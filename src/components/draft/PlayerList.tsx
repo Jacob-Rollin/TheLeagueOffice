@@ -1,28 +1,47 @@
-import { useMemo, useState } from "react";
-import { Search, Undo2 } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { ChevronRight, GripVertical, Search, Star, Undo2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PositionBadge } from "./PositionBadge";
 import { cn } from "@/lib/utils";
-import { POSITIONS, roundOf, value, type Player, type Settings } from "@/lib/draft";
+import { POSITIONS, roundOf, value, type Player, type Pos, type Settings } from "@/lib/draft";
 
-type SortKey = "adp" | "proj" | "prev";
+type SortKey = "adp" | "proj" | "prev" | "needs" | "custom";
+
+const SORTS: [SortKey, string][] = [
+  ["adp", "ADP"],
+  ["proj", "Proj"],
+  ["prev", "Last yr"],
+  ["needs", "My needs"],
+  ["custom", "Custom"],
+];
 
 export function PlayerList({
   players,
   draftedIds,
+  watchIds,
+  needs,
   settings,
   currentOverall,
+  customOrder,
   onDraft,
+  onToggleWatch,
+  onReorder,
   onUndo,
   canUndo,
 }: {
   players: Player[];
   draftedIds: Set<string>;
+  watchIds: Set<string>;
+  needs: Record<Pos, number>;
   settings: Settings;
   currentOverall: number;
+  customOrder: string[];
   onDraft: (id: string) => void;
+  onToggleWatch: (id: string) => void;
+  onReorder: (ids: string[]) => void;
   onUndo: () => void;
   canUndo: boolean;
 }) {
@@ -30,12 +49,22 @@ export function PlayerList({
   const [pos, setPos] = useState<string>("ALL");
   const [sort, setSort] = useState<SortKey>("adp");
   const [showDrafted, setShowDrafted] = useState(false);
+  const [watchOnly, setWatchOnly] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const orderIndex = useMemo(() => {
+    const m = new Map<string, number>();
+    customOrder.forEach((id, i) => m.set(id, i));
+    return m;
+  }, [customOrder]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = players.filter((p) => {
       if ((p.pos === "K" || p.pos === "DEF") && settings.roster[p.pos] === 0) return false;
       if (pos !== "ALL" && p.pos !== pos) return false;
+      if (watchOnly && !watchIds.has(p.id)) return false;
       if (!showDrafted && draftedIds.has(p.id)) return false;
       if (q && !`${p.name} ${p.team}`.toLowerCase().includes(q)) return false;
       return true;
@@ -43,11 +72,57 @@ export function PlayerList({
     return list.sort((a, b) => {
       const av = value(a, settings.scoring);
       const bv = value(b, settings.scoring);
-      if (sort === "adp") return av.adp - bv.adp;
       if (sort === "proj") return bv.proj - av.proj;
-      return (bv.prev ?? -1) - (av.prev ?? -1);
+      if (sort === "prev") return (bv.prev ?? -1) - (av.prev ?? -1);
+      if (sort === "needs") {
+        const an = needs[a.pos] ?? 0;
+        const bn = needs[b.pos] ?? 0;
+        if (an !== bn) return bn - an;
+        return av.rank - bv.rank;
+      }
+      if (sort === "custom") {
+        const ai = orderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const bi = orderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+        if (ai !== bi) return ai - bi;
+        return av.rank - bv.rank;
+      }
+      return av.rank - bv.rank;
     });
-  }, [players, query, pos, sort, showDrafted, draftedIds, settings]);
+  }, [
+    players,
+    query,
+    pos,
+    sort,
+    showDrafted,
+    watchOnly,
+    watchIds,
+    draftedIds,
+    settings,
+    needs,
+    orderIndex,
+  ]);
+
+  const moveBefore = useCallback(
+    (fromId: string, targetId: string) => {
+      const ids = rows.map((r) => r.id);
+      const from = ids.indexOf(fromId);
+      const to = ids.indexOf(targetId);
+      if (from === -1 || to === -1 || from === to) return;
+      ids.splice(to, 0, ids.splice(from, 1)[0]!);
+      // Keep every other already-ranked player behind this visible slice.
+      const rest = customOrder.filter((id) => !ids.includes(id));
+      onReorder([...ids, ...rest]);
+    },
+    [rows, customOrder, onReorder],
+  );
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragId) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const row = el?.closest<HTMLElement>("[data-pid]");
+    const pid = row?.dataset["pid"];
+    if (pid && pid !== dragId) moveBefore(dragId, pid);
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -81,33 +156,31 @@ export function PlayerList({
               )}
             >
               {p}
+              {p !== "ALL" && (needs[p as Pos] ?? 0) > 0 ? (
+                <span className="ml-1 text-[10px] opacity-70">{needs[p as Pos]}</span>
+              ) : null}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <div className="flex gap-1.5">
-            {(
-              [
-                ["adp", "ADP"],
-                ["proj", "Proj"],
-                ["prev", "Last yr"],
-              ] as [SortKey, string][]
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setSort(key)}
-                className={cn(
-                  "rounded border px-2 py-1 uppercase tracking-wide transition-colors",
-                  sort === key
-                    ? "border-accent/50 bg-accent/15 text-accent"
-                    : "border-border hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 text-xs text-muted-foreground">
+          {SORTS.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setSort(key)}
+              className={cn(
+                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                sort === key
+                  ? "border-accent/50 bg-accent/15 text-accent"
+                  : "border-border hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <label className="flex cursor-pointer items-center gap-2 select-none">
             <input
               type="checkbox"
@@ -117,27 +190,67 @@ export function PlayerList({
             />
             Show drafted
           </label>
+          <label className="flex cursor-pointer items-center gap-2 select-none">
+            <input
+              type="checkbox"
+              checked={watchOnly}
+              onChange={(e) => setWatchOnly(e.target.checked)}
+              className="size-3.5 accent-[var(--primary)]"
+            />
+            Watchlist only
+          </label>
         </div>
+
+        {sort === "custom" && (
+          <p className="text-[11px] text-muted-foreground">
+            Drag the handle to build your own board order. It saves automatically.
+          </p>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {rows.length === 0 && (
           <p className="p-6 text-center text-sm text-muted-foreground">No players match.</p>
         )}
-        <ul className="divide-y divide-border">
+        <ul
+          ref={listRef}
+          className="divide-y divide-border"
+          onPointerMove={onPointerMove}
+          onPointerUp={() => setDragId(null)}
+          onPointerCancel={() => setDragId(null)}
+        >
           {rows.map((p) => {
             const v = value(p, settings.scoring);
             const drafted = draftedIds.has(p.id);
+            const watched = watchIds.has(p.id);
             const reach = v.adp < 900 ? Math.round(v.adp - currentOverall) : null;
             return (
-              <li key={p.id}>
-                <button
-                  disabled={drafted}
-                  onClick={() => onDraft(p.id)}
-                  className={cn(
-                    "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
-                    drafted ? "opacity-40" : "hover:bg-secondary/60 active:bg-secondary",
-                  )}
+              <li
+                key={p.id}
+                data-pid={p.id}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-2 transition-colors",
+                  drafted && "opacity-40",
+                  dragId === p.id && "bg-accent/10",
+                )}
+              >
+                {sort === "custom" && (
+                  <button
+                    aria-label={`Reorder ${p.name}`}
+                    className="shrink-0 cursor-grab touch-none p-1 text-muted-foreground active:cursor-grabbing"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      setDragId(p.id);
+                    }}
+                  >
+                    <GripVertical className="size-4" />
+                  </button>
+                )}
+
+                <Link
+                  to="/player/$id"
+                  params={{ id: p.id }}
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded py-0.5 text-left hover:bg-secondary/50"
                 >
                   <PositionBadge pos={p.pos} />
                   <div className="min-w-0 flex-1">
@@ -150,20 +263,37 @@ export function PlayerList({
                       )}
                     </div>
                     <div className="tabnum text-xs text-muted-foreground">
-                      {p.team} · Proj {v.proj.toFixed(1)}
+                      {p.team} · ADP {v.adp < 900 ? v.adp.toFixed(1) : "—"}
+                      {v.adp < 900 ? ` · R${roundOf(Math.max(1, Math.round(v.adp)), settings.teams)}` : ""}
+                      {reach !== null && reach < -6 ? " · reach" : ""}
+                    </div>
+                    <div className="tabnum text-xs text-muted-foreground">
+                      #{v.rank} · Proj {v.proj.toFixed(1)}
                       {v.prev !== null && v.prev > 0 ? ` · LY ${v.prev.toFixed(0)}` : ""}
                     </div>
                   </div>
-                  <div className="tabnum shrink-0 text-right">
-                    <div className="font-display text-lg leading-none font-semibold">
-                      {v.adp < 900 ? v.adp.toFixed(1) : "—"}
-                    </div>
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {v.adp < 900 ? `R${roundOf(Math.max(1, Math.round(v.adp)), settings.teams)}` : "ADP"}
-                      {reach !== null && reach < -6 ? " · reach" : ""}
-                    </div>
-                  </div>
-                </button>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                </Link>
+
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    size="icon"
+                    variant={watched ? "default" : "secondary"}
+                    className="size-9"
+                    onClick={() => onToggleWatch(p.id)}
+                    aria-label={watched ? `Unwatch ${p.name}` : `Watch ${p.name}`}
+                  >
+                    <Star className={cn("size-4", watched && "fill-current")} />
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-9 px-3 font-display uppercase"
+                    disabled={drafted}
+                    onClick={() => onDraft(p.id)}
+                  >
+                    Draft
+                  </Button>
+                </div>
               </li>
             );
           })}

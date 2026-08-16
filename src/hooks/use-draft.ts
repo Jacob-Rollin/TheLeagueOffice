@@ -9,11 +9,18 @@ import {
 
 const KEY = "ff-draft-state-v1";
 
-type Persisted = { settings: Settings; picks: Pick[] };
+type Persisted = {
+  settings: Settings;
+  picks: Pick[];
+  watch?: string[];
+  order?: string[];
+};
 
 export function useDraft() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [picks, setPicks] = useState<Pick[]>([]);
+  const [watch, setWatch] = useState<string[]>([]);
+  const [customOrder, setCustomOrder] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -23,6 +30,8 @@ export function useDraft() {
         const parsed = JSON.parse(raw) as Persisted;
         if (parsed.settings) setSettings({ ...DEFAULT_SETTINGS, ...parsed.settings });
         if (Array.isArray(parsed.picks)) setPicks(parsed.picks);
+        if (Array.isArray(parsed.watch)) setWatch(parsed.watch);
+        if (Array.isArray(parsed.order)) setCustomOrder(parsed.order);
       }
     } catch {
       /* ignore corrupted state */
@@ -32,8 +41,11 @@ export function useDraft() {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(KEY, JSON.stringify({ settings, picks } satisfies Persisted));
-  }, [settings, picks, hydrated]);
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ settings, picks, watch, order: customOrder } satisfies Persisted),
+    );
+  }, [settings, picks, watch, customOrder, hydrated]);
 
   const totalPicks = settings.teams * settings.rounds;
   const currentOverall = Math.min(picks.length + 1, totalPicks);
@@ -41,6 +53,7 @@ export function useDraft() {
   const complete = picks.length >= totalPicks;
 
   const draftedIds = useMemo(() => new Set(picks.map((p) => p.playerId)), [picks]);
+  const watchIds = useMemo(() => new Set(watch), [watch]);
 
   const draftPlayer = useCallback(
     (playerId: string) => {
@@ -57,6 +70,12 @@ export function useDraft() {
     [settings.teams, settings.rounds, settings.snake],
   );
 
+  const toggleWatch = useCallback((playerId: string) => {
+    setWatch((prev) =>
+      prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId],
+    );
+  }, []);
+
   const undo = useCallback(() => setPicks((prev) => prev.slice(0, -1)), []);
   const reset = useCallback(() => setPicks([]), []);
 
@@ -70,6 +89,10 @@ export function useDraft() {
     picks,
     draftedIds,
     draftPlayer,
+    watchIds,
+    toggleWatch,
+    customOrder,
+    setCustomOrder,
     undo,
     reset,
     currentOverall,
