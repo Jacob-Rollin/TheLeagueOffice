@@ -90,7 +90,38 @@ export function nextPicksFor(
 }
 
 export function value(p: Player, scoring: Scoring) {
-  return { adp: p.adp[scoring], proj: p.proj[scoring], prev: p.prev ? p.prev[scoring] : null };
+  return {
+    adp: p.adp[scoring],
+    rank: p.rank ? p.rank[scoring] : 999,
+    proj: p.proj[scoring],
+    prev: p.prev ? p.prev[scoring] : null,
+  };
+}
+
+/**
+ * Remaining starting-lineup needs by position for a team, given who they have
+ * already drafted. Flex demand is spread across RB/WR/TE.
+ */
+export function positionNeeds(drafted: Player[], roster: RosterSlots): Record<Pos, number> {
+  const have: Record<string, number> = {};
+  for (const p of drafted) have[p.pos] = (have[p.pos] ?? 0) + 1;
+
+  const needs = {} as Record<Pos, number>;
+  let flexLeft = roster.FLEX;
+  for (const pos of POSITIONS) {
+    const dedicated = roster[pos];
+    const used = Math.min(have[pos] ?? 0, dedicated);
+    needs[pos] = Math.max(0, dedicated - used);
+    // leftover bodies at this position can soak up flex slots
+    if (FLEX_POSITIONS.includes(pos)) {
+      const spare = Math.max(0, (have[pos] ?? 0) - dedicated);
+      flexLeft = Math.max(0, flexLeft - spare);
+    }
+  }
+  if (flexLeft > 0) {
+    for (const pos of FLEX_POSITIONS) needs[pos] += flexLeft;
+  }
+  return needs;
 }
 
 /** Assign a roster of drafted players into starting slots + bench. */
