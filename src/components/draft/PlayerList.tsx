@@ -34,8 +34,7 @@ export function PlayerList({
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = players.filter((p) => {
-      if (!settings.roster[p.pos === "DEF" ? "DEF" : p.pos] && settings.roster.FLEX === 0)
-        return false;
+      if ((p.pos === "K" || p.pos === "DEF") && settings.roster[p.pos] === 0) return false;
       if (pos !== "ALL" && p.pos !== pos) return false;
       if (!showDrafted && draftedIds.has(p.id)) return false;
       if (q && !`${p.name} ${p.team}`.toLowerCase().includes(q)) return false;
