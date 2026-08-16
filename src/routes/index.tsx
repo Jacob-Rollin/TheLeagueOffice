@@ -7,7 +7,13 @@ import { PlayerList } from "@/components/draft/PlayerList";
 import { RosterPanel } from "@/components/draft/RosterPanel";
 import { SettingsSheet } from "@/components/draft/SettingsSheet";
 import { useDraft } from "@/hooks/use-draft";
-import { nextPicksFor, roundOf, SCORING_LABEL, type Player } from "@/lib/draft";
+import {
+  nextPicksFor,
+  positionNeeds,
+  roundOf,
+  SCORING_LABEL,
+  type Player,
+} from "@/lib/draft";
 import { getPlayers } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
 
@@ -20,13 +26,13 @@ const playersQuery = queryOptions({
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Snake Room — Fantasy Football Draft Tool" },
+      { title: "DraftRoom — Fantasy Football Draft Tool" },
       {
         name: "description",
         content:
           "Live half-PPR fantasy football draft board with real ADP, projections and last-season stats. Custom teams, rounds and roster positions.",
       },
-      { property: "og:title", content: "Snake Room — Fantasy Football Draft Tool" },
+      { property: "og:title", content: "DraftRoom — Fantasy Football Draft Tool" },
       {
         property: "og:description",
         content:
@@ -53,6 +59,14 @@ function DraftRoom() {
   );
 
   const { settings, picks, currentOverall, onTheClock, complete } = draft;
+  const myNeeds = useMemo(() => {
+    const mine = picks
+      .filter((p) => p.team === settings.myTeam)
+      .map((p) => byId.get(p.playerId))
+      .filter((p): p is Player => Boolean(p));
+    return positionNeeds(mine, settings.roster);
+  }, [picks, byId, settings.myTeam, settings.roster]);
+
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
 
@@ -62,7 +76,7 @@ function DraftRoom() {
         <div className="flex items-center justify-between gap-3 px-3 pt-3">
           <div>
             <h1 className="display-title text-2xl">
-              Snake<span className="text-primary">Room</span>
+              Draft<span className="text-primary">Room</span>
             </h1>
             <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
               {data.season} · {SCORING_LABEL[settings.scoring]} · {settings.teams} teams ·{" "}
@@ -119,9 +133,14 @@ function DraftRoom() {
           <PlayerList
             players={data.players}
             draftedIds={draft.draftedIds}
+            watchIds={draft.watchIds}
+            needs={myNeeds}
+            customOrder={draft.customOrder}
             settings={settings}
             currentOverall={currentOverall}
             onDraft={draft.draftPlayer}
+            onToggleWatch={draft.toggleWatch}
+            onReorder={draft.setCustomOrder}
             onUndo={draft.undo}
             canUndo={picks.length > 0}
           />

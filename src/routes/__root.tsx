@@ -77,13 +77,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Snake Room — Fantasy Football Draft Tool" },
+      { title: "DraftRoom — Fantasy Football Draft Tool" },
       {
         name: "description",
         content:
           "Half-PPR fantasy football draft board with live ADP, projections and custom league settings.",
       },
-      { property: "og:title", content: "Snake Room — Fantasy Football Draft Tool" },
+      { property: "og:title", content: "DraftRoom — Fantasy Football Draft Tool" },
       {
         property: "og:description",
         content:
