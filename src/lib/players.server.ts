@@ -440,7 +440,7 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
 
   const season = built.payload.season;
   const prevSeasons = [String(Number(season) - 1), String(Number(season) - 2), String(Number(season) - 3)];
-  const statMaps = await Promise.all(prevSeasons.map((s) => seasonStats(s).catch(() => new Map())));
+  const statMaps = await Promise.all(prevSeasons.map((s) => seasonStats(s).catch(() => new Map<string, Stats>())));
 
   const history: SeasonLine[] = [];
   prevSeasons.forEach((s, i) => {
