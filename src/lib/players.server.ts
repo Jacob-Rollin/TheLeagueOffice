@@ -8,6 +8,8 @@ export type Player = {
   age: number | null;
   exp: number | null;
   injury: string | null;
+  /** Bye week for the player's team this season (null when unknown). */
+  bye: number | null;
   adp: { std: number; half: number; ppr: number };
   /** 1-based overall ADP rank for each scoring format (999 when unranked). */
   rank: { std: number; half: number; ppr: number };
