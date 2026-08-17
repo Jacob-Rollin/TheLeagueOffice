@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PositionBadge } from "./PositionBadge";
 import { cn } from "@/lib/utils";
-import { POSITIONS, roundOf, value, type Player, type Pos, type Settings } from "@/lib/draft";
+import { POSITIONS, value, type Player, type Pos, type Settings } from "@/lib/draft";
 
 type SortKey = "adp" | "proj" | "prev" | "needs" | "custom";
 
@@ -264,7 +264,7 @@ export function PlayerList({
                     </div>
                     <div className="tabnum text-xs text-muted-foreground">
                       {p.team} · ADP {v.adp < 900 ? v.adp.toFixed(1) : "—"}
-                      {v.adp < 900 ? ` · R${roundOf(Math.max(1, Math.round(v.adp)), settings.teams)}` : ""}
+                      {p.bye ? ` · BYE ${p.bye}` : ""}
                       {reach !== null && reach < -6 ? " · reach" : ""}
                     </div>
                     <div className="tabnum text-xs text-muted-foreground">

@@ -177,7 +177,7 @@ function PlayerPage() {
         )}
       </Section>
 
-      <Section title={`${player.team} depth chart`}>
+      <Section title={`${player.team} ${player.pos} depth chart`}>
         {depthChart.length === 0 ? (
           <Empty>No teammates found.</Empty>
         ) : (
