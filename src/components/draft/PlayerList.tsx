@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PositionBadge } from "./PositionBadge";
 import { cn } from "@/lib/utils";
-import { POSITIONS, roundOf, value, type Player, type Pos, type Settings } from "@/lib/draft";
+import { POSITIONS, value, type Player, type Pos, type Settings } from "@/lib/draft";
 
 type SortKey = "adp" | "proj" | "prev" | "needs" | "custom";
 
