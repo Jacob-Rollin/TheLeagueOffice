@@ -1,185 +1,214 @@
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
-import { DraftBoard } from "@/components/draft/DraftBoard";
-import { PlayerList } from "@/components/draft/PlayerList";
-import { RosterPanel } from "@/components/draft/RosterPanel";
-import { SettingsSheet } from "@/components/draft/SettingsSheet";
-import { useDraft } from "@/hooks/use-draft";
-import {
-  nextPicksFor,
-  positionNeeds,
-  roundOf,
-  SCORING_LABEL,
-  teamName,
-  type Player,
-} from "@/lib/draft";
-import { getPlayers } from "@/lib/players.functions";
+import { getStandings, getUserLeagues } from "@/lib/league.functions";
+import type { LeagueSummary, Standings } from "@/lib/league.server";
 import { cn } from "@/lib/utils";
 
-const playersQuery = queryOptions({
-  queryKey: ["players"],
-  queryFn: () => getPlayers(),
-  staleTime: 1000 * 60 * 30,
-});
+const KEY = "ff-league-link-v1";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "DraftRoom — Fantasy Football Draft Tool" },
+      { title: "Welcome To The League — DraftRoom" },
       {
         name: "description",
         content:
-          "Live half-PPR fantasy football draft board with real ADP, projections and last-season stats. Custom teams, rounds and roster positions.",
+          "Link your Sleeper league to see live standings, then jump into the draft board, trade evaluator and waiver evaluator.",
       },
-      { property: "og:title", content: "DraftRoom — Fantasy Football Draft Tool" },
+      { property: "og:title", content: "Welcome To The League — DraftRoom" },
       {
         property: "og:description",
         content:
-          "Draft smarter with live ADP, projections and a snake board built for your league settings.",
+          "Live Sleeper standings plus a draft board, trade evaluator and waiver evaluator in one place.",
       },
     ],
   }),
-  loader: ({ context }) => {
-    void context.queryClient.ensureQueryData(playersQuery);
-  },
-  component: DraftRoom,
+  component: Home,
 });
 
-type Tab = "players" | "board" | "team";
+type Saved = { username: string; leagueId: string };
 
-function DraftRoom() {
-  const { data } = useSuspenseQuery(playersQuery);
-  const draft = useDraft();
-  const [tab, setTab] = useState<Tab>("players");
+function Home() {
+  const [username, setUsername] = useState("");
+  const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
+  const [standings, setStandings] = useState<Standings | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const byId = useMemo(
-    () => new Map<string, Player>(data.players.map((p) => [p.id, p])),
-    [data.players],
-  );
+  const leaguesM = useMutation({
+    mutationFn: (name: string) => getUserLeagues({ data: { username: name } }),
+  });
+  const standingsM = useMutation({
+    mutationFn: (leagueId: string) => getStandings({ data: { leagueId } }),
+  });
 
-  const { settings, picks, currentOverall, onTheClock, complete } = draft;
-  const myNeeds = useMemo(() => {
-    const mine = picks
-      .filter((p) => p.team === settings.myTeam)
-      .map((p) => byId.get(p.playerId))
-      .filter((p): p is Player => Boolean(p));
-    return positionNeeds(mine, settings.roster);
-  }, [picks, byId, settings.myTeam, settings.roster]);
+  const loadLeague = async (leagueId: string, name: string) => {
+    setError(null);
+    const res = await standingsM.mutateAsync(leagueId);
+    if (!res) {
+      setError("Couldn't load that league.");
+      return;
+    }
+    setStandings(res);
+    localStorage.setItem(KEY, JSON.stringify({ username: name, leagueId } satisfies Saved));
+  };
 
-  const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
-  const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Saved;
+      if (saved.username) setUsername(saved.username);
+      if (saved.leagueId) {
+        standingsM.mutateAsync(saved.leagueId).then((res) => res && setStandings(res));
+      }
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const search = async () => {
+    setError(null);
+    setStandings(null);
+    const res = await leaguesM.mutateAsync(username);
+    setLeagues(res);
+    if (!res.length) setError("No leagues found for that Sleeper username.");
+    else if (res.length === 1) await loadLeague(res[0]!.id, username);
+  };
+
+  const unlink = () => {
+    localStorage.removeItem(KEY);
+    setStandings(null);
+    setLeagues([]);
+  };
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
-        <div className="flex items-center justify-between gap-3 px-3 pt-3">
-          <div>
-            <h1 className="display-title text-2xl">
-              Draft<span className="text-primary">Room</span>
-            </h1>
-            <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
-              {data.season} · {SCORING_LABEL[settings.scoring]} · {settings.teams} teams ·{" "}
-              {settings.rounds} rds
-            </p>
-          </div>
-          <SettingsSheet settings={settings} update={draft.updateSettings} onReset={draft.reset} />
-        </div>
+    <main className="mx-auto w-full max-w-4xl px-3 pb-16">
+      <section className="py-10 text-center">
+        <h1 className="display-title text-4xl leading-tight sm:text-5xl">
+          Welcome To The <span className="text-primary">League</span>
+        </h1>
+        <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground">
+          Link your Sleeper account to track live standings, then grade trades and waiver
+          claims or fire up the draft board.
+        </p>
+      </section>
 
-        <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden border-y border-border bg-border">
-          <Stat label="On the clock" value={complete ? "Done" : teamName(settings, onTheClock)} highlight={onTheClock === settings.myTeam && !complete} />
-          <Stat
-            label="Pick"
-            value={complete ? `${picks.length}` : `${currentOverall} · R${roundOf(currentOverall, settings.teams)}`}
+      <section className="rounded-lg border border-border bg-card p-4">
+        <h2 className="font-display text-sm uppercase tracking-widest text-muted-foreground">
+          Your Sleeper league
+        </h2>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && search()}
+            placeholder="Sleeper username"
+            className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
           />
-          <Stat
-            label="Your next"
-            value={
-              untilMyPick === null
-                ? "—"
-                : untilMyPick === 0
-                  ? "Now"
-                  : `${untilMyPick} away`
-            }
-          />
-        </div>
-
-        <nav className="flex gap-1 px-3 py-2">
-          {(
-            [
-              ["players", "Players"],
-              ["board", "Board"],
-              ["team", "My team"],
-            ] as [Tab, string][]
-          ).map(([key, label]) => (
+          <button
+            onClick={search}
+            disabled={!username.trim() || leaguesM.isPending}
+            className="rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-50"
+          >
+            {leaguesM.isPending ? "Looking…" : "Link league"}
+          </button>
+          {standings && (
             <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={cn(
-                "flex-1 rounded-md border px-3 py-1.5 font-display text-sm uppercase tracking-wide transition-colors",
-                tab === key
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground",
-              )}
+              onClick={unlink}
+              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
             >
-              {label}
+              Unlink
             </button>
-          ))}
-        </nav>
-      </header>
+          )}
+        </div>
+        {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
 
-      <div className="flex-1">
-        {tab === "players" && (
-          <PlayerList
-            players={data.players}
-            draftedIds={draft.draftedIds}
-            watchIds={draft.watchIds}
-            needs={myNeeds}
-            customOrder={draft.customOrder}
-            settings={settings}
-            currentOverall={currentOverall}
-            onDraft={draft.draftPlayer}
-            onToggleWatch={draft.toggleWatch}
-            onReorder={draft.setCustomOrder}
-            onUndo={draft.undo}
-            canUndo={picks.length > 0}
-          />
+        {leagues.length > 1 && !standings && (
+          <ul className="mt-3 space-y-1">
+            {leagues.map((l) => (
+              <li key={l.id}>
+                <button
+                  onClick={() => loadLeague(l.id, username)}
+                  className="flex w-full items-center justify-between rounded-md border border-border bg-surface px-3 py-2 text-left text-sm hover:border-primary"
+                >
+                  <span className="truncate">{l.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {l.season} · {l.teams} teams · {l.scoring}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
-        {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} />}
-        {tab === "team" && (
-          <RosterPanel settings={settings} picks={picks} byId={byId} team={settings.myTeam} />
-        )}
-      </div>
+      </section>
 
-      <footer className="border-t border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
-        ADP, projections and prior-season stats from the free Sleeper API. Tap a player to assign
-        them to the team on the clock.
-      </footer>
+      {standingsM.isPending && (
+        <p className="mt-6 text-center text-sm text-muted-foreground">Loading standings…</p>
+      )}
+
+      {standings && (
+        <section className="mt-6">
+          <div className="flex items-baseline justify-between px-1">
+            <h2 className="display-title text-2xl">{standings.league.name}</h2>
+            <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              {standings.league.season} · {standings.league.scoring}
+            </span>
+          </div>
+          <div className="mt-2 overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-surface text-[10px] uppercase tracking-widest text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-2 text-left">#</th>
+                  <th className="px-2 py-2 text-left">Team</th>
+                  <th className="px-2 py-2 text-right">W-L-T</th>
+                  <th className="px-2 py-2 text-right">PF</th>
+                  <th className="px-2 py-2 text-right">PA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {standings.rows.map((r, i) => (
+                  <tr key={r.rosterId} className={cn("border-t border-border", i < 4 && "bg-primary/5")}>
+                    <td className="tabnum px-2 py-2 text-muted-foreground">{i + 1}</td>
+                    <td className="px-2 py-2">
+                      <div className="truncate font-medium">{r.team}</div>
+                      <div className="truncate text-[11px] text-muted-foreground">{r.owner}</div>
+                    </td>
+                    <td className="tabnum px-2 py-2 text-right">
+                      {r.wins}-{r.losses}
+                      {r.ties ? `-${r.ties}` : ""}
+                    </td>
+                    <td className="tabnum px-2 py-2 text-right">{r.pointsFor}</td>
+                    <td className="tabnum px-2 py-2 text-right text-muted-foreground">
+                      {r.pointsAgainst}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      <section className="mt-8 grid gap-3 sm:grid-cols-3">
+        <HomeCard to="/draft" title="Draft board" desc="Live ADP, projections, snake board." />
+        <HomeCard to="/trade" title="Trade evaluator" desc="Grade any trade package instantly." />
+        <HomeCard to="/waiver" title="Waiver evaluator" desc="Claim grades and FAAB guidance." />
+      </section>
     </main>
   );
 }
 
-function Stat({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
+function HomeCard({ to, title, desc }: { to: string; title: string; desc: string }) {
   return (
-    <div className={cn("bg-surface px-3 py-2", highlight && "bg-primary/15")}>
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
-      <div
-        className={cn(
-          "tabnum font-display text-lg leading-tight font-semibold",
-          highlight && "text-primary",
-        )}
-      >
-        {value}
-      </div>
-    </div>
+    <Link
+      to={to}
+      className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary"
+    >
+      <div className="font-display text-lg uppercase tracking-wide">{title}</div>
+      <p className="mt-1 text-xs text-muted-foreground">{desc}</p>
+    </Link>
   );
 }
