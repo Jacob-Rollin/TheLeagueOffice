@@ -1,5 +1,6 @@
+import { ByeMatrix } from "./ByeMatrix";
 import { PositionBadge } from "./PositionBadge";
-import { fillRoster, value, type Pick, type Player, type Settings } from "@/lib/draft";
+import { fillRoster, teamName, value, type Pick, type Player, type Settings } from "@/lib/draft";
 
 export function RosterPanel({
   settings,
@@ -21,9 +22,10 @@ export function RosterPanel({
   const projected = roster.reduce((sum, p) => sum + value(p, settings.scoring).proj, 0);
 
   return (
-    <div className="p-3">
+    <div className="pb-3">
+      <div className="p-3">
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="display-title text-xl">Team {team} roster</h2>
+        <h2 className="display-title text-xl">{teamName(settings, team)}</h2>
         <span className="tabnum text-sm text-muted-foreground">
           {roster.length} picks · {projected.toFixed(0)} proj pts
         </span>
@@ -53,6 +55,8 @@ export function RosterPanel({
           </li>
         ))}
       </ul>
+      </div>
+      {roster.length > 0 && <ByeMatrix players={roster} />}
     </div>
   );
 }

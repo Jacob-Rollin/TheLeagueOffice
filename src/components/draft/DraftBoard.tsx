@@ -1,6 +1,6 @@
 import { PositionBadge } from "./PositionBadge";
 import { cn } from "@/lib/utils";
-import { teamForPick, type Pick, type Player, type Settings } from "@/lib/draft";
+import { teamForPick, teamName, type Pick, type Player, type Settings } from "@/lib/draft";
 
 export function DraftBoard({
   settings,
@@ -28,7 +28,7 @@ export function DraftBoard({
               t === settings.myTeam ? "bg-primary text-primary-foreground" : "text-muted-foreground",
             )}
           >
-            Team {t}
+            <span className="block truncate">{teamName(settings, t)}</span>
           </div>
         ))}
 

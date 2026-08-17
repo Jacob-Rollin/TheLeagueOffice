@@ -12,6 +12,7 @@ import {
   positionNeeds,
   roundOf,
   SCORING_LABEL,
+  teamName,
   type Player,
 } from "@/lib/draft";
 import { getPlayers } from "@/lib/players.functions";
@@ -87,7 +88,7 @@ function DraftRoom() {
         </div>
 
         <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden border-y border-border bg-border">
-          <Stat label="On the clock" value={complete ? "Done" : `Team ${onTheClock}`} highlight={onTheClock === settings.myTeam && !complete} />
+          <Stat label="On the clock" value={complete ? "Done" : teamName(settings, onTheClock)} highlight={onTheClock === settings.myTeam && !complete} />
           <Stat
             label="Pick"
             value={complete ? `${picks.length}` : `${currentOverall} · R${roundOf(currentOverall, settings.teams)}`}
