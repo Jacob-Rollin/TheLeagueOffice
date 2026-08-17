@@ -22,6 +22,7 @@ export type Settings = {
   scoring: Scoring;
   snake: boolean;
   roster: RosterSlots;
+  teamNames: Record<string, string>;
 };
 
 export type Pick = {
@@ -55,7 +56,13 @@ export const DEFAULT_SETTINGS: Settings = {
   scoring: "half",
   snake: true,
   roster: DEFAULT_ROSTER,
+  teamNames: {},
 };
+
+/** Display name for a 1-based team slot. */
+export function teamName(settings: Settings, team: number): string {
+  return settings.teamNames?.[String(team)]?.trim() || `Team ${team}`;
+}
 
 export const SCORING_LABEL: Record<Scoring, string> = {
   std: "Standard",
@@ -147,4 +154,31 @@ export function fillRoster(players: Player[], roster: RosterSlots) {
   for (let i = 0; i < roster.BENCH; i++) slots.push({ slot: "BN", player: pool.shift() ?? null });
   for (const extra of pool) slots.push({ slot: "BN", player: extra });
   return slots;
+}
+
+/** Weeks 4-18 bye grid for a set of drafted players. */
+export function byeMatrix(players: Player[]) {
+  const weeks: number[] = [];
+  for (let w = 4; w <= 14; w++) weeks.push(w);
+  const byWeek = new Map<number, Player[]>();
+  const unknown: Player[] = [];
+  for (const p of players) {
+    if (!p.bye) {
+      unknown.push(p);
+      continue;
+    }
+    if (!weeks.includes(p.bye)) weeks.push(p.bye);
+    byWeek.set(p.bye, [...(byWeek.get(p.bye) ?? []), p]);
+  }
+  weeks.sort((a, b) => a - b);
+  return {
+    weeks: weeks.map((week) => {
+      const list = (byWeek.get(week) ?? []).sort((a, b) => b.proj.half - a.proj.half);
+      const posCounts: Record<string, number> = {};
+      for (const p of list) posCounts[p.pos] = (posCounts[p.pos] ?? 0) + 1;
+      const conflict = list.length >= 3 || Object.values(posCounts).some((n) => n >= 2);
+      return { week, players: list, conflict };
+    }),
+    unknown,
+  };
 }
