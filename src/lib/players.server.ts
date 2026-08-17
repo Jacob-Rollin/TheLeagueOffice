@@ -145,6 +145,32 @@ const scheduleFor = memo<{ week: number; home: string; away: string }[]>(
   },
 );
 
+/** Weeks 1-18 with no scheduled game, per team. */
+async function byeWeeks(season: string): Promise<Map<string, number>> {
+  const games = await scheduleFor(season);
+  const played = new Map<string, Set<number>>();
+  const teams = new Set<string>();
+  for (const g of games) {
+    for (const t of [g.home, g.away]) {
+      if (!t) continue;
+      teams.add(t);
+      if (!played.has(t)) played.set(t, new Set());
+      played.get(t)!.add(g.week);
+    }
+  }
+  const byes = new Map<string, number>();
+  for (const t of teams) {
+    const weeks = played.get(t)!;
+    for (let w = 4; w <= 18; w++) {
+      if (!weeks.has(w)) {
+        byes.set(t, w);
+        break;
+      }
+    }
+  }
+  return byes;
+}
+
 type ProjectionsResult = { season: string; rows: SleeperRow[] };
 
 const projectionsFor = memo<ProjectionsResult>(6 * HOUR, async (season) => {
@@ -172,6 +198,7 @@ const buildPlayers = memo<Built>(6 * HOUR, async () => {
   const { season, rows: projRows } = await projectionsFor(currentSeason());
   const prevSeason = String(Number(season) - 1);
   const prevStats = await seasonStats(prevSeason);
+  const byeByTeam = await byeWeeks(season).catch(() => new Map<string, number>());
 
   const players: Player[] = [];
   const rawProj = new Map<string, Stats>();
@@ -201,6 +228,7 @@ const buildPlayers = memo<Built>(6 * HOUR, async () => {
       age: p.age ?? null,
       exp: p.years_exp ?? null,
       injury: p.injury_status ?? null,
+      bye: byeByTeam.get(row.team ?? p.team ?? "") ?? null,
       adp: { std, half, ppr },
       rank: { std: 999, half: 999, ppr: 999 },
       proj: {
@@ -456,9 +484,9 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
     player.team === "FA"
       ? []
       : built.all
-          .filter((p) => p.team === player.team)
-          .sort((a, b) => POSITIONS.indexOf(a.pos) - POSITIONS.indexOf(b.pos) || b.proj.half - a.proj.half)
-          .slice(0, 24)
+          .filter((p) => p.team === player.team && p.pos === player.pos)
+          .sort((a, b) => b.proj.half - a.proj.half)
+          .slice(0, 12)
           .map((p) => ({
             id: p.id,
             name: p.name,
