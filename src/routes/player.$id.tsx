@@ -1,7 +1,9 @@
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
 
+import { PlayerNews } from "@/components/draft/PlayerNews";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/hooks/use-draft";
@@ -44,6 +46,7 @@ function PlayerPage() {
   const { id } = Route.useParams();
   const { data } = useSuspenseQuery(detailQuery(id));
   const draft = useDraft();
+  const [tab, setTab] = useState<"overview" | "news">("overview");
 
   if (!data) return null;
   const { player, history, projection, depthChart, sos, injuryRisk, season } = data;
@@ -86,8 +89,33 @@ function PlayerPage() {
             {watched ? "Watching" : "Watch"}
           </Button>
         </div>
+        <nav className="mt-3 flex gap-1">
+          {(
+            [
+              ["overview", "Overview"],
+              ["news", "News"],
+            ] as ["overview" | "news", string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={cn(
+                "flex-1 rounded-md border px-3 py-1.5 font-display text-sm uppercase tracking-wide transition-colors",
+                tab === key
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
       </header>
 
+      {tab === "news" && <PlayerNews id={player.id} />}
+
+      {tab === "overview" && (
+      <>
       <Section title={`${season} projection`}>
         <div className="rounded-lg border border-border bg-card p-3">
           <div className="tabnum font-display text-2xl">
@@ -208,6 +236,8 @@ function PlayerPage() {
           </ul>
         )}
       </Section>
+      </>
+      )}
     </main>
   );
 }

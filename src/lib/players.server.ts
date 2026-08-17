@@ -508,3 +508,106 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
     injuryRisk: injuryRisk(player, history),
   };
 }
+
+/* ---------- player news ---------- */
+
+export type NewsItem = {
+  id: string;
+  headline: string;
+  description: string;
+  published: string;
+  link: string | null;
+  image: string | null;
+  aboutPlayer: boolean;
+};
+
+export type PlayerNews = {
+  player: Player;
+  injury: { status: string | null; note: string | null };
+  items: NewsItem[];
+};
+
+type EspnArticle = {
+  id?: number | string;
+  headline?: string;
+  description?: string;
+  published?: string;
+  lastModified?: string;
+  links?: { web?: { href?: string } };
+  images?: { url?: string }[];
+  categories?: { type?: string; athlete?: { id?: number; description?: string } }[];
+};
+
+const espnNews = memo(1000 * 60 * 15, async (query: string) => {
+  const res = await fetch(
+    `https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50${query}`,
+    { headers: { accept: "application/json" } },
+  );
+  if (!res.ok) return [] as EspnArticle[];
+  const json = (await res.json()) as { articles?: EspnArticle[] };
+  return Array.isArray(json.articles) ? json.articles : [];
+});
+
+function mentions(a: EspnArticle, name: string): boolean {
+  const hay = `${a.headline ?? ""} ${a.description ?? ""}`.toLowerCase();
+  const lower = name.toLowerCase();
+  if (hay.includes(lower)) return true;
+  if ((a.categories ?? []).some((c) => (c.athlete?.description ?? "").toLowerCase() === lower)) {
+    return true;
+  }
+  return false;
+}
+
+function toItem(a: EspnArticle, aboutPlayer: boolean): NewsItem {
+  return {
+    id: String(a.id ?? a.headline ?? Math.random()),
+    headline: a.headline ?? "Untitled",
+    description: a.description ?? "",
+    published: a.published ?? a.lastModified ?? "",
+    link: a.links?.web?.href ?? null,
+    image: a.images?.[0]?.url ?? null,
+    aboutPlayer,
+  };
+}
+
+export async function loadPlayerNews(id: string): Promise<PlayerNews | null> {
+  const built = await buildPlayers("v1");
+  const player = built.all.find((p) => p.id === id);
+  if (!player) return null;
+
+  const [league, team] = await Promise.all([
+    espnNews("").catch(() => [] as EspnArticle[]),
+    player.team && player.team !== "FA"
+      ? espnNews(`&team=${player.team.toLowerCase()}`).catch(() => [] as EspnArticle[])
+      : Promise.resolve([] as EspnArticle[]),
+  ]);
+
+  const seen = new Set<string>();
+  const items: NewsItem[] = [];
+  const push = (a: EspnArticle, about: boolean) => {
+    const item = toItem(a, about);
+    if (seen.has(item.id)) return;
+    seen.add(item.id);
+    items.push(item);
+  };
+
+  for (const a of [...league, ...team]) if (mentions(a, player.name)) push(a, true);
+  for (const a of team) push(a, false);
+  for (const a of league) push(a, false);
+
+  items.sort((a, b) => {
+    if (a.aboutPlayer !== b.aboutPlayer) return a.aboutPlayer ? -1 : 1;
+    return (b.published ?? "").localeCompare(a.published ?? "");
+  });
+
+  return {
+    player,
+    injury: {
+      status: player.injury,
+      note: player.injury
+        ? `Listed ${player.injury}${player.team && player.team !== "FA" ? ` on ${player.team}'s report` : ""}.`
+        : null,
+    },
+    items: items.slice(0, 12),
+  };
+}
