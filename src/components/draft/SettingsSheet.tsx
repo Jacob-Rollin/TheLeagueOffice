@@ -158,6 +158,37 @@ export function SettingsSheet({
 
           <section className="space-y-2">
             <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
+              Team names
+            </h3>
+            {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => (
+              <div
+                key={t}
+                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"
+              >
+                <span className="tabnum w-6 shrink-0 font-display text-sm text-muted-foreground">
+                  {t}
+                </span>
+                <input
+                  value={settings.teamNames?.[String(t)] ?? ""}
+                  placeholder={`Team ${t}`}
+                  onChange={(e) =>
+                    update({
+                      teamNames: { ...(settings.teamNames ?? {}), [String(t)]: e.target.value },
+                    })
+                  }
+                  className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                />
+                {t === settings.myTeam && (
+                  <span className="font-display text-[10px] uppercase tracking-wide text-primary">
+                    You
+                  </span>
+                )}
+              </div>
+            ))}
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
               Roster positions
             </h3>
             {ROSTER_KEYS.map((k) => (
