@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DraftRouteImport } from './routes/draft'
 import { Route as TradeRouteImport } from './routes/trade'
+import { Route as WaiverRouteImport } from './routes/waiver'
 import { Route as PlayerIdRouteImport } from './routes/player.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const TradeRoute = TradeRouteImport.update({
   path: '/trade',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WaiverRoute = WaiverRouteImport.update({
+  id: '/waiver',
+  path: '/waiver',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlayerIdRoute = PlayerIdRouteImport.update({
   id: '/player/$id',
   path: '/player/$id',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/draft': typeof DraftRoute
   '/trade': typeof TradeRoute
+  '/waiver': typeof WaiverRoute
   '/player/$id': typeof PlayerIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/draft': typeof DraftRoute
   '/trade': typeof TradeRoute
+  '/waiver': typeof WaiverRoute
   '/player/$id': typeof PlayerIdRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/draft': typeof DraftRoute
   '/trade': typeof TradeRoute
+  '/waiver': typeof WaiverRoute
   '/player/$id': typeof PlayerIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/draft' | '/trade' | '/player/$id'
+  fullPaths: '/' | '/draft' | '/trade' | '/waiver' | '/player/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/draft' | '/trade' | '/player/$id'
-  id: '__root__' | '/' | '/draft' | '/trade' | '/player/$id'
+  to: '/' | '/draft' | '/trade' | '/waiver' | '/player/$id'
+  id: '__root__' | '/' | '/draft' | '/trade' | '/waiver' | '/player/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DraftRoute: typeof DraftRoute
   TradeRoute: typeof TradeRoute
+  WaiverRoute: typeof WaiverRoute
   PlayerIdRoute: typeof PlayerIdRoute
 }
 
@@ -92,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TradeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/waiver': {
+      id: '/waiver'
+      path: '/waiver'
+      fullPath: '/waiver'
+      preLoaderRoute: typeof WaiverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/player/$id': {
       id: '/player/$id'
       path: '/player/$id'
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DraftRoute: DraftRoute,
   TradeRoute: TradeRoute,
+  WaiverRoute: WaiverRoute,
   PlayerIdRoute: PlayerIdRoute,
 }
 export const routeTree = rootRouteImport
