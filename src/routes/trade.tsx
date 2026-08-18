@@ -124,14 +124,21 @@ function TradePage() {
   );
 
   const byId = useMemo(() => new Map(data.players.map((p) => [p.id, p])), [data.players]);
+  const rostersByTeam = useMemo(() => {
+    const map = new Map<number, Player[]>();
+    for (let t = 1; t <= draft.settings.teams; t++) map.set(t, []);
+    for (const pick of draft.picks) {
+      const player = byId.get(pick.playerId);
+      if (!player) continue;
+      map.get(pick.team)?.push(player);
+    }
+    return map;
+  }, [draft.picks, draft.settings.teams, byId]);
   const roster = useMemo(
-    () =>
-      draft.picks
-        .filter((p) => p.team === draft.settings.myTeam)
-        .map((p) => byId.get(p.playerId))
-        .filter((p): p is Player => Boolean(p)),
-    [draft.picks, draft.settings.myTeam, byId],
+    () => rostersByTeam.get(draft.settings.myTeam) ?? [],
+    [rostersByTeam, draft.settings.myTeam],
   );
+
   const needScore = (p: Player) => {
     const count = roster.filter((r) => r.pos === p.pos).length;
     const configured = draft.settings.roster[p.pos] ?? 0;
