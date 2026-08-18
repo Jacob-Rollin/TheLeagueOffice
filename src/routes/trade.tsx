@@ -245,7 +245,7 @@ function TradePage() {
         {(
           [
             ["overview", "Overview"],
-            ["stats", "Last Season Stats"],
+            ["stats", "Stats"],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -267,55 +267,29 @@ function TradePage() {
         <p className="mt-3 text-center text-xs text-muted-foreground">Loading player stats…</p>
       )}
 
-      {tab === "overview" ? (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <SideColumn title="You give" rows={giveRows} other={getRows} />
-          <SideColumn title="You receive" accent rows={getRows} other={giveRows} />
+      <section className="mt-3 overflow-hidden rounded-xl border border-border bg-card">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 p-3">
+          <SideHead rows={giveRows} title="You give" />
+          <span className="self-center rounded-full border border-border bg-surface px-2 py-1 font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+            vs
+          </span>
+          <SideHead rows={getRows} title="You receive" align="right" />
         </div>
-      ) : (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <StatsColumn title="You give" rows={giveRows} other={getRows} />
-          <StatsColumn title="You receive" accent rows={getRows} other={giveRows} />
-        </div>
-      )}
 
-      {tab === "overview" && ready && (
-        <section className="mt-3 overflow-hidden rounded-xl border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-surface text-[10px] uppercase tracking-widest text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 text-left">Package totals</th>
-                <th className="px-3 py-2 text-right">You give</th>
-                <th className="px-3 py-2 text-right">You receive</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(
-                [
-                  ["Projected pts (season)", sum(giveRows, "projTotal"), sum(getRows, "projTotal")],
-                  ["Projected pts / week", sum(giveRows, "projPerWk"), sum(getRows, "projPerWk")],
-                  ["Last season pts", sum(giveRows, "prevTotal"), sum(getRows, "prevTotal")],
-                  ["Last season pts / game", sum(giveRows, "prevPerGame"), sum(getRows, "prevPerGame")],
-                ] as [string, number, number][]
-              ).map(([label, a, b]) => (
-                <tr key={label} className="border-t border-border">
-                  <td className="px-3 py-2 text-muted-foreground">{label}</td>
-                  <td className={cn("tabnum px-3 py-2 text-right", better(a, b) && "font-bold text-primary")}>
-                    {a.toFixed(1)}
-                  </td>
-                  <td className={cn("tabnum px-3 py-2 text-right", better(b, a) && "font-bold text-primary")}>
-                    {b.toFixed(1)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+        {!ready ? (
+          <p className="border-t border-border p-4 text-center text-xs text-muted-foreground">
+            Add at least one player to each side to compare.
+          </p>
+        ) : tab === "overview" ? (
+          <CompareTable title="Fantasy Points" rows={overviewRows} />
+        ) : (
+          <CompareTable title={`${statsSeason} Season Stats`} rows={statRows} />
+        )}
+      </section>
 
       <p className="mt-3 text-center text-[11px] text-muted-foreground">
-        Grades blend this year's projections (65%) with last season's per-game production (35%), then
-        adjust for open roster slots configured in the War Room.
+        Green marks the better side. Grades blend this year's projections (65%) with last season's
+        per-game production (35%), then adjust for open roster slots configured in the War Room.
       </p>
     </main>
   );
@@ -325,149 +299,106 @@ function better(a: number, b: number) {
   return a > b && Math.abs(a - b) > 0.05;
 }
 
-function PlayerHead({ m }: { m: Metrics }) {
-  return (
-    <div className="flex items-center gap-2">
-      <PositionBadge pos={m.player.pos} className="h-5 text-[10px]" />
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{m.player.name}</span>
-      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-        {m.player.team}
-      </span>
-    </div>
-  );
+type CompareRow = {
+  label: string;
+  give: string;
+  get: string;
+  giveWin: boolean;
+  getWin: boolean;
+};
+
+function buildRow(
+  label: string,
+  a: number | null,
+  b: number | null,
+  opts: { lowerBetter?: boolean; digits?: number; prefix?: string } = {},
+): CompareRow {
+  const digits = opts.digits ?? 1;
+  const fmt = (v: number | null) =>
+    v === null || !Number.isFinite(v) ? "—" : `${opts.prefix ?? ""}${v.toFixed(digits)}`;
+  const valid = a !== null && b !== null && Number.isFinite(a) && Number.isFinite(b);
+  const aWins = valid && (opts.lowerBetter ? better(b!, a!) : better(a!, b!));
+  const bWins = valid && (opts.lowerBetter ? better(a!, b!) : better(b!, a!));
+  return { label, give: fmt(a), get: fmt(b), giveWin: aWins, getWin: bWins };
 }
 
-function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function CompareTable({ title, rows }: { title: string; rows: CompareRow[] }) {
+  if (!rows.length)
+    return (
+      <p className="border-t border-border p-4 text-center text-xs text-muted-foreground">
+        No stats available for these players.
+      </p>
+    );
   return (
-    <div className="flex items-center justify-between text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={cn("tabnum font-medium", highlight && "font-bold text-primary")}>{value}</span>
-    </div>
-  );
-}
-
-function SideColumn({
-  title,
-  rows,
-  other,
-  accent,
-}: {
-  title: string;
-  rows: Metrics[];
-  other: Metrics[];
-  accent?: boolean;
-}) {
-  const best = (key: keyof Metrics) =>
-    Math.max(0, ...other.map((r) => (r[key] as number) ?? 0));
-  return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <h3
-        className={cn(
-          "font-display text-sm uppercase tracking-widest",
-          accent ? "text-primary" : "text-foreground",
-        )}
-      >
-        {title}
-      </h3>
-      {!rows.length && <p className="mt-2 text-xs text-muted-foreground">No players selected.</p>}
-      <div className="mt-2 space-y-3">
-        {rows.map((m) => (
-          <div key={m.player.id} className="rounded-lg border border-border bg-surface p-2">
-            <PlayerHead m={m} />
-            <div className="mt-2 space-y-1">
-              <Row
-                label="Proj pts (season)"
-                value={m.projTotal.toFixed(1)}
-                highlight={m.projTotal >= best("projTotal") && m.projTotal > 0}
-              />
-              <Row
-                label="Proj pts / week"
-                value={m.projPerWk.toFixed(1)}
-                highlight={m.projPerWk >= best("projPerWk") && m.projPerWk > 0}
-              />
-              <Row
-                label={`${m.prevSeason ?? "Last"} pts`}
-                value={m.prevTotal.toFixed(1)}
-                highlight={m.prevTotal >= best("prevTotal") && m.prevTotal > 0}
-              />
-              <Row
-                label={`${m.prevSeason ?? "Last"} pts / game`}
-                value={m.prevPerGame.toFixed(1)}
-                highlight={m.prevPerGame >= best("prevPerGame") && m.prevPerGame > 0}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StatsColumn({
-  title,
-  rows,
-  other,
-  accent,
-}: {
-  title: string;
-  rows: Metrics[];
-  other: Metrics[];
-  accent?: boolean;
-}) {
-  const otherBest = (label: string) => {
-    const vals = other
-      .flatMap((r) => r.line.filter((l) => l.label === label).map((l) => Number(l.value)))
-      .filter((n) => Number.isFinite(n));
-    if (!vals.length) return null;
-    return LOWER_IS_BETTER.has(label) ? Math.min(...vals) : Math.max(...vals);
-  };
-  const bestPosRank = Math.min(
-    ...other.map((r) => r.posRank ?? Number.POSITIVE_INFINITY),
-    Number.POSITIVE_INFINITY,
-  );
-  return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <h3
-        className={cn(
-          "font-display text-sm uppercase tracking-widest",
-          accent ? "text-primary" : "text-foreground",
-        )}
-      >
-        {title}
-      </h3>
-      {!rows.length && <p className="mt-2 text-xs text-muted-foreground">No players selected.</p>}
-      <div className="mt-2 space-y-3">
-        {rows.map((m) => (
-          <div key={m.player.id} className="rounded-lg border border-border bg-surface p-2">
-            <PlayerHead m={m} />
-            <p className="mt-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-              {m.prevSeason ?? "Last season"} · {m.prevGames} games
-            </p>
-            <div className="mt-2 space-y-1">
-              <Row
-                label={`${m.player.pos} rank (season)`}
-                value={m.posRank ? `#${m.posRank}` : "—"}
-                highlight={Boolean(m.posRank) && (m.posRank ?? 999) <= bestPosRank}
-              />
-              <Row
-                label="Pts / game rank basis"
-                value={m.prevPerGame.toFixed(1)}
-                highlight={m.prevPerGame >= Math.max(0, ...other.map((r) => r.prevPerGame))}
-              />
-              {m.line.map((l) => {
-                const rival = otherBest(l.label);
-                const n = Number(l.value);
-                const win =
-                  rival === null || !Number.isFinite(n)
-                    ? false
-                    : LOWER_IS_BETTER.has(l.label)
-                      ? n <= rival
-                      : n >= rival;
-                return <Row key={l.label} label={l.label} value={l.value} highlight={win} />;
-              })}
-              {!m.line.length && (
-                <p className="text-xs text-muted-foreground">No prior-season stats available.</p>
+    <table className="w-full border-t border-border text-sm">
+      <thead>
+        <tr className="bg-surface">
+          <th
+            colSpan={3}
+            className="px-3 py-2 text-center font-display text-[11px] uppercase tracking-widest text-muted-foreground"
+          >
+            {title}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.label} className="border-t border-border">
+            <td
+              className={cn(
+                "tabnum w-1/3 px-3 py-2 text-left",
+                r.giveWin ? "font-bold text-success" : "text-foreground",
               )}
+            >
+              {r.give}
+            </td>
+            <td className="px-2 py-2 text-center text-[11px] uppercase tracking-wide text-muted-foreground">
+              {r.label}
+            </td>
+            <td
+              className={cn(
+                "tabnum w-1/3 px-3 py-2 text-right",
+                r.getWin ? "font-bold text-success" : "text-foreground",
+              )}
+            >
+              {r.get}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function SideHead({
+  rows,
+  title,
+  align,
+}: {
+  rows: Metrics[];
+  title: string;
+  align?: "right";
+}) {
+  return (
+    <div className={cn("min-w-0", align === "right" && "text-right")}>
+      <p className="eyebrow">{title}</p>
+      {!rows.length && <p className="mt-1 text-xs text-muted-foreground">No players.</p>}
+      <div className="mt-1 space-y-1.5">
+        {rows.map((m) => (
+          <div
+            key={m.player.id}
+            className={cn(
+              "flex items-center gap-2",
+              align === "right" && "flex-row-reverse text-right",
+            )}
+          >
+            <PositionBadge pos={m.player.pos} className="h-5 shrink-0 text-[10px]" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold leading-tight">{m.player.name}</p>
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                {m.player.pos} · {m.player.team}
+                {m.player.bye ? ` · Bye ${m.player.bye}` : ""}
+              </p>
             </div>
           </div>
         ))}
@@ -475,3 +406,4 @@ function StatsColumn({
     </div>
   );
 }
+
