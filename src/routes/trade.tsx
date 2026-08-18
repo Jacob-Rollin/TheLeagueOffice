@@ -326,6 +326,11 @@ function TradePage() {
           <CompareTable title={`${statsSeason} Season Stats`} rows={statRows} />
         )}
       </section>
+
+      <p className="mt-3 text-center text-[11px] text-muted-foreground">
+        Green marks the better side. Grades blend this year's projections (65%) with last season's
+        per-game production (35%), then adjust for open roster slots configured in the War Room.
+      </p>
     </main>
   );
 }
