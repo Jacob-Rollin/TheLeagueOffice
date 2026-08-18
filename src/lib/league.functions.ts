@@ -17,3 +17,13 @@ export const getStandings = createServerFn({ method: "GET" })
     const { loadStandings } = await import("./league.server");
     return await loadStandings(data.leagueId);
   });
+
+export const getLeagueSync = createServerFn({ method: "GET" })
+  .inputValidator((input: { leagueId: string; username?: string }) => ({
+    leagueId: String(input.leagueId ?? "").slice(0, 32),
+    username: String(input.username ?? "").slice(0, 64),
+  }))
+  .handler(async ({ data }) => {
+    const { loadLeagueSync } = await import("./league.server");
+    return await loadLeagueSync(data.leagueId, data.username);
+  });
