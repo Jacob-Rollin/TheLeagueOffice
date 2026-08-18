@@ -249,33 +249,44 @@ export function PlayerList({
                   </button>
                 )}
 
-                <Link
-                  to="/player/$id"
-                  params={{ id: p.id }}
-                  className="flex min-w-0 flex-1 items-center gap-3 rounded py-0.5 text-left hover:bg-secondary/50"
-                >
-                  <PositionBadge pos={p.pos} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate font-semibold">{p.name}</span>
-                      {p.injury && (
-                        <span className="rounded bg-destructive/20 px-1 text-[10px] font-bold uppercase text-destructive">
-                          {p.injury}
-                        </span>
-                      )}
-                    </div>
-                    <div className="tabnum text-xs text-muted-foreground">
-                      {p.team} · ADP {v.adp < 900 ? v.adp.toFixed(1) : "—"}
-                      {p.bye ? ` · BYE ${p.bye}` : ""}
-                      {reach !== null && reach < -6 ? " · reach" : ""}
-                    </div>
-                    <div className="tabnum text-xs text-muted-foreground">
-                      #{v.rank} · Proj {v.proj.toFixed(1)}
-                      {v.prev !== null && v.prev > 0 ? ` · LY ${v.prev.toFixed(0)}` : ""}
-                    </div>
-                  </div>
-                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                </Link>
+                {(() => {
+                  const rowClass =
+                    "flex min-w-0 flex-1 items-center gap-3 rounded py-0.5 text-left hover:bg-secondary/50";
+                  const body = (
+                    <>
+                      <PositionBadge pos={p.pos} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate font-semibold">{p.name}</span>
+                          {p.injury && (
+                            <span className="rounded bg-destructive/20 px-1 text-[10px] font-bold uppercase text-destructive">
+                              {p.injury}
+                            </span>
+                          )}
+                        </div>
+                        <div className="tabnum text-xs text-muted-foreground">
+                          {p.team} · ADP {v.adp < 900 ? v.adp.toFixed(1) : "—"}
+                          {p.bye ? ` · BYE ${p.bye}` : ""}
+                          {reach !== null && reach < -6 ? " · reach" : ""}
+                        </div>
+                        <div className="tabnum text-xs text-muted-foreground">
+                          #{v.rank} · Proj {v.proj.toFixed(1)}
+                          {v.prev !== null && v.prev > 0 ? ` · LY ${v.prev.toFixed(0)}` : ""}
+                        </div>
+                      </div>
+                      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                    </>
+                  );
+                  return onOpenPlayer ? (
+                    <button type="button" className={rowClass} onClick={() => onOpenPlayer(p.id)}>
+                      {body}
+                    </button>
+                  ) : (
+                    <Link to="/player/$id" params={{ id: p.id }} className={rowClass}>
+                      {body}
+                    </Link>
+                  );
+                })()}
 
                 <div className="flex shrink-0 items-center gap-1">
                   <Button
