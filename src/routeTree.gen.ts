@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DraftRouteImport } from './routes/draft'
 import { Route as TradeRouteImport } from './routes/trade'
 import { Route as WaiverRouteImport } from './routes/waiver'
+import { Route as WarRoomRouteImport } from './routes/war-room'
 import { Route as PlayerIdRouteImport } from './routes/player.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +36,11 @@ const WaiverRoute = WaiverRouteImport.update({
   path: '/waiver',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WarRoomRoute = WarRoomRouteImport.update({
+  id: '/war-room',
+  path: '/war-room',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlayerIdRoute = PlayerIdRouteImport.update({
   id: '/player/$id',
   path: '/player/$id',
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/draft': typeof DraftRoute
   '/trade': typeof TradeRoute
   '/waiver': typeof WaiverRoute
+  '/war-room': typeof WarRoomRoute
   '/player/$id': typeof PlayerIdRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/draft': typeof DraftRoute
   '/trade': typeof TradeRoute
   '/waiver': typeof WaiverRoute
+  '/war-room': typeof WarRoomRoute
   '/player/$id': typeof PlayerIdRoute
 }
 export interface FileRoutesById {
@@ -61,14 +69,22 @@ export interface FileRoutesById {
   '/draft': typeof DraftRoute
   '/trade': typeof TradeRoute
   '/waiver': typeof WaiverRoute
+  '/war-room': typeof WarRoomRoute
   '/player/$id': typeof PlayerIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/draft' | '/trade' | '/waiver' | '/player/$id'
+  fullPaths: '/' | '/draft' | '/trade' | '/waiver' | '/war-room' | '/player/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/draft' | '/trade' | '/waiver' | '/player/$id'
-  id: '__root__' | '/' | '/draft' | '/trade' | '/waiver' | '/player/$id'
+  to: '/' | '/draft' | '/trade' | '/waiver' | '/war-room' | '/player/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/draft'
+    | '/trade'
+    | '/waiver'
+    | '/war-room'
+    | '/player/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,6 +92,7 @@ export interface RootRouteChildren {
   DraftRoute: typeof DraftRoute
   TradeRoute: typeof TradeRoute
   WaiverRoute: typeof WaiverRoute
+  WarRoomRoute: typeof WarRoomRoute
   PlayerIdRoute: typeof PlayerIdRoute
 }
 
@@ -109,6 +126,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WaiverRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/war-room': {
+      id: '/war-room'
+      path: '/war-room'
+      fullPath: '/war-room'
+      preLoaderRoute: typeof WarRoomRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/player/$id': {
       id: '/player/$id'
       path: '/player/$id'
@@ -124,6 +148,7 @@ const rootRouteChildren: RootRouteChildren = {
   DraftRoute: DraftRoute,
   TradeRoute: TradeRoute,
   WaiverRoute: WaiverRoute,
+  WarRoomRoute: WarRoomRoute,
   PlayerIdRoute: PlayerIdRoute,
 }
 export const routeTree = rootRouteImport
