@@ -136,3 +136,138 @@ export async function loadStandings(leagueId: string): Promise<Standings | null>
     rows,
   };
 }
+
+// ---------------------------------------------------------------------------
+// League sync: pull roster slots, scoring, team names and rostered players
+// ---------------------------------------------------------------------------
+
+export type RosterSlotCounts = {
+  QB: number;
+  RB: number;
+  WR: number;
+  TE: number;
+  FLEX: number;
+  K: number;
+  DEF: number;
+  BENCH: number;
+};
+
+export type LeagueSync = {
+  league: LeagueSummary;
+  teams: number;
+  rounds: number;
+  snake: boolean;
+  scoring: "std" | "half" | "ppr";
+  roster: RosterSlotCounts;
+  /** 1-based draft slot -> team name */
+  teamNames: Record<string, string>;
+  /** 1-based draft slot for the linked user, if found */
+  myTeam: number | null;
+  /** rostered players, mapped to a 1-based draft slot */
+  picks: { playerId: string; team: number }[];
+};
+
+function scoringKey(settings: Record<string, unknown> | null | undefined): "std" | "half" | "ppr" {
+  const rec = Number(settings?.["rec"] ?? 0);
+  if (rec >= 1) return "ppr";
+  if (rec > 0) return "half";
+  return "std";
+}
+
+function slotCounts(positions: string[] | undefined): RosterSlotCounts {
+  const roster: RosterSlotCounts = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DEF: 0, BENCH: 0 };
+  for (const raw of positions ?? []) {
+    const p = String(raw).toUpperCase();
+    if (p === "QB") roster.QB++;
+    else if (p === "RB") roster.RB++;
+    else if (p === "WR") roster.WR++;
+    else if (p === "TE") roster.TE++;
+    else if (p === "K") roster.K++;
+    else if (p === "DEF" || p === "DST") roster.DEF++;
+    else if (p.includes("FLEX") || p === "SUPER_FLEX" || p === "REC_FLEX") roster.FLEX++;
+    else if (p === "BN" || p === "TAXI" || p === "IR") roster.BENCH++;
+  }
+  return roster;
+}
+
+export async function loadLeagueSync(leagueId: string, username?: string): Promise<LeagueSync | null> {
+  const id = leagueId.trim();
+  if (!/^\d+$/.test(id)) return null;
+
+  const [league, rosters, users] = await Promise.all([
+    json<{
+      league_id: string;
+      name: string;
+      season: string;
+      total_rosters: number;
+      status: string;
+      draft_id?: string;
+      scoring_settings?: Record<string, unknown>;
+      roster_positions?: string[];
+      settings?: Record<string, number>;
+    }>(`${BASE}/league/${id}`),
+    json<{ roster_id: number; owner_id: string | null; players?: string[] | null }[]>(
+      `${BASE}/league/${id}/rosters`,
+    ),
+    json<{ user_id: string; display_name: string; metadata?: { team_name?: string } }[]>(
+      `${BASE}/league/${id}/users`,
+    ),
+  ]);
+  if (!league || !rosters) return null;
+
+  const draft = league.draft_id
+    ? await json<{
+        type?: string;
+        settings?: { rounds?: number };
+        slot_to_roster_id?: Record<string, number>;
+      }>(`${BASE}/draft/${league.draft_id}`)
+    : null;
+
+  // Map roster_id -> 1-based draft slot (fall back to roster order).
+  const slotByRoster = new Map<number, number>();
+  const s2r = draft?.slot_to_roster_id ?? null;
+  if (s2r) {
+    for (const [slot, rosterId] of Object.entries(s2r)) slotByRoster.set(Number(rosterId), Number(slot));
+  }
+  const ordered = [...rosters].sort((a, b) => a.roster_id - b.roster_id);
+  ordered.forEach((r, i) => {
+    if (!slotByRoster.has(r.roster_id)) slotByRoster.set(r.roster_id, i + 1);
+  });
+
+  const byUser = new Map((users ?? []).map((u) => [u.user_id, u]));
+  const teamNames: Record<string, string> = {};
+  const picks: { playerId: string; team: number }[] = [];
+  let myTeam: number | null = null;
+  const wanted = (username ?? "").trim().replace(/^@/, "").toLowerCase();
+
+  for (const r of ordered) {
+    const slot = slotByRoster.get(r.roster_id) ?? r.roster_id;
+    const u = r.owner_id ? byUser.get(r.owner_id) : undefined;
+    teamNames[String(slot)] = u?.metadata?.team_name?.trim() || u?.display_name || `Team ${slot}`;
+    if (wanted && u && u.display_name.toLowerCase() === wanted) myTeam = slot;
+    for (const pid of r.players ?? []) picks.push({ playerId: String(pid), team: slot });
+  }
+
+  const roster = slotCounts(league.roster_positions);
+  const total = Object.values(roster).reduce((a, b) => a + b, 0);
+  const teams = league.total_rosters || ordered.length || 12;
+
+  return {
+    league: {
+      id: league.league_id,
+      name: league.name,
+      season: league.season,
+      teams,
+      status: league.status,
+      scoring: scoringLabel(league.scoring_settings),
+    },
+    teams,
+    rounds: draft?.settings?.rounds ?? total ?? 15,
+    snake: (draft?.type ?? "snake") !== "linear",
+    scoring: scoringKey(league.scoring_settings),
+    roster,
+    teamNames,
+    myTeam,
+    picks,
+  };
+}
