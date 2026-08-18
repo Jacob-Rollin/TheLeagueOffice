@@ -57,7 +57,7 @@ function Home() {
 
   return <main className="mx-auto w-full max-w-6xl px-3 pb-16">
     <section className="py-12 text-center sm:py-16">
-      <p className="eyebrow">Fantasy Football Headquarters</p>
+      
       <h1 className="display-title text-5xl leading-none sm:text-7xl">Welcome To The <span className="text-primary">League</span></h1>
       <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">Your league. Your draft room. Your front office. Connect Sleeper and keep every decision in one place.</p>
       <div className="mt-6 flex flex-wrap justify-center gap-2"><Link className="rounded-md bg-primary px-5 py-2.5 font-display uppercase tracking-wide text-primary-foreground" to="/draft">Enter War Room</Link><Link className="rounded-md border border-border px-5 py-2.5 font-display uppercase tracking-wide" to="/trade">Evaluate A Trade</Link></div>
