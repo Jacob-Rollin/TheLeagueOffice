@@ -80,13 +80,18 @@ export function PickSuggestions({
   onDraft: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
-  const suggestions = suggestedPicks(players, draftedIds, needs, watchIds, settings, currentOverall);
+  const suggestions = suggestedPicks(
+    players,
+    draftedIds,
+    needs,
+    watchIds,
+    settings,
+    currentOverall,
+  );
 
   if (!suggestions.length) {
     return (
-      <p className="p-3 text-center text-xs text-muted-foreground">
-        No suggestions available.
-      </p>
+      <p className="p-3 text-center text-xs text-muted-foreground">No suggestions available.</p>
     );
   }
 
@@ -106,12 +111,8 @@ export function PickSuggestions({
               className="flex w-full items-center gap-2 text-left"
             >
               <PositionBadge pos={player.pos} className="h-5 text-[10px]" />
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                {player.name}
-              </span>
-              <span className="tabnum text-[10px] text-muted-foreground">
-                #{pv.rank}
-              </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">{player.name}</span>
+              <span className="tabnum text-[10px] text-muted-foreground">#{pv.rank}</span>
             </button>
             <div className="mt-1.5 flex items-center justify-between gap-2">
               <span
