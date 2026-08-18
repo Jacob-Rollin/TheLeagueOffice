@@ -347,8 +347,17 @@ function TradePage() {
         Green marks the better side. Grades blend this year's projections (65%) with last season's
         per-game production (35%), then adjust for open roster slots configured in the War Room.
       </p>
-    </main>
+      </main>
+
+      <OtherTeamsColumn
+        settings={draft.settings}
+        rosters={rostersByTeam}
+        selectedIds={new Set(get.map((p) => p.id))}
+        onPick={(p) => setGet((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+      />
+    </div>
   );
+
 }
 
 function better(a: number, b: number) {
