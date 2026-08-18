@@ -472,3 +472,127 @@ function SideHead({
   );
 }
 
+
+function RosterRow({
+  player,
+  selected,
+  onPick,
+}: {
+  player: Player;
+  selected: boolean;
+  onPick: (p: Player) => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={selected}
+      onClick={() => onPick(player)}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors",
+        selected
+          ? "cursor-default opacity-50"
+          : "hover:border-border hover:bg-surface focus-visible:border-border",
+      )}
+    >
+      <PositionBadge pos={player.pos} className="h-5 shrink-0 text-[10px]" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium leading-tight">{player.name}</span>
+        <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
+          {player.team}
+          {player.bye ? ` · Bye ${player.bye}` : ""}
+        </span>
+      </span>
+      <span aria-hidden className="text-xs text-muted-foreground">
+        {selected ? "✓" : "+"}
+      </span>
+    </button>
+  );
+}
+
+function RosterColumn({
+  title,
+  subtitle,
+  players,
+  selectedIds,
+  onPick,
+}: {
+  title: string;
+  subtitle: string;
+  players: Player[];
+  selectedIds: Set<string>;
+  onPick: (p: Player) => void;
+}) {
+  return (
+    <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+      <p className="eyebrow">{title}</p>
+      <p className="truncate text-sm font-semibold">{subtitle}</p>
+      <p className="mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+        Tap to add to “You give”
+      </p>
+      {players.length === 0 ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          No players yet — draft or sync a league in the War Room.
+        </p>
+      ) : (
+        <div className="mt-2 space-y-0.5">
+          {players.map((p) => (
+            <RosterRow key={p.id} player={p} selected={selectedIds.has(p.id)} onPick={onPick} />
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function OtherTeamsColumn({
+  settings,
+  rosters,
+  selectedIds,
+  onPick,
+}: {
+  settings: Settings;
+  rosters: Map<number, Player[]>;
+  selectedIds: Set<string>;
+  onPick: (p: Player) => void;
+}) {
+  const teams = [...rosters.keys()]
+    .filter((t) => t !== settings.myTeam)
+    .sort((a, b) => a - b);
+  return (
+    <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+      <p className="eyebrow">League rosters</p>
+      <p className="mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+        Tap to add to “You receive”
+      </p>
+      <div className="mt-2 space-y-1">
+        {teams.map((t) => {
+          const players = rosters.get(t) ?? [];
+          return (
+            <details key={t} className="rounded-md border border-border bg-surface">
+              <summary className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium">
+                <span className="truncate">{teamName(settings, t)}</span>
+                <span className="tabnum shrink-0 text-[10px] text-muted-foreground">
+                  {players.length}
+                </span>
+              </summary>
+              <div className="space-y-0.5 border-t border-border p-1">
+                {players.length === 0 ? (
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">No players rostered.</p>
+                ) : (
+                  players.map((p) => (
+                    <RosterRow
+                      key={p.id}
+                      player={p}
+                      selected={selectedIds.has(p.id)}
+                      onPick={onPick}
+                    />
+                  ))
+                )}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
