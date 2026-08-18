@@ -1,4 +1,4 @@
-import { Sparkles, TrendingDown, Target, Star, Crown } from "lucide-react";
+import { Sparkles, TrendingDown, Target, Star, Crown, type LucideIcon } from "lucide-react";
 import { PositionBadge } from "./PositionBadge";
 import { cn } from "@/lib/utils";
 import { value, type Player, type Pos, type Settings, type SuggestionReason } from "@/lib/draft";
@@ -12,12 +12,12 @@ type Suggestion = {
 
 const REASON_META: Record<
   SuggestionReason,
-  { icon: React.ElementType; label: string; className: string }
+  { icon: LucideIcon; label: string; className: string }
 > = {
-  value: { icon: TrendingDown, label: "Value fall", className: "text-emerald-600 bg-emerald-100" },
-  need: { icon: Target, label: "Positional need", className: "text-amber-600 bg-amber-100" },
-  rank: { icon: Crown, label: "Best available", className: "text-primary bg-primary/10" },
-  watch: { icon: Star, label: "Watchlist", className: "text-accent bg-accent/10" },
+  value: { icon: TrendingDown, label: "Value fall", className: "text-accent bg-accent/10" },
+  need: { icon: Target, label: "Positional need", className: "text-primary bg-primary/10" },
+  rank: { icon: Crown, label: "Best available", className: "text-muted-foreground bg-muted" },
+  watch: { icon: Star, label: "Watchlist", className: "text-destructive bg-destructive/10" },
 };
 
 export function suggestedPicks(
