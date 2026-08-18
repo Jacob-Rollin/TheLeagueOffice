@@ -9,7 +9,12 @@ const KEY = "league-office-link-v1";
 const NEWS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50";
 
 type Saved = { username: string; leagueId: string };
-type NewsItem = { headline: string; description?: string; links?: { web?: { href: string } }[]; published?: string; images?: { url: string; alt?: string }[] };
+type NewsItem = { headline: string; description?: string; links?: { web?: { href: string } }[]; published?: string; images?: { url: string; alt?: string }[]; categories?: { description?: string }[] };
+
+const isFantasy = (n: NewsItem) => {
+  const tags = (n.categories ?? []).map((c) => (c.description ?? "").toLowerCase());
+  return tags.some((t) => t.includes("fantasy")) || `${n.headline} ${n.description ?? ""}`.toLowerCase().includes("fantasy");
+};
 
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [
