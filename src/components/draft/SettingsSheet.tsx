@@ -1,5 +1,6 @@
 import { Settings2 } from "lucide-react";
 
+import { SleeperSync } from "@/components/draft/SleeperSync";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -9,6 +10,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import type { LeagueLink, LeagueSyncInput } from "@/hooks/use-draft";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_SETTINGS,
@@ -64,10 +66,16 @@ export function SettingsSheet({
   settings,
   update,
   onReset,
+  link,
+  onApplyLeague,
+  onUnlinkLeague,
 }: {
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
   onReset: () => void;
+  link: LeagueLink | null;
+  onApplyLeague: (sync: LeagueSyncInput, meta: LeagueLink) => void;
+  onUnlinkLeague: () => void;
 }) {
   const setRoster = (key: keyof RosterSlots, v: number) => {
     const roster = { ...settings.roster, [key]: v };
@@ -91,6 +99,8 @@ export function SettingsSheet({
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-10">
+          <SleeperSync link={link} onApply={onApplyLeague} onUnlink={onUnlinkLeague} />
+
           <section className="space-y-2">
             <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
               Scoring

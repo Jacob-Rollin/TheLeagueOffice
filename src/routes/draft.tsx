@@ -86,7 +86,14 @@ function DraftRoom() {
               {settings.rounds} rds
             </p>
           </div>
-          <SettingsSheet settings={settings} update={draft.updateSettings} onReset={draft.reset} />
+          <SettingsSheet
+            settings={settings}
+            update={draft.updateSettings}
+            onReset={draft.reset}
+            link={draft.link}
+            onApplyLeague={draft.applyLeague}
+            onUnlinkLeague={draft.unlinkLeague}
+          />
         </div>
         <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden border-y border-border bg-border">
           <Stat
