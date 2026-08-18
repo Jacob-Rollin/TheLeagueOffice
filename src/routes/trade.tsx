@@ -211,9 +211,6 @@ function TradePage() {
           <h1 className="display-title text-4xl">
             Trade <span className="text-primary">Analyzer</span>
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Last season's production + this year's projections, per week and per season.
-          </p>
         </div>
         <div className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
           Scoring: <b className="text-foreground">{scoring}</b> · Team:{" "}
