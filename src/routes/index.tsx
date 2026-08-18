@@ -9,9 +9,17 @@ const KEY = "league-office-link-v1";
 const NEWS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50";
 
 type Saved = { username: string; leagueId: string };
-type NewsItem = { headline: string; description?: string; links?: { web?: { href: string } }[]; published?: string; images?: { url: string; alt?: string }[]; categories?: { description?: string }[] };
+type LinkNode = { web?: { href?: string }; href?: string };
+type NewsItem = { headline: string; description?: string; links?: LinkNode | LinkNode[]; published?: string; images?: { url: string; alt?: string }[]; categories?: { description?: string }[] };
 
-const articleUrl = (n: NewsItem) => n.links?.find((l) => l.web?.href)?.web?.href ?? "https://www.espn.com/fantasy/football/";
+const articleUrl = (n: NewsItem) => {
+  const nodes = Array.isArray(n.links) ? n.links : n.links ? [n.links] : [];
+  for (const l of nodes) {
+    const href = l?.web?.href ?? l?.href;
+    if (typeof href === "string" && href) return href;
+  }
+  return "https://www.espn.com/fantasy/football/";
+};
 
 const isFantasy = (n: NewsItem) => {
   const tags = (n.categories ?? []).map((c) => (c.description ?? "").toLowerCase());
