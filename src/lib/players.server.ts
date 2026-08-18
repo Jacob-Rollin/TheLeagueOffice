@@ -570,12 +570,59 @@ function toItem(a: EspnArticle, aboutPlayer: boolean): NewsItem {
   };
 }
 
+/** Resolve a player's ESPN athlete id through ESPN's public search. */
+const espnAthleteId = memo<string | null>(24 * HOUR, async (name) => {
+  const res = await fetch(
+    `https://site.web.api.espn.com/apis/search/v2?query=${encodeURIComponent(name)}&limit=5&sport=football&league=nfl`,
+    { headers: { accept: "application/json" } },
+  );
+  if (!res.ok) return null;
+  const json = (await res.json()) as {
+    results?: { type?: string; contents?: { uid?: string; displayName?: string }[] }[];
+  };
+  const players = json.results?.find((r) => r.type === "player")?.contents ?? [];
+  const hit =
+    players.find((c) => (c.displayName ?? "").toLowerCase() === name.toLowerCase()) ?? players[0];
+  const m = /a:(\d+)/.exec(hit?.uid ?? "");
+  return m ? m[1]! : null;
+});
+
+type EspnFeedItem = {
+  id?: number | string;
+  headline?: string;
+  description?: string;
+  story?: string;
+  published?: string;
+  lastModified?: string;
+  links?: { web?: { href?: string } };
+};
+
+/** Rotowire-style player news from ESPN's fantasy feed. */
+const espnPlayerFeed = memo<EspnFeedItem[]>(1000 * 60 * 10, async (athleteId) => {
+  const res = await fetch(
+    `https://site.web.api.espn.com/apis/fantasy/v2/games/ffl/news/players?playerId=${athleteId}&limit=15`,
+    { headers: { accept: "application/json" } },
+  );
+  if (!res.ok) return [];
+  const json = (await res.json()) as { feed?: EspnFeedItem[] };
+  return Array.isArray(json.feed) ? json.feed : [];
+});
+
+function stripTags(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function loadPlayerNews(id: string): Promise<PlayerNews | null> {
   const built = await buildPlayers("v1");
   const player = built.all.find((p) => p.id === id);
   if (!player) return null;
 
-  const [league, team] = await Promise.all([
+  const athleteId = await espnAthleteId(player.name).catch(() => null);
+  const [personal, league, team] = await Promise.all([
+    athleteId ? espnPlayerFeed(athleteId).catch(() => [] as EspnFeedItem[]) : Promise.resolve([]),
     espnNews("").catch(() => [] as EspnArticle[]),
     player.team && player.team !== "FA"
       ? espnNews(`&team=${player.team.toLowerCase()}`).catch(() => [] as EspnArticle[])
@@ -590,6 +637,21 @@ export async function loadPlayerNews(id: string): Promise<PlayerNews | null> {
     seen.add(item.id);
     items.push(item);
   };
+
+  for (const f of personal) {
+    const item: NewsItem = {
+      id: String(f.id ?? f.headline ?? Math.random()),
+      headline: f.headline ?? "Player update",
+      description: stripTags(f.story ?? f.description ?? ""),
+      published: f.published ?? f.lastModified ?? "",
+      link: f.links?.web?.href ?? null,
+      image: null,
+      aboutPlayer: true,
+    };
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    items.push(item);
+  }
 
   for (const a of [...league, ...team]) if (mentions(a, player.name)) push(a, true);
   for (const a of team) push(a, false);
