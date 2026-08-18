@@ -40,6 +40,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-surface: var(--surface);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
 
   --color-qb: var(--pos-qb);
   --color-rb: var(--pos-rb);
