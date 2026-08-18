@@ -125,7 +125,7 @@ export function PickSuggestions({
               </span>
               <button
                 onClick={() => onDraft(player.id)}
-                className="rounded bg-primary px-2 py-1 font-display text-[10px] uppercase tracking-wide text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                className="rounded bg-primary px-2 py-1 font-display text-[10px] uppercase tracking-wide text-primary-foreground"
               >
                 Draft
               </button>
