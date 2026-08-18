@@ -160,6 +160,50 @@ function TradePage() {
   const sum = (rows: Metrics[], key: keyof Metrics) =>
     rows.reduce((s, r) => s + (typeof r[key] === "number" ? (r[key] as number) : 0), 0);
 
+  const statsSeason =
+    giveRows.find((r) => r.prevSeason)?.prevSeason ??
+    getRows.find((r) => r.prevSeason)?.prevSeason ??
+    "Last";
+
+  const overviewRows: CompareRow[] = [
+    buildRow("Season Total (proj)", sum(giveRows, "projTotal"), sum(getRows, "projTotal")),
+    buildRow("Season Avg. (proj)", sum(giveRows, "projPerWk"), sum(getRows, "projPerWk")),
+    buildRow(`${statsSeason} Total`, sum(giveRows, "prevTotal"), sum(getRows, "prevTotal")),
+    buildRow(`${statsSeason} Avg.`, sum(giveRows, "prevPerGame"), sum(getRows, "prevPerGame")),
+    buildRow("Games Played", sum(giveRows, "prevGames"), sum(getRows, "prevGames"), { digits: 0 }),
+  ];
+
+  const bestRank = (rows: Metrics[]) => {
+    const ranks = rows.map((r) => r.posRank).filter((n): n is number => Boolean(n));
+    return ranks.length ? Math.min(...ranks) : null;
+  };
+  const lineTotal = (rows: Metrics[], label: string) => {
+    const vals = rows
+      .flatMap((r) => r.line.filter((l) => l.label === label).map((l) => Number(l.value)))
+      .filter((n) => Number.isFinite(n));
+    return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
+  };
+  const labels: string[] = [];
+  for (const r of [...giveRows, ...getRows])
+    for (const l of r.line) if (!labels.includes(l.label)) labels.push(l.label);
+
+  const statRows: CompareRow[] = [
+    buildRow("Position Rank", bestRank(giveRows), bestRank(getRows), {
+      lowerBetter: true,
+      digits: 0,
+      prefix: "#",
+    }),
+    buildRow("Fantasy Pts", sum(giveRows, "prevTotal"), sum(getRows, "prevTotal")),
+    buildRow("Fantasy Pts / Game", sum(giveRows, "prevPerGame"), sum(getRows, "prevPerGame")),
+    ...labels.map((label) =>
+      buildRow(label, lineTotal(giveRows, label), lineTotal(getRows, label), {
+        lowerBetter: LOWER_IS_BETTER.has(label),
+      }),
+    ),
+  ];
+
+
+
   return (
     <main className="mx-auto w-full max-w-5xl px-3 pb-16 pt-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
