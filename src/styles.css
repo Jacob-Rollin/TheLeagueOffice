@@ -40,6 +40,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-surface: var(--surface);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
 
   --color-qb: var(--pos-qb);
   --color-rb: var(--pos-rb);
@@ -74,6 +76,9 @@
   --border: oklch(0.88 0.008 250);
   --input: oklch(0.88 0.008 250);
   --ring: oklch(0.34 0.13 262);
+  --success: oklch(0.52 0.16 152);
+  --success-foreground: oklch(0.99 0 0);
+
 
   --pos-qb: oklch(0.52 0.19 25);
   --pos-rb: oklch(0.48 0.13 155);
