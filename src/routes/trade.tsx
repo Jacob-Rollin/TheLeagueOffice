@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
-import type { Player, Scoring } from "@/lib/draft";
+import { teamName, type Player, type Scoring, type Settings } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
@@ -124,14 +124,21 @@ function TradePage() {
   );
 
   const byId = useMemo(() => new Map(data.players.map((p) => [p.id, p])), [data.players]);
+  const rostersByTeam = useMemo(() => {
+    const map = new Map<number, Player[]>();
+    for (let t = 1; t <= draft.settings.teams; t++) map.set(t, []);
+    for (const pick of draft.picks) {
+      const player = byId.get(pick.playerId);
+      if (!player) continue;
+      map.get(pick.team)?.push(player);
+    }
+    return map;
+  }, [draft.picks, draft.settings.teams, byId]);
   const roster = useMemo(
-    () =>
-      draft.picks
-        .filter((p) => p.team === draft.settings.myTeam)
-        .map((p) => byId.get(p.playerId))
-        .filter((p): p is Player => Boolean(p)),
-    [draft.picks, draft.settings.myTeam, byId],
+    () => rostersByTeam.get(draft.settings.myTeam) ?? [],
+    [rostersByTeam, draft.settings.myTeam],
   );
+
   const needScore = (p: Player) => {
     const count = roster.filter((r) => r.pos === p.pos).length;
     const configured = draft.settings.roster[p.pos] ?? 0;
@@ -205,7 +212,16 @@ function TradePage() {
 
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-3 pb-16 pt-6">
+    <div className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[16rem_minmax(0,1fr)_18rem]">
+      <RosterColumn
+        title="My team"
+        subtitle={teamName(draft.settings, draft.settings.myTeam)}
+        players={roster}
+        selectedIds={new Set(give.map((p) => p.id))}
+        onPick={(p) => setGive((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+      />
+      <main className="min-w-0">
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="display-title text-4xl">
@@ -331,8 +347,17 @@ function TradePage() {
         Green marks the better side. Grades blend this year's projections (65%) with last season's
         per-game production (35%), then adjust for open roster slots configured in the War Room.
       </p>
-    </main>
+      </main>
+
+      <OtherTeamsColumn
+        settings={draft.settings}
+        rosters={rostersByTeam}
+        selectedIds={new Set(get.map((p) => p.id))}
+        onPick={(p) => setGet((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+      />
+    </div>
   );
+
 }
 
 function better(a: number, b: number) {
@@ -447,3 +472,127 @@ function SideHead({
   );
 }
 
+
+function RosterRow({
+  player,
+  selected,
+  onPick,
+}: {
+  player: Player;
+  selected: boolean;
+  onPick: (p: Player) => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={selected}
+      onClick={() => onPick(player)}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors",
+        selected
+          ? "cursor-default opacity-50"
+          : "hover:border-border hover:bg-surface focus-visible:border-border",
+      )}
+    >
+      <PositionBadge pos={player.pos} className="h-5 shrink-0 text-[10px]" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium leading-tight">{player.name}</span>
+        <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
+          {player.team}
+          {player.bye ? ` · Bye ${player.bye}` : ""}
+        </span>
+      </span>
+      <span aria-hidden className="text-xs text-muted-foreground">
+        {selected ? "✓" : "+"}
+      </span>
+    </button>
+  );
+}
+
+function RosterColumn({
+  title,
+  subtitle,
+  players,
+  selectedIds,
+  onPick,
+}: {
+  title: string;
+  subtitle: string;
+  players: Player[];
+  selectedIds: Set<string>;
+  onPick: (p: Player) => void;
+}) {
+  return (
+    <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+      <p className="eyebrow">{title}</p>
+      <p className="truncate text-sm font-semibold">{subtitle}</p>
+      <p className="mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+        Tap to add to “You give”
+      </p>
+      {players.length === 0 ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          No players yet — draft or sync a league in the War Room.
+        </p>
+      ) : (
+        <div className="mt-2 space-y-0.5">
+          {players.map((p) => (
+            <RosterRow key={p.id} player={p} selected={selectedIds.has(p.id)} onPick={onPick} />
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function OtherTeamsColumn({
+  settings,
+  rosters,
+  selectedIds,
+  onPick,
+}: {
+  settings: Settings;
+  rosters: Map<number, Player[]>;
+  selectedIds: Set<string>;
+  onPick: (p: Player) => void;
+}) {
+  const teams = [...rosters.keys()]
+    .filter((t) => t !== settings.myTeam)
+    .sort((a, b) => a - b);
+  return (
+    <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+      <p className="eyebrow">League rosters</p>
+      <p className="mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+        Tap to add to “You receive”
+      </p>
+      <div className="mt-2 space-y-1">
+        {teams.map((t) => {
+          const players = rosters.get(t) ?? [];
+          return (
+            <details key={t} className="rounded-md border border-border bg-surface">
+              <summary className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium">
+                <span className="truncate">{teamName(settings, t)}</span>
+                <span className="tabnum shrink-0 text-[10px] text-muted-foreground">
+                  {players.length}
+                </span>
+              </summary>
+              <div className="space-y-0.5 border-t border-border p-1">
+                {players.length === 0 ? (
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">No players rostered.</p>
+                ) : (
+                  players.map((p) => (
+                    <RosterRow
+                      key={p.id}
+                      player={p}
+                      selected={selectedIds.has(p.id)}
+                      onPick={onPick}
+                    />
+                  ))
+                )}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
