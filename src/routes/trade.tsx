@@ -212,7 +212,16 @@ function TradePage() {
 
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-3 pb-16 pt-6">
+    <div className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[16rem_minmax(0,1fr)_18rem]">
+      <RosterColumn
+        title="My team"
+        subtitle={teamName(draft.settings, draft.settings.myTeam)}
+        players={roster}
+        selectedIds={new Set(give.map((p) => p.id))}
+        onPick={(p) => setGive((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+      />
+      <main className="min-w-0">
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="display-title text-4xl">
