@@ -31,6 +31,7 @@ export function PlayerList({
   onReorder,
   onUndo,
   canUndo,
+  onOpenPlayer,
 }: {
   players: Player[];
   draftedIds: Set<string>;
@@ -44,6 +45,7 @@ export function PlayerList({
   onReorder: (ids: string[]) => void;
   onUndo: () => void;
   canUndo: boolean;
+  onOpenPlayer?: (id: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [pos, setPos] = useState<string>("ALL");

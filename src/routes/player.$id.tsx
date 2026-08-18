@@ -1,38 +1,24 @@
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { createFileRoute, notFound } from "@tanstack/react-router";
 
-import { PlayerNews } from "@/components/draft/PlayerNews";
-import { PositionBadge } from "@/components/draft/PositionBadge";
-import { Button } from "@/components/ui/button";
-import { useDraft } from "@/hooks/use-draft";
-import { SCORING_LABEL } from "@/lib/draft";
-import { getPlayerDetail } from "@/lib/players.functions";
-import { cn } from "@/lib/utils";
-
-const detailQuery = (id: string) =>
-  queryOptions({
-    queryKey: ["player", id],
-    queryFn: () => getPlayerDetail({ data: { id } }),
-    staleTime: 1000 * 60 * 30,
-  });
+import { PlayerDetail, detailQuery } from "@/components/draft/PlayerDetail";
 
 export const Route = createFileRoute("/player/$id")({
   head: () => ({
     meta: [
-      { title: "Player profile — DraftRoom" },
+      { title: "Player profile — The League Office" },
       {
         name: "description",
         content:
           "Player profile with prior-season stats, current projections, team depth chart, strength of schedule and injury risk.",
       },
-      { property: "og:title", content: "Player profile — DraftRoom" },
+      { property: "og:title", content: "Player profile — The League Office" },
       {
         property: "og:description",
         content:
           "Prior-season production, projections, depth chart, schedule difficulty and injury risk for every draftable player.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   loader: async ({ context, params }) => {
@@ -44,233 +30,9 @@ export const Route = createFileRoute("/player/$id")({
 
 function PlayerPage() {
   const { id } = Route.useParams();
-  const { data } = useSuspenseQuery(detailQuery(id));
-  const draft = useDraft();
-  const [tab, setTab] = useState<"overview" | "news">("overview");
-
-  if (!data) return null;
-  const { player, history, projection, depthChart, sos, injuryRisk, season } = data;
-  const scoring = draft.settings.scoring;
-  const drafted = draft.draftedIds.has(player.id);
-  const watched = draft.watchIds.has(player.id);
-
   return (
     <main className="mx-auto w-full max-w-3xl pb-16">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/90 px-3 py-3 backdrop-blur">
-        <Link to="/" className="inline-flex items-center gap-1 text-xs uppercase tracking-widest text-muted-foreground">
-          <ArrowLeft className="size-3.5" /> Draft board
-        </Link>
-        <div className="mt-2 flex items-start gap-3">
-          <PositionBadge pos={player.pos} />
-          <div className="min-w-0 flex-1">
-            <h1 className="display-title truncate text-2xl">{player.name}</h1>
-            <p className="tabnum text-xs text-muted-foreground">
-              {player.team} · {player.pos} · #{player.rank[scoring]} overall · ADP{" "}
-              {player.adp[scoring] < 900 ? player.adp[scoring].toFixed(1) : "—"} ·{" "}
-              {SCORING_LABEL[scoring]}
-              {player.age ? ` · Age ${player.age}` : ""}
-              {player.exp !== null ? ` · ${player.exp} yr exp` : ""}
-            </p>
-          </div>
-        </div>
-        <div className="mt-3 flex gap-2">
-          <Button
-            className="flex-1 font-display uppercase"
-            disabled={drafted}
-            onClick={() => draft.draftPlayer(player.id)}
-          >
-            {drafted ? "Drafted" : "Draft"}
-          </Button>
-          <Button
-            variant={watched ? "default" : "secondary"}
-            className="flex-1 font-display uppercase"
-            onClick={() => draft.toggleWatch(player.id)}
-          >
-            {watched ? "Watching" : "Watch"}
-          </Button>
-        </div>
-        <nav className="mt-3 flex gap-1">
-          {(
-            [
-              ["overview", "Overview"],
-              ["news", "News"],
-            ] as ["overview" | "news", string][]
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={cn(
-                "flex-1 rounded-md border px-3 py-1.5 font-display text-sm uppercase tracking-wide transition-colors",
-                tab === key
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-      </header>
-
-      {tab === "news" && <PlayerNews id={player.id} />}
-
-      {tab === "overview" && (
-      <>
-      <Section title={`${season} projection`}>
-        <div className="rounded-lg border border-border bg-card p-3">
-          <div className="tabnum font-display text-2xl">
-            {projection.points[scoring].toFixed(1)}{" "}
-            <span className="text-sm text-muted-foreground">proj pts</span>
-          </div>
-          <StatGrid line={projection.line} />
-        </div>
-      </Section>
-
-      <Section title="Previous seasons">
-        {history.length === 0 ? (
-          <Empty>No prior-season stats on record.</Empty>
-        ) : (
-          <ul className="space-y-2">
-            {history.map((h) => (
-              <li key={h.season} className="rounded-lg border border-border bg-card p-3">
-                <div className="flex items-baseline justify-between">
-                  <span className="font-display text-lg">{h.season}</span>
-                  <span className="tabnum text-sm text-muted-foreground">
-                    {h.points[scoring].toFixed(1)} pts · {h.games} gp
-                    {h.posRank ? ` · ${player.pos}${h.posRank}` : ""}
-                  </span>
-                </div>
-                <StatGrid line={h.line} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section title="Injury risk">
-        <div className="rounded-lg border border-border bg-card p-3">
-          <div className="flex items-center justify-between">
-            <span
-              className={cn(
-                "font-display text-lg uppercase",
-                injuryRisk.label === "High"
-                  ? "text-destructive"
-                  : injuryRisk.label === "Moderate"
-                    ? "text-accent"
-                    : "text-primary",
-              )}
-            >
-              {injuryRisk.label}
-            </span>
-            <span className="tabnum text-sm text-muted-foreground">{injuryRisk.score}/100</span>
-          </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded bg-secondary">
-            <div className="h-full bg-primary" style={{ width: `${injuryRisk.score}%` }} />
-          </div>
-          <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-            {injuryRisk.factors.map((f) => (
-              <li key={f}>· {f}</li>
-            ))}
-          </ul>
-        </div>
-      </Section>
-
-      <Section title={`Strength of schedule vs ${player.pos}`}>
-        {!sos ? (
-          <Empty>Schedule data unavailable for this player.</Empty>
-        ) : (
-          <div className="rounded-lg border border-border bg-card p-3">
-            <div className="flex items-baseline justify-between">
-              <span className="font-display text-lg">{sos.grade}</span>
-              <span className="tabnum text-xs text-muted-foreground">
-                avg opponent rank {sos.rank ?? "—"} / 32 (1 = toughest)
-              </span>
-            </div>
-            <div className="mt-3 grid grid-cols-6 gap-1 sm:grid-cols-9">
-              {sos.opponents.map((o) => (
-                <div
-                  key={o.week}
-                  className={cn(
-                    "rounded border border-border px-1 py-1 text-center",
-                    o.rank !== null && o.rank <= 10 && "bg-destructive/20",
-                    o.rank !== null && o.rank >= 23 && "bg-primary/20",
-                  )}
-                >
-                  <div className="text-[9px] uppercase text-muted-foreground">W{o.week}</div>
-                  <div className="tabnum text-[11px] font-semibold">{o.opp}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </Section>
-
-      <Section title={`${player.team} ${player.pos} depth chart`}>
-        {depthChart.length === 0 ? (
-          <Empty>No teammates found.</Empty>
-        ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border bg-card">
-            {depthChart.map((d) => (
-              <li key={d.id}>
-                <Link
-                  to="/player/$id"
-                  params={{ id: d.id }}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 hover:bg-secondary/50",
-                    d.id === player.id && "bg-primary/10",
-                  )}
-                >
-                  <PositionBadge pos={d.pos} className="h-5 text-[10px]" />
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">{d.name}</span>
-                  {d.injury && (
-                    <span className="rounded bg-destructive/20 px-1 text-[10px] font-bold uppercase text-destructive">
-                      {d.injury}
-                    </span>
-                  )}
-                  <span className="tabnum text-xs text-muted-foreground">
-                    {d.proj.toFixed(1)} proj
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-      </>
-      )}
+      <PlayerDetail id={id} />
     </main>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="px-3 pt-4">
-      <h2 className="mb-2 font-display text-sm uppercase tracking-widest text-muted-foreground">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function StatGrid({ line }: { line: { label: string; value: string }[] }) {
-  if (line.length === 0) return null;
-  return (
-    <div className="mt-2 grid grid-cols-3 gap-2">
-      {line.map((s) => (
-        <div key={s.label} className="rounded border border-border bg-surface px-2 py-1">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</div>
-          <div className="tabnum font-display text-base">{s.value}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-      {children}
-    </p>
   );
 }
