@@ -208,7 +208,6 @@ function TradePage() {
     <main className="mx-auto w-full max-w-5xl px-3 pb-16 pt-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="eyebrow">Front Office</p>
           <h1 className="display-title text-4xl">
             Trade <span className="text-primary">Analyzer</span>
           </h1>
@@ -330,11 +329,6 @@ function TradePage() {
           <CompareTable title={`${statsSeason} Season Stats`} rows={statRows} />
         )}
       </section>
-
-      <p className="mt-3 text-center text-[11px] text-muted-foreground">
-        Green marks the better side. Grades blend this year's projections (65%) with last season's
-        per-game production (35%), then adjust for open roster slots configured in the War Room.
-      </p>
     </main>
   );
 }
