@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
-import type { Player, Scoring } from "@/lib/draft";
+import { teamName, type Player, type Scoring, type Settings } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
