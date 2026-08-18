@@ -19,6 +19,6 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v1
         with:
-          path: ./build    # change to ./dist or ./public if your build output is different
+          path: ./dist    # change to ./dist or ./public if your build output is different
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v1
