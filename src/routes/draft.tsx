@@ -4,6 +4,7 @@ import { Star } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DraftBoard } from "@/components/draft/DraftBoard";
 import { PlayerList } from "@/components/draft/PlayerList";
+import { PickSuggestions } from "@/components/draft/PickSuggestions";
 import { PlayerModal } from "@/components/draft/PlayerModal";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { RosterPanel } from "@/components/draft/RosterPanel";
