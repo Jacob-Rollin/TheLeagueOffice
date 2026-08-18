@@ -1,5 +1,4 @@
 import type { Player, Pos } from "./players.server";
-export type SuggestionReason = "value" | "need" | "rank" | "watch";
 
 export type { Player, Pos };
 

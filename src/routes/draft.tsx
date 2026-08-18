@@ -4,7 +4,6 @@ import { Star } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DraftBoard } from "@/components/draft/DraftBoard";
 import { PlayerList } from "@/components/draft/PlayerList";
-import { PickSuggestions } from "@/components/draft/PickSuggestions";
 import { PlayerModal } from "@/components/draft/PlayerModal";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { RosterPanel } from "@/components/draft/RosterPanel";
@@ -157,38 +156,9 @@ function DraftRoom() {
           )}{" "}
           {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} />}{" "}
           {tab === "team" && (
-            <div className="space-y-3">
-              <div className="px-3 pt-3 lg:hidden">
-                <h2 className="display-title mb-2 text-lg">Suggestions</h2>
-                <PickSuggestions
-                  players={data.players}
-                  draftedIds={draft.draftedIds}
-                  needs={myNeeds}
-                  watchIds={draft.watchIds}
-                  settings={settings}
-                  currentOverall={currentOverall}
-                  onDraft={draft.draftPlayer}
-                  onOpen={setOpenId}
-                />
-              </div>
-              <RosterPanel settings={settings} picks={picks} byId={byId} team={settings.myTeam} />
-            </div>
+            <RosterPanel settings={settings} picks={picks} byId={byId} team={settings.myTeam} />
           )}
         </div>
-        <aside className="hidden lg:block">
-          <SideCard title="Suggestions" subtitle="Smart picks">
-            <PickSuggestions
-              players={data.players}
-              draftedIds={draft.draftedIds}
-              needs={myNeeds}
-              watchIds={draft.watchIds}
-              settings={settings}
-              currentOverall={currentOverall}
-              onDraft={draft.draftPlayer}
-              onOpen={setOpenId}
-            />
-          </SideCard>
-        </aside>
         <aside className="hidden lg:block">
           <SideCard title="Watchlist" subtitle={`${watchPlayers.length} players`}>
             <WatchColumn
