@@ -6,7 +6,7 @@ import type { LeagueSummary, Standings } from "@/lib/league.server";
 import { cn } from "@/lib/utils";
 
 const KEY = "league-office-link-v1";
-const NEWS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=6";
+const NEWS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50";
 
 type Saved = { username: string; leagueId: string };
 type NewsItem = { headline: string; description?: string; links?: { web?: { href: string } }[]; published?: string; images?: { url: string; alt?: string }[] };
