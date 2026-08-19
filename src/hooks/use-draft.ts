@@ -172,6 +172,7 @@ export function useDraft() {
     customOrder,
     setCustomOrder,
     undo,
+    removePick,
     reset,
     link,
     applyLeague,
