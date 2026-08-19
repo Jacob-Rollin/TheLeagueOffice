@@ -70,8 +70,8 @@ function DraftRoom() {
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
   return (
-    <main className="mx-auto flex h-screen w-full max-w-[1500px] flex-col overflow-hidden">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
+    <main className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col">
+      <header className="border-b border-border bg-background/85">
         <div className="flex items-center justify-between gap-3 px-3 pt-3">
           <div>
             <h1 className="display-title text-3xl">
@@ -139,12 +139,12 @@ function DraftRoom() {
       </header>
       <div
         className={cn(
-          "min-h-0 flex-1 gap-3 overflow-hidden px-0 py-3 lg:px-3",
-          tab !== "board" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px]",
+          "flex-1 gap-3 px-0 py-3 lg:px-3",
+          tab !== "board" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px] lg:items-start",
         )}
       >
         {tab !== "board" && (
-          <aside className="hidden min-h-0 lg:block">
+          <aside className="hidden lg:sticky lg:top-3 lg:block lg:max-h-[calc(100vh-1.5rem)]">
             {tab === "team" ? (
               <SideCard title="BYE WEEK MATRIX">
                 {myPlayers.length ? (
@@ -160,7 +160,7 @@ function DraftRoom() {
             )}
           </aside>
         )}
-        <div className="flex min-w-0 flex-col overflow-hidden">
+        <div className="flex min-w-0 flex-col">
           {tab === "players" && (
             <PlayerList
               players={data.players}
@@ -190,7 +190,7 @@ function DraftRoom() {
           )}
         </div>
         {tab !== "board" && (
-          <aside className="hidden min-h-0 lg:block">
+          <aside className="hidden lg:sticky lg:top-3 lg:block lg:max-h-[calc(100vh-1.5rem)]">
             {tab === "team" ? (
               <SideCard title="Suggested Picks" subtitle="Best value for your roster">
                 <DraftSuggestions
@@ -228,7 +228,7 @@ function DraftRoom() {
 }
 function SideCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+    <div className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="font-display text-sm uppercase tracking-widest">{title}</div>
         {subtitle && <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>}

@@ -127,8 +127,8 @@ export function PlayerList({
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="space-y-3 border-b border-border bg-surface/60 p-3 backdrop-blur">
+    <div className="flex flex-col">
+      <div className="sticky top-0 z-20 space-y-3 border-b border-border bg-surface/95 p-3 backdrop-blur">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -145,41 +145,43 @@ export function PlayerList({
           </Button>
         </div>
 
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-          {["ALL", ...POSITIONS].map((p) => (
-            <button
-              key={p}
-              onClick={() => setPos(p)}
-              className={cn(
-                "shrink-0 rounded-full border px-3 py-1 font-display text-sm font-semibold uppercase tracking-wide transition-colors",
-                pos === p
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {p}
-              {p !== "ALL" && (needs[p as Pos] ?? 0) > 0 ? (
-                <span className="ml-1 text-[10px] opacity-70">{needs[p as Pos]}</span>
-              ) : null}
-            </button>
-          ))}
-        </div>
+        <div className="-mx-1 flex flex-wrap items-center gap-y-2 px-1 pb-1">
+          <div className="flex flex-1 flex-wrap gap-1.5">
+            {["ALL", ...POSITIONS].map((p) => (
+              <button
+                key={p}
+                onClick={() => setPos(p)}
+                className={cn(
+                  "shrink-0 rounded-full border px-3 py-1 font-display text-sm font-semibold uppercase tracking-wide transition-colors",
+                  pos === p
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {p}
+                {p !== "ALL" && (needs[p as Pos] ?? 0) > 0 ? (
+                  <span className="ml-1 text-[10px] opacity-70">{needs[p as Pos]}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
 
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 text-xs text-muted-foreground">
-          {SORTS.map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setSort(key)}
-              className={cn(
-                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
-                sort === key
-                  ? "border-accent/50 bg-accent/15 text-accent"
-                  : "border-border hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
+          <div className="ml-auto flex flex-wrap justify-end gap-1.5 text-xs text-muted-foreground">
+            {SORTS.map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setSort(key)}
+                className={cn(
+                  "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                  sort === key
+                    ? "border-accent/50 bg-accent/15 text-accent"
+                    : "border-border hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -208,10 +210,7 @@ export function PlayerList({
             Drag the handle to build your own board order. It saves automatically.
           </p>
         )}
-      </div>
-
-      <div className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 hidden items-center gap-2 border-b border-border bg-surface/95 px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur sm:flex">
+        <div className="-mx-3 -mb-3 hidden items-center gap-2 border-t border-border px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground sm:flex">
           {sort === "custom" && <div className="w-6 shrink-0" />}
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="w-14 shrink-0" />
@@ -225,7 +224,9 @@ export function PlayerList({
           </div>
           <div className="w-24 shrink-0" />
         </div>
+      </div>
 
+      <div className="relative">
         {rows.length === 0 && (
           <p className="p-6 text-center text-sm text-muted-foreground">No players match.</p>
         )}
