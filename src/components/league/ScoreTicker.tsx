@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SCOREBOARD_URL =
@@ -16,6 +16,12 @@ type TickerGame = {
   away: TickerTeam;
   home: TickerTeam;
   link: string;
+};
+
+type WeekOption = {
+  seasonType: number;
+  week: number;
+  label: string;
 };
 
 /** Scheduled kickoff formatted in the viewer's local timezone, e.g. "SUN 12:00 PM". */
@@ -61,21 +67,111 @@ function mapGames(json: any): TickerGame[] {
     };
   });
 }
+
+function readCurrentWeek(json: any): number {
+  return Number(json?.week?.number ?? 1);
+}
+
+function readCurrentSeasonType(json: any): number {
+  return Number(json?.season?.type ?? json?.leagues?.[0]?.season?.type ?? 2);
+}
+
+function buildWeekOptions(json: any): WeekOption[] {
+  const calendar: any[] = json?.leagues?.[0]?.calendar ?? [];
+  const options: WeekOption[] = [];
+  for (const block of calendar) {
+    const seasonType = Number(block?.value);
+    if (!Number.isFinite(seasonType)) continue;
+    for (const entry of block?.entries ?? []) {
+      const week = Number(entry?.value);
+      if (!Number.isFinite(week)) continue;
+      options.push({
+        seasonType,
+        week,
+        label: String(entry?.label ?? `Week ${week}`),
+      });
+    }
+  }
+  return options;
+}
+
+function filterWeekOptions(
+  options: WeekOption[],
+  currentSeasonType: number,
+  currentWeek: number,
+): WeekOption[] {
+  const filtered: WeekOption[] = [];
+  for (const opt of options) {
+    if (opt.seasonType !== currentSeasonType) continue;
+    if (opt.week <= currentWeek || opt.week === currentWeek + 1) {
+      filtered.push(opt);
+    }
+  }
+
+  // Preseason transition: if at the final preseason week, offer Regular Season Week 1.
+  if (currentSeasonType === 1) {
+    const preseasonWeeks = options
+      .filter((o) => o.seasonType === 1)
+      .map((o) => o.week);
+    const maxPreseason = preseasonWeeks.length ? Math.max(...preseasonWeeks) : 0;
+    if (currentWeek === maxPreseason) {
+      const rsWeek1 = options.find((o) => o.seasonType === 2 && o.week === 1);
+      if (rsWeek1) filtered.push(rsWeek1);
+    }
+  }
+
+  return filtered;
+}
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export function ScoreTicker() {
   const [games, setGames] = useState<TickerGame[]>([]);
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
+  const [seasonType, setSeasonType] = useState<number | null>(null);
+  const [currentWeek, setCurrentWeek] = useState<number | null>(null);
+  const [currentSeasonType, setCurrentSeasonType] = useState<number | null>(null);
+  const [weekOptions, setWeekOptions] = useState<WeekOption[]>([]);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const initializedRef = useRef(false);
+  const skipCycleRef = useRef(false);
+
+  const visibleOptions =
+    currentSeasonType != null && currentWeek != null
+      ? filterWeekOptions(weekOptions, currentSeasonType, currentWeek)
+      : [];
 
   useEffect(() => {
+    if (skipCycleRef.current) {
+      skipCycleRef.current = false;
+      return;
+    }
+
     let cancelled = false;
 
     const load = async () => {
       try {
-        const res = await fetch(SCOREBOARD_URL);
+        const url =
+          selectedWeek != null && seasonType != null
+            ? `${SCOREBOARD_URL}?week=${selectedWeek}&seasontype=${seasonType}`
+            : SCOREBOARD_URL;
+        const res = await fetch(url);
         if (!res.ok) return;
         const json = await res.json();
-        if (!cancelled) setGames(mapGames(json));
+        if (cancelled) return;
+
+        if (!initializedRef.current) {
+          const cw = readCurrentWeek(json);
+          const cst = readCurrentSeasonType(json);
+          setSelectedWeek(cw);
+          setSeasonType(cst);
+          setCurrentWeek(cw);
+          setCurrentSeasonType(cst);
+          setWeekOptions(buildWeekOptions(json));
+          initializedRef.current = true;
+          skipCycleRef.current = true;
+        }
+
+        setGames(mapGames(json));
       } catch {
         /* offline or blocked — keep last known scores */
       }
@@ -87,7 +183,7 @@ export function ScoreTicker() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
+  }, [selectedWeek, seasonType]);
 
   const nudge = (dir: -1 | 1) => {
     const el = scrollerRef.current;
@@ -95,41 +191,72 @@ export function ScoreTicker() {
     el.scrollBy({ left: dir * Math.max(280, el.clientWidth * 0.7), behavior: "smooth" });
   };
 
+  const handleWeekChange = (value: string) => {
+    const [st, wk] = value.split("-").map(Number);
+    if (Number.isFinite(st) && Number.isFinite(wk)) {
+      setSeasonType(st);
+      setSelectedWeek(wk);
+    }
+  };
+
   if (!games.length) return null;
 
+  const selectValue =
+    selectedWeek != null && seasonType != null ? `${seasonType}-${selectedWeek}` : "";
+
   return (
-    <div className="relative border-b border-border bg-primary text-primary-foreground">
-      <ScrollButton side="left" onClick={() => nudge(-1)} />
-      <div
-        ref={scrollerRef}
-        className="no-scrollbar flex items-stretch gap-0 overflow-x-auto scroll-smooth px-8"
-      >
-        {games.map((g) => (
-          <a
-            key={g.id}
-            href={g.link}
-            target="_blank"
-            rel="noreferrer"
-            className="flex min-w-[168px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
-          >
-            <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-primary-foreground/70">
-              <span className="flex items-center gap-1">
-                {g.state === "in" && (
-                  <span className="size-1.5 rounded-full bg-accent" aria-hidden />
-                )}
-                {g.state === "in"
-                  ? `${g.period} ${g.clock}`.trim()
-                  : g.state === "pre"
-                    ? g.kickoff || g.detail
-                    : g.detail}
-              </span>
-            </div>
-            <TeamRow team={g.away} live={g.state === "in"} pre={g.state === "pre"} />
-            <TeamRow team={g.home} live={g.state === "in"} pre={g.state === "pre"} />
-          </a>
-        ))}
+    <div className="relative flex items-stretch border-b border-border bg-primary text-primary-foreground">
+      <div className="relative flex shrink-0 items-center border-r border-primary-foreground/15 px-3">
+        <select
+          value={selectValue}
+          onChange={(e) => handleWeekChange(e.target.value)}
+          className="appearance-none bg-transparent pr-5 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground focus:outline-none"
+        >
+          {visibleOptions.map((opt) => (
+            <option
+              key={`${opt.seasonType}-${opt.week}`}
+              value={`${opt.seasonType}-${opt.week}`}
+            >
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-1 top-1/2 size-3 -translate-y-1/2 text-primary-foreground/70" />
       </div>
-      <ScrollButton side="right" onClick={() => nudge(1)} />
+
+      <div className="relative flex-1">
+        <ScrollButton side="left" onClick={() => nudge(-1)} />
+        <div
+          ref={scrollerRef}
+          className="no-scrollbar flex items-stretch gap-0 overflow-x-auto scroll-smooth px-8"
+        >
+          {games.map((g) => (
+            <a
+              key={g.id}
+              href={g.link}
+              target="_blank"
+              rel="noreferrer"
+              className="flex min-w-[168px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
+            >
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-primary-foreground/70">
+                <span className="flex items-center gap-1">
+                  {g.state === "in" && (
+                    <span className="size-1.5 rounded-full bg-accent" aria-hidden />
+                  )}
+                  {g.state === "in"
+                    ? `${g.period} ${g.clock}`.trim()
+                    : g.state === "pre"
+                      ? g.kickoff || g.detail
+                      : g.detail}
+                </span>
+              </div>
+              <TeamRow team={g.away} live={g.state === "in"} pre={g.state === "pre"} />
+              <TeamRow team={g.home} live={g.state === "in"} pre={g.state === "pre"} />
+            </a>
+          ))}
+        </div>
+        <ScrollButton side="right" onClick={() => nudge(1)} />
+      </div>
     </div>
   );
 }
