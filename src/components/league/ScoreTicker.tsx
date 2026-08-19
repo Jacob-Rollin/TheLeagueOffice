@@ -237,32 +237,67 @@ export function ScoreTicker() {
   const selectValue =
     selectedWeek != null && seasonType != null ? `${seasonType}-${selectedWeek}` : "";
 
+  const selectedLabel =
+    visibleOptions.find((o) => `${o.seasonType}-${o.week}` === selectValue)?.label ??
+    (selectedWeek != null ? `Week ${selectedWeek}` : "Week");
+
   return (
     <div className="relative flex items-stretch border-b border-border bg-primary text-primary-foreground">
-      <div className="relative flex w-[74px] shrink-0 items-center border-r border-primary-foreground/15 px-2">
-        <select
-          value={selectValue}
-          onChange={(e) => handleWeekChange(e.target.value)}
+      <div
+        ref={dropdownRef}
+        className="relative flex shrink-0 items-stretch border-r border-primary-foreground/15"
+      >
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
           aria-label="Select week"
-          className="w-full cursor-pointer appearance-none bg-transparent pr-4 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground focus:outline-none"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          className="flex min-w-[120px] items-center justify-between gap-3 rounded-l-md bg-primary px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary-foreground/10 focus:outline-none"
         >
-          {visibleOptions.length ? (
-            visibleOptions.map((opt) => (
-              <option
-                key={`${opt.seasonType}-${opt.week}`}
-                value={`${opt.seasonType}-${opt.week}`}
-                className="bg-primary text-primary-foreground"
-              >
-                {opt.label}
-              </option>
-            ))
-          ) : (
-            <option value={selectValue} className="bg-primary text-primary-foreground">
-              {selectedWeek != null ? `WK ${selectedWeek}` : "WEEK"}
-            </option>
-          )}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-1 top-1/2 size-3 -translate-y-1/2 text-primary-foreground/70" />
+          <span className="whitespace-nowrap">{selectedLabel}</span>
+          <ChevronDown
+            className={cn(
+              "size-3 shrink-0 text-primary-foreground/70 transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        </button>
+
+        {open && (
+          <ul
+            role="listbox"
+            className="absolute top-full left-0 z-50 mt-1 min-w-full overflow-hidden rounded-md border border-primary-foreground/15 bg-primary shadow-lg"
+          >
+            {visibleOptions.length ? (
+              visibleOptions.map((opt) => {
+                const value = `${opt.seasonType}-${opt.week}`;
+                const active = value === selectValue;
+                return (
+                  <li key={value} role="option" aria-selected={active}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleWeekChange(value);
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        "w-full whitespace-nowrap px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary-foreground/10",
+                        active && "bg-primary-foreground/10",
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  </li>
+                );
+              })
+            ) : (
+              <li className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground/70">
+                {selectedWeek != null ? `Week ${selectedWeek}` : "Week"}
+              </li>
+            )}
+          </ul>
+        )}
       </div>
 
       <div className="relative flex-1">
