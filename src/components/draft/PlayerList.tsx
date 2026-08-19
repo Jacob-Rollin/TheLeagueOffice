@@ -210,7 +210,7 @@ export function PlayerList({
         )}
       </div>
 
-      <div className="relative flex-1 overflow-y-auto">
+      <div className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 hidden items-center gap-2 border-b border-border bg-surface/95 px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur sm:flex">
           {sort === "custom" && <div className="w-6 shrink-0" />}
           <div className="flex min-w-0 flex-1 items-center gap-3">
