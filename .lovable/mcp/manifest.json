@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "sdk_version": "0.26.2",
+  "path": "/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "the-league-office-v1",
+      "version": "0.1.0",
+      "title": "The League Office V1"
+    },
+    "tools": [
+      {
+        "name": "search_players",
+        "title": "Search fantasy players",
+        "description": "Search NFL fantasy players by name, position or team and return ADP, projections and last-season points.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": true
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "query": {
+              "description": "Name fragment to match.",
+              "type": "string",
+              "maxLength": 64
+            },
+            "position": {
+              "description": "Filter to one position.",
+              "type": "string",
+              "enum": [
+                "QB",
+                "RB",
+                "WR",
+                "TE",
+                "K",
+                "DEF"
+              ]
+            },
+            "team": {
+              "description": "NFL team abbreviation, e.g. KC.",
+              "type": "string",
+              "maxLength": 4
+            },
+            "scoring": {
+              "default": "half",
+              "description": "Scoring format for ADP and points.",
+              "type": "string",
+              "enum": [
+                "std",
+                "half",
+                "ppr"
+              ]
+            },
+            "limit": {
+              "default": 15,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_player",
+        "title": "Get player profile",
+        "description": "Full profile for one player: ADP, projections, prior-season stat lines, depth chart, strength of schedule and injury risk.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": true
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "player_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "description": "Sleeper player id, as returned by search_players."
+            }
+          },
+          "required": [
+            "player_id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_sleeper_leagues",
+        "title": "List Sleeper leagues",
+        "description": "List the public Sleeper fantasy football leagues for a Sleeper username.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": true
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "username": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Sleeper username."
+            },
+            "season": {
+              "description": "Season year, defaults to current.",
+              "type": "string",
+              "maxLength": 4
+            }
+          },
+          "required": [
+            "username"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_league",
+        "title": "Get league settings, standings and rosters",
+        "description": "Public Sleeper league detail: scoring settings, roster slots, team names, standings and every rostered player.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": true
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "league_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "description": "Sleeper league id."
+            },
+            "include": {
+              "default": "both",
+              "description": "Which sections to return.",
+              "type": "string",
+              "enum": [
+                "standings",
+                "rosters",
+                "both"
+              ]
+            }
+          },
+          "required": [
+            "league_id"
+          ]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
