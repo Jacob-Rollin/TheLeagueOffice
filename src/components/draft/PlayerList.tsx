@@ -319,3 +319,12 @@ export function PlayerList({
     </div>
   );
 }
+
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="w-14 rounded border border-border bg-card px-1 py-1 text-center">
+      <div className="text-[9px] uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="tabnum text-xs font-semibold leading-tight">{value}</div>
+    </div>
+  );
+}

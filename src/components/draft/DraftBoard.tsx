@@ -62,7 +62,7 @@ function RoundRow({
   settings: Settings;
   pickByOverall: Map<number, Pick>;
   byId: Map<string, Player>;
-  onRemove?: (playerId: string) => void;
+  onRemove?: ((playerId: string) => void) | undefined;
 }) {
   const cells = Array.from({ length: settings.teams }, (_, i) => {
     const team = i + 1;
