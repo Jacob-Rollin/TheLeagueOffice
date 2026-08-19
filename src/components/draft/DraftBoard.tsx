@@ -1,5 +1,3 @@
-import { X } from "lucide-react";
-
 import { PositionBadge } from "./PositionBadge";
 import { cn } from "@/lib/utils";
 import { teamForPick, teamName, type Pick, type Player, type Settings } from "@/lib/draft";
@@ -8,12 +6,10 @@ export function DraftBoard({
   settings,
   picks,
   byId,
-  onRemove,
 }: {
   settings: Settings;
   picks: Pick[];
   byId: Map<string, Player>;
-  onRemove?: (playerId: string) => void;
 }) {
   const pickByOverall = new Map(picks.map((p) => [p.overall, p]));
 
@@ -43,7 +39,6 @@ export function DraftBoard({
             settings={settings}
             pickByOverall={pickByOverall}
             byId={byId}
-            onRemove={onRemove}
           />
         ))}
       </div>
@@ -56,13 +51,11 @@ function RoundRow({
   settings,
   pickByOverall,
   byId,
-  onRemove,
 }: {
   round: number;
   settings: Settings;
   pickByOverall: Map<number, Pick>;
   byId: Map<string, Player>;
-  onRemove?: ((playerId: string) => void) | undefined;
 }) {
   const cells = Array.from({ length: settings.teams }, (_, i) => {
     const team = i + 1;
@@ -89,16 +82,7 @@ function RoundRow({
             )}
           >
             {player ? (
-              <div className="group relative flex h-full flex-col justify-between">
-                {onRemove && (
-                  <button
-                    aria-label={`Remove ${player.name}`}
-                    onClick={() => onRemove(player.id)}
-                    className="absolute -right-0.5 -top-0.5 rounded border border-border bg-background p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                  >
-                    <X className="size-3" />
-                  </button>
-                )}
+              <div className="flex h-full flex-col justify-between">
                 <span className="truncate text-[11px] font-semibold leading-tight">{player.name}</span>
                 <div className="flex items-center justify-between gap-1">
                   <PositionBadge pos={player.pos} className="h-4 min-w-0 px-1 text-[10px]" />
