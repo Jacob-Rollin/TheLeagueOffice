@@ -52,6 +52,16 @@ function DraftRoom() {
   const draft = useDraft();
   const [tab, setTab] = useState<Tab>("players");
   const [openId, setOpenId] = useState<string | null>(null);
+  const headerRef = useRef<HTMLElement | null>(null);
+  const [headerH, setHeaderH] = useState(0);
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeaderH(el.offsetHeight));
+    ro.observe(el);
+    setHeaderH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
   const byId = useMemo(() => new Map<string, Player>(data.players.map((p) => [p.id, p])), [data.players]);
   const { settings, picks, currentOverall, onTheClock, complete } = draft;
   const myPlayers = useMemo(
