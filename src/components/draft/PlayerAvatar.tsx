@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
 import type { Pos } from "@/lib/draft";
 
-export function playerImage(id: string, pos: Pos, team: string) {
-  if (pos === "DEF") return teamLogo(team || id);
+export function playerImage(id: string, pos: Pos, team: string): string {
+  if (pos === "DEF") return teamLogo(team || id) ?? "";
   return `https://sleepercdn.com/content/nfl/players/${id}.jpg`;
 }
 
