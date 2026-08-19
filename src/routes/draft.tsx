@@ -100,6 +100,29 @@ function DraftRoom() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {lastPlayer && lastPick && (
+              <button
+                onClick={() => setOpenId(lastPlayer.id)}
+                className="hidden items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary sm:flex"
+              >
+                <PlayerAvatar
+                  id={lastPlayer.id}
+                  pos={lastPlayer.pos}
+                  team={lastPlayer.team}
+                  name={lastPlayer.name}
+                  className="size-9"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Previous pick
+                  </span>
+                  <span className="block truncate text-xs font-semibold">{lastPlayer.name}</span>
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {teamName(settings, lastPick.team)}
+                  </span>
+                </span>
+              </button>
+            )}
             <button
               onClick={draft.undo}
               disabled={!picks.length}
