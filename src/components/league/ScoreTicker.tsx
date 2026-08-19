@@ -63,27 +63,6 @@ function mapGames(json: any): TickerGame[] {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-/** Wednesday (day 3) shows the upcoming week instead of last week's finals. */
-function shouldLookAhead(): boolean {
-  return new Date().getDay() === 3;
-}
-
-/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-function readWeekNumber(json: any): number {
-  const candidates = [
-    json?.week?.number,
-    json?.leagues?.[0]?.calendar?.find?.(
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      (c: any) => c?.value === "2",
-    )?.entries?.length,
-  ];
-  for (const c of candidates) {
-    const n = Number(c);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return NaN;
-}
-
 export function ScoreTicker() {
   const [games, setGames] = useState<TickerGame[]>([]);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -96,28 +75,7 @@ export function ScoreTicker() {
         const res = await fetch(SCOREBOARD_URL);
         if (!res.ok) return;
         const json = await res.json();
-        let data = json;
-
-        if (shouldLookAhead()) {
-          const current = readWeekNumber(json);
-          if (Number.isFinite(current)) {
-
-            const nextWeek = current + 1;
-            try {
-              const nextRes = await fetch(
-                `${SCOREBOARD_URL}?week=${nextWeek}&seasontype=2`,
-              );
-              if (nextRes.ok) {
-                const nextJson = await nextRes.json();
-                if (nextJson?.events?.length) data = nextJson;
-              }
-            } catch {
-              /* fall back to current week */
-            }
-          }
-        }
-
-        if (!cancelled) setGames(mapGames(data));
+        if (!cancelled) setGames(mapGames(json));
       } catch {
         /* offline or blocked — keep last known scores */
       }
