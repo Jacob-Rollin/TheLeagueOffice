@@ -15,6 +15,71 @@ function timeAgo(iso: string): string {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
+type Tag = {
+  label: string;
+  class: string;
+};
+
+const INJURY_KEYWORDS = [
+  "injury",
+  "injured",
+  "hurt",
+  "pain",
+  "out",
+  "doubtful",
+  "questionable",
+  "probable",
+  "ir",
+  "surgery",
+  "recover",
+  "rehab",
+  "hamstring",
+  "ankle",
+  "knee",
+  "concussion",
+  "groin",
+  "calf",
+  "shoulder",
+  "back",
+  "quadricep",
+  "quad",
+  "thumb",
+  "wrist",
+  "foot",
+  "toe",
+  "ribs",
+  "illness",
+  "dnr",
+  "did not",
+  "limited",
+  "full participant",
+  "practice",
+];
+
+function classify(headline: string, description: string, aboutPlayer: boolean): Tag {
+  const text = `${headline} ${description}`.toLowerCase();
+  const isInjury = INJURY_KEYWORDS.some((k) => text.includes(k));
+
+  if (isInjury) {
+    return {
+      label: "[INJURY ALERT]",
+      class: "bg-destructive/15 text-destructive border-destructive/30",
+    };
+  }
+
+  if (aboutPlayer) {
+    return {
+      label: "[TRENDING]",
+      class: "bg-primary/15 text-primary border-primary/30",
+    };
+  }
+
+  return {
+    label: "[SCOUTING]",
+    class: "bg-secondary text-muted-foreground border-border",
+  };
+}
+
 export function PlayerNews({ id }: { id: string }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["player-news", id],
@@ -59,39 +124,44 @@ export function PlayerNews({ id }: { id: string }) {
         </p>
       )}
 
-      <ul className="space-y-2">
-        {(data?.items ?? []).map((n) => (
-          <li key={n.id} className="rounded-lg border border-border bg-card p-3">
-            <div className="flex items-center gap-2">
-              {n.aboutPlayer ? (
-                <span className="rounded bg-primary/20 px-1.5 py-0.5 font-display text-[10px] uppercase tracking-wide text-primary">
-                  Player
+      <ul className="space-y-3">
+        {(data?.items ?? []).map((n) => {
+          const tag = classify(n.headline, n.description, n.aboutPlayer);
+          return (
+            <li
+              key={n.id}
+              className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className={cn(
+                    "inline-flex rounded border px-1.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide",
+                    tag.class,
+                  )}
+                >
+                  {tag.label}
                 </span>
-              ) : (
-                <span className="rounded bg-secondary px-1.5 py-0.5 font-display text-[10px] uppercase tracking-wide text-muted-foreground">
-                  League
+                <span className="tabnum shrink-0 text-[11px] text-muted-foreground">
+                  {timeAgo(n.published)}
                 </span>
+              </div>
+              <h3 className="text-sm font-semibold leading-snug">{n.headline}</h3>
+              {n.description && (
+                <p className="line-clamp-3 text-xs text-muted-foreground">{n.description}</p>
               )}
-              <span className="tabnum text-[11px] text-muted-foreground">
-                {timeAgo(n.published)}
-              </span>
-            </div>
-            <h3 className="mt-1 text-sm font-semibold leading-snug">{n.headline}</h3>
-            {n.description && (
-              <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{n.description}</p>
-            )}
-            {n.link && (
-              <a
-                href={n.link}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-primary"
-              >
-                Read on ESPN <ExternalLink className="size-3" />
-              </a>
-            )}
-          </li>
-        ))}
+              {n.link && (
+                <a
+                  href={n.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-primary"
+                >
+                  Read on ESPN <ExternalLink className="size-3" />
+                </a>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
