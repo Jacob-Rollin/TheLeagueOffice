@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getStandings, getUserLeagues } from "@/lib/league.functions";
 import type { LeagueSummary, Standings } from "@/lib/league.server";
 import { cn } from "@/lib/utils";
-import { ScoreTicker } from "@/components/league/ScoreTicker";
+
 
 const KEY = "league-office-link-v1";
 const NEWS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50";
@@ -66,7 +66,7 @@ function Home() {
   };
   const unlink = () => { localStorage.removeItem(KEY); setStandings(null); setLeagues([]); };
 
-  return <><ScoreTicker /><main className="mx-auto w-full max-w-6xl px-3 pb-16">
+  return <><main className="mx-auto w-full max-w-6xl px-3 pb-16">
     <section className="py-12 text-center sm:py-16">
       
       <h1 className="display-title text-5xl leading-none sm:text-7xl">Welcome To The <span className="text-primary">League</span></h1>
