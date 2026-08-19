@@ -1,4 +1,5 @@
-import { defineMcp, type AnyToolDefinition } from "@lovable.dev/mcp-js";
+import { defineMcp } from "@lovable.dev/mcp-js";
+import type { Parameters as McpParams } from "@lovable.dev/mcp-js";
 
 import getLeagueTool from "./tools/get-league";
 import getPlayerTool from "./tools/get-player";
