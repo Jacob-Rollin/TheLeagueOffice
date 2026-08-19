@@ -62,20 +62,20 @@ function classify(headline: string, description: string, aboutPlayer: boolean): 
 
   if (isInjury) {
     return {
-      label: "[INJURY ALERT]",
+      label: "INJURY ALERT",
       class: "bg-destructive/15 text-destructive border-destructive/30",
     };
   }
 
   if (aboutPlayer) {
     return {
-      label: "[TRENDING]",
+      label: "TRENDING",
       class: "bg-primary/15 text-primary border-primary/30",
     };
   }
 
   return {
-    label: "[SCOUTING]",
+    label: "SCOUTING",
     class: "bg-secondary text-muted-foreground border-border",
   };
 }
