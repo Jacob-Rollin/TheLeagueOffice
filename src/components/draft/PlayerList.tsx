@@ -210,7 +210,18 @@ export function PlayerList({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="relative flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-10 hidden items-center gap-2 border-b border-border bg-surface/95 px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur sm:flex">
+          <div className="min-w-0 flex-1">Player</div>
+          <div className="flex shrink-0 items-center gap-4 pr-2">
+            <div className="w-16 text-center">ADP</div>
+            <div className="w-16 text-center">Proj</div>
+            <div className="w-16 text-center">LY</div>
+          </div>
+          <div className="w-4 shrink-0" />
+          <div className="w-[7.25rem] shrink-0" />
+        </div>
+
         {rows.length === 0 && (
           <p className="p-6 text-center text-sm text-muted-foreground">No players match.</p>
         )}
