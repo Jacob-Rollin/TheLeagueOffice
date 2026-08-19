@@ -210,7 +210,18 @@ export function PlayerList({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="relative flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-10 hidden items-center gap-2 border-b border-border bg-surface/95 px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur sm:flex">
+          <div className="min-w-0 flex-1">Player</div>
+          <div className="flex shrink-0 items-center gap-4 pr-2">
+            <div className="w-16 text-center">ADP</div>
+            <div className="w-16 text-center">Proj</div>
+            <div className="w-16 text-center">LY</div>
+          </div>
+          <div className="w-4 shrink-0" />
+          <div className="w-[7.25rem] shrink-0" />
+        </div>
+
         {rows.length === 0 && (
           <p className="p-6 text-center text-sm text-muted-foreground">No players match.</p>
         )}
@@ -270,7 +281,7 @@ export function PlayerList({
                           {reach !== null && reach < -6 ? " · reach" : ""}
                         </div>
                       </div>
-                      <div className="hidden shrink-0 items-center gap-1 sm:flex">
+                      <div className="hidden shrink-0 items-center gap-4 pr-2 sm:flex">
                         <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
                         <StatCell label="Proj" value={v.proj.toFixed(1)} />
                         <StatCell
@@ -320,11 +331,7 @@ export function PlayerList({
   );
 }
 
-function StatCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="w-14 rounded border border-border bg-card px-1 py-1 text-center">
-      <div className="text-[9px] uppercase tracking-widest text-muted-foreground">{label}</div>
-      <div className="tabnum text-xs font-semibold leading-tight">{value}</div>
-    </div>
-  );
+function StatCell({ value }: { label?: string; value: string }) {
+  return <div className="tabnum w-16 text-center text-xs font-semibold">{value}</div>;
 }
+

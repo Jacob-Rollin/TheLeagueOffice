@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import {
   DEFAULT_SETTINGS,
@@ -35,38 +35,134 @@ export type LeagueSyncInput = {
   picks: { playerId: string; team: number }[];
 };
 
-export function useDraft() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [picks, setPicks] = useState<Pick[]>([]);
-  const [watch, setWatch] = useState<string[]>([]);
-  const [customOrder, setCustomOrder] = useState<string[]>([]);
-  const [link, setLink] = useState<LeagueLink | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+type StoreState = {
+  settings: Settings;
+  picks: Pick[];
+  watch: string[];
+  customOrder: string[];
+  link: LeagueLink | null;
+  hydrated: boolean;
+};
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Persisted;
-        if (parsed.settings) setSettings({ ...DEFAULT_SETTINGS, ...parsed.settings });
-        if (Array.isArray(parsed.picks)) setPicks(parsed.picks);
-        if (Array.isArray(parsed.watch)) setWatch(parsed.watch);
-        if (Array.isArray(parsed.order)) setCustomOrder(parsed.order);
-        if (parsed.link) setLink(parsed.link);
-      }
-    } catch {
-      /* ignore corrupted state */
-    }
-    setHydrated(true);
-  }, []);
+let state: StoreState = {
+  settings: DEFAULT_SETTINGS,
+  picks: [],
+  watch: [],
+  customOrder: [],
+  link: null,
+  hydrated: false,
+};
 
-  useEffect(() => {
-    if (!hydrated) return;
+const listeners = new Set<() => void>();
+
+function emit() {
+  for (const l of listeners) l();
+}
+
+function persist() {
+  if (!state.hydrated) return;
+  try {
     localStorage.setItem(
       KEY,
-      JSON.stringify({ settings, picks, watch, order: customOrder, link } satisfies Persisted),
+      JSON.stringify({
+        settings: state.settings,
+        picks: state.picks,
+        watch: state.watch,
+        order: state.customOrder,
+        link: state.link,
+      } satisfies Persisted),
     );
-  }, [settings, picks, watch, customOrder, link, hydrated]);
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+function setState(patch: Partial<StoreState>) {
+  state = { ...state, ...patch };
+  persist();
+  emit();
+}
+
+type Updater<T> = T | ((prev: T) => T);
+function resolve<T>(next: Updater<T>, prev: T): T {
+  return typeof next === "function" ? (next as (p: T) => T)(prev) : next;
+}
+
+let hydrating = false;
+function hydrate() {
+  if (state.hydrated || hydrating || typeof window === "undefined") return;
+  hydrating = true;
+  let loaded: Partial<StoreState> = {};
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Persisted;
+      loaded = {
+        ...(parsed.settings ? { settings: { ...DEFAULT_SETTINGS, ...parsed.settings } } : {}),
+        ...(Array.isArray(parsed.picks) ? { picks: parsed.picks } : {}),
+        ...(Array.isArray(parsed.watch) ? { watch: parsed.watch } : {}),
+        ...(Array.isArray(parsed.order) ? { customOrder: parsed.order } : {}),
+        ...(parsed.link ? { link: parsed.link } : {}),
+      };
+    }
+  } catch {
+    /* ignore corrupted state */
+  }
+  state = { ...state, ...loaded, hydrated: true };
+  emit();
+}
+
+function subscribe(cb: () => void) {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
+const SERVER_SNAPSHOT: StoreState = {
+  settings: DEFAULT_SETTINGS,
+  picks: [],
+  watch: [],
+  customOrder: [],
+  link: null,
+  hydrated: false,
+};
+
+export function useDraft() {
+  const store = useSyncExternalStore(
+    subscribe,
+    () => state,
+    () => SERVER_SNAPSHOT,
+  );
+
+  useEffect(() => {
+    hydrate();
+  }, []);
+
+  const { settings, picks, watch, customOrder, link, hydrated } = store;
+
+  const setSettings = useCallback(
+    (next: Updater<Settings>) => setState({ settings: resolve(next, state.settings) }),
+    [],
+  );
+  const setPicks = useCallback(
+    (next: Updater<Pick[]>) => setState({ picks: resolve(next, state.picks) }),
+    [],
+  );
+  const setWatch = useCallback(
+    (next: Updater<string[]>) => setState({ watch: resolve(next, state.watch) }),
+    [],
+  );
+  const setCustomOrder = useCallback(
+    (next: Updater<string[]>) => setState({ customOrder: resolve(next, state.customOrder) }),
+    [],
+  );
+  const setLink = useCallback(
+    (next: Updater<LeagueLink | null>) => setState({ link: resolve(next, state.link) }),
+    [],
+  );
+
+
 
   const totalPicks = settings.teams * settings.rounds;
   const currentOverall = Math.min(picks.length + 1, totalPicks);
