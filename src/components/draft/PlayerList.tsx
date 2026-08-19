@@ -145,41 +145,43 @@ export function PlayerList({
           </Button>
         </div>
 
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-          {["ALL", ...POSITIONS].map((p) => (
-            <button
-              key={p}
-              onClick={() => setPos(p)}
-              className={cn(
-                "shrink-0 rounded-full border px-3 py-1 font-display text-sm font-semibold uppercase tracking-wide transition-colors",
-                pos === p
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {p}
-              {p !== "ALL" && (needs[p as Pos] ?? 0) > 0 ? (
-                <span className="ml-1 text-[10px] opacity-70">{needs[p as Pos]}</span>
-              ) : null}
-            </button>
-          ))}
-        </div>
+        <div className="-mx-1 flex flex-wrap items-center gap-y-2 px-1 pb-1">
+          <div className="flex flex-1 flex-wrap gap-1.5">
+            {["ALL", ...POSITIONS].map((p) => (
+              <button
+                key={p}
+                onClick={() => setPos(p)}
+                className={cn(
+                  "shrink-0 rounded-full border px-3 py-1 font-display text-sm font-semibold uppercase tracking-wide transition-colors",
+                  pos === p
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {p}
+                {p !== "ALL" && (needs[p as Pos] ?? 0) > 0 ? (
+                  <span className="ml-1 text-[10px] opacity-70">{needs[p as Pos]}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
 
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 text-xs text-muted-foreground">
-          {SORTS.map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setSort(key)}
-              className={cn(
-                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
-                sort === key
-                  ? "border-accent/50 bg-accent/15 text-accent"
-                  : "border-border hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
+          <div className="ml-auto flex flex-wrap justify-end gap-1.5 text-xs text-muted-foreground">
+            {SORTS.map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setSort(key)}
+                className={cn(
+                  "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                  sort === key
+                    ? "border-accent/50 bg-accent/15 text-accent"
+                    : "border-border hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
