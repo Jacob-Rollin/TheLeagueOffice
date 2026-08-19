@@ -98,6 +98,22 @@ export function useDraft() {
   }, []);
 
   const undo = useCallback(() => setPicks((prev) => prev.slice(0, -1)), []);
+
+  /** Remove a mis-clicked pick anywhere on the board and renumber the rest. */
+  const removePick = useCallback(
+    (playerId: string) => {
+      setPicks((prev) =>
+        prev
+          .filter((p) => p.playerId !== playerId)
+          .map((p, i) => ({
+            playerId: p.playerId,
+            overall: i + 1,
+            team: teamForPick(i + 1, settings.teams, settings.snake),
+          })),
+      );
+    },
+    [settings.teams, settings.snake],
+  );
   const reset = useCallback(() => setPicks([]), []);
 
   /** Overwrite settings + rosters from a linked Sleeper league. */
