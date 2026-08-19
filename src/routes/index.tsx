@@ -65,7 +65,7 @@ function Home() {
   };
   const unlink = () => { localStorage.removeItem(KEY); setStandings(null); setLeagues([]); };
 
-  return <main className="mx-auto w-full max-w-6xl px-3 pb-16">
+  return <><ScoreTicker /><main className="mx-auto w-full max-w-6xl px-3 pb-16">
     <section className="py-12 text-center sm:py-16">
       
       <h1 className="display-title text-5xl leading-none sm:text-7xl">Welcome To The <span className="text-primary">League</span></h1>
