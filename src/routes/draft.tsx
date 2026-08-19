@@ -228,7 +228,7 @@ function DraftRoom() {
 }
 function SideCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+    <div className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="font-display text-sm uppercase tracking-widest">{title}</div>
         {subtitle && <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>}
