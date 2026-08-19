@@ -270,7 +270,7 @@ export function PlayerList({
                           {reach !== null && reach < -6 ? " · reach" : ""}
                         </div>
                       </div>
-                      <div className="hidden shrink-0 items-center gap-1 sm:flex">
+                      <div className="hidden shrink-0 items-center gap-4 pr-2 sm:flex">
                         <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
                         <StatCell label="Proj" value={v.proj.toFixed(1)} />
                         <StatCell
