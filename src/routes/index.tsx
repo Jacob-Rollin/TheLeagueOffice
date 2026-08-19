@@ -262,7 +262,6 @@ function Home() {
                       <th className="w-8 px-1 py-1.5 text-left">#</th>
                       <th className="px-1 py-1.5 text-left">Team</th>
                       <th className="w-16 px-1 py-1.5 text-right">W-L</th>
-                      <th className="w-12 px-1 py-1.5 text-right">PF</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -276,7 +275,6 @@ function Home() {
                         <td className="tabnum px-1 py-1.5 text-right">
                           {r.wins}-{r.losses}
                         </td>
-                        <td className="tabnum px-1 py-1.5 text-right">{r.pointsFor}</td>
                       </tr>
                     ))}
                   </tbody>
