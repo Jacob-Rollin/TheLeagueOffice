@@ -101,7 +101,8 @@ function Home() {
         <p className="eyebrow">League HQ</p>
         <h2 className="display-title text-2xl">League Sync</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Import your active Sleeper league assets to instantly unlock custom front-office analytics and real-time draft tracking.
+          Import your active Sleeper league assets to instantly unlock custom front-office analytics and real-time draft
+          tracking.
         </p>
       </div>
       <div className="mt-4 flex flex-col gap-2">
@@ -110,7 +111,7 @@ function Home() {
           onChange={(e) => setUsername(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && search()}
           placeholder="Enter Sleeper Username..."
-          className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-600"
+          className="w-full rounded-md border border-zinc-800 bg-background px-3 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-600"
         />
         <div className="flex gap-2">
           <button
