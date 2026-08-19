@@ -197,7 +197,7 @@ function DraftRoom() {
               </SideCard>
             ) : (
               <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
-                <MyTeamColumn settings={settings} players={myPlayers} onOpen={setOpenId} onRemove={draft.removePick} />
+                <MyTeamColumn settings={settings} players={myPlayers} onOpen={setOpenId} />
               </SideCard>
             )}
           </aside>
@@ -220,14 +220,13 @@ function DraftRoom() {
               onOpenPlayer={setOpenId}
             />
           )}{" "}
-          {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} onRemove={draft.removePick} />}{" "}
+          {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} />}{" "}
           {tab === "team" && (
             <RosterPanel
               settings={settings}
               picks={picks}
               byId={byId}
               team={settings.myTeam}
-              onRemove={draft.removePick}
             />
           )}
         </div>
@@ -283,12 +282,10 @@ function MyTeamColumn({
   settings,
   players,
   onOpen,
-  onRemove,
 }: {
   settings: Settings;
   players: Player[];
   onOpen: (id: string) => void;
-  onRemove?: (id: string) => void;
 }) {
   const slots = fillRoster(players, settings.roster);
   return (
@@ -296,28 +293,17 @@ function MyTeamColumn({
       {slots.map((s, i) => (
         <li key={i} className="flex items-center gap-1">
           {s.player ? (
-            <>
-              <button
-                onClick={() => onOpen(s.player!.id)}
-                className="flex w-full items-center gap-2 rounded border border-border bg-background px-2 py-1.5 text-left hover:border-primary"
-              >
-                <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
-                <PositionBadge pos={s.player.pos} className="h-5 text-[10px]" />
-                <span className="min-w-0 flex-1 truncate text-xs font-semibold">{s.player.name}</span>
-                <span className="tabnum text-[10px] text-muted-foreground">
-                  {value(s.player, settings.scoring).proj.toFixed(0)}
-                </span>
-              </button>
-              {onRemove && (
-                <button
-                  aria-label={`Remove ${s.player.name}`}
-                  onClick={() => onRemove(s.player!.id)}
-                  className="shrink-0 rounded border border-border p-1 text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
-                >
-                  <X className="size-3" />
-                </button>
-              )}
-            </>
+            <button
+              onClick={() => onOpen(s.player!.id)}
+              className="flex w-full items-center gap-2 rounded border border-border bg-background px-2 py-1.5 text-left hover:border-primary"
+            >
+              <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
+              <PositionBadge pos={s.player.pos} className="h-5 text-[10px]" />
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold">{s.player.name}</span>
+              <span className="tabnum text-[10px] text-muted-foreground">
+                {value(s.player, settings.scoring).proj.toFixed(0)}
+              </span>
+            </button>
           ) : (
             <div className="flex flex-1 items-center gap-2 rounded border border-dashed border-border px-2 py-1.5">
               <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
