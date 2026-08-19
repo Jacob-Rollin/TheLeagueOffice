@@ -160,7 +160,7 @@ function DraftRoom() {
             )}
           </aside>
         )}
-        <div className="flex min-w-0 flex-col overflow-hidden">
+        <div className="flex min-w-0 flex-col">
           {tab === "players" && (
             <PlayerList
               players={data.players}
