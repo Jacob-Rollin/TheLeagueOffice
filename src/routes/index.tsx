@@ -100,8 +100,8 @@ function Home() {
       <div className="flex flex-col gap-1">
         <h2 className="display-title text-2xl">League Sync</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Import your active Sleeper league assets to instantly unlock custom front-office analytics and real-time draft
-          tracking.
+          Import your active Sleeper league assets to instantly unlock custom front-office analytics and real- time
+          draft tracking.
         </p>
       </div>
       <div className="mt-4 flex flex-col gap-2">
