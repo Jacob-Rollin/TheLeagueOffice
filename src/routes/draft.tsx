@@ -157,7 +157,7 @@ function DraftRoom() {
         {tab !== "board" && (
           <aside className="hidden lg:block">
             {tab === "team" ? (
-              <SideCard title="Bye Weeks" subtitle={`${myPlayers.length} players`}>
+              <SideCard title="BYE WEEK MATRIX">
                 {myPlayers.length ? (
                   <ByeMatrix players={myPlayers} layout="column" />
                 ) : (
@@ -257,14 +257,14 @@ function SideCard({
   children,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="sticky top-44 mt-3 rounded-xl border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="font-display text-sm uppercase tracking-widest">{title}</div>
-        <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>
+        {subtitle && <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>}
       </div>
       <div className="max-h-[calc(100vh-16rem)] overflow-y-auto p-2">{children}</div>
     </div>

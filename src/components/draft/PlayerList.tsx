@@ -213,10 +213,10 @@ export function PlayerList({
       <div className="relative flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 hidden items-center gap-2 border-b border-border bg-surface/95 px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur sm:flex">
           <div className="min-w-0 flex-1">Player</div>
-          <div className="flex shrink-0 items-center gap-4 pr-2">
-            <div className="w-16 text-center">ADP</div>
-            <div className="w-16 text-center">Proj</div>
-            <div className="w-16 text-center">LY</div>
+          <div className="flex shrink-0 items-center gap-8 pr-4">
+            <div className="w-20 text-center">ADP</div>
+            <div className="w-20 text-center">Proj</div>
+            <div className="w-20 text-center">LY</div>
           </div>
           <div className="w-4 shrink-0" />
           <div className="w-[7.25rem] shrink-0" />
@@ -281,7 +281,7 @@ export function PlayerList({
                           {reach !== null && reach < -6 ? " · reach" : ""}
                         </div>
                       </div>
-                      <div className="hidden shrink-0 items-center gap-4 pr-2 sm:flex">
+                      <div className="hidden shrink-0 items-center gap-8 pr-4 sm:flex">
                         <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
                         <StatCell label="Proj" value={v.proj.toFixed(1)} />
                         <StatCell
@@ -332,6 +332,6 @@ export function PlayerList({
 }
 
 function StatCell({ value }: { label?: string; value: string }) {
-  return <div className="tabnum w-16 text-center text-xs font-semibold">{value}</div>;
+  return <div className="tabnum w-20 text-center text-xs font-semibold">{value}</div>;
 }
 
