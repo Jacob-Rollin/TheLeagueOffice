@@ -151,9 +151,20 @@ export function ScoreTicker() {
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentSeasonType, setCurrentSeasonType] = useState<number | null>(null);
   const [weekOptions, setWeekOptions] = useState<WeekOption[]>([]);
+  const [open, setOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const skipCycleRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e: MouseEvent) => {
+      if (!dropdownRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
 
   const visibleOptions =
     currentSeasonType != null && currentWeek != null
