@@ -123,7 +123,10 @@ function Home() {
             {leaguesM.isPending ? "Looking…" : "Connect"}
           </button>
           {standings && (
-            <button onClick={unlink} className="rounded-md border border-border px-4 py-2.5 text-sm text-muted-foreground">
+            <button
+              onClick={unlink}
+              className="rounded-md border border-border px-4 py-2.5 text-sm text-muted-foreground"
+            >
               Unlink
             </button>
           )}
@@ -182,16 +185,19 @@ function Home() {
             <HomeCard
               to="/draft"
               title="War Room"
-              desc="ADP, projections, stats, player cards, custom rankings and a live draft board."
+              desc="Live draft engine, ADP tracking, and advanced player data metrics."
             />
             <HomeCard
               to="/trade"
-              title="Trade Analyzer"
-              desc="Compare what you give and get with roster-fit and player value."
+              title="Trade Desk"
+              desc="Instant asset evaluation, roster impact modeling, and value tracking."
             />
-            <HomeCard to="/waiver" title="Waiver Wire" desc="Find the best free-agent adds and get a claim grade." />
+            <HomeCard
+              to="/waiver"
+              title="The Wire"
+              desc="'Free agency priority tools, trend monitoring, and waiver budget analysis."
+            />
           </section>
-
 
           <section className="mt-10">
             <div className="mb-3 flex items-end justify-between">
@@ -287,7 +293,6 @@ function Home() {
     </main>
   );
 }
-
 
 function HomeCard({ to, title, desc }: { to: string; title: string; desc: string }) {
   return (
