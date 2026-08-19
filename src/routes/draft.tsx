@@ -139,12 +139,12 @@ function DraftRoom() {
       </header>
       <div
         className={cn(
-          "min-h-0 flex-1 gap-3 overflow-hidden px-0 py-3 lg:px-3",
-          tab !== "board" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px]",
+          "flex-1 gap-3 px-0 py-3 lg:px-3",
+          tab !== "board" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px] lg:items-start",
         )}
       >
         {tab !== "board" && (
-          <aside className="hidden min-h-0 lg:block">
+          <aside className="hidden lg:sticky lg:top-3 lg:block lg:max-h-[calc(100vh-1.5rem)]">
             {tab === "team" ? (
               <SideCard title="BYE WEEK MATRIX">
                 {myPlayers.length ? (
