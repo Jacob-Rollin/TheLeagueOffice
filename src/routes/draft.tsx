@@ -190,7 +190,7 @@ function DraftRoom() {
           )}
         </div>
         {tab !== "board" && (
-          <aside className="hidden min-h-0 lg:block">
+          <aside className="hidden lg:sticky lg:top-3 lg:block lg:max-h-[calc(100vh-1.5rem)]">
             {tab === "team" ? (
               <SideCard title="Suggested Picks" subtitle="Best value for your roster">
                 <DraftSuggestions
