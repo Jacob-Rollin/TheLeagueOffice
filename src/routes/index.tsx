@@ -98,7 +98,6 @@ function Home() {
   const connectBox = (
     <section className="rounded-xl border border-border bg-card p-5">
       <div className="flex flex-col gap-1">
-        <p className="eyebrow">League HQ</p>
         <h2 className="display-title text-2xl">League Sync</h2>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           Import your active Sleeper league assets to instantly unlock custom front-office analytics and real-time draft
