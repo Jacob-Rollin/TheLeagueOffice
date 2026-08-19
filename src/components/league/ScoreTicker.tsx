@@ -76,19 +76,39 @@ function readCurrentSeasonType(json: any): number {
   return Number(json?.season?.type ?? json?.leagues?.[0]?.season?.type ?? 2);
 }
 
+/** Compact label, e.g. "WK 3", "PRE 2", "WC". */
+function shortLabel(seasonType: number, week: number, raw: string): string {
+  const text = String(raw || "");
+  if (seasonType === 3) {
+    const t = text.toLowerCase();
+    if (t.includes("wild")) return "WC";
+    if (t.includes("division")) return "DIV";
+    if (t.includes("conference")) return "CONF";
+    if (t.includes("super")) return "SB";
+    if (t.includes("pro bowl")) return "PB";
+    return text.toUpperCase().slice(0, 6);
+  }
+  if (seasonType === 1) return `PRE ${week}`;
+  if (seasonType === 4) return "PRO";
+  return `WK ${week}`;
+}
+
 function buildWeekOptions(json: any): WeekOption[] {
-  const calendar: any[] = json?.leagues?.[0]?.calendar ?? [];
+  const calendar: any[] = Array.isArray(json?.leagues?.[0]?.calendar)
+    ? json.leagues[0].calendar
+    : [];
   const options: WeekOption[] = [];
   for (const block of calendar) {
     const seasonType = Number(block?.value);
     if (!Number.isFinite(seasonType)) continue;
-    for (const entry of block?.entries ?? []) {
+    const entries = Array.isArray(block?.entries) ? block.entries : [];
+    for (const entry of entries) {
       const week = Number(entry?.value);
       if (!Number.isFinite(week)) continue;
       options.push({
         seasonType,
         week,
-        label: String(entry?.label ?? `Week ${week}`),
+        label: shortLabel(seasonType, week, entry?.label ?? `Week ${week}`),
       });
     }
   }
@@ -208,20 +228,28 @@ export function ScoreTicker() {
 
   return (
     <div className="relative flex items-stretch border-b border-border bg-primary text-primary-foreground">
-      <div className="relative flex shrink-0 items-center border-r border-primary-foreground/15 px-3">
+      <div className="relative flex w-[74px] shrink-0 items-center border-r border-primary-foreground/15 px-2">
         <select
           value={selectValue}
           onChange={(e) => handleWeekChange(e.target.value)}
-          className="appearance-none bg-transparent pr-5 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground focus:outline-none"
+          aria-label="Select week"
+          className="w-full cursor-pointer appearance-none bg-transparent pr-4 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground focus:outline-none"
         >
-          {visibleOptions.map((opt) => (
-            <option
-              key={`${opt.seasonType}-${opt.week}`}
-              value={`${opt.seasonType}-${opt.week}`}
-            >
-              {opt.label}
+          {visibleOptions.length ? (
+            visibleOptions.map((opt) => (
+              <option
+                key={`${opt.seasonType}-${opt.week}`}
+                value={`${opt.seasonType}-${opt.week}`}
+                className="bg-primary text-primary-foreground"
+              >
+                {opt.label}
+              </option>
+            ))
+          ) : (
+            <option value={selectValue} className="bg-primary text-primary-foreground">
+              {selectedWeek != null ? `WK ${selectedWeek}` : "WEEK"}
             </option>
-          ))}
+          )}
         </select>
         <ChevronDown className="pointer-events-none absolute right-1 top-1/2 size-3 -translate-y-1/2 text-primary-foreground/70" />
       </div>
