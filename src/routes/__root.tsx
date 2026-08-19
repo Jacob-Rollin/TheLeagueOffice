@@ -5,25 +5,134 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
 
-function NotFoundComponent() { return <div className="flex min-h-screen items-center justify-center bg-background px-4"><div className="max-w-md text-center"><h1 className="text-7xl font-bold text-foreground">404</h1><h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2><p className="mt-2 text-sm text-muted-foreground">The page you're looking for doesn't exist or has been moved.</p><Link to="/" className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Go home</Link></div></div>; }
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) { console.error(error); const router = useRouter(); useEffect(() => { reportLovableError(error, { boundary: "tanstack_root_error_component" }); }, [error]); return <div className="flex min-h-screen items-center justify-center bg-background px-4"><div className="max-w-md text-center"><h1 className="text-xl font-semibold tracking-tight">This page didn't load</h1><p className="mt-2 text-sm text-muted-foreground">Something went wrong. Try refreshing or head back home.</p><div className="mt-6 flex justify-center gap-2"><button onClick={() => { router.invalidate(); reset(); }} className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">Try again</button><Link to="/" className="rounded-md border border-border px-4 py-2 text-sm">Go home</Link></div></div></div>; }
+function NotFoundComponent() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-7xl font-bold text-foreground">404</h1>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          The page you're looking for doesn't exist or has been moved.
+        </p>
+        <Link
+          to="/"
+          className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        >
+          Go home
+        </Link>
+      </div>
+    </div>
+  );
+}
+function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+  console.error(error);
+  const router = useRouter();
+  useEffect(() => {
+    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+  }, [error]);
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-xl font-semibold tracking-tight">This page didn't load</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Something went wrong. Try refreshing or head back home.</p>
+        <div className="mt-6 flex justify-center gap-2">
+          <button
+            onClick={() => {
+              router.invalidate();
+              reset();
+            }}
+            className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+          >
+            Try again
+          </button>
+          <Link to="/" className="rounded-md border border-border px-4 py-2 text-sm">
+            Go home
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({ meta: [
-    { charSet: "utf-8" }, { name: "viewport", content: "width=device-width, initial-scale=1" },
-    { title: "The League Office — Fantasy Football HQ" },
-    { name: "description", content: "Fantasy football league HQ, War Room draft board, trade evaluator and waiver tools." },
-    { property: "og:title", content: "The League Office" }, { property: "og:description", content: "Your fantasy football front office." }, { property: "og:type", content: "website" },
-  ], links: [
-    { rel: "stylesheet", href: appCss },
-    { rel: "preconnect", href: "https://fonts.googleapis.com" },
-    { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-    { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800&display=swap" },
-    { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
-  ]}),
-  shellComponent: RootShell, component: RootComponent, notFoundComponent: NotFoundComponent, errorComponent: ErrorComponent,
+  head: () => ({
+    meta: [
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { title: "The League Office — Fantasy Football HQ" },
+      {
+        name: "description",
+        content: "Fantasy football league HQ, War Room draft board, trade evaluator and waiver tools.",
+      },
+      { property: "og:title", content: "The League Office" },
+      { property: "og:description", content: "Your fantasy football front office." },
+      { property: "og:type", content: "website" },
+    ],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800&display=swap",
+      },
+      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+    ],
+  }),
+  shellComponent: RootShell,
+  component: RootComponent,
+  notFoundComponent: NotFoundComponent,
+  errorComponent: ErrorComponent,
 });
-function RootShell({ children }: { children: ReactNode }) { return <html lang="en"><head><HeadContent /></head><body>{children}<Scripts /></body></html>; }
-const NAV: [string, string][] = [["/", "League HQ"], ["/draft", "War Room"], ["/trade", "Trade Analyzer"], ["/waiver", "Waiver Wire"]];
-function SiteNav() { return <header className="border-b-4 border-accent bg-primary text-primary-foreground"><nav className="mx-auto flex w-full max-w-6xl items-center gap-2 px-3 py-2.5"><Link to="/" className="display-title mr-2 whitespace-nowrap text-lg">THE LEAGUE <span className="text-accent-foreground/90 rounded bg-accent px-1.5">OFFICE</span></Link><div className="flex flex-1 gap-1 overflow-x-auto">{NAV.map(([to, label]) => <Link key={to} to={to} activeOptions={{ exact: to === "/" }} className="rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[status=active]:border-accent data-[status=active]:text-primary-foreground">{label}</Link>)}</div></nav></header>; }
-function RootComponent() { const { queryClient } = Route.useRouteContext(); return <QueryClientProvider client={queryClient}><ScoreTicker /><SiteNav /><Outlet /></QueryClientProvider>; }
+function RootShell({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        {children}
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+const NAV: [string, string][] = [
+  ["/", "League HQ"],
+  ["/draft", "War Room"],
+  ["/trade", "Trade Desk"],
+  ["/waiver", "The Wire"],
+];
+function SiteNav() {
+  return (
+    <header className="border-b-4 border-accent bg-primary text-primary-foreground">
+      <nav className="mx-auto flex w-full max-w-6xl items-center gap-2 px-3 py-2.5">
+        <Link to="/" className="display-title mr-2 whitespace-nowrap text-lg">
+          THE LEAGUE <span className="text-accent-foreground/90 rounded bg-accent px-1.5">OFFICE</span>
+        </Link>
+        <div className="flex flex-1 gap-1 overflow-x-auto">
+          {NAV.map(([to, label]) => (
+            <Link
+              key={to}
+              to={to}
+              activeOptions={{ exact: to === "/" }}
+              className="rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[status=active]:border-accent data-[status=active]:text-primary-foreground"
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+      </nav>
+    </header>
+  );
+}
+function RootComponent() {
+  const { queryClient } = Route.useRouteContext();
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ScoreTicker />
+      <SiteNav />
+      <Outlet />
+    </QueryClientProvider>
+  );
+}
