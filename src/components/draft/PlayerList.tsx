@@ -212,14 +212,18 @@ export function PlayerList({
 
       <div className="relative flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 hidden items-center gap-2 border-b border-border bg-surface/95 px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur sm:flex">
-          <div className="min-w-0 flex-1">Player</div>
-          <div className="flex shrink-0 items-center gap-8 pr-4">
-            <div className="w-20 text-center">ADP</div>
-            <div className="w-20 text-center">Proj</div>
-            <div className="w-20 text-center">LY</div>
+          {sort === "custom" && <div className="w-6 shrink-0" />}
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="w-14 shrink-0" />
+            <div className="min-w-0 flex-1">Player</div>
+            <div className="flex shrink-0 items-center gap-16">
+              <div className="w-20 text-center">ADP</div>
+              <div className="w-20 text-center">Proj</div>
+              <div className="w-20 text-center">LY</div>
+            </div>
+            <div className="w-4 shrink-0" />
           </div>
-          <div className="w-4 shrink-0" />
-          <div className="w-[7.25rem] shrink-0" />
+          <div className="w-24 shrink-0" />
         </div>
 
         {rows.length === 0 && (
