@@ -70,8 +70,8 @@ function DraftRoom() {
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
   return (
-    <main className="mx-auto flex h-screen w-full max-w-[1500px] flex-col overflow-hidden">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
+    <main className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col">
+      <header className="border-b border-border bg-background/85">
         <div className="flex items-center justify-between gap-3 px-3 pt-3">
           <div>
             <h1 className="display-title text-3xl">
