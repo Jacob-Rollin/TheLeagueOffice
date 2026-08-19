@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SCOREBOARD_URL =
@@ -9,12 +10,23 @@ type TickerGame = {
   id: string;
   state: "pre" | "in" | "post";
   detail: string;
+  kickoff: string;
   clock: string;
   period: string;
   away: TickerTeam;
   home: TickerTeam;
   link: string;
 };
+
+/** Scheduled kickoff formatted in the viewer's local timezone, e.g. "SUN 12:00 PM". */
+function formatKickoff(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = d.toLocaleDateString(undefined, { weekday: "short" }).toUpperCase();
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${day} ${time}`;
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function mapGames(json: any): TickerGame[] {
@@ -40,6 +52,7 @@ function mapGames(json: any): TickerGame[] {
       id: String(ev?.id ?? Math.random()),
       state,
       detail: type?.shortDetail ?? "",
+      kickoff: formatKickoff(ev?.date ?? comp?.date),
       clock: status?.displayClock ?? "",
       period: status?.period ? `Q${status.period}` : "",
       away: pick("away"),
@@ -50,21 +63,51 @@ function mapGames(json: any): TickerGame[] {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
+/** Tuesday (2) and Wednesday (3) show the upcoming week instead of last week's finals. */
+function shouldLookAhead(): boolean {
+  const day = new Date().getDay();
+  return day === 2 || day === 3;
+}
+
 export function ScoreTicker() {
   const [games, setGames] = useState<TickerGame[]>([]);
+  const scrollerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
+
     const load = async () => {
       try {
         const res = await fetch(SCOREBOARD_URL);
         if (!res.ok) return;
         const json = await res.json();
-        if (!cancelled) setGames(mapGames(json));
+        let data = json;
+
+        if (shouldLookAhead()) {
+          const current = Number(json?.week?.number);
+          const seasonType = Number(json?.season?.type ?? 2);
+          if (Number.isFinite(current) && seasonType === 2) {
+            const nextWeek = current + 1;
+            try {
+              const nextRes = await fetch(
+                `${SCOREBOARD_URL}?week=${nextWeek}&seasontype=2`,
+              );
+              if (nextRes.ok) {
+                const nextJson = await nextRes.json();
+                if (nextJson?.events?.length) data = nextJson;
+              }
+            } catch {
+              /* fall back to current week */
+            }
+          }
+        }
+
+        if (!cancelled) setGames(mapGames(data));
       } catch {
         /* offline or blocked — keep last known scores */
       }
     };
+
     load();
     const timer = setInterval(load, 60_000);
     return () => {
@@ -73,11 +116,21 @@ export function ScoreTicker() {
     };
   }, []);
 
+  const nudge = (dir: -1 | 1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * Math.max(280, el.clientWidth * 0.7), behavior: "smooth" });
+  };
+
   if (!games.length) return null;
 
   return (
-    <div className="border-b border-border bg-primary text-primary-foreground">
-      <div className="no-scrollbar flex items-stretch gap-0 overflow-x-auto">
+    <div className="relative border-b border-border bg-primary text-primary-foreground">
+      <ScrollButton side="left" onClick={() => nudge(-1)} />
+      <div
+        ref={scrollerRef}
+        className="no-scrollbar flex items-stretch gap-0 overflow-x-auto scroll-smooth px-8"
+      >
         {games.map((g) => (
           <a
             key={g.id}
@@ -91,19 +144,41 @@ export function ScoreTicker() {
                 {g.state === "in" && (
                   <span className="size-1.5 rounded-full bg-accent" aria-hidden />
                 )}
-                {g.state === "in" ? `${g.period} ${g.clock}`.trim() : g.detail}
+                {g.state === "in"
+                  ? `${g.period} ${g.clock}`.trim()
+                  : g.state === "pre"
+                    ? g.kickoff || g.detail
+                    : g.detail}
               </span>
             </div>
-            <TeamRow team={g.away} live={g.state === "in"} />
-            <TeamRow team={g.home} live={g.state === "in"} />
+            <TeamRow team={g.away} live={g.state === "in"} pre={g.state === "pre"} />
+            <TeamRow team={g.home} live={g.state === "in"} pre={g.state === "pre"} />
           </a>
         ))}
       </div>
+      <ScrollButton side="right" onClick={() => nudge(1)} />
     </div>
   );
 }
 
-function TeamRow({ team, live }: { team: TickerTeam; live: boolean }) {
+function ScrollButton({ side, onClick }: { side: "left" | "right"; onClick: () => void }) {
+  const Icon = side === "left" ? ChevronLeft : ChevronRight;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={side === "left" ? "Scroll scores left" : "Scroll scores right"}
+      className={cn(
+        "absolute top-0 z-10 flex h-full w-8 items-center justify-center bg-primary/95 text-primary-foreground/80 transition-colors hover:text-primary-foreground",
+        side === "left" ? "left-0" : "right-0",
+      )}
+    >
+      <Icon className="size-4" />
+    </button>
+  );
+}
+
+function TeamRow({ team, live, pre }: { team: TickerTeam; live: boolean; pre: boolean }) {
   return (
     <div className="flex items-center gap-1.5">
       {team.logo && (
@@ -125,7 +200,7 @@ function TeamRow({ team, live }: { team: TickerTeam; live: boolean }) {
           aria-label="Has possession"
         />
       )}
-      <span className={cn("tabnum ml-auto text-xs font-semibold")}>{team.score}</span>
+      {!pre && <span className={cn("tabnum ml-auto text-xs font-semibold")}>{team.score}</span>}
     </div>
   );
 }
