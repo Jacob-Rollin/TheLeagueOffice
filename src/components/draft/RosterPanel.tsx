@@ -1,6 +1,5 @@
 import { X } from "lucide-react";
 
-import { ByeMatrix } from "./ByeMatrix";
 import { PositionBadge } from "./PositionBadge";
 import { fillRoster, teamName, value, type Pick, type Player, type Settings } from "@/lib/draft";
 
@@ -69,7 +68,6 @@ export function RosterPanel({
         ))}
       </ul>
       </div>
-      {roster.length > 0 && <ByeMatrix players={roster} />}
     </div>
   );
 }
