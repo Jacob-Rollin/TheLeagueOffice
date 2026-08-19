@@ -70,7 +70,7 @@ function DraftRoom() {
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col">
+    <main className="mx-auto flex h-screen w-full max-w-[1500px] flex-col overflow-hidden">
       <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
         <div className="flex items-center justify-between gap-3 px-3 pt-3">
           <div>
@@ -139,7 +139,7 @@ function DraftRoom() {
       </header>
       <div
         className={cn(
-          "flex-1 gap-3 px-0 lg:px-3",
+          "flex-1 gap-3 overflow-hidden px-0 lg:px-3",
           tab !== "board" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px]",
         )}
       >
@@ -160,7 +160,7 @@ function DraftRoom() {
             )}
           </aside>
         )}
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-col overflow-hidden">
           {tab === "players" && (
             <PlayerList
               players={data.players}

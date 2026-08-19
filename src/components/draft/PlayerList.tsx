@@ -212,14 +212,18 @@ export function PlayerList({
 
       <div className="relative flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 hidden items-center gap-2 border-b border-border bg-surface/95 px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur sm:flex">
-          <div className="min-w-0 flex-1">Player</div>
-          <div className="flex shrink-0 items-center gap-8 pr-4">
-            <div className="w-20 text-center">ADP</div>
-            <div className="w-20 text-center">Proj</div>
-            <div className="w-20 text-center">LY</div>
+          {sort === "custom" && <div className="w-6 shrink-0" />}
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="w-14 shrink-0" />
+            <div className="min-w-0 flex-1">Player</div>
+            <div className="flex shrink-0 items-center gap-16">
+              <div className="w-20 text-center">ADP</div>
+              <div className="w-20 text-center">Proj</div>
+              <div className="w-20 text-center">LY</div>
+            </div>
+            <div className="w-4 shrink-0" />
           </div>
-          <div className="w-4 shrink-0" />
-          <div className="w-[7.25rem] shrink-0" />
+          <div className="w-24 shrink-0" />
         </div>
 
         {rows.length === 0 && (
@@ -237,6 +241,34 @@ export function PlayerList({
             const drafted = draftedIds.has(p.id);
             const watched = watchIds.has(p.id);
             const reach = v.adp < 900 ? Math.round(v.adp - currentOverall) : null;
+            const playerBody = (
+              <>
+                <div className="w-14 shrink-0">
+                  <PositionBadge pos={p.pos} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-semibold">{p.name}</span>
+                    {p.injury && (
+                      <span className="rounded bg-destructive/20 px-1 text-[10px] font-bold uppercase text-destructive">
+                        {p.injury}
+                      </span>
+                    )}
+                  </div>
+                  <div className="tabnum text-xs text-muted-foreground">
+                    #{v.rank} · {p.team}
+                    {p.bye ? ` · BYE ${p.bye}` : ""}
+                    {reach !== null && reach < -6 ? " · reach" : ""}
+                  </div>
+                </div>
+                <div className="hidden shrink-0 items-center gap-16 sm:flex">
+                  <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
+                  <StatCell label="Proj" value={v.proj.toFixed(1)} />
+                  <StatCell label="LY" value={v.prev !== null && v.prev > 0 ? v.prev.toFixed(0) : "—"} />
+                </div>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+              </>
+            );
             return (
               <li
                 key={p.id}
@@ -250,7 +282,7 @@ export function PlayerList({
                 {sort === "custom" && (
                   <button
                     aria-label={`Reorder ${p.name}`}
-                    className="shrink-0 cursor-grab touch-none p-1 text-muted-foreground active:cursor-grabbing"
+                    className="w-6 shrink-0 cursor-grab touch-none p-1 text-muted-foreground active:cursor-grabbing"
                     onPointerDown={(e) => {
                       e.preventDefault();
                       setDragId(p.id);
@@ -260,50 +292,25 @@ export function PlayerList({
                   </button>
                 )}
 
-                {(() => {
-                  const rowClass =
-                    "flex min-w-0 flex-1 items-center gap-3 rounded py-0.5 text-left hover:bg-secondary/50";
-                  const body = (
-                    <>
-                      <PositionBadge pos={p.pos} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate font-semibold">{p.name}</span>
-                          {p.injury && (
-                            <span className="rounded bg-destructive/20 px-1 text-[10px] font-bold uppercase text-destructive">
-                              {p.injury}
-                            </span>
-                          )}
-                        </div>
-                        <div className="tabnum text-xs text-muted-foreground">
-                          #{v.rank} · {p.team}
-                          {p.bye ? ` · BYE ${p.bye}` : ""}
-                          {reach !== null && reach < -6 ? " · reach" : ""}
-                        </div>
-                      </div>
-                      <div className="hidden shrink-0 items-center gap-8 pr-4 sm:flex">
-                        <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
-                        <StatCell label="Proj" value={v.proj.toFixed(1)} />
-                        <StatCell
-                          label="LY"
-                          value={v.prev !== null && v.prev > 0 ? v.prev.toFixed(0) : "—"}
-                        />
-                      </div>
-                      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                    </>
-                  );
-                  return onOpenPlayer ? (
-                    <button type="button" className={rowClass} onClick={() => onOpenPlayer(p.id)}>
-                      {body}
-                    </button>
-                  ) : (
-                    <Link to="/player/$id" params={{ id: p.id }} className={rowClass}>
-                      {body}
-                    </Link>
-                  );
-                })()}
+                {onOpenPlayer ? (
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded py-0.5 text-left hover:bg-secondary/50"
+                    onClick={() => onOpenPlayer(p.id)}
+                  >
+                    {playerBody}
+                  </button>
+                ) : (
+                  <Link
+                    to="/player/$id"
+                    params={{ id: p.id }}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded py-0.5 text-left hover:bg-secondary/50"
+                  >
+                    {playerBody}
+                  </Link>
+                )}
 
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex w-24 shrink-0 items-center justify-end gap-1">
                   <Button
                     size="icon"
                     variant={watched ? "default" : "secondary"}
