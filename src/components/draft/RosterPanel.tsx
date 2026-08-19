@@ -1,3 +1,5 @@
+import { X } from "lucide-react";
+
 import { ByeMatrix } from "./ByeMatrix";
 import { PositionBadge } from "./PositionBadge";
 import { fillRoster, teamName, value, type Pick, type Player, type Settings } from "@/lib/draft";
@@ -7,11 +9,13 @@ export function RosterPanel({
   picks,
   byId,
   team,
+  onRemove,
 }: {
   settings: Settings;
   picks: Pick[];
   byId: Map<string, Player>;
   team: number;
+  onRemove?: (playerId: string) => void;
 }) {
   const roster = picks
     .filter((p) => p.team === team)
@@ -48,6 +52,15 @@ export function RosterPanel({
                 <span className="tabnum text-xs text-muted-foreground">
                   {value(s.player, settings.scoring).proj.toFixed(1)}
                 </span>
+                {onRemove && (
+                  <button
+                    aria-label={`Remove ${s.player.name}`}
+                    onClick={() => onRemove(s.player!.id)}
+                    className="rounded border border-border p-1 text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
               </>
             ) : (
               <span className="text-sm text-muted-foreground">Empty</span>

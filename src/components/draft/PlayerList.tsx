@@ -265,14 +265,18 @@ export function PlayerList({
                           )}
                         </div>
                         <div className="tabnum text-xs text-muted-foreground">
-                          {p.team} · ADP {v.adp < 900 ? v.adp.toFixed(1) : "—"}
+                          #{v.rank} · {p.team}
                           {p.bye ? ` · BYE ${p.bye}` : ""}
                           {reach !== null && reach < -6 ? " · reach" : ""}
                         </div>
-                        <div className="tabnum text-xs text-muted-foreground">
-                          #{v.rank} · Proj {v.proj.toFixed(1)}
-                          {v.prev !== null && v.prev > 0 ? ` · LY ${v.prev.toFixed(0)}` : ""}
-                        </div>
+                      </div>
+                      <div className="hidden shrink-0 items-center gap-1 sm:flex">
+                        <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
+                        <StatCell label="Proj" value={v.proj.toFixed(1)} />
+                        <StatCell
+                          label="LY"
+                          value={v.prev !== null && v.prev > 0 ? v.prev.toFixed(0) : "—"}
+                        />
                       </div>
                       <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                     </>
@@ -312,6 +316,15 @@ export function PlayerList({
           })}
         </ul>
       </div>
+    </div>
+  );
+}
+
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="w-14 rounded border border-border bg-card px-1 py-1 text-center">
+      <div className="text-[9px] uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="tabnum text-xs font-semibold leading-tight">{value}</div>
     </div>
   );
 }
