@@ -96,31 +96,29 @@ function Home() {
   };
 
   const connectBox = (
-    <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
-      <div className="flex flex-col gap-3">
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="eyebrow">League HQ</p>
-            <h2 className="display-title text-2xl">Connect Your Sleeper League</h2>
-          </div>
-          <span className="status-dot shrink-0">LIVE DATA</span>
-        </div>
+    <section className="rounded-xl border border-border bg-card p-5">
+      <div className="flex flex-col gap-1">
+        <p className="eyebrow">League HQ</p>
+        <h2 className="display-title text-2xl">League Sync</h2>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          Import your active Sleeper league assets to instantly unlock custom front-office analytics and real-time draft tracking.
+        </p>
       </div>
       <div className="mt-4 flex flex-col gap-2">
         <input
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && search()}
-          placeholder="Enter Sleeper username"
-          className="w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+          placeholder="Enter Sleeper Username..."
+          className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-600"
         />
         <div className="flex gap-2">
           <button
             onClick={search}
             disabled={!username.trim() || leaguesM.isPending}
-            className="flex-1 rounded-md bg-primary px-5 py-2.5 font-display uppercase tracking-wide text-primary-foreground disabled:opacity-50"
+            className="flex-1 rounded-md bg-accent px-5 py-2.5 font-display uppercase tracking-wide text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {leaguesM.isPending ? "Looking…" : "Connect"}
+            {leaguesM.isPending ? "Looking…" : "Sync"}
           </button>
           {standings && (
             <button
