@@ -18,7 +18,7 @@ export function DraftBoard({
   const pickByOverall = new Map(picks.map((p) => [p.overall, p]));
 
   return (
-    <div className="w-full p-3">
+    <div className="h-full w-full overflow-y-auto p-3">
       <div
         className="grid w-full gap-1"
         style={{ gridTemplateColumns: `1.6rem repeat(${settings.teams}, minmax(0, 1fr))` }}
