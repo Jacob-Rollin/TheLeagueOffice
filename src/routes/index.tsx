@@ -192,46 +192,6 @@ function Home() {
             <HomeCard to="/waiver" title="Waiver Wire" desc="Find the best free-agent adds and get a claim grade." />
           </section>
 
-          {standings && (
-            <section className="mt-8">
-              <div className="mb-2 flex items-baseline justify-between">
-                <h2 className="display-title text-2xl">{standings.league.name}</h2>
-                <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
-                  {standings.league.season} · {standings.league.scoring}
-                </span>
-              </div>
-              <div className="overflow-x-auto rounded-xl border border-border">
-                <table className="w-full text-sm">
-                  <thead className="bg-surface text-[10px] uppercase tracking-widest text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 text-left">#</th>
-                      <th className="px-3 py-2 text-left">Team</th>
-                      <th className="px-3 py-2 text-right">W-L-T</th>
-                      <th className="px-3 py-2 text-right">PF</th>
-                      <th className="px-3 py-2 text-right">PA</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {standings.rows.map((r, i) => (
-                      <tr key={r.rosterId} className={cn("border-t border-border", i < 4 && "bg-primary/5")}>
-                        <td className="tabnum px-3 py-2 text-muted-foreground">{i + 1}</td>
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{r.team}</div>
-                          <div className="text-[11px] text-muted-foreground">{r.owner}</div>
-                        </td>
-                        <td className="tabnum px-3 py-2 text-right">
-                          {r.wins}-{r.losses}
-                          {r.ties ? `-${r.ties}` : ""}
-                        </td>
-                        <td className="tabnum px-3 py-2 text-right">{r.pointsFor}</td>
-                        <td className="tabnum px-3 py-2 text-right text-muted-foreground">{r.pointsAgainst}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
 
           <section className="mt-10">
             <div className="mb-3 flex items-end justify-between">
