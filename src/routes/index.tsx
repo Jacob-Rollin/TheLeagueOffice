@@ -161,7 +161,8 @@ function Home() {
               Welcome To The <span className="text-primary">League</span>
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base lg:mx-0 mx-auto">
-              Your league. Your draft room. Your front office. Connect Sleeper and keep every decision in one place.
+              League HQ. Draft Room Operations. Front Office Analytics. Synchronize your active assets to manage every
+              decision from a single terminal.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-2 lg:justify-start">
               <Link
