@@ -25,7 +25,7 @@ export function RosterPanel({
   const projected = roster.reduce((sum, p) => sum + value(p, settings.scoring).proj, 0);
 
   return (
-    <div className="no-scrollbar h-full overflow-y-auto pb-3">
+    <div className="pb-3">
       <div className="p-3">
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="display-title text-xl">{teamName(settings, team)}</h2>
