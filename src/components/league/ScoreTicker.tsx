@@ -108,7 +108,7 @@ function buildWeekOptions(json: any): WeekOption[] {
       options.push({
         seasonType,
         week,
-        label: shortLabel(seasonType, week, entry?.label ?? `Week ${week}`),
+        label: entry?.label ?? shortLabel(seasonType, week, `Week ${week}`),
       });
     }
   }
