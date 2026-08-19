@@ -10,7 +10,7 @@ export function ByeMatrix({ players, layout = "row" }: { players: Player[]; layo
   return (
     <section className={cn("pb-6", column ? "px-0" : "px-3")}>
       <div className="mb-2 flex items-baseline justify-between">
-        <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground"></h3>
+        <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">Bye week matrix</h3>
         <span className="tabnum text-xs text-muted-foreground">
           {conflicts ? `${conflicts} crowded week${conflicts > 1 ? "s" : ""}` : "No bye conflicts"}
         </span>
