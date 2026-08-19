@@ -300,7 +300,7 @@ export function ScoreTicker() {
         )}
       </div>
 
-      <div className="relative flex-1">
+      <div className="relative min-w-0 flex-1">
         <ScrollButton side="left" onClick={() => nudge(-1)} />
         <div
           ref={scrollerRef}
