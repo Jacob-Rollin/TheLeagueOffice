@@ -52,10 +52,7 @@ function DraftRoom() {
   const draft = useDraft();
   const [tab, setTab] = useState<Tab>("players");
   const [openId, setOpenId] = useState<string | null>(null);
-  const byId = useMemo(
-    () => new Map<string, Player>(data.players.map((p) => [p.id, p])),
-    [data.players],
-  );
+  const byId = useMemo(() => new Map<string, Player>(data.players.map((p) => [p.id, p])), [data.players]);
   const { settings, picks, currentOverall, onTheClock, complete } = draft;
   const myPlayers = useMemo(
     () =>
@@ -65,10 +62,7 @@ function DraftRoom() {
         .filter((p): p is Player => Boolean(p)),
     [picks, byId, settings.myTeam],
   );
-  const myNeeds = useMemo(
-    () => positionNeeds(myPlayers, settings.roster),
-    [myPlayers, settings.roster],
-  );
+  const myNeeds = useMemo(() => positionNeeds(myPlayers, settings.roster), [myPlayers, settings.roster]);
   const watchPlayers = useMemo(
     () => data.players.filter((p) => draft.watchIds.has(p.id)),
     [data.players, draft.watchIds],
@@ -84,8 +78,7 @@ function DraftRoom() {
               War <span className="text-primary">Room</span>
             </h1>
             <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
-              {data.season} · {SCORING_LABEL[settings.scoring]} · {settings.teams} teams ·{" "}
-              {settings.rounds} rds
+              {data.season} · {SCORING_LABEL[settings.scoring]} · {settings.teams} teams · {settings.rounds} rds
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -97,12 +90,12 @@ function DraftRoom() {
               <Undo2 className="size-4" /> Undo pick
             </button>
             <SettingsSheet
-            settings={settings}
-            update={draft.updateSettings}
-            onReset={draft.reset}
-            link={draft.link}
-            onApplyLeague={draft.applyLeague}
-            onUnlinkLeague={draft.unlinkLeague}
+              settings={settings}
+              update={draft.updateSettings}
+              onReset={draft.reset}
+              link={draft.link}
+              onApplyLeague={draft.applyLeague}
+              onUnlinkLeague={draft.unlinkLeague}
             />
           </div>
         </div>
@@ -114,11 +107,7 @@ function DraftRoom() {
           />
           <Stat
             label="Pick"
-            value={
-              complete
-                ? `${picks.length}`
-                : `${currentOverall} · R${roundOf(currentOverall, settings.teams)}`
-            }
+            value={complete ? `${picks.length}` : `${currentOverall} · R${roundOf(currentOverall, settings.teams)}`}
           />
           <Stat
             label="Your next"
@@ -161,19 +150,12 @@ function DraftRoom() {
                 {myPlayers.length ? (
                   <ByeMatrix players={myPlayers} layout="column" />
                 ) : (
-                  <p className="p-3 text-center text-xs text-muted-foreground">
-                    Draft players to see bye weeks.
-                  </p>
+                  <p className="p-3 text-center text-xs text-muted-foreground">Draft players to see bye weeks.</p>
                 )}
               </SideCard>
             ) : (
               <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
-                <MyTeamColumn
-                  settings={settings}
-                  players={myPlayers}
-                  onOpen={setOpenId}
-                  onRemove={draft.removePick}
-                />
+                <MyTeamColumn settings={settings} players={myPlayers} onOpen={setOpenId} onRemove={draft.removePick} />
               </SideCard>
             )}
           </aside>
@@ -196,14 +178,7 @@ function DraftRoom() {
               onOpenPlayer={setOpenId}
             />
           )}{" "}
-          {tab === "board" && (
-            <DraftBoard
-              settings={settings}
-              picks={picks}
-              byId={byId}
-              onRemove={draft.removePick}
-            />
-          )}{" "}
+          {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} onRemove={draft.removePick} />}{" "}
           {tab === "team" && (
             <RosterPanel
               settings={settings}
@@ -244,22 +219,14 @@ function DraftRoom() {
         )}
       </div>
       <footer className="border-t border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
-        ADP, projections and prior-season stats are sourced from the free Sleeper data pipeline.
-        Player detail pages provide deeper news, injury and team context.
+        ADP, projections and prior-season stats are sourced from Sleeper's pipeline API. Player detail pages provide
+        deeper news, injury and team context.
       </footer>
       <PlayerModal id={openId} onClose={() => setOpenId(null)} onSelectPlayer={setOpenId} />
     </main>
   );
 }
-function SideCard({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
+function SideCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <div className="sticky top-44 mt-3 rounded-xl border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
@@ -288,34 +255,30 @@ function MyTeamColumn({
         <li key={i} className="flex items-center gap-1">
           {s.player ? (
             <>
-            <button
-              onClick={() => onOpen(s.player!.id)}
-              className="flex w-full items-center gap-2 rounded border border-border bg-background px-2 py-1.5 text-left hover:border-primary"
-            >
-              <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">
-                {s.slot}
-              </span>
-              <PositionBadge pos={s.player.pos} className="h-5 text-[10px]" />
-              <span className="min-w-0 flex-1 truncate text-xs font-semibold">{s.player.name}</span>
-              <span className="tabnum text-[10px] text-muted-foreground">
-                {value(s.player, settings.scoring).proj.toFixed(0)}
-              </span>
-            </button>
-            {onRemove && (
               <button
-                aria-label={`Remove ${s.player.name}`}
-                onClick={() => onRemove(s.player!.id)}
-                className="shrink-0 rounded border border-border p-1 text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
+                onClick={() => onOpen(s.player!.id)}
+                className="flex w-full items-center gap-2 rounded border border-border bg-background px-2 py-1.5 text-left hover:border-primary"
               >
-                <X className="size-3" />
+                <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
+                <PositionBadge pos={s.player.pos} className="h-5 text-[10px]" />
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold">{s.player.name}</span>
+                <span className="tabnum text-[10px] text-muted-foreground">
+                  {value(s.player, settings.scoring).proj.toFixed(0)}
+                </span>
               </button>
-            )}
+              {onRemove && (
+                <button
+                  aria-label={`Remove ${s.player.name}`}
+                  onClick={() => onRemove(s.player!.id)}
+                  className="shrink-0 rounded border border-border p-1 text-muted-foreground transition-colors hover:border-destructive hover:text-destructive"
+                >
+                  <X className="size-3" />
+                </button>
+              )}
             </>
           ) : (
             <div className="flex flex-1 items-center gap-2 rounded border border-dashed border-border px-2 py-1.5">
-              <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">
-                {s.slot}
-              </span>
+              <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
               <span className="text-xs text-muted-foreground">Empty</span>
             </div>
           )}
@@ -340,14 +303,8 @@ function WatchColumn({
   onToggleWatch: (id: string) => void;
 }) {
   if (!players.length)
-    return (
-      <p className="p-3 text-center text-xs text-muted-foreground">
-        Star players to build your watchlist.
-      </p>
-    );
-  const sorted = [...players].sort(
-    (a, b) => value(a, settings.scoring).rank - value(b, settings.scoring).rank,
-  );
+    return <p className="p-3 text-center text-xs text-muted-foreground">Star players to build your watchlist.</p>;
+  const sorted = [...players].sort((a, b) => value(a, settings.scoring).rank - value(b, settings.scoring).rank);
   return (
     <ul className="space-y-1">
       {sorted.map((p) => {
@@ -355,20 +312,12 @@ function WatchColumn({
         return (
           <li
             key={p.id}
-            className={cn(
-              "rounded border border-border bg-background px-2 py-1.5",
-              drafted && "opacity-50",
-            )}
+            className={cn("rounded border border-border bg-background px-2 py-1.5", drafted && "opacity-50")}
           >
-            <button
-              onClick={() => onOpen(p.id)}
-              className="flex w-full items-center gap-2 text-left"
-            >
+            <button onClick={() => onOpen(p.id)} className="flex w-full items-center gap-2 text-left">
               <PositionBadge pos={p.pos} className="h-5 text-[10px]" />
               <span className="min-w-0 flex-1 truncate text-xs font-semibold">{p.name}</span>
-              <span className="tabnum text-[10px] text-muted-foreground">
-                #{value(p, settings.scoring).rank}
-              </span>
+              <span className="tabnum text-[10px] text-muted-foreground">#{value(p, settings.scoring).rank}</span>
             </button>
             <div className="mt-1 flex gap-1">
               <button
@@ -396,12 +345,7 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
   return (
     <div className={cn("bg-surface px-3 py-2", highlight && "bg-primary/15")}>
       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
-      <div
-        className={cn(
-          "tabnum font-display text-lg leading-tight font-semibold",
-          highlight && "text-primary",
-        )}
-      >
+      <div className={cn("tabnum font-display text-lg leading-tight font-semibold", highlight && "text-primary")}>
         {value}
       </div>
     </div>
