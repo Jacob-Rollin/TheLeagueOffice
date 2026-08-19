@@ -111,7 +111,7 @@ function Home() {
           onChange={(e) => setUsername(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && search()}
           placeholder="Enter Sleeper Username..."
-          className="w-full rounded-md border border-zinc-800 bg-zinc-300 px-3 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-600"
+          className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-600"
         />
         <div className="flex gap-2">
           <button
