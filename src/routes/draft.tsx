@@ -1,7 +1,7 @@
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Star, Undo2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ByeMatrix } from "@/components/draft/ByeMatrix";
 import { DraftBoard } from "@/components/draft/DraftBoard";
 import { DraftSuggestions } from "@/components/draft/DraftSuggestions";
