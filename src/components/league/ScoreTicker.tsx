@@ -63,10 +63,25 @@ function mapGames(json: any): TickerGame[] {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-/** Tuesday (2) and Wednesday (3) show the upcoming week instead of last week's finals. */
+/** Wednesday (day 3) shows the upcoming week instead of last week's finals. */
 function shouldLookAhead(): boolean {
-  const day = new Date().getDay();
-  return day === 2 || day === 3;
+  return new Date().getDay() === 3;
+}
+
+/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+function readWeekNumber(json: any): number {
+  const candidates = [
+    json?.week?.number,
+    json?.leagues?.[0]?.calendar?.find?.(
+      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+      (c: any) => c?.value === "2",
+    )?.entries?.length,
+  ];
+  for (const c of candidates) {
+    const n = Number(c);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return NaN;
 }
 
 export function ScoreTicker() {
@@ -84,9 +99,9 @@ export function ScoreTicker() {
         let data = json;
 
         if (shouldLookAhead()) {
-          const current = Number(json?.week?.number);
-          const seasonType = Number(json?.season?.type ?? 2);
-          if (Number.isFinite(current) && seasonType === 2) {
+          const current = readWeekNumber(json);
+          if (Number.isFinite(current)) {
+
             const nextWeek = current + 1;
             try {
               const nextRes = await fetch(
