@@ -192,7 +192,9 @@ export function ScoreTicker() {
   };
 
   const handleWeekChange = (value: string) => {
-    const [st, wk] = value.split("-").map(Number);
+    const [stRaw, wkRaw] = value.split("-");
+    const st = Number(stRaw);
+    const wk = Number(wkRaw);
     if (Number.isFinite(st) && Number.isFinite(wk)) {
       setSeasonType(st);
       setSelectedWeek(wk);
