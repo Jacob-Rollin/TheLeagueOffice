@@ -14,17 +14,17 @@ export function DraftBoard({
   const pickByOverall = new Map(picks.map((p) => [p.overall, p]));
 
   return (
-    <div className="overflow-x-auto p-3">
+    <div className="w-full p-3">
       <div
-        className="grid min-w-max gap-1"
-        style={{ gridTemplateColumns: `2.2rem repeat(${settings.teams}, 7.5rem)` }}
+        className="grid w-full gap-1"
+        style={{ gridTemplateColumns: `1.6rem repeat(${settings.teams}, minmax(0, 1fr))` }}
       >
         <div />
         {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => (
           <div
             key={t}
             className={cn(
-              "rounded px-2 py-1 text-center font-display text-sm font-semibold uppercase tracking-wide",
+              "min-w-0 rounded px-1 py-1 text-center font-display text-xs font-semibold uppercase tracking-wide",
               t === settings.myTeam ? "bg-primary text-primary-foreground" : "text-muted-foreground",
             )}
           >
@@ -77,13 +77,13 @@ function RoundRow({
           <div
             key={team}
             className={cn(
-              "h-14 rounded border p-1.5",
+              "h-14 min-w-0 rounded border p-1 sm:p-1.5",
               player ? "border-border bg-card" : "border-dashed border-border/60 bg-surface/40",
             )}
           >
             {player ? (
               <div className="flex h-full flex-col justify-between">
-                <span className="truncate text-xs font-semibold leading-tight">{player.name}</span>
+                <span className="truncate text-[11px] font-semibold leading-tight">{player.name}</span>
                 <div className="flex items-center justify-between gap-1">
                   <PositionBadge pos={player.pos} className="h-4 min-w-0 px-1 text-[10px]" />
                   <span className="tabnum text-[10px] text-muted-foreground">{player.team}</span>

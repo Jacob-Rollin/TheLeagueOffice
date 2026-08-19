@@ -2,6 +2,7 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
 import { useState } from "react";
+import { PlayerAvatar } from "./PlayerAvatar";
 import { PlayerNews } from "./PlayerNews";
 import { PositionBadge } from "./PositionBadge";
 import { Button } from "@/components/ui/button";
@@ -39,10 +40,13 @@ export function PlayerDetail({
   return (
     <div className="pb-8">
       <header className="border-b border-border px-3 py-3">
-        <div className="flex items-start gap-3 pr-8">
-          <PositionBadge pos={player.pos} />
+        <div className="flex items-center gap-3 pr-8">
+          <PlayerAvatar id={player.id} pos={player.pos} team={player.team} name={player.name} />
           <div className="min-w-0 flex-1">
-            <h1 className="display-title truncate text-2xl">{player.name}</h1>
+            <div className="flex items-center gap-2">
+              <PositionBadge pos={player.pos} />
+              <h1 className="display-title truncate text-2xl">{player.name}</h1>
+            </div>
             <p className="tabnum text-xs text-muted-foreground">
               {player.team} · {player.pos} · #{player.rank[scoring]} overall · ADP{" "}
               {player.adp[scoring] < 900 ? player.adp[scoring].toFixed(1) : "—"} ·{" "}

@@ -2,12 +2,19 @@ import { PositionBadge } from "./PositionBadge";
 import { cn } from "@/lib/utils";
 import { byeMatrix, type Player } from "@/lib/draft";
 
-export function ByeMatrix({ players }: { players: Player[] }) {
+export function ByeMatrix({
+  players,
+  layout = "row",
+}: {
+  players: Player[];
+  layout?: "row" | "column";
+}) {
   const { weeks, unknown } = byeMatrix(players);
   const conflicts = weeks.filter((w) => w.conflict).length;
+  const column = layout === "column";
 
   return (
-    <section className="px-3 pb-6">
+    <section className={cn("pb-6", column ? "px-0" : "px-3")}>
       <div className="mb-2 flex items-baseline justify-between">
         <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
           Bye week matrix
@@ -17,13 +24,13 @@ export function ByeMatrix({ players }: { players: Player[] }) {
         </span>
       </div>
 
-      <div className="overflow-x-auto">
-        <div className="flex min-w-max gap-1">
+      <div className={cn(!column && "overflow-x-auto")}>
+        <div className={cn("gap-1", column ? "flex flex-col" : "flex min-w-max")}>
           {weeks.map(({ week, players: list, conflict }) => (
             <div
               key={week}
               className={cn(
-                "w-24 shrink-0 rounded border p-1.5",
+                column ? "w-full rounded border p-1.5" : "w-24 shrink-0 rounded border p-1.5",
                 conflict
                   ? "border-destructive/60 bg-destructive/10"
                   : list.length

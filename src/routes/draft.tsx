@@ -2,7 +2,9 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Star } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ByeMatrix } from "@/components/draft/ByeMatrix";
 import { DraftBoard } from "@/components/draft/DraftBoard";
+import { DraftSuggestions } from "@/components/draft/DraftSuggestions";
 import { PlayerList } from "@/components/draft/PlayerList";
 import { PlayerModal } from "@/components/draft/PlayerModal";
 import { PositionBadge } from "@/components/draft/PositionBadge";
@@ -137,12 +139,31 @@ function DraftRoom() {
           ))}
         </nav>
       </header>
-      <div className="flex-1 gap-3 px-0 lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px] lg:px-3">
-        <aside className="hidden lg:block">
-          <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
-            <MyTeamColumn settings={settings} players={myPlayers} onOpen={setOpenId} />
-          </SideCard>
-        </aside>
+      <div
+        className={cn(
+          "flex-1 gap-3 px-0 lg:px-3",
+          tab !== "board" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px]",
+        )}
+      >
+        {tab !== "board" && (
+          <aside className="hidden lg:block">
+            {tab === "team" ? (
+              <SideCard title="Bye Weeks" subtitle={`${myPlayers.length} players`}>
+                {myPlayers.length ? (
+                  <ByeMatrix players={myPlayers} layout="column" />
+                ) : (
+                  <p className="p-3 text-center text-xs text-muted-foreground">
+                    Draft players to see bye weeks.
+                  </p>
+                )}
+              </SideCard>
+            ) : (
+              <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
+                <MyTeamColumn settings={settings} players={myPlayers} onOpen={setOpenId} />
+              </SideCard>
+            )}
+          </aside>
+        )}
         <div className="min-w-0">
           {tab === "players" && (
             <PlayerList
@@ -166,18 +187,34 @@ function DraftRoom() {
             <RosterPanel settings={settings} picks={picks} byId={byId} team={settings.myTeam} />
           )}
         </div>
-        <aside className="hidden lg:block">
-          <SideCard title="Watchlist" subtitle={`${watchPlayers.length} players`}>
-            <WatchColumn
-              settings={settings}
-              players={watchPlayers}
-              draftedIds={draft.draftedIds}
-              onOpen={setOpenId}
-              onDraft={draft.draftPlayer}
-              onToggleWatch={draft.toggleWatch}
-            />
-          </SideCard>
-        </aside>
+        {tab !== "board" && (
+          <aside className="hidden lg:block">
+            {tab === "team" ? (
+              <SideCard title="Suggested Picks" subtitle="Best value for your roster">
+                <DraftSuggestions
+                  players={data.players}
+                  draftedIds={draft.draftedIds}
+                  needs={myNeeds}
+                  settings={settings}
+                  currentOverall={currentOverall}
+                  onDraft={draft.draftPlayer}
+                  onOpen={setOpenId}
+                />
+              </SideCard>
+            ) : (
+              <SideCard title="Watchlist" subtitle={`${watchPlayers.length} players`}>
+                <WatchColumn
+                  settings={settings}
+                  players={watchPlayers}
+                  draftedIds={draft.draftedIds}
+                  onOpen={setOpenId}
+                  onDraft={draft.draftPlayer}
+                  onToggleWatch={draft.toggleWatch}
+                />
+              </SideCard>
+            )}
+          </aside>
+        )}
       </div>
       <footer className="border-t border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
         ADP, projections and prior-season stats are sourced from the free Sleeper data pipeline.
