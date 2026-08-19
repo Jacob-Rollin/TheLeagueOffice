@@ -228,20 +228,28 @@ export function ScoreTicker() {
 
   return (
     <div className="relative flex items-stretch border-b border-border bg-primary text-primary-foreground">
-      <div className="relative flex shrink-0 items-center border-r border-primary-foreground/15 px-3">
+      <div className="relative flex w-[74px] shrink-0 items-center border-r border-primary-foreground/15 px-2">
         <select
           value={selectValue}
           onChange={(e) => handleWeekChange(e.target.value)}
-          className="appearance-none bg-transparent pr-5 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground focus:outline-none"
+          aria-label="Select week"
+          className="w-full cursor-pointer appearance-none bg-transparent pr-4 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground focus:outline-none"
         >
-          {visibleOptions.map((opt) => (
-            <option
-              key={`${opt.seasonType}-${opt.week}`}
-              value={`${opt.seasonType}-${opt.week}`}
-            >
-              {opt.label}
+          {visibleOptions.length ? (
+            visibleOptions.map((opt) => (
+              <option
+                key={`${opt.seasonType}-${opt.week}`}
+                value={`${opt.seasonType}-${opt.week}`}
+                className="bg-primary text-primary-foreground"
+              >
+                {opt.label}
+              </option>
+            ))
+          ) : (
+            <option value={selectValue} className="bg-primary text-primary-foreground">
+              {selectedWeek != null ? `WK ${selectedWeek}` : "WEEK"}
             </option>
-          ))}
+          )}
         </select>
         <ChevronDown className="pointer-events-none absolute right-1 top-1/2 size-3 -translate-y-1/2 text-primary-foreground/70" />
       </div>
