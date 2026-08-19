@@ -195,7 +195,7 @@ function Home() {
             <HomeCard
               to="/waiver"
               title="The Wire"
-              desc="'Free agency priority tools, trend monitoring, and waiver budget analysis."
+              desc="Free agency priority tools, trend monitoring, and waiver budget analysis."
             />
           </section>
 
