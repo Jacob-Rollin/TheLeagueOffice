@@ -79,9 +79,17 @@ function DraftRoom() {
   );
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
+  const lastPick = picks.length ? picks[picks.length - 1]! : null;
+  const lastPlayer = lastPick ? byId.get(lastPick.playerId) : undefined;
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col">
-      <header className="border-b border-border bg-background/85">
+    <main
+      className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col"
+      style={{ "--wr-header-h": `${headerH}px` } as React.CSSProperties}
+    >
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur"
+      >
         <div className="flex items-center justify-between gap-3 px-3 pt-3">
           <div>
             <h1 className="display-title text-3xl">
