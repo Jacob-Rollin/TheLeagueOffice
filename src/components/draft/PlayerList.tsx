@@ -210,10 +210,7 @@ export function PlayerList({
             Drag the handle to build your own board order. It saves automatically.
           </p>
         )}
-      </div>
-
-      <div className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 hidden items-center gap-2 border-b border-border bg-surface/95 px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur sm:flex">
+        <div className="-mx-3 -mb-3 hidden items-center gap-2 border-t border-border px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground sm:flex">
           {sort === "custom" && <div className="w-6 shrink-0" />}
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="w-14 shrink-0" />
@@ -227,7 +224,9 @@ export function PlayerList({
           </div>
           <div className="w-24 shrink-0" />
         </div>
+      </div>
 
+      <div className="relative">
         {rows.length === 0 && (
           <p className="p-6 text-center text-sm text-muted-foreground">No players match.</p>
         )}
