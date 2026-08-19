@@ -1,10 +1,11 @@
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Star, Undo2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ByeMatrix } from "@/components/draft/ByeMatrix";
 import { DraftBoard } from "@/components/draft/DraftBoard";
 import { DraftSuggestions } from "@/components/draft/DraftSuggestions";
+import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerList } from "@/components/draft/PlayerList";
 import { PlayerModal } from "@/components/draft/PlayerModal";
 import { PositionBadge } from "@/components/draft/PositionBadge";
@@ -52,6 +53,16 @@ function DraftRoom() {
   const draft = useDraft();
   const [tab, setTab] = useState<Tab>("players");
   const [openId, setOpenId] = useState<string | null>(null);
+  const headerRef = useRef<HTMLElement | null>(null);
+  const [headerH, setHeaderH] = useState(0);
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeaderH(el.offsetHeight));
+    ro.observe(el);
+    setHeaderH(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
   const byId = useMemo(() => new Map<string, Player>(data.players.map((p) => [p.id, p])), [data.players]);
   const { settings, picks, currentOverall, onTheClock, complete } = draft;
   const myPlayers = useMemo(
@@ -69,9 +80,17 @@ function DraftRoom() {
   );
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
+  const lastPick = picks.length ? picks[picks.length - 1]! : null;
+  const lastPlayer = lastPick ? byId.get(lastPick.playerId) : undefined;
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col">
-      <header className="border-b border-border bg-background/85">
+    <main
+      className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col"
+      style={{ "--wr-header-h": `${headerH}px` } as React.CSSProperties}
+    >
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur"
+      >
         <div className="flex items-center justify-between gap-3 px-3 pt-3">
           <div>
             <h1 className="display-title text-3xl">
@@ -82,6 +101,29 @@ function DraftRoom() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {lastPlayer && lastPick && (
+              <button
+                onClick={() => setOpenId(lastPlayer.id)}
+                className="hidden items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary sm:flex"
+              >
+                <PlayerAvatar
+                  id={lastPlayer.id}
+                  pos={lastPlayer.pos}
+                  team={lastPlayer.team}
+                  name={lastPlayer.name}
+                  className="size-9"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Previous pick
+                  </span>
+                  <span className="block truncate text-xs font-semibold">{lastPlayer.name}</span>
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {teamName(settings, lastPick.team)}
+                  </span>
+                </span>
+              </button>
+            )}
             <button
               onClick={draft.undo}
               disabled={!picks.length}
@@ -144,7 +186,7 @@ function DraftRoom() {
         )}
       >
         {tab !== "board" && (
-          <aside className="hidden lg:sticky lg:top-3 lg:block lg:max-h-[calc(100vh-1.5rem)]">
+          <aside className="hidden lg:sticky lg:top-[calc(var(--wr-header-h,0px)+0.75rem)] lg:block lg:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
             {tab === "team" ? (
               <SideCard title="BYE WEEK MATRIX">
                 {myPlayers.length ? (
@@ -190,7 +232,7 @@ function DraftRoom() {
           )}
         </div>
         {tab !== "board" && (
-          <aside className="hidden lg:sticky lg:top-3 lg:block lg:max-h-[calc(100vh-1.5rem)]">
+          <aside className="hidden lg:sticky lg:top-[calc(var(--wr-header-h,0px)+0.75rem)] lg:block lg:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
             {tab === "team" ? (
               <SideCard title="Suggested Picks" subtitle="Best value for your roster">
                 <DraftSuggestions
