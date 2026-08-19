@@ -95,193 +95,202 @@ function Home() {
     setLeagues([]);
   };
 
-  return (
-    <>
-      <main className="mx-auto w-full max-w-6xl px-3 pb-16">
-        <section className="py-12 text-center sm:py-16">
-          <h1 className="display-title text-5xl leading-none sm:text-7xl">
-            Welcome To The <span className="text-primary">League</span>
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-            Your league. Your draft room. Your front office. Connect Sleeper and keep every decision in one place.
-          </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <Link
-              className="rounded-md bg-primary px-5 py-2.5 font-display uppercase tracking-wide text-primary-foreground"
-              to="/draft"
-            >
-              Enter War Room
-            </Link>
-            <Link
-              className="rounded-md border border-border px-5 py-2.5 font-display uppercase tracking-wide"
-              to="/trade"
-            >
-              Evaluate A Trade
-            </Link>
+  const connectBox = (
+    <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="eyebrow">League HQ</p>
+            <h2 className="display-title text-2xl">Connect Your Sleeper League</h2>
           </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="eyebrow">League HQ</p>
-              <h2 className="display-title text-2xl">Connect Your Sleeper League</h2>
-            </div>
-            <span className="status-dot">LIVE DATA</span>
-          </div>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && search()}
-              placeholder="Enter Sleeper username"
-              className="flex-1 rounded-md border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
-            />
-            <button
-              onClick={search}
-              disabled={!username.trim() || leaguesM.isPending}
-              className="rounded-md bg-primary px-5 py-2.5 font-display uppercase tracking-wide text-primary-foreground disabled:opacity-50"
-            >
-              {leaguesM.isPending ? "Looking…" : "Connect"}
+          <span className="status-dot shrink-0">LIVE DATA</span>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-col gap-2">
+        <input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && search()}
+          placeholder="Enter Sleeper username"
+          className="w-full rounded-md border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary"
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={search}
+            disabled={!username.trim() || leaguesM.isPending}
+            className="flex-1 rounded-md bg-primary px-5 py-2.5 font-display uppercase tracking-wide text-primary-foreground disabled:opacity-50"
+          >
+            {leaguesM.isPending ? "Looking…" : "Connect"}
+          </button>
+          {standings && (
+            <button onClick={unlink} className="rounded-md border border-border px-4 py-2.5 text-sm text-muted-foreground">
+              Unlink
             </button>
-            {standings && (
-              <button
-                onClick={unlink}
-                className="rounded-md border border-border px-4 py-2.5 text-sm text-muted-foreground"
-              >
-                Unlink
-              </button>
-            )}
-          </div>
-          {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
-          {leagues.length > 1 && !standings && (
-            <ul className="mt-3 space-y-1">
-              {leagues.map((l) => (
-                <li key={l.id}>
-                  <button
-                    onClick={() => loadLeague(l.id, username)}
-                    className="flex w-full items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-left text-sm hover:border-primary"
-                  >
-                    <span className="truncate">{l.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {l.season} · {l.teams} teams · {l.scoring}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
           )}
-          {standingsM.isPending && <p className="mt-4 text-sm text-muted-foreground">Loading standings…</p>}
-        </section>
+        </div>
+      </div>
+      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+      {leagues.length > 1 && !standings && (
+        <ul className="mt-3 space-y-1">
+          {leagues.map((l) => (
+            <li key={l.id}>
+              <button
+                onClick={() => loadLeague(l.id, username)}
+                className="flex w-full flex-col items-start gap-0.5 rounded-md border border-border bg-background px-3 py-2 text-left text-sm hover:border-primary"
+              >
+                <span className="w-full truncate">{l.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {l.season} · {l.teams} teams · {l.scoring}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {standingsM.isPending && <p className="mt-4 text-sm text-muted-foreground">Loading standings…</p>}
+    </section>
+  );
 
-        {standings && (
-          <section className="mt-6">
-            <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="display-title text-2xl">{standings.league.name}</h2>
-              <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
-                {standings.league.season} · {standings.league.scoring}
-              </span>
-            </div>
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full text-sm">
-                <thead className="bg-surface text-[10px] uppercase tracking-widest text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 text-left">#</th>
-                    <th className="px-3 py-2 text-left">Team</th>
-                    <th className="px-3 py-2 text-right">W-L-T</th>
-                    <th className="px-3 py-2 text-right">PF</th>
-                    <th className="px-3 py-2 text-right">PA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {standings.rows.map((r, i) => (
-                    <tr key={r.rosterId} className={cn("border-t border-border", i < 4 && "bg-primary/5")}>
-                      <td className="tabnum px-3 py-2 text-muted-foreground">{i + 1}</td>
-                      <td className="px-3 py-2">
-                        <div className="font-medium">{r.team}</div>
-                        <div className="text-[11px] text-muted-foreground">{r.owner}</div>
-                      </td>
-                      <td className="tabnum px-3 py-2 text-right">
-                        {r.wins}-{r.losses}
-                        {r.ties ? `-${r.ties}` : ""}
-                      </td>
-                      <td className="tabnum px-3 py-2 text-right">{r.pointsFor}</td>
-                      <td className="tabnum px-3 py-2 text-right text-muted-foreground">{r.pointsAgainst}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+  return (
+    <main className="mx-auto w-full max-w-6xl px-3 pb-16">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,72fr)_minmax(0,28fr)]">
+        <div className="min-w-0">
+          <section className="py-10 text-center lg:py-14 lg:text-left">
+            <h1 className="display-title text-5xl leading-none sm:text-7xl">
+              Welcome To The <span className="text-primary">League</span>
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base lg:mx-0 mx-auto">
+              Your league. Your draft room. Your front office. Connect Sleeper and keep every decision in one place.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2 lg:justify-start">
+              <Link
+                className="rounded-md bg-primary px-5 py-2.5 font-display uppercase tracking-wide text-primary-foreground"
+                to="/draft"
+              >
+                Enter War Room
+              </Link>
+              <Link
+                className="rounded-md border border-border px-5 py-2.5 font-display uppercase tracking-wide"
+                to="/trade"
+              >
+                Evaluate A Trade
+              </Link>
             </div>
           </section>
-        )}
 
-        <section className="mt-8 grid gap-3 sm:grid-cols-3">
-          <HomeCard
-            to="/draft"
-            title="War Room"
-            desc="ADP, projections, stats, player cards, custom rankings and a live draft board."
-          />
-          <HomeCard
-            to="/trade"
-            title="Trade Analyzer"
-            desc="Compare what you give and get with roster-fit and player value."
-          />
-          <HomeCard to="/waiver" title="Waiver Wire" desc="Find the best free-agent adds and get a claim grade." />
-        </section>
+          <section className="grid gap-3 sm:grid-cols-3">
+            <HomeCard
+              to="/draft"
+              title="War Room"
+              desc="ADP, projections, stats, player cards, custom rankings and a live draft board."
+            />
+            <HomeCard
+              to="/trade"
+              title="Trade Analyzer"
+              desc="Compare what you give and get with roster-fit and player value."
+            />
+            <HomeCard to="/waiver" title="Waiver Wire" desc="Find the best free-agent adds and get a claim grade." />
+          </section>
 
-        <section className="mt-10">
-          <div className="mb-3 flex items-end justify-between">
-            <div>
-              <p className="eyebrow">Intelligence Briefings</p>
-              <h2 className="display-title text-3xl">Fantasy Football News</h2>
+          {standings && (
+            <section className="mt-8">
+              <div className="mb-2 flex items-baseline justify-between">
+                <h2 className="display-title text-2xl">{standings.league.name}</h2>
+                <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                  {standings.league.season} · {standings.league.scoring}
+                </span>
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left">#</th>
+                      <th className="px-3 py-2 text-left">Team</th>
+                      <th className="px-3 py-2 text-right">W-L-T</th>
+                      <th className="px-3 py-2 text-right">PF</th>
+                      <th className="px-3 py-2 text-right">PA</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {standings.rows.map((r, i) => (
+                      <tr key={r.rosterId} className={cn("border-t border-border", i < 4 && "bg-primary/5")}>
+                        <td className="tabnum px-3 py-2 text-muted-foreground">{i + 1}</td>
+                        <td className="px-3 py-2">
+                          <div className="font-medium">{r.team}</div>
+                          <div className="text-[11px] text-muted-foreground">{r.owner}</div>
+                        </td>
+                        <td className="tabnum px-3 py-2 text-right">
+                          {r.wins}-{r.losses}
+                          {r.ties ? `-${r.ties}` : ""}
+                        </td>
+                        <td className="tabnum px-3 py-2 text-right">{r.pointsFor}</td>
+                        <td className="tabnum px-3 py-2 text-right text-muted-foreground">{r.pointsAgainst}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          <section className="mt-10">
+            <div className="mb-3 flex items-end justify-between">
+              <div>
+                <p className="eyebrow">Intelligence Briefings</p>
+                <h2 className="display-title text-3xl">Around The League</h2>
+              </div>
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Updated on load</span>
             </div>
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Updated on load</span>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {news.length
-              ? news
-                  .filter((n) => Boolean(articleUrl(n)))
-                  .map((n, i) => (
-                    <a
-                      key={`${n.headline}-${i}`}
-                      href={articleUrl(n)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="group overflow-hidden rounded-xl border border-border bg-card hover:border-primary"
-                    >
-                      {n.images?.[0]?.url && (
-                        <img
-                          src={n.images[0].url}
-                          alt={n.images[0].alt ?? "Fantasy football news"}
-                          className="h-32 w-full object-cover"
-                        />
-                      )}
-                      <div className="p-4">
-                        <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
-                        <h3 className="mt-1 font-semibold leading-5 group-hover:text-primary">{n.headline}</h3>
-                        {n.description && (
-                          <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{n.description}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {news.length
+                ? news
+                    .filter((n) => Boolean(articleUrl(n)))
+                    .map((n, i) => (
+                      <a
+                        key={`${n.headline}-${i}`}
+                        href={articleUrl(n)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group overflow-hidden rounded-xl border border-border bg-card hover:border-primary"
+                      >
+                        {n.images?.[0]?.url && (
+                          <img
+                            src={n.images[0].url}
+                            alt={n.images[0].alt ?? "Fantasy football news"}
+                            loading="lazy"
+                            className="h-32 w-full object-cover"
+                          />
                         )}
+                        <div className="p-4">
+                          <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
+                          <h3 className="mt-1 font-semibold leading-5 group-hover:text-primary">{n.headline}</h3>
+                          {n.description && (
+                            <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{n.description}</p>
+                          )}
+                        </div>
+                      </a>
+                    ))
+                : ["Fantasy draft targets to watch", "Fantasy sleepers and busts", "Fantasy players trending up"].map(
+                    (x) => (
+                      <div key={x} className="rounded-xl border border-border bg-card p-4">
+                        <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
+                        <h3 className="mt-1 font-semibold">{x}</h3>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Live fantasy football headlines will appear here when the news feed is available.
+                        </p>
                       </div>
-                    </a>
-                  ))
-              : ["Fantasy draft targets to watch", "Fantasy sleepers and busts", "Fantasy players trending up"].map(
-                  (x) => (
-                    <div key={x} className="rounded-xl border border-border bg-card p-4">
-                      <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
-                      <h3 className="mt-1 font-semibold">{x}</h3>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Live fantasy football headlines will appear here when the news feed is available.
-                      </p>
-                    </div>
-                  ),
-                )}
-          </div>
-        </section>
-      </main>
-    </>
+                    ),
+                  )}
+            </div>
+          </section>
+        </div>
+
+        <aside className="min-w-0 space-y-4 lg:pt-10">{connectBox}</aside>
+      </div>
+    </main>
   );
 }
+
 
 function HomeCard({ to, title, desc }: { to: string; title: string; desc: string }) {
   return (
