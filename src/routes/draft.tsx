@@ -139,12 +139,12 @@ function DraftRoom() {
       </header>
       <div
         className={cn(
-          "flex-1 gap-3 overflow-hidden px-0 lg:px-3",
+          "min-h-0 flex-1 gap-3 overflow-hidden px-0 py-3 lg:px-3",
           tab !== "board" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px]",
         )}
       >
         {tab !== "board" && (
-          <aside className="hidden lg:block">
+          <aside className="hidden min-h-0 lg:block">
             {tab === "team" ? (
               <SideCard title="BYE WEEK MATRIX">
                 {myPlayers.length ? (
@@ -190,7 +190,7 @@ function DraftRoom() {
           )}
         </div>
         {tab !== "board" && (
-          <aside className="hidden lg:block">
+          <aside className="hidden min-h-0 lg:block">
             {tab === "team" ? (
               <SideCard title="Suggested Picks" subtitle="Best value for your roster">
                 <DraftSuggestions
@@ -228,12 +228,12 @@ function DraftRoom() {
 }
 function SideCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="sticky top-44 mt-3 rounded-xl border border-border bg-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="font-display text-sm uppercase tracking-widest">{title}</div>
         {subtitle && <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>}
       </div>
-      <div className="max-h-[calc(100vh-16rem)] overflow-y-auto p-2">{children}</div>
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-2">{children}</div>
     </div>
   );
 }
