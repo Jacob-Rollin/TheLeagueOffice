@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getStandings, getUserLeagues } from "@/lib/league.functions";
 import type { LeagueSummary, Standings } from "@/lib/league.server";
 import { cn } from "@/lib/utils";
+import { ScoreTicker } from "@/components/league/ScoreTicker";
 
 const KEY = "league-office-link-v1";
 const NEWS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50";
@@ -86,7 +87,7 @@ function Home() {
     <section className="mt-8 grid gap-3 sm:grid-cols-3"><HomeCard to="/draft" title="War Room" desc="ADP, projections, stats, player cards, custom rankings and a live draft board."/><HomeCard to="/trade" title="Trade Analyzer" desc="Compare what you give and get with roster-fit and player value."/><HomeCard to="/waiver" title="Waiver Wire" desc="Find the best free-agent adds and get a claim grade."/></section>
 
     <section className="mt-10"><div className="mb-3 flex items-end justify-between"><div><p className="eyebrow">Around The League</p><h2 className="display-title text-3xl">Fantasy Football News</h2></div><span className="text-[10px] uppercase tracking-widest text-muted-foreground">Updated on load</span></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{news.length ? news.filter((n) => Boolean(articleUrl(n))).map((n, i) => <a key={`${n.headline}-${i}`} href={articleUrl(n)} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-border bg-card hover:border-primary">{n.images?.[0]?.url && <img src={n.images[0].url} alt={n.images[0].alt ?? "Fantasy football news"} className="h-32 w-full object-cover"/>}<div className="p-4"><p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p><h3 className="mt-1 font-semibold leading-5 group-hover:text-primary">{n.headline}</h3>{n.description && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{n.description}</p>}</div></a>) : ["Fantasy draft targets to watch","Fantasy sleepers and busts","Fantasy players trending up"].map((x) => <div key={x} className="rounded-xl border border-border bg-card p-4"><p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p><h3 className="mt-1 font-semibold">{x}</h3><p className="mt-2 text-xs text-muted-foreground">Live fantasy football headlines will appear here when the news feed is available.</p></div>)}</div></section>
-  </main>;
+  </main></>;
 }
 
 function HomeCard({ to, title, desc }: { to: string; title: string; desc: string }) { return <Link to={to} className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary"><div className="font-display text-xl uppercase tracking-wide">{title}</div><p className="mt-2 text-xs leading-5 text-muted-foreground">{desc}</p></Link>; }
