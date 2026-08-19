@@ -245,7 +245,47 @@ function Home() {
           </section>
         </div>
 
-        <aside className="min-w-0 space-y-4 lg:pt-10">{connectBox}</aside>
+        <aside className="min-w-0 space-y-4 lg:pt-10">
+          {connectBox}
+          {standings && (
+            <section className="rounded-xl border border-border bg-card p-4">
+              <div className="mb-2 flex items-baseline justify-between">
+                <h2 className="display-title text-lg">{standings.league.name}</h2>
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {standings.league.season} · {standings.league.scoring}
+                </span>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <tr>
+                      <th className="px-2 py-2 text-left">#</th>
+                      <th className="px-2 py-2 text-left">Team</th>
+                      <th className="px-2 py-2 text-right">W-L-T</th>
+                      <th className="px-2 py-2 text-right">PF</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {standings.rows.map((r, i) => (
+                      <tr key={r.rosterId} className={cn("border-t border-border", i < 4 && "bg-primary/5")}>
+                        <td className="tabnum px-2 py-2 text-muted-foreground">{i + 1}</td>
+                        <td className="px-2 py-2">
+                          <div className="truncate font-medium">{r.team}</div>
+                          <div className="truncate text-[11px] text-muted-foreground">{r.owner}</div>
+                        </td>
+                        <td className="tabnum px-2 py-2 text-right">
+                          {r.wins}-{r.losses}
+                          {r.ties ? `-${r.ties}` : ""}
+                        </td>
+                        <td className="tabnum px-2 py-2 text-right">{r.pointsFor}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+        </aside>
       </div>
     </main>
   );
