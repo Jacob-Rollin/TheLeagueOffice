@@ -1,5 +1,6 @@
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { type ReactNode, useState } from "react";
 
 import { getHallOfFame } from "@/lib/hof.functions";
 import type { HofYear } from "@/lib/hof.server";
