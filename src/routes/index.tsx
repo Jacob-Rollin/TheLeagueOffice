@@ -48,6 +48,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
+  const { link, saveLink, clearLink } = useLeagueLink();
   const [username, setUsername] = useState("");
   const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
   const [standings, setStandings] = useState<Standings | null>(null);
