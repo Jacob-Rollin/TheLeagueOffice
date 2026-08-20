@@ -17,7 +17,7 @@ export function SleeperSync({
   onApply: (sync: LeagueSyncInput, meta: LeagueLink) => void;
   onUnlink: () => void;
 }) {
-  const [username, setUsername] = useState(() => link?.username ?? savedLink()?.username ?? "");
+  const [username, setUsername] = useState(() => link?.username ?? getLeagueLink()?.username ?? "");
   const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
