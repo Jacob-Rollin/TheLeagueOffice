@@ -55,7 +55,10 @@ function Home() {
   const [standings, setStandings] = useState<Standings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [news, setNews] = useState<NewsItem[]>([]);
-  const [latency] = useState(() => Math.floor(Math.random() * 7) + 12);
+  const [latency, setLatency] = useState(14);
+  useEffect(() => {
+    setLatency(Math.floor(Math.random() * 7) + 12);
+  }, []);
   const leaguesM = useMutation({ mutationFn: (name: string) => getUserLeagues({ data: { username: name } }) });
   const standingsM = useMutation({ mutationFn: (leagueId: string) => getStandings({ data: { leagueId } }) });
 
