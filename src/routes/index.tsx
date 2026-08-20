@@ -189,7 +189,7 @@ function Home() {
           </span>
           SYNC INITIALIZING // STANDBY
         </div>
-      ) : standings ? (
+      ) : standings || link ? (
         <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
           <span className="relative flex h-2 w-2" aria-hidden="true">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
