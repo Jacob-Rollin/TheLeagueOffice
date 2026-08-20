@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeftRight, Grid3X3, Radar } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getStandings, getUserLeagues } from "@/lib/league.functions";
 import type { LeagueSummary, Standings } from "@/lib/league.server";
@@ -217,18 +217,21 @@ function Home() {
             <HomeCard
               to="/draft"
               title="War Room"
+              action="Open War Room"
               desc="Live draft engine, ADP tracking, and advanced player data metrics."
               icon={<Grid3X3 className="h-6 w-6 text-primary" aria-hidden="true" />}
             />
             <HomeCard
               to="/trade"
               title="Trade Desk"
+              action="Launch Trade Desk"
               desc="Instant asset evaluation, roster impact modeling, and value tracking."
               icon={<ArrowLeftRight className="h-6 w-6 text-primary" aria-hidden="true" />}
             />
             <HomeCard
               to="/waiver"
               title="The Wire"
+              action="Access The Wire"
               desc="Free agency priority tools, trend monitoring, and waiver budget analysis."
               icon={<Radar className="h-6 w-6 text-primary" aria-hidden="true" />}
             />
@@ -329,15 +332,36 @@ function Home() {
   );
 }
 
-function HomeCard({ to, title, desc, icon }: { to: string; title: string; desc: string; icon: React.ReactNode }) {
+function HomeCard({
+  to,
+  title,
+  action,
+  desc,
+  icon,
+}: {
+  to: string;
+  title: string;
+  action: string;
+  desc: string;
+  icon: React.ReactNode;
+}) {
   return (
     <Link
       to={to}
-      className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-zinc-700"
+      className="group flex h-full flex-col rounded-xl border border-border bg-card p-5 transition-colors hover:border-zinc-700"
     >
-      <div className="mb-3 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">{icon}</div>
-      <div className="font-display text-xl uppercase tracking-wide">{title}</div>
-      <p className="mt-2 text-xs leading-5 text-muted-foreground">{desc}</p>
+      <div className="mb-3 flex w-full items-center justify-between">
+        <div className="font-display text-xl uppercase tracking-wide">{title}</div>
+        <div className="inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">{icon}</div>
+      </div>
+      <p className="text-xs leading-5 text-muted-foreground">{desc}</p>
+      <div className="mt-auto inline-flex w-fit items-center gap-2 rounded-lg border border-border bg-zinc-900/40 px-4 py-2 text-sm font-medium text-white transition-colors group-hover:border-zinc-600 group-hover:bg-zinc-800/60">
+        <span>{action}</span>
+        <ArrowRight
+          className="h-4 w-4 transition-transform group-hover:translate-x-1"
+          aria-hidden="true"
+        />
+      </div>
     </Link>
   );
 }
