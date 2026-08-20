@@ -106,20 +106,26 @@ function YearNode({ entry, side }: { entry: HofYear; side: "left" | "right" }) {
   return (
     <section className="relative">
       {/* Massive year label anchored on the track */}
-      <div className="relative z-10 mb-8 flex items-center gap-4 pl-12 lg:mb-10 lg:justify-center lg:pl-0">
-        <span className="rounded-full bg-zinc-950 px-4 font-display text-5xl font-black leading-none tracking-tighter text-transparent [background:linear-gradient(to_bottom,#fcd34d,#ca8a04)] [-webkit-background-clip:text] [background-clip:text] sm:text-6xl lg:text-7xl">
+      <div className="relative z-10 mb-10 flex items-center justify-center pl-12 lg:mb-14 lg:pl-0">
+        <span className="relative z-10 rounded-xl bg-zinc-950 px-6 py-2 font-display text-3xl font-extrabold tracking-wider text-white shadow-[0_0_24px_rgba(0,0,0,0.8)] ring-1 ring-amber-500/30 sm:text-4xl lg:text-5xl">
           {entry.year}
         </span>
       </div>
       <div
         aria-hidden
-        className="absolute left-4 top-6 z-10 h-3 w-3 -translate-x-1/2 rounded-full bg-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.9)] lg:left-1/2"
+        className="absolute left-4 top-3 z-10 h-3 w-3 -translate-x-1/2 rounded-full bg-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.9)] lg:left-1/2"
       />
 
-      <div className="grid gap-8 pl-12 lg:grid-cols-2 lg:gap-14 lg:pl-0">
-        <div className={cn(left ? "lg:col-start-1 lg:pr-10" : "lg:col-start-2 lg:pl-10")}>
+      <div className="grid gap-8 pl-12 lg:grid-cols-2 lg:gap-12 lg:pl-0">
+        {/* Left cluster */}
+        <div
+          className={cn(
+            "flex flex-col gap-6",
+            left ? "lg:col-start-1 lg:items-end lg:pr-10" : "lg:col-start-1 lg:items-end lg:pr-10",
+          )}
+        >
           <FlipCard
-            className="h-64 sm:h-72"
+            className="h-72 w-full max-w-xl sm:h-80"
             front={
               <div className="flex h-full flex-col items-center justify-center gap-3 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-zinc-900 to-zinc-950 p-6 text-center shadow-[0_0_40px_-18px_rgba(251,191,36,0.7)]">
                 <TrophyIcon />
@@ -144,54 +150,61 @@ function YearNode({ entry, side }: { entry: HofYear; side: "left" | "right" }) {
             }
           />
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <FlipCard
-              className="h-44"
-              front={<SmallFront label="Highest Scoring Player (Week)" />}
-              back={
-                <CardBack
-                  title="Player — Week"
-                  rows={[
-                    ["Player", entry.playerWeek?.player_name],
-                    ["Points", pts(entry.playerWeek?.points)],
-                    ["Week", entry.playerWeek?.week],
-                    ["Team", entry.playerWeek?.fantasy_team_name],
-                    ["Manager", entry.playerWeek?.manager_name],
-                  ]}
-                />
-              }
-            />
-            <FlipCard
-              className="h-44"
-              front={<SmallFront label="Highest Points For Team (Week)" />}
-              back={
-                <CardBack
-                  title="Team — Week"
-                  rows={[
-                    ["Team", entry.teamWeek?.fantasy_team_name],
-                    ["Points", pts(entry.teamWeek?.points)],
-                    ["Week", entry.teamWeek?.week],
-                    ["Manager", entry.teamWeek?.manager_name],
-                  ]}
-                />
-              }
-            />
-            <FlipCard
-              className="h-44"
-              front={<SmallFront label="Highest Points For Team (Season)" />}
-              back={
-                <CardBack
-                  title="Team — Season"
-                  rows={[
-                    ["Team", entry.teamSeason?.fantasy_team_name],
-                    ["Total Points", pts(entry.teamSeason?.points)],
-                    ["Season", String(entry.year)],
-                    ["Manager", entry.teamSeason?.manager_name],
-                  ]}
-                />
-              }
-            />
-          </div>
+          <FlipCard
+            className="h-56 w-full max-w-md"
+            front={<SmallFront label="Highest Scoring Player (Week)" />}
+            back={
+              <CardBack
+                title="Player — Week"
+                rows={[
+                  ["Player", entry.playerWeek?.player_name],
+                  ["Points", pts(entry.playerWeek?.points)],
+                  ["Week", entry.playerWeek?.week],
+                  ["Team", entry.playerWeek?.fantasy_team_name],
+                  ["Manager", entry.playerWeek?.manager_name],
+                ]}
+              />
+            }
+          />
+        </div>
+
+        {/* Right cluster */}
+        <div
+          className={cn(
+            "flex flex-col gap-6",
+            left ? "lg:col-start-2 lg:items-start lg:pl-10" : "lg:col-start-2 lg:items-start lg:pl-10",
+          )}
+        >
+          <FlipCard
+            className="h-56 w-full max-w-md"
+            front={<SmallFront label="Highest Points For Team (Week)" />}
+            back={
+              <CardBack
+                title="Team — Week"
+                rows={[
+                  ["Team", entry.teamWeek?.fantasy_team_name],
+                  ["Points", pts(entry.teamWeek?.points)],
+                  ["Week", entry.teamWeek?.week],
+                  ["Manager", entry.teamWeek?.manager_name],
+                ]}
+              />
+            }
+          />
+          <FlipCard
+            className="h-56 w-full max-w-md"
+            front={<SmallFront label="Highest Points For Team (Season)" />}
+            back={
+              <CardBack
+                title="Team — Season"
+                rows={[
+                  ["Team", entry.teamSeason?.fantasy_team_name],
+                  ["Total Points", pts(entry.teamSeason?.points)],
+                  ["Season", String(entry.year)],
+                  ["Manager", entry.teamSeason?.manager_name],
+                ]}
+              />
+            }
+          />
         </div>
       </div>
     </section>
@@ -214,7 +227,7 @@ function FlipCard({
         type="button"
         aria-pressed={flipped}
         onClick={() => setFlipped((f) => !f)}
-        className="relative h-full w-full cursor-pointer rounded-2xl text-left transition-transform duration-500 [transform-style:preserve-3d] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+        className="relative h-full w-full cursor-pointer rounded-2xl text-left transition-all duration-300 [transform-style:preserve-3d] hover:scale-[1.03] hover:shadow-[0_0_35px_rgba(245,158,11,0.6)] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
         style={{ transform: flipped ? "rotateY(180deg)" : undefined }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">{front}</div>
@@ -250,13 +263,13 @@ function CardBack({
   return (
     <div
       className={cn(
-        "flex h-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border bg-zinc-900 p-4 text-center",
+        "flex h-full flex-col items-center justify-center space-y-3 overflow-hidden rounded-xl border bg-zinc-900 p-6 text-center",
         large
           ? "rounded-2xl border-amber-500/40 shadow-[0_0_40px_-18px_rgba(251,191,36,0.7)] sm:p-6"
           : "border-zinc-800",
       )}
     >
-      <p className="mb-1 font-display text-[10px] uppercase tracking-[0.22em] text-amber-400">
+      <p className="font-display text-[10px] uppercase tracking-[0.22em] text-amber-400">
         {title}
       </p>
       {rows.map(([label, value]) => (
@@ -264,7 +277,7 @@ function CardBack({
           key={label}
           className={cn(
             "max-w-full truncate text-zinc-300",
-            large ? "text-base sm:text-lg" : "text-xs",
+            large ? "text-base sm:text-lg" : "text-sm",
           )}
           title={value ?? undefined}
         >
