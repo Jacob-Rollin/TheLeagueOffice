@@ -44,14 +44,40 @@ export function saveLeagueLink(link: StoredLeagueLink) {
   window.dispatchEvent(new Event(EVENT));
 }
 
+/**
+ * Every browser storage key that holds Sleeper-derived data. Unlinking must
+ * flush all of them so no page (War Room, Trade Desk, homepage) can restore
+ * ghost team names from a stale cache.
+ */
+export const LEAGUE_CACHE_KEYS = [
+  LEAGUE_LINK_KEY,
+  "sleeper_username",
+  "sleeper_league_id",
+  "sleeper_rosters",
+  "trade_page_teams",
+];
+
 export function clearLeagueLink() {
   if (typeof window === "undefined") return;
+  cache = null;
+  cacheRaw = null;
   try {
-    localStorage.removeItem(LEAGUE_LINK_KEY);
+    for (const key of LEAGUE_CACHE_KEYS) localStorage.removeItem(key);
   } catch {
     /* ignore */
   }
   window.dispatchEvent(new Event(EVENT));
+}
+
+/** Subscribe to global link changes outside of React (module-level stores). */
+export function onLeagueLinkChange(cb: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(EVENT, cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    window.removeEventListener(EVENT, cb);
+    window.removeEventListener("storage", cb);
+  };
 }
 
 function subscribe(cb: () => void) {

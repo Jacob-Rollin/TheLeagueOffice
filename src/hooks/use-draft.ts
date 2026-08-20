@@ -7,7 +7,13 @@ import {
   type Settings,
 } from "@/lib/draft";
 import { getLeagueSync } from "@/lib/league.functions";
-import { clearLeagueLink, getLeagueLink, saveLeagueLink, useLeagueLink } from "@/lib/league-link";
+import {
+  clearLeagueLink,
+  getLeagueLink,
+  onLeagueLinkChange,
+  saveLeagueLink,
+  useLeagueLink,
+} from "@/lib/league-link";
 
 const KEY = "ff-draft-state-v1";
 
@@ -78,6 +84,45 @@ function persist() {
   } catch {
     /* ignore quota errors */
   }
+}
+
+/**
+ * Wipe every Sleeper-derived slice of the draft store and the persisted copy,
+ * regardless of whether a component has hydrated the store yet. Called from any
+ * unlink entry point (homepage terminal, War Room settings, Trade Desk).
+ */
+function resetLinkedLeagueState() {
+  autoSyncKey = null;
+  state = {
+    ...state,
+    settings: DEFAULT_SETTINGS,
+    picks: [],
+    link: null,
+  };
+  if (typeof window !== "undefined") {
+    try {
+      // Keep personal, non-league data (watchlist, custom order) intact.
+      localStorage.setItem(
+        KEY,
+        JSON.stringify({
+          settings: DEFAULT_SETTINGS,
+          picks: [],
+          watch: state.watch,
+          order: state.customOrder,
+          link: null,
+        } satisfies Persisted),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+  emit();
+}
+
+if (typeof window !== "undefined") {
+  onLeagueLinkChange(() => {
+    if (!getLeagueLink() && (state.link || state.picks.length)) resetLinkedLeagueState();
+  });
 }
 
 function setState(patch: Partial<StoreState>) {
@@ -261,8 +306,7 @@ export function useDraft() {
   }, []);
 
   const clearLinkedLeagueState = useCallback(() => {
-    autoSyncKey = null;
-    setState({ settings: DEFAULT_SETTINGS, picks: [], link: null });
+    resetLinkedLeagueState();
   }, []);
 
   const unlinkLeague = useCallback(() => {
