@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
+import { GlobalSearch } from "@/components/search/GlobalSearch";
 
 // Injected at build time by vite.config.ts (`define`). Falls back in dev.
 declare const __BUILD_ID__: string | undefined;
@@ -134,6 +135,7 @@ function SiteNav() {
             </Link>
           ))}
         </div>
+        <GlobalSearch />
       </nav>
     </header>
   );

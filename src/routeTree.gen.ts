@@ -18,6 +18,7 @@ import { Route as WaiverRouteImport } from './routes/waiver'
 import { Route as WarRoomRouteImport } from './routes/war-room'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
 import { Route as PlayerIdRouteImport } from './routes/player.$id'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 
@@ -68,6 +69,11 @@ const Char91DotwellKnownChar93OauthProtectedResourceRoute =
     path: '/.well-known/oauth-protected-resource',
     getParentRoute: () => rootRouteImport,
   } as any)
+const NflTeamNflIdRoute = NflTeamNflIdRouteImport.update({
+  id: '/nfl-team/$nflId',
+  path: '/nfl-team/$nflId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlayerIdRoute = PlayerIdRouteImport.update({
   id: '/player/$id',
   path: '/player/$id',
@@ -90,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
 }
@@ -103,6 +110,7 @@ export interface FileRoutesByTo {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
 }
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
 }
@@ -132,6 +141,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/nfl-team/$nflId'
     | '/player/$id'
     | '/.mcp/invoke-tool/$tool'
   fileRoutesByTo: FileRoutesByTo
@@ -145,6 +155,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/nfl-team/$nflId'
     | '/player/$id'
     | '/.mcp/invoke-tool/$tool'
   id:
@@ -158,6 +169,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/nfl-team/$nflId'
     | '/player/$id'
     | '/.mcp/invoke-tool/$tool'
   fileRoutesById: FileRoutesById
@@ -172,6 +184,7 @@ export interface RootRouteChildren {
   WarRoomRoute: typeof WarRoomRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  NflTeamNflIdRoute: typeof NflTeamNflIdRoute
   PlayerIdRoute: typeof PlayerIdRoute
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
 }
@@ -241,6 +254,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/nfl-team/$nflId': {
+      id: '/nfl-team/$nflId'
+      path: '/nfl-team/$nflId'
+      fullPath: '/nfl-team/$nflId'
+      preLoaderRoute: typeof NflTeamNflIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/player/$id': {
       id: '/player/$id'
       path: '/player/$id'
@@ -269,6 +289,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  NflTeamNflIdRoute: NflTeamNflIdRoute,
   PlayerIdRoute: PlayerIdRoute,
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
 }
