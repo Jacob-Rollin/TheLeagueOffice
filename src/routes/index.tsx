@@ -217,18 +217,21 @@ function Home() {
             <HomeCard
               to="/draft"
               title="War Room"
+              action="Open War Room"
               desc="Live draft engine, ADP tracking, and advanced player data metrics."
               icon={<Grid3X3 className="h-6 w-6 text-primary" aria-hidden="true" />}
             />
             <HomeCard
               to="/trade"
               title="Trade Desk"
+              action="Launch Trade Desk"
               desc="Instant asset evaluation, roster impact modeling, and value tracking."
               icon={<ArrowLeftRight className="h-6 w-6 text-primary" aria-hidden="true" />}
             />
             <HomeCard
               to="/waiver"
               title="The Wire"
+              action="Access The Wire"
               desc="Free agency priority tools, trend monitoring, and waiver budget analysis."
               icon={<Radar className="h-6 w-6 text-primary" aria-hidden="true" />}
             />
