@@ -18,3 +18,17 @@ export const getPlayerNews = createServerFn({ method: "GET" })
     const { loadPlayerNews } = await import("./players.server");
     return await loadPlayerNews(data.id);
   });
+
+export const getPlayerBio = createServerFn({ method: "GET" })
+  .inputValidator((input: { id: string }) => ({ id: String(input.id).slice(0, 32) }))
+  .handler(async ({ data }) => {
+    const { loadPlayerBio } = await import("./players.server");
+    return await loadPlayerBio(data.id);
+  });
+
+export const getGameLogs = createServerFn({ method: "GET" })
+  .inputValidator((input: { id: string }) => ({ id: String(input.id).slice(0, 32) }))
+  .handler(async ({ data }) => {
+    const { loadGameLogs } = await import("./players.server");
+    return await loadGameLogs(data.id);
+  });
