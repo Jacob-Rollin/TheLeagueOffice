@@ -114,29 +114,78 @@ function YearNode({ entry, side }: { entry: HofYear; side: "left" | "right" }) {
 
       <div className="grid gap-8 pl-12 lg:grid-cols-2 lg:gap-14 lg:pl-0">
         <div className={cn(left ? "lg:col-start-1 lg:pr-10" : "lg:col-start-2 lg:pl-10")}>
-          <ChampionCard entry={entry} />
+          <FlipCard
+            className="h-64 sm:h-72"
+            front={
+              <div className="flex h-full flex-col items-center justify-center gap-3 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-zinc-900 to-zinc-950 p-6 text-center shadow-[0_0_40px_-18px_rgba(251,191,36,0.7)]">
+                <TrophyIcon />
+                <span className="bg-gradient-to-b from-amber-200 to-yellow-600 bg-clip-text font-display text-5xl font-black leading-none tracking-tighter text-transparent sm:text-6xl">
+                  {entry.year}
+                </span>
+                <span className="font-display text-xs uppercase tracking-[0.3em] text-amber-400">
+                  League Champion
+                </span>
+              </div>
+            }
+            back={
+              <CardBack
+                title="League Champion"
+                rows={[
+                  ["Team", entry.championship?.fantasy_team_name],
+                  ["Manager", entry.championship?.manager_name],
+                  ["Record", entry.championship?.wins_losses],
+                ]}
+                large
+              />
+            }
+          />
+
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <RecordCard
-              label="Player Week Record"
-              headline={entry.playerWeek?.player_name ?? "—"}
-              points={entry.playerWeek?.points ?? null}
-              meta={[
-                entry.playerWeek?.week,
-                entry.playerWeek?.fantasy_team_name,
-                entry.playerWeek?.manager_name,
-              ]}
+            <FlipCard
+              className="h-44"
+              front={<SmallFront label="Highest Scoring Player (Week)" />}
+              back={
+                <CardBack
+                  title="Player — Week"
+                  rows={[
+                    ["Player", entry.playerWeek?.player_name],
+                    ["Points", pts(entry.playerWeek?.points)],
+                    ["Week", entry.playerWeek?.week],
+                    ["Team", entry.playerWeek?.fantasy_team_name],
+                    ["Manager", entry.playerWeek?.manager_name],
+                  ]}
+                />
+              }
             />
-            <RecordCard
-              label="Team Week Record"
-              headline={entry.teamWeek?.fantasy_team_name ?? "—"}
-              points={entry.teamWeek?.points ?? null}
-              meta={[entry.teamWeek?.week, entry.teamWeek?.manager_name]}
+            <FlipCard
+              className="h-44"
+              front={<SmallFront label="Highest Points For Team (Week)" />}
+              back={
+                <CardBack
+                  title="Team — Week"
+                  rows={[
+                    ["Team", entry.teamWeek?.fantasy_team_name],
+                    ["Points", pts(entry.teamWeek?.points)],
+                    ["Week", entry.teamWeek?.week],
+                    ["Manager", entry.teamWeek?.manager_name],
+                  ]}
+                />
+              }
             />
-            <RecordCard
-              label="Team Season Record"
-              headline={entry.teamSeason?.fantasy_team_name ?? "—"}
-              points={entry.teamSeason?.points ?? null}
-              meta={["Season total", entry.teamSeason?.manager_name]}
+            <FlipCard
+              className="h-44"
+              front={<SmallFront label="Highest Points For Team (Season)" />}
+              back={
+                <CardBack
+                  title="Team — Season"
+                  rows={[
+                    ["Team", entry.teamSeason?.fantasy_team_name],
+                    ["Total Points", pts(entry.teamSeason?.points)],
+                    ["Season", String(entry.year)],
+                    ["Manager", entry.teamSeason?.manager_name],
+                  ]}
+                />
+              }
             />
           </div>
         </div>
@@ -145,57 +194,94 @@ function YearNode({ entry, side }: { entry: HofYear; side: "left" | "right" }) {
   );
 }
 
-function ChampionCard({ entry }: { entry: HofYear }) {
-  const champ = entry.championship;
+function FlipCard({
+  front,
+  back,
+  className,
+}: {
+  front: React.ReactNode;
+  back: React.ReactNode;
+  className?: string;
+}) {
+  const [flipped, setFlipped] = useState(false);
   return (
-    <article className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-zinc-900 to-zinc-950 p-6 shadow-[0_0_40px_-18px_rgba(251,191,36,0.7)] sm:p-8">
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent"
-      />
-      <p className="font-display text-[11px] uppercase tracking-[0.28em] text-amber-400">
-        League Champion
-      </p>
-      <h2 className="mt-3 font-display text-3xl font-black leading-tight text-zinc-50 sm:text-4xl">
-        {champ?.fantasy_team_name ?? "Not recorded"}
-      </h2>
-      <p className="mt-2 text-sm text-zinc-400">
-        Managed by <span className="text-zinc-200">{champ?.manager_name ?? "—"}</span>
-      </p>
-      {champ?.wins_losses ? (
-        <p className="mt-5 inline-flex items-baseline gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-2">
-          <span className="font-display text-2xl font-bold text-amber-300">
-            {champ.wins_losses}
-          </span>
-          <span className="text-[11px] uppercase tracking-widest text-amber-200/70">Record</span>
-        </p>
-      ) : null}
-    </article>
+    <div className={cn("[perspective:1200px]", className)}>
+      <button
+        type="button"
+        aria-pressed={flipped}
+        onClick={() => setFlipped((f) => !f)}
+        className="relative h-full w-full cursor-pointer rounded-2xl text-left transition-transform duration-500 [transform-style:preserve-3d] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+        style={{ transform: flipped ? "rotateY(180deg)" : undefined }}
+      >
+        <div className="absolute inset-0 [backface-visibility:hidden]">{front}</div>
+        <div className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)]">
+          {back}
+        </div>
+      </button>
+    </div>
   );
 }
 
-function RecordCard({
-  label,
-  headline,
-  points,
-  meta,
-}: {
-  label: string;
-  headline: string;
-  points: number | null;
-  meta: (string | null | undefined)[];
-}) {
-  const details = meta.filter(Boolean) as string[];
+function SmallFront({ label }: { label: string }) {
   return (
-    <article className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 transition-colors hover:border-amber-500/40">
-      <p className="font-display text-[10px] uppercase tracking-[0.18em] text-zinc-500">{label}</p>
-      <p className="mt-2 truncate text-sm font-semibold text-zinc-100" title={headline}>
-        {headline}
-      </p>
-      <p className="mt-1 font-display text-2xl font-bold text-amber-300">{num(points)}</p>
-      {details.length > 0 ? (
-        <p className="mt-1 text-[11px] leading-snug text-zinc-500">{details.join(" · ")}</p>
-      ) : null}
-    </article>
+    <div className="flex h-full flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 text-center transition-colors hover:border-amber-500/40">
+      <span className="h-px w-8 bg-gradient-to-r from-transparent via-amber-400 to-transparent" />
+      <span className="font-display text-sm font-semibold uppercase leading-snug tracking-wide text-zinc-200">
+        {label}
+      </span>
+      <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Tap to flip</span>
+    </div>
   );
 }
+
+function CardBack({
+  title,
+  rows,
+  large,
+}: {
+  title: string;
+  rows: [string, string | null | undefined][];
+  large?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex h-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border bg-zinc-900 p-4 text-center",
+        large
+          ? "rounded-2xl border-amber-500/40 shadow-[0_0_40px_-18px_rgba(251,191,36,0.7)] sm:p-6"
+          : "border-zinc-800",
+      )}
+    >
+      <p className="mb-1 font-display text-[10px] uppercase tracking-[0.22em] text-amber-400">
+        {title}
+      </p>
+      {rows.map(([label, value]) => (
+        <p
+          key={label}
+          className={cn(
+            "max-w-full truncate text-zinc-300",
+            large ? "text-base sm:text-lg" : "text-xs",
+          )}
+          title={value ?? undefined}
+        >
+          <span className="text-zinc-500">{label}: </span>
+          <span className="font-semibold text-zinc-100">{value || "—"}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function TrophyIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className="h-10 w-10 text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]"
+      fill="currentColor"
+    >
+      <path d="M18 3h3v3a4 4 0 0 1-3.4 3.95A6 6 0 0 1 13 13.9V17h3a1 1 0 0 1 0 2H8a1 1 0 0 1 0-2h3v-3.1A6 6 0 0 1 6.4 9.95 4 4 0 0 1 3 6V3h3V2h12v1zM6 5H5v1a2 2 0 0 0 1 1.73V5zm13 0h-1v2.73A2 2 0 0 0 19 6V5z" />
+    </svg>
+  );
+}
+
