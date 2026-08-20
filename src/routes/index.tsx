@@ -155,13 +155,20 @@ function Home() {
 
   return (
     <>
-      <section className="relative w-full bg-gradient-to-b from-blue-600/15 via-blue-950/5 to-transparent pb-10 pt-6 backdrop-blur-md">
+      <section className="relative w-full bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.15),transparent_70%)] pb-12 pt-6 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-4 md:px-8">
           <div className="space-y-3 border-l-2 border-blue-500/20 pl-6">
-            <h1 className="bg-gradient-to-r from-white via-zinc-100 to-zinc-300 bg-clip-text text-transparent text-4xl font-black tracking-tight md:text-5xl">
-              Welcome To The League
+            <h1 className="text-4xl font-black tracking-tight md:text-5xl">
+              <span className="text-white">Welcome To</span>{" "}
+              <span className="text-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                The League
+              </span>
             </h1>
-            <p className="max-w-2xl text-lg font-semibold text-zinc-400">
+            <p className="flex max-w-2xl items-center text-lg font-semibold text-zinc-400">
+              <span
+                className="relative top-[1px] mr-2 inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+                aria-hidden="true"
+              />
               Your league. Draft Room Operations. Front Office Analytics.
             </p>
             <p className="max-w-xl text-sm leading-relaxed text-zinc-500">
