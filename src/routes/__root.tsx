@@ -5,9 +5,15 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
 
+// Injected at build time by vite.config.ts (`define`). Falls back in dev.
+declare const __BUILD_ID__: string | undefined;
+const BUILD_ID = typeof __BUILD_ID__ === "string" ? __BUILD_ID__ : "dev";
+
 const absoluteAssetPath = (assetPath: string) => {
-  if (/^https?:\/\//i.test(assetPath) || assetPath.startsWith("/")) return assetPath;
-  return `/${assetPath.replace(/^\.\//, "")}`;
+  if (/^https?:\/\//i.test(assetPath)) return assetPath;
+  const rooted = assetPath.startsWith("/") ? assetPath : `/${assetPath.replace(/^\.\//, "")}`;
+  // Cache-bust per deployment: SSR and client render the same string, so no hydration mismatch.
+  return `${rooted}${rooted.includes("?") ? "&" : "?"}v=${BUILD_ID}`;
 };
 
 function NotFoundComponent() {
