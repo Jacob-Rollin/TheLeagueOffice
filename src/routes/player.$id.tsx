@@ -268,7 +268,10 @@ function PlayerHubPage() {
 
           {/* ---- sidebar widgets ---- */}
           <aside className="space-y-4 self-start rounded-xl border border-zinc-200 bg-zinc-50 p-4 lg:col-span-1">
+            <NextGame />
+
             <Widget title="Injury risk">
+
               <div className="flex items-baseline justify-between">
                 <span
                   className={cn(
