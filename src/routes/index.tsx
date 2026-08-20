@@ -155,12 +155,12 @@ function Home() {
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
-      <section className="relative mt-6 bg-[radial-gradient(circle_at_top_left,rgba(39,39,42,0.25),transparent_70%)] px-6 pb-4 pt-8 md:px-8 md:pt-12">
+      <section className="relative bg-gradient-to-b from-primary/12 via-zinc-900/5 to-transparent pb-8 pt-6 backdrop-blur-md">
         <div className="space-y-3">
-          <h1 className="bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent font-black tracking-tight text-4xl md:text-5xl">
+          <h1 className="bg-gradient-to-r from-white via-zinc-100 to-zinc-300 bg-clip-text text-transparent text-4xl md:text-5xl font-black tracking-tight">
             Welcome To The League
           </h1>
-          <p className="text-lg font-semibold text-zinc-400">
+          <p className="text-lg font-semibold text-zinc-400 max-w-2xl">
             Your league. Draft Room Operations. Front Office Analytics.
           </p>
           <p className="max-w-xl text-sm leading-relaxed text-zinc-500">
