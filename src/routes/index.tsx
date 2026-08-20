@@ -156,42 +156,43 @@ function Home() {
 
   return (
     <>
-      <section className="relative my-4 w-full border-t border-b border-zinc-800/50 bg-gradient-to-b from-blue-950/40 via-zinc-950/20 to-transparent py-10 backdrop-blur-sm">
+      <section className="w-full bg-gradient-to-b from-blue-50/40 via-transparent to-transparent pb-10">
         <div className="mx-auto max-w-7xl px-4 md:px-8">
           <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-3">
             <div className="md:col-span-2">
-              <p className="mb-2 font-mono text-xs tracking-[0.25em] text-zinc-500">
-                // SYSTEM OPERATIONS TERMINAL v1.0
-              </p>
-              <h1 className="drop-shadow-[0_4px_12px_rgba(0,0,0,0.9)] text-4xl font-black tracking-tight md:text-5xl">
-                <span className="text-white">Welcome To</span>{" "}
-                <span className="text-blue-500 drop-shadow-[0_0_20px_rgba(59,130,246,0.35)]">
-                  The League
-                </span>
+              <h1 className="text-4xl font-black tracking-tight text-zinc-900 md:text-5xl">
+                Welcome To{" "}
+                <span className="text-blue-600">The League</span>
               </h1>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-1 text-xs font-semibold text-zinc-300">
+              <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                <span className="rounded-md border border-blue-200 bg-blue-50/60 px-3 py-1 font-mono text-xs font-semibold tracking-wider text-blue-700 shadow-sm">
                   Your league.
                 </span>
-                <span className="rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-1 text-xs font-semibold text-zinc-300">
+                <span className="rounded-md border border-blue-200 bg-blue-50/60 px-3 py-1 font-mono text-xs font-semibold tracking-wider text-blue-700 shadow-sm">
                   Draft Room Operations.
                 </span>
-                <span className="rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-1 text-xs font-semibold text-zinc-300">
+                <span className="rounded-md border border-blue-200 bg-blue-50/60 px-3 py-1 font-mono text-xs font-semibold tracking-wider text-blue-700 shadow-sm">
                   Front Office Analytics.
                 </span>
               </div>
-              <p className="mt-3 max-w-xl text-sm leading-relaxed text-zinc-400">
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-zinc-500">
                 Synchronize your active assets to manage every decision from a single terminal.
               </p>
             </div>
-            <div className="flex md:col-span-1 md:justify-end">
-              <div className="flex w-max items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2 font-mono text-xs tracking-wider text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.05)]">
-                <span
-                  className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500"
-                  aria-hidden="true"
-                />
+            <div className="flex flex-col items-end space-y-1.5 text-right md:col-span-1">
+              <p className="font-mono text-xs tracking-[0.25em] text-zinc-500">
+                // SYSTEM OPERATIONS TERMINAL v1.0
+              </p>
+              <div className="flex w-max items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2 font-mono text-xs tracking-wider text-red-600">
+                <span className="relative flex h-2 w-2" aria-hidden="true">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600" />
+                </span>
                 LIVE DATA STREAM // LINK ACTIVE
               </div>
+              <p className="text-[10px] font-mono tracking-widest text-zinc-400">
+                LATENCY: {latency}ms // DB_STATUS: NOMINAL
+              </p>
             </div>
           </div>
         </div>
