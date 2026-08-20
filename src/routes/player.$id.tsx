@@ -31,6 +31,18 @@ const logsQuery = (id: string) =>
     staleTime: 1000 * 60 * 30,
   });
 
+const nextGameQuery = (team: string) =>
+  queryOptions({
+    queryKey: ["player-next-game", team],
+    queryFn: () => getNextGame({ data: { team } }),
+    staleTime: 1000 * 60 * 60 * 6,
+  });
+
+const TEAM_NAME: Record<string, string> = Object.fromEntries(
+  NFL_TEAMS.map((t) => [t.id, t.name]),
+);
+
+
 export const Route = createFileRoute("/player/$id")({
   head: () => ({
     meta: [
