@@ -11,11 +11,27 @@ import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
 // so the SSR server + static assets land in .vercel/output instead of a Worker bundle.
 const preset = process.env["NITRO_PRESET"] ?? (process.env["VERCEL"] ? "vercel" : undefined);
 
+// Unique per build; injected into the client bundle so asset URLs change every deploy.
+const buildId = process.env["VERCEL_GIT_COMMIT_SHA"]?.slice(0, 8) ?? Date.now().toString(36);
+
 export default defineConfig({
   vite: {
     // Keep every emitted client asset rooted at the deployment host. This prevents
     // nested SSR routes from resolving CSS and scripts relative to their pathname.
     base: "/",
+    define: {
+      __BUILD_ID__: JSON.stringify(buildId),
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          // Content-hashed filenames so a new deploy can never reuse a stale cached file.
+          entryFileNames: "assets/[name]-[hash].js",
+          chunkFileNames: "assets/[name]-[hash].js",
+          assetFileNames: "assets/[name]-[hash][extname]",
+        },
+      },
+    },
   },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
