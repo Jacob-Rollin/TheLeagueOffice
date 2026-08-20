@@ -56,14 +56,11 @@ function HofError({ error }: { error: Error }) {
   );
 }
 
-const num = (v: number | null | undefined) =>
-  typeof v === "number" ? v.toFixed(2).replace(/\.00$/, "") : "—";
+const num = (v: number | null | undefined) => (typeof v === "number" ? v.toFixed(2).replace(/\.00$/, "") : "—");
 
-const wk = (v: string | null | undefined) =>
-  v ? v.replace(/^\s*week\s*/i, "").trim() || null : null;
+const wk = (v: string | null | undefined) => (v ? v.replace(/^\s*week\s*/i, "").trim() || null : null);
 
-const pts = (v: number | null | undefined) =>
-  typeof v === "number" ? `${num(v)} pts` : null;
+const pts = (v: number | null | undefined) => (typeof v === "number" ? `${num(v)} pts` : null);
 
 function HofPage() {
   const { data: years } = useSuspenseQuery(hofQuery);
@@ -71,21 +68,15 @@ function HofPage() {
   return (
     <main className="min-h-screen bg-zinc-950 px-4 pb-24 pt-12">
       <header className="mx-auto max-w-3xl text-center">
-        <p className="font-display text-xs uppercase tracking-[0.3em] text-amber-400/80">
-          The League Office
-        </p>
+        <p className="font-display text-xs uppercase tracking-[0.3em] text-amber-400/80">The League</p>
         <h1 className="mt-2 bg-gradient-to-b from-amber-200 to-yellow-600 bg-clip-text font-display text-4xl font-black uppercase tracking-tight text-transparent sm:text-6xl">
           Hall of Fame
         </h1>
-        <p className="mt-3 text-sm text-zinc-400">
-          Champions and record books, season by season.
-        </p>
+        <p className="mt-3 text-sm text-zinc-400">Champions and record books, season by season.</p>
       </header>
 
       {years.length === 0 ? (
-        <p className="mt-16 text-center text-sm text-zinc-500">
-          No records have been added yet.
-        </p>
+        <p className="mt-16 text-center text-sm text-zinc-500">No records have been added yet.</p>
       ) : (
         <div className="relative mx-auto mt-16 max-w-6xl">
           {/* Center timeline track */}
@@ -135,9 +126,7 @@ function YearNode({ entry, side }: { entry: HofYear; side: "left" | "right" }) {
                 <span className="bg-gradient-to-b from-amber-200 to-yellow-600 bg-clip-text font-display text-5xl font-black leading-none tracking-tighter text-transparent sm:text-6xl">
                   {entry.year}
                 </span>
-                <span className="font-display text-xs uppercase tracking-[0.3em] text-amber-400">
-                  League Champion
-                </span>
+                <span className="font-display text-xs uppercase tracking-[0.3em] text-amber-400">League Champion</span>
               </div>
             }
             back={
@@ -214,15 +203,7 @@ function YearNode({ entry, side }: { entry: HofYear; side: "left" | "right" }) {
   );
 }
 
-function FlipCard({
-  front,
-  back,
-  className,
-}: {
-  front: ReactNode;
-  back: ReactNode;
-  className?: string;
-}) {
+function FlipCard({ front, back, className }: { front: ReactNode; back: ReactNode; className?: string }) {
   const [flipped, setFlipped] = useState(false);
   return (
     <div className={cn("[perspective:1200px]", className)}>
@@ -234,9 +215,7 @@ function FlipCard({
         style={{ transform: flipped ? "rotateY(180deg)" : undefined }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">{front}</div>
-        <div className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)]">
-          {back}
-        </div>
+        <div className="absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)]">{back}</div>
       </button>
     </div>
   );
@@ -272,16 +251,11 @@ function CardBack({
           : "border-zinc-800",
       )}
     >
-      <p className="font-display text-[10px] uppercase tracking-[0.22em] text-amber-400">
-        {title}
-      </p>
+      <p className="font-display text-[10px] uppercase tracking-[0.22em] text-amber-400">{title}</p>
       {rows.map(([label, value]) => (
         <p
           key={label}
-          className={cn(
-            "max-w-full truncate text-zinc-300",
-            large ? "text-base sm:text-lg" : "text-sm",
-          )}
+          className={cn("max-w-full truncate text-zinc-300", large ? "text-base sm:text-lg" : "text-sm")}
           title={value ?? undefined}
         >
           <span className="text-zinc-500">{label}: </span>
@@ -304,4 +278,3 @@ function TrophyIcon() {
     </svg>
   );
 }
-
