@@ -261,7 +261,7 @@ function CardBack({
           : "border-zinc-800",
       )}
     >
-      <p className="font-display text-[10px] uppercase tracking-[0.22em] text-amber-400">{title}</p>
+      <span className="mb-2 block font-mono text-xs font-semibold uppercase tracking-wider text-amber-500">{title}</span>
       {rows.map(([label, value]) => (
         <p
           key={label}
