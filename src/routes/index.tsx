@@ -157,68 +157,52 @@ function Home() {
     </section>
   );
 
-  return (
-    <>
-      <section className="w-full bg-gradient-to-b from-blue-50/40 via-transparent to-transparent pb-0 mb-2">
-        <div className="mx-auto max-w-7xl px-4 md:px-8">
-          <div className="grid grid-cols-1 items-start gap-6 pt-6 pb-0 md:grid-cols-3">
-            <div className="md:col-span-2">
-              <h1 className="text-4xl font-black tracking-tight text-zinc-950 drop-shadow-[0_4px_10px_rgba(0,0,0,0.15)] md:text-5xl">
-                Welcome To{" "}
-                <span className="text-blue-600">The League</span>
-              </h1>
-              <div className="mb-4 mt-3 h-[1px] w-full max-w-xl bg-gradient-to-r from-zinc-200 via-zinc-200/40 to-transparent" />
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-1.5 font-mono text-xs font-bold text-blue-700 shadow-sm">
-                  <span className="h-1.5 w-1.5 rounded-sm bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" aria-hidden="true" />
-                  YOUR LEAGUE
-                </span>
-                <span className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-1.5 font-mono text-xs font-bold text-blue-700 shadow-sm">
-                  <span className="h-1.5 w-1.5 rounded-sm bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" aria-hidden="true" />
-                  DRAFT ROOM OPERATIONS
-                </span>
-                <span className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-1.5 font-mono text-xs font-bold text-blue-700 shadow-sm">
-                  <span className="h-1.5 w-1.5 rounded-sm bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" aria-hidden="true" />
-                  FRONT OFFICE ANALYTICS
-                </span>
-              </div>
-            </div>
-            <div className="w-full lg:max-w-xs md:w-80 ml-auto flex flex-col space-y-2 p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 backdrop-blur-sm shadow-sm text-left items-start">
-              <span className="block w-full border-b border-zinc-200/60 pb-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">
-                // SYSTEM OPERATIONS TERMINAL v1.0
-              </span>
-              <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
-                <span className="relative flex h-2 w-2" aria-hidden="true">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
-                </span>
-                LIVE DATA STREAM // LINK ACTIVE
-              </div>
-              {standings ? (
-                <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
-                  <span className="relative flex h-2 w-2" aria-hidden="true">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
-                  </span>
-                  LEAGUE SYNC // LINK ACTIVE
-                </div>
-              ) : (
-                <div className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1.5 font-mono text-xs tracking-wider text-zinc-400">
-                  <span className="h-2 w-2 rounded-full bg-zinc-400" aria-hidden="true" />
-                  LEAGUE SYNC // DISCONNECTED
-                </div>
-              )}
-              <span className="block w-full font-mono text-[10px] font-bold uppercase tracking-widest text-blue-600 mt-0.5">
-                LATENCY: {latency}ms // DB_STATUS: NOMINAL
-              </span>
-            </div>
-          </div>
+  const commandConsole = (
+    <section className="w-full flex flex-col space-y-2 p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 backdrop-blur-sm shadow-sm text-left items-start mb-4">
+      <span className="block w-full border-b border-zinc-200/60 pb-1.5 font-mono text-xs font-medium uppercase tracking-wider text-zinc-400">
+        // SYSTEM OPERATIONS TERMINAL v1.0
+      </span>
+      <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
+        <span className="relative flex h-2 w-2" aria-hidden="true">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+        </span>
+        LIVE DATA STREAM // LINK ACTIVE
+      </div>
+      {standings ? (
+        <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
+          <span className="relative flex h-2 w-2" aria-hidden="true">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+          </span>
+          LEAGUE SYNC // LINK ACTIVE
         </div>
-      </section>
+      ) : (
+        <div className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1.5 font-mono text-xs tracking-wider text-zinc-400">
+          <span className="h-2 w-2 rounded-full bg-zinc-400" aria-hidden="true" />
+          LEAGUE SYNC // DISCONNECTED
+        </div>
+      )}
+      <span className="block w-full font-mono text-xs font-bold uppercase tracking-widest text-blue-600">
+        LATENCY: {latency}ms // DB_STATUS: NOMINAL
+      </span>
+    </section>
+  );
 
-      <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
-        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
+  return (
+    <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
+      <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
+          <div className="mb-6">
+            <h1 className="text-4xl font-black tracking-tight text-zinc-950 drop-shadow-[0_4px_10px_rgba(0,0,0,0.15)] md:text-5xl">
+              Welcome To{" "}
+              <span className="text-blue-600">The League</span>
+            </h1>
+            <p className="mt-2 mb-6 font-mono text-xs font-bold uppercase tracking-widest text-zinc-500">
+              FRONT OFFICE INTERFACE // DRAFT & OPERATION ANALYTICS
+            </p>
+          </div>
+
           <section className="grid gap-3 sm:grid-cols-3">
             <HomeCard
               to="/draft"
@@ -295,10 +279,11 @@ function Home() {
           </section>
         </div>
 
-        <aside className="min-w-0 space-y-4 lg:col-span-1">
+        <aside className="min-w-0 space-y-0 lg:col-span-1">
+          {commandConsole}
           {connectBox}
           {standings && (
-            <section className="rounded-xl border border-border bg-card p-4">
+            <section className="mt-4 rounded-xl border border-border bg-card p-4">
               <div className="mb-2 flex items-baseline justify-between gap-2">
                 <h2 className="display-title min-w-0 truncate text-lg">{standings.league.name}</h2>
                 <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -335,7 +320,6 @@ function Home() {
         </aside>
       </div>
     </main>
-  </>
   );
 }
 
