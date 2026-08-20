@@ -682,6 +682,8 @@ export type PlayerBio = {
   college: string | null;
   status: string | null;
   number: number | null;
+  birthDate: string | null;
+  draft: string | null;
 };
 
 export type GameLog = {
@@ -689,7 +691,28 @@ export type GameLog = {
   opp: string | null;
   points: { std: number; half: number; ppr: number };
   line: { label: string; value: string }[];
+  raw: Record<string, number>;
 };
+
+const LOG_KEYS = [
+  "rush_att",
+  "rush_yd",
+  "rush_td",
+  "rush_lng",
+  "rec",
+  "rec_tgt",
+  "rec_yd",
+  "rec_td",
+  "rec_lng",
+  "pass_att",
+  "pass_cmp",
+  "pass_yd",
+  "pass_td",
+  "pass_int",
+  "fum",
+  "fum_lost",
+] as const;
+
 
 const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
   const res = await fetch(`${BASE}/players/nfl/${encodeURIComponent(id)}`, {
