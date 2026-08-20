@@ -98,7 +98,7 @@ export function GlobalSearch() {
           "flex items-center overflow-hidden rounded-full border transition-all duration-300 ease-in-out",
           open
             ? "w-56 border-primary-foreground/30 bg-primary-foreground/15 sm:w-72"
-            : "w-9 border-transparent bg-transparent",
+            : "w-8 border-transparent bg-transparent",
         )}
         style={{ transformOrigin: "right" }}
       >
@@ -106,7 +106,7 @@ export function GlobalSearch() {
           type="button"
           onClick={() => (open ? inputRef.current?.focus() : setOpen(true))}
           aria-label="Search teams, players or pages"
-          className="grid size-9 shrink-0 place-items-center text-primary-foreground/80 transition-colors hover:text-primary-foreground"
+          className="grid size-8 shrink-0 place-items-center text-primary-foreground/80 transition-colors hover:text-primary-foreground"
         >
           <Search className="size-4" />
         </button>
@@ -117,7 +117,7 @@ export function GlobalSearch() {
           placeholder="Search Teams, Players or Pages..."
           tabIndex={open ? 0 : -1}
           className={cn(
-            "min-w-0 flex-1 bg-transparent py-1.5 text-sm text-primary-foreground outline-none placeholder:text-primary-foreground/60",
+            "min-w-0 flex-1 bg-transparent py-1 text-sm text-primary-foreground outline-none placeholder:text-primary-foreground/60",
             !open && "pointer-events-none opacity-0",
           )}
         />
@@ -126,7 +126,7 @@ export function GlobalSearch() {
             type="button"
             onClick={collapse}
             aria-label="Close search"
-            className="grid size-9 shrink-0 place-items-center text-primary-foreground/70 hover:text-primary-foreground"
+            className="grid size-8 shrink-0 place-items-center text-primary-foreground/70 hover:text-primary-foreground"
           >
             <X className="size-4" />
           </button>
