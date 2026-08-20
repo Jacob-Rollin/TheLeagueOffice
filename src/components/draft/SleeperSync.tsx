@@ -6,17 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { LeagueLink, LeagueSyncInput } from "@/hooks/use-draft";
 import { getLeagueSync, getUserLeagues } from "@/lib/league.functions";
 import type { LeagueSummary } from "@/lib/league.server";
-
-const HOME_KEY = "league-office-link-v1";
-
-function savedLink(): { username: string; leagueId: string } | null {
-  try {
-    const raw = localStorage.getItem(HOME_KEY);
-    return raw ? (JSON.parse(raw) as { username: string; leagueId: string }) : null;
-  } catch {
-    return null;
-  }
-}
+import { clearLeagueLink, getLeagueLink, saveLeagueLink } from "@/lib/league-link";
 
 export function SleeperSync({
   link,
