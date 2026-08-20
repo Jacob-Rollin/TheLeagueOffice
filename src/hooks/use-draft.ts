@@ -253,7 +253,38 @@ export function useDraft() {
     setLink(meta);
   }, []);
 
-  const unlinkLeague = useCallback(() => setLink(null), []);
+  const unlinkLeague = useCallback(() => {
+    setLink(null);
+    clearLeagueLink();
+  }, []);
+
+  // Keep the War Room in lockstep with the globally shared Sleeper link:
+  // linking or unlinking anywhere (homepage, trade desk) applies here automatically.
+  const globalKey = globalLink ? `${globalLink.leagueId}:${globalLink.syncedAt ?? ""}` : null;
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!globalLink) {
+      if (state.link) setLink(null);
+      return;
+    }
+    const localKey = state.link ? `${state.link.leagueId}:${state.link.syncedAt}` : null;
+    if (localKey === globalKey || autoSyncKey === globalKey) return;
+    autoSyncKey = globalKey;
+    const username = globalLink.username ?? "";
+    void getLeagueSync({ data: { leagueId: globalLink.leagueId, username } })
+      .then((res) => {
+        if (!res || autoSyncKey !== globalKey) return;
+        applyLeague(res, {
+          leagueId: globalLink.leagueId,
+          leagueName: res.league?.name || globalLink.leagueName || "Sleeper league",
+          username,
+          syncedAt: globalLink.syncedAt ?? new Date().toISOString(),
+        });
+      })
+      .catch(() => {
+        autoSyncKey = null;
+      });
+  }, [globalKey, hydrated, globalLink, applyLeague, setLink]);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
