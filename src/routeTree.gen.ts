@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DraftRouteImport } from './routes/draft'
+import { Route as HofRouteImport } from './routes/hof'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as TradeRouteImport } from './routes/trade'
 import { Route as WaiverRouteImport } from './routes/waiver'
@@ -28,6 +29,11 @@ const IndexRoute = IndexRouteImport.update({
 const DraftRoute = DraftRouteImport.update({
   id: '/draft',
   path: '/draft',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HofRoute = HofRouteImport.update({
+  id: '/hof',
+  path: '/hof',
   getParentRoute: () => rootRouteImport,
 } as any)
 const McpRoute = McpRouteImport.update({
@@ -77,6 +83,7 @@ const Char91DotmcpChar93InvokeToolToolRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/draft': typeof DraftRoute
+  '/hof': typeof HofRoute
   '/mcp': typeof McpRoute
   '/trade': typeof TradeRoute
   '/waiver': typeof WaiverRoute
@@ -89,6 +96,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/draft': typeof DraftRoute
+  '/hof': typeof HofRoute
   '/mcp': typeof McpRoute
   '/trade': typeof TradeRoute
   '/waiver': typeof WaiverRoute
@@ -102,6 +110,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/draft': typeof DraftRoute
+  '/hof': typeof HofRoute
   '/mcp': typeof McpRoute
   '/trade': typeof TradeRoute
   '/waiver': typeof WaiverRoute
@@ -116,6 +125,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/draft'
+    | '/hof'
     | '/mcp'
     | '/trade'
     | '/waiver'
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/draft'
+    | '/hof'
     | '/mcp'
     | '/trade'
     | '/waiver'
@@ -140,6 +151,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/draft'
+    | '/hof'
     | '/mcp'
     | '/trade'
     | '/waiver'
@@ -153,6 +165,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DraftRoute: typeof DraftRoute
+  HofRoute: typeof HofRoute
   McpRoute: typeof McpRoute
   TradeRoute: typeof TradeRoute
   WaiverRoute: typeof WaiverRoute
@@ -177,6 +190,13 @@ declare module '@tanstack/react-router' {
       path: '/draft'
       fullPath: '/draft'
       preLoaderRoute: typeof DraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hof': {
+      id: '/hof'
+      path: '/hof'
+      fullPath: '/hof'
+      preLoaderRoute: typeof HofRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mcp': {
@@ -241,6 +261,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DraftRoute: DraftRoute,
+  HofRoute: HofRoute,
   McpRoute: McpRoute,
   TradeRoute: TradeRoute,
   WaiverRoute: WaiverRoute,
