@@ -1,9 +1,12 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
+import { Check, Plus } from "lucide-react";
 import { useState } from "react";
 
+import { useDraft } from "@/hooks/use-draft";
 import { getGameLogs, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
+
 
 /* ---------- queries (page-local, not shared with the draft popup) ---------- */
 
