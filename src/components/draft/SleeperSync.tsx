@@ -82,7 +82,14 @@ export function SleeperSync({
               <RefreshCw className={busy ? "size-4 animate-spin" : "size-4"} />
               Resync rosters
             </Button>
-            <Button size="sm" variant="secondary" onClick={onUnlink}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                clearLeagueLink();
+                onUnlink();
+              }}
+            >
               Unlink
             </Button>
           </div>
