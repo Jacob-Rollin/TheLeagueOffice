@@ -154,27 +154,59 @@ function Home() {
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
-      <section className="mt-6 rounded-xl border border-border bg-card p-6 text-center sm:p-10 sm:text-left">
-        <h1 className="display-title text-5xl leading-none sm:text-7xl">
-          Welcome To The <span className="text-primary">League</span>
-        </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base sm:mx-0">
-          Your league. Draft Room Operations. Front Office Analytics. Synchronize your active assets to manage every
-          decision from a single terminal.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2 sm:justify-start">
-          <Link
-            className="rounded-md bg-primary px-5 py-2.5 font-display uppercase tracking-wide text-primary-foreground"
-            to="/draft"
+      <section className="mt-6 grid w-full grid-cols-1 items-center gap-6 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/20 p-6 md:grid-cols-2 md:p-8">
+        <div className="flex h-full flex-col justify-center">
+          <h1 className="display-title text-5xl leading-none text-white sm:text-7xl">
+            Welcome To The <span className="text-primary">League</span>
+          </h1>
+          <p className="mt-4 text-lg font-semibold text-zinc-400">
+            Your league. Draft Room Operations. Front Office Analytics.
+          </p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Synchronize your active assets to manage every decision from a single terminal.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-start gap-4">
+            <Link
+              className="rounded-md bg-primary px-5 py-2.5 font-display uppercase tracking-wide text-primary-foreground transition-transform hover:scale-105"
+              to="/draft"
+            >
+              Enter War Room
+            </Link>
+            <Link
+              className="rounded-md border border-zinc-700 bg-zinc-900/40 px-5 py-2.5 font-display uppercase tracking-wide text-white transition-transform hover:scale-105"
+              to="/trade"
+            >
+              Evaluate A Trade
+            </Link>
+          </div>
+        </div>
+
+        <div className="relative hidden h-full min-h-[220px] md:block">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="absolute h-56 w-56 rounded-full bg-primary/25 blur-3xl" />
+            <div className="absolute h-44 w-44 translate-x-8 translate-y-6 rounded-full bg-accent/25 blur-3xl" />
+            <div className="absolute h-32 w-32 -translate-x-10 translate-y-[-20px] rounded-full bg-primary/15 blur-2xl" />
+          </div>
+          <svg
+            className="absolute inset-0 h-full w-full opacity-20"
+            viewBox="0 0 400 220"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
           >
-            Enter War Room
-          </Link>
-          <Link
-            className="rounded-md border border-border px-5 py-2.5 font-display uppercase tracking-wide"
-            to="/trade"
-          >
-            Evaluate A Trade
-          </Link>
+            <defs>
+              <linearGradient id="heroLine" x1="0" y1="0" x2="400" y2="220" gradientUnits="userSpaceOnUse">
+                <stop stopColor="var(--primary)" stopOpacity="0.6" />
+                <stop offset="1" stopColor="var(--accent)" stopOpacity="0.4" />
+              </linearGradient>
+            </defs>
+            <rect x="40" y="30" width="320" height="160" rx="12" stroke="url(#heroLine)" strokeWidth="1.5" />
+            <line x1="200" y1="30" x2="200" y2="190" stroke="url(#heroLine)" strokeWidth="1" strokeDasharray="6 6" />
+            <line x1="40" y1="110" x2="360" y2="110" stroke="url(#heroLine)" strokeWidth="1" strokeDasharray="6 6" />
+            <circle cx="200" cy="110" r="28" stroke="url(#heroLine)" strokeWidth="1.5" />
+            <path d="M80 70 L120 70 L120 90 L80 90 Z" fill="var(--primary)" fillOpacity="0.15" />
+            <path d="M280 130 L320 130 L320 150 L280 150 Z" fill="var(--accent)" fillOpacity="0.15" />
+          </svg>
         </div>
       </section>
 
