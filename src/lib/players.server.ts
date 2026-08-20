@@ -782,6 +782,8 @@ export async function loadGameLogs(
           ppr: num(stats["pts_ppr"], 0),
         },
         line: statLine(player.pos, stats),
+        raw: Object.fromEntries(LOG_KEYS.map((k) => [k, num(stats[k], 0)])),
+
       });
     }
     if (logs.length) {
