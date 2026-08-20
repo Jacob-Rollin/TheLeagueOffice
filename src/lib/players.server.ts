@@ -673,3 +673,92 @@ export async function loadPlayerNews(id: string): Promise<PlayerNews | null> {
     items: items.slice(0, 12),
   };
 }
+
+/* ---------- player bio + game logs (ESPN-style profile page) ---------- */
+
+export type PlayerBio = {
+  height: string | null;
+  weight: string | null;
+  college: string | null;
+  status: string | null;
+  number: number | null;
+};
+
+export type GameLog = {
+  week: number;
+  opp: string | null;
+  points: { std: number; half: number; ppr: number };
+  line: { label: string; value: string }[];
+};
+
+const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
+  const res = await fetch(`${BASE}/players/nfl/${encodeURIComponent(id)}`, {
+    headers: { accept: "application/json" },
+  }).catch(() => null);
+  if (!res || !res.ok) return null;
+  const j = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!j) return null;
+  const h = typeof j["height"] === "string" ? j["height"] : null;
+  const inches = h && /^\d+$/.test(h) ? Number(h) : null;
+  return {
+    height: inches ? `${Math.floor(inches / 12)}'${inches % 12}"` : h,
+    weight: j["weight"] ? `${j["weight"]} lbs` : null,
+    college: typeof j["college"] === "string" ? j["college"] : null,
+    status: typeof j["status"] === "string" ? j["status"] : null,
+    number: typeof j["number"] === "number" ? j["number"] : null,
+  };
+});
+
+export async function loadPlayerBio(id: string): Promise<PlayerBio | null> {
+  return await bioFor(id).catch(() => null);
+}
+
+async function weeklyRaw(id: string, season: string): Promise<Record<string, { stats?: Stats | null }>> {
+  const res = await fetch(
+    `${BASE}/stats/nfl/player/${encodeURIComponent(id)}?season_type=regular&season=${season}&grouping=week`,
+    { headers: { accept: "application/json" } },
+  ).catch(() => null);
+  if (!res || !res.ok) return {};
+  const j = (await res.json().catch(() => null)) as Record<string, { stats?: Stats | null }> | null;
+  return j && typeof j === "object" ? j : {};
+}
+
+export async function loadGameLogs(
+  id: string,
+): Promise<{ season: string; logs: GameLog[] } | null> {
+  const built = await buildPlayers("v1");
+  const player = built.all.find((p) => p.id === id);
+  if (!player) return null;
+
+  const seasons = [built.payload.season, String(Number(built.payload.season) - 1)];
+  for (const season of seasons) {
+    const raw = await weeklyRaw(id, season);
+    const schedule = await scheduleFor(season).catch(() => []);
+    const logs: GameLog[] = [];
+    for (const [wk, entry] of Object.entries(raw)) {
+      const stats = entry?.stats;
+      if (!stats) continue;
+      const week = Number(wk);
+      if (!Number.isFinite(week)) continue;
+      const game = schedule.find(
+        (g) => g.week === week && (g.home === player.team || g.away === player.team),
+      );
+      const opp = game ? (game.home === player.team ? `vs ${game.away}` : `@ ${game.home}`) : null;
+      logs.push({
+        week,
+        opp,
+        points: {
+          std: num(stats["pts_std"], 0),
+          half: num(stats["pts_half_ppr"], 0),
+          ppr: num(stats["pts_ppr"], 0),
+        },
+        line: statLine(player.pos, stats),
+      });
+    }
+    if (logs.length) {
+      logs.sort((a, b) => a.week - b.week);
+      return { season, logs };
+    }
+  }
+  return { season: built.payload.season, logs: [] };
+}
