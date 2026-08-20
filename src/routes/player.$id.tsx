@@ -152,10 +152,22 @@ function PlayerHubPage() {
                   {player.name}
                 </h1>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {teamLogo && <img src={teamLogo} alt="" className="size-6" loading="lazy" />}
-                  <span className="font-display text-sm font-bold uppercase tracking-widest text-blue-600">
-                    {player.team} • {player.pos}
-                  </span>
+                  {player.team ? (
+                    <Link
+                      to="/nfl-team/$nflId"
+                      params={{ nflId: player.team }}
+                      className="flex items-center gap-2 border-none bg-transparent p-0 font-inherit text-current no-underline decoration-transparent hover:text-current cursor-pointer"
+                    >
+                      {teamLogo && <img src={teamLogo} alt="" className="size-6" loading="lazy" />}
+                      <span className="font-display text-sm font-bold uppercase tracking-widest text-blue-600">
+                        {player.team} • {player.pos}
+                      </span>
+                    </Link>
+                  ) : (
+                    <span className="font-display text-sm font-bold uppercase tracking-widest text-blue-600">
+                      {player.team} • {player.pos}
+                    </span>
+                  )}
                   <span className="tabnum rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600">
                     #{player.rank.half} overall
                   </span>
@@ -404,27 +416,52 @@ function NextGame({ team }: { team: string }) {
   return (
     <Widget title="Next game">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <TeamLink team={data.away} className="flex min-w-0 flex-1 items-center gap-2">
           <img src={logo(data.away)} alt="" className="size-7 shrink-0" loading="lazy" />
           <div className="min-w-0">
             <p className="truncate text-xs font-semibold text-zinc-800">{label(data.away)}</p>
             <p className="tabnum text-[11px] text-zinc-500">{data.away}</p>
           </div>
-        </div>
+        </TeamLink>
         <span className="font-display text-xs font-bold uppercase text-zinc-400">@</span>
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 text-right">
+        <TeamLink team={data.home} className="flex min-w-0 flex-1 items-center justify-end gap-2 text-right">
           <div className="min-w-0">
             <p className="truncate text-xs font-semibold text-zinc-800">{label(data.home)}</p>
             <p className="tabnum text-[11px] text-zinc-500">{data.home}</p>
           </div>
           <img src={logo(data.home)} alt="" className="size-7 shrink-0" loading="lazy" />
-        </div>
+        </TeamLink>
       </div>
       <p className="tabnum mt-3 border-t border-zinc-100 pt-2 text-center text-[11px] text-zinc-500">
-        Week {data.week}
+        {data.seasonType === "pre" ? "Preseason " : ""}Week {data.week}
         {kickoff ? ` · ${kickoff}` : ""}
       </p>
     </Widget>
+  );
+}
+
+/** Style-neutral wrapper linking a team logo/name to its NFL team page. */
+function TeamLink({
+  team,
+  className,
+  children,
+}: {
+  team: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  if (!team) return <div className={className}>{children}</div>;
+  return (
+    <Link
+      to="/nfl-team/$nflId"
+      params={{ nflId: team }}
+      className={cn(
+        "border-none bg-transparent p-0 font-inherit text-current no-underline decoration-transparent hover:text-current cursor-pointer",
+        className,
+      )}
+    >
+      {children}
+    </Link>
   );
 }
 
