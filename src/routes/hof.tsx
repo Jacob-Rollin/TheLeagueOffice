@@ -59,6 +59,9 @@ function HofError({ error }: { error: Error }) {
 const num = (v: number | null | undefined) =>
   typeof v === "number" ? v.toFixed(2).replace(/\.00$/, "") : "—";
 
+const pts = (v: number | null | undefined) =>
+  typeof v === "number" ? `${num(v)} pts` : null;
+
 function HofPage() {
   const { data: years } = useSuspenseQuery(hofQuery);
 
