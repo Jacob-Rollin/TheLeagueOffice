@@ -56,6 +56,7 @@ let state: StoreState = {
 };
 
 const listeners = new Set<() => void>();
+let autoSyncKey: string | null = null;
 
 function emit() {
   for (const l of listeners) l();
@@ -131,6 +132,7 @@ const SERVER_SNAPSHOT: StoreState = {
 };
 
 export function useDraft() {
+  const { link: globalLink } = useLeagueLink();
   const store = useSyncExternalStore(
     subscribe,
     () => state,
