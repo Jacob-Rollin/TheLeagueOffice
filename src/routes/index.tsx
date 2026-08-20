@@ -159,9 +159,9 @@ function Home() {
 
   return (
     <>
-      <section className="w-full bg-gradient-to-b from-blue-50/40 via-transparent to-transparent pb-2 md:pb-4">
+      <section className="w-full bg-gradient-to-b from-blue-50/40 via-transparent to-transparent pb-0 mb-2">
         <div className="mx-auto max-w-7xl px-4 md:px-8">
-          <div className="grid grid-cols-1 items-start gap-6 pt-6 pb-2 md:grid-cols-3 md:pb-4">
+          <div className="grid grid-cols-1 items-start gap-6 pt-6 pb-0 md:grid-cols-3">
             <div className="md:col-span-2">
               <h1 className="text-4xl font-black tracking-tight text-zinc-950 drop-shadow-[0_4px_10px_rgba(0,0,0,0.15)] md:text-5xl">
                 Welcome To{" "}
@@ -183,10 +183,10 @@ function Home() {
                 </span>
               </div>
             </div>
-            <div className="ml-auto flex w-full max-w-xs flex-col items-start space-y-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-left shadow-sm backdrop-blur-sm md:col-span-1 md:w-80">
-              <p className="block w-full border-b border-zinc-200/60 pb-1.5 font-mono text-xs font-medium uppercase tracking-wider text-zinc-400">
+            <div className="w-full lg:max-w-xs md:w-80 ml-auto flex flex-col space-y-2 p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 backdrop-blur-sm shadow-sm text-left items-start">
+              <span className="block w-full border-b border-zinc-200/60 pb-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">
                 // SYSTEM OPERATIONS TERMINAL v1.0
-              </p>
+              </span>
               <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
                 <span className="relative flex h-2 w-2" aria-hidden="true">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
@@ -194,16 +194,30 @@ function Home() {
                 </span>
                 LIVE DATA STREAM // LINK ACTIVE
               </div>
-              <p className="block w-full font-mono text-xs font-bold uppercase tracking-widest text-blue-600">
+              {standings ? (
+                <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
+                  <span className="relative flex h-2 w-2" aria-hidden="true">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+                  </span>
+                  LEAGUE SYNC // LINK ACTIVE
+                </div>
+              ) : (
+                <div className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1.5 font-mono text-xs tracking-wider text-zinc-400">
+                  <span className="h-2 w-2 rounded-full bg-zinc-400" aria-hidden="true" />
+                  LEAGUE SYNC // DISCONNECTED
+                </div>
+              )}
+              <span className="block w-full font-mono text-[10px] font-bold uppercase tracking-widest text-blue-600 mt-0.5">
                 LATENCY: {latency}ms // DB_STATUS: NOMINAL
-              </p>
+              </span>
             </div>
           </div>
         </div>
       </section>
 
       <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
-        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
           <section className="grid gap-3 sm:grid-cols-3">
             <HomeCard
