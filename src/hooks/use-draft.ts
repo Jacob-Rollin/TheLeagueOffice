@@ -101,7 +101,17 @@ function resetLinkedLeagueState() {
   };
   if (typeof window !== "undefined") {
     try {
-      localStorage.removeItem(KEY);
+      // Keep personal, non-league data (watchlist, custom order) intact.
+      localStorage.setItem(
+        KEY,
+        JSON.stringify({
+          settings: DEFAULT_SETTINGS,
+          picks: [],
+          watch: state.watch,
+          order: state.customOrder,
+          link: null,
+        } satisfies Persisted),
+      );
     } catch {
       /* ignore */
     }
