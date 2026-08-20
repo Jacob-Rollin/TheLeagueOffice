@@ -217,7 +217,7 @@ function Home() {
       </section>
 
       <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
-        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
           <section className="grid gap-3 sm:grid-cols-3">
             <HomeCard
