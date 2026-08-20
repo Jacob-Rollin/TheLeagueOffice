@@ -169,7 +169,15 @@ function Home() {
         </span>
         LIVE DATA STREAM // LINK ACTIVE
       </div>
-      {standings ? (
+      {standingsM.isPending || leaguesM.isPending ? (
+        <div className="flex w-full items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-amber-600">
+          <span className="relative flex h-2 w-2" aria-hidden="true">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-600 shadow-[0_0_15px_rgba(245,158,11,0.8)]" />
+          </span>
+          SYNC INITIALIZING // STANDBY
+        </div>
+      ) : standings ? (
         <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
           <span className="relative flex h-2 w-2" aria-hidden="true">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
