@@ -227,7 +227,7 @@ function FlipCard({
         type="button"
         aria-pressed={flipped}
         onClick={() => setFlipped((f) => !f)}
-        className="relative h-full w-full cursor-pointer rounded-2xl text-left transition-transform duration-500 [transform-style:preserve-3d] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+        className="relative h-full w-full cursor-pointer rounded-2xl text-left transition-all duration-300 [transform-style:preserve-3d] hover:scale-[1.03] hover:shadow-[0_0_35px_rgba(245,158,11,0.6)] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
         style={{ transform: flipped ? "rotateY(180deg)" : undefined }}
       >
         <div className="absolute inset-0 [backface-visibility:hidden]">{front}</div>
@@ -263,13 +263,13 @@ function CardBack({
   return (
     <div
       className={cn(
-        "flex h-full flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border bg-zinc-900 p-4 text-center",
+        "flex h-full flex-col items-center justify-center space-y-3 overflow-hidden rounded-xl border bg-zinc-900 p-6 text-center",
         large
           ? "rounded-2xl border-amber-500/40 shadow-[0_0_40px_-18px_rgba(251,191,36,0.7)] sm:p-6"
           : "border-zinc-800",
       )}
     >
-      <p className="mb-1 font-display text-[10px] uppercase tracking-[0.22em] text-amber-400">
+      <p className="font-display text-[10px] uppercase tracking-[0.22em] text-amber-400">
         {title}
       </p>
       {rows.map(([label, value]) => (
@@ -277,7 +277,7 @@ function CardBack({
           key={label}
           className={cn(
             "max-w-full truncate text-zinc-300",
-            large ? "text-base sm:text-lg" : "text-xs",
+            large ? "text-base sm:text-lg" : "text-sm",
           )}
           title={value ?? undefined}
         >
