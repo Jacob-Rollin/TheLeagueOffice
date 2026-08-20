@@ -1,9 +1,12 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
+import { Check, Plus } from "lucide-react";
 import { useState } from "react";
 
+import { useDraft } from "@/hooks/use-draft";
 import { getGameLogs, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
+
 
 /* ---------- queries (page-local, not shared with the draft popup) ---------- */
 
@@ -67,10 +70,20 @@ function headshot(id: string, pos: string, team: string) {
   return `https://sleepercdn.com/content/nfl/players/${id}.jpg`;
 }
 
+const POS_LABEL: Record<string, string> = {
+  QB: "Quarterback",
+  RB: "Running Back",
+  WR: "Wide Receiver",
+  TE: "Tight End",
+  K: "Kicker",
+  DEF: "Defense / Special Teams",
+};
+
 function PlayerHubPage() {
   const { id } = Route.useParams();
   const { data, isLoading } = useQuery(profileQuery(id));
   const { data: bio } = useQuery(bioQuery(id));
+  const { watchIds, toggleWatch } = useDraft();
   const [tab, setTab] = useState<TabKey>("overview");
 
   if (isLoading)
@@ -81,21 +94,29 @@ function PlayerHubPage() {
   const teamLogo = player.team
     ? `https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`
     : null;
+  const watching = watchIds.has(player.id);
 
-  const meta = [
-    bio?.height && bio?.weight ? `HT/WT ${bio.height}, ${bio.weight}` : null,
-    bio?.college ? `College: ${bio.college}` : null,
-    bio?.number ? `Jersey: #${bio.number}` : null,
-    player.age ? `Age: ${player.age}` : null,
-    player.exp !== null ? `Exp: ${player.exp} yr` : null,
-    `Status: ${player.injury ?? bio?.status ?? "Active"}`,
-  ].filter(Boolean) as string[];
+  const birth = bio?.birthDate
+    ? new Date(`${bio.birthDate}T00:00:00`).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
+
+  const meta: [string, string][] = [
+    ["HT/WT", bio?.height && bio?.weight ? `${bio.height}, ${bio.weight}` : "—"],
+    ["Birthdate", birth ? `${birth}${player.age ? ` (${player.age})` : ""}` : player.age ? `Age ${player.age}` : "—"],
+    ["College", bio?.college ?? "—"],
+    ["Draft Info", bio?.draft ?? (player.exp !== null ? `${player.exp} yr experience` : "—")],
+    ["Status", player.injury ?? bio?.status ?? "Active"],
+  ];
 
   return (
     <main className="min-h-screen w-full bg-white">
       {/* ---- full-width identity banner ---- */}
       <header className="w-full border-b border-zinc-200 bg-gradient-to-b from-zinc-50 to-white">
-        <div className="mx-auto flex w-full max-w-7xl flex-col items-center gap-6 px-4 py-8 sm:flex-row sm:items-end">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:flex-row sm:items-start">
           <div className="relative size-32 shrink-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm sm:size-40">
             <img
               src={headshot(player.id, player.pos, player.team)}
@@ -106,25 +127,54 @@ function PlayerHubPage() {
               }}
             />
           </div>
-          <div className="min-w-0 flex-1 text-center sm:text-left">
-            <h1 className="display-title text-4xl leading-tight text-zinc-950 sm:text-5xl">
-              {player.name}
-            </h1>
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-              {teamLogo && (
-                <img src={teamLogo} alt="" className="size-6" loading="lazy" />
-              )}
-              <span className="font-display text-sm font-bold uppercase tracking-widest text-blue-600">
-                {player.team} • {player.pos}
-              </span>
-              <span className="tabnum rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600">
-                #{player.rank.half} overall
-              </span>
+
+          <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:justify-between">
+            {/* identity stack */}
+            <div className="min-w-0">
+              <h1 className="display-title text-4xl leading-tight text-zinc-950 sm:text-5xl">
+                {player.name}
+              </h1>
+              <p className="mt-1 font-display text-lg font-bold uppercase tracking-widest text-zinc-500">
+                <span className="text-zinc-900">#{bio?.number ?? 0}</span>{" "}
+                {POS_LABEL[player.pos] ?? player.pos}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {teamLogo && <img src={teamLogo} alt="" className="size-6" loading="lazy" />}
+                <span className="font-display text-sm font-bold uppercase tracking-widest text-blue-600">
+                  {player.team} • {player.pos}
+                </span>
+                <span className="tabnum rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600">
+                  #{player.rank.half} overall
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleWatch(player.id)}
+                className={cn(
+                  "mt-3 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-white transition-all",
+                  watching ? "bg-zinc-800 hover:bg-zinc-900" : "bg-blue-600 hover:bg-blue-700",
+                )}
+              >
+                {watching ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+                {watching ? "Watching" : "Watch Player"}
+              </button>
             </div>
-            <p className="tabnum mt-3 text-xs text-zinc-500">{meta.join("  |  ")}</p>
+
+            {/* metadata list */}
+            <dl className="mt-2 space-y-1 text-sm text-zinc-500 sm:min-w-56 sm:text-right">
+              {meta.map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-6 sm:justify-end">
+                  <dt className="font-semibold uppercase tracking-wide text-zinc-400 text-[11px] self-center">
+                    {label}
+                  </dt>
+                  <dd className="tabnum text-zinc-700">{value}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </div>
       </header>
+
 
       <div className="mx-auto w-full max-w-7xl px-4 py-8">
         {/* ---- line tabs ---- */}
@@ -218,7 +268,10 @@ function PlayerHubPage() {
 
           {/* ---- sidebar widgets ---- */}
           <aside className="space-y-4 self-start rounded-xl border border-zinc-200 bg-zinc-50 p-4 lg:col-span-1">
+            <NextGame />
+
             <Widget title="Injury risk">
+
               <div className="flex items-baseline justify-between">
                 <span
                   className={cn(
@@ -305,26 +358,108 @@ function PlayerHubPage() {
   );
 }
 
+/** Broadcast-style upcoming matchup strip. */
+function NextGame() {
+  const logo = (t: string) => `https://sleepercdn.com/images/team_logos/nfl/${t}.png`;
+  return (
+    <Widget title="Next game">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <img src={logo("was")} alt="" className="size-7 shrink-0" loading="lazy" />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-zinc-800">Commanders</p>
+            <p className="tabnum text-[11px] text-zinc-500">(1-0)</p>
+          </div>
+        </div>
+        <span className="font-display text-xs font-bold uppercase text-zinc-400">@</span>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 text-right">
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-zinc-800">Lions</p>
+            <p className="tabnum text-[11px] text-zinc-500">(0-1)</p>
+          </div>
+          <img src={logo("det")} alt="" className="size-7 shrink-0" loading="lazy" />
+        </div>
+      </div>
+      <p className="tabnum mt-3 border-t border-zinc-100 pt-2 text-center text-[11px] text-zinc-500">
+        Saturday, August 22, 2026 at 11:00 AM
+      </p>
+    </Widget>
+  );
+}
+
+type LogView = "rushing" | "receiving" | "fumbles";
+
+const LOG_VIEWS: [LogView, string][] = [
+  ["rushing", "Rushing"],
+  ["receiving", "Receiving"],
+  ["fumbles", "Fumbles"],
+];
+
+const LOG_COLUMNS: Record<LogView, { head: string[]; keys: string[] }> = {
+  rushing: {
+    head: ["Date", "OPP", "Result", "CAR", "YDS", "AVG", "TD", "LNG"],
+    keys: ["rush_att", "rush_yd", "avg:rush_yd/rush_att", "rush_td", "rush_lng"],
+  },
+  receiving: {
+    head: ["Date", "OPP", "Result", "REC", "YDS", "AVG", "TD", "LNG"],
+    keys: ["rec", "rec_yd", "avg:rec_yd/rec", "rec_td", "rec_lng"],
+  },
+  fumbles: {
+    head: ["Date", "OPP", "Result", "FUM", "LST"],
+    keys: ["fum", "fum_lost"],
+  },
+};
+
+function cell(raw: Record<string, number>, key: string) {
+  if (key.startsWith("avg:")) {
+    const [numKey, denKey] = key.slice(4).split("/") as [string, string];
+    const den = raw[denKey] ?? 0;
+    return den > 0 ? ((raw[numKey] ?? 0) / den).toFixed(1) : "0.0";
+  }
+  const v = raw[key] ?? 0;
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
 function GameLogs({ id }: { id: string }) {
   const { data, isLoading } = useQuery(logsQuery(id));
+  const [view, setView] = useState<LogView>("rushing");
+
   if (isLoading) return <Empty>Loading game logs…</Empty>;
   if (!data || data.logs.length === 0) return <Empty>No game logs recorded yet.</Empty>;
 
-  const statLabels = data.logs[0]!.line.map((l) => l.label);
+  const cols = LOG_COLUMNS[view];
   return (
     <Module title={`${data.season} game log`}>
+      <div className="mb-3 flex items-center gap-2">
+        {LOG_VIEWS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setView(key)}
+            className={cn(
+              "rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide transition-colors",
+              view === key
+                ? "border-blue-600 bg-blue-600 text-white"
+                : "border-zinc-200 bg-white text-zinc-500 hover:text-zinc-800",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <StatTable
-        head={["Wk", "Opp", "Pts", ...statLabels]}
+        head={cols.head}
         rows={data.logs.map((g) => [
-          String(g.week),
+          `Wk ${g.week}`,
           g.opp ?? "—",
-          g.points.half.toFixed(1),
-          ...statLabels.map((label) => g.line.find((l) => l.label === label)?.value ?? "—"),
+          `${g.points.half.toFixed(1)} pts`,
+          ...cols.keys.map((k) => cell(g.raw ?? {}, k)),
         ])}
       />
     </Module>
   );
 }
+
 
 function Module({ title, children }: { title: string; children: React.ReactNode }) {
   return (

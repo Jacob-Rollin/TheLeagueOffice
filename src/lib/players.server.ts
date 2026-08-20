@@ -682,6 +682,8 @@ export type PlayerBio = {
   college: string | null;
   status: string | null;
   number: number | null;
+  birthDate: string | null;
+  draft: string | null;
 };
 
 export type GameLog = {
@@ -689,7 +691,28 @@ export type GameLog = {
   opp: string | null;
   points: { std: number; half: number; ppr: number };
   line: { label: string; value: string }[];
+  raw: Record<string, number>;
 };
+
+const LOG_KEYS = [
+  "rush_att",
+  "rush_yd",
+  "rush_td",
+  "rush_lng",
+  "rec",
+  "rec_tgt",
+  "rec_yd",
+  "rec_td",
+  "rec_lng",
+  "pass_att",
+  "pass_cmp",
+  "pass_yd",
+  "pass_td",
+  "pass_int",
+  "fum",
+  "fum_lost",
+] as const;
+
 
 const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
   const res = await fetch(`${BASE}/players/nfl/${encodeURIComponent(id)}`, {
@@ -700,13 +723,19 @@ const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
   if (!j) return null;
   const h = typeof j["height"] === "string" ? j["height"] : null;
   const inches = h && /^\d+$/.test(h) ? Number(h) : null;
+  const draftYear = j["metadata"] && typeof j["metadata"] === "object"
+    ? (j["metadata"] as Record<string, unknown>)["rookie_year"]
+    : null;
   return {
     height: inches ? `${Math.floor(inches / 12)}'${inches % 12}"` : h,
     weight: j["weight"] ? `${j["weight"]} lbs` : null,
     college: typeof j["college"] === "string" ? j["college"] : null,
     status: typeof j["status"] === "string" ? j["status"] : null,
     number: typeof j["number"] === "number" ? j["number"] : null,
+    birthDate: typeof j["birth_date"] === "string" ? j["birth_date"] : null,
+    draft: typeof draftYear === "string" || typeof draftYear === "number" ? `Rookie year ${draftYear}` : null,
   };
+
 });
 
 export async function loadPlayerBio(id: string): Promise<PlayerBio | null> {
@@ -753,6 +782,8 @@ export async function loadGameLogs(
           ppr: num(stats["pts_ppr"], 0),
         },
         line: statLine(player.pos, stats),
+        raw: Object.fromEntries(LOG_KEYS.map((k) => [k, num(stats[k], 0)])),
+
       });
     }
     if (logs.length) {
