@@ -66,24 +66,37 @@ function Home() {
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => setNews(((d.articles ?? []) as NewsItem[]).filter(isFantasy).slice(0, 6)))
       .catch(() => setNews([]));
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as Saved;
-      if (saved.username) setUsername(saved.username);
-      if (saved.leagueId) standingsM.mutateAsync(saved.leagueId).then((res) => res && setStandings(res));
-    } catch {
-      /* ignore */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Hydrate from the globally shared league link (set here, in the War Room, or on Trade).
+  const linkedLeagueId = link?.leagueId ?? null;
+  useEffect(() => {
+    if (link?.username) setUsername((u) => u || link.username);
+    if (!linkedLeagueId) {
+      setStandings(null);
+      return;
+    }
+    let alive = true;
+    standingsM.mutateAsync(linkedLeagueId).then((res) => {
+      if (alive && res) setStandings(res);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedLeagueId, link?.username]);
 
   const loadLeague = async (leagueId: string, name: string) => {
     setError(null);
     const res = await standingsM.mutateAsync(leagueId);
     if (!res) return setError("Couldn't load that league.");
     setStandings(res);
-    localStorage.setItem(KEY, JSON.stringify({ username: name, leagueId } satisfies Saved));
+    saveLink({
+      username: name.trim(),
+      leagueId,
+      leagueName: res.league?.name,
+      syncedAt: new Date().toISOString(),
+    });
   };
   const search = async () => {
     setError(null);
@@ -94,7 +107,7 @@ function Home() {
     else if (res.length === 1) await loadLeague(res[0]!.id, username);
   };
   const unlink = () => {
-    localStorage.removeItem(KEY);
+    clearLink();
     setStandings(null);
     setLeagues([]);
   };
