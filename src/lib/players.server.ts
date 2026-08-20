@@ -141,10 +141,11 @@ type ScheduleGame = {
   status?: string | null;
 };
 
-const scheduleFor = memo<ScheduleGame[]>(
+const scheduleForType = memo<ScheduleGame[]>(
   24 * HOUR,
-  async (season) => {
-    const res = await fetch(`${BASE}/schedule/nfl/regular/${season}`, {
+  async (key) => {
+    const [type, season] = key.split("|") as [string, string];
+    const res = await fetch(`${BASE}/schedule/nfl/${type}/${season}`, {
       headers: { accept: "application/json" },
     });
     if (!res.ok) return [];
@@ -152,6 +153,8 @@ const scheduleFor = memo<ScheduleGame[]>(
     return Array.isArray(json) ? json : [];
   },
 );
+
+const scheduleFor = (season: string) => scheduleForType(`regular|${season}`);
 
 export type NextGame = {
   season: string;
@@ -161,6 +164,7 @@ export type NextGame = {
   date: string | null;
   isHome: boolean;
   opponent: string;
+  seasonType: "pre" | "regular";
 };
 
 /** Next scheduled matchup for an NFL team abbreviation, or null. */
@@ -168,15 +172,26 @@ export async function loadNextGame(team: string): Promise<NextGame | null> {
   const abbr = (team || "").toUpperCase();
   if (!abbr || abbr === "FA") return null;
   const season = currentSeason();
-  const games = await scheduleFor(season).catch(() => []);
-  const mine = games
+  const [pre, reg] = await Promise.all([
+    scheduleForType(`pre|${season}`).catch(() => []),
+    scheduleForType(`regular|${season}`).catch(() => []),
+  ]);
+  type Tagged = ScheduleGame & { seasonType: "pre" | "regular" };
+  const mine: Tagged[] = [
+    ...pre.map((g) => ({ ...g, seasonType: "pre" as const })),
+    ...reg.map((g) => ({ ...g, seasonType: "regular" as const })),
+  ]
     .filter((g) => g.home === abbr || g.away === abbr)
-    .sort((a, b) => a.week - b.week);
+    .sort((a, b) => {
+      if (a.seasonType !== b.seasonType) return a.seasonType === "pre" ? -1 : 1;
+      return a.week - b.week;
+    });
   if (mine.length === 0) return null;
   const today = new Date().toISOString().slice(0, 10);
+  // Prefer a live/upcoming game, including in-progress preseason games today.
   const upcoming =
     mine.find((g) => (g.date ? g.date >= today : false)) ??
-    mine.find((g) => g.status === "pre_game") ??
+    mine.find((g) => g.status === "pre_game" || g.status === "in_game") ??
     mine[0]!;
   const isHome = upcoming.home === abbr;
   return {
@@ -187,6 +202,7 @@ export async function loadNextGame(team: string): Promise<NextGame | null> {
     date: upcoming.date ?? null,
     isHome,
     opponent: isHome ? upcoming.away : upcoming.home,
+    seasonType: upcoming.seasonType,
   };
 }
 
