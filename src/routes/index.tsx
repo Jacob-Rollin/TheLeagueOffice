@@ -329,9 +329,13 @@ function Home() {
   );
 }
 
-function HomeCard({ to, title, desc }: { to: string; title: string; desc: string }) {
+function HomeCard({ to, title, desc, icon }: { to: string; title: string; desc: string; icon: React.ReactNode }) {
   return (
-    <Link to={to} className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary">
+    <Link
+      to={to}
+      className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-zinc-700"
+    >
+      <div className="mb-3 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">{icon}</div>
       <div className="font-display text-xl uppercase tracking-wide">{title}</div>
       <p className="mt-2 text-xs leading-5 text-muted-foreground">{desc}</p>
     </Link>
