@@ -154,22 +154,25 @@ function Home() {
   );
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
-      <section className="relative bg-gradient-to-b from-primary/12 via-zinc-900/5 to-transparent pb-8 pt-6 backdrop-blur-md">
-        <div className="space-y-3">
-          <h1 className="bg-gradient-to-r from-white via-zinc-100 to-zinc-300 bg-clip-text text-transparent text-4xl md:text-5xl font-black tracking-tight">
-            Welcome To The League
-          </h1>
-          <p className="text-lg font-semibold text-zinc-400 max-w-2xl">
-            Your league. Draft Room Operations. Front Office Analytics.
-          </p>
-          <p className="max-w-xl text-sm leading-relaxed text-zinc-500">
-            Synchronize your active assets to manage every decision from a single terminal.
-          </p>
+    <>
+      <section className="relative w-full bg-gradient-to-b from-blue-600/15 via-blue-950/5 to-transparent pb-10 pt-6 backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-4 md:px-8">
+          <div className="space-y-3 border-l-2 border-blue-500/20 pl-6">
+            <h1 className="bg-gradient-to-r from-white via-zinc-100 to-zinc-300 bg-clip-text text-transparent text-4xl font-black tracking-tight md:text-5xl">
+              Welcome To The League
+            </h1>
+            <p className="max-w-2xl text-lg font-semibold text-zinc-400">
+              Your league. Draft Room Operations. Front Office Analytics.
+            </p>
+            <p className="max-w-xl text-sm leading-relaxed text-zinc-500">
+              Synchronize your active assets to manage every decision from a single terminal.
+            </p>
+          </div>
         </div>
       </section>
 
-      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
+      <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
+        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
           <section className="grid gap-3 sm:grid-cols-3">
             <HomeCard
@@ -287,6 +290,7 @@ function Home() {
         </aside>
       </div>
     </main>
+  </>
   );
 }
 
