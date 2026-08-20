@@ -116,61 +116,62 @@ function PlayerHubPage() {
     <main className="min-h-screen w-full bg-white">
       {/* ---- full-width identity banner ---- */}
       <header className="w-full border-b border-zinc-200 bg-gradient-to-b from-zinc-50 to-white">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:flex-row sm:items-start">
-          <div className="relative size-32 shrink-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm sm:size-40">
-            <img
-              src={headshot(player.id, player.pos, player.team)}
-              alt={player.name}
-              className="size-full object-cover object-top"
-              onError={(e) => {
-                e.currentTarget.style.visibility = "hidden";
-              }}
-            />
-          </div>
+        <div className="mx-auto w-full max-w-7xl px-4 py-8">
+          <div className="relative grid w-full grid-cols-1 items-center gap-6 rounded-2xl border border-zinc-200 bg-white p-6 md:grid-cols-2">
+            {/* center vertical divider */}
+            <div className="absolute left-1/2 top-6 bottom-6 hidden -translate-x-1/2 border-r border-zinc-200/80 md:block" />
 
-          <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:justify-between">
-            {/* identity stack */}
-            <div className="min-w-0">
-              <h1 className="display-title text-4xl leading-tight text-zinc-950 sm:text-5xl">
-                {player.name}
-              </h1>
-              <p className="mt-1 font-display text-lg font-bold uppercase tracking-widest text-zinc-500">
-                <span className="text-zinc-900">#{bio?.number ?? 0}</span>{" "}
-                {POS_LABEL[player.pos] ?? player.pos}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                {teamLogo && <img src={teamLogo} alt="" className="size-6" loading="lazy" />}
-                <span className="font-display text-sm font-bold uppercase tracking-widest text-blue-600">
-                  {player.team} • {player.pos}
-                </span>
-                <span className="tabnum rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600">
-                  #{player.rank.half} overall
-                </span>
+            {/* Left Side — Identity Block */}
+            <div className="flex items-center gap-5">
+              <div className="relative size-28 shrink-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm sm:size-36">
+                <img
+                  src={headshot(player.id, player.pos, player.team)}
+                  alt={player.name}
+                  className="size-full object-cover object-top"
+                  onError={(e) => {
+                    e.currentTarget.style.visibility = "hidden";
+                  }}
+                />
               </div>
-              <button
-                type="button"
-                onClick={() => toggleWatch(player.id)}
-                className={cn(
-                  "mt-3 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-white transition-all",
-                  watching ? "bg-zinc-800 hover:bg-zinc-900" : "bg-blue-600 hover:bg-blue-700",
-                )}
-              >
-                {watching ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
-                {watching ? "Watching" : "Watch Player"}
-              </button>
+              <div className="min-w-0">
+                <h1 className="display-title text-3xl leading-tight text-zinc-950 sm:text-4xl">
+                  <span className="text-zinc-500">#{bio?.number ?? 0}</span>{" "}
+                  {player.name}
+                </h1>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {teamLogo && <img src={teamLogo} alt="" className="size-6" loading="lazy" />}
+                  <span className="font-display text-sm font-bold uppercase tracking-widest text-blue-600">
+                    {player.team} • {player.pos}
+                  </span>
+                  <span className="tabnum rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600">
+                    #{player.rank.half} overall
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleWatch(player.id)}
+                  className={cn(
+                    "mt-3 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-white transition-all",
+                    watching ? "bg-zinc-800 hover:bg-zinc-900" : "bg-blue-600 hover:bg-blue-700",
+                  )}
+                >
+                  {watching ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+                  {watching ? "Watching" : "Watch Player"}
+                </button>
+              </div>
             </div>
 
-            {/* metadata list */}
-            <dl className="mt-2 space-y-1 text-sm text-zinc-500 sm:min-w-56 sm:text-right">
+            {/* Right Side — Aligned Bio Metrics */}
+            <div className="flex flex-col items-start space-y-1.5 pl-0 text-left md:pl-8">
               {meta.map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-6 sm:justify-end">
-                  <dt className="font-semibold uppercase tracking-wide text-zinc-400 text-[11px] self-center">
-                    {label}
-                  </dt>
-                  <dd className="tabnum text-zinc-700">{value}</dd>
+                <div key={label} className="text-sm">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-600">
+                    {label}:
+                  </span>{" "}
+                  <span className="tabnum text-zinc-800">{value}</span>
                 </div>
               ))}
-            </dl>
+            </div>
           </div>
         </div>
       </header>
