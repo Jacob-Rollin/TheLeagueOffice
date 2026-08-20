@@ -55,7 +55,10 @@ function Home() {
   const [standings, setStandings] = useState<Standings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [news, setNews] = useState<NewsItem[]>([]);
-  const [latency] = useState(() => Math.floor(Math.random() * 7) + 12);
+  const [latency, setLatency] = useState(14);
+  useEffect(() => {
+    setLatency(Math.floor(Math.random() * 7) + 12);
+  }, []);
   const leaguesM = useMutation({ mutationFn: (name: string) => getUserLeagues({ data: { username: name } }) });
   const standingsM = useMutation({ mutationFn: (leagueId: string) => getStandings({ data: { leagueId } }) });
 
@@ -158,39 +161,42 @@ function Home() {
     <>
       <section className="w-full bg-gradient-to-b from-blue-50/40 via-transparent to-transparent pb-10">
         <div className="mx-auto max-w-7xl px-4 md:px-8">
-          <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-3">
+          <div className="grid grid-cols-1 items-start gap-6 pt-6 pb-8 md:grid-cols-3 md:pb-10">
             <div className="md:col-span-2">
-              <h1 className="text-4xl font-black tracking-tight text-zinc-900 md:text-5xl">
+              <h1 className="text-4xl font-black tracking-tight text-zinc-950 drop-shadow-[0_4px_10px_rgba(0,0,0,0.15)] md:text-5xl">
                 Welcome To{" "}
                 <span className="text-blue-600">The League</span>
               </h1>
               <div className="mt-4 flex flex-wrap items-center gap-2.5">
-                <span className="rounded-md border border-blue-200 bg-blue-50/60 px-3 py-1 font-mono text-xs font-semibold tracking-wider text-blue-700 shadow-sm">
-                  Your league.
+                <span className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-1.5 font-mono text-[11px] font-bold text-blue-700 shadow-sm">
+                  <span className="h-1.5 w-1.5 rounded-sm bg-blue-500" aria-hidden="true" />
+                  <span className="text-zinc-500">SYS //</span> YOUR LEAGUE
                 </span>
-                <span className="rounded-md border border-blue-200 bg-blue-50/60 px-3 py-1 font-mono text-xs font-semibold tracking-wider text-blue-700 shadow-sm">
-                  Draft Room Operations.
+                <span className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-1.5 font-mono text-[11px] font-bold text-blue-700 shadow-sm">
+                  <span className="h-1.5 w-1.5 rounded-sm bg-blue-500" aria-hidden="true" />
+                  <span className="text-zinc-500">MOD //</span> DRAFT ROOM OPERATIONS
                 </span>
-                <span className="rounded-md border border-blue-200 bg-blue-50/60 px-3 py-1 font-mono text-xs font-semibold tracking-wider text-blue-700 shadow-sm">
-                  Front Office Analytics.
+                <span className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-1.5 font-mono text-[11px] font-bold text-blue-700 shadow-sm">
+                  <span className="h-1.5 w-1.5 rounded-sm bg-blue-500" aria-hidden="true" />
+                  <span className="text-zinc-500">ANL //</span> FRONT OFFICE ANALYTICS
                 </span>
               </div>
               <p className="mt-3 max-w-xl text-sm leading-relaxed text-zinc-500">
                 Synchronize your active assets to manage every decision from a single terminal.
               </p>
             </div>
-            <div className="flex flex-col items-end space-y-1.5 text-right md:col-span-1">
-              <p className="font-mono text-xs tracking-[0.25em] text-zinc-500">
+            <div className="flex w-full max-w-xs flex-col items-start space-y-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-left shadow-sm backdrop-blur-sm md:col-span-1 ml-auto">
+              <p className="mb-0.5 block w-full border-b border-zinc-200/60 pb-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-zinc-400">
                 // SYSTEM OPERATIONS TERMINAL v1.0
               </p>
-              <div className="flex w-max items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2 font-mono text-xs tracking-wider text-red-600">
-                <span className="relative flex h-2 w-2" aria-hidden="true">
+              <div className="flex w-full items-center gap-2 font-mono text-xs tracking-wider text-zinc-700">
+                <span className="relative flex h-3 w-3" aria-hidden="true">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
                 </span>
                 LIVE DATA STREAM // LINK ACTIVE
               </div>
-              <p className="text-[10px] font-mono tracking-widest text-zinc-400">
+              <p className="mt-0.5 block w-full font-mono text-[10px] font-bold uppercase tracking-widest text-blue-600">
                 LATENCY: {latency}ms // DB_STATUS: NOMINAL
               </p>
             </div>
