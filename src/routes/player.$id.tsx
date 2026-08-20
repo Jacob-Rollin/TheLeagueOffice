@@ -70,10 +70,20 @@ function headshot(id: string, pos: string, team: string) {
   return `https://sleepercdn.com/content/nfl/players/${id}.jpg`;
 }
 
+const POS_LABEL: Record<string, string> = {
+  QB: "Quarterback",
+  RB: "Running Back",
+  WR: "Wide Receiver",
+  TE: "Tight End",
+  K: "Kicker",
+  DEF: "Defense / Special Teams",
+};
+
 function PlayerHubPage() {
   const { id } = Route.useParams();
   const { data, isLoading } = useQuery(profileQuery(id));
   const { data: bio } = useQuery(bioQuery(id));
+  const { watchIds, toggleWatch } = useDraft();
   const [tab, setTab] = useState<TabKey>("overview");
 
   if (isLoading)
@@ -84,21 +94,29 @@ function PlayerHubPage() {
   const teamLogo = player.team
     ? `https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`
     : null;
+  const watching = watchIds.has(player.id);
 
-  const meta = [
-    bio?.height && bio?.weight ? `HT/WT ${bio.height}, ${bio.weight}` : null,
-    bio?.college ? `College: ${bio.college}` : null,
-    bio?.number ? `Jersey: #${bio.number}` : null,
-    player.age ? `Age: ${player.age}` : null,
-    player.exp !== null ? `Exp: ${player.exp} yr` : null,
-    `Status: ${player.injury ?? bio?.status ?? "Active"}`,
-  ].filter(Boolean) as string[];
+  const birth = bio?.birthDate
+    ? new Date(`${bio.birthDate}T00:00:00`).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
+
+  const meta: [string, string][] = [
+    ["HT/WT", bio?.height && bio?.weight ? `${bio.height}, ${bio.weight}` : "—"],
+    ["Birthdate", birth ? `${birth}${player.age ? ` (${player.age})` : ""}` : player.age ? `Age ${player.age}` : "—"],
+    ["College", bio?.college ?? "—"],
+    ["Draft Info", bio?.draft ?? (player.exp !== null ? `${player.exp} yr experience` : "—")],
+    ["Status", player.injury ?? bio?.status ?? "Active"],
+  ];
 
   return (
     <main className="min-h-screen w-full bg-white">
       {/* ---- full-width identity banner ---- */}
       <header className="w-full border-b border-zinc-200 bg-gradient-to-b from-zinc-50 to-white">
-        <div className="mx-auto flex w-full max-w-7xl flex-col items-center gap-6 px-4 py-8 sm:flex-row sm:items-end">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:flex-row sm:items-start">
           <div className="relative size-32 shrink-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm sm:size-40">
             <img
               src={headshot(player.id, player.pos, player.team)}
@@ -109,25 +127,54 @@ function PlayerHubPage() {
               }}
             />
           </div>
-          <div className="min-w-0 flex-1 text-center sm:text-left">
-            <h1 className="display-title text-4xl leading-tight text-zinc-950 sm:text-5xl">
-              {player.name}
-            </h1>
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-              {teamLogo && (
-                <img src={teamLogo} alt="" className="size-6" loading="lazy" />
-              )}
-              <span className="font-display text-sm font-bold uppercase tracking-widest text-blue-600">
-                {player.team} • {player.pos}
-              </span>
-              <span className="tabnum rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600">
-                #{player.rank.half} overall
-              </span>
+
+          <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:justify-between">
+            {/* identity stack */}
+            <div className="min-w-0">
+              <h1 className="display-title text-4xl leading-tight text-zinc-950 sm:text-5xl">
+                {player.name}
+              </h1>
+              <p className="mt-1 font-display text-lg font-bold uppercase tracking-widest text-zinc-500">
+                <span className="text-zinc-900">#{bio?.number ?? 0}</span>{" "}
+                {POS_LABEL[player.pos] ?? player.pos}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {teamLogo && <img src={teamLogo} alt="" className="size-6" loading="lazy" />}
+                <span className="font-display text-sm font-bold uppercase tracking-widest text-blue-600">
+                  {player.team} • {player.pos}
+                </span>
+                <span className="tabnum rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-600">
+                  #{player.rank.half} overall
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleWatch(player.id)}
+                className={cn(
+                  "mt-3 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-white transition-all",
+                  watching ? "bg-zinc-800 hover:bg-zinc-900" : "bg-blue-600 hover:bg-blue-700",
+                )}
+              >
+                {watching ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+                {watching ? "Watching" : "Watch Player"}
+              </button>
             </div>
-            <p className="tabnum mt-3 text-xs text-zinc-500">{meta.join("  |  ")}</p>
+
+            {/* metadata list */}
+            <dl className="mt-2 space-y-1 text-sm text-zinc-500 sm:min-w-56 sm:text-right">
+              {meta.map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-6 sm:justify-end">
+                  <dt className="font-semibold uppercase tracking-wide text-zinc-400 text-[11px] self-center">
+                    {label}
+                  </dt>
+                  <dd className="tabnum text-zinc-700">{value}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </div>
       </header>
+
 
       <div className="mx-auto w-full max-w-7xl px-4 py-8">
         {/* ---- line tabs ---- */}
