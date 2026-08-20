@@ -290,6 +290,7 @@ function Home() {
         </aside>
       </div>
     </main>
+  </>
   );
 }
 
