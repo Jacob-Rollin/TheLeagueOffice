@@ -358,26 +358,108 @@ function PlayerHubPage() {
   );
 }
 
+/** Broadcast-style upcoming matchup strip. */
+function NextGame() {
+  const logo = (t: string) => `https://sleepercdn.com/images/team_logos/nfl/${t}.png`;
+  return (
+    <Widget title="Next game">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <img src={logo("was")} alt="" className="size-7 shrink-0" loading="lazy" />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-zinc-800">Commanders</p>
+            <p className="tabnum text-[11px] text-zinc-500">(1-0)</p>
+          </div>
+        </div>
+        <span className="font-display text-xs font-bold uppercase text-zinc-400">@</span>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 text-right">
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-zinc-800">Lions</p>
+            <p className="tabnum text-[11px] text-zinc-500">(0-1)</p>
+          </div>
+          <img src={logo("det")} alt="" className="size-7 shrink-0" loading="lazy" />
+        </div>
+      </div>
+      <p className="tabnum mt-3 border-t border-zinc-100 pt-2 text-center text-[11px] text-zinc-500">
+        Saturday, August 22, 2026 at 11:00 AM
+      </p>
+    </Widget>
+  );
+}
+
+type LogView = "rushing" | "receiving" | "fumbles";
+
+const LOG_VIEWS: [LogView, string][] = [
+  ["rushing", "Rushing"],
+  ["receiving", "Receiving"],
+  ["fumbles", "Fumbles"],
+];
+
+const LOG_COLUMNS: Record<LogView, { head: string[]; keys: string[] }> = {
+  rushing: {
+    head: ["Date", "OPP", "Result", "CAR", "YDS", "AVG", "TD", "LNG"],
+    keys: ["rush_att", "rush_yd", "avg:rush_yd/rush_att", "rush_td", "rush_lng"],
+  },
+  receiving: {
+    head: ["Date", "OPP", "Result", "REC", "YDS", "AVG", "TD", "LNG"],
+    keys: ["rec", "rec_yd", "avg:rec_yd/rec", "rec_td", "rec_lng"],
+  },
+  fumbles: {
+    head: ["Date", "OPP", "Result", "FUM", "LST"],
+    keys: ["fum", "fum_lost"],
+  },
+};
+
+function cell(raw: Record<string, number>, key: string) {
+  if (key.startsWith("avg:")) {
+    const [numKey, denKey] = key.slice(4).split("/") as [string, string];
+    const den = raw[denKey] ?? 0;
+    return den > 0 ? ((raw[numKey] ?? 0) / den).toFixed(1) : "0.0";
+  }
+  const v = raw[key] ?? 0;
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
 function GameLogs({ id }: { id: string }) {
   const { data, isLoading } = useQuery(logsQuery(id));
+  const [view, setView] = useState<LogView>("rushing");
+
   if (isLoading) return <Empty>Loading game logs…</Empty>;
   if (!data || data.logs.length === 0) return <Empty>No game logs recorded yet.</Empty>;
 
-  const statLabels = data.logs[0]!.line.map((l) => l.label);
+  const cols = LOG_COLUMNS[view];
   return (
     <Module title={`${data.season} game log`}>
+      <div className="mb-3 flex items-center gap-2">
+        {LOG_VIEWS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setView(key)}
+            className={cn(
+              "rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide transition-colors",
+              view === key
+                ? "border-blue-600 bg-blue-600 text-white"
+                : "border-zinc-200 bg-white text-zinc-500 hover:text-zinc-800",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <StatTable
-        head={["Wk", "Opp", "Pts", ...statLabels]}
+        head={cols.head}
         rows={data.logs.map((g) => [
-          String(g.week),
+          `Wk ${g.week}`,
           g.opp ?? "—",
-          g.points.half.toFixed(1),
-          ...statLabels.map((label) => g.line.find((l) => l.label === label)?.value ?? "—"),
+          `${g.points.half.toFixed(1)} pts`,
+          ...cols.keys.map((k) => cell(g.raw ?? {}, k)),
         ])}
       />
     </Module>
   );
 }
+
 
 function Module({ title, children }: { title: string; children: React.ReactNode }) {
   return (
