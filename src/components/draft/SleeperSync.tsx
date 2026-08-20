@@ -6,17 +6,7 @@ import { Button } from "@/components/ui/button";
 import type { LeagueLink, LeagueSyncInput } from "@/hooks/use-draft";
 import { getLeagueSync, getUserLeagues } from "@/lib/league.functions";
 import type { LeagueSummary } from "@/lib/league.server";
-
-const HOME_KEY = "league-office-link-v1";
-
-function savedLink(): { username: string; leagueId: string } | null {
-  try {
-    const raw = localStorage.getItem(HOME_KEY);
-    return raw ? (JSON.parse(raw) as { username: string; leagueId: string }) : null;
-  } catch {
-    return null;
-  }
-}
+import { clearLeagueLink, getLeagueLink, saveLeagueLink } from "@/lib/league-link";
 
 export function SleeperSync({
   link,
@@ -27,7 +17,7 @@ export function SleeperSync({
   onApply: (sync: LeagueSyncInput, meta: LeagueLink) => void;
   onUnlink: () => void;
 }) {
-  const [username, setUsername] = useState(() => link?.username ?? savedLink()?.username ?? "");
+  const [username, setUsername] = useState(() => link?.username ?? getLeagueLink()?.username ?? "");
   const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,12 +32,15 @@ export function SleeperSync({
     setError(null);
     const res = await syncM.mutateAsync({ leagueId, username: username.trim() });
     if (!res) return setError("Couldn't load that league.");
-    onApply(res, {
+    const meta = {
       leagueId,
       leagueName: res.league.name || name,
       username: username.trim(),
       syncedAt: new Date().toISOString(),
-    });
+    };
+    onApply(res, meta);
+    // Broadcast to the shared global link so the homepage stays in sync.
+    saveLeagueLink(meta);
     setLeagues([]);
   };
 
@@ -89,7 +82,14 @@ export function SleeperSync({
               <RefreshCw className={busy ? "size-4 animate-spin" : "size-4"} />
               Resync rosters
             </Button>
-            <Button size="sm" variant="secondary" onClick={onUnlink}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                clearLeagueLink();
+                onUnlink();
+              }}
+            >
               Unlink
             </Button>
           </div>

@@ -4,12 +4,10 @@ import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getStandings, getUserLeagues } from "@/lib/league.functions";
 import type { LeagueSummary, Standings } from "@/lib/league.server";
+import { useLeagueLink } from "@/lib/league-link";
 import { cn } from "@/lib/utils";
 
-const KEY = "league-office-link-v1";
 const NEWS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50";
-
-type Saved = { username: string; leagueId: string };
 type LinkNode = { web?: { href?: string }; href?: string };
 type NewsItem = {
   headline: string;
@@ -50,6 +48,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
+  const { link, saveLink, clearLink } = useLeagueLink();
   const [username, setUsername] = useState("");
   const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
   const [standings, setStandings] = useState<Standings | null>(null);
@@ -67,24 +66,37 @@ function Home() {
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => setNews(((d.articles ?? []) as NewsItem[]).filter(isFantasy).slice(0, 6)))
       .catch(() => setNews([]));
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as Saved;
-      if (saved.username) setUsername(saved.username);
-      if (saved.leagueId) standingsM.mutateAsync(saved.leagueId).then((res) => res && setStandings(res));
-    } catch {
-      /* ignore */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Hydrate from the globally shared league link (set here, in the War Room, or on Trade).
+  const linkedLeagueId = link?.leagueId ?? null;
+  useEffect(() => {
+    if (link?.username) setUsername((u) => u || link.username);
+    if (!linkedLeagueId) {
+      setStandings(null);
+      return;
+    }
+    let alive = true;
+    standingsM.mutateAsync(linkedLeagueId).then((res) => {
+      if (alive && res) setStandings(res);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedLeagueId, link?.username]);
 
   const loadLeague = async (leagueId: string, name: string) => {
     setError(null);
     const res = await standingsM.mutateAsync(leagueId);
     if (!res) return setError("Couldn't load that league.");
     setStandings(res);
-    localStorage.setItem(KEY, JSON.stringify({ username: name, leagueId } satisfies Saved));
+    saveLink({
+      username: name.trim(),
+      leagueId,
+      leagueName: res.league?.name,
+      syncedAt: new Date().toISOString(),
+    });
   };
   const search = async () => {
     setError(null);
@@ -95,7 +107,7 @@ function Home() {
     else if (res.length === 1) await loadLeague(res[0]!.id, username);
   };
   const unlink = () => {
-    localStorage.removeItem(KEY);
+    clearLink();
     setStandings(null);
     setLeagues([]);
   };
@@ -125,7 +137,7 @@ function Home() {
           >
             {leaguesM.isPending ? "Looking…" : "Sync"}
           </button>
-          {standings && (
+          {(standings || link) && (
             <button
               onClick={unlink}
               className="rounded-md border border-border px-4 py-2.5 text-sm text-muted-foreground"
@@ -177,7 +189,7 @@ function Home() {
           </span>
           SYNC INITIALIZING // STANDBY
         </div>
-      ) : standings ? (
+      ) : standings || link ? (
         <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
           <span className="relative flex h-2 w-2" aria-hidden="true">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
