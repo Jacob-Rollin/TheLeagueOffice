@@ -7,7 +7,7 @@ import {
   type Settings,
 } from "@/lib/draft";
 import { getLeagueSync } from "@/lib/league.functions";
-import { clearLeagueLink, saveLeagueLink, useLeagueLink } from "@/lib/league-link";
+import { clearLeagueLink, getLeagueLink, saveLeagueLink, useLeagueLink } from "@/lib/league-link";
 
 const KEY = "ff-draft-state-v1";
 
@@ -107,6 +107,9 @@ function hydrate() {
         ...(Array.isArray(parsed.order) ? { customOrder: parsed.order } : {}),
         ...(parsed.link ? { link: parsed.link } : {}),
       };
+      if (parsed.link && !getLeagueLink()) {
+        loaded = { ...loaded, settings: DEFAULT_SETTINGS, picks: [], link: null };
+      }
     }
   } catch {
     /* ignore corrupted state */
