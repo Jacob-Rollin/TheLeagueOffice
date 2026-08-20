@@ -178,8 +178,8 @@ function Home() {
         </div>
       </section>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,68fr)_minmax(0,32fr)]">
-        <div className="min-w-0">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
           <section className="grid gap-3 sm:grid-cols-3">
             <HomeCard
               to="/draft"
@@ -250,7 +250,7 @@ function Home() {
           </section>
         </div>
 
-        <aside className="min-w-0 space-y-4 lg:pt-10">
+        <aside className="min-w-0 space-y-4 lg:col-span-1">
           {connectBox}
           {standings && (
             <section className="rounded-xl border border-border bg-card p-4">
