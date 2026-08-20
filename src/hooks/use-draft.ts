@@ -268,6 +268,7 @@ export function useDraft() {
   useEffect(() => {
     if (!hydrated) return;
     if (!globalLink) {
+      autoSyncKey = null;
       if (state.link) setLink(null);
       return;
     }
