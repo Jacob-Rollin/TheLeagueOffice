@@ -203,8 +203,8 @@ function FlipCard({
   back,
   className,
 }: {
-  front: React.ReactNode;
-  back: React.ReactNode;
+  front: ReactNode;
+  back: ReactNode;
   className?: string;
 }) {
   const [flipped, setFlipped] = useState(false);
