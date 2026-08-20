@@ -155,25 +155,43 @@ function Home() {
 
   return (
     <>
-      <section className="relative w-full bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.15),transparent_70%)] pb-12 pt-6 backdrop-blur-md">
+      <section className="relative my-4 w-full border-t border-b border-zinc-800/50 bg-gradient-to-b from-blue-950/40 via-zinc-950/20 to-transparent py-10 backdrop-blur-sm">
         <div className="mx-auto max-w-7xl px-4 md:px-8">
-          <div className="space-y-3 border-l-2 border-blue-500/20 pl-6">
-            <h1 className="text-4xl font-black tracking-tight md:text-5xl">
-              <span className="text-white">Welcome To</span>{" "}
-              <span className="text-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-                The League
-              </span>
-            </h1>
-            <p className="flex max-w-2xl items-center text-lg font-semibold text-zinc-400">
-              <span
-                className="relative top-[1px] mr-2 inline-block h-2.5 w-2.5 animate-pulse rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"
-                aria-hidden="true"
-              />
-              Your league. Draft Room Operations. Front Office Analytics.
-            </p>
-            <p className="max-w-xl text-sm leading-relaxed text-zinc-500">
-              Synchronize your active assets to manage every decision from a single terminal.
-            </p>
+          <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-3">
+            <div className="md:col-span-2">
+              <p className="mb-2 font-mono text-xs tracking-[0.25em] text-zinc-500">
+                // SYSTEM OPERATIONS TERMINAL v1.0
+              </p>
+              <h1 className="drop-shadow-[0_4px_12px_rgba(0,0,0,0.9)] text-4xl font-black tracking-tight md:text-5xl">
+                <span className="text-white">Welcome To</span>{" "}
+                <span className="text-blue-500 drop-shadow-[0_0_20px_rgba(59,130,246,0.35)]">
+                  The League
+                </span>
+              </h1>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-1 text-xs font-semibold text-zinc-300">
+                  Your league.
+                </span>
+                <span className="rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-1 text-xs font-semibold text-zinc-300">
+                  Draft Room Operations.
+                </span>
+                <span className="rounded-md border border-zinc-800 bg-zinc-900/50 px-3 py-1 text-xs font-semibold text-zinc-300">
+                  Front Office Analytics.
+                </span>
+              </div>
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-zinc-400">
+                Synchronize your active assets to manage every decision from a single terminal.
+              </p>
+            </div>
+            <div className="flex md:col-span-1 md:justify-end">
+              <div className="flex w-max items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2 font-mono text-xs tracking-wider text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.05)]">
+                <span
+                  className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500"
+                  aria-hidden="true"
+                />
+                LIVE DATA STREAM // LINK ACTIVE
+              </div>
+            </div>
           </div>
         </div>
       </section>
