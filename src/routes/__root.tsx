@@ -102,6 +102,7 @@ const NAV: [string, string][] = [
   ["/draft", "War Room"],
   ["/trade", "Trade Desk"],
   ["/waiver", "The Wire"],
+  ["/hof", "Hall of Fame"],
 ];
 function SiteNav() {
   return (
