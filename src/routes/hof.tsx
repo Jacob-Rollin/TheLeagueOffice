@@ -59,6 +59,9 @@ function HofError({ error }: { error: Error }) {
 const num = (v: number | null | undefined) =>
   typeof v === "number" ? v.toFixed(2).replace(/\.00$/, "") : "—";
 
+const wk = (v: string | null | undefined) =>
+  v ? v.replace(/^\s*week\s*/i, "").trim() || null : null;
+
 const pts = (v: number | null | undefined) =>
   typeof v === "number" ? `${num(v)} pts` : null;
 
@@ -159,7 +162,7 @@ function YearNode({ entry, side }: { entry: HofYear; side: "left" | "right" }) {
                 rows={[
                   ["Player", entry.playerWeek?.player_name],
                   ["Points", pts(entry.playerWeek?.points)],
-                  ["Week", entry.playerWeek?.week],
+                  ["Week", wk(entry.playerWeek?.week)],
                   ["Team", entry.playerWeek?.fantasy_team_name],
                   ["Manager", entry.playerWeek?.manager_name],
                 ]}
@@ -184,7 +187,7 @@ function YearNode({ entry, side }: { entry: HofYear; side: "left" | "right" }) {
                 rows={[
                   ["Team", entry.teamWeek?.fantasy_team_name],
                   ["Points", pts(entry.teamWeek?.points)],
-                  ["Week", entry.teamWeek?.week],
+                  ["Week", wk(entry.teamWeek?.week)],
                   ["Manager", entry.teamWeek?.manager_name],
                 ]}
               />
