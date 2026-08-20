@@ -134,6 +134,7 @@ function SiteNav() {
             </Link>
           ))}
         </div>
+        <GlobalSearch />
       </nav>
     </header>
   );
