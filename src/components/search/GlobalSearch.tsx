@@ -22,6 +22,7 @@ export function GlobalSearch() {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   const { data } = useQuery({
     queryKey: ["players"],
@@ -35,170 +36,166 @@ export function GlobalSearch() {
   }, [open]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setOpen(true);
-      }
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) collapse();
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") collapse();
+    };
+    window.addEventListener("mousedown", onDown);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
   }, []);
 
+  const collapse = () => {
+    setQ("");
+    setOpen(false);
+  };
+
   const term = q.trim().toLowerCase();
+  const active = term.length > 0;
 
   const pages = useMemo(
     () =>
-      term
+      active
         ? PAGES.filter(
             (p) =>
               p.label.toLowerCase().includes(term) || p.hint.toLowerCase().includes(term),
           )
-        : PAGES,
-    [term],
+        : [],
+    [term, active],
   );
 
   const teams = useMemo(
     () =>
-      term
+      active
         ? NFL_TEAMS.filter((t) =>
             `${t.city} ${t.name} ${t.id}`.toLowerCase().includes(term),
           ).slice(0, 6)
         : [],
-    [term],
+    [term, active],
   );
 
   const players = useMemo(() => {
     if (term.length < 2) return [];
-    const list = data?.players ?? [];
-    return list.filter((p) => p.name.toLowerCase().includes(term)).slice(0, 8);
+    return (data?.players ?? []).filter((p) => p.name.toLowerCase().includes(term)).slice(0, 8);
   }, [term, data]);
 
-  const empty = term.length >= 2 && !pages.length && !teams.length && !players.length;
-
-  const close = () => {
-    setOpen(false);
-    setQ("");
-  };
+  const empty = active && !pages.length && !teams.length && !players.length;
 
   const go = (to: string, params?: Record<string, string>) => {
-    close();
+    collapse();
     navigate({ to, params } as never);
   };
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-md border border-primary-foreground/25 bg-primary-foreground/10 px-3 py-1.5 text-sm text-primary-foreground/70 transition-colors hover:bg-primary-foreground/20 hover:text-primary-foreground"
-        aria-label="Search players, teams and pages"
+    <div ref={wrapRef} className="relative ml-auto flex items-center">
+      <div
+        className={cn(
+          "flex items-center overflow-hidden rounded-full border transition-all duration-300 ease-in-out",
+          open
+            ? "w-56 border-primary-foreground/30 bg-primary-foreground/15 sm:w-72"
+            : "w-9 border-transparent bg-transparent",
+        )}
+        style={{ transformOrigin: "right" }}
       >
-        <Search className="size-4" />
-        <span className="hidden sm:inline">Search…</span>
-      </button>
-
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-foreground/20 px-4 pt-24 backdrop-blur-sm"
-          onMouseDown={close}
+        <button
+          type="button"
+          onClick={() => (open ? inputRef.current?.focus() : setOpen(true))}
+          aria-label="Search teams, players or pages"
+          className="grid size-9 shrink-0 place-items-center text-primary-foreground/80 transition-colors hover:text-primary-foreground"
         >
-          <div
-            className="w-full max-w-xl overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
-            onMouseDown={(e) => e.stopPropagation()}
+          <Search className="size-4" />
+        </button>
+        <input
+          ref={inputRef}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search Teams, Players or Pages..."
+          tabIndex={open ? 0 : -1}
+          className={cn(
+            "min-w-0 flex-1 bg-transparent py-1.5 text-sm text-primary-foreground outline-none placeholder:text-primary-foreground/60",
+            !open && "pointer-events-none opacity-0",
+          )}
+        />
+        {open && (
+          <button
+            type="button"
+            onClick={collapse}
+            aria-label="Close search"
+            className="grid size-9 shrink-0 place-items-center text-primary-foreground/70 hover:text-primary-foreground"
           >
-            <div className="flex items-center gap-2 border-b border-border px-3">
-              <Search className="size-4 text-muted-foreground" />
-              <input
-                ref={inputRef}
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search players, NFL teams or pages…"
-                className="w-full bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
-              />
-              <button
-                type="button"
-                onClick={close}
-                aria-label="Close search"
-                className="rounded p-1 text-muted-foreground hover:text-foreground"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
 
-            <div className="max-h-[60vh] overflow-y-auto p-2">
-              {!!pages.length && (
-                <Section title="Platform Pages">
-                  {pages.map((p) => (
-                    <Row key={p.to} onClick={() => go(p.to)}>
-                      <span className="flex-1 truncate font-medium">{p.label}</span>
-                      <span className="text-xs text-muted-foreground">{p.hint}</span>
-                    </Row>
-                  ))}
-                </Section>
-              )}
+      {open && active && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-80 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+          <div className="max-h-[70vh] overflow-y-auto py-1 text-foreground">
+            {!!pages.length && (
+              <Section title="Platform Pages">
+                {pages.map((p) => (
+                  <Row key={p.to} onClick={() => go(p.to)}>
+                    <span className="flex-1 truncate font-medium">{p.label}</span>
+                    <span className="text-xs text-muted-foreground">{p.hint}</span>
+                  </Row>
+                ))}
+              </Section>
+            )}
 
-              {!!teams.length && (
-                <Section title="NFL Teams">
-                  {teams.map((t) => (
-                    <Row
-                      key={t.id}
-                      onClick={() => go("/nfl-team/$nflId", { nflId: t.id })}
-                    >
-                      <img
-                        src={teamLogo(t.id) ?? ""}
-                        alt=""
-                        className="size-6"
-                        loading="lazy"
-                      />
-                      <span className="flex-1 truncate font-medium">
-                        {t.city} {t.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {t.conference} {t.division}
-                      </span>
-                    </Row>
-                  ))}
-                </Section>
-              )}
+            {!!teams.length && (
+              <Section title="NFL Teams">
+                {teams.map((t) => (
+                  <Row key={t.id} onClick={() => go("/nfl-team/$nflId", { nflId: t.id })}>
+                    <img src={teamLogo(t.id) ?? ""} alt="" className="size-5" loading="lazy" />
+                    <span className="flex-1 truncate font-medium">
+                      {t.city} {t.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{t.id}</span>
+                  </Row>
+                ))}
+              </Section>
+            )}
 
-              {!!players.length && (
-                <Section title="NFL Players">
-                  {players.map((p) => (
-                    <Row key={p.id} onClick={() => go("/player/$id", { id: p.id })}>
-                      <PositionBadge pos={p.pos} />
-                      <span className="flex-1 truncate font-medium">{p.name}</span>
-                      <span className="text-xs text-muted-foreground">{p.team}</span>
-                    </Row>
-                  ))}
-                </Section>
-              )}
+            {!!players.length && (
+              <Section title="NFL Players">
+                {players.map((p) => (
+                  <Row key={p.id} onClick={() => go("/player/$id", { id: p.id })}>
+                    <PositionBadge pos={p.pos} />
+                    <span className="flex-1 truncate font-medium">{p.name}</span>
+                    <span className="text-xs text-muted-foreground">{p.team}</span>
+                  </Row>
+                ))}
+              </Section>
+            )}
 
-              {term.length >= 2 && !players.length && !data && (
-                <p className="px-3 py-2 text-xs text-muted-foreground">Loading players…</p>
-              )}
+            {term.length >= 2 && !players.length && !data && (
+              <p className="px-3 py-2 text-xs text-muted-foreground">Loading players…</p>
+            )}
 
-              {empty && (
-                <p className="py-10 text-center text-sm text-muted-foreground">
-                  No matching players or teams found
-                </p>
-              )}
-            </div>
+            {empty && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No matching players or teams found
+              </p>
+            )}
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="mb-2">
+    <div className="border-b border-border last:border-0">
       <p className="px-3 py-1.5 font-display text-[11px] uppercase tracking-widest text-muted-foreground">
         {title}
       </p>
-      <ul>{children}</ul>
+      <ul className="pb-1">{children}</ul>
     </div>
   );
 }
@@ -209,9 +206,7 @@ function Row({ onClick, children }: { onClick: () => void; children: React.React
       <button
         type="button"
         onClick={onClick}
-        className={cn(
-          "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-accent",
-        )}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
       >
         {children}
       </button>
