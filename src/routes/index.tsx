@@ -4,12 +4,10 @@ import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getStandings, getUserLeagues } from "@/lib/league.functions";
 import type { LeagueSummary, Standings } from "@/lib/league.server";
+import { useLeagueLink } from "@/lib/league-link";
 import { cn } from "@/lib/utils";
 
-const KEY = "league-office-link-v1";
 const NEWS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50";
-
-type Saved = { username: string; leagueId: string };
 type LinkNode = { web?: { href?: string }; href?: string };
 type NewsItem = {
   headline: string;
