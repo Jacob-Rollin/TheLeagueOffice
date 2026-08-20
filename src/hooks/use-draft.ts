@@ -6,6 +6,8 @@ import {
   type Pick,
   type Settings,
 } from "@/lib/draft";
+import { getLeagueSync } from "@/lib/league.functions";
+import { clearLeagueLink, saveLeagueLink, useLeagueLink } from "@/lib/league-link";
 
 const KEY = "ff-draft-state-v1";
 
@@ -54,6 +56,7 @@ let state: StoreState = {
 };
 
 const listeners = new Set<() => void>();
+let autoSyncKey: string | null = null;
 
 function emit() {
   for (const l of listeners) l();
@@ -129,6 +132,7 @@ const SERVER_SNAPSHOT: StoreState = {
 };
 
 export function useDraft() {
+  const { link: globalLink } = useLeagueLink();
   const store = useSyncExternalStore(
     subscribe,
     () => state,
@@ -249,9 +253,43 @@ export function useDraft() {
     }
     setPicks(next);
     setLink(meta);
+    autoSyncKey = `${meta.leagueId}:${meta.syncedAt}`;
+    saveLeagueLink(meta);
   }, []);
 
-  const unlinkLeague = useCallback(() => setLink(null), []);
+  const unlinkLeague = useCallback(() => {
+    setLink(null);
+    clearLeagueLink();
+  }, []);
+
+  // Keep the War Room in lockstep with the globally shared Sleeper link:
+  // linking or unlinking anywhere (homepage, trade desk) applies here automatically.
+  const globalKey = globalLink ? `${globalLink.leagueId}:${globalLink.syncedAt ?? ""}` : null;
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!globalLink) {
+      autoSyncKey = null;
+      if (state.link) setLink(null);
+      return;
+    }
+    const localKey = state.link ? `${state.link.leagueId}:${state.link.syncedAt}` : null;
+    if (localKey === globalKey || autoSyncKey === globalKey) return;
+    autoSyncKey = globalKey;
+    const username = globalLink.username ?? "";
+    void getLeagueSync({ data: { leagueId: globalLink.leagueId, username } })
+      .then((res) => {
+        if (!res || autoSyncKey !== globalKey) return;
+        applyLeague(res, {
+          leagueId: globalLink.leagueId,
+          leagueName: res.league?.name || globalLink.leagueName || "Sleeper league",
+          username,
+          syncedAt: globalLink.syncedAt ?? new Date().toISOString(),
+        });
+      })
+      .catch(() => {
+        autoSyncKey = null;
+      });
+  }, [globalKey, hydrated, globalLink, applyLeague, setLink]);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
