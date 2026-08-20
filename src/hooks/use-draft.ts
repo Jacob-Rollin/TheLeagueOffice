@@ -7,7 +7,7 @@ import {
   type Settings,
 } from "@/lib/draft";
 import { getLeagueSync } from "@/lib/league.functions";
-import { clearLeagueLink, saveLeagueLink, useLeagueLink } from "@/lib/league-link";
+import { clearLeagueLink, getLeagueLink, saveLeagueLink, useLeagueLink } from "@/lib/league-link";
 
 const KEY = "ff-draft-state-v1";
 
@@ -107,6 +107,9 @@ function hydrate() {
         ...(Array.isArray(parsed.order) ? { customOrder: parsed.order } : {}),
         ...(parsed.link ? { link: parsed.link } : {}),
       };
+      if (parsed.link && !getLeagueLink()) {
+        loaded = { ...loaded, settings: DEFAULT_SETTINGS, picks: [], link: null };
+      }
     }
   } catch {
     /* ignore corrupted state */
@@ -257,10 +260,15 @@ export function useDraft() {
     saveLeagueLink(meta);
   }, []);
 
-  const unlinkLeague = useCallback(() => {
-    setLink(null);
-    clearLeagueLink();
+  const clearLinkedLeagueState = useCallback(() => {
+    autoSyncKey = null;
+    setState({ settings: DEFAULT_SETTINGS, picks: [], link: null });
   }, []);
+
+  const unlinkLeague = useCallback(() => {
+    clearLinkedLeagueState();
+    clearLeagueLink();
+  }, [clearLinkedLeagueState]);
 
   // Keep the War Room in lockstep with the globally shared Sleeper link:
   // linking or unlinking anywhere (homepage, trade desk) applies here automatically.
@@ -269,7 +277,7 @@ export function useDraft() {
     if (!hydrated) return;
     if (!globalLink) {
       autoSyncKey = null;
-      if (state.link) setLink(null);
+      if (state.link) clearLinkedLeagueState();
       return;
     }
     const localKey = state.link ? `${state.link.leagueId}:${state.link.syncedAt}` : null;
@@ -289,7 +297,7 @@ export function useDraft() {
       .catch(() => {
         autoSyncKey = null;
       });
-  }, [globalKey, hydrated, globalLink, applyLeague, setLink]);
+  }, [globalKey, hydrated, globalLink, applyLeague, clearLinkedLeagueState]);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
