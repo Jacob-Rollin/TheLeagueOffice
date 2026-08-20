@@ -12,11 +12,19 @@ import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
 const preset = process.env["NITRO_PRESET"] ?? (process.env["VERCEL"] ? "vercel" : undefined);
 
 export default defineConfig({
+  vite: {
+    // Keep every emitted client asset rooted at the deployment host. This prevents
+    // nested SSR routes from resolving CSS and scripts relative to their pathname.
+    base: "/",
+  },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  ...(preset ? { nitro: { preset } } : {}),
+  nitro: {
+    ...(preset ? { preset } : {}),
+    baseURL: "/",
+  },
   plugins: [mcpPlugin()],
 });

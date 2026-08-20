@@ -5,6 +5,11 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
 
+const absoluteAssetPath = (assetPath: string) => {
+  if (/^https?:\/\//i.test(assetPath) || assetPath.startsWith("/")) return assetPath;
+  return `/${assetPath.replace(/^\.\//, "")}`;
+};
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -69,7 +74,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
     ],
     links: [
-      { rel: "stylesheet", href: appCss },
+      { rel: "stylesheet", href: absoluteAssetPath(appCss) },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
