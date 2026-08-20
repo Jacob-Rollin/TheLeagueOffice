@@ -133,17 +133,63 @@ const seasonStats = memo<Map<string, Stats>>(6 * HOUR, async (season) => {
   return map;
 });
 
-const scheduleFor = memo<{ week: number; home: string; away: string }[]>(
+type ScheduleGame = {
+  week: number;
+  home: string;
+  away: string;
+  date?: string | null;
+  status?: string | null;
+};
+
+const scheduleFor = memo<ScheduleGame[]>(
   24 * HOUR,
   async (season) => {
     const res = await fetch(`${BASE}/schedule/nfl/regular/${season}`, {
       headers: { accept: "application/json" },
     });
     if (!res.ok) return [];
-    const json = (await res.json()) as { week: number; home: string; away: string }[];
+    const json = (await res.json()) as ScheduleGame[];
     return Array.isArray(json) ? json : [];
   },
 );
+
+export type NextGame = {
+  season: string;
+  week: number;
+  home: string;
+  away: string;
+  date: string | null;
+  isHome: boolean;
+  opponent: string;
+};
+
+/** Next scheduled matchup for an NFL team abbreviation, or null. */
+export async function loadNextGame(team: string): Promise<NextGame | null> {
+  const abbr = (team || "").toUpperCase();
+  if (!abbr || abbr === "FA") return null;
+  const season = currentSeason();
+  const games = await scheduleFor(season).catch(() => []);
+  const mine = games
+    .filter((g) => g.home === abbr || g.away === abbr)
+    .sort((a, b) => a.week - b.week);
+  if (mine.length === 0) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming =
+    mine.find((g) => (g.date ? g.date >= today : false)) ??
+    mine.find((g) => g.status === "pre_game") ??
+    mine[0]!;
+  const isHome = upcoming.home === abbr;
+  return {
+    season,
+    week: upcoming.week,
+    home: upcoming.home,
+    away: upcoming.away,
+    date: upcoming.date ?? null,
+    isHome,
+    opponent: isHome ? upcoming.away : upcoming.home,
+  };
+}
+
 
 /** Weeks 1-18 with no scheduled game, per team. */
 async function byeWeeks(season: string): Promise<Map<string, number>> {

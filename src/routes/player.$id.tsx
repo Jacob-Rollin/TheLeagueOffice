@@ -4,7 +4,8 @@ import { Check, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { useDraft } from "@/hooks/use-draft";
-import { getGameLogs, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
+import { NFL_TEAMS } from "@/lib/nfl-teams";
+import { getGameLogs, getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
 
 
@@ -30,6 +31,18 @@ const logsQuery = (id: string) =>
     queryFn: () => getGameLogs({ data: { id } }),
     staleTime: 1000 * 60 * 30,
   });
+
+const nextGameQuery = (team: string) =>
+  queryOptions({
+    queryKey: ["player-next-game", team],
+    queryFn: () => getNextGame({ data: { team } }),
+    staleTime: 1000 * 60 * 60 * 6,
+  });
+
+const TEAM_NAME: Record<string, string> = Object.fromEntries(
+  NFL_TEAMS.map((t) => [t.id, t.name]),
+);
+
 
 export const Route = createFileRoute("/player/$id")({
   head: () => ({
@@ -244,7 +257,7 @@ function PlayerHubPage() {
               </>
             )}
 
-            {tab === "logs" && <GameLogs id={id} />}
+            {tab === "logs" && <GameLogs id={id} pos={player.pos} />}
 
             {tab === "depth" && (
               <Module title={`${player.team} ${player.pos} depth chart`}>
@@ -269,7 +282,7 @@ function PlayerHubPage() {
 
           {/* ---- sidebar widgets ---- */}
           <aside className="space-y-4 self-start rounded-xl border border-zinc-200 bg-zinc-50 p-4 lg:col-span-1">
-            <NextGame />
+            <NextGame team={player.team} />
 
             <Widget title="Injury risk">
 
@@ -359,44 +372,91 @@ function PlayerHubPage() {
   );
 }
 
-/** Broadcast-style upcoming matchup strip. */
-function NextGame() {
-  const logo = (t: string) => `https://sleepercdn.com/images/team_logos/nfl/${t}.png`;
+/** Broadcast-style upcoming matchup strip, bound to the player's real NFL team. */
+function NextGame({ team }: { team: string }) {
+  const { data, isLoading } = useQuery(nextGameQuery(team));
+  const logo = (t: string) =>
+    `https://sleepercdn.com/images/team_logos/nfl/${(t || "").toLowerCase()}.png`;
+  const label = (t: string) => TEAM_NAME[t.toUpperCase()] ?? t;
+
+  if (isLoading)
+    return (
+      <Widget title="Next game">
+        <p className="text-xs text-zinc-500">Loading schedule…</p>
+      </Widget>
+    );
+  if (!data)
+    return (
+      <Widget title="Next game">
+        <p className="text-xs text-zinc-500">No upcoming game scheduled.</p>
+      </Widget>
+    );
+
+  const kickoff = data.date
+    ? new Date(`${data.date}T00:00:00`).toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
+
   return (
     <Widget title="Next game">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <img src={logo("was")} alt="" className="size-7 shrink-0" loading="lazy" />
+          <img src={logo(data.away)} alt="" className="size-7 shrink-0" loading="lazy" />
           <div className="min-w-0">
-            <p className="truncate text-xs font-semibold text-zinc-800">Commanders</p>
-            <p className="tabnum text-[11px] text-zinc-500">(1-0)</p>
+            <p className="truncate text-xs font-semibold text-zinc-800">{label(data.away)}</p>
+            <p className="tabnum text-[11px] text-zinc-500">{data.away}</p>
           </div>
         </div>
         <span className="font-display text-xs font-bold uppercase text-zinc-400">@</span>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2 text-right">
           <div className="min-w-0">
-            <p className="truncate text-xs font-semibold text-zinc-800">Lions</p>
-            <p className="tabnum text-[11px] text-zinc-500">(0-1)</p>
+            <p className="truncate text-xs font-semibold text-zinc-800">{label(data.home)}</p>
+            <p className="tabnum text-[11px] text-zinc-500">{data.home}</p>
           </div>
-          <img src={logo("det")} alt="" className="size-7 shrink-0" loading="lazy" />
+          <img src={logo(data.home)} alt="" className="size-7 shrink-0" loading="lazy" />
         </div>
       </div>
       <p className="tabnum mt-3 border-t border-zinc-100 pt-2 text-center text-[11px] text-zinc-500">
-        Saturday, August 22, 2026 at 11:00 AM
+        Week {data.week}
+        {kickoff ? ` · ${kickoff}` : ""}
       </p>
     </Widget>
   );
 }
 
-type LogView = "rushing" | "receiving" | "fumbles";
+type LogView = "passing" | "rushing" | "receiving" | "fumbles";
 
-const LOG_VIEWS: [LogView, string][] = [
-  ["rushing", "Rushing"],
-  ["receiving", "Receiving"],
-  ["fumbles", "Fumbles"],
-];
+const LOG_VIEW_LABEL: Record<LogView, string> = {
+  passing: "Passing",
+  rushing: "Rushing",
+  receiving: "Receiving",
+  fumbles: "Fumbles",
+};
+
+/** Sub-tabs shown per position group. */
+function viewsForPosition(pos: string): LogView[] {
+  switch (pos) {
+    case "QB":
+      return ["passing", "rushing"];
+    case "RB":
+      return ["rushing", "receiving", "fumbles"];
+    case "WR":
+    case "TE":
+      return ["receiving", "fumbles"];
+    default:
+      return ["rushing", "receiving", "fumbles"];
+  }
+}
 
 const LOG_COLUMNS: Record<LogView, { head: string[]; keys: string[] }> = {
+  passing: {
+    head: ["Date", "OPP", "Result", "CMP", "ATT", "YDS", "TD", "INT", "RATING"],
+    keys: ["pass_cmp", "pass_att", "pass_yd", "pass_td", "pass_int", "rating:"],
+  },
   rushing: {
     head: ["Date", "OPP", "Result", "CAR", "YDS", "AVG", "TD", "LNG"],
     keys: ["rush_att", "rush_yd", "avg:rush_yd/rush_att", "rush_td", "rush_lng"],
@@ -411,7 +471,24 @@ const LOG_COLUMNS: Record<LogView, { head: string[]; keys: string[] }> = {
   },
 };
 
+/** Standard NFL passer rating. */
+function passerRating(raw: Record<string, number>) {
+  const att = raw["pass_att"] ?? 0;
+  if (att <= 0) return "0.0";
+  const cmp = raw["pass_cmp"] ?? 0;
+  const yds = raw["pass_yd"] ?? 0;
+  const td = raw["pass_td"] ?? 0;
+  const int = raw["pass_int"] ?? 0;
+  const clamp = (v: number) => Math.max(0, Math.min(2.375, v));
+  const a = clamp((cmp / att - 0.3) * 5);
+  const b = clamp((yds / att - 3) * 0.25);
+  const c = clamp((td / att) * 20);
+  const d = clamp(2.375 - (int / att) * 25);
+  return (((a + b + c + d) / 6) * 100).toFixed(1);
+}
+
 function cell(raw: Record<string, number>, key: string) {
+  if (key === "rating:") return passerRating(raw);
   if (key.startsWith("avg:")) {
     const [numKey, denKey] = key.slice(4).split("/") as [string, string];
     const den = raw[denKey] ?? 0;
@@ -421,30 +498,32 @@ function cell(raw: Record<string, number>, key: string) {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
-function GameLogs({ id }: { id: string }) {
+function GameLogs({ id, pos }: { id: string; pos: string }) {
   const { data, isLoading } = useQuery(logsQuery(id));
-  const [view, setView] = useState<LogView>("rushing");
+  const views = viewsForPosition(pos);
+  const [view, setView] = useState<LogView>(views[0]!);
+  const active = views.includes(view) ? view : views[0]!;
 
   if (isLoading) return <Empty>Loading game logs…</Empty>;
   if (!data || data.logs.length === 0) return <Empty>No game logs recorded yet.</Empty>;
 
-  const cols = LOG_COLUMNS[view];
+  const cols = LOG_COLUMNS[active];
   return (
     <Module title={`${data.season} game log`}>
       <div className="mb-3 flex items-center gap-2">
-        {LOG_VIEWS.map(([key, label]) => (
+        {views.map((key) => (
           <button
             key={key}
             type="button"
             onClick={() => setView(key)}
             className={cn(
               "rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wide transition-colors",
-              view === key
+              active === key
                 ? "border-blue-600 bg-blue-600 text-white"
                 : "border-zinc-200 bg-white text-zinc-500 hover:text-zinc-800",
             )}
           >
-            {label}
+            {LOG_VIEW_LABEL[key]}
           </button>
         ))}
       </div>
@@ -460,6 +539,7 @@ function GameLogs({ id }: { id: string }) {
     </Module>
   );
 }
+
 
 
 function Module({ title, children }: { title: string; children: React.ReactNode }) {

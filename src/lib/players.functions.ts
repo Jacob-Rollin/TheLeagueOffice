@@ -32,3 +32,11 @@ export const getGameLogs = createServerFn({ method: "GET" })
     const { loadGameLogs } = await import("./players.server");
     return await loadGameLogs(data.id);
   });
+
+export const getNextGame = createServerFn({ method: "GET" })
+  .inputValidator((input: { team: string }) => ({ team: String(input.team).slice(0, 4) }))
+  .handler(async ({ data }) => {
+    const { loadNextGame } = await import("./players.server");
+    return await loadNextGame(data.team);
+  });
+
