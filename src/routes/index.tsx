@@ -153,33 +153,33 @@ function Home() {
   );
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-3 pb-16">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,68fr)_minmax(0,32fr)]">
-        <div className="min-w-0">
-          <section className="py-10 text-center lg:py-14 lg:text-left">
-            <h1 className="display-title text-5xl leading-none sm:text-7xl">
-              Welcome To The <span className="text-primary">League</span>
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base lg:mx-0 mx-auto">
-              Your league. Draft Room Operations. Front Office Analytics. Synchronize your active assets to manage every
-              decision from a single terminal.
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-2 lg:justify-start">
-              <Link
-                className="rounded-md bg-primary px-5 py-2.5 font-display uppercase tracking-wide text-primary-foreground"
-                to="/draft"
-              >
-                Enter War Room
-              </Link>
-              <Link
-                className="rounded-md border border-border px-5 py-2.5 font-display uppercase tracking-wide"
-                to="/trade"
-              >
-                Evaluate A Trade
-              </Link>
-            </div>
-          </section>
+    <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
+      <section className="mt-6 rounded-xl border border-border bg-card p-6 text-center sm:p-10 sm:text-left">
+        <h1 className="display-title text-5xl leading-none sm:text-7xl">
+          Welcome To The <span className="text-primary">League</span>
+        </h1>
+        <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base sm:mx-0">
+          Your league. Draft Room Operations. Front Office Analytics. Synchronize your active assets to manage every
+          decision from a single terminal.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2 sm:justify-start">
+          <Link
+            className="rounded-md bg-primary px-5 py-2.5 font-display uppercase tracking-wide text-primary-foreground"
+            to="/draft"
+          >
+            Enter War Room
+          </Link>
+          <Link
+            className="rounded-md border border-border px-5 py-2.5 font-display uppercase tracking-wide"
+            to="/trade"
+          >
+            Evaluate A Trade
+          </Link>
+        </div>
+      </section>
 
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,68fr)_minmax(0,32fr)]">
+        <div className="min-w-0">
           <section className="grid gap-3 sm:grid-cols-3">
             <HomeCard
               to="/draft"
