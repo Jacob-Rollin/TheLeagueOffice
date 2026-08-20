@@ -32,12 +32,15 @@ export function SleeperSync({
     setError(null);
     const res = await syncM.mutateAsync({ leagueId, username: username.trim() });
     if (!res) return setError("Couldn't load that league.");
-    onApply(res, {
+    const meta = {
       leagueId,
       leagueName: res.league.name || name,
       username: username.trim(),
       syncedAt: new Date().toISOString(),
-    });
+    };
+    onApply(res, meta);
+    // Broadcast to the shared global link so the homepage stays in sync.
+    saveLeagueLink(meta);
     setLeagues([]);
   };
 
