@@ -253,6 +253,8 @@ export function useDraft() {
     }
     setPicks(next);
     setLink(meta);
+    autoSyncKey = `${meta.leagueId}:${meta.syncedAt}`;
+    saveLeagueLink(meta);
   }, []);
 
   const unlinkLeague = useCallback(() => {
