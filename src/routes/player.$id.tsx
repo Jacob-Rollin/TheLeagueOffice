@@ -4,7 +4,8 @@ import { Check, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { useDraft } from "@/hooks/use-draft";
-import { getGameLogs, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
+import { NFL_TEAMS } from "@/lib/nfl-teams";
+import { getGameLogs, getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
 
 
@@ -256,7 +257,7 @@ function PlayerHubPage() {
               </>
             )}
 
-            {tab === "logs" && <GameLogs id={id} />}
+            {tab === "logs" && <GameLogs id={id} pos={player.pos} />}
 
             {tab === "depth" && (
               <Module title={`${player.team} ${player.pos} depth chart`}>
@@ -281,7 +282,7 @@ function PlayerHubPage() {
 
           {/* ---- sidebar widgets ---- */}
           <aside className="space-y-4 self-start rounded-xl border border-zinc-200 bg-zinc-50 p-4 lg:col-span-1">
-            <NextGame />
+            <NextGame team={player.team} />
 
             <Widget title="Injury risk">
 
