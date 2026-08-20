@@ -94,12 +94,7 @@ function TimelineRow({ side, children }: { side: "left" | "right"; children: Rea
   const left = side === "left";
   return (
     <div className="relative pl-12 md:pl-0">
-      <div
-        className={cn(
-          "relative w-full md:w-[calc(50%-2rem)]",
-          left ? "md:mr-auto" : "md:ml-auto",
-        )}
-      >
+      <div className={cn("relative w-full md:w-[calc(50%-2rem)]", left ? "md:mr-auto" : "md:ml-auto")}>
         <span
           aria-hidden
           className={cn(
@@ -141,7 +136,7 @@ function YearNode({ entry }: { entry: HofYear }) {
             }
             back={
               <CardBack
-                title="Record: League Champion"
+                title="League Champion"
                 rows={[
                   ["Team", entry.championship?.fantasy_team_name],
                   ["Manager", entry.championship?.manager_name],
@@ -159,7 +154,7 @@ function YearNode({ entry }: { entry: HofYear }) {
             front={<SmallFront label="Highest Scoring Player (Week)" />}
             back={
               <CardBack
-                title="Record: Highest Scoring Player (Week)"
+                title="Highest Scoring Player (Week)"
                 rows={[
                   ["Player", entry.playerWeek?.player_name],
                   ["Points", pts(entry.playerWeek?.points)],
@@ -178,7 +173,7 @@ function YearNode({ entry }: { entry: HofYear }) {
             front={<SmallFront label="Highest Points For Team (Week)" />}
             back={
               <CardBack
-                title="Record: Highest Points For Team (Week)"
+                title="Highest Points For Team (Week)"
                 rows={[
                   ["Team", entry.teamWeek?.fantasy_team_name],
                   ["Points", pts(entry.teamWeek?.points)],
@@ -196,7 +191,7 @@ function YearNode({ entry }: { entry: HofYear }) {
             front={<SmallFront label="Highest Points For Team (Season)" />}
             back={
               <CardBack
-                title="Record: Highest Points For Team (Season)"
+                title="Highest Points For Team (Season)"
                 rows={[
                   ["Team", entry.teamSeason?.fantasy_team_name],
                   ["Total Points", pts(entry.teamSeason?.points)],
@@ -211,7 +206,6 @@ function YearNode({ entry }: { entry: HofYear }) {
     </section>
   );
 }
-
 
 function FlipCard({ front, back, className }: { front: ReactNode; back: ReactNode; className?: string }) {
   const [flipped, setFlipped] = useState(false);
@@ -261,7 +255,9 @@ function CardBack({
           : "border-zinc-800",
       )}
     >
-      <span className="mb-2 block font-mono text-xs font-semibold uppercase tracking-wider text-amber-500">{title}</span>
+      <span className="mb-2 block font-mono text-xs font-semibold uppercase tracking-wider text-amber-500">
+        {title}
+      </span>
       {rows.map(([label, value]) => (
         <p
           key={label}
