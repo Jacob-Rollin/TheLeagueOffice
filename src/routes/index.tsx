@@ -161,13 +161,14 @@ function Home() {
     <>
       <section className="w-full bg-gradient-to-b from-blue-50/40 via-transparent to-transparent pb-2 md:pb-4">
         <div className="mx-auto max-w-7xl px-4 md:px-8">
-          <div className="grid grid-cols-1 items-start gap-6 pt-6 pb-8 md:grid-cols-3 md:pb-10">
+          <div className="grid grid-cols-1 items-start gap-6 pt-6 pb-2 md:grid-cols-3 md:pb-4">
             <div className="md:col-span-2">
               <h1 className="text-4xl font-black tracking-tight text-zinc-950 drop-shadow-[0_4px_10px_rgba(0,0,0,0.15)] md:text-5xl">
                 Welcome To{" "}
                 <span className="text-blue-600">The League</span>
               </h1>
-              <div className="mt-4 flex flex-wrap items-center gap-2.5">
+              <div className="mb-4 mt-3 h-[1px] w-full max-w-xl bg-gradient-to-r from-zinc-200 via-zinc-200/40 to-transparent" />
+              <div className="flex flex-wrap items-center gap-2.5">
                 <span className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-1.5 font-mono text-xs font-bold text-blue-700 shadow-sm">
                   <span className="h-1.5 w-1.5 rounded-sm bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" aria-hidden="true" />
                   YOUR LEAGUE
@@ -182,7 +183,7 @@ function Home() {
                 </span>
               </div>
             </div>
-            <div className="ml-auto flex w-full max-w-xs flex-col items-start space-y-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-left shadow-sm backdrop-blur-sm md:col-span-1">
+            <div className="ml-auto flex w-full max-w-xs flex-col items-start space-y-2 rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-4 text-left shadow-sm backdrop-blur-sm md:col-span-1 md:w-80">
               <p className="block w-full border-b border-zinc-200/60 pb-1.5 font-mono text-xs font-medium uppercase tracking-wider text-zinc-400">
                 // SYSTEM OPERATIONS TERMINAL v1.0
               </p>
