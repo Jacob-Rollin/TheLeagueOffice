@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowLeftRight, Grid3X3, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getStandings, getUserLeagues } from "@/lib/league.functions";
 import type { LeagueSummary, Standings } from "@/lib/league.server";
@@ -217,16 +218,19 @@ function Home() {
               to="/draft"
               title="War Room"
               desc="Live draft engine, ADP tracking, and advanced player data metrics."
+              icon={<Grid3X3 className="h-6 w-6 text-primary" aria-hidden="true" />}
             />
             <HomeCard
               to="/trade"
               title="Trade Desk"
               desc="Instant asset evaluation, roster impact modeling, and value tracking."
+              icon={<ArrowLeftRight className="h-6 w-6 text-primary" aria-hidden="true" />}
             />
             <HomeCard
               to="/waiver"
               title="The Wire"
               desc="Free agency priority tools, trend monitoring, and waiver budget analysis."
+              icon={<Radar className="h-6 w-6 text-primary" aria-hidden="true" />}
             />
           </section>
 
@@ -325,9 +329,13 @@ function Home() {
   );
 }
 
-function HomeCard({ to, title, desc }: { to: string; title: string; desc: string }) {
+function HomeCard({ to, title, desc, icon }: { to: string; title: string; desc: string; icon: React.ReactNode }) {
   return (
-    <Link to={to} className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary">
+    <Link
+      to={to}
+      className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-zinc-700"
+    >
+      <div className="mb-3 inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">{icon}</div>
       <div className="font-display text-xl uppercase tracking-wide">{title}</div>
       <p className="mt-2 text-xs leading-5 text-muted-foreground">{desc}</p>
     </Link>
