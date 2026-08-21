@@ -263,12 +263,14 @@ export function PlayerList({
               }}
               aria-pressed={custom}
               className={cn(
-                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                "inline-flex shrink-0 items-center gap-0.5 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
                 custom
                   ? "border-accent/50 bg-accent/15 text-accent"
                   : "border-border hover:text-foreground",
               )}
             >
+              <GripVertical className="size-3.5" />
+              <GripVertical className="size-3.5 -ml-2" />
               Custom
             </button>
           </div>
