@@ -46,12 +46,18 @@ export function PlayerDetail({
         <div className="flex items-center gap-3 pr-8">
           <PlayerAvatar id={player.id} pos={player.pos} team={player.team} name={player.name} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <PositionBadge pos={player.pos} />
               <h1 className="display-title truncate text-2xl">{player.name}</h1>
+              {player.injury && (
+                <span className="shrink-0 rounded border border-destructive/40 bg-destructive/15 px-1.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-destructive">
+                  {player.injury}
+                </span>
+              )}
             </div>
             <p className="tabnum text-xs text-muted-foreground">
-              {player.team} · {player.pos} · #{player.rank[scoring]} overall · ADP{" "}
+              Rank #{player.rank[scoring]} · {player.pos} · {player.team}
+              {player.bye ? ` · Bye ${player.bye}` : ""} · ADP{" "}
               {player.adp[scoring] < 900 ? player.adp[scoring].toFixed(1) : "—"} ·{" "}
               {SCORING_LABEL[scoring]}
               {player.age ? ` · Age ${player.age}` : ""}
