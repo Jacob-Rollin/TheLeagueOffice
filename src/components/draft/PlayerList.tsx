@@ -6,7 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { cn } from "@/lib/utils";
-import { POSITIONS, value, type Player, type Pos, type Settings } from "@/lib/draft";
+import {
+  POSITIONS,
+  roundOf,
+  value,
+  type Player,
+  type Pos,
+  type Settings,
+} from "@/lib/draft";
 
 const SEASON = new Date().getFullYear();
 
@@ -24,6 +31,7 @@ export function PlayerList({
   draftedIds,
   watchIds,
   counts,
+  needs,
   settings,
   currentOverall,
   customOrder,
@@ -38,6 +46,7 @@ export function PlayerList({
   draftedIds: Set<string>;
   watchIds: Set<string>;
   counts?: Record<string, number>;
+  needs?: Record<Pos, number>;
   settings: Settings;
   currentOverall: number;
   customOrder: string[];
@@ -52,6 +61,7 @@ export function PlayerList({
   const [pos, setPos] = useState<string>("ALL");
   const [sort, setSort] = useState<Sort>(null);
   const [custom, setCustom] = useState(false);
+  const [suggested, setSuggested] = useState(false);
   const [showDrafted, setShowDrafted] = useState(false);
   const [watchOnly, setWatchOnly] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -79,6 +89,24 @@ export function PlayerList({
       if (q && !`${p.name} ${p.team}`.toLowerCase().includes(q)) return false;
       return true;
     });
+    if (suggested) {
+      const round = roundOf(currentOverall, settings.teams);
+      const endgame = round >= settings.rounds - 1;
+      const scored = list
+        .filter((p) => !draftedIds.has(p.id))
+        .map((p) => {
+          const v = value(p, settings.scoring);
+          const rank = v.rank > 900 ? 400 : v.rank;
+          const fall = v.adp < 900 ? currentOverall - v.adp : 0;
+          const need = needs?.[p.pos] ?? 0;
+          let score = -rank + Math.max(0, fall) * 2.5 + Math.min(need, 3) * 14;
+          // Starting-lineup holes matter most; K/DEF are deferred to the last two rounds.
+          if ((p.pos === "K" || p.pos === "DEF") && !endgame) score -= 1000;
+          return { p, score };
+        })
+        .sort((a, b) => b.score - a.score);
+      return scored.slice(0, Math.max(15, Math.min(24, scored.length))).map((s) => s.p);
+    }
     return list.sort((a, b) => {
       const av = value(a, settings.scoring);
       const bv = value(b, settings.scoring);
@@ -112,6 +140,9 @@ export function PlayerList({
     draftedIds,
     settings,
     orderIndex,
+    suggested,
+    needs,
+    currentOverall,
   ]);
 
   const moveBefore = useCallback(
@@ -198,10 +229,33 @@ export function PlayerList({
               Watchlist
             </button>
             <button
+              onClick={() =>
+                setSuggested((v) => {
+                  if (!v) {
+                    setCustom(false);
+                    setSort(null);
+                  }
+                  return !v;
+                })
+              }
+              aria-pressed={suggested}
+              className={cn(
+                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                suggested
+                  ? "border-primary/60 bg-primary/15 text-primary"
+                  : "border-border hover:text-foreground",
+              )}
+            >
+              {"\u{1F9E0}"} Suggested
+            </button>
+            <button
               onClick={() => {
                 // True two-way toggle: second click closes custom mode.
                 setCustom((v) => {
-                  if (!v) setSort(null);
+                  if (!v) {
+                    setSort(null);
+                    setSuggested(false);
+                  }
                   return !v;
                 });
               }}
