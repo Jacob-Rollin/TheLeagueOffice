@@ -348,40 +348,6 @@ function StatMatrix({
   );
 }
 
-function SummaryCard({
-  title,
-  pts,
-  games,
-}: {
-  title: string;
-  pts: number | null;
-  games: number;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <div className="font-display text-xs uppercase tracking-widest text-muted-foreground">
-        {title}
-      </div>
-      <ul className="mt-2 space-y-1 text-sm">
-        <li className="flex items-baseline gap-2">
-          <span className="text-muted-foreground">·</span>
-          <span className="text-muted-foreground">PTS</span>
-          <span className="tabnum ml-auto font-mono font-semibold">
-            {pts === null ? "—" : pts.toFixed(1)}
-          </span>
-        </li>
-        <li className="flex items-baseline gap-2">
-          <span className="text-muted-foreground">·</span>
-          <span className="text-muted-foreground">AVG</span>
-          <span className="tabnum ml-auto font-mono font-semibold">
-            {pts === null || !games ? "—" : (pts / games).toFixed(1)}
-          </span>
-        </li>
-      </ul>
-    </div>
-  );
-}
-
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="px-3 pt-4">
