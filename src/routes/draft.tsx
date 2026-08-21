@@ -304,12 +304,15 @@ function MyTeamColumn({
   players,
   picks,
   onOpen,
+  showProj,
 }: {
   settings: Settings;
   players: Player[];
   picks: DraftPick[];
   onOpen: (id: string) => void;
+  showProj?: boolean;
 }) {
+
   const slots = fillRoster(players, settings.roster);
   const pickByPlayer = useMemo(
     () =>
