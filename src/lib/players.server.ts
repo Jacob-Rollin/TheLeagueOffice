@@ -337,6 +337,13 @@ const buildPlayers = memo<Built>(6 * HOUR, async () => {
     });
   }
 
+  // Positional rank (RB1, WR12, ...) off the half-PPR ordering.
+  const posSeen: Record<string, number> = {};
+  for (const p of [...players].sort((a, b) => a.rank.half - b.rank.half)) {
+    posSeen[p.pos] = (posSeen[p.pos] ?? 0) + 1;
+    p.posRank = posSeen[p.pos]!;
+  }
+
   const all = [...players].sort((a, b) => a.rank.half - b.rank.half);
 
   return {
