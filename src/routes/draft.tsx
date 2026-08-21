@@ -195,37 +195,41 @@ function DraftRoom() {
       <div
         className={cn(
           "flex-1 gap-3 px-0 py-3 lg:px-3",
-          tab === "team" && "md:grid md:grid-cols-[280px_minmax(0,1fr)] md:items-start",
-          tab === "team" && "lg:grid-cols-[280px_minmax(0,1fr)_240px]",
+          tab === "team" && "md:grid md:grid-cols-[340px_minmax(0,1fr)] md:items-start",
           tab === "players" && "md:grid md:grid-cols-[280px_minmax(0,1fr)] md:items-start",
         )}
       >
         {tab !== "board" && (
           <aside className="hidden md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)] md:block md:min-w-[280px] md:shrink-0 md:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
-            {tab === "team" ? (
-              <SideCard title="BYE WEEK MATRIX">
+            <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
+              <MyTeamColumn
+                settings={settings}
+                players={myPlayers}
+                picks={picks}
+                onOpen={setOpenId}
+              />
+            </SideCard>
+          </aside>
+        )}
+
+        <div className="flex min-w-0 flex-col gap-3">
+          {tab === "team" && (
+            <>
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="mb-2 font-display text-sm uppercase tracking-widest">
+                  Bye Week Matrix
+                </div>
                 {myPlayers.length ? (
-                  <ByeMatrix players={myPlayers} layout="column" />
+                  <ByeMatrix players={myPlayers} />
                 ) : (
                   <p className="p-3 text-center text-xs text-muted-foreground">
                     Draft players to see bye weeks.
                   </p>
                 )}
-              </SideCard>
-            ) : (
-              <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
-                <MyTeamColumn
-                  settings={settings}
-                  players={myPlayers}
-                  picks={picks}
-                  onOpen={setOpenId}
-                />
-              </SideCard>
-            )}
-          </aside>
-        )}
-
-        <div className="flex min-w-0 flex-col">
+              </div>
+              <RosterTelemetry players={myPlayers} needs={myNeeds} settings={settings} />
+            </>
+          )}
           {tab === "players" && (
             <PlayerList
               players={data.players}
