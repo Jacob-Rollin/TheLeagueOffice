@@ -21,6 +21,7 @@ export function PlayerList({
   draftedIds,
   watchIds,
   needs,
+  counts,
   settings,
   currentOverall,
   customOrder,
@@ -35,6 +36,7 @@ export function PlayerList({
   draftedIds: Set<string>;
   watchIds: Set<string>;
   needs: Record<Pos, number>;
+  counts?: Record<string, number>;
   settings: Settings;
   currentOverall: number;
   customOrder: string[];
@@ -176,27 +178,29 @@ export function PlayerList({
                 )}
               >
                 {p}
-                {p !== "ALL" && (needs[p as Pos] ?? 0) > 0 ? (
-                  <span className="ml-1 text-[10px] opacity-70">{needs[p as Pos]}</span>
+                {p !== "ALL" && (settings.roster[p as Pos] ?? 0) > 0 ? (
+                  <span className="tabnum ml-1 text-[10px] opacity-70">
+                    {Math.min(counts?.[p] ?? 0, settings.roster[p as Pos])}/
+                    {settings.roster[p as Pos]}
+                  </span>
                 ) : null}
               </button>
             ))}
+          </div>
 
+          <div className="ml-auto flex flex-wrap justify-end gap-1.5 text-xs text-muted-foreground">
             <button
               onClick={() => setWatchOnly((v) => !v)}
               aria-pressed={watchOnly}
               className={cn(
-                "shrink-0 rounded-full border px-3 py-1 font-mono text-xs font-semibold uppercase tracking-wide transition-colors",
+                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
                 watchOnly
-                  ? "border-amber-400 bg-amber-400/15 text-amber-400"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+                  ? "border-amber-400/60 bg-amber-400/15 text-amber-400"
+                  : "border-border hover:text-foreground",
               )}
             >
-              {watchOnly ? "[ ★ Watchlist Active ]" : "[ ✩ Watchlist ]"}
+              Watchlist
             </button>
-          </div>
-
-          <div className="ml-auto flex flex-wrap justify-end gap-1.5 text-xs text-muted-foreground">
             <button
               onClick={() => toggleSort("custom")}
               className={cn(
@@ -220,6 +224,15 @@ export function PlayerList({
               className="size-3.5 accent-[var(--primary)]"
             />
             Show drafted
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 select-none">
+            <input
+              type="checkbox"
+              checked={watchOnly}
+              onChange={(e) => setWatchOnly(e.target.checked)}
+              className="size-3.5 accent-[var(--primary)]"
+            />
+            Watchlist only
           </label>
         </div>
 
