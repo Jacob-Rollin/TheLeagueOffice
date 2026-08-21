@@ -18,12 +18,14 @@ export function PlayerAvatar({
   team,
   name,
   className,
+  logoClassName,
 }: {
   id: string;
   pos: Pos;
   team: string;
   name: string;
   className?: string;
+  logoClassName?: string;
 }) {
   const logo = teamLogo(team);
   return (
@@ -44,7 +46,10 @@ export function PlayerAvatar({
           src={logo}
           alt={`${team} logo`}
           loading="lazy"
-          className="absolute -bottom-1 -right-1 size-6 rounded-full border border-border bg-background p-0.5"
+          className={cn(
+            "absolute -bottom-1 -right-1 size-6 rounded-full border border-border bg-background p-0.5",
+            logoClassName,
+          )}
           onError={(e) => {
             e.currentTarget.style.display = "none";
           }}

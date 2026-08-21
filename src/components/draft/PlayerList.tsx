@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, GripVertical, Search, Star, Undo2 } from "lucide-react";
+import { GripVertical, Search, Star, Undo2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PositionBadge } from "./PositionBadge";
+import { PlayerAvatar } from "./PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { POSITIONS, value, type Player, type Pos, type Settings } from "@/lib/draft";
+
+const SEASON = new Date().getFullYear();
 
 type SortKey = "adp" | "proj" | "prev" | "needs" | "custom";
 
