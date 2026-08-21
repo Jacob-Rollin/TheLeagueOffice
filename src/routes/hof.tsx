@@ -85,13 +85,11 @@ function HofPage() {
             ))}
           </div>
 
-          {/* Timeline Anchor Node */}
-          <div className="relative z-10 mx-auto mt-16 flex justify-start pl-1.5 md:justify-center md:pl-0">
-            <div className="rounded-full border border-amber-600/40 bg-zinc-900 px-4 py-1.5 text-center shadow-[0_0_15px_rgba(245,158,11,0.15)]">
-              <p className="font-mono text-xs font-bold uppercase tracking-widest text-amber-500/90">
-                The League Established 2015
-              </p>
-            </div>
+          {/* Centered Timeline Anchor Node matching the Year badges */}
+          <div className="relative z-10 mx-auto mt-16 flex justify-center">
+            <span className="block w-fit rounded-md border-2 border-amber-500 bg-zinc-900 px-4 py-1.5 font-mono text-sm font-bold uppercase tracking-widest text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+              The League Established 2015
+            </span>
           </div>
         </div>
       )}
