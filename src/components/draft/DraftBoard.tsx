@@ -90,7 +90,9 @@ function RoundRow({
                 </div>
               </div>
             ) : (
-              <span className="tabnum text-[10px] text-muted-foreground">#{overall}</span>
+              <span className="tabnum text-[10px] text-muted-foreground">
+                {round}.{(((overall - 1) % settings.teams) + 1).toString().padStart(2, "0")}
+              </span>
             )}
           </div>
         );

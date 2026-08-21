@@ -4,17 +4,17 @@ import { Undo2, X } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ByeMatrix } from "@/components/draft/ByeMatrix";
 import { DraftBoard } from "@/components/draft/DraftBoard";
-import { DraftSuggestions } from "@/components/draft/DraftSuggestions";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerList } from "@/components/draft/PlayerList";
 import { PlayerModal } from "@/components/draft/PlayerModal";
-import { RosterPanel } from "@/components/draft/RosterPanel";
 import { SettingsSheet } from "@/components/draft/SettingsSheet";
 import { useDraft } from "@/hooks/use-draft";
 import {
   fillRoster,
   nextPicksFor,
   positionNeeds,
+  POSITIONS,
+  byeMatrix,
   roundOf,
   SCORING_LABEL,
   teamName,
@@ -159,7 +159,9 @@ function DraftRoom() {
             value={
               complete
                 ? `${picks.length}`
-                : `${currentOverall} · R${roundOf(currentOverall, settings.teams)}`
+                : `PICK ${roundOf(currentOverall, settings.teams)}.${(((currentOverall - 1) % settings.teams) + 1)
+                    .toString()
+                    .padStart(2, "0")}`
             }
           />
           <Stat
@@ -193,37 +195,41 @@ function DraftRoom() {
       <div
         className={cn(
           "flex-1 gap-3 px-0 py-3 lg:px-3",
-          tab === "team" && "md:grid md:grid-cols-[280px_minmax(0,1fr)] md:items-start",
-          tab === "team" && "lg:grid-cols-[280px_minmax(0,1fr)_240px]",
+          tab === "team" && "md:grid md:grid-cols-[340px_minmax(0,1fr)] md:items-start",
           tab === "players" && "md:grid md:grid-cols-[280px_minmax(0,1fr)] md:items-start",
         )}
       >
         {tab !== "board" && (
           <aside className="hidden md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)] md:block md:min-w-[280px] md:shrink-0 md:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
-            {tab === "team" ? (
-              <SideCard title="BYE WEEK MATRIX">
+            <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
+              <MyTeamColumn
+                settings={settings}
+                players={myPlayers}
+                picks={picks}
+                onOpen={setOpenId}
+              />
+            </SideCard>
+          </aside>
+        )}
+
+        <div className="flex min-w-0 flex-col gap-3">
+          {tab === "team" && (
+            <>
+              <div className="rounded-xl border border-border bg-card p-3">
+                <div className="mb-2 font-display text-sm uppercase tracking-widest">
+                  Bye Week Matrix
+                </div>
                 {myPlayers.length ? (
-                  <ByeMatrix players={myPlayers} layout="column" />
+                  <ByeMatrix players={myPlayers} />
                 ) : (
                   <p className="p-3 text-center text-xs text-muted-foreground">
                     Draft players to see bye weeks.
                   </p>
                 )}
-              </SideCard>
-            ) : (
-              <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
-                <MyTeamColumn
-                  settings={settings}
-                  players={myPlayers}
-                  picks={picks}
-                  onOpen={setOpenId}
-                />
-              </SideCard>
-            )}
-          </aside>
-        )}
-
-        <div className="flex min-w-0 flex-col">
+              </div>
+              <RosterTelemetry players={myPlayers} needs={myNeeds} settings={settings} />
+            </>
+          )}
           {tab === "players" && (
             <PlayerList
               players={data.players}
@@ -242,26 +248,8 @@ function DraftRoom() {
               onOpenPlayer={setOpenId}
             />
           )}{" "}
-          {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} />}{" "}
-          {tab === "team" && (
-            <RosterPanel settings={settings} picks={picks} byId={byId} team={settings.myTeam} />
-          )}
+          {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} />}
         </div>
-        {tab === "team" && (
-          <aside className="hidden lg:sticky lg:top-[calc(var(--wr-header-h,0px)+0.75rem)] lg:block lg:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
-            <SideCard title="Suggested Picks" subtitle="Best value for your roster">
-              <DraftSuggestions
-                players={data.players}
-                draftedIds={draft.draftedIds}
-                needs={myNeeds}
-                settings={settings}
-                currentOverall={currentOverall}
-                onDraft={draft.draftPlayer}
-                onOpen={setOpenId}
-              />
-            </SideCard>
-          </aside>
-        )}
       </div>
       <footer className="border-t border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
         ADP, projections and prior-season stats are sourced from Sleeper's pipeline API. Player
@@ -378,6 +366,77 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
       >
         {value}
       </div>
+    </div>
+  );
+}
+
+function RosterTelemetry({
+  players,
+  needs,
+  settings,
+}: {
+  players: Player[];
+  needs: Record<string, number>;
+  settings: Settings;
+}) {
+  const alerts: { level: "warn" | "info" | "ok"; text: string }[] = [];
+  const counts: Record<string, number> = {};
+  for (const p of players) counts[p.pos] = (counts[p.pos] ?? 0) + 1;
+
+  for (const pos of POSITIONS) {
+    const required = settings.roster[pos];
+    const have = counts[pos] ?? 0;
+    if (have < required) {
+      alerts.push({
+        level: "warn",
+        text: `STARTER GAP :: ${pos} ${have}/${required} — ${required - have} lineup slot${required - have > 1 ? "s" : ""} unfilled`,
+      });
+    } else if ((needs[pos] ?? 0) > 0) {
+      alerts.push({ level: "info", text: `FLEX DEMAND :: ${pos} depth can still absorb a flex slot` });
+    }
+  }
+
+  const { weeks, unknown } = byeMatrix(players);
+  for (const w of weeks) {
+    if (w.conflict) {
+      alerts.push({
+        level: "warn",
+        text: `BYE CONFLICT :: WK ${w.week} — ${w.players.length} starters idle (${w.players.map((p) => p.pos).join(", ")})`,
+      });
+    }
+  }
+  if (unknown.length) {
+    alerts.push({ level: "info", text: `BYE UNKNOWN :: ${unknown.map((p) => p.name).join(", ")}` });
+  }
+  if (!players.length) {
+    alerts.push({ level: "info", text: "AWAITING DRAFT INPUT :: no players on roster yet" });
+  } else if (!alerts.length) {
+    alerts.push({ level: "ok", text: "ALL CLEAR :: starting lineup filled, no bye clusters detected" });
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card">
+      <div className="border-b border-border px-3 py-2 font-display text-sm uppercase tracking-widest">
+        // Roster Telemetry Report
+      </div>
+      <ul className="space-y-1 p-3 font-mono text-[11px]">
+        {alerts.map((a, i) => (
+          <li
+            key={i}
+            className={cn(
+              "flex gap-2 rounded border px-2 py-1.5",
+              a.level === "warn"
+                ? "border-destructive/50 bg-destructive/10 text-destructive"
+                : a.level === "ok"
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-surface/40 text-muted-foreground",
+            )}
+          >
+            <span className="shrink-0">{a.level === "warn" ? "!" : a.level === "ok" ? "+" : ">"}</span>
+            <span className="min-w-0">{a.text}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
