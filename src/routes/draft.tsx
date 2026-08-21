@@ -500,7 +500,7 @@ function RosterTelemetry({
                   <div
                     className={cn(
                       "h-full rounded-full transition-all",
-                      t.have < t.required ? "bg-destructive" : "bg-primary",
+                      t.startersFilled < t.required ? "bg-destructive" : "bg-primary",
                     )}
                     style={{ width: `${t.pct}%` }}
                   />
