@@ -220,12 +220,13 @@ export function PlayerList({
               onClick={() => setWatchOnly((v) => !v)}
               aria-pressed={watchOnly}
               className={cn(
-                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                "inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
                 watchOnly
                   ? "border-amber-400/60 bg-amber-400/15 text-amber-400"
                   : "border-border hover:text-foreground",
               )}
             >
+              <Star className="size-3.5" />
               Watchlist
             </button>
             <button
