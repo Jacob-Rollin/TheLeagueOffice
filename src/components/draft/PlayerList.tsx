@@ -554,6 +554,7 @@ function StatGroupHeader({
   avgKey,
   sort,
   onSort,
+  flushRight,
 }: {
   label: string;
   totalLabel?: string;
@@ -562,6 +563,7 @@ function StatGroupHeader({
   avgKey: SortKey;
   sort: Sort;
   onSort: (key: SortKey) => void;
+  flushRight?: boolean;
 }) {
   return (
     <div className={cn("flex-1", DIVIDER)}>
@@ -579,7 +581,8 @@ function StatGroupHeader({
         <button
           onClick={() => onSort(avgKey)}
           className={cn(
-            "pr-3 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            "text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            flushRight ? "pr-0" : "pr-3",
             sort === avgKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
