@@ -248,26 +248,8 @@ function DraftRoom() {
               onOpenPlayer={setOpenId}
             />
           )}{" "}
-          {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} />}{" "}
-          {tab === "team" && (
-            <RosterPanel settings={settings} picks={picks} byId={byId} team={settings.myTeam} />
-          )}
+          {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} />}
         </div>
-        {tab === "team" && (
-          <aside className="hidden lg:sticky lg:top-[calc(var(--wr-header-h,0px)+0.75rem)] lg:block lg:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
-            <SideCard title="Suggested Picks" subtitle="Best value for your roster">
-              <DraftSuggestions
-                players={data.players}
-                draftedIds={draft.draftedIds}
-                needs={myNeeds}
-                settings={settings}
-                currentOverall={currentOverall}
-                onDraft={draft.draftPlayer}
-                onOpen={setOpenId}
-              />
-            </SideCard>
-          </aside>
-        )}
       </div>
       <footer className="border-t border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
         ADP, projections and prior-season stats are sourced from Sleeper's pipeline API. Player
