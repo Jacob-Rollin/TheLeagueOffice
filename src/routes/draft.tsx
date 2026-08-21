@@ -4,17 +4,17 @@ import { Undo2, X } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ByeMatrix } from "@/components/draft/ByeMatrix";
 import { DraftBoard } from "@/components/draft/DraftBoard";
-import { DraftSuggestions } from "@/components/draft/DraftSuggestions";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerList } from "@/components/draft/PlayerList";
 import { PlayerModal } from "@/components/draft/PlayerModal";
-import { RosterPanel } from "@/components/draft/RosterPanel";
 import { SettingsSheet } from "@/components/draft/SettingsSheet";
 import { useDraft } from "@/hooks/use-draft";
 import {
   fillRoster,
   nextPicksFor,
   positionNeeds,
+  POSITIONS,
+  byeMatrix,
   roundOf,
   SCORING_LABEL,
   teamName,
@@ -366,6 +366,77 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
       >
         {value}
       </div>
+    </div>
+  );
+}
+
+function RosterTelemetry({
+  players,
+  needs,
+  settings,
+}: {
+  players: Player[];
+  needs: Record<string, number>;
+  settings: Settings;
+}) {
+  const alerts: { level: "warn" | "info" | "ok"; text: string }[] = [];
+  const counts: Record<string, number> = {};
+  for (const p of players) counts[p.pos] = (counts[p.pos] ?? 0) + 1;
+
+  for (const pos of POSITIONS) {
+    const required = settings.roster[pos];
+    const have = counts[pos] ?? 0;
+    if (have < required) {
+      alerts.push({
+        level: "warn",
+        text: `STARTER GAP :: ${pos} ${have}/${required} — ${required - have} lineup slot${required - have > 1 ? "s" : ""} unfilled`,
+      });
+    } else if ((needs[pos] ?? 0) > 0) {
+      alerts.push({ level: "info", text: `FLEX DEMAND :: ${pos} depth can still absorb a flex slot` });
+    }
+  }
+
+  const { weeks, unknown } = byeMatrix(players);
+  for (const w of weeks) {
+    if (w.conflict) {
+      alerts.push({
+        level: "warn",
+        text: `BYE CONFLICT :: WK ${w.week} — ${w.players.length} starters idle (${w.players.map((p) => p.pos).join(", ")})`,
+      });
+    }
+  }
+  if (unknown.length) {
+    alerts.push({ level: "info", text: `BYE UNKNOWN :: ${unknown.map((p) => p.name).join(", ")}` });
+  }
+  if (!players.length) {
+    alerts.push({ level: "info", text: "AWAITING DRAFT INPUT :: no players on roster yet" });
+  } else if (!alerts.length) {
+    alerts.push({ level: "ok", text: "ALL CLEAR :: starting lineup filled, no bye clusters detected" });
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card">
+      <div className="border-b border-border px-3 py-2 font-display text-sm uppercase tracking-widest">
+        // Roster Telemetry Report
+      </div>
+      <ul className="space-y-1 p-3 font-mono text-[11px]">
+        {alerts.map((a, i) => (
+          <li
+            key={i}
+            className={cn(
+              "flex gap-2 rounded border px-2 py-1.5",
+              a.level === "warn"
+                ? "border-destructive/50 bg-destructive/10 text-destructive"
+                : a.level === "ok"
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-surface/40 text-muted-foreground",
+            )}
+          >
+            <span className="shrink-0">{a.level === "warn" ? "!" : a.level === "ok" ? "+" : ">"}</span>
+            <span className="min-w-0">{a.text}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
