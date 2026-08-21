@@ -197,7 +197,7 @@ function DraftRoom() {
               </SideCard>
             ) : (
               <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
-                <MyTeamColumn settings={settings} players={myPlayers} onOpen={setOpenId} />
+                <MyTeamColumn settings={settings} players={myPlayers} picks={picks} onOpen={setOpenId} />
               </SideCard>
             )}
           </aside>
