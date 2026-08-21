@@ -80,7 +80,7 @@ function classify(headline: string, description: string, aboutPlayer: boolean): 
   };
 }
 
-export function PlayerNews({ id }: { id: string }) {
+export function PlayerNews({ id, pos }: { id: string; pos?: string }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["player-news", id],
     queryFn: () => getPlayerNews({ data: { id } }),
@@ -89,6 +89,7 @@ export function PlayerNews({ id }: { id: string }) {
 
   return (
     <div className="space-y-4 px-3 pt-4">
+      {pos !== "DEF" && (
       <div
         className={cn(
           "rounded-lg border p-3",
@@ -112,6 +113,7 @@ export function PlayerNews({ id }: { id: string }) {
           <p className="mt-1 text-xs text-muted-foreground">{data.injury.note}</p>
         )}
       </div>
+      )}
 
       {isLoading && (
         <p className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">

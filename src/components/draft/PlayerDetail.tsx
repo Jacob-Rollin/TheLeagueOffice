@@ -104,7 +104,7 @@ export function PlayerDetail({
         </nav>
       </header>
 
-      {tab === "news" && <PlayerNews id={player.id} />}
+      {tab === "news" && <PlayerNews id={player.id} pos={player.pos} />}
 
       {tab === "overview" && (
         <>
@@ -157,6 +157,7 @@ export function PlayerDetail({
           )}
 
 
+          {player.pos !== "DEF" && (
           <Section title={`Strength of schedule vs ${player.pos}`}>
             {!sos ? (
               <Empty>Schedule data unavailable for this player.</Empty>
@@ -186,7 +187,9 @@ export function PlayerDetail({
               </div>
             )}
           </Section>
+          )}
 
+          {player.pos !== "DEF" && (
           <Section title={`${player.team} ${player.pos} depth chart`}>
             {depthChart.length === 0 ? (
               <Empty>No teammates found.</Empty>
@@ -228,6 +231,7 @@ export function PlayerDetail({
               </ul>
             )}
           </Section>
+          )}
 
           <div className="px-3 pt-4">
             <Link to="/player/$id" params={{ id: player.id }} className="block">

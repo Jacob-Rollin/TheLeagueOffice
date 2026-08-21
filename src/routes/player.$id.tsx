@@ -3,6 +3,8 @@ import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import { Check, Plus } from "lucide-react";
 import { useState } from "react";
 
+import { PlayerNews } from "@/components/draft/PlayerNews";
+
 import { useDraft } from "@/hooks/use-draft";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { getGameLogs, getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
