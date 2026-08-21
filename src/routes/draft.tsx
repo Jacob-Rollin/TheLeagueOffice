@@ -287,13 +287,13 @@ function MyTeamColumn({
 }: {
   settings: Settings;
   players: Player[];
-  picks: Pick[];
+  picks: DraftPick[];
   onOpen: (id: string) => void;
 }) {
   const slots = fillRoster(players, settings.roster);
   const pickByPlayer = useMemo(
     () =>
-      picks.reduce<Record<string, Pick>>((acc, p) => {
+      picks.reduce<Record<string, DraftPick>>((acc, p) => {
         acc[p.playerId] = p;
         return acc;
       }, {}),
