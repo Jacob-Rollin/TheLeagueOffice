@@ -193,13 +193,13 @@ function DraftRoom() {
       <div
         className={cn(
           "flex-1 gap-3 px-0 py-3 lg:px-3",
-          tab === "team" && "md:grid md:grid-cols-[230px_minmax(0,1fr)] md:items-start",
-          tab === "team" && "lg:grid-cols-[230px_minmax(0,1fr)_240px]",
-          tab === "players" && "md:grid md:grid-cols-[230px_minmax(0,1fr)] md:items-start",
+          tab === "team" && "md:grid md:grid-cols-[280px_minmax(0,1fr)] md:items-start",
+          tab === "team" && "lg:grid-cols-[280px_minmax(0,1fr)_240px]",
+          tab === "players" && "md:grid md:grid-cols-[280px_minmax(0,1fr)] md:items-start",
         )}
       >
         {tab !== "board" && (
-          <aside className="hidden md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)] md:block md:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
+          <aside className="hidden md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)] md:block md:min-w-[280px] md:shrink-0 md:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
             {tab === "team" ? (
               <SideCard title="BYE WEEK MATRIX">
                 {myPlayers.length ? (
@@ -283,7 +283,7 @@ function SideCard({
     <div className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="font-display text-sm uppercase tracking-widest">{title}</div>
-        {subtitle && <div className="truncate text-[11px] text-muted-foreground">{subtitle}</div>}
+        {subtitle && <div className="text-[11px] text-muted-foreground">{subtitle}</div>}
       </div>
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-2">{children}</div>
     </div>
@@ -330,8 +330,8 @@ function MyTeamColumn({
                 logoClassName="size-3.5"
               />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-semibold">{s.player.name}</div>
-                <div className="flex items-center gap-1 truncate text-[10px] text-muted-foreground">
+                <div className="text-xs font-semibold">{s.player.name}</div>
+                <div className="flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
                   <span
                     className="inline-block size-1.5 rounded-full"
                     style={{ backgroundColor: `var(--pos-${s.player.pos.toLowerCase()})` }}
