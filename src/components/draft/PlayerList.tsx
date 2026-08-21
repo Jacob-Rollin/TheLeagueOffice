@@ -17,7 +17,7 @@ type Sort = SortKey | null;
 /** Continuous vertical rule that separates stat column groups. */
 const DIVIDER = "border-l border-border";
 /** Muted wash applied down an actively sorted column. */
-const ACTIVE_COL = "bg-muted/20";
+const ACTIVE_COL = "bg-muted/60";
 
 export function PlayerList({
   players,
