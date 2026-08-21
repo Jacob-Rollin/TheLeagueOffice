@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { GripVertical, Search, Star, Undo2 } from "lucide-react";
+import { GripVertical, Search, Star, Undo2, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -220,12 +220,13 @@ export function PlayerList({
               onClick={() => setWatchOnly((v) => !v)}
               aria-pressed={watchOnly}
               className={cn(
-                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                "inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
                 watchOnly
                   ? "border-amber-400/60 bg-amber-400/15 text-amber-400"
                   : "border-border hover:text-foreground",
               )}
             >
+              <Star className="size-3.5" />
               Watchlist
             </button>
             <button
@@ -240,13 +241,14 @@ export function PlayerList({
               }
               aria-pressed={suggested}
               className={cn(
-                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                "inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
                 suggested
                   ? "border-primary/60 bg-primary/15 text-primary"
                   : "border-border hover:text-foreground",
               )}
             >
-              {"\u{1F9E0}"} Suggested
+              <Zap className="size-3.5" />
+              Suggested
             </button>
             <button
               onClick={() => {
@@ -261,12 +263,14 @@ export function PlayerList({
               }}
               aria-pressed={custom}
               className={cn(
-                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                "inline-flex shrink-0 items-center gap-0.5 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
                 custom
                   ? "border-accent/50 bg-accent/15 text-accent"
                   : "border-border hover:text-foreground",
               )}
             >
+              <GripVertical className="size-3.5" />
+              <GripVertical className="size-3.5 -ml-2" />
               Custom
             </button>
           </div>
@@ -524,11 +528,11 @@ function StatGroup({
   return (
     <div className={cn("grid flex-[2] grid-cols-2 text-xs font-semibold", DIVIDER)}>
       <div
-        className={cn("tabnum flex items-center justify-end pr-2 pl-2", totalActive && ACTIVE_COL)}
+        className={cn("tabnum flex items-center justify-start pl-3", totalActive && ACTIVE_COL)}
       >
         {total}
       </div>
-      <div className={cn("tabnum flex items-center justify-end pr-2", avgActive && ACTIVE_COL)}>
+      <div className={cn("tabnum flex items-center justify-end pr-3", avgActive && ACTIVE_COL)}>
         {avg}
       </div>
     </div>
@@ -559,7 +563,7 @@ function StatGroupHeader({
         <button
           onClick={() => onSort(totalKey)}
           className={cn(
-            "px-2 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            "pl-2 text-left uppercase tracking-widest transition-colors hover:text-foreground",
             sort === totalKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
