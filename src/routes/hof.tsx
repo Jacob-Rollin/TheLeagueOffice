@@ -84,13 +84,6 @@ function HofPage() {
               <YearNode key={entry.year} entry={entry} />
             ))}
           </div>
-
-          {/* Centered Timeline Anchor Node matching the Year badges */}
-          <div className="relative z-10 mx-auto mt-16 flex justify-center">
-            <span className="block w-fit rounded-md border-2 border-amber-500 bg-zinc-900 px-4 py-1.5 font-mono text-sm font-bold uppercase tracking-widest text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
-              The League Established 2015
-            </span>
-          </div>
         </div>
       )}
     </main>
