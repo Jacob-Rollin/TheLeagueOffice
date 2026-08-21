@@ -348,41 +348,49 @@ export function ScoreTicker() {
           ref={scrollerRef}
           className="no-scrollbar flex items-stretch gap-0 overflow-x-auto scroll-smooth px-8"
         >
-          {games.map((g) => (
-            <a
-              key={g.id}
-              href={g.link}
-              target="_blank"
-              rel="noreferrer"
-              className="flex min-w-[178px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
-            >
-              <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-primary-foreground/70">
-                {g.state === "in" && (
-                  <span className="size-1.5 rounded-full bg-accent" aria-hidden />
-                )}
-                {g.state === "in"
-                  ? `${g.period} ${g.clock}`.trim()
-                  : g.state === "pre"
-                    ? g.kickoff || g.detail
-                    : g.detail}
-              </div>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <TeamRow team={g.away} live={g.state === "in"} pre={g.state === "pre"} />
-                  <TeamRow team={g.home} live={g.state === "in"} pre={g.state === "pre"} />
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-0.5 text-[9px] uppercase tracking-wider text-primary-foreground/60">
-                  {g.network && g.state !== "post" && <span>{g.network}</span>}
-                  {g.state === "in" && g.downDistance && (
-                    <span className="text-primary-foreground/75">{g.downDistance}</span>
-                  )}
-                  {g.state === "in" && g.ballOn && (
-                    <span className="text-primary-foreground/75">{g.ballOn}</span>
+          {games.map((g) => {
+            const live = g.state === "in";
+            const pre = g.state === "pre";
+            return (
+              <a
+                key={g.id}
+                href={g.link}
+                target="_blank"
+                rel="noreferrer"
+                className="flex min-w-[196px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
+              >
+                <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-primary-foreground/70">
+                  <span className="flex min-w-0 items-center gap-1 truncate">
+                    {live && (
+                      <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />
+                    )}
+                    {live
+                      ? `${g.period} ${g.clock}`.trim()
+                      : pre
+                        ? g.kickoff || g.detail
+                        : g.detail}
+                  </span>
+                  {g.network && g.state !== "post" && (
+                    <span className="shrink-0 text-primary-foreground/60">{g.network}</span>
                   )}
                 </div>
-              </div>
-            </a>
-          ))}
+
+                <TeamRow
+                  team={g.away}
+                  live={live}
+                  pre={pre}
+                  extra={live ? g.downDistance : ""}
+                />
+                <TeamRow
+                  team={g.home}
+                  live={live}
+                  pre={pre}
+                  extra={live ? g.ballOn : ""}
+                />
+              </a>
+            );
+          })}
+
         </div>
         <ScrollButton side="right" onClick={() => nudge(1)} />
       </div>
@@ -407,7 +415,17 @@ function ScrollButton({ side, onClick }: { side: "left" | "right"; onClick: () =
   );
 }
 
-function TeamRow({ team, live, pre }: { team: TickerTeam; live: boolean; pre: boolean }) {
+function TeamRow({
+  team,
+  live,
+  pre,
+  extra,
+}: {
+  team: TickerTeam;
+  live: boolean;
+  pre: boolean;
+  extra?: string;
+}) {
   return (
     <div className="flex items-center gap-1.5">
       {team.logo && (
@@ -421,20 +439,31 @@ function TeamRow({ team, live, pre }: { team: TickerTeam; live: boolean; pre: bo
           }}
         />
       )}
-      <span className="font-display text-xs uppercase tracking-wide">{team.abbr}</span>
+      <span className="min-w-0 flex-1 truncate font-display text-xs uppercase tracking-wide">
+        {team.abbr}
+      </span>
       {live && team.possession && (
         <span
-          className="size-1.5 rounded-full bg-accent"
+          className="size-1.5 shrink-0 rounded-full bg-accent"
           title="Has possession"
           aria-label="Has possession"
         />
       )}
-      {!pre && <span className="tabnum ml-1 text-xs font-semibold">{team.score}</span>}
-      {pre && team.record && (
-        <span className="tabnum ml-auto pl-2 text-[10px] text-primary-foreground/60">
+      {live && (
+        <span className="w-14 shrink-0 truncate text-right text-[9px] uppercase tracking-wider text-primary-foreground/70">
+          {extra || ""}
+        </span>
+      )}
+      {!pre ? (
+        <span className="tabnum w-7 shrink-0 text-right text-xs font-semibold">
+          {team.score}
+        </span>
+      ) : (
+        <span className="tabnum w-12 shrink-0 text-right text-[10px] text-primary-foreground/60">
           {team.record}
         </span>
       )}
     </div>
   );
 }
+
