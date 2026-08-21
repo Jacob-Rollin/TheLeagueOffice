@@ -495,6 +495,7 @@ export function PlayerList({
                     avg={v.prev !== null && v.prev > 0 ? (v.prev / 18).toFixed(1) : "—"}
                     totalActive={sort === "prevPts"}
                     avgActive={sort === "prevAvg"}
+                    flushRight
                   />
                 </div>
               </li>
