@@ -19,6 +19,13 @@ export const getPlayerNews = createServerFn({ method: "GET" })
     return await loadPlayerNews(data.id);
   });
 
+export const getTeamNews = createServerFn({ method: "GET" })
+  .inputValidator((input: { team: string }) => ({ team: String(input.team).slice(0, 4) }))
+  .handler(async ({ data }) => {
+    const { loadTeamNews } = await import("./players.server");
+    return await loadTeamNews(data.team);
+  });
+
 export const getPlayerBio = createServerFn({ method: "GET" })
   .inputValidator((input: { id: string }) => ({ id: String(input.id).slice(0, 32) }))
   .handler(async ({ data }) => {

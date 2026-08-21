@@ -774,6 +774,24 @@ export async function loadPlayerNews(id: string): Promise<PlayerNews | null> {
   };
 }
 
+export async function loadTeamNews(team: string): Promise<NewsItem[]> {
+  const abbr = String(team).toLowerCase();
+  const [teamArticles, league] = await Promise.all([
+    espnNews(`&team=${abbr}`).catch(() => [] as EspnArticle[]),
+    espnNews("").catch(() => [] as EspnArticle[]),
+  ]);
+  const seen = new Set<string>();
+  const items: NewsItem[] = [];
+  for (const a of [...teamArticles, ...league]) {
+    const item = toItem(a, false);
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    items.push(item);
+  }
+  items.sort((a, b) => (b.published ?? "").localeCompare(a.published ?? ""));
+  return items.slice(0, 12);
+}
+
 /* ---------- player bio + game logs (ESPN-style profile page) ---------- */
 
 export type PlayerBio = {

@@ -119,12 +119,14 @@ export function PlayerDetail({
             />
           </Section>
 
-          <div className="mt-4 px-3">
-            <h2 className="font-display text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Analytics
-            </h2>
-            <div className="mt-1 h-px bg-border" />
-          </div>
+          {player.pos !== "DEF" && (
+            <div className="mt-4 px-3">
+              <h2 className="font-display text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Analytics
+              </h2>
+              <div className="mt-1 h-px bg-border" />
+            </div>
+          )}
 
           {player.pos !== "DEF" && (
           <Section title="Injury risk">
