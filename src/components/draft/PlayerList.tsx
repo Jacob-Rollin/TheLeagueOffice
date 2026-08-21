@@ -460,7 +460,7 @@ export function PlayerList({
                     onClick={() => onToggleWatch(p.id)}
                     aria-label={watched ? `Unwatch ${p.name}` : `Watch ${p.name}`}
                     className={cn(
-                      "shrink-0 rounded p-1.5 transition-colors hover:text-foreground",
+                      "shrink-0 rounded py-1.5 pl-1.5 pr-0 transition-colors hover:text-foreground",
                       watched ? "text-amber-400" : "text-muted-foreground",
                     )}
                   >
