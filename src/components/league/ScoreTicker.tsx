@@ -339,9 +339,9 @@ export function ScoreTicker() {
               href={g.link}
               target="_blank"
               rel="noreferrer"
-              className="flex min-w-[168px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
+              className="flex min-w-[178px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
             >
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-primary-foreground/70">
+              <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-primary-foreground/70">
                 <span className="flex items-center gap-1">
                   {g.state === "in" && (
                     <span className="size-1.5 rounded-full bg-accent" aria-hidden />
@@ -352,9 +352,19 @@ export function ScoreTicker() {
                       ? g.kickoff || g.detail
                       : g.detail}
                 </span>
+                {g.network && g.state !== "post" && (
+                  <span className="shrink-0 text-[9px] tracking-wider text-primary-foreground/55">
+                    {g.network}
+                  </span>
+                )}
               </div>
               <TeamRow team={g.away} live={g.state === "in"} pre={g.state === "pre"} />
               <TeamRow team={g.home} live={g.state === "in"} pre={g.state === "pre"} />
+              {g.state === "in" && (g.downDistance || g.ballOn) && (
+                <div className="truncate text-[9px] uppercase tracking-wider text-primary-foreground/70">
+                  {[g.downDistance, g.ballOn].filter(Boolean).join(" · ")}
+                </div>
+              )}
             </a>
           ))}
         </div>
