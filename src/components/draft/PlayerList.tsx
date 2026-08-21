@@ -10,15 +10,11 @@ import { POSITIONS, value, type Player, type Pos, type Settings } from "@/lib/dr
 
 const SEASON = new Date().getFullYear();
 
-type SortKey = "adp" | "proj" | "prev" | "needs" | "custom";
+type SortKey = "rank" | "adp" | "projPts" | "projAvg" | "prevPts" | "prevAvg" | "custom";
+type Dir = "asc" | "desc";
 
-const SORTS: [SortKey, string][] = [
-  ["adp", "ADP"],
-  ["proj", "Proj"],
-  ["prev", "Last yr"],
-  ["needs", "My needs"],
-  ["custom", "Custom"],
-];
+/** Columns that read best ascending (lower is better) by default. */
+const ASC_FIRST: SortKey[] = ["rank", "adp", "custom"];
 
 export function PlayerList({
   players,
@@ -51,11 +47,26 @@ export function PlayerList({
 }) {
   const [query, setQuery] = useState("");
   const [pos, setPos] = useState<string>("ALL");
-  const [sort, setSort] = useState<SortKey>("adp");
+  const [sort, setSort] = useState<SortKey>("rank");
+  const [dir, setDir] = useState<Dir>("asc");
   const [showDrafted, setShowDrafted] = useState(false);
   const [watchOnly, setWatchOnly] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+
+  const toggleSort = useCallback(
+    (key: SortKey) => {
+      setSort((prev) => {
+        if (prev === key) {
+          setDir((d) => (d === "asc" ? "desc" : "asc"));
+          return prev;
+        }
+        setDir(ASC_FIRST.includes(key) ? "asc" : "desc");
+        return key;
+      });
+    },
+    [],
+  );
 
   const orderIndex = useMemo(() => {
     const m = new Map<string, number>();
@@ -73,23 +84,22 @@ export function PlayerList({
       if (q && !`${p.name} ${p.team}`.toLowerCase().includes(q)) return false;
       return true;
     });
+    const sign = dir === "asc" ? 1 : -1;
     return list.sort((a, b) => {
       const av = value(a, settings.scoring);
       const bv = value(b, settings.scoring);
-      if (sort === "proj") return bv.proj - av.proj;
-      if (sort === "prev") return (bv.prev ?? -1) - (av.prev ?? -1);
-      if (sort === "needs") {
-        const an = needs[a.pos] ?? 0;
-        const bn = needs[b.pos] ?? 0;
-        if (an !== bn) return bn - an;
-        return av.rank - bv.rank;
-      }
       if (sort === "custom") {
         const ai = orderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER;
         const bi = orderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-        if (ai !== bi) return ai - bi;
+        if (ai !== bi) return (ai - bi) * sign;
         return av.rank - bv.rank;
       }
+      let diff = 0;
+      if (sort === "adp") diff = av.adp - bv.adp;
+      else if (sort === "projPts" || sort === "projAvg") diff = av.proj - bv.proj;
+      else if (sort === "prevPts" || sort === "prevAvg") diff = (av.prev ?? -1) - (bv.prev ?? -1);
+      else diff = av.rank - bv.rank;
+      if (diff !== 0) return diff * sign;
       return av.rank - bv.rank;
     });
   }, [
@@ -97,12 +107,12 @@ export function PlayerList({
     query,
     pos,
     sort,
+    dir,
     showDrafted,
     watchOnly,
     watchIds,
     draftedIds,
     settings,
-    needs,
     orderIndex,
   ]);
 
@@ -127,6 +137,8 @@ export function PlayerList({
     const pid = row?.dataset["pid"];
     if (pid && pid !== dragId) moveBefore(dragId, pid);
   };
+
+  const arrow = (key: SortKey) => (sort === key ? (dir === "asc" ? " ▴" : " ▾") : "");
 
   return (
     <div className="flex flex-col">
@@ -154,7 +166,7 @@ export function PlayerList({
         </div>
 
         <div className="-mx-1 flex flex-wrap items-center gap-y-2 px-1 pb-1">
-          <div className="flex flex-1 flex-wrap gap-1.5">
+          <div className="flex flex-1 flex-wrap items-center gap-1.5">
             {["ALL", ...POSITIONS].map((p) => (
               <button
                 key={p}
@@ -172,23 +184,33 @@ export function PlayerList({
                 ) : null}
               </button>
             ))}
+
+            <button
+              onClick={() => setWatchOnly((v) => !v)}
+              aria-pressed={watchOnly}
+              className={cn(
+                "shrink-0 rounded-full border px-3 py-1 font-mono text-xs font-semibold uppercase tracking-wide transition-colors",
+                watchOnly
+                  ? "border-amber-400 bg-amber-400/15 text-amber-400"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {watchOnly ? "[ ★ Watchlist Active ]" : "[ ✩ Watchlist ]"}
+            </button>
           </div>
 
           <div className="ml-auto flex flex-wrap justify-end gap-1.5 text-xs text-muted-foreground">
-            {SORTS.map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setSort(key)}
-                className={cn(
-                  "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
-                  sort === key
-                    ? "border-accent/50 bg-accent/15 text-accent"
-                    : "border-border hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            ))}
+            <button
+              onClick={() => toggleSort("custom")}
+              className={cn(
+                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                sort === "custom"
+                  ? "border-accent/50 bg-accent/15 text-accent"
+                  : "border-border hover:text-foreground",
+              )}
+            >
+              Custom
+            </button>
           </div>
         </div>
 
@@ -202,15 +224,6 @@ export function PlayerList({
             />
             Show drafted
           </label>
-          <label className="flex cursor-pointer items-center gap-2 select-none">
-            <input
-              type="checkbox"
-              checked={watchOnly}
-              onChange={(e) => setWatchOnly(e.target.checked)}
-              className="size-3.5 accent-[var(--primary)]"
-            />
-            Watchlist only
-          </label>
         </div>
 
         {sort === "custom" && (
@@ -221,12 +234,43 @@ export function PlayerList({
         <div className="-mx-3 -mb-3 hidden items-center gap-2 border-t border-border px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground sm:flex">
           {sort === "custom" && <div className="w-6 shrink-0" />}
           <div className="w-[62px] shrink-0" />
-          <div className="w-8 shrink-0 text-center">RK</div>
+          <button
+            onClick={() => toggleSort("rank")}
+            className={cn(
+              "w-8 shrink-0 text-center uppercase tracking-widest transition-colors hover:text-foreground",
+              sort === "rank" && "text-foreground",
+            )}
+          >
+            RK{arrow("rank")}
+          </button>
           <div className="min-w-0 flex-1">Player</div>
-          <div className="flex shrink-0 items-center gap-4">
-            <div className="w-16 text-right">ADP</div>
-            <StatGroupHeader label={`${SEASON} PROJ`} />
-            <StatGroupHeader label={`${SEASON - 1} ACTUAL`} />
+          <div className="w-7 shrink-0" />
+          <div className="flex shrink-0 items-center gap-4 border-l border-border pl-4">
+            <button
+              onClick={() => toggleSort("adp")}
+              className={cn(
+                "w-16 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+                sort === "adp" && "text-foreground",
+              )}
+            >
+              ADP{arrow("adp")}
+            </button>
+            <StatGroupHeader
+              label={`${SEASON} PROJ`}
+              totalKey="projPts"
+              avgKey="projAvg"
+              sort={sort}
+              arrow={arrow}
+              onSort={toggleSort}
+            />
+            <StatGroupHeader
+              label={`${SEASON - 1} ACTUAL`}
+              totalKey="prevPts"
+              avgKey="prevAvg"
+              sort={sort}
+              arrow={arrow}
+              onSort={toggleSort}
+            />
           </div>
         </div>
 
@@ -315,7 +359,7 @@ export function PlayerList({
                 {onOpenPlayer ? (
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 items-center gap-3 rounded py-0.5 text-left hover:bg-secondary/50"
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
                     onClick={() => onOpenPlayer(p.id)}
                   >
                     {playerBody}
@@ -324,7 +368,7 @@ export function PlayerList({
                   <Link
                     to="/player/$id"
                     params={{ id: p.id }}
-                    className="flex min-w-0 flex-1 items-center gap-3 rounded py-0.5 text-left hover:bg-secondary/50"
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
                   >
                     {playerBody}
                   </Link>
@@ -335,14 +379,14 @@ export function PlayerList({
                   onClick={() => onToggleWatch(p.id)}
                   aria-label={watched ? `Unwatch ${p.name}` : `Watch ${p.name}`}
                   className={cn(
-                    "shrink-0 rounded p-1.5 transition-colors hover:text-foreground",
-                    watched ? "text-accent" : "text-muted-foreground",
+                    "w-7 shrink-0 rounded p-1.5 transition-colors hover:text-foreground",
+                    watched ? "text-amber-400" : "text-muted-foreground",
                   )}
                 >
                   <Star className={cn("size-4", watched && "fill-current")} />
                 </button>
 
-                <div className="hidden shrink-0 items-center gap-4 sm:flex">
+                <div className="hidden shrink-0 items-center gap-4 self-stretch border-l border-border pl-4 sm:flex">
                   <StatCell
                     value={v.adp < 900 ? v.adp.toFixed(1) : "—"}
                     className="w-16 text-right"
@@ -376,13 +420,43 @@ function StatGroup({ total, avg }: { total: string; avg: string }) {
   );
 }
 
-function StatGroupHeader({ label }: { label: string }) {
+function StatGroupHeader({
+  label,
+  totalKey,
+  avgKey,
+  sort,
+  arrow,
+  onSort,
+}: {
+  label: string;
+  totalKey: SortKey;
+  avgKey: SortKey;
+  sort: SortKey;
+  arrow: (key: SortKey) => string;
+  onSort: (key: SortKey) => void;
+}) {
   return (
     <div className="w-28">
       <div className="border-b border-border pb-1 text-center">{label}</div>
       <div className="grid grid-cols-2 pt-1">
-        <div className="pr-2 text-right">PTS</div>
-        <div className="text-right">AVG</div>
+        <button
+          onClick={() => onSort(totalKey)}
+          className={cn(
+            "pr-2 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            sort === totalKey && "text-foreground",
+          )}
+        >
+          PTS{arrow(totalKey)}
+        </button>
+        <button
+          onClick={() => onSort(avgKey)}
+          className={cn(
+            "text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            sort === avgKey && "text-foreground",
+          )}
+        >
+          AVG{arrow(avgKey)}
+        </button>
       </div>
     </div>
   );
