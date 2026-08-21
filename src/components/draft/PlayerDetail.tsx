@@ -126,6 +126,7 @@ export function PlayerDetail({
             <div className="mt-1 h-px bg-border" />
           </div>
 
+          {player.pos !== "DEF" && (
           <Section title="Injury risk">
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center justify-between">
@@ -153,6 +154,8 @@ export function PlayerDetail({
               </ul>
             </div>
           </Section>
+          )}
+
 
           <Section title={`Strength of schedule vs ${player.pos}`}>
             {!sos ? (

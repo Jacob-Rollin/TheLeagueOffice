@@ -296,6 +296,7 @@ function PlayerHubPage() {
           <aside className="space-y-4 self-start rounded-xl border border-zinc-200 bg-zinc-50 p-4 lg:col-span-1">
             <NextGame team={player.team} />
 
+            {player.pos !== "DEF" && (
             <Widget title="Injury risk">
 
               <div className="flex items-baseline justify-between">
@@ -322,6 +323,8 @@ function PlayerHubPage() {
                 ))}
               </ul>
             </Widget>
+            )}
+
 
             <Widget title={`Strength of schedule vs ${player.pos}`}>
               {!sos ? (
