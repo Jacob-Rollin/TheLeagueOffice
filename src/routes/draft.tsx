@@ -18,7 +18,6 @@ import {
   roundOf,
   SCORING_LABEL,
   teamName,
-  value,
   type Pick as DraftPick,
   type Player,
   type Settings,
