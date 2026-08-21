@@ -11,6 +11,8 @@ export type Player = {
   /** Bye week for the player's team this season (null when unknown). */
   bye: number | null;
   adp: { std: number; half: number; ppr: number };
+  /** Low/high ADP across Sleeper's scoring-format markets (999 when unranked). */
+  adpRange: { min: number; max: number };
   /** 1-based overall ADP rank for each scoring format (999 when unranked). */
   rank: { std: number; half: number; ppr: number };
   proj: { std: number; half: number; ppr: number };
@@ -105,6 +107,13 @@ function adpPick(...vals: unknown[]): number {
     if (n > 0 && n < 999) return n;
   }
   return 999;
+}
+
+/** Low/high across the ADP markets we have; 999/999 when none are ranked. */
+function adpSpread(vals: unknown[]): { min: number; max: number } {
+  const nums = vals.map((v) => num(v, 999)).filter((n) => n > 0 && n < 999);
+  if (!nums.length) return { min: 999, max: 999 };
+  return { min: Math.min(...nums), max: Math.max(...nums) };
 }
 
 function memo<T>(ttl: number, fn: (key: string) => Promise<T>) {
@@ -292,6 +301,13 @@ const buildPlayers = memo<Built>(6 * HOUR, async () => {
       injury: p.injury_status ?? null,
       bye: byeByTeam.get(row.team ?? p.team ?? "") ?? null,
       adp: { std, half, ppr },
+      adpRange: adpSpread([
+        s["adp_std"],
+        s["adp_half_ppr"],
+        s["adp_ppr"],
+        s["adp_2qb"],
+        s["adp_dynasty"],
+      ]),
       rank: { std: 999, half: 999, ppr: 999 },
       proj: {
         std: num(s["pts_std"], 0),
