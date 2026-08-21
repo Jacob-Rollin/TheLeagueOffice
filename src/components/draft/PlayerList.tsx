@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { GripVertical, Search, Star, Undo2 } from "lucide-react";
+import { GripVertical, Search, Star, Undo2, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
