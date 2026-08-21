@@ -395,7 +395,9 @@ function MyTeamColumn({
         </li>
       ))}
     </ul>
+    </>
   );
+
 }
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
