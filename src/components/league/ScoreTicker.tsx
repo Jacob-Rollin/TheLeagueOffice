@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
+const SCOREBOARD_URL =
+  "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 
 type TickerTeam = {
   abbr: string;
@@ -47,7 +48,9 @@ function formatKickoff(iso?: string): string {
   startOfToday.setHours(0, 0, 0, 0);
   const startOfGameDay = new Date(d);
   startOfGameDay.setHours(0, 0, 0, 0);
-  const daysAway = Math.round((startOfGameDay.getTime() - startOfToday.getTime()) / 86_400_000);
+  const daysAway = Math.round(
+    (startOfGameDay.getTime() - startOfToday.getTime()) / 86_400_000,
+  );
   if (daysAway < 0 || daysAway > 6) {
     const date = d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" });
     return `${day} ${date} ${time}`;
@@ -71,13 +74,21 @@ function mapGames(json: any): TickerGame[] {
         logo: c?.team?.logo ?? "",
         score: c?.score ?? "0",
         possession: Boolean(possessionId) && String(c?.id) === String(possessionId),
-        record: String(c?.records?.find((r: any) => r?.type === "total")?.summary ?? c?.records?.[0]?.summary ?? ""),
+        record: String(
+          c?.records?.find((r: any) => r?.type === "total")?.summary ??
+            c?.records?.[0]?.summary ??
+            "",
+        ),
       };
     };
-    const state: TickerGame["state"] = type?.state === "in" ? "in" : type?.state === "post" ? "post" : "pre";
+    const state: TickerGame["state"] =
+      type?.state === "in" ? "in" : type?.state === "post" ? "post" : "pre";
     const sit = comp?.situation ?? {};
     const network =
-      comp?.broadcasts?.[0]?.names?.[0] ?? comp?.geoBroadcasts?.[0]?.media?.shortName ?? comp?.broadcast ?? "";
+      comp?.broadcasts?.[0]?.names?.[0] ??
+      comp?.geoBroadcasts?.[0]?.media?.shortName ??
+      comp?.broadcast ??
+      "";
     return {
       id: String(ev?.id ?? Math.random()),
       state,
@@ -85,7 +96,11 @@ function mapGames(json: any): TickerGame[] {
       kickoff: formatKickoff(ev?.date ?? comp?.date),
       clock: status?.displayClock ?? "",
       period: status?.period ? `Q${status.period}` : "",
-      downDistance: String(sit?.shortDownDistanceText ?? String(sit?.downDistanceText ?? "").split(" at ")[0] ?? ""),
+      downDistance: String(
+        sit?.shortDownDistanceText ??
+          String(sit?.downDistanceText ?? "").split(" at ")[0] ??
+          "",
+      ),
       ballOn: String(sit?.possessionText ?? "").replace(/^at\s+/i, ""),
       network: String(network || ""),
       away: pick("away"),
@@ -121,7 +136,9 @@ function shortLabel(seasonType: number, week: number, raw: string): string {
 }
 
 function buildWeekOptions(json: any): WeekOption[] {
-  const calendar: any[] = Array.isArray(json?.leagues?.[0]?.calendar) ? json.leagues[0].calendar : [];
+  const calendar: any[] = Array.isArray(json?.leagues?.[0]?.calendar)
+    ? json.leagues[0].calendar
+    : [];
   const options: WeekOption[] = [];
   for (const block of calendar) {
     const seasonType = Number(block?.value);
@@ -140,7 +157,11 @@ function buildWeekOptions(json: any): WeekOption[] {
   return options;
 }
 
-function filterWeekOptions(options: WeekOption[], currentSeasonType: number, currentWeek: number): WeekOption[] {
+function filterWeekOptions(
+  options: WeekOption[],
+  currentSeasonType: number,
+  currentWeek: number,
+): WeekOption[] {
   const filtered: WeekOption[] = [];
   for (const opt of options) {
     if (opt.seasonType !== currentSeasonType) continue;
@@ -151,7 +172,9 @@ function filterWeekOptions(options: WeekOption[], currentSeasonType: number, cur
 
   // Preseason transition: if at the final preseason week, offer Regular Season Week 1.
   if (currentSeasonType === 1) {
-    const preseasonWeeks = options.filter((o) => o.seasonType === 1).map((o) => o.week);
+    const preseasonWeeks = options
+      .filter((o) => o.seasonType === 1)
+      .map((o) => o.week);
     const maxPreseason = preseasonWeeks.length ? Math.max(...preseasonWeeks) : 0;
     if (currentWeek === maxPreseason) {
       const rsWeek1 = options.find((o) => o.seasonType === 2 && o.week === 1);
@@ -253,7 +276,8 @@ export function ScoreTicker() {
 
   if (!games.length) return null;
 
-  const selectValue = selectedWeek != null && seasonType != null ? `${seasonType}-${selectedWeek}` : "";
+  const selectValue =
+    selectedWeek != null && seasonType != null ? `${seasonType}-${selectedWeek}` : "";
 
   const selectedLabel =
     visibleOptions.find((o) => `${o.seasonType}-${o.week}` === selectValue)?.label ??
@@ -261,7 +285,10 @@ export function ScoreTicker() {
 
   return (
     <div className="relative flex items-stretch border-b border-border bg-primary text-primary-foreground">
-      <div ref={dropdownRef} className="relative flex shrink-0 items-stretch border-r border-primary-foreground/15">
+      <div
+        ref={dropdownRef}
+        className="relative flex shrink-0 items-stretch border-r border-primary-foreground/15"
+      >
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -272,7 +299,10 @@ export function ScoreTicker() {
         >
           <span className="whitespace-nowrap">{selectedLabel}</span>
           <ChevronDown
-            className={cn("size-3 shrink-0 text-primary-foreground/70 transition-transform", open && "rotate-180")}
+            className={cn(
+              "size-3 shrink-0 text-primary-foreground/70 transition-transform",
+              open && "rotate-180",
+            )}
           />
         </button>
 
@@ -314,7 +344,10 @@ export function ScoreTicker() {
 
       <div className="relative min-w-0 flex-1">
         <ScrollButton side="left" onClick={() => nudge(-1)} />
-        <div ref={scrollerRef} className="no-scrollbar flex items-stretch gap-0 overflow-x-auto scroll-smooth px-8">
+        <div
+          ref={scrollerRef}
+          className="no-scrollbar flex items-stretch gap-0 overflow-x-auto scroll-smooth px-8"
+        >
           {games.map((g) => {
             const live = g.state === "in";
             const pre = g.state === "pre";
@@ -326,24 +359,44 @@ export function ScoreTicker() {
                 rel="noreferrer"
                 className={cn(
                   "flex shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10",
-                  live ? "w-[280px]" : pre ? "w-[280px]" : "w-[150px]",
+                  live ? "w-[280px]" : pre ? "w-[210px]" : "w-[180px]",
                 )}
               >
                 <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-primary-foreground/70">
                   <span className="flex min-w-0 items-center gap-1 truncate">
-                    {live && <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />}
-                    {live ? `${g.period} ${g.clock}`.trim() : pre ? g.kickoff || g.detail : g.detail}
+                    {live && (
+                      <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />
+                    )}
+                    {live
+                      ? `${g.period} ${g.clock}`.trim()
+                      : pre
+                        ? g.kickoff || g.detail
+                        : g.detail}
                   </span>
                   {g.network && g.state !== "post" && (
-                    <span className="w-24 shrink-0 truncate text-right text-primary-foreground/60">{g.network}</span>
+                    <span className="w-24 shrink-0 truncate text-right text-primary-foreground/60">
+                      {g.network}
+                    </span>
                   )}
                 </div>
 
-                <TeamRow team={g.away} live={live} pre={pre} extra={live ? g.downDistance : ""} />
-                <TeamRow team={g.home} live={live} pre={pre} extra={live ? g.ballOn : ""} />
+                <TeamRow
+                  team={g.away}
+                  live={live}
+                  pre={pre}
+                  extra={live ? g.downDistance : ""}
+                />
+                <TeamRow
+                  team={g.home}
+                  live={live}
+                  pre={pre}
+                  extra={live ? g.ballOn : ""}
+                />
               </a>
+
             );
           })}
+
         </div>
         <ScrollButton side="right" onClick={() => nudge(1)} />
       </div>
@@ -368,7 +421,17 @@ function ScrollButton({ side, onClick }: { side: "left" | "right"; onClick: () =
   );
 }
 
-function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; pre: boolean; extra?: string }) {
+function TeamRow({
+  team,
+  live,
+  pre,
+  extra,
+}: {
+  team: TickerTeam;
+  live: boolean;
+  pre: boolean;
+  extra?: string;
+}) {
   return (
     <div className="flex items-center gap-1.5">
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -383,7 +446,9 @@ function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; 
             }}
           />
         )}
-        <span className="truncate font-display text-xs uppercase tracking-wide">{team.abbr}</span>
+        <span className="truncate font-display text-xs uppercase tracking-wide">
+          {team.abbr}
+        </span>
         {live && team.possession && (
           <span
             className="size-1.5 shrink-0 rounded-full bg-accent"
@@ -394,9 +459,13 @@ function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; 
       </div>
 
       {!pre ? (
-        <span className="tabnum w-10 shrink-0 text-right text-xs font-semibold">{team.score}</span>
+        <span className="tabnum w-10 shrink-0 text-right text-xs font-semibold">
+          {team.score}
+        </span>
       ) : (
-        <span className="tabnum w-12 shrink-0 text-right text-[10px] text-primary-foreground/60">{team.record}</span>
+        <span className="tabnum w-12 shrink-0 text-right text-[10px] text-primary-foreground/60">
+          {team.record}
+        </span>
       )}
 
       {live && (
@@ -407,3 +476,5 @@ function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; 
     </div>
   );
 }
+
+
