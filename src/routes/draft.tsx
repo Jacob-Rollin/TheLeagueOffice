@@ -213,43 +213,45 @@ function DraftRoom() {
         )}
 
         {tab === "team" && (
-          <div className="mb-3 rounded-xl border border-border bg-card p-3 md:mb-0 md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)]">
-            <div className="mb-2 font-display text-sm uppercase tracking-widest">
-              Bye Week Matrix
+          <div className="mb-3 flex flex-col gap-3 md:mb-0 md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)]">
+            <div className="rounded-xl border border-border bg-card p-3">
+              <div className="mb-2 font-display text-sm uppercase tracking-widest">
+                Bye Week Matrix
+              </div>
+              {myPlayers.length ? (
+                <ByeWeekGrid players={myPlayers} />
+              ) : (
+                <p className="p-3 text-center text-xs text-muted-foreground">
+                  Draft players to see bye weeks.
+                </p>
+              )}
             </div>
-            {myPlayers.length ? (
-              <ByeMatrix players={myPlayers} />
-            ) : (
-              <p className="p-3 text-center text-xs text-muted-foreground">
-                Draft players to see bye weeks.
-              </p>
-            )}
+            <RosterTelemetry players={myPlayers} settings={settings} />
           </div>
         )}
 
         <div className="flex min-w-0 flex-col gap-3">
           {tab === "team" && (
-            <>
-              <div className="rounded-xl border border-border bg-card">
-                <div className="border-b border-border px-3 py-2">
-                  <div className="font-display text-sm uppercase tracking-widest">My Team</div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {teamName(settings, settings.myTeam)}
-                  </div>
-                </div>
-                <div className="p-2">
-                  <MyTeamColumn
-                    settings={settings}
-                    players={myPlayers}
-                    picks={picks}
-                    onOpen={setOpenId}
-                    showProj
-                  />
+            <div className="rounded-xl border border-border bg-card">
+              <div className="border-b border-border px-3 py-2">
+                <div className="font-display text-sm uppercase tracking-widest">My Team</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {teamName(settings, settings.myTeam)}
                 </div>
               </div>
-              <RosterTelemetry players={myPlayers} needs={myNeeds} settings={settings} />
-            </>
+              <div className="p-2">
+                <MyTeamColumn
+                  settings={settings}
+                  players={myPlayers}
+                  picks={picks}
+                  onOpen={setOpenId}
+                  showProj
+                  showHeader
+                />
+              </div>
+            </div>
           )}
+
 
           {tab === "players" && (
             <PlayerList
