@@ -20,6 +20,7 @@ import {
   SCORING_LABEL,
   teamName,
   value,
+  type Pick as DraftPick,
   type Player,
   type Settings,
 } from "@/lib/draft";
