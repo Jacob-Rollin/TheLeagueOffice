@@ -525,7 +525,7 @@ function StatGroup({
   avgActive?: boolean;
 }) {
   return (
-    <div className={cn("grid flex-[2] grid-cols-2 text-xs font-semibold", DIVIDER)}>
+    <div className={cn("grid flex-1 grid-cols-2 text-xs font-semibold", DIVIDER)}>
       <div
         className={cn("tabnum flex items-center justify-start pl-3", totalActive && ACTIVE_COL)}
       >
