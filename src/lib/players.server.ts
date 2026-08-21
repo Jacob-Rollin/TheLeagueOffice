@@ -516,9 +516,12 @@ function injuryRisk(player: Player, history: SeasonLine[]) {
   const factors: string[] = [];
   let score = 20;
 
+  const rookie = player.exp === 0 || (player.exp === null && history.length === 0);
   const missed = history.map((h) => Math.max(0, 17 - h.games)).filter((m) => Number.isFinite(m));
   const totalMissed = missed.reduce((a, b) => a + b, 0);
-  if (history.length) {
+  if (rookie) {
+    factors.push("Rookie — no NFL injury history");
+  } else if (history.length) {
     score += Math.min(45, totalMissed * 5);
     if (totalMissed >= 6)
       factors.push(`${totalMissed} games missed over the last ${history.length} seasons`);
