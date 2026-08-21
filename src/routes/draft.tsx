@@ -2,7 +2,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Undo2, X } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ByeMatrix } from "@/components/draft/ByeMatrix";
+import { ByeWeekGrid } from "@/components/draft/ByeWeekGrid";
 import { DraftBoard } from "@/components/draft/DraftBoard";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerList } from "@/components/draft/PlayerList";
@@ -14,6 +14,7 @@ import {
   nextPicksFor,
   positionNeeds,
   POSITIONS,
+  FLEX_POSITIONS,
   byeMatrix,
   roundOf,
   SCORING_LABEL,
@@ -213,43 +214,45 @@ function DraftRoom() {
         )}
 
         {tab === "team" && (
-          <div className="mb-3 rounded-xl border border-border bg-card p-3 md:mb-0 md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)]">
-            <div className="mb-2 font-display text-sm uppercase tracking-widest">
-              Bye Week Matrix
+          <div className="mb-3 flex flex-col gap-3 md:mb-0 md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)]">
+            <div className="rounded-xl border border-border bg-card p-3">
+              <div className="mb-2 font-display text-sm uppercase tracking-widest">
+                Bye Week Matrix
+              </div>
+              {myPlayers.length ? (
+                <ByeWeekGrid players={myPlayers} />
+              ) : (
+                <p className="p-3 text-center text-xs text-muted-foreground">
+                  Draft players to see bye weeks.
+                </p>
+              )}
             </div>
-            {myPlayers.length ? (
-              <ByeMatrix players={myPlayers} />
-            ) : (
-              <p className="p-3 text-center text-xs text-muted-foreground">
-                Draft players to see bye weeks.
-              </p>
-            )}
+            <RosterTelemetry players={myPlayers} settings={settings} />
           </div>
         )}
 
         <div className="flex min-w-0 flex-col gap-3">
           {tab === "team" && (
-            <>
-              <div className="rounded-xl border border-border bg-card">
-                <div className="border-b border-border px-3 py-2">
-                  <div className="font-display text-sm uppercase tracking-widest">My Team</div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {teamName(settings, settings.myTeam)}
-                  </div>
-                </div>
-                <div className="p-2">
-                  <MyTeamColumn
-                    settings={settings}
-                    players={myPlayers}
-                    picks={picks}
-                    onOpen={setOpenId}
-                    showProj
-                  />
+            <div className="rounded-xl border border-border bg-card">
+              <div className="border-b border-border px-3 py-2">
+                <div className="font-display text-sm uppercase tracking-widest">My Team</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {teamName(settings, settings.myTeam)}
                 </div>
               </div>
-              <RosterTelemetry players={myPlayers} needs={myNeeds} settings={settings} />
-            </>
+              <div className="p-2">
+                <MyTeamColumn
+                  settings={settings}
+                  players={myPlayers}
+                  picks={picks}
+                  onOpen={setOpenId}
+                  showProj
+                  showHeader
+                />
+              </div>
+            </div>
           )}
+
 
           {tab === "players" && (
             <PlayerList
@@ -305,12 +308,14 @@ function MyTeamColumn({
   picks,
   onOpen,
   showProj,
+  showHeader,
 }: {
   settings: Settings;
   players: Player[];
   picks: DraftPick[];
   onOpen: (id: string) => void;
   showProj?: boolean;
+  showHeader?: boolean;
 }) {
 
   const slots = fillRoster(players, settings.roster);
@@ -323,7 +328,17 @@ function MyTeamColumn({
     [picks],
   );
   return (
+    <>
+      {showHeader && (
+        <div className="mb-1 flex items-center gap-2 border-b border-border px-2 pb-1.5 font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span className="w-7 shrink-0">Pos</span>
+          <span className="w-9 shrink-0" />
+          <span className="min-w-0 flex-1">Player</span>
+          <span className="w-16 shrink-0 whitespace-nowrap text-right">2026 Proj Pts</span>
+        </div>
+      )}
     <ul className="space-y-1">
+
       {slots.map((s, i) => (
         <li key={i} className="flex items-center gap-1">
           {s.player ? (
@@ -381,7 +396,9 @@ function MyTeamColumn({
         </li>
       ))}
     </ul>
+    </>
   );
+
 }
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
@@ -401,36 +418,40 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
 
 function RosterTelemetry({
   players,
-  needs,
   settings,
 }: {
   players: Player[];
-  needs: Record<string, number>;
   settings: Settings;
 }) {
   const alerts: { level: "critical" | "warn" | "ok"; tag: string; text: string }[] = [];
   const counts: Record<string, number> = {};
   for (const p of players) counts[p.pos] = (counts[p.pos] ?? 0) + 1;
 
+  // Full roster capacity: dedicated starters (+ flex share for flex-eligible spots)
   const tiers = POSITIONS.map((pos) => {
-    const required = Math.max(1, settings.roster[pos]);
+    const starters =
+      Math.max(0, settings.roster[pos]) + (FLEX_POSITIONS.includes(pos) ? settings.roster.FLEX : 0);
+    const required = Math.max(1, starters);
     const have = counts[pos] ?? 0;
-    const pct = Math.min(100, Math.round((have / required) * 100));
-    const label = have === 0 ? "Empty" : have < required ? "Weak Depth" : have > required ? "Surplus" : "Nominal";
-    return { pos, have, required, pct, label };
+    const startersFilled = Math.min(have, required);
+    const bench = Math.max(0, have - required);
+    const pct = Math.min(100, Math.round((startersFilled / required) * 100));
+    const label = `${startersFilled}/${required} Starters (${bench > 0 ? `+${bench}` : "0"} Bench)`;
+    return { pos, have, required, startersFilled, bench, pct, label };
   });
 
   for (const t of tiers) {
-    if (t.have < t.required) {
+    if (t.startersFilled < t.required) {
       alerts.push({
         level: "critical",
         tag: "CRITICAL",
-        text: `${t.pos} starting slots unfilled — ${t.have}/${t.required} rostered`,
+        text: `${t.pos} starting slots unfilled — ${t.startersFilled}/${t.required} rostered`,
       });
-    } else if ((needs[t.pos] ?? 0) > 0) {
-      alerts.push({ level: "ok", tag: "OK", text: `${t.pos} filled — depth can still absorb a flex slot` });
+    } else if (t.bench === 0) {
+      alerts.push({ level: "ok", tag: "OK", text: `${t.pos} starters filled — no bench depth yet` });
     }
   }
+
 
   const { weeks, unknown } = byeMatrix(players);
   for (const w of weeks) {
@@ -456,7 +477,7 @@ function RosterTelemetry({
       <div className="border-b border-border px-3 py-2 font-display text-sm uppercase tracking-widest">
         Roster Analysis
       </div>
-      <div className="grid gap-4 p-3 md:grid-cols-2">
+      <div className="grid gap-4 p-3">
         <section>
           <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Position Depth Tiers
@@ -464,30 +485,22 @@ function RosterTelemetry({
           <ul className="space-y-2">
             {tiers.map((t) => (
               <li key={t.pos} className="space-y-1">
-                <div className="flex items-center justify-between font-mono text-[11px]">
-                  <span className="font-semibold">
-                    {t.pos}{" "}
-                    <span className="text-muted-foreground">
-                      {t.have}/{t.required}
-                    </span>
-                  </span>
+                <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
+                  <span className="font-semibold">{t.pos}</span>
                   <span
                     className={cn(
-                      t.have < t.required
-                        ? "text-destructive"
-                        : t.have > t.required
-                          ? "text-muted-foreground"
-                          : "text-primary",
+                      t.startersFilled < t.required ? "text-destructive" : "text-primary",
                     )}
                   >
                     {t.label}
                   </span>
                 </div>
+
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all",
-                      t.have < t.required ? "bg-destructive" : "bg-primary",
+                      t.startersFilled < t.required ? "bg-destructive" : "bg-primary",
                     )}
                     style={{ width: `${t.pct}%` }}
                   />
