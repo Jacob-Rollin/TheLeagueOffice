@@ -563,7 +563,7 @@ function StatGroupHeader({
         <button
           onClick={() => onSort(totalKey)}
           className={cn(
-            "px-2 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            "pl-2 text-left uppercase tracking-widest transition-colors hover:text-foreground",
             sort === totalKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
