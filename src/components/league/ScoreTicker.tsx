@@ -326,7 +326,7 @@ export function ScoreTicker() {
                 rel="noreferrer"
                 className={cn(
                   "flex shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10",
-                  live ? "w-[220px]" : pre ? "w-[190px]" : "w-[150px]",
+                  live ? "w-[250px]" : pre ? "w-[200px]" : "w-[150px]",
                 )}
               >
                 <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-primary-foreground/70">
