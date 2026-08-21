@@ -74,6 +74,11 @@ function mapGames(json: any): TickerGame[] {
         logo: c?.team?.logo ?? "",
         score: c?.score ?? "0",
         possession: Boolean(possessionId) && String(c?.id) === String(possessionId),
+        record: String(
+          c?.records?.find((r: any) => r?.type === "total")?.summary ??
+            c?.records?.[0]?.summary ??
+            "",
+        ),
       };
     };
     const state: TickerGame["state"] =
