@@ -313,7 +313,7 @@ export function PlayerList({
           >
             RK
           </button>
-          <div className="flex w-[380px] shrink-0 items-end pb-1">Player</div>
+          <div className="flex w-[460px] shrink-0 items-end pb-1">Player</div>
           <div className="flex min-w-0 flex-1 items-stretch">
             <button
               onClick={() => toggleSort("adp")}
