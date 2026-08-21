@@ -5,7 +5,13 @@ import { cn } from "@/lib/utils";
 const SCOREBOARD_URL =
   "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 
-type TickerTeam = { abbr: string; logo: string; score: string; possession: boolean };
+type TickerTeam = {
+  abbr: string;
+  logo: string;
+  score: string;
+  possession: boolean;
+  record: string;
+};
 type TickerGame = {
   id: string;
   state: "pre" | "in" | "post";
