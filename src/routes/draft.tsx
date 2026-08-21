@@ -62,7 +62,10 @@ function DraftRoom() {
     setHeaderH(el.offsetHeight);
     return () => ro.disconnect();
   }, []);
-  const byId = useMemo(() => new Map<string, Player>(data.players.map((p) => [p.id, p])), [data.players]);
+  const byId = useMemo(
+    () => new Map<string, Player>(data.players.map((p) => [p.id, p])),
+    [data.players],
+  );
   const { settings, picks, currentOverall, onTheClock, complete } = draft;
   const myPlayers = useMemo(
     () =>
@@ -72,7 +75,10 @@ function DraftRoom() {
         .filter((p): p is Player => Boolean(p)),
     [picks, byId, settings.myTeam],
   );
-  const myNeeds = useMemo(() => positionNeeds(myPlayers, settings.roster), [myPlayers, settings.roster]);
+  const myNeeds = useMemo(
+    () => positionNeeds(myPlayers, settings.roster),
+    [myPlayers, settings.roster],
+  );
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
   const lastPick = picks.length ? picks[picks.length - 1]! : null;
@@ -92,7 +98,8 @@ function DraftRoom() {
               War <span className="text-primary">Room</span>
             </h1>
             <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
-              {data.season} · {SCORING_LABEL[settings.scoring]} · {settings.teams} teams · {settings.rounds} rds
+              {data.season} · {SCORING_LABEL[settings.scoring]} · {settings.teams} teams ·{" "}
+              {settings.rounds} rds
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -144,7 +151,11 @@ function DraftRoom() {
           />
           <Stat
             label="Pick"
-            value={complete ? `${picks.length}` : `${currentOverall} · R${roundOf(currentOverall, settings.teams)}`}
+            value={
+              complete
+                ? `${picks.length}`
+                : `${currentOverall} · R${roundOf(currentOverall, settings.teams)}`
+            }
           />
           <Stat
             label="Your next"
@@ -181,7 +192,6 @@ function DraftRoom() {
           tab === "players" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start",
         )}
       >
-
         {tab !== "board" && (
           <aside className="hidden lg:sticky lg:top-[calc(var(--wr-header-h,0px)+0.75rem)] lg:block lg:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
             {tab === "team" ? (
@@ -189,12 +199,19 @@ function DraftRoom() {
                 {myPlayers.length ? (
                   <ByeMatrix players={myPlayers} layout="column" />
                 ) : (
-                  <p className="p-3 text-center text-xs text-muted-foreground">Draft players to see bye weeks.</p>
+                  <p className="p-3 text-center text-xs text-muted-foreground">
+                    Draft players to see bye weeks.
+                  </p>
                 )}
               </SideCard>
             ) : (
               <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
-                <MyTeamColumn settings={settings} players={myPlayers} picks={picks} onOpen={setOpenId} />
+                <MyTeamColumn
+                  settings={settings}
+                  players={myPlayers}
+                  picks={picks}
+                  onOpen={setOpenId}
+                />
               </SideCard>
             )}
           </aside>
@@ -219,12 +236,7 @@ function DraftRoom() {
           )}{" "}
           {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} />}{" "}
           {tab === "team" && (
-            <RosterPanel
-              settings={settings}
-              picks={picks}
-              byId={byId}
-              team={settings.myTeam}
-            />
+            <RosterPanel settings={settings} picks={picks} byId={byId} team={settings.myTeam} />
           )}
         </div>
         {tab === "team" && (
@@ -242,17 +254,24 @@ function DraftRoom() {
             </SideCard>
           </aside>
         )}
-
       </div>
       <footer className="border-t border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
-        ADP, projections and prior-season stats are sourced from Sleeper's pipeline API. Player detail pages provide
-        deeper news, injury and team context.
+        ADP, projections and prior-season stats are sourced from Sleeper's pipeline API. Player
+        detail pages provide deeper news, injury and team context.
       </footer>
       <PlayerModal id={openId} onClose={() => setOpenId(null)} onSelectPlayer={setOpenId} />
     </main>
   );
 }
-function SideCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function SideCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
@@ -292,7 +311,9 @@ function MyTeamColumn({
               onClick={() => onOpen(s.player!.id)}
               className="flex w-full items-center gap-2 rounded border border-border bg-background px-2 py-1.5 text-left hover:border-primary"
             >
-              <span className="w-7 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
+              <span className="w-7 shrink-0 font-display text-[10px] uppercase text-muted-foreground">
+                {s.slot}
+              </span>
               <PlayerAvatar
                 id={s.player.id}
                 pos={s.player.pos}
@@ -326,7 +347,9 @@ function MyTeamColumn({
             </button>
           ) : (
             <div className="flex flex-1 items-center gap-2 rounded border border-dashed border-border px-2 py-1.5">
-              <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
+              <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">
+                {s.slot}
+              </span>
               <span className="text-xs text-muted-foreground">Empty</span>
             </div>
           )}
@@ -339,7 +362,12 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
   return (
     <div className={cn("bg-surface px-3 py-2", highlight && "bg-primary/15")}>
       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
-      <div className={cn("tabnum font-display text-lg leading-tight font-semibold", highlight && "text-primary")}>
+      <div
+        className={cn(
+          "tabnum font-display text-lg leading-tight font-semibold",
+          highlight && "text-primary",
+        )}
+      >
         {value}
       </div>
     </div>

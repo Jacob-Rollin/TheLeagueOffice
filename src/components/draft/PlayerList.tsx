@@ -54,19 +54,16 @@ export function PlayerList({
   const [dragId, setDragId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  const toggleSort = useCallback(
-    (key: SortKey) => {
-      setSort((prev) => {
-        if (prev === key) {
-          setDir((d) => (d === "asc" ? "desc" : "asc"));
-          return prev;
-        }
-        setDir(ASC_FIRST.includes(key) ? "asc" : "desc");
-        return key;
-      });
-    },
-    [],
-  );
+  const toggleSort = useCallback((key: SortKey) => {
+    setSort((prev) => {
+      if (prev === key) {
+        setDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
+      setDir(ASC_FIRST.includes(key) ? "asc" : "desc");
+      return key;
+    });
+  }, []);
 
   const orderIndex = useMemo(() => {
     const m = new Map<string, number>();
@@ -273,7 +270,6 @@ export function PlayerList({
             />
           </div>
         </div>
-
       </div>
 
       <div className="relative">
@@ -399,7 +395,6 @@ export function PlayerList({
                 </div>
               </li>
             );
-
           })}
         </ul>
       </div>
