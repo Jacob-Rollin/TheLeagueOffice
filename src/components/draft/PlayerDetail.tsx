@@ -108,19 +108,15 @@ export function PlayerDetail({
 
       {tab === "overview" && (
         <>
-          <Section title="Season summary">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <SummaryCard
-                title={`${season} Projections`}
-                pts={projection.points[scoring]}
-                games={projection.games || 17}
-              />
-              <SummaryCard
-                title={`${prevSeason} Actual`}
-                pts={last ? last.points[scoring] : null}
-                games={last?.games ?? 0}
-              />
-            </div>
+          <Section title="Stat matrix">
+            <StatMatrix
+              pos={player.pos}
+              season={season}
+              prevSeason={prevSeason}
+              proj={projection}
+              actual={last}
+              scoring={scoring}
+            />
           </Section>
 
           <div className="mt-4 px-3">
@@ -230,17 +226,6 @@ export function PlayerDetail({
             )}
           </Section>
 
-          <Section title="Stat matrix">
-            <StatMatrix
-              pos={player.pos}
-              season={season}
-              prevSeason={prevSeason}
-              proj={projection}
-              actual={last}
-              scoring={scoring}
-            />
-          </Section>
-
           <div className="px-3 pt-4">
             <Link to="/player/$id" params={{ id: player.id }} className="block">
               <Button variant="secondary" className="w-full font-display uppercase tracking-wide">
@@ -262,13 +247,22 @@ const MATRIX_ROWS: Record<string, [string, string][]> = {
     ["rush_yd", "Rushing Yards"],
     ["rush_td", "Rushing TDs"],
   ],
-  SKILL: [
+  RB: [
     ["rush_yd", "Rushing Yards"],
     ["rush_td", "Rushing TDs"],
     ["rec_tgt", "Targets"],
     ["rec", "Receptions"],
     ["rec_yd", "Receiving Yards"],
     ["rec_td", "Receiving TDs"],
+    ["fum_lost", "Fumbles Lost"],
+  ],
+  SKILL: [
+    ["rec_tgt", "Targets"],
+    ["rec", "Receptions"],
+    ["rec_yd", "Receiving Yards"],
+    ["rec_td", "Receiving TDs"],
+    ["rush_yd", "Rushing Yards"],
+    ["rush_td", "Rushing TDs"],
     ["fum_lost", "Fumbles Lost"],
   ],
   K: [
@@ -300,7 +294,8 @@ function StatMatrix({
   scoring: string;
 }) {
   const rows =
-    MATRIX_ROWS[pos === "QB" || pos === "K" || pos === "DEF" ? pos : "SKILL"] ?? MATRIX_ROWS["SKILL"]!;
+    MATRIX_ROWS[pos === "QB" || pos === "K" || pos === "DEF" || pos === "RB" ? pos : "SKILL"] ??
+    MATRIX_ROWS["SKILL"]!;
   const fmt = (v: number | undefined) =>
     v === undefined || v === null ? "—" : Math.round(v * 10) / 10 === 0 ? "0" : (Math.round(v * 10) / 10).toString();
 
@@ -349,40 +344,6 @@ function StatMatrix({
           </tr>
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function SummaryCard({
-  title,
-  pts,
-  games,
-}: {
-  title: string;
-  pts: number | null;
-  games: number;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <div className="font-display text-xs uppercase tracking-widest text-muted-foreground">
-        {title}
-      </div>
-      <ul className="mt-2 space-y-1 text-sm">
-        <li className="flex items-baseline gap-2">
-          <span className="text-muted-foreground">·</span>
-          <span className="text-muted-foreground">PTS</span>
-          <span className="tabnum ml-auto font-mono font-semibold">
-            {pts === null ? "—" : pts.toFixed(1)}
-          </span>
-        </li>
-        <li className="flex items-baseline gap-2">
-          <span className="text-muted-foreground">·</span>
-          <span className="text-muted-foreground">AVG</span>
-          <span className="tabnum ml-auto font-mono font-semibold">
-            {pts === null || !games ? "—" : (pts / games).toFixed(1)}
-          </span>
-        </li>
-      </ul>
     </div>
   );
 }
