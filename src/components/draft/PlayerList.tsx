@@ -518,11 +518,13 @@ function StatGroup({
   avg,
   totalActive,
   avgActive,
+  flushRight,
 }: {
   total: string;
   avg: string;
   totalActive?: boolean;
   avgActive?: boolean;
+  flushRight?: boolean;
 }) {
   return (
     <div className={cn("grid flex-1 grid-cols-2 text-xs font-semibold", DIVIDER)}>
@@ -531,7 +533,13 @@ function StatGroup({
       >
         {total}
       </div>
-      <div className={cn("tabnum flex items-center justify-end pr-3", avgActive && ACTIVE_COL)}>
+      <div
+        className={cn(
+          "tabnum flex items-center justify-end",
+          flushRight ? "pr-0" : "pr-3",
+          avgActive && ACTIVE_COL,
+        )}
+      >
         {avg}
       </div>
     </div>
