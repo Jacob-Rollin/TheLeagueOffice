@@ -15,6 +15,8 @@ export type Player = {
   adpRange: { min: number; max: number };
   /** 1-based overall ADP rank for each scoring format (999 when unranked). */
   rank: { std: number; half: number; ppr: number };
+  /** 1-based rank within the player's position (e.g. 3 => "RB3"). */
+  posRank: number;
   proj: { std: number; half: number; ppr: number };
   prev: { std: number; half: number; ppr: number } | null;
 };
