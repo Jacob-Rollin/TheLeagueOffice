@@ -108,36 +108,21 @@ export function PlayerDetail({
 
       {tab === "overview" && (
         <>
-          <Section title={`${season} projection`}>
-            <div className="rounded-lg border border-border bg-card p-3">
-              <div className="tabnum font-display text-2xl">
-                {projection.points[scoring].toFixed(1)}{" "}
-                <span className="text-sm text-muted-foreground">proj pts</span>
-              </div>
-              <StatGrid line={projection.line} />
+          <Section title="Season summary">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <SummaryCard
+                title={`${season} Projections`}
+                pts={projection.points[scoring]}
+                games={projection.games || 17}
+              />
+              <SummaryCard
+                title={`${prevSeason} Actual`}
+                pts={last ? last.points[scoring] : null}
+                games={last?.games ?? 0}
+              />
             </div>
           </Section>
 
-          <Section title="Previous seasons">
-            {history.length === 0 ? (
-              <Empty>No prior-season stats on record.</Empty>
-            ) : (
-              <ul className="space-y-2">
-                {history.map((h) => (
-                  <li key={h.season} className="rounded-lg border border-border bg-card p-3">
-                    <div className="flex items-baseline justify-between">
-                      <span className="font-display text-lg">{h.season}</span>
-                      <span className="tabnum text-sm text-muted-foreground">
-                        {h.points[scoring].toFixed(1)} pts · {h.games} gp
-                        {h.posRank ? ` · ${player.pos}${h.posRank}` : ""}
-                      </span>
-                    </div>
-                    <StatGrid line={h.line} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
 
           <Section title="Injury risk">
             <div className="rounded-lg border border-border bg-card p-3">
