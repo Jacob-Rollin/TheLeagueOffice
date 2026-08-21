@@ -159,7 +159,9 @@ function DraftRoom() {
             value={
               complete
                 ? `${picks.length}`
-                : `${currentOverall} · R${roundOf(currentOverall, settings.teams)}`
+                : `PICK ${roundOf(currentOverall, settings.teams)}.${(((currentOverall - 1) % settings.teams) + 1)
+                    .toString()
+                    .padStart(2, "0")}`
             }
           />
           <Stat
