@@ -167,7 +167,9 @@ export function PlayerList({
     orderIndex,
     suggested,
     needs,
+    counts,
     currentOverall,
+
   ]);
 
   const moveBefore = useCallback(
