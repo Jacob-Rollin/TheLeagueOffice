@@ -248,9 +248,14 @@ export function PlayerList({
             const reach = v.adp < 900 ? Math.round(v.adp - currentOverall) : null;
             const playerBody = (
               <>
-                <div className="w-14 shrink-0">
-                  <PositionBadge pos={p.pos} />
-                </div>
+                <PlayerAvatar
+                  id={p.id}
+                  pos={p.pos}
+                  team={p.team}
+                  name={p.name}
+                  className="size-10"
+                  logoClassName="size-4"
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-semibold">{p.name}</span>
@@ -260,24 +265,13 @@ export function PlayerList({
                       </span>
                     )}
                   </div>
-                  <div className="tabnum text-xs text-muted-foreground">
-                    #{v.rank} · {p.team}
+                  <div className="truncate text-xs text-muted-foreground">
+                    {p.pos}
+                    {p.team ? ` · ${p.team}` : ""}
                     {p.bye ? ` · BYE ${p.bye}` : ""}
                     {reach !== null && reach < -6 ? " · reach" : ""}
                   </div>
                 </div>
-                <div className="hidden shrink-0 items-center gap-4 sm:flex">
-                  <StatCell
-                    value={v.adp < 900 ? v.adp.toFixed(1) : "—"}
-                    className="w-20 text-right"
-                  />
-                  <StatGroup total={v.proj.toFixed(0)} avg={(v.proj / 18).toFixed(1)} />
-                  <StatGroup
-                    total={v.prev !== null && v.prev > 0 ? v.prev.toFixed(0) : "—"}
-                    avg={v.prev !== null && v.prev > 0 ? (v.prev / 18).toFixed(1) : "—"}
-                  />
-                </div>
-                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
               </>
             );
             return (
@@ -303,6 +297,19 @@ export function PlayerList({
                   </button>
                 )}
 
+                <Button
+                  size="sm"
+                  className="h-8 w-[62px] shrink-0 px-0 font-display text-xs uppercase"
+                  disabled={drafted}
+                  onClick={() => onDraft(p.id)}
+                >
+                  Draft
+                </Button>
+
+                <div className="tabnum w-8 shrink-0 text-center text-xs font-semibold text-muted-foreground">
+                  {v.rank}
+                </div>
+
                 {onOpenPlayer ? (
                   <button
                     type="button"
@@ -321,27 +328,32 @@ export function PlayerList({
                   </Link>
                 )}
 
-                <div className="flex w-24 shrink-0 items-center justify-end gap-1">
-                  <Button
-                    size="icon"
-                    variant={watched ? "default" : "secondary"}
-                    className="size-9"
-                    onClick={() => onToggleWatch(p.id)}
-                    aria-label={watched ? `Unwatch ${p.name}` : `Watch ${p.name}`}
-                  >
-                    <Star className={cn("size-4", watched && "fill-current")} />
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="h-9 px-3 font-display uppercase"
-                    disabled={drafted}
-                    onClick={() => onDraft(p.id)}
-                  >
-                    Draft
-                  </Button>
+                <button
+                  type="button"
+                  onClick={() => onToggleWatch(p.id)}
+                  aria-label={watched ? `Unwatch ${p.name}` : `Watch ${p.name}`}
+                  className={cn(
+                    "shrink-0 rounded p-1.5 transition-colors hover:text-foreground",
+                    watched ? "text-accent" : "text-muted-foreground",
+                  )}
+                >
+                  <Star className={cn("size-4", watched && "fill-current")} />
+                </button>
+
+                <div className="hidden shrink-0 items-center gap-4 sm:flex">
+                  <StatCell
+                    value={v.adp < 900 ? v.adp.toFixed(1) : "—"}
+                    className="w-16 text-right"
+                  />
+                  <StatGroup total={v.proj.toFixed(0)} avg={(v.proj / 18).toFixed(1)} />
+                  <StatGroup
+                    total={v.prev !== null && v.prev > 0 ? v.prev.toFixed(0) : "—"}
+                    avg={v.prev !== null && v.prev > 0 ? (v.prev / 18).toFixed(1) : "—"}
+                  />
                 </div>
               </li>
             );
+
           })}
         </ul>
       </div>
