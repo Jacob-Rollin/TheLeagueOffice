@@ -257,12 +257,12 @@ export function PlayerList({
           >
             RK
           </button>
-          <div className="min-w-0 flex-1">Player</div>
-          <div className="flex shrink-0 items-stretch">
+          <div className="w-[300px] shrink-0">Player</div>
+          <div className="flex min-w-0 flex-1 items-stretch">
             <button
               onClick={() => toggleSort("adp")}
               className={cn(
-                "w-16 self-stretch px-2 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+                "flex-1 self-stretch px-2 text-center uppercase tracking-widest transition-colors hover:text-foreground",
                 DIVIDER,
                 sort === "adp" && `${ACTIVE_COL} text-foreground`,
               )}
@@ -278,6 +278,9 @@ export function PlayerList({
               sort={sort}
               onSort={toggleSort}
             />
+            <div className={cn("flex flex-1 items-end justify-center pb-1", DIVIDER)}>
+              <span className="uppercase tracking-widest">Pos RK</span>
+            </div>
             <StatGroupHeader
               label={`${SEASON} PROJ`}
               totalKey="projPts"
