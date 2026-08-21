@@ -307,6 +307,7 @@ const buildPlayers = memo<Built>(6 * HOUR, async () => {
         s["adp_dynasty"],
       ]),
       rank: { std: 999, half: 999, ppr: 999 },
+      posRank: 999,
       proj: {
         std: num(s["pts_std"], 0),
         half: projHalf,
