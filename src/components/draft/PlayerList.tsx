@@ -270,7 +270,6 @@ export function PlayerList({
               )}
             >
               <GripVertical className="size-3.5" />
-              <GripVertical className="size-3.5 -ml-2" />
               Custom
             </button>
           </div>
