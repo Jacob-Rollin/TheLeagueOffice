@@ -177,8 +177,7 @@ export function PlayerList({
                 {p}
                 {p !== "ALL" && (settings.roster[p as Pos] ?? 0) > 0 ? (
                   <span className="tabnum ml-1 text-[10px] opacity-70">
-                    {Math.min(counts?.[p] ?? 0, settings.roster[p as Pos])}/
-                    {settings.roster[p as Pos]}
+                    {counts?.[p] ?? 0}/{settings.roster[p as Pos]}
                   </span>
                 ) : null}
               </button>
