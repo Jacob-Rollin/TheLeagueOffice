@@ -417,36 +417,40 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
 
 function RosterTelemetry({
   players,
-  needs,
   settings,
 }: {
   players: Player[];
-  needs: Record<string, number>;
   settings: Settings;
 }) {
   const alerts: { level: "critical" | "warn" | "ok"; tag: string; text: string }[] = [];
   const counts: Record<string, number> = {};
   for (const p of players) counts[p.pos] = (counts[p.pos] ?? 0) + 1;
 
+  // Full roster capacity: dedicated starters (+ flex share for flex-eligible spots)
   const tiers = POSITIONS.map((pos) => {
-    const required = Math.max(1, settings.roster[pos]);
+    const starters =
+      Math.max(0, settings.roster[pos]) + (FLEX_POSITIONS.includes(pos) ? settings.roster.FLEX : 0);
+    const required = Math.max(1, starters);
     const have = counts[pos] ?? 0;
-    const pct = Math.min(100, Math.round((have / required) * 100));
-    const label = have === 0 ? "Empty" : have < required ? "Weak Depth" : have > required ? "Surplus" : "Nominal";
-    return { pos, have, required, pct, label };
+    const startersFilled = Math.min(have, required);
+    const bench = Math.max(0, have - required);
+    const pct = Math.min(100, Math.round((startersFilled / required) * 100));
+    const label = `${startersFilled}/${required} Starters (${bench > 0 ? `+${bench}` : "0"} Bench)`;
+    return { pos, have, required, startersFilled, bench, pct, label };
   });
 
   for (const t of tiers) {
-    if (t.have < t.required) {
+    if (t.startersFilled < t.required) {
       alerts.push({
         level: "critical",
         tag: "CRITICAL",
-        text: `${t.pos} starting slots unfilled — ${t.have}/${t.required} rostered`,
+        text: `${t.pos} starting slots unfilled — ${t.startersFilled}/${t.required} rostered`,
       });
-    } else if ((needs[t.pos] ?? 0) > 0) {
-      alerts.push({ level: "ok", tag: "OK", text: `${t.pos} filled — depth can still absorb a flex slot` });
+    } else if (t.bench === 0) {
+      alerts.push({ level: "ok", tag: "OK", text: `${t.pos} starters filled — no bench depth yet` });
     }
   }
+
 
   const { weeks, unknown } = byeMatrix(players);
   for (const w of weeks) {
