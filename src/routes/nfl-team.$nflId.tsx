@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { ExternalLink } from "lucide-react";
+import { useState } from "react";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { teamLogo } from "@/components/draft/PlayerAvatar";
 import { NFL_TEAMS, teamById } from "@/lib/nfl-teams";
-import { getPlayers } from "@/lib/players.functions";
+import { getPlayers, getTeamNews } from "@/lib/players.functions";
 
 export const Route = createFileRoute("/nfl-team/$nflId")({
   head: ({ params }) => {
@@ -46,6 +48,7 @@ function NflTeamHub() {
     .filter((p) => p.team === team.id)
     .sort((a, b) => b.proj.half - a.proj.half);
   const injured = roster.filter((p) => p.injury);
+  const [tab, setTab] = useState<"roster" | "news">("roster");
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6">
@@ -64,6 +67,24 @@ function NflTeamHub() {
         </div>
       </header>
 
+      <nav className="mt-6 flex items-center gap-6 border-b border-border pb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
+        {(["roster", "news"] as const).map((k) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={
+              "-mb-2 pb-2 transition-colors hover:text-foreground " +
+              (tab === k ? "border-b-2 border-primary text-primary" : "")
+            }
+          >
+            {k === "roster" ? "Roster" : "News"}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "news" && <TeamNews team={team.id} />}
+
+      {tab === "roster" && (
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <section className="lg:col-span-2">
           <h2 className="font-display text-sm uppercase tracking-widest">Active roster</h2>
@@ -155,6 +176,51 @@ function NflTeamHub() {
           </div>
         </aside>
       </div>
+      )}
     </main>
+  );
+}
+
+function TeamNews({ team }: { team: string }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["team-news", team],
+    queryFn: () => getTeamNews({ data: { team } }),
+    staleTime: 1000 * 60 * 10,
+  });
+
+  if (isLoading)
+    return (
+      <p className="mt-6 rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        Loading team news…
+      </p>
+    );
+  if (isError || !data?.length)
+    return (
+      <p className="mt-6 rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        No news available right now.
+      </p>
+    );
+
+  return (
+    <ul className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+      {data.map((n) => (
+        <li key={n.id} className="rounded-lg border border-border bg-card p-4">
+          <h3 className="text-sm font-semibold leading-snug">{n.headline}</h3>
+          {n.description && (
+            <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{n.description}</p>
+          )}
+          {n.link && (
+            <a
+              href={n.link}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-primary"
+            >
+              Read on ESPN <ExternalLink className="size-3" />
+            </a>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

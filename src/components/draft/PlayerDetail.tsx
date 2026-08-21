@@ -104,7 +104,7 @@ export function PlayerDetail({
         </nav>
       </header>
 
-      {tab === "news" && <PlayerNews id={player.id} />}
+      {tab === "news" && <PlayerNews id={player.id} pos={player.pos} />}
 
       {tab === "overview" && (
         <>
@@ -119,12 +119,14 @@ export function PlayerDetail({
             />
           </Section>
 
-          <div className="mt-4 px-3">
-            <h2 className="font-display text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Analytics
-            </h2>
-            <div className="mt-1 h-px bg-border" />
-          </div>
+          {player.pos !== "DEF" && (
+            <div className="mt-4 px-3">
+              <h2 className="font-display text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Analytics
+              </h2>
+              <div className="mt-1 h-px bg-border" />
+            </div>
+          )}
 
           {player.pos !== "DEF" && (
           <Section title="Injury risk">
@@ -157,6 +159,7 @@ export function PlayerDetail({
           )}
 
 
+          {player.pos !== "DEF" && (
           <Section title={`Strength of schedule vs ${player.pos}`}>
             {!sos ? (
               <Empty>Schedule data unavailable for this player.</Empty>
@@ -186,7 +189,9 @@ export function PlayerDetail({
               </div>
             )}
           </Section>
+          )}
 
+          {player.pos !== "DEF" && (
           <Section title={`${player.team} ${player.pos} depth chart`}>
             {depthChart.length === 0 ? (
               <Empty>No teammates found.</Empty>
@@ -228,6 +233,7 @@ export function PlayerDetail({
               </ul>
             )}
           </Section>
+          )}
 
           <div className="px-3 pt-4">
             <Link to="/player/$id" params={{ id: player.id }} className="block">
