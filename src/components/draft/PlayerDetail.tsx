@@ -229,8 +229,160 @@ export function PlayerDetail({
               </ul>
             )}
           </Section>
+
+          <Section title="Stat matrix">
+            <StatMatrix
+              pos={player.pos}
+              season={season}
+              prevSeason={prevSeason}
+              proj={projection}
+              actual={last}
+              scoring={scoring}
+            />
+          </Section>
+
+          <div className="px-3 pt-4">
+            <Link to="/player/$id" params={{ id: player.id }} className="block">
+              <Button variant="secondary" className="w-full font-display uppercase tracking-wide">
+                View Full Player Profile
+              </Button>
+            </Link>
+          </div>
         </>
       )}
+    </div>
+  );
+}
+
+const MATRIX_ROWS: Record<string, [string, string][]> = {
+  QB: [
+    ["pass_yd", "Passing Yards"],
+    ["pass_td", "Passing TDs"],
+    ["pass_int", "Interceptions"],
+    ["rush_yd", "Rushing Yards"],
+    ["rush_td", "Rushing TDs"],
+  ],
+  SKILL: [
+    ["rush_yd", "Rushing Yards"],
+    ["rush_td", "Rushing TDs"],
+    ["rec_tgt", "Targets"],
+    ["rec", "Receptions"],
+    ["rec_yd", "Receiving Yards"],
+    ["rec_td", "Receiving TDs"],
+    ["fum_lost", "Fumbles Lost"],
+  ],
+  K: [
+    ["fgm", "Field Goals Made"],
+    ["fgmiss", "Field Goals Missed"],
+    ["xpm", "Extra Points Made"],
+  ],
+  DEF: [
+    ["sack", "Sacks"],
+    ["int", "Interceptions"],
+    ["def_st_td", "Defensive/ST TDs"],
+    ["pts_allow", "Points Allowed"],
+  ],
+};
+
+function StatMatrix({
+  pos,
+  season,
+  prevSeason,
+  proj,
+  actual,
+  scoring,
+}: {
+  pos: string;
+  season: string;
+  prevSeason: string;
+  proj: { points: Record<string, number>; games: number; raw: Record<string, number> };
+  actual: { points: Record<string, number>; games: number; raw: Record<string, number> } | null;
+  scoring: string;
+}) {
+  const rows =
+    MATRIX_ROWS[pos === "QB" || pos === "K" || pos === "DEF" ? pos : "SKILL"] ?? MATRIX_ROWS.SKILL!;
+  const fmt = (v: number | undefined) =>
+    v === undefined || v === null ? "—" : Math.round(v * 10) / 10 === 0 ? "0" : (Math.round(v * 10) / 10).toString();
+
+  const projPts = proj.points[scoring] ?? 0;
+  const actPts = actual ? (actual.points[scoring] ?? 0) : null;
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-secondary/40 font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+            <th className="px-3 py-2 text-left">Stat Type</th>
+            <th className="px-3 py-2 text-right">{season} Proj</th>
+            <th className="px-3 py-2 text-right">{prevSeason} Actual</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.map(([key, label]) => (
+            <tr key={key}>
+              <td className="px-3 py-1.5 text-muted-foreground">{label}</td>
+              <td className="tabnum px-3 py-1.5 text-right font-mono">{fmt(proj.raw?.[key] ?? 0)}</td>
+              <td className="tabnum px-3 py-1.5 text-right font-mono">
+                {actual ? fmt(actual.raw?.[key] ?? 0) : "—"}
+              </td>
+            </tr>
+          ))}
+          <tr className="border-t border-border bg-secondary/40 font-semibold">
+            <td className="px-3 py-1.5 font-display text-xs uppercase tracking-wide">
+              Total Points
+            </td>
+            <td className="tabnum px-3 py-1.5 text-right font-mono">{projPts.toFixed(1)}</td>
+            <td className="tabnum px-3 py-1.5 text-right font-mono">
+              {actPts === null ? "—" : actPts.toFixed(1)}
+            </td>
+          </tr>
+          <tr className="bg-secondary/40 font-semibold">
+            <td className="px-3 py-1.5 font-display text-xs uppercase tracking-wide">
+              Weekly Average
+            </td>
+            <td className="tabnum px-3 py-1.5 text-right font-mono">
+              {(projPts / (proj.games || 17)).toFixed(1)}
+            </td>
+            <td className="tabnum px-3 py-1.5 text-right font-mono">
+              {actPts === null || !actual?.games ? "—" : (actPts / actual.games).toFixed(1)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  pts,
+  games,
+}: {
+  title: string;
+  pts: number | null;
+  games: number;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="font-display text-xs uppercase tracking-widest text-muted-foreground">
+        {title}
+      </div>
+      <ul className="mt-2 space-y-1 text-sm">
+        <li className="flex items-baseline gap-2">
+          <span className="text-muted-foreground">·</span>
+          <span className="text-muted-foreground">PTS</span>
+          <span className="tabnum ml-auto font-mono font-semibold">
+            {pts === null ? "—" : pts.toFixed(1)}
+          </span>
+        </li>
+        <li className="flex items-baseline gap-2">
+          <span className="text-muted-foreground">·</span>
+          <span className="text-muted-foreground">AVG</span>
+          <span className="tabnum ml-auto font-mono font-semibold">
+            {pts === null || !games ? "—" : (pts / games).toFixed(1)}
+          </span>
+        </li>
+      </ul>
     </div>
   );
 }
