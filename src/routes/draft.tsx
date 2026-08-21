@@ -354,7 +354,11 @@ function MyTeamColumn({
                   {s.player.bye ? <span>· BYE {s.player.bye}</span> : null}
                 </div>
               </div>
-              {pickByPlayer[s.player.id] ? (
+              {showProj ? (
+                <span className="tabnum w-14 shrink-0 text-right text-[11px] font-semibold text-foreground">
+                  {(s.player.proj[settings.scoring] ?? 0).toFixed(1)}
+                </span>
+              ) : pickByPlayer[s.player.id] ? (
                 <span className="tabnum w-10 text-right text-[10px] font-semibold text-muted-foreground">
                   {(() => {
                     const overall = pickByPlayer[s.player.id]!.overall;
@@ -364,6 +368,7 @@ function MyTeamColumn({
                   })()}
                 </span>
               ) : null}
+
             </button>
           ) : (
             <div className="flex flex-1 items-center gap-2 rounded border border-dashed border-border px-2 py-1.5">
