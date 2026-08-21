@@ -478,7 +478,7 @@ function StatGroup({
   avgActive?: boolean;
 }) {
   return (
-    <div className={cn("grid w-28 grid-cols-2 text-xs font-semibold", DIVIDER)}>
+    <div className={cn("grid flex-[2] grid-cols-2 text-xs font-semibold", DIVIDER)}>
       <div
         className={cn("tabnum flex items-center justify-end pr-2 pl-2", totalActive && ACTIVE_COL)}
       >
@@ -509,7 +509,7 @@ function StatGroupHeader({
   onSort: (key: SortKey) => void;
 }) {
   return (
-    <div className={cn("w-28", DIVIDER)}>
+    <div className={cn("flex-[2]", DIVIDER)}>
       <div className="border-b border-border pb-1 text-center">{label}</div>
       <div className="grid grid-cols-2 pt-1">
         <button
