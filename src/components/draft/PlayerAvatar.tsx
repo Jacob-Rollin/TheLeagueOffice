@@ -30,18 +30,18 @@ export function PlayerAvatar({
   const logo = teamLogo(team);
   return (
     <div className={cn("relative size-16 shrink-0", className)}>
-      <div className="size-full overflow-hidden rounded-full border border-border bg-surface">
+      <div className="flex size-full items-center justify-center overflow-hidden rounded-full border border-border bg-surface">
         <img
           src={playerImage(id, pos, team)}
           alt={name}
           loading="lazy"
-          style={{ width: '40px', height: '40px', minWidth: '40px' }}
-          className="size-full object-cover object-top"
+          className="size-full object-cover object-center"
           onError={(e) => {
             e.currentTarget.style.visibility = "hidden";
           }}
         />
       </div>
+
       {logo && (
         <img
           src={logo}

@@ -1,6 +1,6 @@
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Star, Undo2, X } from "lucide-react";
+import { Undo2, X } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ByeMatrix } from "@/components/draft/ByeMatrix";
 import { DraftBoard } from "@/components/draft/DraftBoard";
@@ -8,7 +8,6 @@ import { DraftSuggestions } from "@/components/draft/DraftSuggestions";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerList } from "@/components/draft/PlayerList";
 import { PlayerModal } from "@/components/draft/PlayerModal";
-import { PositionBadge } from "@/components/draft/PositionBadge";
 import { RosterPanel } from "@/components/draft/RosterPanel";
 import { SettingsSheet } from "@/components/draft/SettingsSheet";
 import { useDraft } from "@/hooks/use-draft";
@@ -19,7 +18,6 @@ import {
   roundOf,
   SCORING_LABEL,
   teamName,
-  value,
   type Pick as DraftPick,
   type Player,
   type Settings,
@@ -64,7 +62,10 @@ function DraftRoom() {
     setHeaderH(el.offsetHeight);
     return () => ro.disconnect();
   }, []);
-  const byId = useMemo(() => new Map<string, Player>(data.players.map((p) => [p.id, p])), [data.players]);
+  const byId = useMemo(
+    () => new Map<string, Player>(data.players.map((p) => [p.id, p])),
+    [data.players],
+  );
   const { settings, picks, currentOverall, onTheClock, complete } = draft;
   const myPlayers = useMemo(
     () =>
@@ -74,10 +75,9 @@ function DraftRoom() {
         .filter((p): p is Player => Boolean(p)),
     [picks, byId, settings.myTeam],
   );
-  const myNeeds = useMemo(() => positionNeeds(myPlayers, settings.roster), [myPlayers, settings.roster]);
-  const watchPlayers = useMemo(
-    () => data.players.filter((p) => draft.watchIds.has(p.id)),
-    [data.players, draft.watchIds],
+  const myNeeds = useMemo(
+    () => positionNeeds(myPlayers, settings.roster),
+    [myPlayers, settings.roster],
   );
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
@@ -98,7 +98,8 @@ function DraftRoom() {
               War <span className="text-primary">Room</span>
             </h1>
             <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
-              {data.season} · {SCORING_LABEL[settings.scoring]} · {settings.teams} teams · {settings.rounds} rds
+              {data.season} · {SCORING_LABEL[settings.scoring]} · {settings.teams} teams ·{" "}
+              {settings.rounds} rds
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -150,7 +151,11 @@ function DraftRoom() {
           />
           <Stat
             label="Pick"
-            value={complete ? `${picks.length}` : `${currentOverall} · R${roundOf(currentOverall, settings.teams)}`}
+            value={
+              complete
+                ? `${picks.length}`
+                : `${currentOverall} · R${roundOf(currentOverall, settings.teams)}`
+            }
           />
           <Stat
             label="Your next"
@@ -183,7 +188,8 @@ function DraftRoom() {
       <div
         className={cn(
           "flex-1 gap-3 px-0 py-3 lg:px-3",
-          tab !== "board" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px] lg:items-start",
+          tab === "team" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px] lg:items-start",
+          tab === "players" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start",
         )}
       >
         {tab !== "board" && (
@@ -193,12 +199,19 @@ function DraftRoom() {
                 {myPlayers.length ? (
                   <ByeMatrix players={myPlayers} layout="column" />
                 ) : (
-                  <p className="p-3 text-center text-xs text-muted-foreground">Draft players to see bye weeks.</p>
+                  <p className="p-3 text-center text-xs text-muted-foreground">
+                    Draft players to see bye weeks.
+                  </p>
                 )}
               </SideCard>
             ) : (
               <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
-                <MyTeamColumn settings={settings} players={myPlayers} picks={picks} onOpen={setOpenId} />
+                <MyTeamColumn
+                  settings={settings}
+                  players={myPlayers}
+                  picks={picks}
+                  onOpen={setOpenId}
+                />
               </SideCard>
             )}
           </aside>
@@ -223,52 +236,42 @@ function DraftRoom() {
           )}{" "}
           {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} />}{" "}
           {tab === "team" && (
-            <RosterPanel
-              settings={settings}
-              picks={picks}
-              byId={byId}
-              team={settings.myTeam}
-            />
+            <RosterPanel settings={settings} picks={picks} byId={byId} team={settings.myTeam} />
           )}
         </div>
-        {tab !== "board" && (
+        {tab === "team" && (
           <aside className="hidden lg:sticky lg:top-[calc(var(--wr-header-h,0px)+0.75rem)] lg:block lg:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
-            {tab === "team" ? (
-              <SideCard title="Suggested Picks" subtitle="Best value for your roster">
-                <DraftSuggestions
-                  players={data.players}
-                  draftedIds={draft.draftedIds}
-                  needs={myNeeds}
-                  settings={settings}
-                  currentOverall={currentOverall}
-                  onDraft={draft.draftPlayer}
-                  onOpen={setOpenId}
-                />
-              </SideCard>
-            ) : (
-              <SideCard title="Watchlist" subtitle={`${watchPlayers.length} players`}>
-                <WatchColumn
-                  settings={settings}
-                  players={watchPlayers}
-                  draftedIds={draft.draftedIds}
-                  onOpen={setOpenId}
-                  onDraft={draft.draftPlayer}
-                  onToggleWatch={draft.toggleWatch}
-                />
-              </SideCard>
-            )}
+            <SideCard title="Suggested Picks" subtitle="Best value for your roster">
+              <DraftSuggestions
+                players={data.players}
+                draftedIds={draft.draftedIds}
+                needs={myNeeds}
+                settings={settings}
+                currentOverall={currentOverall}
+                onDraft={draft.draftPlayer}
+                onOpen={setOpenId}
+              />
+            </SideCard>
           </aside>
         )}
       </div>
       <footer className="border-t border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
-        ADP, projections and prior-season stats are sourced from Sleeper's pipeline API. Player detail pages provide
-        deeper news, injury and team context.
+        ADP, projections and prior-season stats are sourced from Sleeper's pipeline API. Player
+        detail pages provide deeper news, injury and team context.
       </footer>
       <PlayerModal id={openId} onClose={() => setOpenId(null)} onSelectPlayer={setOpenId} />
     </main>
   );
 }
-function SideCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function SideCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
@@ -308,13 +311,15 @@ function MyTeamColumn({
               onClick={() => onOpen(s.player!.id)}
               className="flex w-full items-center gap-2 rounded border border-border bg-background px-2 py-1.5 text-left hover:border-primary"
             >
-              <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
+              <span className="w-7 shrink-0 font-display text-[10px] uppercase text-muted-foreground">
+                {s.slot}
+              </span>
               <PlayerAvatar
                 id={s.player.id}
                 pos={s.player.pos}
                 team={s.player.team}
                 name={s.player.name}
-                className="size-9"
+                className="-ml-1 size-9"
                 logoClassName="size-3.5"
               />
               <div className="min-w-0 flex-1">
@@ -342,7 +347,9 @@ function MyTeamColumn({
             </button>
           ) : (
             <div className="flex flex-1 items-center gap-2 rounded border border-dashed border-border px-2 py-1.5">
-              <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
+              <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">
+                {s.slot}
+              </span>
               <span className="text-xs text-muted-foreground">Empty</span>
             </div>
           )}
@@ -351,65 +358,16 @@ function MyTeamColumn({
     </ul>
   );
 }
-function WatchColumn({
-  settings,
-  players,
-  draftedIds,
-  onOpen,
-  onDraft,
-  onToggleWatch,
-}: {
-  settings: Settings;
-  players: Player[];
-  draftedIds: Set<string>;
-  onOpen: (id: string) => void;
-  onDraft: (id: string) => void;
-  onToggleWatch: (id: string) => void;
-}) {
-  if (!players.length)
-    return <p className="p-3 text-center text-xs text-muted-foreground">Star players to build your watchlist.</p>;
-  const sorted = [...players].sort((a, b) => value(a, settings.scoring).rank - value(b, settings.scoring).rank);
-  return (
-    <ul className="space-y-1">
-      {sorted.map((p) => {
-        const drafted = draftedIds.has(p.id);
-        return (
-          <li
-            key={p.id}
-            className={cn("rounded border border-border bg-background px-2 py-1.5", drafted && "opacity-50")}
-          >
-            <button onClick={() => onOpen(p.id)} className="flex w-full items-center gap-2 text-left">
-              <PositionBadge pos={p.pos} className="h-5 text-[10px]" />
-              <span className="min-w-0 flex-1 truncate text-xs font-semibold">{p.name}</span>
-              <span className="tabnum text-[10px] text-muted-foreground">#{value(p, settings.scoring).rank}</span>
-            </button>
-            <div className="mt-1 flex gap-1">
-              <button
-                disabled={drafted}
-                onClick={() => onDraft(p.id)}
-                className="flex-1 rounded bg-primary px-2 py-1 font-display text-[10px] uppercase text-primary-foreground disabled:opacity-50"
-              >
-                {drafted ? "Gone" : "Draft"}
-              </button>
-              <button
-                aria-label={`Unwatch ${p.name}`}
-                onClick={() => onToggleWatch(p.id)}
-                className="rounded border border-border px-2 py-1 text-muted-foreground hover:text-foreground"
-              >
-                <Star className="size-3 fill-current" />
-              </button>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className={cn("bg-surface px-3 py-2", highlight && "bg-primary/15")}>
       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
-      <div className={cn("tabnum font-display text-lg leading-tight font-semibold", highlight && "text-primary")}>
+      <div
+        className={cn(
+          "tabnum font-display text-lg leading-tight font-semibold",
+          highlight && "text-primary",
+        )}
+      >
         {value}
       </div>
     </div>
