@@ -5,7 +5,13 @@ import { cn } from "@/lib/utils";
 const SCOREBOARD_URL =
   "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
 
-type TickerTeam = { abbr: string; logo: string; score: string; possession: boolean };
+type TickerTeam = {
+  abbr: string;
+  logo: string;
+  score: string;
+  possession: boolean;
+  record: string;
+};
 type TickerGame = {
   id: string;
   state: "pre" | "in" | "post";
@@ -68,6 +74,11 @@ function mapGames(json: any): TickerGame[] {
         logo: c?.team?.logo ?? "",
         score: c?.score ?? "0",
         possession: Boolean(possessionId) && String(c?.id) === String(possessionId),
+        record: String(
+          c?.records?.find((r: any) => r?.type === "total")?.summary ??
+            c?.records?.[0]?.summary ??
+            "",
+        ),
       };
     };
     const state: TickerGame["state"] =
@@ -85,8 +96,12 @@ function mapGames(json: any): TickerGame[] {
       kickoff: formatKickoff(ev?.date ?? comp?.date),
       clock: status?.displayClock ?? "",
       period: status?.period ? `Q${status.period}` : "",
-      downDistance: sit?.downDistanceText ?? sit?.shortDownDistanceText ?? "",
-      ballOn: sit?.possessionText ?? "",
+      downDistance: String(
+        sit?.shortDownDistanceText ??
+          String(sit?.downDistanceText ?? "").split(" at ")[0] ??
+          "",
+      ),
+      ballOn: String(sit?.possessionText ?? "").replace(/^at\s+/i, ""),
       network: String(network || ""),
       away: pick("away"),
       home: pick("home"),
@@ -341,30 +356,31 @@ export function ScoreTicker() {
               rel="noreferrer"
               className="flex min-w-[178px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
             >
-              <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-primary-foreground/70">
-                <span className="flex items-center gap-1">
-                  {g.state === "in" && (
-                    <span className="size-1.5 rounded-full bg-accent" aria-hidden />
-                  )}
-                  {g.state === "in"
-                    ? `${g.period} ${g.clock}`.trim()
-                    : g.state === "pre"
-                      ? g.kickoff || g.detail
-                      : g.detail}
-                </span>
-                {g.network && g.state !== "post" && (
-                  <span className="shrink-0 text-[9px] tracking-wider text-primary-foreground/55">
-                    {g.network}
-                  </span>
+              <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-primary-foreground/70">
+                {g.state === "in" && (
+                  <span className="size-1.5 rounded-full bg-accent" aria-hidden />
                 )}
+                {g.state === "in"
+                  ? `${g.period} ${g.clock}`.trim()
+                  : g.state === "pre"
+                    ? g.kickoff || g.detail
+                    : g.detail}
               </div>
-              <TeamRow team={g.away} live={g.state === "in"} pre={g.state === "pre"} />
-              <TeamRow team={g.home} live={g.state === "in"} pre={g.state === "pre"} />
-              {g.state === "in" && (g.downDistance || g.ballOn) && (
-                <div className="truncate text-[9px] uppercase tracking-wider text-primary-foreground/70">
-                  {[g.downDistance, g.ballOn].filter(Boolean).join(" · ")}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <TeamRow team={g.away} live={g.state === "in"} pre={g.state === "pre"} />
+                  <TeamRow team={g.home} live={g.state === "in"} pre={g.state === "pre"} />
                 </div>
-              )}
+                <div className="flex shrink-0 flex-col items-end gap-0.5 text-[9px] uppercase tracking-wider text-primary-foreground/60">
+                  {g.network && g.state !== "post" && <span>{g.network}</span>}
+                  {g.state === "in" && g.downDistance && (
+                    <span className="text-primary-foreground/75">{g.downDistance}</span>
+                  )}
+                  {g.state === "in" && g.ballOn && (
+                    <span className="text-primary-foreground/75">{g.ballOn}</span>
+                  )}
+                </div>
+              </div>
             </a>
           ))}
         </div>
@@ -413,7 +429,12 @@ function TeamRow({ team, live, pre }: { team: TickerTeam; live: boolean; pre: bo
           aria-label="Has possession"
         />
       )}
-      {!pre && <span className={cn("tabnum ml-auto text-xs font-semibold")}>{team.score}</span>}
+      {!pre && <span className="tabnum ml-1 text-xs font-semibold">{team.score}</span>}
+      {pre && team.record && (
+        <span className="tabnum ml-auto pl-2 text-[10px] text-primary-foreground/60">
+          {team.record}
+        </span>
+      )}
     </div>
   );
 }
