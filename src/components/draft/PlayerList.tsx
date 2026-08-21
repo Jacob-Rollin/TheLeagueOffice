@@ -469,10 +469,7 @@ function StatGroup({
   return (
     <div className={cn("grid w-28 grid-cols-2 text-xs font-semibold", DIVIDER)}>
       <div
-        className={cn(
-          "tabnum flex items-center justify-end pr-2 pl-2",
-          totalActive && ACTIVE_COL,
-        )}
+        className={cn("tabnum flex items-center justify-end pr-2 pl-2", totalActive && ACTIVE_COL)}
       >
         {total}
       </div>

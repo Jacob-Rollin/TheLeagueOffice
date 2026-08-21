@@ -150,18 +150,15 @@ type ScheduleGame = {
   status?: string | null;
 };
 
-const scheduleForType = memo<ScheduleGame[]>(
-  24 * HOUR,
-  async (key) => {
-    const [type, season] = key.split("|") as [string, string];
-    const res = await fetch(`${BASE}/schedule/nfl/${type}/${season}`, {
-      headers: { accept: "application/json" },
-    });
-    if (!res.ok) return [];
-    const json = (await res.json()) as ScheduleGame[];
-    return Array.isArray(json) ? json : [];
-  },
-);
+const scheduleForType = memo<ScheduleGame[]>(24 * HOUR, async (key) => {
+  const [type, season] = key.split("|") as [string, string];
+  const res = await fetch(`${BASE}/schedule/nfl/${type}/${season}`, {
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) return [];
+  const json = (await res.json()) as ScheduleGame[];
+  return Array.isArray(json) ? json : [];
+});
 
 const scheduleFor = (season: string) => scheduleForType(`regular|${season}`);
 
@@ -214,7 +211,6 @@ export async function loadNextGame(team: string): Promise<NextGame | null> {
     seasonType: upcoming.seasonType,
   };
 }
-
 
 /** Weeks 1-18 with no scheduled game, per team. */
 async function byeWeeks(season: string): Promise<Map<string, number>> {
@@ -497,7 +493,8 @@ async function buildSos(player: Player, season: string) {
   return {
     grade: avg === null ? "Unknown" : sosGrade(avg),
     rank: avg === null ? null : Math.round(avg),
-    pointsAllowedPerGame: avg === null ? null : Math.round((perGame.get(player.team) ?? 0) * 10) / 10,
+    pointsAllowedPerGame:
+      avg === null ? null : Math.round((perGame.get(player.team) ?? 0) * 10) / 10,
     opponents,
   };
 }
@@ -506,13 +503,12 @@ function injuryRisk(player: Player, history: SeasonLine[]) {
   const factors: string[] = [];
   let score = 20;
 
-  const missed = history
-    .map((h) => Math.max(0, 17 - h.games))
-    .filter((m) => Number.isFinite(m));
+  const missed = history.map((h) => Math.max(0, 17 - h.games)).filter((m) => Number.isFinite(m));
   const totalMissed = missed.reduce((a, b) => a + b, 0);
   if (history.length) {
     score += Math.min(45, totalMissed * 5);
-    if (totalMissed >= 6) factors.push(`${totalMissed} games missed over the last ${history.length} seasons`);
+    if (totalMissed >= 6)
+      factors.push(`${totalMissed} games missed over the last ${history.length} seasons`);
     else if (totalMissed > 0) factors.push(`${totalMissed} games missed recently`);
     else factors.push("No games missed in tracked seasons");
   }
@@ -547,8 +543,14 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
   if (!player) return null;
 
   const season = built.payload.season;
-  const prevSeasons = [String(Number(season) - 1), String(Number(season) - 2), String(Number(season) - 3)];
-  const statMaps = await Promise.all(prevSeasons.map((s) => seasonStats(s).catch(() => new Map<string, Stats>())));
+  const prevSeasons = [
+    String(Number(season) - 1),
+    String(Number(season) - 2),
+    String(Number(season) - 3),
+  ];
+  const statMaps = await Promise.all(
+    prevSeasons.map((s) => seasonStats(s).catch(() => new Map<string, Stats>())),
+  );
 
   const history: SeasonLine[] = [];
   prevSeasons.forEach((s, i) => {
@@ -791,7 +793,6 @@ const LOG_KEYS = [
   "fum_lost",
 ] as const;
 
-
 const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
   const res = await fetch(`${BASE}/players/nfl/${encodeURIComponent(id)}`, {
     headers: { accept: "application/json" },
@@ -801,9 +802,10 @@ const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
   if (!j) return null;
   const h = typeof j["height"] === "string" ? j["height"] : null;
   const inches = h && /^\d+$/.test(h) ? Number(h) : null;
-  const draftYear = j["metadata"] && typeof j["metadata"] === "object"
-    ? (j["metadata"] as Record<string, unknown>)["rookie_year"]
-    : null;
+  const draftYear =
+    j["metadata"] && typeof j["metadata"] === "object"
+      ? (j["metadata"] as Record<string, unknown>)["rookie_year"]
+      : null;
   return {
     height: inches ? `${Math.floor(inches / 12)}'${inches % 12}"` : h,
     weight: j["weight"] ? `${j["weight"]} lbs` : null,
@@ -811,16 +813,21 @@ const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
     status: typeof j["status"] === "string" ? j["status"] : null,
     number: typeof j["number"] === "number" ? j["number"] : null,
     birthDate: typeof j["birth_date"] === "string" ? j["birth_date"] : null,
-    draft: typeof draftYear === "string" || typeof draftYear === "number" ? `Rookie year ${draftYear}` : null,
+    draft:
+      typeof draftYear === "string" || typeof draftYear === "number"
+        ? `Rookie year ${draftYear}`
+        : null,
   };
-
 });
 
 export async function loadPlayerBio(id: string): Promise<PlayerBio | null> {
   return await bioFor(id).catch(() => null);
 }
 
-async function weeklyRaw(id: string, season: string): Promise<Record<string, { stats?: Stats | null }>> {
+async function weeklyRaw(
+  id: string,
+  season: string,
+): Promise<Record<string, { stats?: Stats | null }>> {
   const res = await fetch(
     `${BASE}/stats/nfl/player/${encodeURIComponent(id)}?season_type=regular&season=${season}&grouping=week`,
     { headers: { accept: "application/json" } },
@@ -861,7 +868,6 @@ export async function loadGameLogs(
         },
         line: statLine(player.pos, stats),
         raw: Object.fromEntries(LOG_KEYS.map((k) => [k, num(stats[k], 0)])),
-
       });
     }
     if (logs.length) {
