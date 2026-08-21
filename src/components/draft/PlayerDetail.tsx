@@ -36,6 +36,9 @@ export function PlayerDetail({
   const scoring = draft.settings.scoring;
   const drafted = draft.draftedIds.has(player.id);
   const watched = draft.watchIds.has(player.id);
+  const last = history[0] ?? null;
+  const prevSeason = last?.season ?? String(Number(season) - 1);
+
 
   return (
     <div className="pb-8">
@@ -43,12 +46,18 @@ export function PlayerDetail({
         <div className="flex items-center gap-3 pr-8">
           <PlayerAvatar id={player.id} pos={player.pos} team={player.team} name={player.name} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <PositionBadge pos={player.pos} />
               <h1 className="display-title truncate text-2xl">{player.name}</h1>
+              {player.injury && (
+                <span className="shrink-0 rounded border border-destructive/40 bg-destructive/15 px-1.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-destructive">
+                  {player.injury}
+                </span>
+              )}
             </div>
             <p className="tabnum text-xs text-muted-foreground">
-              {player.team} · {player.pos} · #{player.rank[scoring]} overall · ADP{" "}
+              Rank #{player.rank[scoring]} · {player.pos} · {player.team}
+              {player.bye ? ` · Bye ${player.bye}` : ""} · ADP{" "}
               {player.adp[scoring] < 900 ? player.adp[scoring].toFixed(1) : "—"} ·{" "}
               {SCORING_LABEL[scoring]}
               {player.age ? ` · Age ${player.age}` : ""}
@@ -99,36 +108,27 @@ export function PlayerDetail({
 
       {tab === "overview" && (
         <>
-          <Section title={`${season} projection`}>
-            <div className="rounded-lg border border-border bg-card p-3">
-              <div className="tabnum font-display text-2xl">
-                {projection.points[scoring].toFixed(1)}{" "}
-                <span className="text-sm text-muted-foreground">proj pts</span>
-              </div>
-              <StatGrid line={projection.line} />
+          <Section title="Season summary">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <SummaryCard
+                title={`${season} Projections`}
+                pts={projection.points[scoring]}
+                games={projection.games || 17}
+              />
+              <SummaryCard
+                title={`${prevSeason} Actual`}
+                pts={last ? last.points[scoring] : null}
+                games={last?.games ?? 0}
+              />
             </div>
           </Section>
 
-          <Section title="Previous seasons">
-            {history.length === 0 ? (
-              <Empty>No prior-season stats on record.</Empty>
-            ) : (
-              <ul className="space-y-2">
-                {history.map((h) => (
-                  <li key={h.season} className="rounded-lg border border-border bg-card p-3">
-                    <div className="flex items-baseline justify-between">
-                      <span className="font-display text-lg">{h.season}</span>
-                      <span className="tabnum text-sm text-muted-foreground">
-                        {h.points[scoring].toFixed(1)} pts · {h.games} gp
-                        {h.posRank ? ` · ${player.pos}${h.posRank}` : ""}
-                      </span>
-                    </div>
-                    <StatGrid line={h.line} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
+          <div className="mt-4 px-3">
+            <h2 className="font-display text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Analytics
+            </h2>
+            <div className="mt-1 h-px bg-border" />
+          </div>
 
           <Section title="Injury risk">
             <div className="rounded-lg border border-border bg-card p-3">
@@ -229,8 +229,160 @@ export function PlayerDetail({
               </ul>
             )}
           </Section>
+
+          <Section title="Stat matrix">
+            <StatMatrix
+              pos={player.pos}
+              season={season}
+              prevSeason={prevSeason}
+              proj={projection}
+              actual={last}
+              scoring={scoring}
+            />
+          </Section>
+
+          <div className="px-3 pt-4">
+            <Link to="/player/$id" params={{ id: player.id }} className="block">
+              <Button variant="secondary" className="w-full font-display uppercase tracking-wide">
+                View Full Player Profile
+              </Button>
+            </Link>
+          </div>
         </>
       )}
+    </div>
+  );
+}
+
+const MATRIX_ROWS: Record<string, [string, string][]> = {
+  QB: [
+    ["pass_yd", "Passing Yards"],
+    ["pass_td", "Passing TDs"],
+    ["pass_int", "Interceptions"],
+    ["rush_yd", "Rushing Yards"],
+    ["rush_td", "Rushing TDs"],
+  ],
+  SKILL: [
+    ["rush_yd", "Rushing Yards"],
+    ["rush_td", "Rushing TDs"],
+    ["rec_tgt", "Targets"],
+    ["rec", "Receptions"],
+    ["rec_yd", "Receiving Yards"],
+    ["rec_td", "Receiving TDs"],
+    ["fum_lost", "Fumbles Lost"],
+  ],
+  K: [
+    ["fgm", "Field Goals Made"],
+    ["fgmiss", "Field Goals Missed"],
+    ["xpm", "Extra Points Made"],
+  ],
+  DEF: [
+    ["sack", "Sacks"],
+    ["int", "Interceptions"],
+    ["def_st_td", "Defensive/ST TDs"],
+    ["pts_allow", "Points Allowed"],
+  ],
+};
+
+function StatMatrix({
+  pos,
+  season,
+  prevSeason,
+  proj,
+  actual,
+  scoring,
+}: {
+  pos: string;
+  season: string;
+  prevSeason: string;
+  proj: { points: Record<string, number>; games: number; raw: Record<string, number> };
+  actual: { points: Record<string, number>; games: number; raw: Record<string, number> } | null;
+  scoring: string;
+}) {
+  const rows =
+    MATRIX_ROWS[pos === "QB" || pos === "K" || pos === "DEF" ? pos : "SKILL"] ?? MATRIX_ROWS["SKILL"]!;
+  const fmt = (v: number | undefined) =>
+    v === undefined || v === null ? "—" : Math.round(v * 10) / 10 === 0 ? "0" : (Math.round(v * 10) / 10).toString();
+
+  const projPts = proj.points[scoring] ?? 0;
+  const actPts = actual ? (actual.points[scoring] ?? 0) : null;
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-secondary/40 font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+            <th className="px-3 py-2 text-left">Stat Type</th>
+            <th className="px-3 py-2 text-right">{season} Proj</th>
+            <th className="px-3 py-2 text-right">{prevSeason} Actual</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.map(([key, label]) => (
+            <tr key={key}>
+              <td className="px-3 py-1.5 text-muted-foreground">{label}</td>
+              <td className="tabnum px-3 py-1.5 text-right font-mono">{fmt(proj.raw?.[key] ?? 0)}</td>
+              <td className="tabnum px-3 py-1.5 text-right font-mono">
+                {actual ? fmt(actual.raw?.[key] ?? 0) : "—"}
+              </td>
+            </tr>
+          ))}
+          <tr className="border-t border-border bg-secondary/40 font-semibold">
+            <td className="px-3 py-1.5 font-display text-xs uppercase tracking-wide">
+              Total Points
+            </td>
+            <td className="tabnum px-3 py-1.5 text-right font-mono">{projPts.toFixed(1)}</td>
+            <td className="tabnum px-3 py-1.5 text-right font-mono">
+              {actPts === null ? "—" : actPts.toFixed(1)}
+            </td>
+          </tr>
+          <tr className="bg-secondary/40 font-semibold">
+            <td className="px-3 py-1.5 font-display text-xs uppercase tracking-wide">
+              Weekly Average
+            </td>
+            <td className="tabnum px-3 py-1.5 text-right font-mono">
+              {(projPts / (proj.games || 17)).toFixed(1)}
+            </td>
+            <td className="tabnum px-3 py-1.5 text-right font-mono">
+              {actPts === null || !actual?.games ? "—" : (actPts / actual.games).toFixed(1)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  pts,
+  games,
+}: {
+  title: string;
+  pts: number | null;
+  games: number;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="font-display text-xs uppercase tracking-widest text-muted-foreground">
+        {title}
+      </div>
+      <ul className="mt-2 space-y-1 text-sm">
+        <li className="flex items-baseline gap-2">
+          <span className="text-muted-foreground">·</span>
+          <span className="text-muted-foreground">PTS</span>
+          <span className="tabnum ml-auto font-mono font-semibold">
+            {pts === null ? "—" : pts.toFixed(1)}
+          </span>
+        </li>
+        <li className="flex items-baseline gap-2">
+          <span className="text-muted-foreground">·</span>
+          <span className="text-muted-foreground">AVG</span>
+          <span className="tabnum ml-auto font-mono font-semibold">
+            {pts === null || !games ? "—" : (pts / games).toFixed(1)}
+          </span>
+        </li>
+      </ul>
     </div>
   );
 }
@@ -246,19 +398,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function StatGrid({ line }: { line: { label: string; value: string }[] }) {
-  if (line.length === 0) return null;
-  return (
-    <div className="mt-2 grid grid-cols-3 gap-2">
-      {line.map((s) => (
-        <div key={s.label} className="rounded border border-border bg-surface px-2 py-1">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</div>
-          <div className="tabnum font-display text-base">{s.value}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
