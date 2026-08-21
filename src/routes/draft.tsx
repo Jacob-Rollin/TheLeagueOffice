@@ -79,6 +79,11 @@ function DraftRoom() {
     () => positionNeeds(myPlayers, settings.roster),
     [myPlayers, settings.roster],
   );
+  const myCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const p of myPlayers) c[p.pos] = (c[p.pos] ?? 0) + 1;
+    return c;
+  }, [myPlayers]);
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
   const lastPick = picks.length ? picks[picks.length - 1]! : null;
@@ -188,12 +193,13 @@ function DraftRoom() {
       <div
         className={cn(
           "flex-1 gap-3 px-0 py-3 lg:px-3",
-          tab === "team" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px] lg:items-start",
-          tab === "players" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start",
+          tab === "team" && "md:grid md:grid-cols-[230px_minmax(0,1fr)] md:items-start",
+          tab === "team" && "lg:grid-cols-[230px_minmax(0,1fr)_240px]",
+          tab === "players" && "md:grid md:grid-cols-[230px_minmax(0,1fr)] md:items-start",
         )}
       >
         {tab !== "board" && (
-          <aside className="hidden lg:sticky lg:top-[calc(var(--wr-header-h,0px)+0.75rem)] lg:block lg:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
+          <aside className="hidden md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)] md:block md:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
             {tab === "team" ? (
               <SideCard title="BYE WEEK MATRIX">
                 {myPlayers.length ? (
@@ -216,13 +222,14 @@ function DraftRoom() {
             )}
           </aside>
         )}
+
         <div className="flex min-w-0 flex-col">
           {tab === "players" && (
             <PlayerList
               players={data.players}
               draftedIds={draft.draftedIds}
               watchIds={draft.watchIds}
-              needs={myNeeds}
+              counts={myCounts}
               customOrder={draft.customOrder}
               settings={settings}
               currentOverall={currentOverall}
