@@ -17,7 +17,7 @@ type Sort = SortKey | null;
 /** Continuous vertical rule that separates stat column groups. */
 const DIVIDER = "border-l border-border";
 /** Muted wash applied down an actively sorted column. */
-const ACTIVE_COL = "bg-muted/60";
+const ACTIVE_COL = "bg-muted/40";
 
 export function PlayerList({
   players,
@@ -251,18 +251,18 @@ export function PlayerList({
           <button
             onClick={() => toggleSort("rank")}
             className={cn(
-              "w-8 shrink-0 self-stretch text-center uppercase tracking-widest transition-colors hover:text-foreground",
+              "flex w-8 shrink-0 items-end justify-center self-stretch pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
               sort === "rank" && `${ACTIVE_COL} text-foreground`,
             )}
           >
             RK
           </button>
-          <div className="w-[300px] shrink-0">Player</div>
+          <div className="flex w-[380px] shrink-0 items-end pb-1">Player</div>
           <div className="flex min-w-0 flex-1 items-stretch">
             <button
               onClick={() => toggleSort("adp")}
               className={cn(
-                "flex-1 self-stretch px-2 text-center uppercase tracking-widest transition-colors hover:text-foreground",
+                "flex flex-1 items-end justify-center self-stretch px-2 pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
                 DIVIDER,
                 sort === "adp" && `${ACTIVE_COL} text-foreground`,
               )}
@@ -278,9 +278,6 @@ export function PlayerList({
               sort={sort}
               onSort={toggleSort}
             />
-            <div className={cn("flex flex-1 items-end justify-center pb-1", DIVIDER)}>
-              <span className="uppercase tracking-widest">Pos RK</span>
-            </div>
             <StatGroupHeader
               label={`${SEASON} PROJ`}
               totalKey="projPts"
@@ -325,20 +322,18 @@ export function PlayerList({
                   className="size-10"
                   logoClassName="size-4"
                 />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-semibold">{p.name}</span>
-                    {p.injury && (
-                      <span className="rounded bg-destructive/20 px-1 text-[10px] font-bold uppercase text-destructive">
-                        {p.injury}
-                      </span>
-                    )}
-                  </div>
-                  <div className="truncate text-xs text-muted-foreground">
+                <div className="flex-1">
+                  <div className="font-semibold whitespace-nowrap">{p.name}</div>
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
                     {p.pos}
                     {p.team ? ` · ${p.team}` : ""}
                     {p.bye ? ` · BYE ${p.bye}` : ""}
                     {reach !== null && reach < -6 ? " · reach" : ""}
+                    {p.injury ? (
+                      <span className="font-semibold uppercase text-destructive">
+                        {` · ${p.injury}`}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </>
@@ -386,11 +381,11 @@ export function PlayerList({
                   {v.rank}
                 </div>
 
-                <div className="flex w-[300px] shrink-0 items-center gap-1 py-2">
+                <div className="flex w-[380px] shrink-0 items-center gap-1 py-2">
                   {onOpenPlayer ? (
                     <button
                       type="button"
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
+                      className="flex flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
                       onClick={() => onOpenPlayer(p.id)}
                     >
                       {playerBody}
@@ -399,7 +394,7 @@ export function PlayerList({
                     <Link
                       to="/player/$id"
                       params={{ id: p.id }}
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
+                      className="flex flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
                     >
                       {playerBody}
                     </Link>
@@ -431,10 +426,6 @@ export function PlayerList({
                     avg={p.adpRange.max < 900 ? p.adpRange.max.toFixed(1) : "—"}
                     totalActive={sort === "adpMin"}
                     avgActive={sort === "adpMax"}
-                  />
-                  <StatCell
-                    value={p.posRank && p.posRank < 999 ? `${p.pos}${p.posRank}` : "—"}
-                    className={cn("flex-1 justify-center px-2", DIVIDER)}
                   />
                   <StatGroup
                     total={v.proj.toFixed(0)}
