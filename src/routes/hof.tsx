@@ -84,6 +84,10 @@ function HofPage() {
               <YearNode key={entry.year} entry={entry} />
             ))}
           </div>
+
+          <div className="relative z-10 mx-auto my-12 block w-fit rounded-md border-2 border-amber-500 bg-zinc-900 px-4 py-1.5 text-center font-mono text-xl font-bold tracking-tight text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+            The League Established 2015
+          </div>
         </div>
       )}
     </main>
