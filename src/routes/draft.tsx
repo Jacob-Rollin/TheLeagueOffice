@@ -334,7 +334,7 @@ function MyTeamColumn({
           <span className="w-7 shrink-0">Pos</span>
           <span className="w-9 shrink-0" />
           <span className="min-w-0 flex-1">Player</span>
-          <span className="w-14 shrink-0 text-right">2026 Proj Pts</span>
+          <span className="w-16 shrink-0 whitespace-nowrap text-right">2026 Proj Pts</span>
         </div>
       )}
     <ul className="space-y-1">
