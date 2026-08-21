@@ -381,11 +381,11 @@ export function PlayerList({
                   {v.rank}
                 </div>
 
-                <div className="flex w-[300px] shrink-0 items-center gap-1 py-2">
+                <div className="flex w-[380px] shrink-0 items-center gap-1 py-2">
                   {onOpenPlayer ? (
                     <button
                       type="button"
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
+                      className="flex flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
                       onClick={() => onOpenPlayer(p.id)}
                     >
                       {playerBody}
@@ -394,7 +394,7 @@ export function PlayerList({
                     <Link
                       to="/player/$id"
                       params={{ id: p.id }}
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
+                      className="flex flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
                     >
                       {playerBody}
                     </Link>
