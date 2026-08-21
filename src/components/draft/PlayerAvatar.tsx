@@ -35,6 +35,7 @@ export function PlayerAvatar({
           src={playerImage(id, pos, team)}
           alt={name}
           loading="lazy"
+          style={{ width: '40px', height: '40px', minWidth: '40px' }}
           className="size-full object-cover object-top"
           onError={(e) => {
             e.currentTarget.style.visibility = "hidden";
