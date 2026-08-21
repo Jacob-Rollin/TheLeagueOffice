@@ -281,13 +281,23 @@ function SideCard({ title, subtitle, children }: { title: string; subtitle?: str
 function MyTeamColumn({
   settings,
   players,
+  picks,
   onOpen,
 }: {
   settings: Settings;
   players: Player[];
+  picks: Pick[];
   onOpen: (id: string) => void;
 }) {
   const slots = fillRoster(players, settings.roster);
+  const pickByPlayer = useMemo(
+    () =>
+      picks.reduce<Record<string, Pick>>((acc, p) => {
+        acc[p.playerId] = p;
+        return acc;
+      }, {}),
+    [picks],
+  );
   return (
     <ul className="space-y-1">
       {slots.map((s, i) => (
@@ -298,11 +308,36 @@ function MyTeamColumn({
               className="flex w-full items-center gap-2 rounded border border-border bg-background px-2 py-1.5 text-left hover:border-primary"
             >
               <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
-              <PositionBadge pos={s.player.pos} className="h-5 text-[10px]" />
-              <span className="min-w-0 flex-1 truncate text-xs font-semibold">{s.player.name}</span>
-              <span className="tabnum text-[10px] text-muted-foreground">
-                {value(s.player, settings.scoring).proj.toFixed(0)}
-              </span>
+              <PlayerAvatar
+                id={s.player.id}
+                pos={s.player.pos}
+                team={s.player.team}
+                name={s.player.name}
+                className="size-9"
+                logoClassName="size-3.5"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-semibold">{s.player.name}</div>
+                <div className="flex items-center gap-1 truncate text-[10px] text-muted-foreground">
+                  <span
+                    className="inline-block size-1.5 rounded-full"
+                    style={{ backgroundColor: `var(--pos-${s.player.pos.toLowerCase()})` }}
+                  />
+                  <span>{s.player.pos}</span>
+                  {s.player.team ? <span>· {s.player.team}</span> : null}
+                  {s.player.bye ? <span>· BYE {s.player.bye}</span> : null}
+                </div>
+              </div>
+              {pickByPlayer[s.player.id] ? (
+                <span className="tabnum w-10 text-right text-[10px] font-semibold text-muted-foreground">
+                  {(() => {
+                    const overall = pickByPlayer[s.player.id]!.overall;
+                    const round = roundOf(overall, settings.teams);
+                    const pick = ((overall - 1) % settings.teams) + 1;
+                    return `${round}.${pick.toString().padStart(2, "0")}`;
+                  })()}
+                </span>
+              ) : null}
             </button>
           ) : (
             <div className="flex flex-1 items-center gap-2 rounded border border-dashed border-border px-2 py-1.5">
