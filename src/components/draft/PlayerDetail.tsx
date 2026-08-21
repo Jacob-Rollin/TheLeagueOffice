@@ -398,19 +398,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function StatGrid({ line }: { line: { label: string; value: string }[] }) {
-  if (line.length === 0) return null;
-  return (
-    <div className="mt-2 grid grid-cols-3 gap-2">
-      {line.map((s) => (
-        <div key={s.label} className="rounded border border-border bg-surface px-2 py-1">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</div>
-          <div className="tabnum font-display text-base">{s.value}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
