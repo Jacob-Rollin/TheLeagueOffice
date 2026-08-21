@@ -70,12 +70,13 @@ export const Route = createFileRoute("/player/$id")({
   component: PlayerHubPage,
 });
 
-type TabKey = "overview" | "logs" | "depth";
+type TabKey = "overview" | "logs" | "depth" | "news";
 
 const TABS: [TabKey, string][] = [
   ["overview", "Overview"],
   ["logs", "Game Logs"],
   ["depth", "Team Depth Chart"],
+  ["news", "News"],
 ];
 
 function headshot(id: string, pos: string, team: string) {
@@ -271,7 +272,9 @@ function PlayerHubPage() {
 
             {tab === "logs" && <GameLogs id={id} pos={player.pos} />}
 
-            {tab === "depth" && (
+            {tab === "news" && <PlayerNews id={id} pos={player.pos} />}
+
+            {tab === "depth" && player.pos !== "DEF" && (
               <Module title={`${player.team} ${player.pos} depth chart`}>
                 {depthChart.length === 0 ? (
                   <Empty>No teammates found.</Empty>
@@ -326,6 +329,7 @@ function PlayerHubPage() {
             )}
 
 
+            {player.pos !== "DEF" && (
             <Widget title={`Strength of schedule vs ${player.pos}`}>
               {!sos ? (
                 <p className="text-xs text-zinc-500">Schedule data unavailable.</p>
@@ -355,7 +359,9 @@ function PlayerHubPage() {
                 </>
               )}
             </Widget>
+            )}
 
+            {player.pos !== "DEF" && (
             <Widget title={`${player.team} ${player.pos} depth`}>
               {depthChart.length === 0 ? (
                 <p className="text-xs text-zinc-500">No teammates found.</p>
@@ -380,6 +386,7 @@ function PlayerHubPage() {
                 </ol>
               )}
             </Widget>
+            )}
           </aside>
         </div>
       </div>
