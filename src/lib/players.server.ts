@@ -571,7 +571,11 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
   const history: SeasonLine[] = [];
   prevSeasons.forEach((s, i) => {
     const stats = statMaps[i]?.get(id);
-    if (stats) history.push(toSeasonLine(s, player.pos, stats));
+    if (!stats) return;
+    const line = toSeasonLine(s, player.pos, stats);
+    // Skip seasons the player never actually played (rookies get empty stat rows).
+    if (line.games <= 0) return;
+    history.push(line);
   });
 
   const projection = toSeasonLine(season, player.pos, built.rawProj.get(id) ?? {});
