@@ -437,7 +437,7 @@ export function PlayerList({
                   {v.rank}
                 </div>
 
-                <div className="flex w-[380px] shrink-0 items-center gap-1 py-2">
+                <div className="flex w-[460px] shrink-0 items-center gap-1 py-2">
                   {onOpenPlayer ? (
                     <button
                       type="button"
