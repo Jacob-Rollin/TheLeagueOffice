@@ -233,34 +233,22 @@ function DraftRoom() {
             />
           )}
         </div>
-        {tab !== "board" && (
+        {tab === "team" && (
           <aside className="hidden lg:sticky lg:top-[calc(var(--wr-header-h,0px)+0.75rem)] lg:block lg:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
-            {tab === "team" ? (
-              <SideCard title="Suggested Picks" subtitle="Best value for your roster">
-                <DraftSuggestions
-                  players={data.players}
-                  draftedIds={draft.draftedIds}
-                  needs={myNeeds}
-                  settings={settings}
-                  currentOverall={currentOverall}
-                  onDraft={draft.draftPlayer}
-                  onOpen={setOpenId}
-                />
-              </SideCard>
-            ) : (
-              <SideCard title="Watchlist" subtitle={`${watchPlayers.length} players`}>
-                <WatchColumn
-                  settings={settings}
-                  players={watchPlayers}
-                  draftedIds={draft.draftedIds}
-                  onOpen={setOpenId}
-                  onDraft={draft.draftPlayer}
-                  onToggleWatch={draft.toggleWatch}
-                />
-              </SideCard>
-            )}
+            <SideCard title="Suggested Picks" subtitle="Best value for your roster">
+              <DraftSuggestions
+                players={data.players}
+                draftedIds={draft.draftedIds}
+                needs={myNeeds}
+                settings={settings}
+                currentOverall={currentOverall}
+                onDraft={draft.draftPlayer}
+                onOpen={setOpenId}
+              />
+            </SideCard>
           </aside>
         )}
+
       </div>
       <footer className="border-t border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
         ADP, projections and prior-season stats are sourced from Sleeper's pipeline API. Player detail pages provide
