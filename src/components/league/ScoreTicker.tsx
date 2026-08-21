@@ -13,6 +13,9 @@ type TickerGame = {
   kickoff: string;
   clock: string;
   period: string;
+  downDistance: string;
+  ballOn: string;
+  network: string;
   away: TickerTeam;
   home: TickerTeam;
   link: string;
