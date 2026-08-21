@@ -1,6 +1,6 @@
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Star, Undo2, X } from "lucide-react";
+import { Undo2, X } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ByeMatrix } from "@/components/draft/ByeMatrix";
 import { DraftBoard } from "@/components/draft/DraftBoard";
@@ -8,7 +8,6 @@ import { DraftSuggestions } from "@/components/draft/DraftSuggestions";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerList } from "@/components/draft/PlayerList";
 import { PlayerModal } from "@/components/draft/PlayerModal";
-import { PositionBadge } from "@/components/draft/PositionBadge";
 import { RosterPanel } from "@/components/draft/RosterPanel";
 import { SettingsSheet } from "@/components/draft/SettingsSheet";
 import { useDraft } from "@/hooks/use-draft";
@@ -75,10 +74,6 @@ function DraftRoom() {
     [picks, byId, settings.myTeam],
   );
   const myNeeds = useMemo(() => positionNeeds(myPlayers, settings.roster), [myPlayers, settings.roster]);
-  const watchPlayers = useMemo(
-    () => data.players.filter((p) => draft.watchIds.has(p.id)),
-    [data.players, draft.watchIds],
-  );
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
   const lastPick = picks.length ? picks[picks.length - 1]! : null;
@@ -298,13 +293,13 @@ function MyTeamColumn({
               onClick={() => onOpen(s.player!.id)}
               className="flex w-full items-center gap-2 rounded border border-border bg-background px-2 py-1.5 text-left hover:border-primary"
             >
-              <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
+              <span className="w-7 shrink-0 font-display text-[10px] uppercase text-muted-foreground">{s.slot}</span>
               <PlayerAvatar
                 id={s.player.id}
                 pos={s.player.pos}
                 team={s.player.team}
                 name={s.player.name}
-                className="size-9"
+                className="-ml-1 size-9"
                 logoClassName="size-3.5"
               />
               <div className="min-w-0 flex-1">
@@ -338,60 +333,6 @@ function MyTeamColumn({
           )}
         </li>
       ))}
-    </ul>
-  );
-}
-function WatchColumn({
-  settings,
-  players,
-  draftedIds,
-  onOpen,
-  onDraft,
-  onToggleWatch,
-}: {
-  settings: Settings;
-  players: Player[];
-  draftedIds: Set<string>;
-  onOpen: (id: string) => void;
-  onDraft: (id: string) => void;
-  onToggleWatch: (id: string) => void;
-}) {
-  if (!players.length)
-    return <p className="p-3 text-center text-xs text-muted-foreground">Star players to build your watchlist.</p>;
-  const sorted = [...players].sort((a, b) => value(a, settings.scoring).rank - value(b, settings.scoring).rank);
-  return (
-    <ul className="space-y-1">
-      {sorted.map((p) => {
-        const drafted = draftedIds.has(p.id);
-        return (
-          <li
-            key={p.id}
-            className={cn("rounded border border-border bg-background px-2 py-1.5", drafted && "opacity-50")}
-          >
-            <button onClick={() => onOpen(p.id)} className="flex w-full items-center gap-2 text-left">
-              <PositionBadge pos={p.pos} className="h-5 text-[10px]" />
-              <span className="min-w-0 flex-1 truncate text-xs font-semibold">{p.name}</span>
-              <span className="tabnum text-[10px] text-muted-foreground">#{value(p, settings.scoring).rank}</span>
-            </button>
-            <div className="mt-1 flex gap-1">
-              <button
-                disabled={drafted}
-                onClick={() => onDraft(p.id)}
-                className="flex-1 rounded bg-primary px-2 py-1 font-display text-[10px] uppercase text-primary-foreground disabled:opacity-50"
-              >
-                {drafted ? "Gone" : "Draft"}
-              </button>
-              <button
-                aria-label={`Unwatch ${p.name}`}
-                onClick={() => onToggleWatch(p.id)}
-                className="rounded border border-border px-2 py-1 text-muted-foreground hover:text-foreground"
-              >
-                <Star className="size-3 fill-current" />
-              </button>
-            </div>
-          </li>
-        );
-      })}
     </ul>
   );
 }
