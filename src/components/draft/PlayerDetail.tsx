@@ -247,13 +247,22 @@ const MATRIX_ROWS: Record<string, [string, string][]> = {
     ["rush_yd", "Rushing Yards"],
     ["rush_td", "Rushing TDs"],
   ],
-  SKILL: [
+  RB: [
     ["rush_yd", "Rushing Yards"],
     ["rush_td", "Rushing TDs"],
     ["rec_tgt", "Targets"],
     ["rec", "Receptions"],
     ["rec_yd", "Receiving Yards"],
     ["rec_td", "Receiving TDs"],
+    ["fum_lost", "Fumbles Lost"],
+  ],
+  SKILL: [
+    ["rec_tgt", "Targets"],
+    ["rec", "Receptions"],
+    ["rec_yd", "Receiving Yards"],
+    ["rec_td", "Receiving TDs"],
+    ["rush_yd", "Rushing Yards"],
+    ["rush_td", "Rushing TDs"],
     ["fum_lost", "Fumbles Lost"],
   ],
   K: [
