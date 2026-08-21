@@ -139,7 +139,13 @@ export function PlayerList({
               className="h-10 pl-9"
             />
           </div>
-          <Button variant="secondary" size="icon" className="h-10 w-10" disabled={!canUndo} onClick={onUndo}>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-10 w-10"
+            disabled={!canUndo}
+            onClick={onUndo}
+          >
             <Undo2 className="size-4" />
             <span className="sr-only">Undo last pick</span>
           </Button>
@@ -263,11 +269,11 @@ export function PlayerList({
                   </div>
                 </div>
                 <div className="hidden shrink-0 items-center gap-4 sm:flex">
-                  <StatCell value={v.adp < 900 ? v.adp.toFixed(1) : "—"} className="w-20 text-right" />
-                  <StatGroup
-                    total={v.proj.toFixed(0)}
-                    avg={(v.proj / 18).toFixed(1)}
+                  <StatCell
+                    value={v.adp < 900 ? v.adp.toFixed(1) : "—"}
+                    className="w-20 text-right"
                   />
+                  <StatGroup total={v.proj.toFixed(0)} avg={(v.proj / 18).toFixed(1)} />
                   <StatGroup
                     total={v.prev !== null && v.prev > 0 ? v.prev.toFixed(0) : "—"}
                     avg={v.prev !== null && v.prev > 0 ? (v.prev / 18).toFixed(1) : "—"}
@@ -369,4 +375,3 @@ function StatGroupHeader({ label }: { label: string }) {
     </div>
   );
 }
-
