@@ -427,10 +427,6 @@ export function PlayerList({
                     totalActive={sort === "adpMin"}
                     avgActive={sort === "adpMax"}
                   />
-                  <StatCell
-                    value={p.posRank && p.posRank < 999 ? `${p.pos}${p.posRank}` : "—"}
-                    className={cn("flex-1 justify-center px-2", DIVIDER)}
-                  />
                   <StatGroup
                     total={v.proj.toFixed(0)}
                     avg={(v.proj / 18).toFixed(1)}
