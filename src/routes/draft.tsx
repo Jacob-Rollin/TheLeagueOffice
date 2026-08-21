@@ -14,6 +14,7 @@ import {
   nextPicksFor,
   positionNeeds,
   POSITIONS,
+  FLEX_POSITIONS,
   byeMatrix,
   roundOf,
   SCORING_LABEL,
