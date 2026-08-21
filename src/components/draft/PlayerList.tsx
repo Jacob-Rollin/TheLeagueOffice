@@ -347,6 +347,7 @@ export function PlayerList({
               avgKey="prevAvg"
               sort={sort}
               onSort={toggleSort}
+              flushRight
             />
           </div>
         </div>
