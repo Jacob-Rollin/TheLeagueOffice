@@ -415,7 +415,17 @@ function ScrollButton({ side, onClick }: { side: "left" | "right"; onClick: () =
   );
 }
 
-function TeamRow({ team, live, pre }: { team: TickerTeam; live: boolean; pre: boolean }) {
+function TeamRow({
+  team,
+  live,
+  pre,
+  extra,
+}: {
+  team: TickerTeam;
+  live: boolean;
+  pre: boolean;
+  extra?: string;
+}) {
   return (
     <div className="flex items-center gap-1.5">
       {team.logo && (
@@ -429,20 +439,31 @@ function TeamRow({ team, live, pre }: { team: TickerTeam; live: boolean; pre: bo
           }}
         />
       )}
-      <span className="font-display text-xs uppercase tracking-wide">{team.abbr}</span>
+      <span className="min-w-0 flex-1 truncate font-display text-xs uppercase tracking-wide">
+        {team.abbr}
+      </span>
       {live && team.possession && (
         <span
-          className="size-1.5 rounded-full bg-accent"
+          className="size-1.5 shrink-0 rounded-full bg-accent"
           title="Has possession"
           aria-label="Has possession"
         />
       )}
-      {!pre && <span className="tabnum ml-1 text-xs font-semibold">{team.score}</span>}
-      {pre && team.record && (
-        <span className="tabnum ml-auto pl-2 text-[10px] text-primary-foreground/60">
+      {live && (
+        <span className="w-14 shrink-0 truncate text-right text-[9px] uppercase tracking-wider text-primary-foreground/70">
+          {extra || ""}
+        </span>
+      )}
+      {!pre ? (
+        <span className="tabnum w-7 shrink-0 text-right text-xs font-semibold">
+          {team.score}
+        </span>
+      ) : (
+        <span className="tabnum w-12 shrink-0 text-right text-[10px] text-primary-foreground/60">
           {team.record}
         </span>
       )}
     </div>
   );
 }
+
