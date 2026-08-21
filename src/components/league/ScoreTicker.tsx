@@ -244,7 +244,7 @@ export function ScoreTicker() {
   const nudge = (dir: -1 | 1) => {
     const el = scrollerRef.current;
     if (!el) return;
-    el.scrollBy({ left: dir * Math.max(280, el.clientWidth * 0.7), behavior: "smooth" });
+    el.scrollBy({ left: dir * Math.max(200, el.clientWidth * 0.7), behavior: "smooth" });
   };
 
   const handleWeekChange = (value: string) => {
