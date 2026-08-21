@@ -183,9 +183,11 @@ function DraftRoom() {
       <div
         className={cn(
           "flex-1 gap-3 px-0 py-3 lg:px-3",
-          tab !== "board" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px] lg:items-start",
+          tab === "team" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)_260px] lg:items-start",
+          tab === "players" && "lg:grid lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start",
         )}
       >
+
         {tab !== "board" && (
           <aside className="hidden lg:sticky lg:top-[calc(var(--wr-header-h,0px)+0.75rem)] lg:block lg:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
             {tab === "team" ? (
