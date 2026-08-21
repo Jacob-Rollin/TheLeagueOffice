@@ -307,12 +307,14 @@ function MyTeamColumn({
   picks,
   onOpen,
   showProj,
+  showHeader,
 }: {
   settings: Settings;
   players: Player[];
   picks: DraftPick[];
   onOpen: (id: string) => void;
   showProj?: boolean;
+  showHeader?: boolean;
 }) {
 
   const slots = fillRoster(players, settings.roster);
@@ -325,7 +327,17 @@ function MyTeamColumn({
     [picks],
   );
   return (
+    <>
+      {showHeader && (
+        <div className="mb-1 flex items-center gap-2 border-b border-border px-2 pb-1.5 font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span className="w-7 shrink-0">Pos</span>
+          <span className="w-9 shrink-0" />
+          <span className="min-w-0 flex-1">Player</span>
+          <span className="w-14 shrink-0 text-right">2026 Proj Pts</span>
+        </div>
+      )}
     <ul className="space-y-1">
+
       {slots.map((s, i) => (
         <li key={i} className="flex items-center gap-1">
           {s.player ? (
