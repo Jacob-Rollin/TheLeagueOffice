@@ -241,13 +241,14 @@ export function PlayerList({
               }
               aria-pressed={suggested}
               className={cn(
-                "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
+                "inline-flex shrink-0 items-center gap-1 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
                 suggested
                   ? "border-primary/60 bg-primary/15 text-primary"
                   : "border-border hover:text-foreground",
               )}
             >
-              {"\u{1F9E0}"} Suggested
+              <Zap className="size-3.5" />
+              Suggested
             </button>
             <button
               onClick={() => {
