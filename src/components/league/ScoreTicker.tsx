@@ -96,8 +96,12 @@ function mapGames(json: any): TickerGame[] {
       kickoff: formatKickoff(ev?.date ?? comp?.date),
       clock: status?.displayClock ?? "",
       period: status?.period ? `Q${status.period}` : "",
-      downDistance: sit?.downDistanceText ?? sit?.shortDownDistanceText ?? "",
-      ballOn: sit?.possessionText ?? "",
+      downDistance: String(
+        sit?.shortDownDistanceText ??
+          String(sit?.downDistanceText ?? "").split(" at ")[0] ??
+          "",
+      ),
+      ballOn: String(sit?.possessionText ?? "").replace(/^at\s+/i, ""),
       network: String(network || ""),
       away: pick("away"),
       home: pick("home"),
