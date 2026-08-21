@@ -20,7 +20,6 @@ export function PlayerList({
   players,
   draftedIds,
   watchIds,
-  needs,
   counts,
   settings,
   currentOverall,
@@ -35,7 +34,6 @@ export function PlayerList({
   players: Player[];
   draftedIds: Set<string>;
   watchIds: Set<string>;
-  needs: Record<Pos, number>;
   counts?: Record<string, number>;
   settings: Settings;
   currentOverall: number;

@@ -229,7 +229,6 @@ function DraftRoom() {
               players={data.players}
               draftedIds={draft.draftedIds}
               watchIds={draft.watchIds}
-              needs={myNeeds}
               counts={myCounts}
               customOrder={draft.customOrder}
               settings={settings}
