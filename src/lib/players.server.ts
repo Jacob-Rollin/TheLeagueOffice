@@ -33,6 +33,8 @@ export type SeasonLine = {
   points: { std: number; half: number; ppr: number };
   posRank: number | null;
   line: { label: string; value: string }[];
+  /** Raw Sleeper stat keys for this season (projected or actual). */
+  raw: Record<string, number>;
 };
 
 export type DepthEntry = {
