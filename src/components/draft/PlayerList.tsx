@@ -17,7 +17,7 @@ type Sort = SortKey | null;
 /** Continuous vertical rule that separates stat column groups. */
 const DIVIDER = "border-l border-border";
 /** Muted wash applied down an actively sorted column. */
-const ACTIVE_COL = "bg-muted/60";
+const ACTIVE_COL = "bg-muted/40";
 
 export function PlayerList({
   players,
@@ -251,18 +251,18 @@ export function PlayerList({
           <button
             onClick={() => toggleSort("rank")}
             className={cn(
-              "w-8 shrink-0 self-stretch text-center uppercase tracking-widest transition-colors hover:text-foreground",
+              "flex w-8 shrink-0 items-end justify-center self-stretch pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
               sort === "rank" && `${ACTIVE_COL} text-foreground`,
             )}
           >
             RK
           </button>
-          <div className="w-[300px] shrink-0">Player</div>
+          <div className="flex w-[380px] shrink-0 items-end pb-1">Player</div>
           <div className="flex min-w-0 flex-1 items-stretch">
             <button
               onClick={() => toggleSort("adp")}
               className={cn(
-                "flex-1 self-stretch px-2 text-center uppercase tracking-widest transition-colors hover:text-foreground",
+                "flex flex-1 items-end justify-center self-stretch px-2 pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
                 DIVIDER,
                 sort === "adp" && `${ACTIVE_COL} text-foreground`,
               )}
@@ -278,9 +278,6 @@ export function PlayerList({
               sort={sort}
               onSort={toggleSort}
             />
-            <div className={cn("flex flex-1 items-end justify-center pb-1", DIVIDER)}>
-              <span className="uppercase tracking-widest">Pos RK</span>
-            </div>
             <StatGroupHeader
               label={`${SEASON} PROJ`}
               totalKey="projPts"
