@@ -72,6 +72,12 @@ function mapGames(json: any): TickerGame[] {
     };
     const state: TickerGame["state"] =
       type?.state === "in" ? "in" : type?.state === "post" ? "post" : "pre";
+    const sit = comp?.situation ?? {};
+    const network =
+      comp?.broadcasts?.[0]?.names?.[0] ??
+      comp?.geoBroadcasts?.[0]?.media?.shortName ??
+      comp?.broadcast ??
+      "";
     return {
       id: String(ev?.id ?? Math.random()),
       state,
@@ -79,6 +85,9 @@ function mapGames(json: any): TickerGame[] {
       kickoff: formatKickoff(ev?.date ?? comp?.date),
       clock: status?.displayClock ?? "",
       period: status?.period ? `Q${status.period}` : "",
+      downDistance: sit?.downDistanceText ?? sit?.shortDownDistanceText ?? "",
+      ballOn: sit?.possessionText ?? "",
+      network: String(network || ""),
       away: pick("away"),
       home: pick("home"),
       link: ev?.links?.[0]?.href ?? "https://www.espn.com/nfl/scoreboard",
