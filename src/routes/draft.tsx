@@ -79,6 +79,11 @@ function DraftRoom() {
     () => positionNeeds(myPlayers, settings.roster),
     [myPlayers, settings.roster],
   );
+  const myCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const p of myPlayers) c[p.pos] = (c[p.pos] ?? 0) + 1;
+    return c;
+  }, [myPlayers]);
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 2);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
   const lastPick = picks.length ? picks[picks.length - 1]! : null;
@@ -225,6 +230,7 @@ function DraftRoom() {
               draftedIds={draft.draftedIds}
               watchIds={draft.watchIds}
               needs={myNeeds}
+              counts={myCounts}
               customOrder={draft.customOrder}
               settings={settings}
               currentOverall={currentOverall}
