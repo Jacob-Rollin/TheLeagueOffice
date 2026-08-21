@@ -15,6 +15,8 @@ export type Player = {
   adpRange: { min: number; max: number };
   /** 1-based overall ADP rank for each scoring format (999 when unranked). */
   rank: { std: number; half: number; ppr: number };
+  /** 1-based rank within the player's position (e.g. 3 => "RB3"). */
+  posRank: number;
   proj: { std: number; half: number; ppr: number };
   prev: { std: number; half: number; ppr: number } | null;
 };
@@ -305,6 +307,7 @@ const buildPlayers = memo<Built>(6 * HOUR, async () => {
         s["adp_dynasty"],
       ]),
       rank: { std: 999, half: 999, ppr: 999 },
+      posRank: 999,
       proj: {
         std: num(s["pts_std"], 0),
         half: projHalf,
@@ -332,6 +335,13 @@ const buildPlayers = memo<Built>(6 * HOUR, async () => {
     ordered.forEach((p, i) => {
       p.rank[fmt] = i + 1;
     });
+  }
+
+  // Positional rank (RB1, WR12, ...) off the half-PPR ordering.
+  const posSeen: Record<string, number> = {};
+  for (const p of [...players].sort((a, b) => a.rank.half - b.rank.half)) {
+    posSeen[p.pos] = (posSeen[p.pos] ?? 0) + 1;
+    p.posRank = posSeen[p.pos]!;
   }
 
   const all = [...players].sort((a, b) => a.rank.half - b.rank.half);
