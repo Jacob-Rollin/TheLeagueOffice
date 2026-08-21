@@ -13,6 +13,9 @@ type TickerGame = {
   kickoff: string;
   clock: string;
   period: string;
+  downDistance: string;
+  ballOn: string;
+  network: string;
   away: TickerTeam;
   home: TickerTeam;
   link: string;
@@ -69,6 +72,12 @@ function mapGames(json: any): TickerGame[] {
     };
     const state: TickerGame["state"] =
       type?.state === "in" ? "in" : type?.state === "post" ? "post" : "pre";
+    const sit = comp?.situation ?? {};
+    const network =
+      comp?.broadcasts?.[0]?.names?.[0] ??
+      comp?.geoBroadcasts?.[0]?.media?.shortName ??
+      comp?.broadcast ??
+      "";
     return {
       id: String(ev?.id ?? Math.random()),
       state,
@@ -76,6 +85,9 @@ function mapGames(json: any): TickerGame[] {
       kickoff: formatKickoff(ev?.date ?? comp?.date),
       clock: status?.displayClock ?? "",
       period: status?.period ? `Q${status.period}` : "",
+      downDistance: sit?.downDistanceText ?? sit?.shortDownDistanceText ?? "",
+      ballOn: sit?.possessionText ?? "",
+      network: String(network || ""),
       away: pick("away"),
       home: pick("home"),
       link: ev?.links?.[0]?.href ?? "https://www.espn.com/nfl/scoreboard",
@@ -327,9 +339,9 @@ export function ScoreTicker() {
               href={g.link}
               target="_blank"
               rel="noreferrer"
-              className="flex min-w-[168px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
+              className="flex min-w-[178px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
             >
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-primary-foreground/70">
+              <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-primary-foreground/70">
                 <span className="flex items-center gap-1">
                   {g.state === "in" && (
                     <span className="size-1.5 rounded-full bg-accent" aria-hidden />
@@ -340,9 +352,19 @@ export function ScoreTicker() {
                       ? g.kickoff || g.detail
                       : g.detail}
                 </span>
+                {g.network && g.state !== "post" && (
+                  <span className="shrink-0 text-[9px] tracking-wider text-primary-foreground/55">
+                    {g.network}
+                  </span>
+                )}
               </div>
               <TeamRow team={g.away} live={g.state === "in"} pre={g.state === "pre"} />
               <TeamRow team={g.home} live={g.state === "in"} pre={g.state === "pre"} />
+              {g.state === "in" && (g.downDistance || g.ballOn) && (
+                <div className="truncate text-[9px] uppercase tracking-wider text-primary-foreground/70">
+                  {[g.downDistance, g.ballOn].filter(Boolean).join(" · ")}
+                </div>
+              )}
             </a>
           ))}
         </div>
