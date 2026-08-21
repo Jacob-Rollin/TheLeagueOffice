@@ -300,7 +300,7 @@ function StatMatrix({
   scoring: string;
 }) {
   const rows =
-    MATRIX_ROWS[pos === "QB" || pos === "K" || pos === "DEF" ? pos : "SKILL"] ?? MATRIX_ROWS.SKILL!;
+    MATRIX_ROWS[pos === "QB" || pos === "K" || pos === "DEF" ? pos : "SKILL"] ?? MATRIX_ROWS["SKILL"]!;
   const fmt = (v: number | undefined) =>
     v === undefined || v === null ? "—" : Math.round(v * 10) / 10 === 0 ? "0" : (Math.round(v * 10) / 10).toString();
 
