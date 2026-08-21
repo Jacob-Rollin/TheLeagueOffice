@@ -322,20 +322,18 @@ export function PlayerList({
                   className="size-10"
                   logoClassName="size-4"
                 />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-semibold">{p.name}</span>
-                    {p.injury && (
-                      <span className="rounded bg-destructive/20 px-1 text-[10px] font-bold uppercase text-destructive">
-                        {p.injury}
-                      </span>
-                    )}
-                  </div>
-                  <div className="truncate text-xs text-muted-foreground">
+                <div className="flex-1">
+                  <div className="font-semibold whitespace-nowrap">{p.name}</div>
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
                     {p.pos}
                     {p.team ? ` · ${p.team}` : ""}
                     {p.bye ? ` · BYE ${p.bye}` : ""}
                     {reach !== null && reach < -6 ? " · reach" : ""}
+                    {p.injury ? (
+                      <span className="font-semibold uppercase text-destructive">
+                        {` · ${p.injury}`}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </>
