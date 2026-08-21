@@ -408,20 +408,27 @@ function RosterTelemetry({
   needs: Record<string, number>;
   settings: Settings;
 }) {
-  const alerts: { level: "warn" | "info" | "ok"; text: string }[] = [];
+  const alerts: { level: "critical" | "warn" | "ok"; tag: string; text: string }[] = [];
   const counts: Record<string, number> = {};
   for (const p of players) counts[p.pos] = (counts[p.pos] ?? 0) + 1;
 
-  for (const pos of POSITIONS) {
-    const required = settings.roster[pos];
+  const tiers = POSITIONS.map((pos) => {
+    const required = Math.max(1, settings.roster[pos]);
     const have = counts[pos] ?? 0;
-    if (have < required) {
+    const pct = Math.min(100, Math.round((have / required) * 100));
+    const label = have === 0 ? "Empty" : have < required ? "Weak Depth" : have > required ? "Surplus" : "Nominal";
+    return { pos, have, required, pct, label };
+  });
+
+  for (const t of tiers) {
+    if (t.have < t.required) {
       alerts.push({
-        level: "warn",
-        text: `STARTER GAP :: ${pos} ${have}/${required} — ${required - have} lineup slot${required - have > 1 ? "s" : ""} unfilled`,
+        level: "critical",
+        tag: "CRITICAL",
+        text: `${t.pos} starting slots unfilled — ${t.have}/${t.required} rostered`,
       });
-    } else if ((needs[pos] ?? 0) > 0) {
-      alerts.push({ level: "info", text: `FLEX DEMAND :: ${pos} depth can still absorb a flex slot` });
+    } else if ((needs[t.pos] ?? 0) > 0) {
+      alerts.push({ level: "ok", tag: "OK", text: `${t.pos} filled — depth can still absorb a flex slot` });
     }
   }
 
@@ -430,42 +437,90 @@ function RosterTelemetry({
     if (w.conflict) {
       alerts.push({
         level: "warn",
-        text: `BYE CONFLICT :: WK ${w.week} — ${w.players.length} starters idle (${w.players.map((p) => p.pos).join(", ")})`,
+        tag: "WARN",
+        text: `Week ${w.week} bye conflict — ${w.players.length} players idle (${w.players.map((p) => p.pos).join(", ")})`,
       });
     }
   }
   if (unknown.length) {
-    alerts.push({ level: "info", text: `BYE UNKNOWN :: ${unknown.map((p) => p.name).join(", ")}` });
+    alerts.push({ level: "warn", tag: "WARN", text: `Bye week unknown for ${unknown.map((p) => p.name).join(", ")}` });
   }
   if (!players.length) {
-    alerts.push({ level: "info", text: "AWAITING DRAFT INPUT :: no players on roster yet" });
+    alerts.push({ level: "warn", tag: "WARN", text: "No players drafted yet — awaiting roster input" });
   } else if (!alerts.length) {
-    alerts.push({ level: "ok", text: "ALL CLEAR :: starting lineup filled, no bye clusters detected" });
+    alerts.push({ level: "ok", tag: "OK", text: "Starting lineup filled, no bye clusters detected" });
   }
 
   return (
     <div className="rounded-xl border border-border bg-card">
       <div className="border-b border-border px-3 py-2 font-display text-sm uppercase tracking-widest">
-        // Roster Telemetry Report
+        Roster Analysis
       </div>
-      <ul className="space-y-1 p-3 font-mono text-[11px]">
-        {alerts.map((a, i) => (
-          <li
-            key={i}
-            className={cn(
-              "flex gap-2 rounded border px-2 py-1.5",
-              a.level === "warn"
-                ? "border-destructive/50 bg-destructive/10 text-destructive"
-                : a.level === "ok"
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border bg-surface/40 text-muted-foreground",
-            )}
-          >
-            <span className="shrink-0">{a.level === "warn" ? "!" : a.level === "ok" ? "+" : ">"}</span>
-            <span className="min-w-0">{a.text}</span>
-          </li>
-        ))}
-      </ul>
+      <div className="grid gap-4 p-3 md:grid-cols-2">
+        <section>
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Position Depth Tiers
+          </div>
+          <ul className="space-y-2">
+            {tiers.map((t) => (
+              <li key={t.pos} className="space-y-1">
+                <div className="flex items-center justify-between font-mono text-[11px]">
+                  <span className="font-semibold">
+                    {t.pos}{" "}
+                    <span className="text-muted-foreground">
+                      {t.have}/{t.required}
+                    </span>
+                  </span>
+                  <span
+                    className={cn(
+                      t.have < t.required
+                        ? "text-destructive"
+                        : t.have > t.required
+                          ? "text-muted-foreground"
+                          : "text-primary",
+                    )}
+                  >
+                    {t.label}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all",
+                      t.have < t.required ? "bg-destructive" : "bg-primary",
+                    )}
+                    style={{ width: `${t.pct}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section>
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            System Diagnostics Log
+          </div>
+          <ul className="space-y-1.5 font-mono text-[11px]">
+            {alerts.map((a, i) => (
+              <li
+                key={i}
+                className={cn(
+                  "flex items-start gap-2 rounded border px-2 py-1.5",
+                  a.level === "critical"
+                    ? "border-destructive/50 bg-destructive/10 text-destructive"
+                    : a.level === "warn"
+                      ? "border-amber-500/50 bg-amber-500/10 text-amber-500"
+                      : "border-primary/40 bg-primary/10 text-primary",
+                )}
+              >
+                <span className="shrink-0 font-semibold">[{a.tag}]</span>
+                <span className="min-w-0 text-foreground/80">{a.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
     </div>
   );
+
 }
