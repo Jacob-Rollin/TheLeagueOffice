@@ -357,7 +357,10 @@ export function ScoreTicker() {
                 href={g.link}
                 target="_blank"
                 rel="noreferrer"
-                className="flex min-w-[196px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
+                className={cn(
+                  "flex shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10",
+                  live ? "w-[280px]" : pre ? "w-[210px]" : "w-[180px]",
+                )}
               >
                 <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-primary-foreground/70">
                   <span className="flex min-w-0 items-center gap-1 truncate">
@@ -371,7 +374,9 @@ export function ScoreTicker() {
                         : g.detail}
                   </span>
                   {g.network && g.state !== "post" && (
-                    <span className="shrink-0 text-primary-foreground/60">{g.network}</span>
+                    <span className="w-24 shrink-0 truncate text-right text-primary-foreground/60">
+                      {g.network}
+                    </span>
                   )}
                 </div>
 
@@ -388,6 +393,7 @@ export function ScoreTicker() {
                   extra={live ? g.ballOn : ""}
                 />
               </a>
+
             );
           })}
 
