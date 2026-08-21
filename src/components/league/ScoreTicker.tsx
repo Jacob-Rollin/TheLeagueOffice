@@ -434,34 +434,32 @@ function TeamRow({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      {team.logo && (
-        <img
-          src={team.logo}
-          alt={`${team.abbr} logo`}
-          loading="lazy"
-          className="size-4 shrink-0"
-          onError={(e) => {
-            e.currentTarget.style.visibility = "hidden";
-          }}
-        />
-      )}
-      <span className="min-w-0 flex-1 truncate font-display text-xs uppercase tracking-wide">
-        {team.abbr}
-      </span>
-      {live && team.possession && (
-        <span
-          className="size-1.5 shrink-0 rounded-full bg-accent"
-          title="Has possession"
-          aria-label="Has possession"
-        />
-      )}
-      {live && (
-        <span className="w-14 shrink-0 truncate text-right text-[9px] uppercase tracking-wider text-primary-foreground/70">
-          {extra || ""}
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        {team.logo && (
+          <img
+            src={team.logo}
+            alt={`${team.abbr} logo`}
+            loading="lazy"
+            className="size-4 shrink-0"
+            onError={(e) => {
+              e.currentTarget.style.visibility = "hidden";
+            }}
+          />
+        )}
+        <span className="truncate font-display text-xs uppercase tracking-wide">
+          {team.abbr}
         </span>
-      )}
+        {live && team.possession && (
+          <span
+            className="size-1.5 shrink-0 rounded-full bg-accent"
+            title="Has possession"
+            aria-label="Has possession"
+          />
+        )}
+      </div>
+
       {!pre ? (
-        <span className="tabnum w-7 shrink-0 text-right text-xs font-semibold">
+        <span className="tabnum w-10 shrink-0 text-right text-xs font-semibold">
           {team.score}
         </span>
       ) : (
@@ -469,7 +467,14 @@ function TeamRow({
           {team.record}
         </span>
       )}
+
+      {live && (
+        <span className="w-24 shrink-0 truncate text-right text-[9px] uppercase tracking-wider text-primary-foreground/70">
+          {extra || ""}
+        </span>
+      )}
     </div>
   );
 }
+
 
