@@ -108,19 +108,15 @@ export function PlayerDetail({
 
       {tab === "overview" && (
         <>
-          <Section title="Season summary">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <SummaryCard
-                title={`${season} Projections`}
-                pts={projection.points[scoring]}
-                games={projection.games || 17}
-              />
-              <SummaryCard
-                title={`${prevSeason} Actual`}
-                pts={last ? last.points[scoring] : null}
-                games={last?.games ?? 0}
-              />
-            </div>
+          <Section title="Stat matrix">
+            <StatMatrix
+              pos={player.pos}
+              season={season}
+              prevSeason={prevSeason}
+              proj={projection}
+              actual={last}
+              scoring={scoring}
+            />
           </Section>
 
           <div className="mt-4 px-3">
