@@ -84,7 +84,7 @@ function DraftRoom() {
   const lastPlayer = lastPick ? byId.get(lastPick.playerId) : undefined;
   return (
     <main
-      className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col"
+      className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col"
       style={{ "--wr-header-h": `${headerH}px` } as React.CSSProperties}
     >
       <header

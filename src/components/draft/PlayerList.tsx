@@ -139,7 +139,13 @@ export function PlayerList({
               className="h-10 pl-9"
             />
           </div>
-          <Button variant="secondary" size="icon" className="h-10 w-10" disabled={!canUndo} onClick={onUndo}>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-10 w-10"
+            disabled={!canUndo}
+            onClick={onUndo}
+          >
             <Undo2 className="size-4" />
             <span className="sr-only">Undo last pick</span>
           </Button>
@@ -215,10 +221,10 @@ export function PlayerList({
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="w-14 shrink-0" />
             <div className="min-w-0 flex-1">Player</div>
-            <div className="flex shrink-0 items-center gap-16">
+            <div className="flex shrink-0 items-center gap-4">
               <div className="w-20 text-center">ADP</div>
-              <div className="w-20 text-center">Proj</div>
-              <div className="w-20 text-center">LY</div>
+              <StatGroupHeader label="2026 PROJ" />
+              <StatGroupHeader label="2025 ACTUAL" />
             </div>
             <div className="w-4 shrink-0" />
           </div>
@@ -262,10 +268,16 @@ export function PlayerList({
                     {reach !== null && reach < -6 ? " · reach" : ""}
                   </div>
                 </div>
-                <div className="hidden shrink-0 items-center gap-16 sm:flex">
-                  <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
-                  <StatCell label="Proj" value={v.proj.toFixed(1)} />
-                  <StatCell label="LY" value={v.prev !== null && v.prev > 0 ? v.prev.toFixed(0) : "—"} />
+                <div className="hidden shrink-0 items-center gap-4 sm:flex">
+                  <StatCell
+                    value={v.adp < 900 ? v.adp.toFixed(1) : "—"}
+                    className="w-20 text-right"
+                  />
+                  <StatGroup total={v.proj.toFixed(0)} avg={(v.proj / 18).toFixed(1)} />
+                  <StatGroup
+                    total={v.prev !== null && v.prev > 0 ? v.prev.toFixed(0) : "—"}
+                    avg={v.prev !== null && v.prev > 0 ? (v.prev / 18).toFixed(1) : "—"}
+                  />
                 </div>
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
               </>
@@ -339,7 +351,27 @@ export function PlayerList({
   );
 }
 
-function StatCell({ value }: { label?: string; value: string }) {
-  return <div className="tabnum w-20 text-center text-xs font-semibold">{value}</div>;
+function StatCell({ value, className }: { value: string; className?: string }) {
+  return <div className={cn("tabnum text-xs font-semibold", className)}>{value}</div>;
 }
 
+function StatGroup({ total, avg }: { total: string; avg: string }) {
+  return (
+    <div className="grid w-28 grid-cols-2 text-xs font-semibold">
+      <div className="tabnum pr-2 text-right">{total}</div>
+      <div className="tabnum text-right">{avg}</div>
+    </div>
+  );
+}
+
+function StatGroupHeader({ label }: { label: string }) {
+  return (
+    <div className="w-28">
+      <div className="border-b border-border pb-1 text-center">{label}</div>
+      <div className="grid grid-cols-2 pt-1">
+        <div className="pr-2 text-right">PTS</div>
+        <div className="text-right">AVG</div>
+      </div>
+    </div>
+  );
+}
