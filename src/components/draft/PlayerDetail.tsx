@@ -123,6 +123,12 @@ export function PlayerDetail({
             </div>
           </Section>
 
+          <div className="mt-4 px-3">
+            <h2 className="font-display text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Analytics
+            </h2>
+            <div className="mt-1 h-px bg-border" />
+          </div>
 
           <Section title="Injury risk">
             <div className="rounded-lg border border-border bg-card p-3">
