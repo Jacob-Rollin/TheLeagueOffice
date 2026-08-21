@@ -55,6 +55,12 @@ function formatKickoff(iso?: string): string {
   return `${day} ${time}`;
 }
 
+function truncateNetwork(name: string, maxChars = 8): string {
+  const clean = name.trim();
+  if (clean.length <= maxChars) return clean;
+  return `${clean.slice(0, maxChars)}...`;
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function mapGames(json: any): TickerGame[] {
   const events: any[] = json?.events ?? [];
@@ -238,7 +244,7 @@ export function ScoreTicker() {
   const nudge = (dir: -1 | 1) => {
     const el = scrollerRef.current;
     if (!el) return;
-    el.scrollBy({ left: dir * Math.max(280, el.clientWidth * 0.7), behavior: "smooth" });
+    el.scrollBy({ left: dir * Math.max(200, el.clientWidth * 0.7), behavior: "smooth" });
   };
 
   const handleWeekChange = (value: string) => {
@@ -326,7 +332,7 @@ export function ScoreTicker() {
                 rel="noreferrer"
                 className={cn(
                   "flex shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10",
-                  live ? "w-[280px]" : pre ? "w-[210px]" : "w-[150px]",
+                  live ? "w-[200px]" : pre ? "w-[190px]" : "w-[150px]",
                 )}
               >
                 <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-primary-foreground/70">
@@ -335,7 +341,9 @@ export function ScoreTicker() {
                     {live ? `${g.period} ${g.clock}`.trim() : pre ? g.kickoff || g.detail : g.detail}
                   </span>
                   {g.network && g.state !== "post" && (
-                    <span className="w-24 shrink-0 truncate text-right text-primary-foreground/60">{g.network}</span>
+                    <span className="w-16 shrink-0 truncate text-right text-primary-foreground/60">
+                      {truncateNetwork(g.network)}
+                    </span>
                   )}
                 </div>
 
@@ -400,7 +408,7 @@ function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; 
       )}
 
       {live && (
-        <span className="w-24 shrink-0 truncate text-right text-[9px] uppercase tracking-wider text-primary-foreground/70">
+        <span className="w-16 shrink-0 truncate text-right text-[9px] uppercase tracking-wider text-primary-foreground/70">
           {extra || ""}
         </span>
       )}
