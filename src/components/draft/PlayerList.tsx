@@ -270,7 +270,6 @@ export function PlayerList({
               )}
             >
               <GripVertical className="size-3.5" />
-              <GripVertical className="size-3.5 -ml-2" />
               Custom
             </button>
           </div>
@@ -314,7 +313,7 @@ export function PlayerList({
           >
             RK
           </button>
-          <div className="flex w-[380px] shrink-0 items-end pb-1">Player</div>
+          <div className="flex w-[460px] shrink-0 items-end pb-1">Player</div>
           <div className="flex min-w-0 flex-1 items-stretch">
             <button
               onClick={() => toggleSort("adp")}
@@ -348,6 +347,7 @@ export function PlayerList({
               avgKey="prevAvg"
               sort={sort}
               onSort={toggleSort}
+              flushRight
             />
           </div>
         </div>
@@ -438,7 +438,7 @@ export function PlayerList({
                   {v.rank}
                 </div>
 
-                <div className="flex w-[380px] shrink-0 items-center gap-1 py-2">
+                <div className="flex w-[460px] shrink-0 items-center gap-1 py-2">
                   {onOpenPlayer ? (
                     <button
                       type="button"
@@ -461,7 +461,7 @@ export function PlayerList({
                     onClick={() => onToggleWatch(p.id)}
                     aria-label={watched ? `Unwatch ${p.name}` : `Watch ${p.name}`}
                     className={cn(
-                      "shrink-0 rounded p-1.5 transition-colors hover:text-foreground",
+                      "shrink-0 rounded py-1.5 pl-1.5 pr-0 transition-colors hover:text-foreground",
                       watched ? "text-amber-400" : "text-muted-foreground",
                     )}
                   >
@@ -495,6 +495,7 @@ export function PlayerList({
                     avg={v.prev !== null && v.prev > 0 ? (v.prev / 18).toFixed(1) : "—"}
                     totalActive={sort === "prevPts"}
                     avgActive={sort === "prevAvg"}
+                    flushRight
                   />
                 </div>
               </li>
@@ -519,20 +520,28 @@ function StatGroup({
   avg,
   totalActive,
   avgActive,
+  flushRight,
 }: {
   total: string;
   avg: string;
   totalActive?: boolean;
   avgActive?: boolean;
+  flushRight?: boolean;
 }) {
   return (
-    <div className={cn("grid flex-[2] grid-cols-2 text-xs font-semibold", DIVIDER)}>
+    <div className={cn("grid flex-1 grid-cols-2 text-xs font-semibold", DIVIDER)}>
       <div
         className={cn("tabnum flex items-center justify-start pl-3", totalActive && ACTIVE_COL)}
       >
         {total}
       </div>
-      <div className={cn("tabnum flex items-center justify-end pr-3", avgActive && ACTIVE_COL)}>
+      <div
+        className={cn(
+          "tabnum flex items-center justify-end",
+          flushRight ? "pr-0" : "pr-3",
+          avgActive && ACTIVE_COL,
+        )}
+      >
         {avg}
       </div>
     </div>
@@ -547,6 +556,7 @@ function StatGroupHeader({
   avgKey,
   sort,
   onSort,
+  flushRight,
 }: {
   label: string;
   totalLabel?: string;
@@ -555,15 +565,16 @@ function StatGroupHeader({
   avgKey: SortKey;
   sort: Sort;
   onSort: (key: SortKey) => void;
+  flushRight?: boolean;
 }) {
   return (
-    <div className={cn("flex-[2]", DIVIDER)}>
+    <div className={cn("flex-1", DIVIDER)}>
       <div className="border-b border-border pb-1 text-center">{label}</div>
       <div className="grid grid-cols-2 pt-1">
         <button
           onClick={() => onSort(totalKey)}
           className={cn(
-            "pl-2 text-left uppercase tracking-widest transition-colors hover:text-foreground",
+            "pl-3 text-left uppercase tracking-widest transition-colors hover:text-foreground",
             sort === totalKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
@@ -572,7 +583,8 @@ function StatGroupHeader({
         <button
           onClick={() => onSort(avgKey)}
           className={cn(
-            "pr-2 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            "text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            flushRight ? "pr-0" : "pr-3",
             sort === avgKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
