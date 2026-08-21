@@ -226,17 +226,6 @@ export function PlayerDetail({
             )}
           </Section>
 
-          <Section title="Stat matrix">
-            <StatMatrix
-              pos={player.pos}
-              season={season}
-              prevSeason={prevSeason}
-              proj={projection}
-              actual={last}
-              scoring={scoring}
-            />
-          </Section>
-
           <div className="px-3 pt-4">
             <Link to="/player/$id" params={{ id: player.id }} className="block">
               <Button variant="secondary" className="w-full font-display uppercase tracking-wide">
