@@ -55,6 +55,12 @@ function formatKickoff(iso?: string): string {
   return `${day} ${time}`;
 }
 
+function truncateNetwork(name: string, maxChars = 8): string {
+  const clean = name.trim();
+  if (clean.length <= maxChars) return clean;
+  return `${clean.slice(0, maxChars)}...`;
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function mapGames(json: any): TickerGame[] {
   const events: any[] = json?.events ?? [];
