@@ -24,13 +24,28 @@ type WeekOption = {
   label: string;
 };
 
-/** Scheduled kickoff formatted in the viewer's local timezone, e.g. "SUN 12:00 PM". */
+/**
+ * Scheduled kickoff in the viewer's local timezone.
+ * Within the next 6 days: "SUN 12:00 PM".
+ * Further out (future weeks): "SUN 9/14 12:00 PM".
+ */
 function formatKickoff(iso?: string): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const day = d.toLocaleDateString(undefined, { weekday: "short" }).toUpperCase();
   const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfGameDay = new Date(d);
+  startOfGameDay.setHours(0, 0, 0, 0);
+  const daysAway = Math.round(
+    (startOfGameDay.getTime() - startOfToday.getTime()) / 86_400_000,
+  );
+  if (daysAway < 0 || daysAway > 6) {
+    const date = d.toLocaleDateString(undefined, { month: "numeric", day: "numeric" });
+    return `${day} ${date} ${time}`;
+  }
   return `${day} ${time}`;
 }
 
