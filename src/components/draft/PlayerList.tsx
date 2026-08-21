@@ -10,11 +10,14 @@ import { POSITIONS, value, type Player, type Pos, type Settings } from "@/lib/dr
 
 const SEASON = new Date().getFullYear();
 
-type SortKey = "rank" | "adp" | "projPts" | "projAvg" | "prevPts" | "prevAvg" | "custom";
-type Dir = "asc" | "desc";
+type SortKey = "rank" | "adp" | "adpMin" | "adpMax" | "projPts" | "projAvg" | "prevPts" | "prevAvg";
+/** null = default baseline order (overall rank). */
+type Sort = SortKey | null;
 
-/** Columns that read best ascending (lower is better) by default. */
-const ASC_FIRST: SortKey[] = ["rank", "adp", "custom"];
+/** Continuous vertical rule that separates stat column groups. */
+const DIVIDER = "border-l border-border";
+/** Muted wash applied down an actively sorted column. */
+const ACTIVE_COL = "bg-muted/20";
 
 export function PlayerList({
   players,
@@ -47,22 +50,17 @@ export function PlayerList({
 }) {
   const [query, setQuery] = useState("");
   const [pos, setPos] = useState<string>("ALL");
-  const [sort, setSort] = useState<SortKey>("rank");
-  const [dir, setDir] = useState<Dir>("asc");
+  const [sort, setSort] = useState<Sort>(null);
+  const [custom, setCustom] = useState(false);
   const [showDrafted, setShowDrafted] = useState(false);
   const [watchOnly, setWatchOnly] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
+  /** Click once to sort high-to-low, click again to clear back to baseline. */
   const toggleSort = useCallback((key: SortKey) => {
-    setSort((prev) => {
-      if (prev === key) {
-        setDir((d) => (d === "asc" ? "desc" : "asc"));
-        return prev;
-      }
-      setDir(ASC_FIRST.includes(key) ? "asc" : "desc");
-      return key;
-    });
+    setCustom(false);
+    setSort((prev) => (prev === key ? null : key));
   }, []);
 
   const orderIndex = useMemo(() => {
@@ -81,22 +79,25 @@ export function PlayerList({
       if (q && !`${p.name} ${p.team}`.toLowerCase().includes(q)) return false;
       return true;
     });
-    const sign = dir === "asc" ? 1 : -1;
     return list.sort((a, b) => {
       const av = value(a, settings.scoring);
       const bv = value(b, settings.scoring);
-      if (sort === "custom") {
+      if (custom) {
         const ai = orderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER;
         const bi = orderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER;
-        if (ai !== bi) return (ai - bi) * sign;
+        if (ai !== bi) return ai - bi;
         return av.rank - bv.rank;
       }
+      if (!sort) return av.rank - bv.rank;
+      // Every metric column sorts strictly high-to-low.
       let diff = 0;
-      if (sort === "adp") diff = av.adp - bv.adp;
-      else if (sort === "projPts" || sort === "projAvg") diff = av.proj - bv.proj;
-      else if (sort === "prevPts" || sort === "prevAvg") diff = (av.prev ?? -1) - (bv.prev ?? -1);
-      else diff = av.rank - bv.rank;
-      if (diff !== 0) return diff * sign;
+      if (sort === "rank") diff = bv.rank - av.rank;
+      else if (sort === "adp") diff = bv.adp - av.adp;
+      else if (sort === "adpMin") diff = b.adpRange.min - a.adpRange.min;
+      else if (sort === "adpMax") diff = b.adpRange.max - a.adpRange.max;
+      else if (sort === "projPts" || sort === "projAvg") diff = bv.proj - av.proj;
+      else if (sort === "prevPts" || sort === "prevAvg") diff = (bv.prev ?? -1) - (av.prev ?? -1);
+      if (diff !== 0) return diff;
       return av.rank - bv.rank;
     });
   }, [
@@ -104,7 +105,7 @@ export function PlayerList({
     query,
     pos,
     sort,
-    dir,
+    custom,
     showDrafted,
     watchOnly,
     watchIds,
@@ -134,8 +135,6 @@ export function PlayerList({
     const pid = row?.dataset["pid"];
     if (pid && pid !== dragId) moveBefore(dragId, pid);
   };
-
-  const arrow = (key: SortKey) => (sort === key ? (dir === "asc" ? " ▴" : " ▾") : "");
 
   return (
     <div className="flex flex-col">
@@ -200,10 +199,17 @@ export function PlayerList({
               Watchlist
             </button>
             <button
-              onClick={() => toggleSort("custom")}
+              onClick={() => {
+                // True two-way toggle: second click closes custom mode.
+                setCustom((v) => {
+                  if (!v) setSort(null);
+                  return !v;
+                });
+              }}
+              aria-pressed={custom}
               className={cn(
                 "shrink-0 rounded border px-2 py-1 uppercase tracking-wide transition-colors",
-                sort === "custom"
+                custom
                   ? "border-accent/50 bg-accent/15 text-accent"
                   : "border-border hover:text-foreground",
               )}
@@ -234,41 +240,49 @@ export function PlayerList({
           </label>
         </div>
 
-        {sort === "custom" && (
+        {custom && (
           <p className="text-[11px] text-muted-foreground">
             Drag the handle to build your own board order. It saves automatically.
           </p>
         )}
-        <div className="-mx-3 -mb-3 hidden items-center gap-2 border-t border-border px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground sm:flex">
-          {sort === "custom" && <div className="w-6 shrink-0" />}
+        <div className="-mx-3 -mb-3 hidden items-stretch gap-2 border-t border-border px-2 pt-1.5 text-[10px] uppercase tracking-widest text-muted-foreground sm:flex">
+          {custom && <div className="w-6 shrink-0" />}
           <div className="w-[62px] shrink-0" />
           <button
             onClick={() => toggleSort("rank")}
             className={cn(
-              "w-8 shrink-0 text-center uppercase tracking-widest transition-colors hover:text-foreground",
-              sort === "rank" && "text-foreground",
+              "w-8 shrink-0 self-stretch text-center uppercase tracking-widest transition-colors hover:text-foreground",
+              sort === "rank" && `${ACTIVE_COL} text-foreground`,
             )}
           >
-            RK{arrow("rank")}
+            RK
           </button>
           <div className="min-w-0 flex-1">Player</div>
-          <div className="w-7 shrink-0" />
-          <div className="flex shrink-0 items-center gap-4 border-l border-border pl-4">
+          <div className="flex shrink-0 items-stretch">
             <button
               onClick={() => toggleSort("adp")}
               className={cn(
-                "w-16 text-right uppercase tracking-widest transition-colors hover:text-foreground",
-                sort === "adp" && "text-foreground",
+                "w-16 self-stretch px-2 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+                DIVIDER,
+                sort === "adp" && `${ACTIVE_COL} text-foreground`,
               )}
             >
-              ADP{arrow("adp")}
+              ADP
             </button>
+            <StatGroupHeader
+              label="ADP Range"
+              totalLabel="MIN"
+              avgLabel="MAX"
+              totalKey="adpMin"
+              avgKey="adpMax"
+              sort={sort}
+              onSort={toggleSort}
+            />
             <StatGroupHeader
               label={`${SEASON} PROJ`}
               totalKey="projPts"
               avgKey="projAvg"
               sort={sort}
-              arrow={arrow}
               onSort={toggleSort}
             />
             <StatGroupHeader
@@ -276,7 +290,6 @@ export function PlayerList({
               totalKey="prevPts"
               avgKey="prevAvg"
               sort={sort}
-              arrow={arrow}
               onSort={toggleSort}
             />
           </div>
@@ -332,12 +345,12 @@ export function PlayerList({
                 key={p.id}
                 data-pid={p.id}
                 className={cn(
-                  "flex items-center gap-2 px-2 py-2 transition-colors",
+                  "flex items-stretch gap-2 px-2 transition-colors",
                   drafted && "opacity-40",
                   dragId === p.id && "bg-accent/10",
                 )}
               >
-                {sort === "custom" && (
+                {custom && (
                   <button
                     aria-label={`Reorder ${p.name}`}
                     className="w-6 shrink-0 cursor-grab touch-none p-1 text-muted-foreground active:cursor-grabbing"
@@ -350,58 +363,79 @@ export function PlayerList({
                   </button>
                 )}
 
-                <Button
-                  size="sm"
-                  className="h-8 w-[62px] shrink-0 px-0 font-display text-xs uppercase"
-                  disabled={drafted}
-                  onClick={() => onDraft(p.id)}
-                >
-                  Draft
-                </Button>
+                <div className="flex shrink-0 items-center py-2">
+                  <Button
+                    size="sm"
+                    className="h-8 w-[62px] px-0 font-display text-xs uppercase"
+                    disabled={drafted}
+                    onClick={() => onDraft(p.id)}
+                  >
+                    Draft
+                  </Button>
+                </div>
 
-                <div className="tabnum w-8 shrink-0 text-center text-xs font-semibold text-muted-foreground">
+                <div
+                  className={cn(
+                    "tabnum flex w-8 shrink-0 items-center justify-center text-xs font-semibold text-muted-foreground",
+                    sort === "rank" && ACTIVE_COL,
+                  )}
+                >
                   {v.rank}
                 </div>
 
-                {onOpenPlayer ? (
+                <div className="flex min-w-0 flex-1 items-center gap-1 py-2">
+                  {onOpenPlayer ? (
+                    <button
+                      type="button"
+                      className="flex min-w-0 max-w-[320px] flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
+                      onClick={() => onOpenPlayer(p.id)}
+                    >
+                      {playerBody}
+                    </button>
+                  ) : (
+                    <Link
+                      to="/player/$id"
+                      params={{ id: p.id }}
+                      className="flex min-w-0 max-w-[320px] flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
+                    >
+                      {playerBody}
+                    </Link>
+                  )}
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
-                    onClick={() => onOpenPlayer(p.id)}
+                    onClick={() => onToggleWatch(p.id)}
+                    aria-label={watched ? `Unwatch ${p.name}` : `Watch ${p.name}`}
+                    className={cn(
+                      "shrink-0 rounded p-1.5 transition-colors hover:text-foreground",
+                      watched ? "text-amber-400" : "text-muted-foreground",
+                    )}
                   >
-                    {playerBody}
+                    <Star className={cn("size-4", watched && "fill-current")} />
                   </button>
-                ) : (
-                  <Link
-                    to="/player/$id"
-                    params={{ id: p.id }}
-                    className="flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
-                  >
-                    {playerBody}
-                  </Link>
-                )}
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => onToggleWatch(p.id)}
-                  aria-label={watched ? `Unwatch ${p.name}` : `Watch ${p.name}`}
-                  className={cn(
-                    "w-7 shrink-0 rounded p-1.5 transition-colors hover:text-foreground",
-                    watched ? "text-amber-400" : "text-muted-foreground",
-                  )}
-                >
-                  <Star className={cn("size-4", watched && "fill-current")} />
-                </button>
-
-                <div className="hidden shrink-0 items-center gap-4 self-stretch border-l border-border pl-4 sm:flex">
+                <div className="hidden shrink-0 items-stretch sm:flex">
                   <StatCell
                     value={v.adp < 900 ? v.adp.toFixed(1) : "—"}
-                    className="w-16 text-right"
+                    className={cn("w-16 px-2 text-right", DIVIDER, sort === "adp" && ACTIVE_COL)}
                   />
-                  <StatGroup total={v.proj.toFixed(0)} avg={(v.proj / 18).toFixed(1)} />
+                  <StatGroup
+                    total={p.adpRange.min < 900 ? p.adpRange.min.toFixed(1) : "—"}
+                    avg={p.adpRange.max < 900 ? p.adpRange.max.toFixed(1) : "—"}
+                    totalActive={sort === "adpMin"}
+                    avgActive={sort === "adpMax"}
+                  />
+                  <StatGroup
+                    total={v.proj.toFixed(0)}
+                    avg={(v.proj / 18).toFixed(1)}
+                    totalActive={sort === "projPts"}
+                    avgActive={sort === "projAvg"}
+                  />
                   <StatGroup
                     total={v.prev !== null && v.prev > 0 ? v.prev.toFixed(0) : "—"}
                     avg={v.prev !== null && v.prev > 0 ? (v.prev / 18).toFixed(1) : "—"}
+                    totalActive={sort === "prevPts"}
+                    avgActive={sort === "prevAvg"}
                   />
                 </div>
               </li>
@@ -414,54 +448,79 @@ export function PlayerList({
 }
 
 function StatCell({ value, className }: { value: string; className?: string }) {
-  return <div className={cn("tabnum text-xs font-semibold", className)}>{value}</div>;
+  return (
+    <div className={cn("tabnum flex items-center justify-end text-xs font-semibold", className)}>
+      {value}
+    </div>
+  );
 }
 
-function StatGroup({ total, avg }: { total: string; avg: string }) {
+function StatGroup({
+  total,
+  avg,
+  totalActive,
+  avgActive,
+}: {
+  total: string;
+  avg: string;
+  totalActive?: boolean;
+  avgActive?: boolean;
+}) {
   return (
-    <div className="grid w-28 grid-cols-2 text-xs font-semibold">
-      <div className="tabnum pr-2 text-right">{total}</div>
-      <div className="tabnum text-right">{avg}</div>
+    <div className={cn("grid w-28 grid-cols-2 text-xs font-semibold", DIVIDER)}>
+      <div
+        className={cn(
+          "tabnum flex items-center justify-end pr-2 pl-2",
+          totalActive && ACTIVE_COL,
+        )}
+      >
+        {total}
+      </div>
+      <div className={cn("tabnum flex items-center justify-end pr-2", avgActive && ACTIVE_COL)}>
+        {avg}
+      </div>
     </div>
   );
 }
 
 function StatGroupHeader({
   label,
+  totalLabel = "PTS",
+  avgLabel = "AVG",
   totalKey,
   avgKey,
   sort,
-  arrow,
   onSort,
 }: {
   label: string;
+  totalLabel?: string;
+  avgLabel?: string;
   totalKey: SortKey;
   avgKey: SortKey;
-  sort: SortKey;
-  arrow: (key: SortKey) => string;
+  sort: Sort;
   onSort: (key: SortKey) => void;
 }) {
   return (
-    <div className="w-28">
+    <div className={cn("w-28", DIVIDER)}>
       <div className="border-b border-border pb-1 text-center">{label}</div>
       <div className="grid grid-cols-2 pt-1">
         <button
           onClick={() => onSort(totalKey)}
           className={cn(
-            "pr-2 text-right uppercase tracking-widest transition-colors hover:text-foreground",
-            sort === totalKey && "text-foreground",
+            "px-2 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            sort === totalKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
-          PTS{arrow(totalKey)}
+          {totalLabel}
         </button>
         <button
           onClick={() => onSort(avgKey)}
           className={cn(
-            "text-right uppercase tracking-widest transition-colors hover:text-foreground",
-            sort === avgKey && "text-foreground",
+            "pr-2 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            sort === avgKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
-          AVG{arrow(avgKey)}
+          {avgLabel}
         </button>
       </div>
     </div>
