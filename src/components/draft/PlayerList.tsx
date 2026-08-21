@@ -556,13 +556,13 @@ function StatGroupHeader({
   onSort: (key: SortKey) => void;
 }) {
   return (
-    <div className={cn("flex-[2]", DIVIDER)}>
+    <div className={cn("flex-1", DIVIDER)}>
       <div className="border-b border-border pb-1 text-center">{label}</div>
       <div className="grid grid-cols-2 pt-1">
         <button
           onClick={() => onSort(totalKey)}
           className={cn(
-            "pl-2 text-left uppercase tracking-widest transition-colors hover:text-foreground",
+            "pl-3 text-left uppercase tracking-widest transition-colors hover:text-foreground",
             sort === totalKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
@@ -571,7 +571,7 @@ function StatGroupHeader({
         <button
           onClick={() => onSort(avgKey)}
           className={cn(
-            "pr-2 text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            "pr-3 text-right uppercase tracking-widest transition-colors hover:text-foreground",
             sort === avgKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
