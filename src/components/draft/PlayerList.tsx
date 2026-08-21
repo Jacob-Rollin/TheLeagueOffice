@@ -218,18 +218,16 @@ export function PlayerList({
         )}
         <div className="-mx-3 -mb-3 hidden items-center gap-2 border-t border-border px-2 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground sm:flex">
           {sort === "custom" && <div className="w-6 shrink-0" />}
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="w-14 shrink-0" />
-            <div className="min-w-0 flex-1">Player</div>
-            <div className="flex shrink-0 items-center gap-4">
-              <div className="w-20 text-center">ADP</div>
-              <StatGroupHeader label="2026 PROJ" />
-              <StatGroupHeader label="2025 ACTUAL" />
-            </div>
-            <div className="w-4 shrink-0" />
+          <div className="w-[62px] shrink-0" />
+          <div className="w-8 shrink-0 text-center">RK</div>
+          <div className="min-w-0 flex-1">Player</div>
+          <div className="flex shrink-0 items-center gap-4">
+            <div className="w-16 text-right">ADP</div>
+            <StatGroupHeader label={`${SEASON} PROJ`} />
+            <StatGroupHeader label={`${SEASON - 1} ACTUAL`} />
           </div>
-          <div className="w-24 shrink-0" />
         </div>
+
       </div>
 
       <div className="relative">
