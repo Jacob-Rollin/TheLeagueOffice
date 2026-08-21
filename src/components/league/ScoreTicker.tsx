@@ -429,7 +429,12 @@ function TeamRow({ team, live, pre }: { team: TickerTeam; live: boolean; pre: bo
           aria-label="Has possession"
         />
       )}
-      {!pre && <span className={cn("tabnum ml-auto text-xs font-semibold")}>{team.score}</span>}
+      {!pre && <span className="tabnum ml-1 text-xs font-semibold">{team.score}</span>}
+      {pre && team.record && (
+        <span className="tabnum ml-auto pl-2 text-[10px] text-primary-foreground/60">
+          {team.record}
+        </span>
+      )}
     </div>
   );
 }
