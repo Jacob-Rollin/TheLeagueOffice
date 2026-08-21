@@ -477,7 +477,7 @@ function RosterTelemetry({
       <div className="border-b border-border px-3 py-2 font-display text-sm uppercase tracking-widest">
         Roster Analysis
       </div>
-      <div className="grid gap-4 p-3 md:grid-cols-2">
+      <div className="grid gap-4 p-3">
         <section>
           <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Position Depth Tiers
@@ -485,25 +485,17 @@ function RosterTelemetry({
           <ul className="space-y-2">
             {tiers.map((t) => (
               <li key={t.pos} className="space-y-1">
-                <div className="flex items-center justify-between font-mono text-[11px]">
-                  <span className="font-semibold">
-                    {t.pos}{" "}
-                    <span className="text-muted-foreground">
-                      {t.have}/{t.required}
-                    </span>
-                  </span>
+                <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
+                  <span className="font-semibold">{t.pos}</span>
                   <span
                     className={cn(
-                      t.have < t.required
-                        ? "text-destructive"
-                        : t.have > t.required
-                          ? "text-muted-foreground"
-                          : "text-primary",
+                      t.startersFilled < t.required ? "text-destructive" : "text-primary",
                     )}
                   >
                     {t.label}
                   </span>
                 </div>
+
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className={cn(
