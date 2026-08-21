@@ -356,30 +356,31 @@ export function ScoreTicker() {
               rel="noreferrer"
               className="flex min-w-[178px] shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10"
             >
-              <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-primary-foreground/70">
-                <span className="flex items-center gap-1">
-                  {g.state === "in" && (
-                    <span className="size-1.5 rounded-full bg-accent" aria-hidden />
-                  )}
-                  {g.state === "in"
-                    ? `${g.period} ${g.clock}`.trim()
-                    : g.state === "pre"
-                      ? g.kickoff || g.detail
-                      : g.detail}
-                </span>
-                {g.network && g.state !== "post" && (
-                  <span className="shrink-0 text-[9px] tracking-wider text-primary-foreground/55">
-                    {g.network}
-                  </span>
+              <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-primary-foreground/70">
+                {g.state === "in" && (
+                  <span className="size-1.5 rounded-full bg-accent" aria-hidden />
                 )}
+                {g.state === "in"
+                  ? `${g.period} ${g.clock}`.trim()
+                  : g.state === "pre"
+                    ? g.kickoff || g.detail
+                    : g.detail}
               </div>
-              <TeamRow team={g.away} live={g.state === "in"} pre={g.state === "pre"} />
-              <TeamRow team={g.home} live={g.state === "in"} pre={g.state === "pre"} />
-              {g.state === "in" && (g.downDistance || g.ballOn) && (
-                <div className="truncate text-[9px] uppercase tracking-wider text-primary-foreground/70">
-                  {[g.downDistance, g.ballOn].filter(Boolean).join(" · ")}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <TeamRow team={g.away} live={g.state === "in"} pre={g.state === "pre"} />
+                  <TeamRow team={g.home} live={g.state === "in"} pre={g.state === "pre"} />
                 </div>
-              )}
+                <div className="flex shrink-0 flex-col items-end gap-0.5 text-[9px] uppercase tracking-wider text-primary-foreground/60">
+                  {g.network && g.state !== "post" && <span>{g.network}</span>}
+                  {g.state === "in" && g.downDistance && (
+                    <span className="text-primary-foreground/75">{g.downDistance}</span>
+                  )}
+                  {g.state === "in" && g.ballOn && (
+                    <span className="text-primary-foreground/75">{g.ballOn}</span>
+                  )}
+                </div>
+              </div>
             </a>
           ))}
         </div>
