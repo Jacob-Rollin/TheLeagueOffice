@@ -417,16 +417,24 @@ export function PlayerList({
                   </button>
                 </div>
 
-                <div className="hidden shrink-0 items-stretch sm:flex">
+                <div className="hidden min-w-0 flex-1 items-stretch sm:flex">
                   <StatCell
                     value={v.adp < 900 ? v.adp.toFixed(1) : "—"}
-                    className={cn("w-16 px-2 text-right", DIVIDER, sort === "adp" && ACTIVE_COL)}
+                    className={cn(
+                      "flex-1 justify-center px-2",
+                      DIVIDER,
+                      sort === "adp" && ACTIVE_COL,
+                    )}
                   />
                   <StatGroup
                     total={p.adpRange.min < 900 ? p.adpRange.min.toFixed(1) : "—"}
                     avg={p.adpRange.max < 900 ? p.adpRange.max.toFixed(1) : "—"}
                     totalActive={sort === "adpMin"}
                     avgActive={sort === "adpMax"}
+                  />
+                  <StatCell
+                    value={p.posRank && p.posRank < 999 ? `${p.pos}${p.posRank}` : "—"}
+                    className={cn("flex-1 justify-center px-2", DIVIDER)}
                   />
                   <StatGroup
                     total={v.proj.toFixed(0)}
