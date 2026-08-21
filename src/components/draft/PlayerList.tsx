@@ -318,7 +318,7 @@ export function PlayerList({
             <button
               onClick={() => toggleSort("adp")}
               className={cn(
-                "flex flex-1 items-end justify-center self-stretch px-2 pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
+                "flex w-14 shrink-0 items-end justify-center self-stretch px-1 pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
                 DIVIDER,
                 sort === "adp" && `${ACTIVE_COL} text-foreground`,
               )}
@@ -473,7 +473,7 @@ export function PlayerList({
                   <StatCell
                     value={v.adp < 900 ? v.adp.toFixed(1) : "—"}
                     className={cn(
-                      "flex-1 justify-center px-2",
+                      "w-14 shrink-0 justify-center px-1",
                       DIVIDER,
                       sort === "adp" && ACTIVE_COL,
                     )}
