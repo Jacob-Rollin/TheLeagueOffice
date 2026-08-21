@@ -2,7 +2,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Undo2, X } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ByeMatrix } from "@/components/draft/ByeMatrix";
+import { ByeWeekGrid } from "@/components/draft/ByeWeekGrid";
 import { DraftBoard } from "@/components/draft/DraftBoard";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerList } from "@/components/draft/PlayerList";
