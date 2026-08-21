@@ -36,6 +36,9 @@ export function PlayerDetail({
   const scoring = draft.settings.scoring;
   const drafted = draft.draftedIds.has(player.id);
   const watched = draft.watchIds.has(player.id);
+  const last = history[0] ?? null;
+  const prevSeason = last?.season ?? String(Number(season) - 1);
+
 
   return (
     <div className="pb-8">
