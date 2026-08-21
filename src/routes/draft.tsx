@@ -2,7 +2,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Undo2, X } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ByeWeekGrid } from "@/components/draft/ByeWeekGrid";
+import { ByeMatrix } from "@/components/draft/ByeMatrix";
 import { DraftBoard } from "@/components/draft/DraftBoard";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerList } from "@/components/draft/PlayerList";
@@ -220,7 +220,7 @@ function DraftRoom() {
                 Bye Week Matrix
               </div>
               {myPlayers.length ? (
-                <ByeWeekGrid players={myPlayers} />
+                <ByeMatrix players={myPlayers} layout="column" />
               ) : (
                 <p className="p-3 text-center text-xs text-muted-foreground">
                   Draft players to see bye weeks.
