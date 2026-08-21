@@ -91,7 +91,8 @@ export function PlayerList({
     });
     if (suggested) {
       const round = roundOf(currentOverall, settings.teams);
-      const endgame = round >= settings.rounds - 1;
+      const roundsLeft = settings.rounds - round + 1;
+      const endgame = roundsLeft <= 2;
       const scored = list
         .filter((p) => !draftedIds.has(p.id))
         .map((p) => {
@@ -100,13 +101,31 @@ export function PlayerList({
           const fall = v.adp < 900 ? currentOverall - v.adp : 0;
           const need = needs?.[p.pos] ?? 0;
           let score = -rank + Math.max(0, fall) * 2.5 + Math.min(need, 3) * 14;
-          // Starting-lineup holes matter most; K/DEF are deferred to the last two rounds.
-          if ((p.pos === "K" || p.pos === "DEF") && !endgame) score -= 1000;
+          const isKD = p.pos === "K" || p.pos === "DEF";
+          if (isKD) {
+            const required = settings.roster[p.pos] ?? 0;
+            const stillNeeded = required > 0 && need > 0;
+            // In the final two rounds a missing K/DEF is mandatory — force them to the top.
+            if (endgame && stillNeeded) score += 5000;
+            else if (!endgame) score -= 1000;
+          }
           return { p, score };
         })
         .sort((a, b) => b.score - a.score);
-      return scored.slice(0, Math.max(15, Math.min(24, scored.length))).map((s) => s.p);
+      const picked = scored.slice(0, Math.max(15, Math.min(24, scored.length))).map((s) => s.p);
+      // Guarantee the best available K and DEF appear once we're in the mandatory window.
+      if (endgame) {
+        for (const pos of ["K", "DEF"] as const) {
+          if ((settings.roster[pos] ?? 0) <= 0) continue;
+          if ((needs?.[pos] ?? 0) <= 0) continue;
+          if (picked.some((p) => p.pos === pos)) continue;
+          const best = scored.find((s) => s.p.pos === pos)?.p;
+          if (best) picked.unshift(best);
+        }
+      }
+      return picked;
     }
+
     return list.sort((a, b) => {
       const av = value(a, settings.scoring);
       const bv = value(b, settings.scoring);
