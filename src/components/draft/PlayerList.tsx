@@ -91,8 +91,14 @@ export function PlayerList({
     });
     if (suggested) {
       const round = roundOf(currentOverall, settings.teams);
-      const roundsLeft = settings.rounds - round + 1;
-      const endgame = roundsLeft <= 2;
+      // Picks *I* have left: total roster slots minus players already on my team.
+      const totalSlots = Object.values(settings.roster).reduce((a, b) => a + (b ?? 0), 0);
+      const myCount = counts ? Object.values(counts).reduce((a, b) => a + (b ?? 0), 0) : 0;
+      const myPicksLeft = counts
+        ? Math.max(0, Math.min(totalSlots, settings.rounds) - myCount)
+        : settings.rounds - round + 1;
+      const endgame = myPicksLeft <= 2;
+
       const scored = list
         .filter((p) => !draftedIds.has(p.id))
         .map((p) => {
@@ -161,7 +167,9 @@ export function PlayerList({
     orderIndex,
     suggested,
     needs,
+    counts,
     currentOverall,
+
   ]);
 
   const moveBefore = useCallback(
