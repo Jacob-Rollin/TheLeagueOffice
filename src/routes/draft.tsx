@@ -177,6 +177,22 @@ function DraftRoom() {
             value={untilMyPick === null ? "—" : untilMyPick === 0 ? "Now" : `${untilMyPick} away`}
           />
         </div>
+        <div className="flex items-center justify-between px-3 pt-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span>
+            {cache.error
+              ? "Local cache unavailable — server fallback"
+              : cache.fetchedAt
+                ? `Player cache · ${new Date(cache.fetchedAt).toLocaleDateString()}`
+                : "Player cache · syncing"}
+          </span>
+          <button
+            type="button"
+            onClick={cache.resync}
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            [ ↻ Resync ]
+          </button>
+        </div>
         <nav className="flex gap-1 px-3 py-2">
           {(
             [
