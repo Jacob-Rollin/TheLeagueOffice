@@ -261,7 +261,17 @@ function DraftRoom() {
           )}
 
 
-          {tab === "players" && (
+          {tab === "players" && syncing && (
+            <div className="space-y-2 px-3 py-6">
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                Syncing player database…
+              </p>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-10 animate-pulse rounded-md bg-muted/40" />
+              ))}
+            </div>
+          )}
+          {tab === "players" && !syncing && (
             <PlayerList
               players={data.players}
               draftedIds={draft.draftedIds}
