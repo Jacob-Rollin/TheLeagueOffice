@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { GripVertical, Search, Star, Undo2, Zap } from "lucide-react";
 
@@ -171,6 +171,29 @@ export function PlayerList({
     currentOverall,
 
   ]);
+
+  // Render in chunks so a full-league player pool never blocks scrolling.
+  const PAGE = 100;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  useEffect(() => {
+    setVisibleCount(PAGE);
+  }, [query, pos, sort, custom, showDrafted, watchOnly, suggested]);
+  const visibleRows = useMemo(() => rows.slice(0, visibleCount), [rows, visibleCount]);
+  const sentinelRef = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisibleCount((c) => Math.min(c + PAGE, rows.length));
+        }
+      },
+      { rootMargin: "600px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rows.length, visibleCount]);
 
   const moveBefore = useCallback(
     (fromId: string, targetId: string) => {
@@ -391,7 +414,7 @@ export function PlayerList({
           onPointerUp={() => setDragId(null)}
           onPointerCancel={() => setDragId(null)}
         >
-          {rows.map((p) => {
+          {visibleRows.map((p) => {
             const v = value(p, settings.scoring);
             const drafted = draftedIds.has(p.id);
             const watched = watchIds.has(p.id);
@@ -528,6 +551,14 @@ export function PlayerList({
               </li>
             );
           })}
+          {visibleCount < rows.length && (
+            <li
+              ref={sentinelRef}
+              className="p-4 text-center text-xs text-muted-foreground"
+            >
+              Loading more players… ({visibleCount} of {rows.length})
+            </li>
+          )}
         </ul>
       </div>
     </div>

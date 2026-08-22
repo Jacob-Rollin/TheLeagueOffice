@@ -351,7 +351,7 @@ const buildPlayers = memo<Built>(6 * HOUR, async () => {
   return {
     all,
     rawProj,
-    payload: { season, updatedAt: Date.now(), players: all.slice(0, 500) },
+    payload: { season, updatedAt: Date.now(), players: all },
   };
 });
 
