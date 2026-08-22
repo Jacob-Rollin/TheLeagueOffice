@@ -55,7 +55,7 @@ function formatKickoff(iso?: string): string {
   return `${day} ${time}`;
 }
 
-function truncateNetwork(name: string, maxChars = 8): string {
+function truncateNetwork(name: string, maxChars = 14): string {
   const clean = name.trim();
   if (clean.length <= maxChars) return clean;
   return `${clean.slice(0, maxChars)}...`;
@@ -332,16 +332,20 @@ export function ScoreTicker() {
                 rel="noreferrer"
                 className={cn(
                   "flex shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10",
-                  live ? "w-[200px]" : pre ? "w-[190px]" : "w-[150px]",
+                  live ? "w-[186px]" : pre ? "w-[190px]" : "w-[150px]",
                 )}
               >
-                <div className="flex items-center justify-between gap-2 text-[10px] uppercase tracking-widest text-primary-foreground/70">
-                  <span className="flex min-w-0 items-center gap-1 truncate">
-                    {live && <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-hidden />}
+                <div className="flex items-center justify-between gap-1.5 text-[10px] uppercase tracking-widest text-primary-foreground/70">
+                  <span
+                    className={cn(
+                      "flex shrink-0 items-center gap-1 whitespace-nowrap",
+                      live && "font-semibold text-accent",
+                    )}
+                  >
                     {live ? `${g.period} ${g.clock}`.trim() : pre ? g.kickoff || g.detail : g.detail}
                   </span>
                   {g.network && g.state !== "post" && (
-                    <span className="w-16 shrink-0 truncate text-right text-primary-foreground/60">
+                    <span className="min-w-0 flex-1 truncate text-right text-primary-foreground/60">
                       {truncateNetwork(g.network)}
                     </span>
                   )}
