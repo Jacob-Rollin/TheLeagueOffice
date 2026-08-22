@@ -1,31 +1,23 @@
-export type Pos = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
+import {
+  POSITIONS,
+  adpPick,
+  adpSpread,
+  buildPlayersFromRows,
+  byeWeeksFromSchedule,
+  currentSeason,
+  fetchProjections,
+  fetchRows,
+  fetchSeasonStats,
+  num,
+  positionsQuery,
+  type Player,
+  type PlayersPayload,
+  type Pos,
+  type SleeperRow,
+  type Stats,
+} from "./players-build";
 
-export type Player = {
-  id: string;
-  name: string;
-  team: string;
-  pos: Pos;
-  age: number | null;
-  exp: number | null;
-  injury: string | null;
-  /** Bye week for the player's team this season (null when unknown). */
-  bye: number | null;
-  adp: { std: number; half: number; ppr: number };
-  /** Low/high ADP across Sleeper's scoring-format markets (999 when unranked). */
-  adpRange: { min: number; max: number };
-  /** 1-based overall ADP rank for each scoring format (999 when unranked). */
-  rank: { std: number; half: number; ppr: number };
-  /** 1-based rank within the player's position (e.g. 3 => "RB3"). */
-  posRank: number;
-  proj: { std: number; half: number; ppr: number };
-  prev: { std: number; half: number; ppr: number } | null;
-};
-
-export type PlayersPayload = {
-  season: string;
-  updatedAt: number;
-  players: Player[];
-};
+export type { Player, PlayersPayload, Pos };
 
 export type SeasonLine = {
   season: string;
@@ -61,64 +53,7 @@ export type PlayerDetail = {
   injuryRisk: { score: number; label: string; factors: string[] };
 };
 
-const POSITIONS: Pos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
 const BASE = "https://api.sleeper.app";
-
-type Stats = Record<string, number>;
-
-type SleeperRow = {
-  player_id: string;
-  team: string | null;
-  opponent?: string | null;
-  week?: number | null;
-  stats: Stats | null;
-  player: {
-    first_name?: string;
-    last_name?: string;
-    position?: string;
-    team?: string | null;
-    age?: number | null;
-    years_exp?: number | null;
-    injury_status?: string | null;
-  } | null;
-};
-
-function positionsQuery() {
-  return POSITIONS.map((p) => `position[]=${p}`).join("&");
-}
-
-function currentSeason(): string {
-  const now = new Date();
-  // NFL fantasy season rolls over in the spring.
-  return String(now.getUTCMonth() >= 2 ? now.getUTCFullYear() : now.getUTCFullYear() - 1);
-}
-
-async function fetchRows(url: string): Promise<SleeperRow[]> {
-  const res = await fetch(url, { headers: { accept: "application/json" } });
-  if (!res.ok) throw new Error(`Upstream ${res.status}`);
-  const json = (await res.json()) as SleeperRow[];
-  return Array.isArray(json) ? json : [];
-}
-
-function num(v: unknown, fallback: number): number {
-  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
-}
-
-/** First finite ADP below the "unranked" sentinel, else 999. */
-function adpPick(...vals: unknown[]): number {
-  for (const v of vals) {
-    const n = num(v, 999);
-    if (n > 0 && n < 999) return n;
-  }
-  return 999;
-}
-
-/** Low/high across the ADP markets we have; 999/999 when none are ranked. */
-function adpSpread(vals: unknown[]): { min: number; max: number } {
-  const nums = vals.map((v) => num(v, 999)).filter((n) => n > 0 && n < 999);
-  if (!nums.length) return { min: 999, max: 999 };
-  return { min: Math.min(...nums), max: Math.max(...nums) };
-}
 
 function memo<T>(ttl: number, fn: (key: string) => Promise<T>) {
   const store = new Map<string, { at: number; value: Promise<T> }>();
@@ -137,14 +72,7 @@ function memo<T>(ttl: number, fn: (key: string) => Promise<T>) {
 const HOUR = 1000 * 60 * 60;
 
 /** Season-long stats for every player, keyed by player id. */
-const seasonStats = memo<Map<string, Stats>>(6 * HOUR, async (season) => {
-  const rows = await fetchRows(
-    `${BASE}/stats/nfl/${season}?season_type=regular&${positionsQuery()}&order_by=pts_half_ppr`,
-  ).catch(() => []);
-  const map = new Map<string, Stats>();
-  for (const row of rows) if (row.stats) map.set(row.player_id, row.stats);
-  return map;
-});
+const seasonStats = memo<Map<string, Stats>>(6 * HOUR, (season) => fetchSeasonStats(season));
 
 type ScheduleGame = {
   week: number;
@@ -218,46 +146,12 @@ export async function loadNextGame(team: string): Promise<NextGame | null> {
 
 /** Weeks 1-18 with no scheduled game, per team. */
 async function byeWeeks(season: string): Promise<Map<string, number>> {
-  const games = await scheduleFor(season);
-  const played = new Map<string, Set<number>>();
-  const teams = new Set<string>();
-  for (const g of games) {
-    for (const t of [g.home, g.away]) {
-      if (!t) continue;
-      teams.add(t);
-      if (!played.has(t)) played.set(t, new Set());
-      played.get(t)!.add(g.week);
-    }
-  }
-  const byes = new Map<string, number>();
-  for (const t of teams) {
-    const weeks = played.get(t)!;
-    for (let w = 4; w <= 18; w++) {
-      if (!weeks.has(w)) {
-        byes.set(t, w);
-        break;
-      }
-    }
-  }
-  return byes;
+  return byeWeeksFromSchedule(await scheduleFor(season));
 }
 
 type ProjectionsResult = { season: string; rows: SleeperRow[] };
 
-const projectionsFor = memo<ProjectionsResult>(6 * HOUR, async (season) => {
-  const q = `season_type=regular&${positionsQuery()}&order_by=adp_half_ppr`;
-  let rows = await fetchRows(`${BASE}/projections/nfl/${season}?${q}`).catch(() => []);
-  let used = season;
-  if (!rows.some((r) => num(r.stats?.["adp_half_ppr"], 999) < 999)) {
-    const fallback = String(Number(season) - 1);
-    const alt = await fetchRows(`${BASE}/projections/nfl/${fallback}?${q}`).catch(() => []);
-    if (alt.length) {
-      rows = alt;
-      used = fallback;
-    }
-  }
-  return { season: used, rows };
-});
+const projectionsFor = memo<ProjectionsResult>(6 * HOUR, (season) => fetchProjections(season));
 
 type Built = {
   payload: PlayersPayload;
@@ -271,82 +165,12 @@ const buildPlayers = memo<Built>(6 * HOUR, async () => {
   const prevStats = await seasonStats(prevSeason);
   const byeByTeam = await byeWeeks(season).catch(() => new Map<string, number>());
 
-  const players: Player[] = [];
-  const rawProj = new Map<string, Stats>();
-
-  for (const row of projRows) {
-    const s = row.stats ?? {};
-    const p = row.player ?? {};
-    const pos = (p.position ?? "") as Pos;
-    if (!POSITIONS.includes(pos)) continue;
-
-    const half = adpPick(s["adp_half_ppr"], s["adp_ppr"], s["adp_std"]);
-    const ppr = adpPick(s["adp_ppr"], s["adp_half_ppr"], s["adp_std"]);
-    const std = adpPick(s["adp_std"], s["adp_half_ppr"], s["adp_ppr"]);
-    const projHalf = num(s["pts_half_ppr"], 0);
-    if (half >= 999 && projHalf <= 0) continue;
-
-    const name = `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || row.team || "";
-    if (!name) continue;
-
-    const prev = prevStats.get(row.player_id);
-    rawProj.set(row.player_id, s);
-    players.push({
-      id: row.player_id,
-      name,
-      team: row.team ?? p.team ?? "FA",
-      pos,
-      age: p.age ?? null,
-      exp: p.years_exp ?? null,
-      injury: p.injury_status ?? null,
-      bye: byeByTeam.get(row.team ?? p.team ?? "") ?? null,
-      adp: { std, half, ppr },
-      adpRange: adpSpread([
-        s["adp_std"],
-        s["adp_half_ppr"],
-        s["adp_ppr"],
-        s["adp_2qb"],
-        s["adp_dynasty"],
-      ]),
-      rank: { std: 999, half: 999, ppr: 999 },
-      posRank: 999,
-      proj: {
-        std: num(s["pts_std"], 0),
-        half: projHalf,
-        ppr: num(s["pts_ppr"], 0),
-      },
-      prev: prev
-        ? {
-            std: num(prev["pts_std"], 0),
-            half: num(prev["pts_half_ppr"], 0),
-            ppr: num(prev["pts_ppr"], 0),
-          }
-        : null,
-    });
-  }
-
-  // Overall ADP rank per scoring format: ADP order first, then projection order
-  // for anyone without a market ADP so every player gets a sane ranking.
-  for (const fmt of ["std", "half", "ppr"] as const) {
-    const ordered = [...players].sort((a, b) => {
-      const ad = a.adp[fmt];
-      const bd = b.adp[fmt];
-      if (ad !== bd) return ad - bd;
-      return b.proj[fmt] - a.proj[fmt];
-    });
-    ordered.forEach((p, i) => {
-      p.rank[fmt] = i + 1;
-    });
-  }
-
-  // Positional rank (RB1, WR12, ...) off the half-PPR ordering.
-  const posSeen: Record<string, number> = {};
-  for (const p of [...players].sort((a, b) => a.rank.half - b.rank.half)) {
-    posSeen[p.pos] = (posSeen[p.pos] ?? 0) + 1;
-    p.posRank = posSeen[p.pos]!;
-  }
-
-  const all = [...players].sort((a, b) => a.rank.half - b.rank.half);
+  const { players: all, rawProj } = buildPlayersFromRows({
+    season,
+    projRows,
+    prevStats,
+    byeByTeam,
+  });
 
   return {
     all,

@@ -1,4 +1,4 @@
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Undo2, X } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +23,7 @@ import {
   type Player,
   type Settings,
 } from "@/lib/draft";
+import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { getPlayers } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
 
@@ -42,14 +43,20 @@ export const Route = createFileRoute("/draft")({
       },
     ],
   }),
-  loader: ({ context }) => {
-    void context.queryClient.ensureQueryData(playersQuery);
-  },
   component: DraftRoom,
 });
 type Tab = "players" | "board" | "team";
+
+const EMPTY_PAYLOAD = { season: "", updatedAt: 0, players: [] as Player[] };
+
 function DraftRoom() {
-  const { data } = useSuspenseQuery(playersQuery);
+  // Sleeper catalog is downloaded by the browser once per day and cached
+  // locally, so search / filters / scrolling never touch the network.
+  const cache = useSleeperPlayers();
+  // Server loader is only a fallback when the direct Sleeper fetch fails.
+  const fallback = useQuery({ ...playersQuery, enabled: Boolean(cache.error) && !cache.data });
+  const data = cache.data ?? fallback.data ?? EMPTY_PAYLOAD;
+  const syncing = !cache.data && (cache.loading || fallback.isLoading);
   const draft = useDraft();
   const [tab, setTab] = useState<Tab>("players");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -170,6 +177,22 @@ function DraftRoom() {
             value={untilMyPick === null ? "—" : untilMyPick === 0 ? "Now" : `${untilMyPick} away`}
           />
         </div>
+        <div className="flex items-center justify-between px-3 pt-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          <span>
+            {cache.error
+              ? "Local cache unavailable — server fallback"
+              : cache.fetchedAt
+                ? `Player cache · ${new Date(cache.fetchedAt).toLocaleDateString()}`
+                : "Player cache · syncing"}
+          </span>
+          <button
+            type="button"
+            onClick={cache.resync}
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            [ ↻ Resync ]
+          </button>
+        </div>
         <nav className="flex gap-1 px-3 py-2">
           {(
             [
@@ -254,7 +277,17 @@ function DraftRoom() {
           )}
 
 
-          {tab === "players" && (
+          {tab === "players" && syncing && (
+            <div className="space-y-2 px-3 py-6">
+              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+                Syncing player database…
+              </p>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-10 animate-pulse rounded-md bg-muted/40" />
+              ))}
+            </div>
+          )}
+          {tab === "players" && !syncing && (
             <PlayerList
               players={data.players}
               draftedIds={draft.draftedIds}
