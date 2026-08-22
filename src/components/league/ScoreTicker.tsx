@@ -332,8 +332,9 @@ export function ScoreTicker() {
                 rel="noreferrer"
                 className={cn(
                   "flex shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10",
-                  live ? "w-[186px]" : pre ? "w-[190px]" : "w-[150px]",
+                  live ? "w-[186px]" : pre ? "w-[168px]" : "w-[132px]",
                 )}
+
               >
                 <div className="flex items-center justify-between gap-1.5 text-[10px] uppercase tracking-widest text-primary-foreground/70">
                   <span className="flex shrink-0 items-center gap-1 whitespace-nowrap">
@@ -386,8 +387,9 @@ function ScrollButton({ side, onClick }: { side: "left" | "right"; onClick: () =
 
 function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; pre: boolean; extra?: string }) {
   return (
-    <div className="grid grid-cols-[1fr_40px_52px] items-center gap-1.5">
+    <div className={cn("grid items-center gap-1.5", live ? "grid-cols-[1fr_40px_52px]" : "grid-cols-[1fr_auto]")}>
       <div className="flex min-w-0 items-center gap-1.5">
+
         {team.logo && (
           <img
             src={team.logo}
