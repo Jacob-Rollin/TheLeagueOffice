@@ -54,6 +54,9 @@ function Home() {
   const [standings, setStandings] = useState<Standings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [visibleNews, setVisibleNews] = useState(6);
+  const [newsLimit, setNewsLimit] = useState(50);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [latency, setLatency] = useState(14);
   useEffect(() => {
     setLatency(Math.floor(Math.random() * 7) + 12);
@@ -61,12 +64,38 @@ function Home() {
   const leaguesM = useMutation({ mutationFn: (name: string) => getUserLeagues({ data: { username: name } }) });
   const standingsM = useMutation({ mutationFn: (leagueId: string) => getStandings({ data: { leagueId } }) });
 
+  const fetchNews = (limit: number) =>
+    fetch(`${NEWS_BASE_URL}?limit=${limit}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("news"))))
+      .then((d) => ((d.articles ?? []) as NewsItem[]).filter(isFantasy));
+
   useEffect(() => {
-    fetch(NEWS_URL)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => setNews(((d.articles ?? []) as NewsItem[]).filter(isFantasy).slice(0, 6)))
+    fetchNews(50)
+      .then(setNews)
       .catch(() => setNews([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadMoreNews = async () => {
+    const next = visibleNews + 6;
+    if (next <= news.length) {
+      setVisibleNews(next);
+      return;
+    }
+    setLoadingMore(true);
+    try {
+      const bigger = Math.min(newsLimit + 50, 200);
+      const more = await fetchNews(bigger);
+      if (more.length > news.length) setNews(more);
+      setNewsLimit(bigger);
+      setVisibleNews(next);
+    } catch {
+      setVisibleNews(Math.min(next, news.length));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
 
   // Hydrate from the globally shared league link (set here, in the War Room, or on Trade).
   const linkedLeagueId = link?.leagueId ?? null;
