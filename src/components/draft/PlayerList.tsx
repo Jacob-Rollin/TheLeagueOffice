@@ -551,6 +551,14 @@ export function PlayerList({
               </li>
             );
           })}
+          {visibleCount < rows.length && (
+            <li
+              ref={sentinelRef}
+              className="p-4 text-center text-xs text-muted-foreground"
+            >
+              Loading more players… ({visibleCount} of {rows.length})
+            </li>
+          )}
         </ul>
       </div>
     </div>
