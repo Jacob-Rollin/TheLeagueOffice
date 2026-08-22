@@ -255,47 +255,84 @@ function Home() {
               </div>
               <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Updated on load</span>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {news.length
-                ? news
-                    .filter((n) => Boolean(articleUrl(n)))
-                    .map((n, i) => (
-                      <a
-                        key={`${n.headline}-${i}`}
-                        href={articleUrl(n)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="group overflow-hidden rounded-xl border border-border bg-card hover:border-primary"
-                      >
-                        {n.images?.[0]?.url && (
-                          <img
-                            src={n.images[0].url}
-                            alt={n.images[0].alt ?? "Fantasy football news"}
-                            loading="lazy"
-                            className="h-32 w-full object-cover"
-                          />
-                        )}
-                        <div className="p-4">
-                          <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
-                          <h3 className="mt-1 font-semibold leading-5 group-hover:text-primary">{n.headline}</h3>
-                          {n.description && (
-                            <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{n.description}</p>
-                          )}
-                        </div>
-                      </a>
-                    ))
-                : ["Fantasy draft targets to watch", "Fantasy sleepers and busts", "Fantasy players trending up"].map(
-                    (x) => (
-                      <div key={x} className="rounded-xl border border-border bg-card p-4">
-                        <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
-                        <h3 className="mt-1 font-semibold">{x}</h3>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          Live fantasy football headlines will appear here when the news feed is available.
-                        </p>
-                      </div>
-                    ),
+
+            {news.length ? (
+              <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+                {/* Featured article */}
+                <a
+                  href={articleUrl(news[0]!)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card hover:border-primary"
+                >
+                  {news[0]!.images?.[0]?.url ? (
+                    <img
+                      src={news[0]!.images[0].url}
+                      alt={news[0]!.images[0].alt ?? "Fantasy football news"}
+                      loading="lazy"
+                      className="aspect-video w-full object-cover"
+                    />
+                  ) : (
+                    <div className="aspect-video w-full bg-surface" />
                   )}
-            </div>
+                  <div className="flex flex-1 flex-col p-4">
+                    <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
+                    <h3 className="mt-1 text-lg font-semibold leading-snug group-hover:text-primary md:text-xl">
+                      {news[0]!.headline}
+                    </h3>
+                    {news[0]!.description && (
+                      <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                        {news[0]!.description}
+                      </p>
+                    )}
+                  </div>
+                </a>
+
+                {/* Stacked headline list */}
+                <div className="flex flex-col gap-3">
+                  {news.slice(1, 6).map((n, i) => (
+                    <a
+                      key={`${n.headline}-${i}`}
+                      href={articleUrl(n)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="group flex items-start gap-3 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary"
+                    >
+                      {n.images?.[0]?.url ? (
+                        <img
+                          src={n.images[0].url}
+                          alt={n.images[0].alt ?? "Fantasy football news"}
+                          loading="lazy"
+                          className="size-16 shrink-0 rounded-md object-cover"
+                        />
+                      ) : (
+                        <div className="size-16 shrink-0 rounded-md bg-surface" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
+                        <h3 className="mt-0.5 line-clamp-2 font-semibold leading-snug group-hover:text-primary">
+                          {n.headline}
+                        </h3>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {["Fantasy draft targets to watch", "Fantasy sleepers and busts", "Fantasy players trending up"].map(
+                  (x) => (
+                    <div key={x} className="rounded-xl border border-border bg-card p-4">
+                      <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
+                      <h3 className="mt-1 font-semibold">{x}</h3>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Live fantasy football headlines will appear here when the news feed is available.
+                      </p>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
           </section>
         </div>
 
