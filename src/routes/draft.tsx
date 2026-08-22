@@ -23,6 +23,7 @@ import {
   type Player,
   type Settings,
 } from "@/lib/draft";
+import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { getPlayers } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
 
