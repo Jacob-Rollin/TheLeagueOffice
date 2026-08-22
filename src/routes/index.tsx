@@ -259,6 +259,7 @@ function Home() {
               {news.length
                 ? news
                     .filter((n) => Boolean(articleUrl(n)))
+                    .slice(0, visibleNews)
                     .map((n, i) => (
                       <a
                         key={`${n.headline}-${i}`}
@@ -272,7 +273,7 @@ function Home() {
                             src={n.images[0].url}
                             alt={n.images[0].alt ?? "Fantasy football news"}
                             loading="lazy"
-                            className="h-44 w-full object-cover"
+                            className="h-auto w-full object-contain"
                           />
                         )}
                         <div className="p-4">
@@ -281,9 +282,7 @@ function Home() {
                             {n.headline}
                           </h3>
                           {n.description && (
-                            <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
-                              {n.description}
-                            </p>
+                            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{n.description}</p>
                           )}
                         </div>
                       </a>
@@ -299,7 +298,19 @@ function Home() {
                       </div>
                     ),
                   )}
+
+              {news.length > 0 && (visibleNews < news.length || newsLimit < 200) && (
+                <button
+                  type="button"
+                  onClick={loadMoreNews}
+                  disabled={loadingMore}
+                  className="rounded-xl border border-border bg-card px-4 py-3 font-display text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+                >
+                  {loadingMore ? "Loading…" : "[ Load more ]"}
+                </button>
+              )}
             </div>
+
           </section>
         </div>
 
