@@ -53,64 +53,7 @@ export type PlayerDetail = {
   injuryRisk: { score: number; label: string; factors: string[] };
 };
 
-const POSITIONS: Pos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
 const BASE = "https://api.sleeper.app";
-
-type Stats = Record<string, number>;
-
-type SleeperRow = {
-  player_id: string;
-  team: string | null;
-  opponent?: string | null;
-  week?: number | null;
-  stats: Stats | null;
-  player: {
-    first_name?: string;
-    last_name?: string;
-    position?: string;
-    team?: string | null;
-    age?: number | null;
-    years_exp?: number | null;
-    injury_status?: string | null;
-  } | null;
-};
-
-function positionsQuery() {
-  return POSITIONS.map((p) => `position[]=${p}`).join("&");
-}
-
-function currentSeason(): string {
-  const now = new Date();
-  // NFL fantasy season rolls over in the spring.
-  return String(now.getUTCMonth() >= 2 ? now.getUTCFullYear() : now.getUTCFullYear() - 1);
-}
-
-async function fetchRows(url: string): Promise<SleeperRow[]> {
-  const res = await fetch(url, { headers: { accept: "application/json" } });
-  if (!res.ok) throw new Error(`Upstream ${res.status}`);
-  const json = (await res.json()) as SleeperRow[];
-  return Array.isArray(json) ? json : [];
-}
-
-function num(v: unknown, fallback: number): number {
-  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
-}
-
-/** First finite ADP below the "unranked" sentinel, else 999. */
-function adpPick(...vals: unknown[]): number {
-  for (const v of vals) {
-    const n = num(v, 999);
-    if (n > 0 && n < 999) return n;
-  }
-  return 999;
-}
-
-/** Low/high across the ADP markets we have; 999/999 when none are ranked. */
-function adpSpread(vals: unknown[]): { min: number; max: number } {
-  const nums = vals.map((v) => num(v, 999)).filter((n) => n > 0 && n < 999);
-  if (!nums.length) return { min: 999, max: 999 };
-  return { min: Math.min(...nums), max: Math.max(...nums) };
-}
 
 function memo<T>(ttl: number, fn: (key: string) => Promise<T>) {
   const store = new Map<string, { at: number; value: Promise<T> }>();
@@ -129,14 +72,7 @@ function memo<T>(ttl: number, fn: (key: string) => Promise<T>) {
 const HOUR = 1000 * 60 * 60;
 
 /** Season-long stats for every player, keyed by player id. */
-const seasonStats = memo<Map<string, Stats>>(6 * HOUR, async (season) => {
-  const rows = await fetchRows(
-    `${BASE}/stats/nfl/${season}?season_type=regular&${positionsQuery()}&order_by=pts_half_ppr`,
-  ).catch(() => []);
-  const map = new Map<string, Stats>();
-  for (const row of rows) if (row.stats) map.set(row.player_id, row.stats);
-  return map;
-});
+const seasonStats = memo<Map<string, Stats>>(6 * HOUR, (season) => fetchSeasonStats(season));
 
 type ScheduleGame = {
   week: number;
