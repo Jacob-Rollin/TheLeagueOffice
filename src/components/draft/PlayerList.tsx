@@ -414,7 +414,7 @@ export function PlayerList({
           onPointerUp={() => setDragId(null)}
           onPointerCancel={() => setDragId(null)}
         >
-          {rows.map((p) => {
+          {visibleRows.map((p) => {
             const v = value(p, settings.scoring);
             const drafted = draftedIds.has(p.id);
             const watched = watchIds.has(p.id);
