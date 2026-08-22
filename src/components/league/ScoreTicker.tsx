@@ -385,8 +385,8 @@ function ScrollButton({ side, onClick }: { side: "left" | "right"; onClick: () =
 
 function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; pre: boolean; extra?: string }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+    <div className="grid grid-cols-[1fr_40px_52px] items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1.5">
         {team.logo && (
           <img
             src={team.logo}
@@ -399,25 +399,31 @@ function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; 
           />
         )}
         <span className="truncate font-display text-xs uppercase tracking-wide">{team.abbr}</span>
-        {live && team.possession && (
+        {live && (
           <span
-            className="size-1.5 shrink-0 rounded-full bg-accent"
-            title="Has possession"
-            aria-label="Has possession"
+            className={cn(
+              "ml-0.5 size-1.5 shrink-0 rounded-full",
+              team.possession ? "bg-accent" : "bg-transparent",
+            )}
+            aria-hidden={!team.possession}
+            title={team.possession ? "Has possession" : undefined}
           />
         )}
       </div>
 
       {!pre ? (
-        <span className="tabnum w-10 shrink-0 text-right text-xs font-semibold">{team.score}</span>
+        <span className="tabnum text-right text-xs font-semibold">{team.score}</span>
       ) : (
-        <span className="tabnum w-12 shrink-0 text-right text-[10px] text-primary-foreground/60">{team.record}</span>
+        <span className="tabnum text-right text-[10px] text-primary-foreground/60">{team.record}</span>
       )}
 
       {live && (
-        <span className="w-[52px] shrink-0 truncate border-l border-primary-foreground/10 pl-1.5 text-left text-[9px] uppercase tracking-wider text-primary-foreground/70">
-          {extra || ""}
-        </span>
+        <div className="relative flex h-5 items-center pl-1.5">
+          <div className="absolute left-0 top-1/2 h-4 w-px -translate-y-1/2 bg-primary-foreground/10" />
+          <span className="truncate text-left text-[9px] uppercase tracking-wider text-primary-foreground/70">
+            {extra || ""}
+          </span>
+        </div>
       )}
     </div>
   );
