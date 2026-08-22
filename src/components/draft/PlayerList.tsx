@@ -172,6 +172,29 @@ export function PlayerList({
 
   ]);
 
+  // Render in chunks so a full-league player pool never blocks scrolling.
+  const PAGE = 100;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  useEffect(() => {
+    setVisibleCount(PAGE);
+  }, [query, pos, sort, custom, showDrafted, watchOnly, suggested]);
+  const visibleRows = useMemo(() => rows.slice(0, visibleCount), [rows, visibleCount]);
+  const sentinelRef = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisibleCount((c) => Math.min(c + PAGE, rows.length));
+        }
+      },
+      { rootMargin: "600px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rows.length, visibleCount]);
+
   const moveBefore = useCallback(
     (fromId: string, targetId: string) => {
       const ids = rows.map((r) => r.id);
