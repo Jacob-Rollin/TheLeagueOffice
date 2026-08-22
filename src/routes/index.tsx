@@ -7,7 +7,7 @@ import type { LeagueSummary, Standings } from "@/lib/league.server";
 import { useLeagueLink } from "@/lib/league-link";
 import { cn } from "@/lib/utils";
 
-const NEWS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50";
+const NEWS_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news";
 type LinkNode = { web?: { href?: string }; href?: string };
 type NewsItem = {
   headline: string;
