@@ -386,8 +386,9 @@ function ScrollButton({ side, onClick }: { side: "left" | "right"; onClick: () =
 
 function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; pre: boolean; extra?: string }) {
   return (
-    <div className="grid grid-cols-[1fr_40px_52px] items-center gap-1.5">
+    <div className={cn("grid items-center gap-1.5", live ? "grid-cols-[1fr_40px_52px]" : "grid-cols-[1fr_auto]")}>
       <div className="flex min-w-0 items-center gap-1.5">
+
         {team.logo && (
           <img
             src={team.logo}
