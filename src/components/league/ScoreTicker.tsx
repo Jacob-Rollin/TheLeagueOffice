@@ -412,7 +412,7 @@ function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; 
       )}
 
       {live && (
-        <span className="w-16 shrink-0 truncate text-right text-[9px] uppercase tracking-wider text-primary-foreground/70">
+        <span className="w-[52px] shrink-0 truncate border-l border-primary-foreground/10 pl-1.5 text-left text-[9px] uppercase tracking-wider text-primary-foreground/70">
           {extra || ""}
         </span>
       )}
