@@ -43,14 +43,20 @@ export const Route = createFileRoute("/draft")({
       },
     ],
   }),
-  loader: ({ context }) => {
-    void context.queryClient.ensureQueryData(playersQuery);
-  },
   component: DraftRoom,
 });
 type Tab = "players" | "board" | "team";
+
+const EMPTY_PAYLOAD = { season: "", updatedAt: 0, players: [] as Player[] };
+
 function DraftRoom() {
-  const { data } = useSuspenseQuery(playersQuery);
+  // Sleeper catalog is downloaded by the browser once per day and cached
+  // locally, so search / filters / scrolling never touch the network.
+  const cache = useSleeperPlayers();
+  // Server loader is only a fallback when the direct Sleeper fetch fails.
+  const fallback = useQuery({ ...playersQuery, enabled: Boolean(cache.error) && !cache.data });
+  const data = cache.data ?? fallback.data ?? EMPTY_PAYLOAD;
+  const syncing = !cache.data && (cache.loading || fallback.isLoading);
   const draft = useDraft();
   const [tab, setTab] = useState<Tab>("players");
   const [openId, setOpenId] = useState<string | null>(null);
