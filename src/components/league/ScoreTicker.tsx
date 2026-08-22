@@ -335,20 +335,23 @@ export function ScoreTicker() {
                   live ? "w-[186px]" : pre ? "w-[190px]" : "w-[150px]",
                 )}
               >
-                <div className="flex items-center justify-between gap-1.5 text-[10px] uppercase tracking-widest text-primary-foreground/70">
-                  <span
-                    className={cn(
-                      "flex shrink-0 items-center gap-1 whitespace-nowrap",
-                      live && "font-semibold text-accent",
-                    )}
-                  >
-                    {live ? `${g.period} ${g.clock}`.trim() : pre ? g.kickoff || g.detail : g.detail}
+                <div className="grid grid-cols-[1fr_40px_52px] items-center gap-1.5 text-[10px] uppercase tracking-widest text-primary-foreground/70">
+                  <span className="min-w-0 truncate text-primary-foreground/60">
+                    {g.network && g.state !== "post" ? truncateNetwork(g.network) : ""}
                   </span>
-                  {g.network && g.state !== "post" && (
-                    <span className="min-w-0 flex-1 truncate text-right text-primary-foreground/60">
-                      {truncateNetwork(g.network)}
-                    </span>
-                  )}
+                  <span />
+                  <span className="text-right whitespace-nowrap">
+                    {live ? (
+                      <>
+                        <span className="font-semibold text-accent">{g.period}</span>
+                        <span className="text-primary-foreground"> {g.clock}</span>
+                      </>
+                    ) : pre ? (
+                      g.kickoff || g.detail
+                    ) : (
+                      g.detail
+                    )}
+                  </span>
                 </div>
 
                 <TeamRow team={g.away} live={live} pre={pre} extra={live ? g.downDistance : ""} />
