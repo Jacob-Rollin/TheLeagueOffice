@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Check, X } from "lucide-react";
 
 export type AuthMode = "signin" | "signup";
 
@@ -28,6 +29,23 @@ function passwordProblems(pw: string): string[] {
   return missing;
 }
 
+function passwordStrength(pw: string): number {
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  return score;
+}
+
+const strengthLabels = ["Weak", "Fair", "Good", "Strong"];
+const strengthColors = [
+  "bg-red-500",
+  "bg-amber-500",
+  "bg-yellow-400",
+  "bg-emerald-500",
+];
+
 type RpcFn = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
 
 export function AuthDialog({
@@ -40,10 +58,10 @@ export function AuthDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [isSignup, setIsSignup] = useState(mode === "signup");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +75,14 @@ export function AuthDialog({
     }
   }, [open, mode]);
 
+  const strength = passwordStrength(password);
+  const confirmStatus =
+    confirmPassword.length > 0
+      ? password === confirmPassword
+        ? "match"
+        : "mismatch"
+      : null;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -64,6 +90,11 @@ export function AuthDialog({
     setNotice(null);
     try {
       if (isSignup) {
+        const cleanName = name.trim();
+        if (!cleanName) {
+          setError("Please enter your name.");
+          return;
+        }
         const cleanEmail = email.trim();
         if (!EMAIL_RE.test(cleanEmail)) {
           setError("Please enter a valid email address.");
@@ -72,6 +103,10 @@ export function AuthDialog({
         const missing = passwordProblems(password);
         if (missing.length > 0) {
           setError(`Password must include ${missing.join(", ")}.`);
+          return;
+        }
+        if (password !== confirmPassword) {
+          setError("Passwords do not match.");
           return;
         }
 
@@ -97,8 +132,7 @@ export function AuthDialog({
           options: {
             emailRedirectTo: `${window.location.origin}/`,
             data: {
-              username: username.trim(),
-              display_name: displayName.trim(),
+              name: cleanName,
             },
           },
         });
@@ -138,12 +172,26 @@ export function AuthDialog({
           </DialogTitle>
           <DialogDescription>
             {isSignup
-              ? "Registration is invite only. Enter your league invite code to continue."
+              ? "Registration is invite only. Enter your league code below."
               : "Welcome back to the front office."}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-3">
+          {isSignup && (
+            <label className={labelClass}>
+              Name
+              <input
+                type="text"
+                required
+                minLength={2}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={fieldClass}
+              />
+            </label>
+          )}
+
           <label className={labelClass}>
             Email
             <input
@@ -154,32 +202,6 @@ export function AuthDialog({
               className={fieldClass}
             />
           </label>
-
-          {isSignup && (
-            <>
-              <label className={labelClass}>
-                Username
-                <input
-                  type="text"
-                  required
-                  minLength={2}
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className={fieldClass}
-                />
-              </label>
-              <label className={labelClass}>
-                Display Name
-                <input
-                  type="text"
-                  required
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  className={fieldClass}
-                />
-              </label>
-            </>
-          )}
 
           <label className={labelClass}>
             Password
@@ -194,11 +216,55 @@ export function AuthDialog({
           </label>
 
           {isSignup && (
+            <div>
+              <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+                <span>Password Strength</span>
+                <span>{strengthLabels[strength - 1] ?? "Weak"}</span>
+              </div>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4].map((slot) => (
+                  <div
+                    key={slot}
+                    className={`h-1.5 flex-1 rounded-full transition-colors ${
+                      strength >= slot ? strengthColors[strength - 1] : "bg-muted"
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isSignup && (
+            <label className={labelClass}>
+              Confirm Password
+              <div className="relative">
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`${fieldClass} pr-10`}
+                />
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                  {confirmStatus === "match" && (
+                    <Check className="size-4 text-emerald-500" aria-label="Passwords match" />
+                  )}
+                  {confirmStatus === "mismatch" && (
+                    <X className="size-4 text-red-500" aria-label="Passwords do not match" />
+                  )}
+                </div>
+              </div>
+            </label>
+          )}
+
+          {isSignup && (
             <label className={labelClass}>
               Invite Code
               <input
                 type="text"
                 required
+                placeholder="Your personal league invite code"
                 value={inviteCode}
                 onChange={(e) => setInviteCode(e.target.value)}
                 className={`${fieldClass} font-mono uppercase tracking-widest`}
