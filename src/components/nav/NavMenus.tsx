@@ -112,6 +112,13 @@ export function ActiveOperationsMenu() {
 export function ProfileMenu() {
   const { user, ready, signOut } = useAuth();
   const navigate = useNavigate();
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
+
+  const openAuth = (mode: AuthMode) => {
+    setAuthMode(mode);
+    setAuthOpen(true);
+  };
 
   const initials = (user?.email ?? "?").slice(0, 1).toUpperCase();
 
