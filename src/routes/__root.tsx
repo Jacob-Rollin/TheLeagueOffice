@@ -5,6 +5,12 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
+import {
+  ActiveOperationsMenu,
+  FrontOfficeMenu,
+  ProfileMenu,
+  navLinkClass,
+} from "@/components/nav/NavMenus";
 
 // Injected at build time by vite.config.ts (`define`). Falls back in dev.
 declare const __BUILD_ID__: string | undefined;
@@ -109,13 +115,6 @@ function RootShell({ children }: { children: ReactNode }) {
     </html>
   );
 }
-const NAV: [string, string][] = [
-  ["/", "League HQ"],
-  ["/draft", "War Room"],
-  ["/trade", "Trade Desk"],
-  ["/waiver", "The Wire"],
-  ["/hof", "Hall of Fame"],
-];
 function SiteNav() {
   return (
     <header className="border-b-4 border-accent bg-primary text-primary-foreground">
@@ -123,19 +122,24 @@ function SiteNav() {
         <Link to="/" className="display-title mr-2 whitespace-nowrap text-lg">
           THE LEAGUE <span className="text-accent-foreground/90 rounded bg-accent px-1.5">OFFICE</span>
         </Link>
-        <div className="flex flex-1 gap-1 overflow-x-auto">
-          {NAV.map(([to, label]) => (
-            <Link
-              key={to}
-              to={to}
-              activeOptions={{ exact: to === "/" }}
-              className="rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[status=active]:border-accent data-[status=active]:text-primary-foreground"
-            >
-              {label}
-            </Link>
-          ))}
+
+        {/* Left-side navigation grouping */}
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          <Link to="/" activeOptions={{ exact: true }} className={navLinkClass}>
+            League HQ
+          </Link>
+          <FrontOfficeMenu />
+          <ActiveOperationsMenu />
+          <Link to="/hof" className={navLinkClass}>
+            Hall of Fame
+          </Link>
         </div>
-        <GlobalSearch />
+
+        {/* Far-right utilities: search expands leftward, profile stays pinned */}
+        <div className="flex shrink-0 items-center gap-2">
+          <GlobalSearch />
+          <ProfileMenu />
+        </div>
       </nav>
     </header>
   );
