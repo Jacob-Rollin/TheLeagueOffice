@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
+import { signUpWithInviteCode } from "@/lib/invite.functions";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +11,11 @@ import {
 } from "@/components/ui/dialog";
 
 export type AuthMode = "signin" | "signup";
+
+const fieldClass =
+  "mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring";
+const labelClass =
+  "block text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
 export function AuthDialog({
   open,
@@ -22,7 +28,10 @@ export function AuthDialog({
 }) {
   const [isSignup, setIsSignup] = useState(mode === "signup");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -42,13 +51,29 @@ export function AuthDialog({
     setNotice(null);
     try {
       if (isSignup) {
-        const { error: err } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: `${window.location.origin}/` },
+        const result = await signUpWithInviteCode({
+          data: {
+            email: email.trim(),
+            password,
+            username: username.trim(),
+            displayName: displayName.trim(),
+            inviteCode: inviteCode.trim(),
+          },
         });
-        if (err) throw err;
-        setNotice("Account created. Check your email to confirm, then sign in.");
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (signInError) {
+          setNotice("Account created. You can sign in now.");
+          setIsSignup(false);
+          return;
+        }
+        onOpenChange(false);
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password });
         if (err) throw err;
@@ -69,22 +94,51 @@ export function AuthDialog({
             {isSignup ? "Create Account" : "Sign In"}
           </DialogTitle>
           <DialogDescription>
-            {isSignup ? "Register to run your leagues." : "Welcome back to the front office."}
+            {isSignup
+              ? "Registration is invite only. Enter your league invite code to continue."
+              : "Welcome back to the front office."}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-3">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <label className={labelClass}>
             Email
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring"
+              className={fieldClass}
             />
           </label>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+
+          {isSignup && (
+            <>
+              <label className={labelClass}>
+                Username
+                <input
+                  type="text"
+                  required
+                  minLength={2}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className={fieldClass}
+                />
+              </label>
+              <label className={labelClass}>
+                Display Name
+                <input
+                  type="text"
+                  required
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className={fieldClass}
+                />
+              </label>
+            </>
+          )}
+
+          <label className={labelClass}>
             Password
             <input
               type="password"
@@ -92,9 +146,22 @@ export function AuthDialog({
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring"
+              className={fieldClass}
             />
           </label>
+
+          {isSignup && (
+            <label className={labelClass}>
+              Invite Code
+              <input
+                type="text"
+                required
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                className={`${fieldClass} font-mono uppercase tracking-widest`}
+              />
+            </label>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
           {notice && <p className="text-sm text-success">{notice}</p>}
@@ -109,7 +176,11 @@ export function AuthDialog({
 
           <button
             type="button"
-            onClick={() => setIsSignup((v) => !v)}
+            onClick={() => {
+              setIsSignup((v) => !v);
+              setError(null);
+              setNotice(null);
+            }}
             className="w-full text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
           >
             {isSignup ? "Already have an account? Sign In" : "Need an account? Create Account"}
