@@ -132,6 +132,7 @@ export function GlobalSearch() {
             <X className="size-4" />
           </button>
         )}
+        </div>
       </div>
 
       {open && active && (
