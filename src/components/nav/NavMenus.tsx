@@ -148,24 +148,34 @@ export function ProfileMenu() {
               className="flex items-center gap-2"
             >
               <LogOut className="size-4" />
-              Sign out
+              Sign Out
             </DropdownMenuItem>
           </>
         ) : (
           <>
-            <DropdownMenuItem asChild>
-              <Link to="/auth" search={{ mode: "signin" }} className="font-medium">
-                Sign in
-              </Link>
+            <DropdownMenuItem
+              className="font-medium"
+              onSelect={(e) => {
+                e.preventDefault();
+                openAuth("signin");
+              }}
+            >
+              Sign In
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/auth" search={{ mode: "signup" }} className="font-medium">
-                Create account
-              </Link>
+            <DropdownMenuItem
+              className="font-medium"
+              onSelect={(e) => {
+                e.preventDefault();
+                openAuth("signup");
+              }}
+            >
+              Create Account
             </DropdownMenuItem>
           </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    <AuthDialog open={authOpen} mode={authMode} onOpenChange={setAuthOpen} />
+    </>
   );
 }
