@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronDown, LogOut, Plus, User as UserIcon } from "lucide-react";
 
