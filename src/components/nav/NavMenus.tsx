@@ -142,7 +142,7 @@ export function ProfileMenu() {
         ) : (
           <>
             <DropdownMenuItem asChild>
-              <Link to="/auth" className="font-medium">
+              <Link to="/auth" search={{ mode: "signin" }} className="font-medium">
                 Sign in
               </Link>
             </DropdownMenuItem>
