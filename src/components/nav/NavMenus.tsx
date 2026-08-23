@@ -123,6 +123,7 @@ export function ProfileMenu() {
   const initials = (user?.email ?? "?").slice(0, 1).toUpperCase();
 
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Profile and settings"
