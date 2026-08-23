@@ -92,16 +92,17 @@ export function GlobalSearch() {
   };
 
   return (
-    <div ref={wrapRef} className="relative ml-auto flex items-center">
-      <div
-        className={cn(
-          "flex items-center overflow-hidden rounded-full border transition-all duration-300 ease-in-out",
-          open
-            ? "w-56 border-primary-foreground/30 bg-primary-foreground/15 sm:w-72"
-            : "w-8 border-transparent bg-transparent",
-        )}
-        style={{ transformOrigin: "right" }}
-      >
+    <div ref={wrapRef} className="relative flex shrink-0 items-center justify-end">
+      {/* Reserve the collapsed footprint; the expanded field grows leftward only. */}
+      <div className="relative h-8 w-8">
+        <div
+          className={cn(
+            "absolute right-0 top-0 flex h-8 origin-right items-center justify-end overflow-hidden rounded-full border transition-[width,background-color,border-color] duration-300 ease-in-out",
+            open
+              ? "w-56 border-primary-foreground/30 bg-primary-foreground/15 sm:w-72"
+              : "w-8 border-transparent bg-transparent",
+          )}
+        >
         <button
           type="button"
           onClick={() => (open ? inputRef.current?.focus() : setOpen(true))}
