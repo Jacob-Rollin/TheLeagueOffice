@@ -10,10 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as DraftRouteImport } from './routes/draft'
 import { Route as HofRouteImport } from './routes/hof'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as TheWireRouteImport } from './routes/the-wire'
 import { Route as TradeRouteImport } from './routes/trade'
+import { Route as TradeDeskRouteImport } from './routes/trade-desk'
 import { Route as WaiverRouteImport } from './routes/waiver'
 import { Route as WarRoomRouteImport } from './routes/war-room'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
@@ -25,6 +28,11 @@ import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DraftRoute = DraftRouteImport.update({
@@ -42,9 +50,19 @@ const McpRoute = McpRouteImport.update({
   path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TheWireRoute = TheWireRouteImport.update({
+  id: '/the-wire',
+  path: '/the-wire',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TradeRoute = TradeRouteImport.update({
   id: '/trade',
   path: '/trade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TradeDeskRoute = TradeDeskRouteImport.update({
+  id: '/trade-desk',
+  path: '/trade-desk',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WaiverRoute = WaiverRouteImport.update({
@@ -88,10 +106,13 @@ const Char91DotmcpChar93InvokeToolToolRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
   '/mcp': typeof McpRoute
+  '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
+  '/trade-desk': typeof TradeDeskRoute
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -102,10 +123,13 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
   '/mcp': typeof McpRoute
+  '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
+  '/trade-desk': typeof TradeDeskRoute
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -117,10 +141,13 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
   '/mcp': typeof McpRoute
+  '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
+  '/trade-desk': typeof TradeDeskRoute
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -133,10 +160,13 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/auth'
     | '/draft'
     | '/hof'
     | '/mcp'
+    | '/the-wire'
     | '/trade'
+    | '/trade-desk'
     | '/waiver'
     | '/war-room'
     | '/.mcp/list-tools'
@@ -147,10 +177,13 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/auth'
     | '/draft'
     | '/hof'
     | '/mcp'
+    | '/the-wire'
     | '/trade'
+    | '/trade-desk'
     | '/waiver'
     | '/war-room'
     | '/.mcp/list-tools'
@@ -161,10 +194,13 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/auth'
     | '/draft'
     | '/hof'
     | '/mcp'
+    | '/the-wire'
     | '/trade'
+    | '/trade-desk'
     | '/waiver'
     | '/war-room'
     | '/.mcp/list-tools'
@@ -176,10 +212,13 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRoute
   DraftRoute: typeof DraftRoute
   HofRoute: typeof HofRoute
   McpRoute: typeof McpRoute
+  TheWireRoute: typeof TheWireRoute
   TradeRoute: typeof TradeRoute
+  TradeDeskRoute: typeof TradeDeskRoute
   WaiverRoute: typeof WaiverRoute
   WarRoomRoute: typeof WarRoomRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
@@ -196,6 +235,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/draft': {
@@ -219,11 +265,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/the-wire': {
+      id: '/the-wire'
+      path: '/the-wire'
+      fullPath: '/the-wire'
+      preLoaderRoute: typeof TheWireRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/trade': {
       id: '/trade'
       path: '/trade'
       fullPath: '/trade'
       preLoaderRoute: typeof TradeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trade-desk': {
+      id: '/trade-desk'
+      path: '/trade-desk'
+      fullPath: '/trade-desk'
+      preLoaderRoute: typeof TradeDeskRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/waiver': {
@@ -280,10 +340,13 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthRoute: AuthRoute,
   DraftRoute: DraftRoute,
   HofRoute: HofRoute,
   McpRoute: McpRoute,
+  TheWireRoute: TheWireRoute,
   TradeRoute: TradeRoute,
+  TradeDeskRoute: TradeDeskRoute,
   WaiverRoute: WaiverRoute,
   WarRoomRoute: WarRoomRoute,
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,

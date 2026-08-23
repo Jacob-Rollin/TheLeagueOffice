@@ -1,0 +1,159 @@
+import { useQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ChevronDown, LogOut, Plus, User as UserIcon } from "lucide-react";
+
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+const triggerClass =
+  "flex items-center gap-1 rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[state=open]:border-accent data-[state=open]:text-primary-foreground";
+
+export const navLinkClass =
+  "rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[status=active]:border-accent data-[status=active]:text-primary-foreground";
+
+const FRONT_OFFICE: { to: string; label: string; hint: string }[] = [
+  { to: "/war-room", label: "War Room", hint: "Draft board" },
+  { to: "/trade-desk", label: "Trade Desk", hint: "Trade analyzer" },
+  { to: "/the-wire", label: "The Wire", hint: "Waivers" },
+];
+
+export function FrontOfficeMenu() {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className={triggerClass}>
+        Front Office
+        <ChevronDown className="size-3.5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuLabel className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
+          Sandbox Tools
+        </DropdownMenuLabel>
+        {FRONT_OFFICE.map((item) => (
+          <DropdownMenuItem key={item.to} asChild>
+            <Link to={item.to} className="flex items-center gap-2">
+              <span className="flex-1 truncate font-medium">{item.label}</span>
+              <span className="text-xs text-muted-foreground">{item.hint}</span>
+            </Link>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+type MemberRow = { league_id: string; team_name: string; leagues: { name: string } | null };
+
+export function ActiveOperationsMenu() {
+  const { user, ready } = useAuth();
+
+  const { data: memberships } = useQuery({
+    queryKey: ["league-memberships", user?.id],
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("league_members")
+        .select("league_id, team_name, leagues(name)")
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return (data ?? []) as unknown as MemberRow[];
+    },
+  });
+
+  if (!ready || !user) return null;
+
+  const leagues = memberships ?? [];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className={triggerClass}>
+        Active Operations
+        <ChevronDown className="size-3.5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuLabel className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
+          My Leagues
+        </DropdownMenuLabel>
+        {leagues.length > 0 ? (
+          leagues.map((m) => (
+            <DropdownMenuItem key={m.league_id} asChild>
+              <Link to="/" className="flex items-center gap-2">
+                <span className="flex-1 truncate font-medium">{m.leagues?.name ?? "League"}</span>
+                <span className="truncate text-xs text-muted-foreground">{m.team_name}</span>
+              </Link>
+            </DropdownMenuItem>
+          ))
+        ) : (
+          <DropdownMenuItem asChild>
+            <Link to="/" className="flex items-center gap-2 font-medium">
+              <Plus className="size-4" />
+              Create or Join a League
+            </Link>
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function ProfileMenu() {
+  const { user, ready, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const initials = (user?.email ?? "?").slice(0, 1).toUpperCase();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Profile and settings"
+        className={cn(
+          "grid size-8 shrink-0 place-items-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
+        )}
+      >
+        {ready && user ? initials : <UserIcon className="size-4" />}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        {ready && user ? (
+          <>
+            <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
+              {user.email}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={async () => {
+                await signOut();
+                navigate({ to: "/" });
+              }}
+              className="flex items-center gap-2"
+            >
+              <LogOut className="size-4" />
+              Sign out
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <>
+            <DropdownMenuItem asChild>
+              <Link to="/auth" search={{ mode: "signin" }} className="font-medium">
+                Sign in
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/auth" search={{ mode: "signup" }} className="font-medium">
+                Create account
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
