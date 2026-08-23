@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
-import { signUpWithInviteCode } from "@/lib/invite.functions";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +15,20 @@ const fieldClass =
   "mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring";
 const labelClass =
   "block text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
+const INVALID_CODE = "Invalid or expired invite code.";
+
+function passwordProblems(pw: string): string[] {
+  const missing: string[] = [];
+  if (pw.length < 8) missing.push("at least 8 characters");
+  if (!/[A-Z]/.test(pw)) missing.push("one uppercase letter");
+  if (!/[0-9]/.test(pw)) missing.push("one number");
+  if (!/[^A-Za-z0-9]/.test(pw)) missing.push("one special character (! @ # $ *)");
+  return missing;
+}
+
+type RpcFn = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
 
 export function AuthDialog({
   open,
@@ -51,21 +64,51 @@ export function AuthDialog({
     setNotice(null);
     try {
       if (isSignup) {
-        const result = await signUpWithInviteCode({
-          data: {
-            email: email.trim(),
-            password,
-            username: username.trim(),
-            displayName: displayName.trim(),
-            inviteCode: inviteCode.trim(),
-          },
-        });
-        if (!result.ok) {
-          setError(result.error);
+        const cleanEmail = email.trim();
+        if (!EMAIL_RE.test(cleanEmail)) {
+          setError("Please enter a valid email address.");
           return;
         }
+        const missing = passwordProblems(password);
+        if (missing.length > 0) {
+          setError(`Password must include ${missing.join(", ")}.`);
+          return;
+        }
+
+        const code = inviteCode.trim();
+        if (!code) {
+          setError(INVALID_CODE);
+          return;
+        }
+
+        const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
+        const { data: consumed, error: rpcError } = await rpc(
+          "verify_and_consume_invite_code",
+          { target_code: code },
+        );
+        if (rpcError || consumed !== true) {
+          setError(INVALID_CODE);
+          return;
+        }
+
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+            data: {
+              username: username.trim(),
+              display_name: displayName.trim(),
+            },
+          },
+        });
+        if (signUpError) {
+          setError(signUpError.message);
+          return;
+        }
+
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
+          email: cleanEmail,
           password,
         });
         if (signInError) {
@@ -143,7 +186,7 @@ export function AuthDialog({
             <input
               type="password"
               required
-              minLength={6}
+              minLength={isSignup ? 8 : 6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className={fieldClass}
@@ -163,7 +206,18 @@ export function AuthDialog({
             </label>
           )}
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {isSignup && (
+            <p className="text-xs text-muted-foreground">
+              Minimum 8 characters with one uppercase letter, one number, and one special
+              character.
+            </p>
+          )}
+
+          {error && (
+            <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          )}
           {notice && <p className="text-sm text-success">{notice}</p>}
 
           <button
