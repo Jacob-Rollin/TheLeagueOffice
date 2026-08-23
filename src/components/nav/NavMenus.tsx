@@ -54,22 +54,26 @@ type MemberRow = { league_id: string; team_name: string; leagues: { name: string
 
 export function ActiveOperationsMenu() {
   const { user, ready } = useAuth();
+  const userId = user?.id ?? null;
+  const canQuery = Boolean(ready && userId);
 
   const { data: memberships } = useQuery({
-    queryKey: ["league-memberships", user?.id],
-    enabled: !!user,
+    queryKey: ["league-memberships", userId],
+    enabled: canQuery,
+    retry: false,
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
+      if (!userId) return [] as MemberRow[];
       const { data, error } = await supabase
         .from("league_members")
         .select("league_id, team_name, leagues(name)")
-        .eq("user_id", user!.id);
+        .eq("user_id", userId);
       if (error) throw error;
       return (data ?? []) as unknown as MemberRow[];
     },
   });
 
-  if (!ready || !user) return null;
+  if (!canQuery) return null;
 
   const leagues = memberships ?? [];
 
