@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronDown, LogOut, Plus, User as UserIcon } from "lucide-react";
 
@@ -54,22 +56,26 @@ type MemberRow = { league_id: string; team_name: string; leagues: { name: string
 
 export function ActiveOperationsMenu() {
   const { user, ready } = useAuth();
+  const userId = user?.id ?? null;
+  const canQuery = Boolean(ready && userId);
 
   const { data: memberships } = useQuery({
-    queryKey: ["league-memberships", user?.id],
-    enabled: !!user,
+    queryKey: ["league-memberships", userId],
+    enabled: canQuery,
+    retry: false,
     staleTime: 1000 * 60 * 5,
     queryFn: async () => {
+      if (!userId) return [] as MemberRow[];
       const { data, error } = await supabase
         .from("league_members")
         .select("league_id, team_name, leagues(name)")
-        .eq("user_id", user!.id);
+        .eq("user_id", userId);
       if (error) throw error;
       return (data ?? []) as unknown as MemberRow[];
     },
   });
 
-  if (!ready || !user) return null;
+  if (!canQuery) return null;
 
   const leagues = memberships ?? [];
 
@@ -108,10 +114,18 @@ export function ActiveOperationsMenu() {
 export function ProfileMenu() {
   const { user, ready, signOut } = useAuth();
   const navigate = useNavigate();
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
+
+  const openAuth = (mode: AuthMode) => {
+    setAuthMode(mode);
+    setAuthOpen(true);
+  };
 
   const initials = (user?.email ?? "?").slice(0, 1).toUpperCase();
 
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Profile and settings"
@@ -136,24 +150,34 @@ export function ProfileMenu() {
               className="flex items-center gap-2"
             >
               <LogOut className="size-4" />
-              Sign out
+              Sign Out
             </DropdownMenuItem>
           </>
         ) : (
           <>
-            <DropdownMenuItem asChild>
-              <Link to="/auth" search={{ mode: "signin" }} className="font-medium">
-                Sign in
-              </Link>
+            <DropdownMenuItem
+              className="font-medium"
+              onSelect={(e) => {
+                e.preventDefault();
+                openAuth("signin");
+              }}
+            >
+              Sign In
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/auth" search={{ mode: "signup" }} className="font-medium">
-                Create account
-              </Link>
+            <DropdownMenuItem
+              className="font-medium"
+              onSelect={(e) => {
+                e.preventDefault();
+                openAuth("signup");
+              }}
+            >
+              Create Account
             </DropdownMenuItem>
           </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    <AuthDialog open={authOpen} mode={authMode} onOpenChange={setAuthOpen} />
+    </>
   );
 }
