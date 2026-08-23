@@ -792,6 +792,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      verify_and_consume_invite_code: {
+        Args: { target_code: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
