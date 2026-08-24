@@ -1,4 +1,5 @@
-import { Settings2 } from "lucide-react";
+import { GripVertical, Settings2 } from "lucide-react";
+import { useState } from "react";
 
 import { SleeperSync } from "@/components/draft/SleeperSync";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,7 @@ export function SettingsSheet({
   link,
   onApplyLeague,
   onUnlinkLeague,
+  orderLocked = false,
 }: {
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
@@ -76,11 +78,31 @@ export function SettingsSheet({
   link: LeagueLink | null;
   onApplyLeague: (sync: LeagueSyncInput, meta: LeagueLink) => void;
   onUnlinkLeague: () => void;
+  /** Client-side gate; swap for commissioner role checks later. */
+  orderLocked?: boolean;
 }) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
   const setRoster = (key: keyof RosterSlots, v: number) => {
     const roster = { ...settings.roster, [key]: v };
     update({ roster, rounds: rosterSize(roster) });
   };
+
+  /** Move a 1-based draft slot to a new position, remapping names + my slot. */
+  const moveTeam = (from: number, to: number) => {
+    if (orderLocked || from === to) return;
+    const slots = Array.from({ length: settings.teams }, (_, i) => i + 1);
+    const [moved] = slots.splice(from, 1);
+    slots.splice(to, 0, moved!);
+    const names: Record<string, string> = {};
+    slots.forEach((oldSlot, i) => {
+      const n = settings.teamNames?.[String(oldSlot)];
+      if (n) names[String(i + 1)] = n;
+    });
+    const myIdx = slots.indexOf(settings.myTeam);
+    update({ teamNames: names, myTeam: myIdx === -1 ? settings.myTeam : myIdx + 1 });
+  };
+
 
   return (
     <Sheet>
@@ -173,8 +195,29 @@ export function SettingsSheet({
             {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => (
               <div
                 key={t}
-                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"
+                draggable={!orderLocked}
+                onDragStart={() => setDragIndex(t - 1)}
+                onDragOver={(e) => {
+                  if (!orderLocked && dragIndex !== null) e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragIndex !== null) moveTeam(dragIndex, t - 1);
+                  setDragIndex(null);
+                }}
+                onDragEnd={() => setDragIndex(null)}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2",
+                  !orderLocked && "cursor-grab active:cursor-grabbing",
+                  dragIndex === t - 1 && "opacity-50",
+                )}
               >
+                {!orderLocked && (
+                  <GripVertical
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                )}
                 <span className="tabnum w-6 shrink-0 font-display text-sm text-muted-foreground">
                   {t}
                 </span>
@@ -195,6 +238,11 @@ export function SettingsSheet({
                 )}
               </div>
             ))}
+            {orderLocked && (
+              <p className="pt-1 text-xs text-muted-foreground/70">
+                Draft order locked. Clear and restart the draft to re-order teams.
+              </p>
+            )}
           </section>
 
           <section className="space-y-2">
