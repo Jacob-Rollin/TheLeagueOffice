@@ -454,7 +454,7 @@ function SetupDialog({
     <Dialog open={open}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="display-title text-2xl">Mock Draft Setup</DialogTitle>
+          <DialogTitle className="font-display text-2xl tracking-wide">Mock Draft Setup</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
