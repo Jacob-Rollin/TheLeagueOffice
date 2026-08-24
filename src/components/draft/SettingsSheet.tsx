@@ -238,6 +238,11 @@ export function SettingsSheet({
                 )}
               </div>
             ))}
+            {orderLocked && (
+              <p className="pt-1 text-xs text-muted-foreground/70">
+                Draft order locked. Clear and restart the draft to re-order teams.
+              </p>
+            )}
           </section>
 
           <section className="space-y-2">
