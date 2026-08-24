@@ -41,6 +41,7 @@ export function PlayerList({
   onUndo,
   canUndo,
   onOpenPlayer,
+  canDraft = true,
 }: {
   players: Player[];
   draftedIds: Set<string>;
@@ -56,6 +57,8 @@ export function PlayerList({
   onUndo: () => void;
   canUndo: boolean;
   onOpenPlayer?: (id: string) => void;
+  /** Mock-draft only: greys out and disables the row Draft buttons off-turn. */
+  canDraft?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [pos, setPos] = useState<string>("ALL");
@@ -471,9 +474,13 @@ export function PlayerList({
                 <div className="flex shrink-0 items-center py-2">
                   <Button
                     size="sm"
-                    className="h-8 w-[62px] px-0 font-display text-xs uppercase"
-                    disabled={drafted}
-                    onClick={() => onDraft(p.id)}
+                    className={cn(
+                      "h-8 w-[62px] px-0 font-display text-xs uppercase",
+                      !canDraft &&
+                        "pointer-events-none border border-border bg-muted text-muted-foreground opacity-60 shadow-none hover:bg-muted",
+                    )}
+                    disabled={drafted || !canDraft}
+                    onClick={() => canDraft && onDraft(p.id)}
                   >
                     Draft
                   </Button>
