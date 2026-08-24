@@ -80,7 +80,7 @@ const TIMER_CHOICES: { label: string; seconds: number | null }[] = [
   { label: "60 Seconds", seconds: 60 },
   { label: "90 Seconds", seconds: 90 },
   { label: "2 Minutes", seconds: 120 },
-  { label: "Untimed", seconds: null },
+  { label: "None", seconds: null },
 ];
 
 const EMPTY_PAYLOAD = { season: "", updatedAt: 0, players: [] as Player[] };
@@ -90,9 +90,12 @@ type Config = {
   teams: number;
   slot: number;
   timerLabel: string;
+  scoring: Scoring;
+  roster: RosterSlots;
 };
 
 function MockDraftPage() {
+  const navigate = useNavigate();
   const cache = useSleeperPlayers();
   const fallback = useQuery({ ...playersQuery, enabled: Boolean(cache.error) && !cache.data });
   const data = cache.data ?? fallback.data ?? EMPTY_PAYLOAD;
@@ -104,6 +107,8 @@ function MockDraftPage() {
     teams: 12,
     slot: 1,
     timerLabel: "60 Seconds",
+    scoring: DEFAULT_SETTINGS.scoring,
+    roster: { ...DEFAULT_ROSTER },
   });
 
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -112,7 +117,9 @@ function MockDraftPage() {
   const [watch, setWatch] = useState<string[]>([]);
   const [customOrder, setCustomOrder] = useState<string[]>([]);
   const [speed, setSpeed] = useState<Speed>("normal");
+  const [paused, setPaused] = useState(false);
   const [clock, setClock] = useState<number | null>(null);
+
   const [openId, setOpenId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("players");
   const [rosterTeam, setRosterTeam] = useState(1);
