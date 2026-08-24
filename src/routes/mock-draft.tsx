@@ -421,7 +421,10 @@ function MockDraftPage() {
       </header>
 
       <div className="flex-1 gap-3 px-0 py-3 lg:px-3">
-        {tab === "players" && syncing && (
+        {tab === "players" && complete && (
+          <MockRecap settings={settings} picks={picks} byId={byId} />
+        )}
+        {tab === "players" && !complete && syncing && (
           <div className="space-y-2 px-3 py-6">
             <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
               Syncing player database…
@@ -431,29 +434,48 @@ function MockDraftPage() {
             ))}
           </div>
         )}
-        {tab === "players" && !syncing && (
-          <PlayerList
-            players={data.players}
-            draftedIds={draftedIds}
-            watchIds={watchIds}
-            counts={myCounts}
-            needs={myNeeds}
-            customOrder={customOrder}
-            settings={settings}
-            currentOverall={currentOverall}
-            onDraft={draftForUser}
-            onToggleWatch={(id) =>
-              setWatch((prev) =>
-                prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-              )
-            }
-            onReorder={setCustomOrder}
-            onUndo={() => setPicks((prev) => prev.slice(0, -1))}
-            canUndo={picks.length > 0}
-            onOpenPlayer={setOpenId}
-            canDraft={myTurn}
-          />
+        {tab === "players" && !complete && !syncing && (
+          <div className="md:grid md:grid-cols-[280px_minmax(0,1fr)] md:items-start md:gap-3">
+            <aside className="hidden md:block md:min-w-[280px] md:shrink-0">
+              <div className="overflow-hidden rounded-xl border border-border bg-card">
+                <header className="border-b border-border px-3 py-2">
+                  <div className="font-display text-sm uppercase tracking-widest">My Team</div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    {teamName(settings, settings.myTeam)}
+                  </div>
+                </header>
+                <RosterPanel
+                  settings={settings}
+                  picks={picks}
+                  byId={byId}
+                  team={settings.myTeam}
+                />
+              </div>
+            </aside>
+            <PlayerList
+              players={data.players}
+              draftedIds={draftedIds}
+              watchIds={watchIds}
+              counts={myCounts}
+              needs={myNeeds}
+              customOrder={customOrder}
+              settings={settings}
+              currentOverall={currentOverall}
+              onDraft={draftForUser}
+              onToggleWatch={(id) =>
+                setWatch((prev) =>
+                  prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                )
+              }
+              onReorder={setCustomOrder}
+              onUndo={() => setPicks((prev) => prev.slice(0, -1))}
+              canUndo={picks.length > 0}
+              onOpenPlayer={setOpenId}
+              canDraft={myTurn}
+            />
+          </div>
         )}
+
         {tab === "board" && <DraftBoard settings={settings} picks={picks} byId={byId} />}
         {tab === "team" && (
           <div className="px-3">
