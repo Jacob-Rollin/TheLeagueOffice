@@ -37,7 +37,7 @@ export function FrontOfficeMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuLabel className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
-          Sandbox Tools
+          Free Playbook
         </DropdownMenuLabel>
         {FRONT_OFFICE.map((item) => (
           <DropdownMenuItem key={item.to} asChild>
