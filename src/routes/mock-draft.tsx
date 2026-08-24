@@ -438,12 +438,6 @@ function MockDraftPage() {
           <div className="md:grid md:grid-cols-[280px_minmax(0,1fr)] md:items-start md:gap-3">
             <aside className="hidden md:block md:min-w-[280px] md:shrink-0">
               <div className="overflow-hidden rounded-xl border border-border bg-card">
-                <header className="border-b border-border px-3 py-2">
-                  <div className="font-display text-sm uppercase tracking-widest">My Team</div>
-                  <div className="truncate text-[11px] text-muted-foreground">
-                    {teamName(settings, settings.myTeam)}
-                  </div>
-                </header>
                 <RosterPanel
                   settings={settings}
                   picks={picks}
