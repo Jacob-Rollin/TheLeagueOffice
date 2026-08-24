@@ -281,7 +281,9 @@ function MockDraftPage() {
         config={config}
         setConfig={setConfig}
         onBegin={begin}
+        onClose={() => navigate({ to: "/" })}
       />
+
 
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-3 pt-3">
