@@ -339,13 +339,29 @@ function MockDraftPage() {
             <span
               className={cn(
                 "tabnum font-display text-sm uppercase tracking-widest",
-                myTurn && clock !== null && clock <= 10 ? "text-destructive" : "text-foreground",
+                myTurn && clock !== null && clock <= 10 && !paused
+                  ? "text-destructive"
+                  : "text-foreground",
               )}
             >
               Time Remaining:{" "}
               {clock === null ? "--:--" : `${String(Math.floor(clock / 60)).padStart(2, "0")}:${String(clock % 60).padStart(2, "0")}`}
             </span>
+            <button
+              type="button"
+              onClick={() => setPaused((p) => !p)}
+              disabled={complete}
+              className={cn(
+                "rounded-md border px-3 py-1.5 font-display text-xs uppercase tracking-wide transition-colors disabled:opacity-50",
+                paused
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              [ {paused ? "Resume" : "Pause"} ]
+            </button>
           </div>
+
         </div>
 
         {myTurn && (
