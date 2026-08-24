@@ -70,6 +70,7 @@ export function SettingsSheet({
   link,
   onApplyLeague,
   onUnlinkLeague,
+  orderLocked = false,
 }: {
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
@@ -77,11 +78,31 @@ export function SettingsSheet({
   link: LeagueLink | null;
   onApplyLeague: (sync: LeagueSyncInput, meta: LeagueLink) => void;
   onUnlinkLeague: () => void;
+  /** Client-side gate; swap for commissioner role checks later. */
+  orderLocked?: boolean;
 }) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
   const setRoster = (key: keyof RosterSlots, v: number) => {
     const roster = { ...settings.roster, [key]: v };
     update({ roster, rounds: rosterSize(roster) });
   };
+
+  /** Move a 1-based draft slot to a new position, remapping names + my slot. */
+  const moveTeam = (from: number, to: number) => {
+    if (orderLocked || from === to) return;
+    const slots = Array.from({ length: settings.teams }, (_, i) => i + 1);
+    const [moved] = slots.splice(from, 1);
+    slots.splice(to, 0, moved!);
+    const names: Record<string, string> = {};
+    slots.forEach((oldSlot, i) => {
+      const n = settings.teamNames?.[String(oldSlot)];
+      if (n) names[String(i + 1)] = n;
+    });
+    const myIdx = slots.indexOf(settings.myTeam);
+    update({ teamNames: names, myTeam: myIdx === -1 ? settings.myTeam : myIdx + 1 });
+  };
+
 
   return (
     <Sheet>
