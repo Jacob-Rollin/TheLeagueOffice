@@ -165,7 +165,7 @@ export function AuthDialog({
           <DialogDescription>
             {isSignup
               ? "Registration is invite only. Enter your league invite code below."
-              : "Welcome back to the front office."}
+              : "Access your league operations."}
           </DialogDescription>
         </DialogHeader>
 
