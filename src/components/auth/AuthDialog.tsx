@@ -25,27 +25,26 @@ function passwordProblems(pw: string): string[] {
 function passwordStrength(pw: string): number {
   if (!pw) return 0;
 
-  // 1. If it doesn't meet the length requirement, lock it to slot 1 immediately
+  // 1. Base rule: If it's too short, it is hard-locked to Level 1
   if (pw.length < 8) return 1;
 
-  // 2. Count up the rest of your specific complexity rules
+  // 2. Check each complexity condition individually
   const hasUpper = /[A-Z]/.test(pw);
   const hasNum = /[0-9]/.test(pw);
   const hasSpecial = /[^A-Za-z0-9]/.test(pw);
 
-  let requirementCount = 0;
-  if (hasUpper) requirementCount++;
-  if (hasNum) requirementCount++;
-  if (hasSpecial) requirementCount++;
+  // Start with 1 point for satisfying the length requirement
+  let score = 1;
+  if (hasUpper) score++;
+  if (hasNum) score++;
+  if (hasSpecial) score++;
 
-  // 3. Clamps the bar at slot 2 until every single requirement passes
-  if (requirementCount < 3) return 2;
-
-  // 4. All rules satisfied! Jump straight to full strength slot 4
-  return 4;
+  // 3. Natural progression cap: It will step through 2 (Weak) and 3 (Almost)
+  // and hit 4 (Secure) only when every single item passes!
+  return score;
 }
 
-// Punchy, single-word status labels matching your style perfectly
+// Spacing labels matching your chosen words perfectly
 const strengthLabels = ["Too Short", "Weak", "Almost", "Secure"];
 const strengthColors = ["bg-red-500", "bg-amber-500", "bg-yellow-400", "bg-emerald-500"];
 
