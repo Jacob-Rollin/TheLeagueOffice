@@ -193,8 +193,17 @@ export function AuthDialog({
             />
           </label>
 
+          {/* 🌟 MOVED THE LEGEND TEXT DIRECTLY HERE UNDER THE PASSWORD FIELD */}
           {isSignup && (
-            <div>
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+              Minimum 8 characters with one uppercase letter, one number, and one special character.
+            </p>
+          )}
+
+          {isSignup && (
+            <div className="mt-2">
+              {" "}
+              {/* Added slight margin top to separate it from the text */}
               <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
                 <span>Password Strength</span>
                 <span>{strengthLabels[strength - 1] ?? "Weak"}</span>
@@ -248,12 +257,6 @@ export function AuthDialog({
                 className={`${fieldClass} font-mono uppercase tracking-widest`}
               />
             </label>
-          )}
-
-          {isSignup && (
-            <p className="text-xs text-muted-foreground">
-              Minimum 8 characters with one uppercase letter, one number, and one special character.
-            </p>
           )}
 
           {error && (
