@@ -1,8 +1,10 @@
-import { queryOptions, useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { queryOptions, useMutation, useQuery } from "@tanstack/react-query";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DraftBoard } from "@/components/draft/DraftBoard";
+import { MockRecap } from "@/components/draft/MockRecap";
 import { PlayerList } from "@/components/draft/PlayerList";
 import { PlayerModal } from "@/components/draft/PlayerModal";
 import { RosterPanel } from "@/components/draft/RosterPanel";
@@ -12,17 +14,23 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import {
+  DEFAULT_ROSTER,
   DEFAULT_SETTINGS,
   positionNeeds,
   roundOf,
+  rosterSize,
   teamForPick,
   teamName,
   SCORING_LABEL,
   type Pick as DraftPick,
   type Player,
   type Pos,
+  type RosterSlots,
+  type Scoring,
   type Settings,
 } from "@/lib/draft";
+import { getLeagueSync, getUserLeagues } from "@/lib/league.functions";
+import type { LeagueSummary } from "@/lib/league.server";
 import {
   aiPick,
   autoPickForUser,
@@ -32,6 +40,7 @@ import {
 } from "@/lib/mock-ai";
 import { getPlayers } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
+
 
 const playersQuery = queryOptions({
   queryKey: ["players"],
