@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
+/** Same-origin proxy — ESPN's scoreboard endpoint sends no CORS headers. */
+const SCOREBOARD_URL = "/api/public/scoreboard";
 
 type TickerTeam = {
   abbr: string;
