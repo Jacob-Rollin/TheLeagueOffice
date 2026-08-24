@@ -23,15 +23,30 @@ function passwordProblems(pw: string): string[] {
 }
 
 function passwordStrength(pw: string): number {
-  let score = 0;
-  if (pw.length >= 8) score++;
-  if (/[A-Z]/.test(pw)) score++;
-  if (/[0-9]/.test(pw)) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score++;
-  return score;
+  if (!pw) return 0;
+
+  // 1. If it doesn't meet the length requirement, lock it to slot 1 immediately
+  if (pw.length < 8) return 1;
+
+  // 2. Count up the rest of your specific complexity rules
+  const hasUpper = /[A-Z]/.test(pw);
+  const hasNum = /[0-9]/.test(pw);
+  const hasSpecial = /[^A-Za-z0-9]/.test(pw);
+
+  let requirementCount = 0;
+  if (hasUpper) requirementCount++;
+  if (hasNum) requirementCount++;
+  if (hasSpecial) requirementCount++;
+
+  // 3. Clamps the bar at slot 2 until every single requirement passes
+  if (requirementCount < 3) return 2;
+
+  // 4. All rules satisfied! Jump straight to full strength slot 4
+  return 4;
 }
 
-const strengthLabels = ["Weak", "Fair", "Good", "Strong"];
+// Punchy, single-word status labels matching your style perfectly
+const strengthLabels = ["Too Short", "Weak", "Almost", "Secure"];
 const strengthColors = ["bg-red-500", "bg-amber-500", "bg-yellow-400", "bg-emerald-500"];
 
 type RpcFn = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
