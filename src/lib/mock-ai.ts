@@ -137,6 +137,8 @@ export type AiContext = {
   recentPos: Pos[];
   /** Rosters keyed by 1-based team slot. */
   rosters: Map<number, Player[]>;
+  /** Strategic profile per 1-based team slot. */
+  personas: Record<string, Personality>;
   overall: number;
 };
 
@@ -149,11 +151,8 @@ export function aiPick(
   available: Player[],
   ctx: AiContext,
 ): Player | null {
-  const { settings, rosters, recentPos, overall } = ctx;
-  const persona = (settings as Settings & { personas?: Record<string, Personality> }).personas?.[
-    String(team)
-  ];
-  const profile: Personality = persona ?? "value";
+  const { settings, rosters, recentPos, overall, personas } = ctx;
+  const profile: Personality = personas[String(team)] ?? "value";
   const roster = rosters.get(team) ?? [];
   const round = Math.floor((overall - 1) / settings.teams) + 1;
   const lastTwoRounds = round > settings.rounds - 2;
