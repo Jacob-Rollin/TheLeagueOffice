@@ -195,8 +195,29 @@ export function SettingsSheet({
             {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => (
               <div
                 key={t}
-                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"
+                draggable={!orderLocked}
+                onDragStart={() => setDragIndex(t - 1)}
+                onDragOver={(e) => {
+                  if (!orderLocked && dragIndex !== null) e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragIndex !== null) moveTeam(dragIndex, t - 1);
+                  setDragIndex(null);
+                }}
+                onDragEnd={() => setDragIndex(null)}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2",
+                  !orderLocked && "cursor-grab active:cursor-grabbing",
+                  dragIndex === t - 1 && "opacity-50",
+                )}
               >
+                {!orderLocked && (
+                  <GripVertical
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                )}
                 <span className="tabnum w-6 shrink-0 font-display text-sm text-muted-foreground">
                   {t}
                 </span>
