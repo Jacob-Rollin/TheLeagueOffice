@@ -153,7 +153,7 @@ function DraftRoom() {
               link={draft.link}
               onApplyLeague={draft.applyLeague}
               onUnlinkLeague={draft.unlinkLeague}
-              orderLocked={draft.picks.length > 0}
+              orderLocked={(draft.picks?.length ?? 0) > 0}
             />
           </div>
         </div>
