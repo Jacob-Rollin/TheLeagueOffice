@@ -141,10 +141,12 @@ export function MockRecap({
         const stability = 0.18 - Math.min(0.08, t.depth / 40000);
         return base * (1 + (rand() - 0.5) * 2 * stability * 2);
       });
-      for (let i = 0; i < n; i++) {
-        const j = (i + 1 + w) % n;
-        if (j === i) continue;
-        if (i > j) continue;
+      // Circle-method round robin: every team plays exactly one game per week.
+      const rot = [0, ...Array.from({ length: n - 1 }, (_, k) => 1 + ((k + w) % (n - 1)))];
+      for (let s = 0; s < Math.floor(n / 2); s++) {
+        const i = rot[s]!;
+        const j = rot[n - 1 - s]!;
+        if (i === j) continue;
         const a = scores[i]!;
         const b = scores[j]!;
         teams[i]!.pointsFor += a;
@@ -157,6 +159,7 @@ export function MockRecap({
           teams[i]!.losses++;
         }
       }
+
     }
 
     const standings = [...teams].sort(
