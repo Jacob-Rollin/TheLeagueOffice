@@ -399,7 +399,7 @@ function MockDraftPage() {
         <nav className="flex gap-1 px-3 py-2">
           {(
             [
-              ["players", "Available Players"],
+              ["players", complete ? "Post-Draft Recap" : "Available Players"],
               ["board", "Draft Board"],
               ["team", "Team Rosters"],
             ] as [Tab, string][]
