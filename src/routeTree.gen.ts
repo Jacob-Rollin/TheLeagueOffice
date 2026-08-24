@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as DraftRouteImport } from './routes/draft'
 import { Route as HofRouteImport } from './routes/hof'
 import { Route as McpRouteImport } from './routes/mcp'
+import { Route as MockDraftRouteImport } from './routes/mock-draft'
 import { Route as TheWireRouteImport } from './routes/the-wire'
 import { Route as TradeRouteImport } from './routes/trade'
 import { Route as TradeDeskRouteImport } from './routes/trade-desk'
@@ -49,6 +50,11 @@ const HofRoute = HofRouteImport.update({
 const McpRoute = McpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MockDraftRoute = MockDraftRouteImport.update({
+  id: '/mock-draft',
+  path: '/mock-draft',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TheWireRoute = TheWireRouteImport.update({
@@ -116,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
   '/mcp': typeof McpRoute
+  '/mock-draft': typeof MockDraftRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByTo {
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
   '/mcp': typeof McpRoute
+  '/mock-draft': typeof MockDraftRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -153,6 +161,7 @@ export interface FileRoutesById {
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
   '/mcp': typeof McpRoute
+  '/mock-draft': typeof MockDraftRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -173,6 +182,7 @@ export interface FileRouteTypes {
     | '/draft'
     | '/hof'
     | '/mcp'
+    | '/mock-draft'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
@@ -191,6 +201,7 @@ export interface FileRouteTypes {
     | '/draft'
     | '/hof'
     | '/mcp'
+    | '/mock-draft'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
@@ -209,6 +220,7 @@ export interface FileRouteTypes {
     | '/draft'
     | '/hof'
     | '/mcp'
+    | '/mock-draft'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
@@ -228,6 +240,7 @@ export interface RootRouteChildren {
   DraftRoute: typeof DraftRoute
   HofRoute: typeof HofRoute
   McpRoute: typeof McpRoute
+  MockDraftRoute: typeof MockDraftRoute
   TheWireRoute: typeof TheWireRoute
   TradeRoute: typeof TradeRoute
   TradeDeskRoute: typeof TradeDeskRoute
@@ -276,6 +289,13 @@ declare module '@tanstack/react-router' {
       path: '/mcp'
       fullPath: '/mcp'
       preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mock-draft': {
+      id: '/mock-draft'
+      path: '/mock-draft'
+      fullPath: '/mock-draft'
+      preLoaderRoute: typeof MockDraftRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/the-wire': {
@@ -364,6 +384,7 @@ const rootRouteChildren: RootRouteChildren = {
   DraftRoute: DraftRoute,
   HofRoute: HofRoute,
   McpRoute: McpRoute,
+  MockDraftRoute: MockDraftRoute,
   TheWireRoute: TheWireRoute,
   TradeRoute: TradeRoute,
   TradeDeskRoute: TradeDeskRoute,
