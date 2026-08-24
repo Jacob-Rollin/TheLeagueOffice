@@ -202,8 +202,6 @@ export function AuthDialog({
 
           {isSignup && (
             <div className="mt-2">
-              {" "}
-              {/* Added slight margin top to separate it from the text */}
               <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
                 <span>Password Strength</span>
                 <span>{strengthLabels[strength - 1] ?? "Weak"}</span>
