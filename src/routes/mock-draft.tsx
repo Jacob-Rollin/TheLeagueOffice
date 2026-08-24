@@ -452,7 +452,7 @@ function SetupDialog({
   const slots = Array.from({ length: config.teams }, (_, i) => i + 1);
   return (
     <Dialog open={open}>
-      <DialogContent className="max-w-md" showCloseButton={false}>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="display-title text-2xl">Mock Draft Setup</DialogTitle>
         </DialogHeader>

@@ -26,6 +26,7 @@ const FRONT_OFFICE: { to: string; label: string; hint: string }[] = [
   { to: "/war-room", label: "War Room", hint: "Draft board" },
   { to: "/trade-desk", label: "Trade Desk", hint: "Trade analyzer" },
   { to: "/the-wire", label: "The Wire", hint: "Waivers" },
+  { to: "/mock-draft", label: "Mock Draft Simulator", hint: "🤖 AI Simulation Engine" },
 ];
 
 export function FrontOfficeMenu() {
