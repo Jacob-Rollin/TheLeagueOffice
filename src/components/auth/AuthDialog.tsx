@@ -183,6 +183,11 @@ export function AuthDialog({
 
           <label className={labelClass}>
             Password
+            {isSignup && (
+              <p className="text-xs text-muted-foreground">
+                Minimum 8 characters with one uppercase letter, one number, and one special character.
+              </p>
+            )}
             <input
               type="password"
               required
@@ -192,11 +197,6 @@ export function AuthDialog({
               className={fieldClass}
             />
           </label>
-          {isSignup && (
-            <p className="text-xs text-muted-foreground">
-              Minimum 8 characters with one uppercase letter, one number, and one special character.
-            </p>
-          )}
           {isSignup && (
             <div>
               <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
