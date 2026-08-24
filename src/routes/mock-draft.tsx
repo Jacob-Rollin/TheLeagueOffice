@@ -206,33 +206,40 @@ function MockDraftPage() {
   const runRef = useRef(runAiPick);
   runRef.current = runAiPick;
   useEffect(() => {
-    if (setupOpen || complete || myTurn || speed === "manual" || !data.players.length) return;
+    if (setupOpen || complete || myTurn || paused || speed === "manual" || !data.players.length)
+      return;
     const id = setTimeout(() => runRef.current(), SPEED_DELAY[speed]);
     return () => clearTimeout(id);
-  }, [setupOpen, complete, myTurn, speed, picks.length, data.players.length]);
+  }, [setupOpen, complete, myTurn, paused, speed, picks.length, data.players.length]);
 
-  // Pick clock: counts down only while the human is on the clock.
+  // Pick clock: counts down only while the human is on the clock and unpaused.
   useEffect(() => {
     if (!myTurn || timerSeconds === null) {
       setClock(timerSeconds === null ? null : timerSeconds);
       return;
     }
-    setClock(timerSeconds);
+    if (paused) return;
     const id = setInterval(() => {
       setClock((c) => (c === null ? null : Math.max(0, c - 1)));
     }, 1000);
     return () => clearInterval(id);
+  }, [myTurn, timerSeconds, picks.length, paused]);
+
+  // Reset the clock at the start of each of the user's turns.
+  useEffect(() => {
+    if (myTurn && timerSeconds !== null) setClock(timerSeconds);
   }, [myTurn, timerSeconds, picks.length]);
 
   // Auto-draft with the Suggested engine when the clock expires.
   useEffect(() => {
-    if (!myTurn || clock !== 0) return;
+    if (!myTurn || paused || clock !== 0) return;
     const choice = autoPickForUser(available, myPlayers, settings, picks.length + 1);
     if (choice) commitPick(choice.id, settings.myTeam);
-  }, [clock, myTurn, available, myPlayers, settings, picks.length, commitPick]);
+  }, [clock, myTurn, paused, available, myPlayers, settings, picks.length, commitPick]);
 
   const begin = () => {
-    const rounds = DEFAULT_SETTINGS.rounds;
+    const roster = { ...config.roster };
+    const rounds = Math.max(1, rosterSize(roster));
     const slot = Math.min(Math.max(1, config.slot), config.teams);
     const { names, personas: personaMap } = generateOpponents(
       config.teams,
@@ -243,6 +250,8 @@ function MockDraftPage() {
       ...DEFAULT_SETTINGS,
       teams: config.teams,
       rounds,
+      roster,
+      scoring: config.scoring,
       myTeam: slot,
       teamNames: names,
     });
@@ -250,13 +259,17 @@ function MockDraftPage() {
     setPicks([]);
     setRosterTeam(slot);
     setSpeed("normal");
+    setPaused(false);
+    setTab("players");
     setSetupOpen(false);
   };
 
   const restart = () => {
     setPicks([]);
+    setPaused(false);
     setSetupOpen(true);
   };
+
 
   const lastPick = picks.length ? picks[picks.length - 1]! : null;
   const lastPlayer = lastPick ? byId.get(lastPick.playerId) : undefined;
