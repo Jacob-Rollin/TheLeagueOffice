@@ -37,7 +37,7 @@ export function FrontOfficeMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuLabel className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
-          Sandbox Tools
+          Free Playbook
         </DropdownMenuLabel>
         {FRONT_OFFICE.map((item) => (
           <DropdownMenuItem key={item.to} asChild>
@@ -126,58 +126,58 @@ export function ProfileMenu() {
 
   return (
     <>
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label="Profile and settings"
-        className={cn(
-          "grid size-8 shrink-0 place-items-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
-        )}
-      >
-        {ready && user ? initials : <UserIcon className="size-4" />}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        {ready && user ? (
-          <>
-            <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
-              {user.email}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={async () => {
-                await signOut();
-                navigate({ to: "/" });
-              }}
-              className="flex items-center gap-2"
-            >
-              <LogOut className="size-4" />
-              Sign Out
-            </DropdownMenuItem>
-          </>
-        ) : (
-          <>
-            <DropdownMenuItem
-              className="font-medium"
-              onSelect={(e) => {
-                e.preventDefault();
-                openAuth("signin");
-              }}
-            >
-              Sign In
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="font-medium"
-              onSelect={(e) => {
-                e.preventDefault();
-                openAuth("signup");
-              }}
-            >
-              Create Account
-            </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-    <AuthDialog open={authOpen} mode={authMode} onOpenChange={setAuthOpen} />
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label="Profile and settings"
+          className={cn(
+            "grid size-8 shrink-0 place-items-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
+          )}
+        >
+          {ready && user ? initials : <UserIcon className="size-4" />}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          {ready && user ? (
+            <>
+              <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
+                {user.email}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={async () => {
+                  await signOut();
+                  navigate({ to: "/" });
+                }}
+                className="flex items-center gap-2"
+              >
+                <LogOut className="size-4" />
+                Sign Out
+              </DropdownMenuItem>
+            </>
+          ) : (
+            <>
+              <DropdownMenuItem
+                className="font-medium"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  openAuth("signin");
+                }}
+              >
+                Sign In
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="font-medium"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  openAuth("signup");
+                }}
+              >
+                Create Account
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AuthDialog open={authOpen} mode={authMode} onOpenChange={setAuthOpen} />
     </>
   );
 }
