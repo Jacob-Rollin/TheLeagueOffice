@@ -1,21 +1,14 @@
 import { useEffect, useState } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Check, X } from "lucide-react";
 
 export type AuthMode = "signin" | "signup";
 
 const fieldClass =
   "mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring";
-const labelClass =
-  "block text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+const labelClass = "block text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
 const INVALID_CODE = "Invalid or expired invite code.";
@@ -39,12 +32,7 @@ function passwordStrength(pw: string): number {
 }
 
 const strengthLabels = ["Weak", "Fair", "Good", "Strong"];
-const strengthColors = [
-  "bg-red-500",
-  "bg-amber-500",
-  "bg-yellow-400",
-  "bg-emerald-500",
-];
+const strengthColors = ["bg-red-500", "bg-amber-500", "bg-yellow-400", "bg-emerald-500"];
 
 type RpcFn = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
 
@@ -76,12 +64,7 @@ export function AuthDialog({
   }, [open, mode]);
 
   const strength = passwordStrength(password);
-  const confirmStatus =
-    confirmPassword.length > 0
-      ? password === confirmPassword
-        ? "match"
-        : "mismatch"
-      : null;
+  const confirmStatus = confirmPassword.length > 0 ? (password === confirmPassword ? "match" : "mismatch") : null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,10 +100,7 @@ export function AuthDialog({
         }
 
         const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
-        const { data: consumed, error: rpcError } = await rpc(
-          "verify_and_consume_invite_code",
-          { target_code: code },
-        );
+        const { data: consumed, error: rpcError } = await rpc("verify_and_consume_invite_code", { target_code: code });
         if (rpcError || consumed !== true) {
           setError(INVALID_CODE);
           return;
@@ -167,12 +147,10 @@ export function AuthDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="display-title text-2xl">
-            {isSignup ? "Create Account" : "Sign In"}
-          </DialogTitle>
+          <DialogTitle className="display-title text-2xl">{isSignup ? "Create Account" : "Sign In"}</DialogTitle>
           <DialogDescription>
             {isSignup
-              ? "Registration is invite only. Enter your league code below."
+              ? "Registration is invite only. Enter your league invite code below."
               : "Welcome back to the front office."}
           </DialogDescription>
         </DialogHeader>
@@ -274,8 +252,7 @@ export function AuthDialog({
 
           {isSignup && (
             <p className="text-xs text-muted-foreground">
-              Minimum 8 characters with one uppercase letter, one number, and one special
-              character.
+              Minimum 8 characters with one uppercase letter, one number, and one special character.
             </p>
           )}
 
