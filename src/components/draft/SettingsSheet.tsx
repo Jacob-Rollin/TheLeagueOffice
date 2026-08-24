@@ -1,4 +1,5 @@
-import { Settings2 } from "lucide-react";
+import { GripVertical, Settings2 } from "lucide-react";
+import { useState } from "react";
 
 import { SleeperSync } from "@/components/draft/SleeperSync";
 import { Button } from "@/components/ui/button";
