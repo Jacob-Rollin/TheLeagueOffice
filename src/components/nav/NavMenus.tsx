@@ -22,7 +22,7 @@ const triggerClass =
 export const navLinkClass =
   "rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[status=active]:border-accent data-[status=active]:text-primary-foreground";
 
-const FREE_PLAYBOOK: { to: string; label: string }[] = [
+const PLAYBOOK: { to: string; label: string }[] = [
   { to: "/war-room", label: "War Room" },
   { to: "/mock-draft/setup", label: "Mock Draft Simulator" },
   { to: "/trade-desk", label: "Trade Desk" },
@@ -33,11 +33,11 @@ export function FrontOfficeMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className={triggerClass}>
-        Free Playbook
+        Playbook
         <ChevronDown className="size-3.5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        {FREE_PLAYBOOK.map((item) => (
+        {PLAYBOOK.map((item) => (
           <DropdownMenuItem key={item.to} asChild>
             <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
               {item.label}
@@ -48,7 +48,6 @@ export function FrontOfficeMenu() {
     </DropdownMenu>
   );
 }
-
 
 type MemberRow = { league_id: string; team_name: string; leagues: { name: string } | null };
 
