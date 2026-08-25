@@ -223,7 +223,8 @@ export function MockRecap({
             Projected Standings — Simulated Season
           </h3>
           <p className="text-[11px] text-muted-foreground">
-            14-week schedule simulation weighted by lineup strength and bench depth.
+            {Math.max(1, playoffsStartWeek - 1)}-week schedule simulation weighted by lineup
+            strength and bench depth.
           </p>
         </header>
         <table className="w-full text-sm">
