@@ -24,7 +24,7 @@ export const navLinkClass =
 
 const FREE_PLAYBOOK: { to: string; label: string }[] = [
   { to: "/war-room", label: "War Room" },
-  { to: "/mock-draft", label: "Mock Draft Simulator" },
+  { to: "/mock-draft/setup", label: "Mock Draft Simulator" },
   { to: "/trade-desk", label: "Trade Desk" },
   { to: "/the-wire", label: "The Wire" },
 ];
