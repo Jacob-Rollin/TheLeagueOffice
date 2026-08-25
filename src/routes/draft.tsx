@@ -11,7 +11,6 @@ import { PlayerModal } from "@/components/draft/PlayerModal";
 import { SettingsSheet } from "@/components/draft/SettingsSheet";
 import { useDraft } from "@/hooks/use-draft";
 import {
-  fillRoster,
   nextPicksFor,
   positionNeeds,
   POSITIONS,
