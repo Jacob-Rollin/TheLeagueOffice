@@ -42,6 +42,7 @@ export function PlayerList({
   canUndo,
   onOpenPlayer,
   canDraft = true,
+  hideValueTags = false,
 }: {
   players: Player[];
   draftedIds: Set<string>;
