@@ -71,10 +71,13 @@ export function MockRecap({
   settings,
   picks,
   byId,
+  playoffsStartWeek = 15,
 }: {
   settings: Settings;
   picks: Pick[];
   byId: Map<string, Player>;
+  /** Regular season runs through the week before this one. */
+  playoffsStartWeek?: number;
 }) {
   const recap = useMemo(() => {
     const enriched: TeamPick[] = [];
@@ -130,10 +133,10 @@ export function MockRecap({
       t.tone = g.tone;
     }
 
-    // Simulated 14-week regular season: weekly output scales with lineup
+    // Simulated regular season sized by the configured playoff start week: weekly output scales with lineup
     // strength, with variance damped by bench depth.
     const rand = rng(picks.length * 7919 + settings.teams * 104729);
-    const weeks = 14;
+    const weeks = Math.max(1, playoffsStartWeek - 1);
     const n = teams.length;
     for (let w = 0; w < weeks; w++) {
       const scores = teams.map((t) => {
@@ -165,9 +168,13 @@ export function MockRecap({
     const standings = [...teams].sort(
       (a, b) => b.wins - a.wins || b.pointsFor - a.pointsFor,
     );
-    const steal = [...enriched].sort((a, b) => b.delta - a.delta)[0] ?? null;
+    // Kickers and defenses are never eligible for the steal spotlight.
+    const steal =
+      [...enriched]
+        .filter((e) => e.player.pos !== "K" && e.player.pos !== "DEF")
+        .sort((a, b) => b.delta - a.delta)[0] ?? null;
     return { teams, standings, steal };
-  }, [picks, byId, settings]);
+  }, [picks, byId, settings, playoffsStartWeek]);
 
   const { standings, steal, teams } = recap;
 
@@ -216,7 +223,8 @@ export function MockRecap({
             Projected Standings — Simulated Season
           </h3>
           <p className="text-[11px] text-muted-foreground">
-            14-week schedule simulation weighted by lineup strength and bench depth.
+            {Math.max(1, playoffsStartWeek - 1)}-week schedule simulation weighted by lineup
+            strength and bench depth.
           </p>
         </header>
         <table className="w-full text-sm">

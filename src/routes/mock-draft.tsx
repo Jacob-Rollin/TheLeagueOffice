@@ -1,20 +1,17 @@
-import { queryOptions, useMutation, useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Link2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ByeMatrix } from "@/components/draft/ByeMatrix";
 import { DraftBoard } from "@/components/draft/DraftBoard";
+import { MyTeamColumn, SideCard } from "@/components/draft/MyTeamColumn";
 import { MockRecap } from "@/components/draft/MockRecap";
 import { PlayerList } from "@/components/draft/PlayerList";
 import { PlayerModal } from "@/components/draft/PlayerModal";
 import { RosterPanel } from "@/components/draft/RosterPanel";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import {
-  DEFAULT_ROSTER,
   DEFAULT_SETTINGS,
   positionNeeds,
   roundOf,
@@ -25,19 +22,15 @@ import {
   type Pick as DraftPick,
   type Player,
   type Pos,
-  type RosterSlots,
-  type Scoring,
   type Settings,
 } from "@/lib/draft";
-import { getLeagueSync, getUserLeagues } from "@/lib/league.functions";
-import type { LeagueSummary } from "@/lib/league.server";
 import {
   aiPick,
   autoPickForUser,
   generateOpponents,
-  PERSONALITY_LABEL,
   type Personality,
 } from "@/lib/mock-ai";
+import { loadMockConfig, timerSecondsFor, type MockConfig } from "@/lib/mock-config";
 import { getPlayers } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
 
@@ -74,25 +67,7 @@ type Tab = "players" | "board" | "team";
 type Speed = "normal" | "fast" | "manual";
 const SPEED_DELAY: Record<Speed, number> = { normal: 5000, fast: 1000, manual: 0 };
 
-const TEAM_CHOICES = [8, 10, 12, 14, 16];
-const TIMER_CHOICES: { label: string; seconds: number | null }[] = [
-  { label: "30 Seconds", seconds: 30 },
-  { label: "60 Seconds", seconds: 60 },
-  { label: "90 Seconds", seconds: 90 },
-  { label: "2 Minutes", seconds: 120 },
-  { label: "None", seconds: null },
-];
-
 const EMPTY_PAYLOAD = { season: "", updatedAt: 0, players: [] as Player[] };
-
-type Config = {
-  teamName: string;
-  teams: number;
-  slot: number;
-  timerLabel: string;
-  scoring: Scoring;
-  roster: RosterSlots;
-};
 
 function MockDraftPage() {
   const navigate = useNavigate();
@@ -101,15 +76,8 @@ function MockDraftPage() {
   const data = cache.data ?? fallback.data ?? EMPTY_PAYLOAD;
   const syncing = !cache.data && (cache.loading || fallback.isLoading);
 
-  const [setupOpen, setSetupOpen] = useState(true);
-  const [config, setConfig] = useState<Config>({
-    teamName: "My Team",
-    teams: 12,
-    slot: 1,
-    timerLabel: "60 Seconds",
-    scoring: DEFAULT_SETTINGS.scoring,
-    roster: { ...DEFAULT_ROSTER },
-  });
+  const [config, setConfig] = useState<MockConfig | null>(null);
+  const started = config !== null;
 
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [personas, setPersonas] = useState<Record<string, Personality>>({});
@@ -124,8 +92,7 @@ function MockDraftPage() {
   const [tab, setTab] = useState<Tab>("players");
   const [rosterTeam, setRosterTeam] = useState(1);
 
-  const timerSeconds =
-    TIMER_CHOICES.find((t) => t.label === config.timerLabel)?.seconds ?? null;
+  const timerSeconds = config ? timerSecondsFor(config.timerLabel) : null;
 
   const byId = useMemo(
     () => new Map<string, Player>(data.players.map((p) => [p.id, p])),
@@ -138,7 +105,7 @@ function MockDraftPage() {
   const complete = picks.length >= totalPicks;
   const currentOverall = Math.min(picks.length + 1, totalPicks);
   const onTheClock = teamForPick(currentOverall, settings.teams, settings.snake);
-  const myTurn = !setupOpen && !complete && onTheClock === settings.myTeam;
+  const myTurn = started && !complete && onTheClock === settings.myTeam;
 
   const rosters = useMemo(() => {
     const map = new Map<number, Player[]>();
@@ -185,7 +152,7 @@ function MockDraftPage() {
   );
 
   const runAiPick = useCallback(() => {
-    if (complete || setupOpen) return;
+    if (complete || !started) return;
     const team = teamForPick(picks.length + 1, settings.teams, settings.snake);
     if (team === settings.myTeam) return;
     const recentPos = picks
@@ -200,17 +167,17 @@ function MockDraftPage() {
       overall: picks.length + 1,
     });
     if (choice) commitPick(choice.id, team);
-  }, [complete, setupOpen, picks, settings, byId, available, rosters, personas, commitPick]);
+  }, [complete, started, picks, settings, byId, available, rosters, personas, commitPick]);
 
   // Simulation loop: computer slots pick automatically at the active speed.
   const runRef = useRef(runAiPick);
   runRef.current = runAiPick;
   useEffect(() => {
-    if (setupOpen || complete || myTurn || paused || speed === "manual" || !data.players.length)
+    if (!started || complete || myTurn || paused || speed === "manual" || !data.players.length)
       return;
     const id = setTimeout(() => runRef.current(), SPEED_DELAY[speed]);
     return () => clearTimeout(id);
-  }, [setupOpen, complete, myTurn, paused, speed, picks.length, data.players.length]);
+  }, [started, complete, myTurn, paused, speed, picks.length, data.players.length]);
 
   // Pick clock: counts down only while the human is on the clock and unpaused.
   useEffect(() => {
@@ -237,21 +204,28 @@ function MockDraftPage() {
     if (choice) commitPick(choice.id, settings.myTeam);
   }, [clock, myTurn, paused, available, myPlayers, settings, picks.length, commitPick]);
 
-  const begin = () => {
-    const roster = { ...config.roster };
+  // Boot the arena from the standalone /mock-draft/setup configuration.
+  useEffect(() => {
+    const stored = loadMockConfig();
+    if (!stored) {
+      navigate({ to: "/mock-draft/setup" });
+      return;
+    }
+    const roster = { ...stored.roster };
     const rounds = Math.max(1, rosterSize(roster));
-    const slot = Math.min(Math.max(1, config.slot), config.teams);
+    const slot = Math.min(Math.max(1, stored.slot), stored.teams);
     const { names, personas: personaMap } = generateOpponents(
-      config.teams,
+      stored.teams,
       slot,
-      config.teamName,
+      stored.teamName,
     );
     setSettings({
       ...DEFAULT_SETTINGS,
-      teams: config.teams,
+      teams: stored.teams,
       rounds,
       roster,
-      scoring: config.scoring,
+      scoring: stored.scoring,
+      snake: stored.snake,
       myTeam: slot,
       teamNames: names,
     });
@@ -261,29 +235,20 @@ function MockDraftPage() {
     setSpeed("normal");
     setPaused(false);
     setTab("players");
-    setSetupOpen(false);
-  };
+    setConfig({ ...stored, slot });
+  }, [navigate]);
 
   const restart = () => {
-    setPicks([]);
-    setPaused(false);
-    setSetupOpen(true);
+    navigate({ to: "/mock-draft/setup" });
   };
 
 
+  const mySlotLabel = `${roundOf(currentOverall, settings.teams)}.${(((currentOverall - 1) % settings.teams) + 1).toString().padStart(2, "0")}`;
   const lastPick = picks.length ? picks[picks.length - 1]! : null;
   const lastPlayer = lastPick ? byId.get(lastPick.playerId) : undefined;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col">
-      <SetupDialog
-        open={setupOpen}
-        config={config}
-        setConfig={setConfig}
-        onBegin={begin}
-        onClose={() => navigate({ to: "/" })}
-      />
-
 
       <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-3 pt-3">
@@ -358,42 +323,53 @@ function MockDraftPage() {
                   : "border-border bg-card text-muted-foreground hover:text-foreground",
               )}
             >
-              [ {paused ? "Resume" : "Pause"} ]
+              {paused ? "Resume" : "Pause"}
             </button>
           </div>
 
         </div>
 
         {myTurn && (
-          <div className="mt-2 flex items-center justify-center gap-2 border-y border-accent bg-accent px-3 py-2 font-display text-sm uppercase tracking-[0.3em] text-accent-foreground">
-            Your Turn
+          <div className="mt-2 flex animate-pulse items-center justify-center gap-2 border-y border-accent bg-accent px-3 py-2 font-display text-sm uppercase tracking-[0.3em] text-accent-foreground">
+            Your Turn — You are picking at {mySlotLabel}
           </div>
         )}
 
-        <div className="mt-3 grid grid-cols-4 gap-px overflow-hidden border-y border-border bg-border">
+        {/* Draft board tracker ribbon */}
+        <div className="no-scrollbar mt-2 flex items-center gap-4 overflow-x-auto border-y border-border bg-surface px-3 py-1.5">
+          {picks.length === 0 ? (
+            <span className="whitespace-nowrap font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+              Board empty — waiting on pick 1.01
+            </span>
+          ) : (
+            picks.map((pk) => {
+              const pl = byId.get(pk.playerId);
+              const label = `${roundOf(pk.overall, settings.teams)}.${(((pk.overall - 1) % settings.teams) + 1).toString().padStart(2, "0")}`;
+              return (
+                <span
+                  key={pk.overall}
+                  className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wide"
+                >
+                  <span className="tabnum text-muted-foreground">{label}</span>{" "}
+                  <span className="font-semibold">{pl?.name ?? "—"}</span>
+                  <span className="text-muted-foreground">
+                    {pl?.pos ? ` ${pl.pos}` : ""}
+                    {pl?.team ? `/${pl.team}` : ""}
+                  </span>
+                </span>
+              );
+            })
+          )}
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden border-y border-border bg-border">
           <Stat
             label="On the clock"
             value={complete ? "Done" : teamName(settings, onTheClock)}
             highlight={myTurn}
           />
-          <Stat
-            label="Pick"
-            value={`PICK ${roundOf(currentOverall, settings.teams)}.${(((currentOverall - 1) % settings.teams) + 1)
-              .toString()
-              .padStart(2, "0")}`}
-          />
-          <Stat
-            label="Strategy"
-            value={
-              onTheClock === settings.myTeam
-                ? "You"
-                : (PERSONALITY_LABEL[personas[String(onTheClock)] ?? "value"] ?? "—")
-            }
-          />
-          <Stat
-            label="Last pick"
-            value={lastPlayer ? lastPlayer.name : "—"}
-          />
+          <Stat label="Pick" value={complete ? `${picks.length}` : mySlotLabel} />
+          <Stat label="Last pick" value={lastPlayer ? lastPlayer.name : "—"} />
         </div>
 
         <nav className="flex gap-1 px-3 py-2">
@@ -422,7 +398,12 @@ function MockDraftPage() {
 
       <div className="flex-1 gap-3 px-0 py-3 lg:px-3">
         {tab === "players" && complete && (
-          <MockRecap settings={settings} picks={picks} byId={byId} />
+          <MockRecap
+            settings={settings}
+            picks={picks}
+            byId={byId}
+            playoffsStartWeek={config?.playoffsStartWeek ?? 15}
+          />
         )}
         {tab === "players" && !complete && syncing && (
           <div className="space-y-2 px-3 py-6">
@@ -437,14 +418,14 @@ function MockDraftPage() {
         {tab === "players" && !complete && !syncing && (
           <div className="md:grid md:grid-cols-[280px_minmax(0,1fr)] md:items-start md:gap-3">
             <aside className="hidden md:block md:min-w-[280px] md:shrink-0">
-              <div className="overflow-hidden rounded-xl border border-border bg-card">
-                <RosterPanel
+              <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
+                <MyTeamColumn
                   settings={settings}
+                  players={myPlayers}
                   picks={picks}
-                  byId={byId}
-                  team={settings.myTeam}
+                  onOpen={setOpenId}
                 />
-              </div>
+              </SideCard>
             </aside>
             <PlayerList
               players={data.players}
@@ -466,6 +447,7 @@ function MockDraftPage() {
               canUndo={picks.length > 0}
               onOpenPlayer={setOpenId}
               canDraft={myTurn}
+              hideValueTags
             />
           </div>
         )}
@@ -489,8 +471,22 @@ function MockDraftPage() {
                 </button>
               ))}
             </div>
-            <div className="rounded-xl border border-border bg-card">
-              <RosterPanel settings={settings} picks={picks} byId={byId} team={rosterTeam} />
+            <div className="md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] md:items-start md:gap-3">
+              <div className="mb-3 rounded-xl border border-border bg-card p-3 md:mb-0">
+                <div className="mb-2 font-display text-sm uppercase tracking-widest">
+                  Bye Week Matrix
+                </div>
+                {(rosters.get(rosterTeam) ?? []).length ? (
+                  <ByeMatrix players={rosters.get(rosterTeam) ?? []} layout="column" />
+                ) : (
+                  <p className="p-3 text-center text-xs text-muted-foreground">
+                    No picks yet for this team.
+                  </p>
+                )}
+              </div>
+              <div className="rounded-xl border border-border bg-card">
+                <RosterPanel settings={settings} picks={picks} byId={byId} team={rosterTeam} />
+              </div>
             </div>
           </div>
         )}
@@ -500,287 +496,6 @@ function MockDraftPage() {
     </main>
   );
 }
-
-const ROSTER_FIELDS: { key: keyof RosterSlots; label: string }[] = [
-  { key: "QB", label: "QB" },
-  { key: "RB", label: "RB" },
-  { key: "WR", label: "WR" },
-  { key: "TE", label: "TE" },
-  { key: "FLEX", label: "FLEX" },
-  { key: "K", label: "K" },
-  { key: "DEF", label: "DEF" },
-  { key: "BENCH", label: "BENCH" },
-];
-
-const SCORING_CHOICES: { key: Scoring; label: string }[] = [
-  { key: "std", label: "Standard" },
-  { key: "ppr", label: "PPR" },
-  { key: "half", label: "Half PPR" },
-];
-
-function SetupDialog({
-  open,
-  config,
-  setConfig,
-  onBegin,
-  onClose,
-}: {
-  open: boolean;
-  config: Config;
-  setConfig: (c: Config) => void;
-  onBegin: () => void;
-  onClose: () => void;
-}) {
-  const [username, setUsername] = useState("");
-  const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
-  const [syncNote, setSyncNote] = useState<string | null>(null);
-  const [syncOpen, setSyncOpen] = useState(false);
-
-  const leaguesM = useMutation({
-    mutationFn: (name: string) => getUserLeagues({ data: { username: name } }),
-  });
-  const syncM = useMutation({
-    mutationFn: (vars: { leagueId: string }) => getLeagueSync({ data: vars }),
-  });
-
-  const slots = Array.from({ length: config.teams }, (_, i) => i + 1);
-
-  const findLeagues = async () => {
-    setSyncNote(null);
-    setLeagues([]);
-    const res = await leaguesM.mutateAsync(username.trim());
-    if (!res.length) return setSyncNote("No leagues found for that Sleeper username.");
-    if (res.length === 1) return applyLeague(res[0]!.id, res[0]!.name);
-    setLeagues(res);
-  };
-
-  // League-wide settings only: scoring, roster slots and league size.
-  // Team names are intentionally skipped so the sim generates its own.
-  const applyLeague = async (leagueId: string, name: string) => {
-    const res = await syncM.mutateAsync({ leagueId });
-    if (!res) return setSyncNote("Couldn't load that league.");
-    const teams = TEAM_CHOICES.includes(res.teams)
-      ? res.teams
-      : Math.min(16, Math.max(8, res.teams));
-    setConfig({
-      ...config,
-      teams,
-      slot: Math.min(config.slot, teams),
-      scoring: res.scoring,
-      roster: { ...config.roster, ...res.roster },
-    });
-    setLeagues([]);
-    setSyncNote(`Imported settings from ${res.league.name || name} (team names skipped).`);
-  };
-
-  const busy = leaguesM.isPending || syncM.isPending;
-
-  return (
-    <Dialog open={open}>
-      <DialogContent
-        className="max-h-[90vh] max-w-md overflow-y-auto"
-        onInteractOutside={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        onKeyDown={(e) => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          aria-label="Close setup"
-          onClick={onClose}
-          className="absolute right-4 top-4 z-10 grid size-6 place-items-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <X className="size-4" />
-        </button>
-        <DialogHeader>
-          <DialogTitle className="font-display text-2xl tracking-wide">Mock Draft Setup</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          {/* Sleeper league sync — settings only */}
-          <div className="rounded-lg border border-border bg-card p-3">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full gap-2 font-display uppercase tracking-wide"
-              onClick={() => setSyncOpen((v) => !v)}
-            >
-              <Link2 className="size-4" />
-              Sleeper League Sync
-            </Button>
-            {syncOpen && (
-              <div className="mt-3 space-y-2">
-                <div className="flex gap-2">
-                  <Input
-                    value={username}
-                    placeholder="Sleeper username"
-                    onChange={(e) => setUsername(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && username.trim() && void findLeagues()}
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busy || !username.trim()}
-                    onClick={() => void findLeagues()}
-                  >
-                    {busy ? "…" : "Load"}
-                  </Button>
-                </div>
-                {leagues.length > 0 && (
-                  <ul className="space-y-1">
-                    {leagues.map((l) => (
-                      <li key={l.id}>
-                        <button
-                          type="button"
-                          onClick={() => void applyLeague(l.id, l.name)}
-                          className="w-full rounded-md border border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-primary"
-                        >
-                          <div className="truncate font-display">{l.name}</div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {l.season} · {l.teams} teams · {l.scoring}
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <p className="text-[11px] text-muted-foreground">
-                  {syncNote ??
-                    "Imports scoring, roster slots and league size only — team names stay local."}
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="md-team">Team Name</Label>
-            <Input
-              id="md-team"
-              value={config.teamName}
-              onChange={(e) => setConfig({ ...config, teamName: e.target.value })}
-              placeholder="Your team name"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Amount of Teams</Label>
-            <div className="flex gap-1">
-              {TEAM_CHOICES.map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() =>
-                    setConfig({ ...config, teams: n, slot: Math.min(config.slot, n) })
-                  }
-                  className={cn(
-                    "flex-1 rounded-md border px-2 py-1.5 font-display text-sm transition-colors",
-                    config.teams === n
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-card text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="md-slot">Draft Slot Position</Label>
-            <select
-              id="md-slot"
-              value={config.slot}
-              onChange={(e) => setConfig({ ...config, slot: Number(e.target.value) })}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              {slots.map((s) => (
-                <option key={s} value={s}>
-                  Slot {s}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-muted-foreground">
-              Slots available: 1–{config.teams}
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="md-scoring">Scoring System</Label>
-            <select
-              id="md-scoring"
-              value={config.scoring}
-              onChange={(e) => setConfig({ ...config, scoring: e.target.value as Scoring })}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              {SCORING_CHOICES.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="md-timer">Pick Timer</Label>
-            <select
-              id="md-timer"
-              value={config.timerLabel}
-              onChange={(e) => setConfig({ ...config, timerLabel: e.target.value })}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              {TIMER_CHOICES.map((t) => (
-                <option key={t.label} value={t.label}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2 rounded-lg border border-border bg-card p-3">
-            <Label className="font-display text-xs uppercase tracking-widest text-muted-foreground">
-              Roster Positions Setup
-            </Label>
-            <div className="grid grid-cols-4 gap-2">
-              {ROSTER_FIELDS.map((f) => (
-                <div key={f.key} className="space-y-1">
-                  <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
-                    {f.label}
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={12}
-                    value={config.roster[f.key]}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        roster: {
-                          ...config.roster,
-                          [f.key]: Math.max(0, Math.min(12, Number(e.target.value) || 0)),
-                        },
-                      })
-                    }
-                    className="tabnum h-8 w-full rounded-md border border-input bg-background px-2 text-center text-sm"
-                  />
-                </div>
-              ))}
-            </div>
-            <p className="tabnum text-[11px] text-muted-foreground">
-              {rosterSize(config.roster)} rounds · {rosterSize(config.roster) * config.teams} total
-              picks
-            </p>
-          </div>
-
-          <Button className="w-full font-display uppercase tracking-wide" onClick={onBegin}>
-            Begin Mock Draft
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (

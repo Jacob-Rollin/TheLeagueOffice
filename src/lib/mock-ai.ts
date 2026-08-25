@@ -184,7 +184,10 @@ export function aiPick(
 
   for (const p of pool) {
     const v = value(p, settings.scoring);
-    const adp = v.adp < 900 ? v.adp : 400;
+    // Smart value variance: humans don't draft straight off a static board, so
+    // each AI evaluation jitters the market ADP by +/- 5%.
+    const rawAdp = v.adp < 900 ? v.adp : 400;
+    const adp = rawAdp * (0.95 + Math.random() * 0.1);
     const count = have[p.pos] ?? 0;
 
     // Strict K/DEF block until the final two rounds.

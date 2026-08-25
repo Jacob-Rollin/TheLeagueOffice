@@ -42,6 +42,7 @@ export function PlayerList({
   canUndo,
   onOpenPlayer,
   canDraft = true,
+  hideValueTags = false,
 }: {
   players: Player[];
   draftedIds: Set<string>;
@@ -59,6 +60,8 @@ export function PlayerList({
   onOpenPlayer?: (id: string) => void;
   /** Mock-draft only: greys out and disables the row Draft buttons off-turn. */
   canDraft?: boolean;
+  /** Hide reach / value tags (used during live mock drafts). */
+  hideValueTags?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [pos, setPos] = useState<string>("ALL");
@@ -438,7 +441,7 @@ export function PlayerList({
                     {p.pos}
                     {p.team ? ` · ${p.team}` : ""}
                     {p.bye ? ` · BYE ${p.bye}` : ""}
-                    {reach !== null && reach < -6 ? " · reach" : ""}
+                    {!hideValueTags && reach !== null && reach < -6 ? " · reach" : ""}
                     {p.injury ? (
                       <span className="font-semibold uppercase text-destructive">
                         {` · ${p.injury}`}
