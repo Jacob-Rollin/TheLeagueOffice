@@ -243,6 +243,7 @@ function MockDraftPage() {
   };
 
 
+  const mySlotLabel = `${roundOf(currentOverall, settings.teams)}.${(((currentOverall - 1) % settings.teams) + 1).toString().padStart(2, "0")}`;
   const lastPick = picks.length ? picks[picks.length - 1]! : null;
   const lastPlayer = lastPick ? byId.get(lastPick.playerId) : undefined;
 
@@ -322,42 +323,53 @@ function MockDraftPage() {
                   : "border-border bg-card text-muted-foreground hover:text-foreground",
               )}
             >
-              [ {paused ? "Resume" : "Pause"} ]
+              {paused ? "Resume" : "Pause"}
             </button>
           </div>
 
         </div>
 
         {myTurn && (
-          <div className="mt-2 flex items-center justify-center gap-2 border-y border-accent bg-accent px-3 py-2 font-display text-sm uppercase tracking-[0.3em] text-accent-foreground">
-            Your Turn
+          <div className="mt-2 flex animate-pulse items-center justify-center gap-2 border-y border-accent bg-accent px-3 py-2 font-display text-sm uppercase tracking-[0.3em] text-accent-foreground">
+            Your Turn — You are picking at {mySlotLabel}
           </div>
         )}
 
-        <div className="mt-3 grid grid-cols-4 gap-px overflow-hidden border-y border-border bg-border">
+        {/* Draft board tracker ribbon */}
+        <div className="no-scrollbar mt-2 flex items-center gap-4 overflow-x-auto border-y border-border bg-surface px-3 py-1.5">
+          {picks.length === 0 ? (
+            <span className="whitespace-nowrap font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+              Board empty — waiting on pick 1.01
+            </span>
+          ) : (
+            picks.map((pk) => {
+              const pl = byId.get(pk.playerId);
+              const label = `${roundOf(pk.overall, settings.teams)}.${(((pk.overall - 1) % settings.teams) + 1).toString().padStart(2, "0")}`;
+              return (
+                <span
+                  key={pk.overall}
+                  className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wide"
+                >
+                  <span className="tabnum text-muted-foreground">{label}</span>{" "}
+                  <span className="font-semibold">{pl?.name ?? "—"}</span>
+                  <span className="text-muted-foreground">
+                    {pl?.pos ? ` ${pl.pos}` : ""}
+                    {pl?.team ? `/${pl.team}` : ""}
+                  </span>
+                </span>
+              );
+            })
+          )}
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden border-y border-border bg-border">
           <Stat
             label="On the clock"
             value={complete ? "Done" : teamName(settings, onTheClock)}
             highlight={myTurn}
           />
-          <Stat
-            label="Pick"
-            value={`PICK ${roundOf(currentOverall, settings.teams)}.${(((currentOverall - 1) % settings.teams) + 1)
-              .toString()
-              .padStart(2, "0")}`}
-          />
-          <Stat
-            label="Strategy"
-            value={
-              onTheClock === settings.myTeam
-                ? "You"
-                : (PERSONALITY_LABEL[personas[String(onTheClock)] ?? "value"] ?? "—")
-            }
-          />
-          <Stat
-            label="Last pick"
-            value={lastPlayer ? lastPlayer.name : "—"}
-          />
+          <Stat label="Pick" value={complete ? `${picks.length}` : mySlotLabel} />
+          <Stat label="Last pick" value={lastPlayer ? lastPlayer.name : "—"} />
         </div>
 
         <nav className="flex gap-1 px-3 py-2">
@@ -386,7 +398,12 @@ function MockDraftPage() {
 
       <div className="flex-1 gap-3 px-0 py-3 lg:px-3">
         {tab === "players" && complete && (
-          <MockRecap settings={settings} picks={picks} byId={byId} />
+          <MockRecap
+            settings={settings}
+            picks={picks}
+            byId={byId}
+            playoffsStartWeek={config?.playoffsStartWeek ?? 15}
+          />
         )}
         {tab === "players" && !complete && syncing && (
           <div className="space-y-2 px-3 py-6">
@@ -401,14 +418,14 @@ function MockDraftPage() {
         {tab === "players" && !complete && !syncing && (
           <div className="md:grid md:grid-cols-[280px_minmax(0,1fr)] md:items-start md:gap-3">
             <aside className="hidden md:block md:min-w-[280px] md:shrink-0">
-              <div className="overflow-hidden rounded-xl border border-border bg-card">
-                <RosterPanel
+              <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
+                <MyTeamColumn
                   settings={settings}
+                  players={myPlayers}
                   picks={picks}
-                  byId={byId}
-                  team={settings.myTeam}
+                  onOpen={setOpenId}
                 />
-              </div>
+              </SideCard>
             </aside>
             <PlayerList
               players={data.players}
@@ -430,6 +447,7 @@ function MockDraftPage() {
               canUndo={picks.length > 0}
               onOpenPlayer={setOpenId}
               canDraft={myTurn}
+              hideValueTags
             />
           </div>
         )}
@@ -453,8 +471,22 @@ function MockDraftPage() {
                 </button>
               ))}
             </div>
-            <div className="rounded-xl border border-border bg-card">
-              <RosterPanel settings={settings} picks={picks} byId={byId} team={rosterTeam} />
+            <div className="md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] md:items-start md:gap-3">
+              <div className="mb-3 rounded-xl border border-border bg-card p-3 md:mb-0">
+                <div className="mb-2 font-display text-sm uppercase tracking-widest">
+                  Bye Week Matrix
+                </div>
+                {(rosters.get(rosterTeam) ?? []).length ? (
+                  <ByeMatrix players={rosters.get(rosterTeam) ?? []} layout="column" />
+                ) : (
+                  <p className="p-3 text-center text-xs text-muted-foreground">
+                    No picks yet for this team.
+                  </p>
+                )}
+              </div>
+              <div className="rounded-xl border border-border bg-card">
+                <RosterPanel settings={settings} picks={picks} byId={byId} team={rosterTeam} />
+              </div>
             </div>
           </div>
         )}
