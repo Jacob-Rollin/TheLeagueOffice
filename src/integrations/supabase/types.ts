@@ -789,6 +789,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_league_member: {
+        Args: { _league_id: string; _user_id: string }
+        Returns: boolean
+      }
       verify_and_consume_invite_code: {
         Args: { target_code: string }
         Returns: boolean
