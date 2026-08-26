@@ -74,6 +74,7 @@ function PlayerListImpl({
   const [watchOnly, setWatchOnly] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const queryClient = useQueryClient();
 
   /** Click once to sort high-to-low, click again to clear back to baseline. */
   const toggleSort = useCallback((key: SortKey) => {
