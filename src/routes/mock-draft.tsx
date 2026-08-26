@@ -520,15 +520,35 @@ const DraftTicker = memo(function DraftTicker({
   byId: Map<string, Player>;
   teams: number;
 }) {
-  const items = picks.map((pk) => {
-    const pl = byId.get(pk.playerId);
-    return {
-      key: pk.overall,
-      label: `${roundOf(pk.overall, teams)}.${(((pk.overall - 1) % teams) + 1).toString().padStart(2, "0")}`,
-      name: pl?.name ?? "—",
-      meta: `${pl?.pos ? ` ${pl.pos}` : ""}${pl?.team ? `/${pl.team}` : ""}`,
-    };
-  });
+  const all = useMemo(
+    () =>
+      picks.map((pk) => {
+        const pl = byId.get(pk.playerId);
+        return {
+          key: pk.overall,
+          label: `${roundOf(pk.overall, teams)}.${(((pk.overall - 1) % teams) + 1).toString().padStart(2, "0")}`,
+          name: pl?.name ?? "—",
+          meta: `${pl?.pos ? ` ${pl.pos}` : ""}${pl?.team ? `/${pl.team}` : ""}`,
+        };
+      }),
+    [picks, byId, teams],
+  );
+
+  // The visible track only swaps in new picks at a loop boundary, so the crawl
+  // never restarts or jumps mid-cycle when the picks array grows.
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [items, setItems] = useState(all);
+  const pending = useRef(all);
+  pending.current = all;
+
+  useEffect(() => {
+    setItems((cur) => (cur.length === 0 ? pending.current : cur));
+    const el = trackRef.current;
+    if (!el) return;
+    const onIteration = () => setItems(pending.current);
+    el.addEventListener("animationiteration", onIteration);
+    return () => el.removeEventListener("animationiteration", onIteration);
+  }, [all]);
 
   if (!items.length) {
     return (
