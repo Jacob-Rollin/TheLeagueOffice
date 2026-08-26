@@ -503,6 +503,8 @@ function PlayerListImpl({
                     <button
                       type="button"
                       className="flex flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
+                      onPointerEnter={() => queryClient.prefetchQuery(detailQuery(p.id))}
+                      onPointerDown={() => onOpenPlayer(p.id)}
                       onClick={() => onOpenPlayer(p.id)}
                     >
                       {playerBody}
