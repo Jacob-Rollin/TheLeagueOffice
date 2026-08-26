@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { GripVertical, Search, Star, Undo2, Zap } from "lucide-react";
 
@@ -26,7 +26,7 @@ const DIVIDER = "border-l border-border";
 /** Muted wash applied down an actively sorted column. */
 const ACTIVE_COL = "bg-muted/40";
 
-export function PlayerList({
+function PlayerListImpl({
   players,
   draftedIds,
   watchIds,
@@ -574,6 +574,8 @@ export function PlayerList({
     </div>
   );
 }
+
+export const PlayerList = memo(PlayerListImpl);
 
 function StatCell({ value, className }: { value: string; className?: string }) {
   return (
