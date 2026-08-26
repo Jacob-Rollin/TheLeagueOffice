@@ -565,7 +565,7 @@ const DraftTicker = memo(function DraftTicker({
 
   return (
     <div className="no-scrollbar mt-2 overflow-hidden border-y border-border bg-surface py-1.5">
-      <div className="ticker-track" style={{ animationDuration: duration }}>
+      <div ref={trackRef} className="ticker-track" style={{ animationDuration: duration }}>
         {[0, 1].map((copy) => (
           <div key={copy} className="flex shrink-0 items-center gap-4 pr-4" aria-hidden={copy === 1}>
             {items.map((it) => (
