@@ -313,6 +313,26 @@ function MockDraftPage() {
             </Button>
           )}
           <div className="ml-auto flex items-center gap-3">
+            {lastPlayer && lastPick && (
+              <button
+                onClick={() => openPlayer(lastPlayer.id)}
+                className="hidden items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-left leading-tight transition-colors hover:border-primary sm:flex"
+              >
+                <PlayerAvatar
+                  id={lastPlayer.id}
+                  pos={lastPlayer.pos}
+                  team={lastPlayer.team}
+                  name={lastPlayer.name}
+                  className="size-7"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[9px] uppercase tracking-widest text-muted-foreground">
+                    Previous pick
+                  </span>
+                  <span className="block truncate text-[11px] font-semibold">{lastPlayer.name}</span>
+                </span>
+              </button>
+            )}
             <span
               className={cn(
                 "tabnum font-display text-sm uppercase tracking-widest",
