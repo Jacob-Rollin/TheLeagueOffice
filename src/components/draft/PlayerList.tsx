@@ -1,10 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { GripVertical, Search, Star, Undo2, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PlayerAvatar } from "./PlayerAvatar";
+import { detailQuery } from "./PlayerDetail";
 import { cn } from "@/lib/utils";
 import {
   POSITIONS,
@@ -72,6 +74,7 @@ function PlayerListImpl({
   const [watchOnly, setWatchOnly] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const queryClient = useQueryClient();
 
   /** Click once to sort high-to-low, click again to clear back to baseline. */
   const toggleSort = useCallback((key: SortKey) => {
@@ -503,6 +506,8 @@ function PlayerListImpl({
                     <button
                       type="button"
                       className="flex flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
+                      onPointerEnter={() => queryClient.prefetchQuery(detailQuery(p.id))}
+                      onPointerDown={() => onOpenPlayer(p.id)}
                       onClick={() => onOpenPlayer(p.id)}
                     >
                       {playerBody}

@@ -282,29 +282,6 @@ function MockDraftPage() {
 
         {/* Persistent simulation toolbar */}
         <div className="mt-3 flex flex-wrap items-center gap-2 px-3">
-          {lastPlayer && lastPick && (
-            <button
-              onClick={() => openPlayer(lastPlayer.id)}
-              className="mr-1 hidden items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary sm:flex"
-            >
-              <PlayerAvatar
-                id={lastPlayer.id}
-                pos={lastPlayer.pos}
-                team={lastPlayer.team}
-                name={lastPlayer.name}
-                className="size-9"
-              />
-              <span className="min-w-0">
-                <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Previous pick
-                </span>
-                <span className="block truncate text-xs font-semibold">{lastPlayer.name}</span>
-                <span className="block truncate text-[10px] text-muted-foreground">
-                  {teamName(settings, lastPick.team)}
-                </span>
-              </span>
-            </button>
-          )}
           <span className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
             Sim Speed
           </span>
@@ -336,6 +313,26 @@ function MockDraftPage() {
             </Button>
           )}
           <div className="ml-auto flex items-center gap-3">
+            {lastPlayer && lastPick && (
+              <button
+                onClick={() => openPlayer(lastPlayer.id)}
+                className="hidden items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-left leading-tight transition-colors hover:border-primary sm:flex"
+              >
+                <PlayerAvatar
+                  id={lastPlayer.id}
+                  pos={lastPlayer.pos}
+                  team={lastPlayer.team}
+                  name={lastPlayer.name}
+                  className="size-7"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[9px] uppercase tracking-widest text-muted-foreground">
+                    Previous pick
+                  </span>
+                  <span className="block truncate text-[11px] font-semibold">{lastPlayer.name}</span>
+                </span>
+              </button>
+            )}
             <span
               className={cn(
                 "tabnum font-display text-sm uppercase tracking-widest",
@@ -523,15 +520,35 @@ const DraftTicker = memo(function DraftTicker({
   byId: Map<string, Player>;
   teams: number;
 }) {
-  const items = picks.map((pk) => {
-    const pl = byId.get(pk.playerId);
-    return {
-      key: pk.overall,
-      label: `${roundOf(pk.overall, teams)}.${(((pk.overall - 1) % teams) + 1).toString().padStart(2, "0")}`,
-      name: pl?.name ?? "—",
-      meta: `${pl?.pos ? ` ${pl.pos}` : ""}${pl?.team ? `/${pl.team}` : ""}`,
-    };
-  });
+  const all = useMemo(
+    () =>
+      picks.map((pk) => {
+        const pl = byId.get(pk.playerId);
+        return {
+          key: pk.overall,
+          label: `${roundOf(pk.overall, teams)}.${(((pk.overall - 1) % teams) + 1).toString().padStart(2, "0")}`,
+          name: pl?.name ?? "—",
+          meta: `${pl?.pos ? ` ${pl.pos}` : ""}${pl?.team ? `/${pl.team}` : ""}`,
+        };
+      }),
+    [picks, byId, teams],
+  );
+
+  // The visible track only swaps in new picks at a loop boundary, so the crawl
+  // never restarts or jumps mid-cycle when the picks array grows.
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [items, setItems] = useState(all);
+  const pending = useRef(all);
+  pending.current = all;
+
+  useEffect(() => {
+    setItems((cur) => (cur.length === 0 ? pending.current : cur));
+    const el = trackRef.current;
+    if (!el) return;
+    const onIteration = () => setItems(pending.current);
+    el.addEventListener("animationiteration", onIteration);
+    return () => el.removeEventListener("animationiteration", onIteration);
+  }, [all]);
 
   if (!items.length) {
     return (
@@ -548,7 +565,7 @@ const DraftTicker = memo(function DraftTicker({
 
   return (
     <div className="no-scrollbar mt-2 overflow-hidden border-y border-border bg-surface py-1.5">
-      <div className="ticker-track" style={{ animationDuration: duration }}>
+      <div ref={trackRef} className="ticker-track" style={{ animationDuration: duration }}>
         {[0, 1].map((copy) => (
           <div key={copy} className="flex shrink-0 items-center gap-4 pr-4" aria-hidden={copy === 1}>
             {items.map((it) => (
