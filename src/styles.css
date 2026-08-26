@@ -133,18 +133,3 @@
   }
 }
 
-@keyframes ticker-marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@utility ticker-track {
-  display: flex;
-  width: max-content;
-  animation: ticker-marquee linear infinite;
-  will-change: transform;
-}
