@@ -289,7 +289,30 @@ function MockDraftPage() {
               {settings.rounds} rds · Slot {settings.myTeam}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {lastPlayer && lastPick && (
+              <button
+                onClick={() => openPlayer(lastPlayer.id)}
+                className="hidden items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary sm:flex"
+              >
+                <PlayerAvatar
+                  id={lastPlayer.id}
+                  pos={lastPlayer.pos}
+                  team={lastPlayer.team}
+                  name={lastPlayer.name}
+                  className="size-9"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Previous pick
+                  </span>
+                  <span className="block truncate text-xs font-semibold">{lastPlayer.name}</span>
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {teamName(settings, lastPick.team)}
+                  </span>
+                </span>
+              </button>
+            )}
             <Button variant="outline" size="sm" onClick={restart} className="font-display uppercase">
               New Mock
             </Button>
@@ -329,29 +352,6 @@ function MockDraftPage() {
             </Button>
           )}
           <div className="ml-auto flex items-center gap-3">
-            {lastPlayer && lastPick && (
-              <button
-                onClick={() => openPlayer(lastPlayer.id)}
-                className="hidden items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary sm:flex"
-              >
-                <PlayerAvatar
-                  id={lastPlayer.id}
-                  pos={lastPlayer.pos}
-                  team={lastPlayer.team}
-                  name={lastPlayer.name}
-                  className="size-9"
-                />
-                <span className="min-w-0">
-                  <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
-                    Previous pick
-                  </span>
-                  <span className="block truncate text-xs font-semibold">{lastPlayer.name}</span>
-                  <span className="block truncate text-[10px] text-muted-foreground">
-                    {teamName(settings, lastPick.team)}
-                  </span>
-                </span>
-              </button>
-            )}
             <span
               className={cn(
                 "tabnum font-display text-sm uppercase tracking-widest",
@@ -377,7 +377,6 @@ function MockDraftPage() {
               {paused ? "Resume" : "Pause"}
             </button>
           </div>
-
         </div>
 
         {myTurn && (
