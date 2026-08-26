@@ -22,7 +22,13 @@ export default defineConfig({
     define: {
       __BUILD_ID__: JSON.stringify(buildId),
     },
+    // 🟢 WE INJECTED THE CSS TRANSFORMER TARGETS DIRECTLY HERE
+    css: {
+      transformer: "lightningcss", // Forces Vite to use modern, modern-selector capable parsing
+    },
     build: {
+      target: "es2022", // Standardizes modern JavaScript/CSS selector translation
+      chunkSizeWarningLimit: 1600, // Raises the warning trigger threshold from 500kB to 1.6MB
       rollupOptions: {
         output: {
           // Content-hashed filenames so a new deploy can never reuse a stale cached file.
