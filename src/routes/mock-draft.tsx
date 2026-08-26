@@ -279,8 +279,8 @@ function MockDraftPage() {
         ref={headerRef}
         className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 px-3 pt-3">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-3 pt-3 lg:grid lg:grid-cols-3">
+          <div className="lg:col-span-2">
             <h1 className="display-title text-3xl">
               Mock Draft <span className="text-primary">Simulator</span>
             </h1>
@@ -289,7 +289,7 @@ function MockDraftPage() {
               {settings.rounds} rds · Slot {settings.myTeam}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 lg:justify-between">
             {lastPlayer && lastPick && (
               <button
                 onClick={() => openPlayer(lastPlayer.id)}
