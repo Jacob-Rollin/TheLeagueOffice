@@ -1,8 +1,9 @@
 @import "tailwindcss" source(none);
-@source "../src";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+@source ".";
+
+@variant dark (&\:is(.dark *));
 
 /*
  * Design system: "Night Turf" — a dark stadium-at-night draft room.
