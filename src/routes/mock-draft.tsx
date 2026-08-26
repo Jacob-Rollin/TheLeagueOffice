@@ -1,18 +1,20 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ByeMatrix } from "@/components/draft/ByeMatrix";
+import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { DraftBoard } from "@/components/draft/DraftBoard";
 import { MyTeamColumn, SideCard } from "@/components/draft/MyTeamColumn";
 import { MockRecap } from "@/components/draft/MockRecap";
 import { PlayerList } from "@/components/draft/PlayerList";
-import { PlayerModal } from "@/components/draft/PlayerModal";
+import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { RosterPanel } from "@/components/draft/RosterPanel";
 import { Button } from "@/components/ui/button";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import {
   DEFAULT_SETTINGS,
+  nextPicksFor,
   positionNeeds,
   roundOf,
   rosterSize,
@@ -88,7 +90,8 @@ function MockDraftPage() {
   const [paused, setPaused] = useState(false);
   const [clock, setClock] = useState<number | null>(null);
 
-  const [openId, setOpenId] = useState<string | null>(null);
+  const modalRef = useRef<PlayerModalHandle>(null);
+  const openPlayer = useCallback((id: string) => modalRef.current?.open(id), []);
   const [tab, setTab] = useState<Tab>("players");
   const [rosterTeam, setRosterTeam] = useState(1);
 
@@ -238,6 +241,13 @@ function MockDraftPage() {
     setConfig({ ...stored, slot });
   }, [navigate]);
 
+  const toggleWatch = useCallback(
+    (id: string) =>
+      setWatch((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])),
+    [],
+  );
+  const undoPick = useCallback(() => setPicks((prev) => prev.slice(0, -1)), []);
+
   const restart = () => {
     navigate({ to: "/mock-draft/setup" });
   };
@@ -246,6 +256,8 @@ function MockDraftPage() {
   const mySlotLabel = `${roundOf(currentOverall, settings.teams)}.${(((currentOverall - 1) % settings.teams) + 1).toString().padStart(2, "0")}`;
   const lastPick = picks.length ? picks[picks.length - 1]! : null;
   const lastPlayer = lastPick ? byId.get(lastPick.playerId) : undefined;
+  const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 1);
+  const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col">
@@ -270,6 +282,29 @@ function MockDraftPage() {
 
         {/* Persistent simulation toolbar */}
         <div className="mt-3 flex flex-wrap items-center gap-2 px-3">
+          {lastPlayer && lastPick && (
+            <button
+              onClick={() => openPlayer(lastPlayer.id)}
+              className="mr-1 hidden items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary sm:flex"
+            >
+              <PlayerAvatar
+                id={lastPlayer.id}
+                pos={lastPlayer.pos}
+                team={lastPlayer.team}
+                name={lastPlayer.name}
+                className="size-9"
+              />
+              <span className="min-w-0">
+                <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Previous pick
+                </span>
+                <span className="block truncate text-xs font-semibold">{lastPlayer.name}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">
+                  {teamName(settings, lastPick.team)}
+                </span>
+              </span>
+            </button>
+          )}
           <span className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
             Sim Speed
           </span>
@@ -335,32 +370,8 @@ function MockDraftPage() {
           </div>
         )}
 
-        {/* Draft board tracker ribbon */}
-        <div className="no-scrollbar mt-2 flex items-center gap-4 overflow-x-auto border-y border-border bg-surface px-3 py-1.5">
-          {picks.length === 0 ? (
-            <span className="whitespace-nowrap font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-              Board empty — waiting on pick 1.01
-            </span>
-          ) : (
-            picks.map((pk) => {
-              const pl = byId.get(pk.playerId);
-              const label = `${roundOf(pk.overall, settings.teams)}.${(((pk.overall - 1) % settings.teams) + 1).toString().padStart(2, "0")}`;
-              return (
-                <span
-                  key={pk.overall}
-                  className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wide"
-                >
-                  <span className="tabnum text-muted-foreground">{label}</span>{" "}
-                  <span className="font-semibold">{pl?.name ?? "—"}</span>
-                  <span className="text-muted-foreground">
-                    {pl?.pos ? ` ${pl.pos}` : ""}
-                    {pl?.team ? `/${pl.team}` : ""}
-                  </span>
-                </span>
-              );
-            })
-          )}
-        </div>
+        {/* Draft board tracker ribbon — seamless double-track marquee */}
+        <DraftTicker picks={picks} byId={byId} teams={settings.teams} />
 
         <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden border-y border-border bg-border">
           <Stat
@@ -369,7 +380,17 @@ function MockDraftPage() {
             highlight={myTurn}
           />
           <Stat label="Pick" value={complete ? `${picks.length}` : mySlotLabel} />
-          <Stat label="Last pick" value={lastPlayer ? lastPlayer.name : "—"} />
+          <Stat
+            label="Your next"
+            value={
+              complete || untilMyPick === null
+                ? "—"
+                : untilMyPick === 0
+                  ? "Your turn"
+                  : `${untilMyPick} away`
+            }
+            highlight={myTurn}
+          />
         </div>
 
         <nav className="flex gap-1 px-3 py-2">
@@ -423,7 +444,7 @@ function MockDraftPage() {
                   settings={settings}
                   players={myPlayers}
                   picks={picks}
-                  onOpen={setOpenId}
+                  onOpen={openPlayer}
                 />
               </SideCard>
             </aside>
@@ -437,15 +458,11 @@ function MockDraftPage() {
               settings={settings}
               currentOverall={currentOverall}
               onDraft={draftForUser}
-              onToggleWatch={(id) =>
-                setWatch((prev) =>
-                  prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-                )
-              }
+              onToggleWatch={toggleWatch}
               onReorder={setCustomOrder}
-              onUndo={() => setPicks((prev) => prev.slice(0, -1))}
+              onUndo={undoPick}
               canUndo={picks.length > 0}
-              onOpenPlayer={setOpenId}
+              onOpenPlayer={openPlayer}
               canDraft={myTurn}
               hideValueTags
             />
@@ -492,10 +509,64 @@ function MockDraftPage() {
         )}
       </div>
 
-      <PlayerModal id={openId} onClose={() => setOpenId(null)} onSelectPlayer={setOpenId} />
+      <PlayerModalHost ref={modalRef} />
     </main>
   );
 }
+
+const DraftTicker = memo(function DraftTicker({
+  picks,
+  byId,
+  teams,
+}: {
+  picks: DraftPick[];
+  byId: Map<string, Player>;
+  teams: number;
+}) {
+  const items = picks.map((pk) => {
+    const pl = byId.get(pk.playerId);
+    return {
+      key: pk.overall,
+      label: `${roundOf(pk.overall, teams)}.${(((pk.overall - 1) % teams) + 1).toString().padStart(2, "0")}`,
+      name: pl?.name ?? "—",
+      meta: `${pl?.pos ? ` ${pl.pos}` : ""}${pl?.team ? `/${pl.team}` : ""}`,
+    };
+  });
+
+  if (!items.length) {
+    return (
+      <div className="mt-2 border-y border-border bg-surface px-3 py-1.5">
+        <span className="whitespace-nowrap font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+          Board empty — waiting on pick 1.01
+        </span>
+      </div>
+    );
+  }
+
+  // Duration scales with the track length so the crawl speed stays constant.
+  const duration = `${Math.max(12, items.length * 2.6)}s`;
+
+  return (
+    <div className="no-scrollbar mt-2 overflow-hidden border-y border-border bg-surface py-1.5">
+      <div className="ticker-track" style={{ animationDuration: duration }}>
+        {[0, 1].map((copy) => (
+          <div key={copy} className="flex shrink-0 items-center gap-4 pr-4" aria-hidden={copy === 1}>
+            {items.map((it) => (
+              <span
+                key={`${copy}-${it.key}`}
+                className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wide"
+              >
+                <span className="tabnum text-muted-foreground">{it.label}</span>{" "}
+                <span className="font-semibold">{it.name}</span>
+                <span className="text-muted-foreground">{it.meta}</span>
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
 
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (

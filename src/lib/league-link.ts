@@ -1,3 +1,4 @@
+import { useHydrated } from "@tanstack/react-router";
 import { useCallback, useSyncExternalStore } from "react";
 
 /** Single global key shared by the homepage, War Room and Trade Analyzer. */
@@ -91,7 +92,11 @@ function subscribe(cb: () => void) {
 
 /** Reactive access to the globally shared Sleeper league link. */
 export function useLeagueLink() {
-  const link = useSyncExternalStore(subscribe, read, () => null);
+  // The first client render must match the server (null); localStorage is only
+  // read after hydration, otherwise React throws hydration error #418.
+  const hydrated = useHydrated();
+  const stored = useSyncExternalStore(subscribe, read, () => null);
+  const link = hydrated ? stored : null;
   const save = useCallback((next: StoredLeagueLink) => saveLeagueLink(next), []);
   const clear = useCallback(() => clearLeagueLink(), []);
   return { link, saveLink: save, clearLink: clear };
