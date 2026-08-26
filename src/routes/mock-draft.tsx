@@ -289,7 +289,7 @@ function MockDraftPage() {
               {settings.rounds} rds · Slot {settings.myTeam}
             </p>
           </div>
-          <div className="flex items-center gap-3 lg:justify-between">
+          <div className="flex items-center gap-3 lg:justify-end">
             {lastPlayer && lastPick && (
               <button
                 onClick={() => openPlayer(lastPlayer.id)}
