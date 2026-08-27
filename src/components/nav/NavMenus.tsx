@@ -127,8 +127,9 @@ export function ProfileMenu() {
 
   // Subscribe to the global active league: the moment the last league is deleted,
   // activeLeague flushes to null and the navbar icon resets to the default silhouette.
-  const activeLeague = leagues.find((l) => l.id === activeLeagueId) ?? null;
-  const navAvatar = activeLeague?.avatar ?? profile?.avatar_url ?? null;
+  const activeLeague = leagues?.find((l) => l?.id === activeLeagueId) ?? null;
+  const navPlatform = activeLeague?.platform ?? null;
+  const navAvatar = activeLeague?.avatar ?? (navPlatform ? null : (profile?.avatar_url ?? null));
 
   return (
     <>
@@ -139,18 +140,18 @@ export function ProfileMenu() {
             "grid size-8 shrink-0 place-items-center overflow-hidden rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
           )}
         >
-          {ready && user && navAvatar ? (
-            <img
+          {ready && user && (navPlatform || navAvatar) ? (
+            <LeagueAvatar
+              platform={navPlatform}
               src={navAvatar}
               alt=""
-              className="size-8 rounded-full border border-neutral-200 object-cover"
-              width={32}
-              height={32}
+              className="size-8"
             />
           ) : (
             <UserIcon className="size-4" />
           )}
         </DropdownMenuTrigger>
+
         <DropdownMenuContent align="end" className={ready && user ? "w-[26rem] p-0" : "w-56"}>
           {ready && user ? (
             <div className="flex">
