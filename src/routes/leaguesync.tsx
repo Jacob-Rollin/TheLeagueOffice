@@ -42,7 +42,11 @@ function LeagueSyncPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [platform, setPlatform] = useState<Platform>("sleeper");
+  const yahooUnconfigured =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("yahoo") === "unconfigured";
+
+  const [platform, setPlatform] = useState<Platform>(yahooUnconfigured ? "yahoo" : "sleeper");
   const [espnTab, setEspnTab] = useState<EspnTab>("public");
   const [guideOpen, setGuideOpen] = useState(false);
   const [busy, setBusy] = useState(false);
