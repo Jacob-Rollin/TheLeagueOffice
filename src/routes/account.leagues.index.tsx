@@ -136,8 +136,8 @@ function LeagueRow({
         data: {
           identifier,
           platform: platformKey,
-          s2: row?.espn_s2 ?? undefined,
-          swid: row?.espn_swid ?? undefined,
+          ...(row?.espn_s2 ? { s2: row.espn_s2 } : {}),
+          ...(row?.espn_swid ? { swid: row.espn_swid } : {}),
         },
       }),
   });
