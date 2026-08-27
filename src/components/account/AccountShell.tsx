@@ -46,6 +46,7 @@ export function AccountShell({
             >
               My Leagues
             </Link>
+            <div className="my-2 border-t border-border" />
             <button
               type="button"
               className={itemClass}
@@ -56,6 +57,7 @@ export function AccountShell({
             >
               Sign Out
             </button>
+
           </div>
         </nav>
 
