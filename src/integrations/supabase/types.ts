@@ -157,6 +157,45 @@ export type Database = {
           },
         ]
       }
+      league_connections: {
+        Row: {
+          created_at: string
+          espn_league_id: string | null
+          espn_s2: string | null
+          espn_swid: string | null
+          id: string
+          label: string | null
+          platform: string
+          sleeper_user_id: string | null
+          user_id: string
+          yahoo_league_key: string | null
+        }
+        Insert: {
+          created_at?: string
+          espn_league_id?: string | null
+          espn_s2?: string | null
+          espn_swid?: string | null
+          id?: string
+          label?: string | null
+          platform: string
+          sleeper_user_id?: string | null
+          user_id: string
+          yahoo_league_key?: string | null
+        }
+        Update: {
+          created_at?: string
+          espn_league_id?: string | null
+          espn_s2?: string | null
+          espn_swid?: string | null
+          id?: string
+          label?: string | null
+          platform?: string
+          sleeper_user_id?: string | null
+          user_id?: string
+          yahoo_league_key?: string | null
+        }
+        Relationships: []
+      }
       league_historical_archive: {
         Row: {
           champion_id: string | null

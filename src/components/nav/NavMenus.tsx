@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, LogOut, Plus, User as UserIcon } from "lucide-react";
+import { ChevronDown, Plus, User as UserIcon } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -113,13 +114,14 @@ export function ProfileMenu() {
   const navigate = useNavigate();
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
+  const { data: profile } = useProfile(user?.id ?? null);
 
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
     setAuthOpen(true);
   };
 
-  const initials = (user?.email ?? "?").slice(0, 1).toUpperCase();
+  const initials = (profile?.full_name ?? user?.email ?? "?").slice(0, 1).toUpperCase();
 
   return (
     <>
@@ -130,7 +132,21 @@ export function ProfileMenu() {
             "grid size-8 shrink-0 place-items-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
           )}
         >
-          {ready && user ? initials : <UserIcon className="size-4" />}
+          {ready && user ? (
+            profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt=""
+                className="size-8 rounded-full object-cover"
+                width={32}
+                height={32}
+              />
+            ) : (
+              initials
+            )
+          ) : (
+            <UserIcon className="size-4" />
+          )}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           {ready && user ? (
@@ -139,14 +155,18 @@ export function ProfileMenu() {
                 {user.email}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild className="font-medium">
+                <Link to="/account" className="block w-full">
+                  Account
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem
+                className="font-medium"
                 onSelect={async () => {
                   await signOut();
                   navigate({ to: "/" });
                 }}
-                className="flex items-center gap-2"
               >
-                <LogOut className="size-4" />
                 Sign Out
               </DropdownMenuItem>
             </>
