@@ -123,7 +123,8 @@ export function ProfileMenu() {
     setAuthOpen(true);
   };
 
-  const initials = (profile?.full_name ?? user?.email ?? "?").slice(0, 1).toUpperCase();
+  // Subscribe to the global active league: the moment the last league is deleted,
+  // activeLeague flushes to null and the navbar icon resets to the default silhouette.
   const activeLeague = leagues.find((l) => l.id === activeLeagueId) ?? null;
   const navAvatar = activeLeague?.avatar ?? profile?.avatar_url ?? null;
 
@@ -136,18 +137,14 @@ export function ProfileMenu() {
             "grid size-8 shrink-0 place-items-center overflow-hidden rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
           )}
         >
-          {ready && user ? (
-            navAvatar ? (
-              <img
-                src={navAvatar}
-                alt=""
-                className="size-8 rounded-full border border-neutral-200 object-cover"
-                width={32}
-                height={32}
-              />
-            ) : (
-              initials
-            )
+          {ready && user && navAvatar ? (
+            <img
+              src={navAvatar}
+              alt=""
+              className="size-8 rounded-full border border-neutral-200 object-cover"
+              width={32}
+              height={32}
+            />
           ) : (
             <UserIcon className="size-4" />
           )}
@@ -191,7 +188,11 @@ export function ProfileMenu() {
                       </button>
                     ))
                   ) : (
-                    <p className="px-2 py-2 text-xs text-muted-foreground">No leagues synced yet.</p>
+                    <div className="flex items-center justify-center px-2 py-8">
+                      <p className="font-display text-xs font-semibold uppercase tracking-widest text-black">
+                        No Active Leagues
+                      </p>
+                    </div>
                   )}
                 </div>
                 <Link
