@@ -4,6 +4,7 @@ import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronDown, Plus, User as UserIcon } from "lucide-react";
 
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
