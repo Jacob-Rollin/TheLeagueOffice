@@ -127,8 +127,6 @@ function LeagueRow({
     row?.sleeper_user_id ?? row?.espn_league_id ?? row?.yahoo_league_key ?? row?.label ?? "";
   const platformKey = row?.platform ?? "sleeper";
   const platform = PLATFORM_LABEL[platformKey] ?? platformKey;
-  const isEspn = platformKey === "espn";
-  const isYahoo = platformKey === "yahoo";
 
   const { data: meta } = useQuery({
     queryKey: ["connection-meta", row?.id, platformKey, identifier],
