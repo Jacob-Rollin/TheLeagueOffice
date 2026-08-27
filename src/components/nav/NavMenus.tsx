@@ -177,14 +177,24 @@ export function ProfileMenu() {
                         <span
                           className={cn(
                             "size-8 shrink-0 overflow-hidden rounded-full border border-border flex items-center justify-center",
-                            isEspn ? "bg-neutral-800" : isYahoo ? "bg-purple-50" : "bg-background",
+                            league.platform === "espn"
+                              ? "bg-neutral-800"
+                              : league.platform === "yahoo"
+                                ? "bg-purple-50"
+                                : "bg-background",
                           )}
                         >
                           <LeagueAvatar
                             platform={league.platform}
                             src={league.avatar}
                             alt=""
-                            className={isEspn ? "text-red-600" : isYahoo ? "text-purple-700" : undefined}
+                            className={
+                              league.platform === "espn"
+                                ? "text-red-600"
+                                : league.platform === "yahoo"
+                                  ? "text-purple-700"
+                                  : undefined
+                            }
                           />
                         </span>
                         <span className="min-w-0">
