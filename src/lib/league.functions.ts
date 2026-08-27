@@ -29,10 +29,12 @@ export const getLeagueSync = createServerFn({ method: "GET" })
   });
 
 export const getConnectionMeta = createServerFn({ method: "GET" })
-  .inputValidator((input: { identifier: string }) => ({
+  .inputValidator((input: { identifier: string; platform?: string }) => ({
     identifier: String(input.identifier ?? "").slice(0, 64),
+    platform: String(input.platform ?? "sleeper").slice(0, 16),
   }))
   .handler(async ({ data }) => {
-    const { loadConnectionMeta } = await import("./league.server");
+    const { loadConnectionMeta, loadEspnConnectionMeta } = await import("./league.server");
+    if (data.platform === "espn") return await loadEspnConnectionMeta(data.identifier);
     return await loadConnectionMeta(data.identifier);
   });
