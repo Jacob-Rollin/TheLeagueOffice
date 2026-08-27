@@ -1,3 +1,4 @@
+import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -46,7 +47,10 @@ function WaiverPage() {
 
   return (
     <main className="mx-auto w-full max-w-4xl px-3 pb-16 pt-6">
-      <h1 className="display-title text-3xl">Waiver Evaluator</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="display-title text-3xl">Waiver Evaluator</h1>
+        <ActiveLeagueLabel />
+      </div>
       <p className="mt-1 text-sm text-muted-foreground">
         Compare a waiver add to the roster spot it costs you.
       </p>

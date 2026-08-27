@@ -1,3 +1,4 @@
+import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Undo2, X } from "lucide-react";
@@ -107,9 +108,12 @@ function DraftRoom() {
       >
         <div className="flex items-center justify-between gap-3 px-3 pt-3">
           <div>
-            <h1 className="display-title text-3xl">
-              War <span className="text-primary">Room</span>
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="display-title text-3xl">
+                War <span className="text-primary">Room</span>
+              </h1>
+              <ActiveLeagueLabel />
+            </div>
             <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
               {data.season} · {SCORING_LABEL[settings.scoring]} · {settings.teams} teams ·{" "}
               {settings.rounds} rds

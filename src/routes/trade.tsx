@@ -1,3 +1,4 @@
+import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
 import { queryOptions, useQueries, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -227,6 +228,7 @@ function TradePage() {
           <h1 className="display-title text-4xl">
             Trade <span className="text-primary">Analyzer</span>
           </h1>
+          <ActiveLeagueLabel className="mt-2 inline-block" />
         </div>
         <div className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
           Scoring: <b className="text-foreground">{scoring}</b> · Team:{" "}
