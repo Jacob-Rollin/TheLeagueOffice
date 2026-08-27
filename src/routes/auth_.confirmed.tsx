@@ -24,8 +24,52 @@ export const Route = createFileRoute("/auth_/confirmed")({
 
 function ConfirmedPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [seconds, setSeconds] = useState(5);
   const [authOpen, setAuthOpen] = useState(false);
+  const [syncNote, setSyncNote] = useState<string | null>(null);
+  const handled = useRef(false);
+
+  // Intercept the Yahoo OAuth return leg and persist the synced league.
+  useEffect(() => {
+    if (handled.current || !userId) return;
+    const params = new URLSearchParams(window.location.search);
+    const sync = params.get("sync");
+    if (!sync) return;
+    handled.current = true;
+
+    if (sync !== "yahoo") {
+      setSyncNote(params.get("reason") ?? "League sync could not be completed.");
+      return;
+    }
+
+    const leagueKey = params.get("league_key");
+    const label = params.get("label") ?? leagueKey ?? "Yahoo League";
+    if (!leagueKey) {
+      setSyncNote("Yahoo did not return a league.");
+      return;
+    }
+
+    void (async () => {
+      const { error } = await supabase.from("league_connections").insert({
+        user_id: userId,
+        platform: "yahoo",
+        label,
+        yahoo_league_key: leagueKey,
+        sleeper_user_id: null,
+        espn_league_id: null,
+      });
+      if (error) {
+        setSyncNote(error.message);
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
+      queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
+      setSyncNote(`${label} synced from Yahoo.`);
+    })();
+  }, [userId, queryClient]);
 
   useEffect(() => {
     if (authOpen) return;
