@@ -366,8 +366,18 @@ export async function loadEspnConnectionMeta(
     const teams = league?.teams ?? [];
     if (!league?.settings || teams.length === 0) continue;
 
-    // Identify the user's own team from their SWID owner guid when available.
-    const mine = (swidGuid ? teams.find((t) => (t.owners ?? []).some((o) => o.toUpperCase().includes(swidGuid))) : undefined) ?? teams[0];
+    // Identify the user's own team by matching the stored SWID guid against
+    // every owner-ish identifier ESPN exposes on a team row.
+    const matchesSwid = (t: EspnTeam) => {
+      if (!swidGuid) return false;
+      const candidates: (string | undefined)[] = [
+        ...(t.owners ?? []),
+        t.primaryOwner,
+        t.swid,
+      ];
+      return candidates.some((c) => c && c.replace(/[{}]/g, "").toUpperCase() === swidGuid);
+    };
+    const mine = teams.find(matchesSwid) ?? teams[0];
     const rec = league.settings?.scoringSettings?.scoringItems?.find((s) => s.statId === 53)?.points ?? null;
     return {
       leagueName: league.settings?.name ?? null,
