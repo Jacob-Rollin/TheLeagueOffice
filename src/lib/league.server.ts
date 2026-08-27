@@ -300,6 +300,8 @@ type EspnTeam = {
   logo?: string;
   abbrev?: string;
   owners?: string[];
+  primaryOwner?: string;
+  swid?: string;
 };
 
 type EspnLeagueView = {
@@ -318,14 +320,25 @@ function espnTeamName(t: EspnTeam | undefined): string | null {
   return combined || null;
 }
 
+function espnSwidCookie(swid: string | null | undefined): string | null {
+  const raw = swid?.trim();
+  if (!raw) return null;
+  const bare = raw.replace(/[{}]/g, "");
+  return `{${bare.toUpperCase()}}`;
+}
+
 async function espnJson<T>(url: string, s2?: string | null, swid?: string | null): Promise<T | null> {
   try {
-    const headers: Record<string, string> = { "User-Agent": "Mozilla/5.0" };
-    if (s2 || swid) {
-      const parts = [];
-      if (s2) parts.push(`espn_s2=${s2}`);
-      if (swid) parts.push(`SWID=${swid}`);
-      headers["Cookie"] = parts.join("; ");
+    const headers: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0",
+      Accept: "application/json",
+    };
+    const cookieSwid = espnSwidCookie(swid);
+    if (s2 || cookieSwid) {
+      const parts: string[] = [];
+      if (s2) parts.push(`espn_s2=${s2.trim()}`);
+      if (cookieSwid) parts.push(`SWID=${cookieSwid}`);
+      headers["Cookie"] = `${parts.join("; ")};`;
     }
     const res = await fetch(url, { headers });
     if (!res.ok) return null;
@@ -355,8 +368,18 @@ export async function loadEspnConnectionMeta(
     const teams = league?.teams ?? [];
     if (!league?.settings || teams.length === 0) continue;
 
-    // Identify the user's own team from their SWID owner guid when available.
-    const mine = (swidGuid ? teams.find((t) => (t.owners ?? []).some((o) => o.toUpperCase().includes(swidGuid))) : undefined) ?? teams[0];
+    // Identify the user's own team by matching the stored SWID guid against
+    // every owner-ish identifier ESPN exposes on a team row.
+    const matchesSwid = (t: EspnTeam) => {
+      if (!swidGuid) return false;
+      const candidates: (string | undefined)[] = [
+        ...(t.owners ?? []),
+        t.primaryOwner,
+        t.swid,
+      ];
+      return candidates.some((c) => c && c.replace(/[{}]/g, "").toUpperCase() === swidGuid);
+    };
+    const mine = teams.find(matchesSwid) ?? teams[0];
     const rec = league.settings?.scoringSettings?.scoringItems?.find((s) => s.statId === 53)?.points ?? null;
     return {
       leagueName: league.settings?.name ?? null,
