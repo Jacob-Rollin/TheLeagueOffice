@@ -115,6 +115,7 @@ export function ProfileMenu() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const { data: profile } = useProfile(user?.id ?? null);
+  const { leagues, activeLeagueId, setActiveLeagueId } = useActiveLeague();
 
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
