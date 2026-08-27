@@ -162,52 +162,36 @@ export function ProfileMenu() {
                 </p>
 
                 <div className="mt-1 flex-1 space-y-1">
-                  {leagues.length > 0 ? (
-                    leagues.map((league) => (
+                  {(leagues?.length ?? 0) > 0 ? (
+                    (leagues ?? []).map((league) => (
                       <button
-                        key={league.id}
+                        key={league?.id}
                         type="button"
-                        onClick={() => setActiveLeagueId(league.id)}
+                        onClick={() => league?.id && setActiveLeagueId(league.id)}
                         className={cn(
                           "flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors",
-                          league.id === activeLeagueId
+                          league?.id === activeLeagueId
                             ? "border-accent bg-accent/10"
                             : "border-transparent hover:bg-muted",
                         )}
                       >
-                        <span
-                          className={cn(
-                            "size-8 shrink-0 overflow-hidden rounded-full border border-border flex items-center justify-center",
-                            league.platform === "espn"
-                              ? "bg-neutral-800"
-                              : league.platform === "yahoo"
-                                ? "bg-purple-50"
-                                : "bg-background",
-                          )}
-                        >
-                          <LeagueAvatar
-                            platform={league.platform}
-                            src={league.avatar}
-                            alt=""
-                            className={
-                              league.platform === "espn"
-                                ? "text-red-600"
-                                : league.platform === "yahoo"
-                                  ? "text-purple-700"
-                                  : undefined
-                            }
-                          />
-                        </span>
+                        <LeagueAvatar
+                          platform={league?.platform}
+                          src={league?.avatar}
+                          alt=""
+                          className="size-8"
+                        />
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-semibold text-black">
-                            {league.name}
+                            {league?.name ?? "League"}
                           </span>
                           <span className="block truncate text-xs text-black">
-                            {league.teamName ?? "My Team"}
+                            {league?.teamName ?? "My Team"}
                           </span>
                         </span>
                       </button>
                     ))
+
                   ) : (
                     <div className="flex items-center justify-center px-2 py-8">
                       <p className="font-display text-xs font-semibold uppercase tracking-widest text-black">
