@@ -121,14 +121,15 @@ function LeagueRow({
 }) {
   const identifier =
     row?.sleeper_user_id ?? row?.espn_league_id ?? row?.yahoo_league_key ?? row?.label ?? "";
-  const platform = PLATFORM_LABEL[row?.platform ?? ""] ?? row?.platform ?? "Sleeper";
+  const platformKey = row?.platform ?? "sleeper";
+  const platform = PLATFORM_LABEL[platformKey] ?? platformKey;
 
   const { data: meta } = useQuery({
-    queryKey: ["connection-meta", row?.id, identifier],
-    enabled: row?.platform === "sleeper" && identifier.length > 0,
+    queryKey: ["connection-meta", row?.id, platformKey, identifier],
+    enabled: (platformKey === "sleeper" || platformKey === "espn") && identifier.length > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
-    queryFn: () => getConnectionMeta({ data: { identifier } }),
+    queryFn: () => getConnectionMeta({ data: { identifier, platform: platformKey } }),
   });
 
   const [imgOk, setImgOk] = useState(true);

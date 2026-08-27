@@ -69,9 +69,9 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
       const { getConnectionMeta } = await import("@/lib/league.functions");
       return await Promise.all(
         rows.map(async (row) => {
-          if (row.platform !== "sleeper" || !row.leagueId) return row;
+          if ((row.platform !== "sleeper" && row.platform !== "espn") || !row.leagueId) return row;
           try {
-            const meta = await getConnectionMeta({ data: { identifier: row.leagueId } });
+            const meta = await getConnectionMeta({ data: { identifier: row.leagueId, platform: row.platform } });
             return {
               ...row,
               name: meta?.leagueName ?? row.name,
