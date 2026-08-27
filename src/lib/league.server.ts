@@ -271,3 +271,73 @@ export async function loadLeagueSync(leagueId: string, username?: string): Promi
     picks,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Connection metadata: league title, the user's team name, avatar
+// ---------------------------------------------------------------------------
+
+export type ConnectionMeta = {
+  leagueName: string | null;
+  teamName: string | null;
+  avatar: string | null;
+  scoring: string | null;
+  teams: number | null;
+};
+
+function sleeperAvatar(id: string | null | undefined) {
+  return id ? `https://sleepercdn.com/avatars/thumbs/${id}` : null;
+}
+
+export async function loadConnectionMeta(identifier: string): Promise<ConnectionMeta> {
+  const clean = identifier.trim().replace(/^@/, "");
+  const empty: ConnectionMeta = {
+    leagueName: null,
+    teamName: null,
+    avatar: null,
+    scoring: null,
+    teams: null,
+  };
+  if (!clean) return empty;
+
+  let leagueId: string | null = null;
+  let userId: string | null = null;
+
+  if (/^\d{6,}$/.test(clean)) {
+    leagueId = clean;
+  } else {
+    const user = await json<{ user_id?: string; avatar?: string | null }>(
+      `${BASE}/user/${encodeURIComponent(clean)}`,
+    );
+    if (!user?.user_id) return empty;
+    userId = user.user_id;
+    const leagues = await loadUserLeagues(clean);
+    leagueId = leagues[0]?.id ?? null;
+    if (!leagueId) return { ...empty, avatar: sleeperAvatar(user.avatar) };
+  }
+
+  const [league, users] = await Promise.all([
+    json<{
+      name: string;
+      avatar?: string | null;
+      total_rosters?: number;
+      scoring_settings?: Record<string, unknown>;
+    }>(`${BASE}/league/${leagueId}`),
+    json<
+      { user_id: string; display_name: string; avatar: string | null; metadata?: { team_name?: string; avatar?: string } }[]
+    >(`${BASE}/league/${leagueId}/users`),
+  ]);
+
+  const me = userId ? (users ?? []).find((u) => u.user_id === userId) : undefined;
+
+  return {
+    leagueName: league?.name ?? null,
+    teamName: me?.metadata?.team_name?.trim() || me?.display_name || null,
+    avatar:
+      me?.metadata?.avatar ||
+      sleeperAvatar(me?.avatar) ||
+      sleeperAvatar(league?.avatar) ||
+      null,
+    scoring: league ? scoringLabel(league.scoring_settings) : null,
+    teams: league?.total_rosters ?? null,
+  };
+}

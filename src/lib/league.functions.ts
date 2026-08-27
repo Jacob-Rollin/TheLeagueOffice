@@ -27,3 +27,12 @@ export const getLeagueSync = createServerFn({ method: "GET" })
     const { loadLeagueSync } = await import("./league.server");
     return await loadLeagueSync(data.leagueId, data.username);
   });
+
+export const getConnectionMeta = createServerFn({ method: "GET" })
+  .inputValidator((input: { identifier: string }) => ({
+    identifier: String(input.identifier ?? "").slice(0, 64),
+  }))
+  .handler(async ({ data }) => {
+    const { loadConnectionMeta } = await import("./league.server");
+    return await loadConnectionMeta(data.identifier);
+  });
