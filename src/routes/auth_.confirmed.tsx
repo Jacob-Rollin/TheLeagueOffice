@@ -86,6 +86,8 @@ function ConfirmedPage() {
       <CheckCircle2 className="size-16 text-emerald-500" aria-hidden />
       <h1 className="display-title mt-6 text-3xl uppercase tracking-wide">Email Successfully Confirmed</h1>
       <p className="mt-2 text-sm text-muted-foreground">Your roster handle is now active.</p>
+      {syncNote && <p className="mt-2 text-sm text-black">{syncNote}</p>}
+
 
       <div className="mt-8 w-full rounded-xl border border-border bg-card p-6">
         <p className="text-sm text-muted-foreground">
