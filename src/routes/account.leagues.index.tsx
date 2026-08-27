@@ -75,11 +75,13 @@ function LeaguesPage() {
     if (!window.confirm("Delete this synced league? This cannot be undone.")) return;
     const { error } = await supabase.from("league_connections").delete().eq("id", id);
     if (error) setStatus(error.message);
+    // Flush all league list caches — including the global navbar/context cache —
+    // so the deleted league (and its avatar) disappears everywhere instantly.
     queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
+    queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
   };
 
   const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
-  const showBaseline = rows.length === 0;
 
   return (
     <AccountShell
@@ -93,31 +95,22 @@ function LeaguesPage() {
     >
       {status && <p className="mb-4 text-sm text-muted-foreground">{status}</p>}
 
-      <ul className="space-y-3">
-        {rows.map((row) => (
-          <LeagueRow key={row?.id} row={row} onDelete={remove} />
-        ))}
-        {showBaseline && <LeagueRow row={BASELINE_ROW} baseline onDelete={() => {}} />}
-      </ul>
+      {rows.length === 0 ? (
+        <div className="flex items-center justify-center rounded-xl border border-border bg-card px-4 py-16">
+          <p className="font-display text-sm font-semibold uppercase tracking-widest text-black">
+            No Active Leagues
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {rows.map((row) => (
+            <LeagueRow key={row?.id} row={row} onDelete={remove} />
+          ))}
+        </ul>
+      )}
     </AccountShell>
   );
 }
-
-const BASELINE_ROW: ConnectionRow = {
-  id: "baseline",
-  platform: "sleeper",
-  label: "The League",
-  sleeper_user_id: null,
-  espn_league_id: null,
-  yahoo_league_key: null,
-};
-
-const BASELINE_META = {
-  leagueName: "The League",
-  teamName: "Scattebo's Gymnast Club",
-  scoring: "Half PPR",
-  teams: 10,
-};
 
 function LeagueRow({
   row,
