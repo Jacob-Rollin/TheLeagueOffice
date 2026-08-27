@@ -84,6 +84,7 @@ function ProfileCard({ userId }: { userId: string | null }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -91,104 +92,107 @@ function ProfileCard({ userId }: { userId: string | null }) {
   }, [profile?.full_name]);
 
   useEffect(() => {
-    setEmail(user?.email ?? "");
-  }, [user?.email]);
+    setEmail(profile?.email ?? user?.email ?? "");
+  }, [profile?.email, user?.email]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) return;
-    const clean = name.trim();
-    if (clean.length < 2) {
+    const fullName = name.trim();
+    const nextEmail = email.trim();
+    if (fullName.length < 2) {
+      setOk(false);
       setStatus("Please enter at least 2 characters.");
       return;
     }
     setBusy(true);
     setStatus(null);
-    const { error } = await supabase.from("profiles").update({ full_name: clean }).eq("id", userId);
-    if (!error) await supabase.auth.updateUser({ data: { full_name: clean, name: clean } });
 
-    let message = error ? error.message : "Profile updated.";
-    const nextEmail = email.trim();
-    if (!error && nextEmail && nextEmail !== user?.email) {
+    const { error } = await supabase
+      .from("profiles")
+      .upsert({ id: userId, full_name: fullName, email: nextEmail });
+
+    if (error) {
+      setBusy(false);
+      setOk(false);
+      setStatus(error.message);
+      return;
+    }
+
+    await supabase.auth.updateUser({ data: { full_name: fullName, name: fullName } });
+
+    let message = "Profile saved.";
+    if (nextEmail && nextEmail !== user?.email) {
       const { error: emailError } = await supabase.auth.updateUser({ email: nextEmail });
-      message = emailError ? emailError.message : "Profile updated. Confirm the new email address.";
+      message = emailError ? emailError.message : "Profile saved. Confirm the new email address.";
+      if (emailError) setOk(false);
+      else setOk(true);
+    } else {
+      setOk(true);
     }
 
     setBusy(false);
     setStatus(message);
-    queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+    await queryClient.invalidateQueries({ queryKey: ["profile", userId] });
   };
 
   return (
     <section className={cardClass}>
-      <form onSubmit={save} className="space-y-4">
-        <label className={labelClass}>
-          Full Name
+      <form onSubmit={save} className="flex max-w-sm flex-col gap-5">
+        <div className="flex flex-col">
+          <span className={labelClass}>Full Name</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className={cn(inputClass, "max-w-sm")}
+            placeholder="Your full name"
+            className={cn(inputClass, "text-black placeholder:text-black/60")}
             required
             minLength={2}
           />
-        </label>
-        <label className={labelClass}>
-          Email
+        </div>
+
+        <div className="flex flex-col">
+          <span className={labelClass}>Email</span>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className={cn(inputClass, "max-w-sm")}
+            placeholder="you@example.com"
+            className={cn(inputClass, "text-black placeholder:text-black/60")}
             required
           />
-        </label>
-        <div>
-          <span className={labelClass}>Avatar</span>
-          <AvatarRow userId={userId} />
         </div>
-        <button type="submit" disabled={busy} className={buttonClass}>
-          {busy ? "Saving…" : "Save Profile"}
-        </button>
-        {status && <p className="text-sm text-muted-foreground">{status}</p>}
+
+        <div>
+          <button type="submit" disabled={busy} className={cn(buttonClass, "inline-flex items-center gap-2")}>
+            {busy && (
+              <span
+                aria-hidden
+                className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+              />
+            )}
+            {busy ? "Saving…" : "Save Profile"}
+          </button>
+        </div>
+
+        {status && (
+          <p
+            role="status"
+            className={cn(
+              "rounded-md border px-3 py-2 text-sm",
+              ok
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
+                : "border-destructive/40 bg-destructive/10 text-destructive",
+            )}
+          >
+            {status}
+          </p>
+        )}
       </form>
     </section>
   );
 }
 
-function AvatarRow({ userId }: { userId: string | null }) {
-  const queryClient = useQueryClient();
-  const { data: profile } = useProfile(userId);
-  const [status, setStatus] = useState<string | null>(null);
-
-  const pick = async (url: string) => {
-    if (!userId) return;
-    const { error } = await supabase.from("profiles").update({ avatar_url: url }).eq("id", userId);
-    setStatus(error ? error.message : "Avatar updated.");
-    queryClient.invalidateQueries({ queryKey: ["profile", userId] });
-  };
-
-  return (
-    <div>
-      <div className="mt-2 flex flex-wrap gap-3">
-        {AVATAR_CHOICES.map((choice) => (
-          <button
-            key={choice.id}
-            type="button"
-            onClick={() => pick(choice.url)}
-            aria-label={`Use ${choice.label} avatar`}
-            className={cn(
-              "size-14 overflow-hidden rounded-full border-2 transition-colors",
-              profile?.avatar_url === choice.url ? "border-accent" : "border-border hover:border-ring",
-            )}
-          >
-            <img src={choice.url} alt="" width={56} height={56} className="size-full object-cover" loading="lazy" />
-          </button>
-        ))}
-      </div>
-      {status && <p className="mt-2 text-sm text-muted-foreground">{status}</p>}
-    </div>
-  );
-}
 
 
 function PasswordCard() {
