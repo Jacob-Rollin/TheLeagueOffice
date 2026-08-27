@@ -19,6 +19,7 @@ export function PlayerAvatar({
   name,
   className,
   logoClassName,
+  style,
 }: {
   id: string;
   pos: Pos;
@@ -26,10 +27,11 @@ export function PlayerAvatar({
   name: string;
   className?: string;
   logoClassName?: string;
+  style?: React.CSSProperties;
 }) {
   const logo = teamLogo(team);
   return (
-    <div className={cn("relative size-16 shrink-0", className)}>
+    <div className={cn("relative size-16 shrink-0", className)} style={style}>
       <div className="flex size-full items-center justify-center overflow-hidden rounded-full border border-border bg-surface">
         <img
           src={playerImage(id, pos, team)}
