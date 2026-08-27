@@ -6,7 +6,7 @@ type LeagueAvatarProps = {
   platform: string;
   src: string | null | undefined;
   alt: string;
-  className?: string;
+  className?: string | undefined;
 };
 
 export function LeagueAvatar({ platform, src, alt, className }: LeagueAvatarProps) {
