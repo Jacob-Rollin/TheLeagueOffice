@@ -135,7 +135,8 @@ function LeaguesPage() {
       value === current ? "border-accent bg-accent/10 text-foreground" : "border-border text-muted-foreground",
     );
 
-  const rows = connections ?? [];
+  const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
+  const showBaseline = rows.length === 0;
 
   return (
     <AccountShell
@@ -204,34 +205,57 @@ function LeaguesPage() {
 
       <ul className="space-y-3">
         {rows.map((row) => (
-          <LeagueRow key={row.id} row={row} onDelete={remove} />
+          <LeagueRow key={row?.id} row={row} onDelete={remove} />
         ))}
-        {rows.length === 0 && (
-          <li className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
-            No leagues synced yet.
-          </li>
-        )}
+        {showBaseline && <LeagueRow row={BASELINE_ROW} baseline onDelete={() => {}} />}
       </ul>
     </AccountShell>
   );
 }
 
-function LeagueRow({ row, onDelete }: { row: ConnectionRow; onDelete: (id: string) => void }) {
-  const identifier = row.sleeper_user_id ?? row.espn_league_id ?? row.yahoo_league_key ?? row.label ?? "";
-  const platform = PLATFORM_LABEL[row.platform] ?? row.platform;
+const BASELINE_ROW: ConnectionRow = {
+  id: "baseline",
+  platform: "sleeper",
+  label: "The League",
+  sleeper_user_id: null,
+  espn_league_id: null,
+  yahoo_league_key: null,
+};
+
+const BASELINE_META = {
+  leagueName: "The League",
+  teamName: "Scattebo's Gymnast Club",
+  scoring: "Half PPR",
+  teams: 10,
+};
+
+function LeagueRow({
+  row,
+  onDelete,
+  baseline = false,
+}: {
+  row: ConnectionRow;
+  onDelete: (id: string) => void;
+  baseline?: boolean;
+}) {
+  const identifier =
+    row?.sleeper_user_id ?? row?.espn_league_id ?? row?.yahoo_league_key ?? row?.label ?? "";
+  const platform = PLATFORM_LABEL[row?.platform ?? ""] ?? row?.platform ?? "Sleeper";
 
   const { data: meta } = useQuery({
-    queryKey: ["connection-meta", row.id, identifier],
-    enabled: row.platform === "sleeper" && identifier.length > 0,
+    queryKey: ["connection-meta", row?.id, identifier],
+    enabled: !baseline && row?.platform === "sleeper" && identifier.length > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
     queryFn: () => getConnectionMeta({ data: { identifier } }),
   });
 
   const [imgOk, setImgOk] = useState(true);
-  const leagueName = meta?.leagueName ?? row.label ?? "The League";
-  const subtitle = meta?.teamName ? `${meta.teamName} - ${platform}` : platform;
-  const avatar = imgOk ? meta?.avatar : null;
+  const fallback = baseline ? BASELINE_META : null;
+  const leagueName = meta?.leagueName ?? fallback?.leagueName ?? row?.label ?? "The League";
+  const teamName = meta?.teamName ?? fallback?.teamName ?? null;
+  const subtitle = teamName ? `${teamName} - ${platform}` : platform;
+  const avatar = imgOk ? (meta?.avatar ?? null) : null;
 
   return (
     <li className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card px-4 py-4">
@@ -264,15 +288,15 @@ function LeagueRow({ row, onDelete }: { row: ConnectionRow; onDelete: (id: strin
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? "Half PPR"}</span>
+        <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? fallback?.scoring ?? "Half PPR"}</span>
         <span className="rounded-md border border-border px-2 py-1">Redraft</span>
-        <span className="rounded-md border border-border px-2 py-1">{meta?.teams ?? 10} Team</span>
+        <span className="rounded-md border border-border px-2 py-1">{meta?.teams ?? fallback?.teams ?? 10} Team</span>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
         <Link
           to="/account/leagues/$connectionId"
-          params={{ connectionId: row.id }}
+          params={{ connectionId: row?.id }}
           className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
         >
           Settings
@@ -286,11 +310,11 @@ function LeagueRow({ row, onDelete }: { row: ConnectionRow; onDelete: (id: strin
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem asChild className="font-medium">
-              <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }}>
+              <Link to="/account/leagues/$connectionId" params={{ connectionId: row?.id }}>
                 League Settings
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem className="font-medium" onSelect={() => onDelete(row.id)}>
+            <DropdownMenuItem className="font-medium" onSelect={() => onDelete(row?.id)}>
               Delete League
             </DropdownMenuItem>
           </DropdownMenuContent>
