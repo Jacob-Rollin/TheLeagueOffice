@@ -124,6 +124,8 @@ export function ProfileMenu() {
   };
 
   const initials = (profile?.full_name ?? user?.email ?? "?").slice(0, 1).toUpperCase();
+  const activeLeague = leagues.find((l) => l.id === activeLeagueId) ?? null;
+  const navAvatar = activeLeague?.avatar ?? profile?.avatar_url ?? null;
 
   return (
     <>
@@ -131,15 +133,15 @@ export function ProfileMenu() {
         <DropdownMenuTrigger
           aria-label="Profile and settings"
           className={cn(
-            "grid size-8 shrink-0 place-items-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
+            "grid size-8 shrink-0 place-items-center overflow-hidden rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
           )}
         >
           {ready && user ? (
-            profile?.avatar_url ? (
+            navAvatar ? (
               <img
-                src={profile.avatar_url}
+                src={navAvatar}
                 alt=""
-                className="size-8 rounded-full object-cover"
+                className="size-8 rounded-full border border-neutral-200 object-cover"
                 width={32}
                 height={32}
               />
@@ -153,11 +155,12 @@ export function ProfileMenu() {
         <DropdownMenuContent align="end" className={ready && user ? "w-[26rem] p-0" : "w-56"}>
           {ready && user ? (
             <div className="flex">
-              {/* Left pane — synced NFL leagues */}
+              {/* Left pane — synced leagues */}
               <div className="flex w-[60%] flex-col border-r border-border p-2">
-                <p className="px-2 py-1 font-display text-[11px] uppercase tracking-widest text-muted-foreground">
-                  NFL Leagues
+                <p className="px-2 py-1 font-display text-[11px] font-semibold uppercase tracking-widest text-foreground">
+                  Active Leagues
                 </p>
+
                 <div className="mt-1 flex-1 space-y-1">
                   {leagues.length > 0 ? (
                     leagues.map((league) => (
