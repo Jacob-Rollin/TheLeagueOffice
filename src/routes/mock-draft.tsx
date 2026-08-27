@@ -457,6 +457,7 @@ function MockDraftPage() {
                   players={myPlayers}
                   picks={picks}
                   onOpen={openPlayer}
+                  fit
                 />
               </SideCard>
             </aside>
