@@ -6,6 +6,7 @@ import { AccountShell } from "@/components/account/AccountShell";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { getConnectionMeta } from "@/lib/league.functions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -203,59 +204,7 @@ function LeaguesPage() {
 
       <ul className="space-y-3">
         {rows.map((row) => (
-          <li
-            key={row.id}
-            className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card px-4 py-4"
-          >
-            <span
-              aria-label="Synced"
-              className="flex size-6 shrink-0 items-center justify-center rounded-full border border-emerald-500 text-xs font-bold text-emerald-600"
-            >
-              ✓
-            </span>
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-background font-display text-xs uppercase text-muted-foreground">
-              {(PLATFORM_LABEL[row.platform] ?? row.platform).slice(0, 2)}
-            </span>
-
-            <div className="min-w-[10rem] flex-1">
-              <p className="text-sm font-semibold text-foreground">{row.label ?? "The League"}</p>
-              <p className="text-xs text-muted-foreground">{PLATFORM_LABEL[row.platform] ?? row.platform}</p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <span className="rounded-md border border-border px-2 py-1">Half PPR</span>
-              <span className="rounded-md border border-border px-2 py-1">Redraft</span>
-              <span className="rounded-md border border-border px-2 py-1">10 Team</span>
-            </div>
-
-            <div className="ml-auto flex items-center gap-2">
-              <Link
-                to="/account/leagues/$connectionId"
-                params={{ connectionId: row.id }}
-                className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
-              >
-                Settings
-              </Link>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  aria-label="League options"
-                  className="rounded-md border border-border px-2 py-1.5 text-xs leading-none text-foreground"
-                >
-                  ⋮
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem asChild className="font-medium">
-                    <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }}>
-                      League Settings
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="font-medium" onSelect={() => remove(row.id)}>
-                    Delete League
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </li>
+          <LeagueRow key={row.id} row={row} onDelete={remove} />
         ))}
         {rows.length === 0 && (
           <li className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
@@ -264,5 +213,89 @@ function LeaguesPage() {
         )}
       </ul>
     </AccountShell>
+  );
+}
+
+function LeagueRow({ row, onDelete }: { row: ConnectionRow; onDelete: (id: string) => void }) {
+  const identifier = row.sleeper_user_id ?? row.espn_league_id ?? row.yahoo_league_key ?? row.label ?? "";
+  const platform = PLATFORM_LABEL[row.platform] ?? row.platform;
+
+  const { data: meta } = useQuery({
+    queryKey: ["connection-meta", row.id, identifier],
+    enabled: row.platform === "sleeper" && identifier.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    queryFn: () => getConnectionMeta({ data: { identifier } }),
+  });
+
+  const [imgOk, setImgOk] = useState(true);
+  const leagueName = meta?.leagueName ?? row.label ?? "The League";
+  const subtitle = meta?.teamName ? `${meta.teamName} - ${platform}` : platform;
+  const avatar = imgOk ? meta?.avatar : null;
+
+  return (
+    <li className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card px-4 py-4">
+      <span
+        aria-label="Synced"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full border border-emerald-500 text-xs font-bold text-emerald-600"
+      >
+        ✓
+      </span>
+
+      <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-background">
+        {avatar ? (
+          <img
+            src={avatar}
+            alt={`${leagueName} team avatar`}
+            loading="lazy"
+            className="size-full object-cover"
+            onError={() => setImgOk(false)}
+          />
+        ) : (
+          <svg viewBox="0 0 24 24" aria-hidden className="size-5 text-muted-foreground" fill="currentColor">
+            <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9Zm6.92 8H16.5a12.7 12.7 0 0 0-.83-4.2A7.02 7.02 0 0 1 18.92 11ZM12 5.06c.62.98 1.32 2.83 1.47 5.94h-2.94c.15-3.11.85-4.96 1.47-5.94ZM8.33 6.8A12.7 12.7 0 0 0 7.5 11H5.08A7.02 7.02 0 0 1 8.33 6.8ZM5.08 13H7.5c.07 1.5.35 2.94.83 4.2A7.02 7.02 0 0 1 5.08 13Zm6.92 5.94c-.62-.98-1.32-2.83-1.47-5.94h2.94c-.15 3.11-.85 4.96-1.47 5.94Zm3.67-1.74c.48-1.26.76-2.7.83-4.2h2.42a7.02 7.02 0 0 1-3.25 4.2Z" />
+          </svg>
+        )}
+      </span>
+
+      <div className="min-w-[10rem] flex-1">
+        <p className="text-base font-semibold leading-tight text-foreground">{leagueName}</p>
+        <p className="text-sm font-medium leading-tight text-muted-foreground">{subtitle}</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? "Half PPR"}</span>
+        <span className="rounded-md border border-border px-2 py-1">Redraft</span>
+        <span className="rounded-md border border-border px-2 py-1">{meta?.teams ?? 10} Team</span>
+      </div>
+
+      <div className="ml-auto flex items-center gap-2">
+        <Link
+          to="/account/leagues/$connectionId"
+          params={{ connectionId: row.id }}
+          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
+        >
+          Settings
+        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="League options"
+            className="rounded-md border border-border px-2 py-1.5 text-xs leading-none text-foreground"
+          >
+            ⋮
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem asChild className="font-medium">
+              <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }}>
+                League Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="font-medium" onSelect={() => onDelete(row.id)}>
+              Delete League
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </li>
   );
 }
