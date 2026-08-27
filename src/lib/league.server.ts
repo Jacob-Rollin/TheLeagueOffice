@@ -288,6 +288,63 @@ function sleeperAvatar(id: string | null | undefined) {
   return id ? `https://sleepercdn.com/avatars/thumbs/${id}` : null;
 }
 
+// ---------------------------------------------------------------------------
+// ESPN public league metadata
+// ---------------------------------------------------------------------------
+
+type EspnTeam = {
+  id?: number;
+  name?: string;
+  location?: string;
+  nickname?: string;
+  logo?: string;
+  abbrev?: string;
+};
+
+type EspnLeagueView = {
+  settings?: { name?: string; size?: number; scoringSettings?: { scoringItems?: { statId?: number; points?: number }[] } };
+  teams?: EspnTeam[];
+  members?: { id?: string }[];
+};
+
+function espnTeamName(t: EspnTeam | undefined): string | null {
+  if (!t) return null;
+  const named = t.name?.trim();
+  if (named) return named;
+  const loc = t.location?.trim() ?? "";
+  const nick = t.nickname?.trim() ?? "";
+  const combined = `${loc} ${nick}`.trim();
+  return combined || null;
+}
+
+export async function loadEspnConnectionMeta(leagueId: string): Promise<ConnectionMeta> {
+  const empty: ConnectionMeta = { leagueName: null, teamName: null, avatar: null, scoring: null, teams: null };
+  const id = leagueId.trim();
+  if (!/^\d+$/.test(id)) return empty;
+  const season = new Date().getFullYear();
+
+  for (const year of [season, season - 1]) {
+    const league = await json<EspnLeagueView>(
+      `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(id)}?view=mSettings&view=mTeam`,
+    );
+    const teams = league?.teams ?? [];
+    if (!league || teams.length === 0) continue;
+
+    // The user's team isn't identifiable from the public payload, so surface the
+    // first active roster's branding as the card identity.
+    const mine = teams[0];
+    const rec = league.settings?.scoringSettings?.scoringItems?.find((s) => s.statId === 53)?.points ?? null;
+    return {
+      leagueName: league.settings?.name ?? null,
+      teamName: espnTeamName(mine),
+      avatar: mine?.logo ?? null,
+      scoring: rec == null ? null : rec >= 1 ? "Full PPR" : rec > 0 ? "Half PPR" : "Standard",
+      teams: league.settings?.size ?? teams.length,
+    };
+  }
+  return empty;
+}
+
 export async function loadConnectionMeta(identifier: string): Promise<ConnectionMeta> {
   const clean = identifier.trim().replace(/^@/, "");
   const empty: ConnectionMeta = {
