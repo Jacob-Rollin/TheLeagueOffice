@@ -113,13 +113,14 @@ export function ProfileMenu() {
   const navigate = useNavigate();
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
+  const { data: profile } = useProfile(user?.id ?? null);
 
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
     setAuthOpen(true);
   };
 
-  const initials = (user?.email ?? "?").slice(0, 1).toUpperCase();
+  const initials = (profile?.full_name ?? user?.email ?? "?").slice(0, 1).toUpperCase();
 
   return (
     <>
