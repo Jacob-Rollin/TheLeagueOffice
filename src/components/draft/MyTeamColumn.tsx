@@ -8,18 +8,28 @@ export function SideCard({
   title,
   subtitle,
   children,
+  fit,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
+  /** Fill the parent height exactly and never scroll internally. */
+  fit?: boolean;
 }) {
   return (
-    <div className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
-      <div className="border-b border-border px-3 py-2">
+    <div
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card",
+        fit ? "h-full" : "max-h-full",
+      )}
+    >
+      <div className="shrink-0 border-b border-border px-3 py-1.5">
         <div className="font-display text-sm uppercase tracking-widest">{title}</div>
         {subtitle && <div className="text-[11px] text-muted-foreground">{subtitle}</div>}
       </div>
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto p-2">{children}</div>
+      <div className={cn("min-h-0 flex-1 p-2", fit ? "overflow-hidden" : "no-scrollbar overflow-y-auto")}>
+        {children}
+      </div>
     </div>
   );
 }
