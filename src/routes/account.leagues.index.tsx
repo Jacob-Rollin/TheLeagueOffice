@@ -150,8 +150,6 @@ function LeagueRow({
   const leagueName = meta?.leagueName ?? row?.label ?? "League";
   const teamName = meta?.teamName ?? null;
   const subtitle = teamName ? `${teamName} - ${platform}` : platform;
-  const avatarBg = isEspn ? "bg-neutral-800" : isYahoo ? "bg-purple-50" : "bg-background";
-  const avatarColor = isEspn ? "text-red-600" : isYahoo ? "text-purple-700" : "text-muted-foreground";
 
   return (
     <li className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card px-4 py-4">
@@ -162,24 +160,8 @@ function LeagueRow({
         ✓
       </span>
 
-      <span
-        className={cn(
-          "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border",
-          avatarBg,
-        )}
-      >
-        <LeagueAvatar
-          platform={platformKey}
-          src={avatar}
-          alt={`${leagueName} team avatar`}
-          className={cn("size-full object-cover", avatarColor)}
-        />
-        {!avatar && !isEspn && !isYahoo && (
-          <svg viewBox="0 0 24 24" aria-hidden className="size-5 text-muted-foreground" fill="currentColor">
-            <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9Zm6.92 8H16.5a12.7 12.7 0 0 0-.83-4.2A7.02 7.02 0 0 1 18.92 11ZM12 5.06c.62.98 1.32 2.83 1.47 5.94h-2.94c.15-3.11.85-4.96 1.47-5.94ZM8.33 6.8A12.7 12.7 0 0 0 7.5 11H5.08A7.02 7.02 0 0 1 8.33 6.8ZM5.08 13H7.5c.07 1.5.35 2.94.83 4.2A7.02 7.02 0 0 1 5.08 13Zm6.92 5.94c-.62-.98-1.32-2.83-1.47-5.94h2.94c-.15 3.11-.85 4.96-1.47 5.94Zm3.67-1.74c.48-1.26.76-2.7.83-4.2h2.42a7.02 7.02 0 0 1-3.25 4.2Z" />
-          </svg>
-        )}
-      </span>
+      <LeagueAvatar platform={platformKey} src={avatar} alt={`${leagueName} team avatar`} />
+
 
       <div className="min-w-[10rem] flex-1">
         <p className="text-base font-semibold leading-tight text-black">{leagueName}</p>
