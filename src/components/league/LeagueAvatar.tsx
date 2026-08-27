@@ -10,41 +10,33 @@ type LeagueAvatarProps = {
   className?: string | undefined;
 };
 
-/** Official slanted crimson ESPN "E" mark. */
+/** Official slanted crimson ESPN "E" mark — real vector path geometry. */
 function EspnMark() {
   return (
-    <svg viewBox="0 0 64 32" className="h-6 w-6 object-contain" aria-hidden="true">
-      <text
-        x="32"
-        y="24"
-        textAnchor="middle"
-        fontFamily="Helvetica, Arial, sans-serif"
-        fontSize="26"
-        fontWeight="900"
-        fontStyle="italic"
+    <svg
+      viewBox="0 0 64 32"
+      className="h-8 w-8 -translate-x-[2px] object-contain"
+      aria-hidden="true"
+      role="img"
+    >
+      <path
         fill="#D50A0A"
-      >
-        E
-      </text>
+        d="M54.8 9.2H27.9l-1 4.4h25.1l-1.1 5.1H25.8l-.9 4.1h26.9l-1.2 5.3H18.4l3.8-24.2h32.6zM14.1 5.1l-3.8 24.2H4.5L8.3 5.1h5.8z"
+      />
     </svg>
   );
 }
 
-/** Official deep-purple Yahoo "Y!" mark. */
+/** Official deep-purple Yahoo "Y!" mark — real vector path geometry. */
 function YahooMark() {
   return (
-    <svg viewBox="0 0 64 32" className="h-6 w-6 object-contain" aria-hidden="true">
-      <text
-        x="32"
-        y="24"
-        textAnchor="middle"
-        fontFamily="Helvetica, Arial, sans-serif"
-        fontSize="24"
-        fontWeight="800"
+    <svg viewBox="0 0 64 32" className="h-8 w-8 object-contain" aria-hidden="true" role="img">
+      <path
         fill="#5F01D1"
-      >
-        Y!
-      </text>
+        d="M20.1 5.1h6.4l5 9.3 5-9.3h6.4l-8.4 15.2v9.4h-6.1v-9.4L20.1 5.1z"
+      />
+      <path fill="#5F01D1" d="M47.9 14.2h4.9l-2.6 15.5h-4.8l2.5-15.5z" />
+      <circle cx="49.6" cy="6.6" r="3" fill="#5F01D1" />
     </svg>
   );
 }
