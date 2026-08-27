@@ -225,13 +225,14 @@ function DraftRoom() {
         )}
       >
         {tab === "players" && (
-          <aside className="hidden md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)] md:block md:min-w-[280px] md:shrink-0 md:max-h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)]">
-            <SideCard title="My Team" subtitle={teamName(settings, settings.myTeam)}>
+          <aside className="hidden md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)] md:block md:min-w-[280px] md:shrink-0 md:h-[calc(100vh-var(--wr-header-h,0px)-1.5rem)] md:overflow-hidden">
+            <SideCard fit title="My Team" subtitle={teamName(settings, settings.myTeam)}>
               <MyTeamColumn
                 settings={settings}
                 players={myPlayers}
                 picks={picks}
                 onOpen={setOpenId}
+                fit
               />
             </SideCard>
           </aside>
