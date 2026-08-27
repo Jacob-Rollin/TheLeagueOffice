@@ -11,7 +11,7 @@ type LeagueAvatarProps = {
 };
 
 const FALLBACK_SHELL =
-  "bg-white border border-neutral-200 w-10 h-10 rounded-full flex items-center justify-center p-1.5 overflow-hidden";
+  "bg-white border border-neutral-200 size-10 shrink-0 rounded-full flex items-center justify-center relative p-0.5 overflow-hidden";
 
 export function LeagueAvatar({ platform, src, alt = "", className }: LeagueAvatarProps) {
   const [failed, setFailed] = useState(false);
@@ -29,22 +29,27 @@ export function LeagueAvatar({ platform, src, alt = "", className }: LeagueAvata
 
   if (!url || failed) {
     return (
-      <span className={FALLBACK_SHELL}>
+      <span className={cn(FALLBACK_SHELL, className)}>
         {key === "espn" ? (
-          <img
-            src="/espn-fallback.svg"
-            alt={alt || "ESPN"}
-            className="h-8 w-8 object-contain transform -translate-x-[1px]"
-            aria-hidden="true"
-          />
+          <span className="flex h-8 w-8 items-center justify-center overflow-hidden">
+            <img
+              src="/espn-fallback.svg"
+              alt={alt || "ESPN"}
+              className="h-full w-full object-contain"
+              aria-hidden="true"
+            />
+          </span>
         ) : key === "yahoo" ? (
-          <img
-            src="/yahoo-fallback.svg"
-            alt={alt || "Yahoo"}
-            className="h-8 w-8 object-contain"
-            aria-hidden="true"
-          />
+          <span className="flex h-8 w-8 items-center justify-center overflow-hidden">
+            <img
+              src="/yahoo-fallback.svg"
+              alt={alt || "Yahoo"}
+              className="h-full w-full object-contain"
+              aria-hidden="true"
+            />
+          </span>
         ) : (
+
           <svg
             viewBox="0 0 24 24"
             className="h-6 w-6 object-contain text-neutral-400"
