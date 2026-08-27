@@ -22,6 +22,7 @@ import { Route as WaiverRouteImport } from './routes/waiver'
 import { Route as WarRoomRouteImport } from './routes/war-room'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
 import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
 import { Route as PlayerIdRouteImport } from './routes/player.$id'
@@ -95,6 +96,11 @@ const Char91DotwellKnownChar93OauthProtectedResourceRoute =
     path: '/.well-known/oauth-protected-resource',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AuthConfirmedRoute = AuthConfirmedRouteImport.update({
+  id: '/auth_/confirmed',
+  path: '/auth/confirmed',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MockDraftSetupRoute = MockDraftSetupRouteImport.update({
   id: '/mock-draft_/setup',
   path: '/mock-draft/setup',
@@ -136,6 +142,7 @@ export interface FileRoutesByFullPath {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
@@ -156,6 +163,7 @@ export interface FileRoutesByTo {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
@@ -177,6 +185,7 @@ export interface FileRoutesById {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/auth_/confirmed': typeof AuthConfirmedRoute
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
@@ -199,6 +208,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
     | '/player/$id'
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
     | '/player/$id'
@@ -239,6 +250,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/auth_/confirmed'
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
     | '/player/$id'
@@ -260,6 +272,7 @@ export interface RootRouteChildren {
   WarRoomRoute: typeof WarRoomRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  AuthConfirmedRoute: typeof AuthConfirmedRoute
   MockDraftSetupRoute: typeof MockDraftSetupRoute
   NflTeamNflIdRoute: typeof NflTeamNflIdRoute
   PlayerIdRoute: typeof PlayerIdRoute
@@ -360,6 +373,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth_/confirmed': {
+      id: '/auth_/confirmed'
+      path: '/auth/confirmed'
+      fullPath: '/auth/confirmed'
+      preLoaderRoute: typeof AuthConfirmedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mock-draft_/setup': {
       id: '/mock-draft_/setup'
       path: '/mock-draft/setup'
@@ -413,6 +433,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  AuthConfirmedRoute: AuthConfirmedRoute,
   MockDraftSetupRoute: MockDraftSetupRoute,
   NflTeamNflIdRoute: NflTeamNflIdRoute,
   PlayerIdRoute: PlayerIdRoute,
