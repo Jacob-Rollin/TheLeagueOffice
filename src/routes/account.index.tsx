@@ -31,7 +31,7 @@ export const Route = createFileRoute("/account/")({
 
 const inputClass =
   "mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring";
-const labelClass = "block text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+const labelClass = "block text-xs font-semibold uppercase tracking-wide text-black";
 const cardClass = "rounded-xl border border-border bg-card p-6";
 const buttonClass =
   "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
