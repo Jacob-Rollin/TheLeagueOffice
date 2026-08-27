@@ -115,11 +115,9 @@ function LeaguesPage() {
 function LeagueRow({
   row,
   onDelete,
-  baseline = false,
 }: {
   row: ConnectionRow;
   onDelete: (id: string) => void;
-  baseline?: boolean;
 }) {
   const identifier =
     row?.sleeper_user_id ?? row?.espn_league_id ?? row?.yahoo_league_key ?? row?.label ?? "";
@@ -127,16 +125,15 @@ function LeagueRow({
 
   const { data: meta } = useQuery({
     queryKey: ["connection-meta", row?.id, identifier],
-    enabled: !baseline && row?.platform === "sleeper" && identifier.length > 0,
+    enabled: row?.platform === "sleeper" && identifier.length > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
     queryFn: () => getConnectionMeta({ data: { identifier } }),
   });
 
   const [imgOk, setImgOk] = useState(true);
-  const fallback = baseline ? BASELINE_META : null;
-  const leagueName = meta?.leagueName ?? fallback?.leagueName ?? row?.label ?? "The League";
-  const teamName = meta?.teamName ?? fallback?.teamName ?? null;
+  const leagueName = meta?.leagueName ?? row?.label ?? "League";
+  const teamName = meta?.teamName ?? null;
   const subtitle = teamName ? `${teamName} - ${platform}` : platform;
   const avatar = imgOk ? (meta?.avatar ?? null) : null;
 
