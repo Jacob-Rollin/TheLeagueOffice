@@ -5,6 +5,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
+import { ActiveLeagueProvider } from "@/context/ActiveLeagueContext";
 import {
   ActiveOperationsMenu,
   FrontOfficeMenu,
@@ -148,9 +149,11 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <ScoreTicker />
-      <SiteNav />
-      <Outlet />
+      <ActiveLeagueProvider>
+        <ScoreTicker />
+        <SiteNav />
+        <Outlet />
+      </ActiveLeagueProvider>
     </QueryClientProvider>
   );
 }

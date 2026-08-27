@@ -4,6 +4,7 @@ import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronDown, Plus, User as UserIcon } from "lucide-react";
 
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
@@ -115,6 +116,7 @@ export function ProfileMenu() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const { data: profile } = useProfile(user?.id ?? null);
+  const { leagues, activeLeagueId, setActiveLeagueId } = useActiveLeague();
 
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
@@ -148,28 +150,82 @@ export function ProfileMenu() {
             <UserIcon className="size-4" />
           )}
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuContent align="end" className={ready && user ? "w-[26rem] p-0" : "w-56"}>
           {ready && user ? (
-            <>
-              <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
-                {user.email}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild className="font-medium">
-                <Link to="/account" className="block w-full">
-                  Account
+            <div className="flex">
+              {/* Left pane — synced NFL leagues */}
+              <div className="flex w-[60%] flex-col border-r border-border p-2">
+                <p className="px-2 py-1 font-display text-[11px] uppercase tracking-widest text-muted-foreground">
+                  NFL Leagues
+                </p>
+                <div className="mt-1 flex-1 space-y-1">
+                  {leagues.length > 0 ? (
+                    leagues.map((league) => (
+                      <button
+                        key={league.id}
+                        type="button"
+                        onClick={() => setActiveLeagueId(league.id)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors",
+                          league.id === activeLeagueId
+                            ? "border-accent bg-accent/10"
+                            : "border-transparent hover:bg-muted",
+                        )}
+                      >
+                        <span className="size-8 shrink-0 overflow-hidden rounded-full border border-border bg-background">
+                          {league.avatar && (
+                            <img src={league.avatar} alt="" className="size-full object-cover" />
+                          )}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-foreground">
+                            {league.name}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {league.teamName ?? "My Team"}
+                          </span>
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-2 py-2 text-xs text-muted-foreground">No leagues synced yet.</p>
+                  )}
+                </div>
+                <Link
+                  to="/leaguesync"
+                  className="mt-2 block w-full rounded-md bg-primary px-3 py-2 text-center font-display text-xs uppercase tracking-wide text-primary-foreground"
+                >
+                  Sync Another League
                 </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="font-medium"
-                onSelect={async () => {
-                  await signOut();
-                  navigate({ to: "/" });
-                }}
-              >
-                Sign Out
-              </DropdownMenuItem>
-            </>
+              </div>
+
+              {/* Right pane — account navigation */}
+              <div className="flex w-[40%] flex-col p-2">
+                <DropdownMenuLabel className="truncate px-2 text-xs font-normal text-muted-foreground">
+                  {user.email}
+                </DropdownMenuLabel>
+                <DropdownMenuItem asChild className="font-medium">
+                  <Link to="/account/leagues" className="block w-full">
+                    My Leagues
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="font-medium">
+                  <Link to="/account" className="block w-full">
+                    Account
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="font-medium"
+                  onSelect={async () => {
+                    await signOut();
+                    navigate({ to: "/" });
+                  }}
+                >
+                  Sign Out
+                </DropdownMenuItem>
+              </div>
+            </div>
           ) : (
             <>
               <DropdownMenuItem

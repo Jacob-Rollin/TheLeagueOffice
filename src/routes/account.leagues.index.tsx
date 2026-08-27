@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AccountShell } from "@/components/account/AccountShell";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { cn } from "@/lib/utils";
 import { getConnectionMeta } from "@/lib/league.functions";
 import {
   DropdownMenu,
@@ -33,13 +32,8 @@ export const Route = createFileRoute("/account/leagues/")({
   component: LeaguesPage,
 });
 
-const inputClass =
-  "mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring";
-const labelClass = "block text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 const buttonClass =
   "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
-
-type Platform = "sleeper" | "espn" | "yahoo";
 
 export type ConnectionRow = {
   id: string;
@@ -61,16 +55,7 @@ function LeaguesPage() {
   const userId = user?.id ?? null;
   const queryClient = useQueryClient();
 
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<Platform>("sleeper");
-  const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-
-  const [sleeperId, setSleeperId] = useState("");
-  const [espnLeague, setEspnLeague] = useState("");
-  const [espnS2, setEspnS2] = useState("");
-  const [espnSwid, setEspnSwid] = useState("");
-  const [yahooKey, setYahooKey] = useState("");
 
   const { data: connections } = useQuery({
     queryKey: ["league-connections", userId],
@@ -86,54 +71,12 @@ function LeaguesPage() {
     },
   });
 
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userId) return;
-    setBusy(true);
-    setStatus(null);
-    const label =
-      tab === "sleeper" ? sleeperId.trim() : tab === "espn" ? espnLeague.trim() : yahooKey.trim();
-
-    if (!label) {
-      setBusy(false);
-      setStatus("Enter a league identifier first.");
-      return;
-    }
-
-    const { error } = await supabase.from("league_connections").insert({
-      user_id: userId,
-      platform: tab,
-      label,
-      sleeper_user_id: tab === "sleeper" ? label : null,
-      espn_league_id: tab === "espn" ? label : null,
-      espn_s2: tab === "espn" ? espnS2.trim() || null : null,
-      espn_swid: tab === "espn" ? espnSwid.trim() || null : null,
-      yahoo_league_key: tab === "yahoo" ? label : null,
-    });
-    setBusy(false);
-    setStatus(error ? error.message : "League connection saved.");
-    if (!error) {
-      setSleeperId("");
-      setEspnLeague("");
-      setEspnS2("");
-      setEspnSwid("");
-      setYahooKey("");
-      queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
-    }
-  };
-
   const remove = async (id: string) => {
     if (!window.confirm("Delete this synced league? This cannot be undone.")) return;
     const { error } = await supabase.from("league_connections").delete().eq("id", id);
     if (error) setStatus(error.message);
     queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
   };
-
-  const tabClass = (value: string, current: string) =>
-    cn(
-      "rounded-md border px-3 py-1.5 font-display text-xs uppercase tracking-wide transition-colors",
-      value === current ? "border-accent bg-accent/10 text-foreground" : "border-border text-muted-foreground",
-    );
 
   const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
   const showBaseline = rows.length === 0;
@@ -143,65 +86,12 @@ function LeaguesPage() {
       title="My Leagues"
       active="leagues"
       action={
-        <button type="button" onClick={() => setOpen((v) => !v)} className={buttonClass}>
-          {open ? "Close" : "Sync New League"}
-        </button>
+        <Link to="/leaguesync" className={buttonClass}>
+          Sync New League
+        </Link>
       }
     >
-      {open && (
-        <div className="mb-6 rounded-xl border border-border bg-card p-6">
-          <div className="flex flex-wrap gap-2">
-            {(["sleeper", "espn", "yahoo"] as const).map((value) => (
-              <button key={value} type="button" className={tabClass(value, tab)} onClick={() => setTab(value)}>
-                {PLATFORM_LABEL[value]}
-              </button>
-            ))}
-          </div>
-
-          <form onSubmit={save} className="mt-4 max-w-md space-y-3">
-            {tab === "sleeper" && (
-              <label className={labelClass}>
-                Sleeper User Or League ID
-                <input value={sleeperId} onChange={(e) => setSleeperId(e.target.value)} className={inputClass} />
-              </label>
-            )}
-
-            {tab === "espn" && (
-              <>
-                <label className={labelClass}>
-                  ESPN League ID
-                  <input value={espnLeague} onChange={(e) => setEspnLeague(e.target.value)} className={inputClass} />
-                </label>
-                <label className={labelClass}>
-                  ESPN_S2
-                  <input value={espnS2} onChange={(e) => setEspnS2(e.target.value)} className={inputClass} />
-                </label>
-                <label className={labelClass}>
-                  SWID
-                  <input value={espnSwid} onChange={(e) => setEspnSwid(e.target.value)} className={inputClass} />
-                </label>
-              </>
-            )}
-
-            {tab === "yahoo" && (
-              <>
-                <label className={labelClass}>
-                  Yahoo League Key
-                  <input value={yahooKey} onChange={(e) => setYahooKey(e.target.value)} className={inputClass} />
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Yahoo requires an OAuth redirect. Save the league key now and authorize when prompted.
-                </p>
-              </>
-            )}
-
-            <button type="submit" disabled={busy} className={buttonClass}>
-              {busy ? "Saving…" : "Save Connection"}
-            </button>
-            {status && <p className="text-sm text-muted-foreground">{status}</p>}
-          </form>
-        </div>
-      )}
+      {status && <p className="mb-4 text-sm text-muted-foreground">{status}</p>}
 
       <ul className="space-y-3">
         {rows.map((row) => (
