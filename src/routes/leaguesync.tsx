@@ -280,6 +280,11 @@ function LeagueSyncPage() {
             >
               Continue
             </button>
+            {yahooUnconfigured && (
+              <p className="mt-4 text-xs text-black">
+                Yahoo sync isn't available yet — the Yahoo app credentials still need to be added.
+              </p>
+            )}
             <p className="mt-6 text-xs text-muted-foreground">
               Note: You won't be able to connect if you used a third-party (like{" "}
               <span className="underline">Facebook</span>) to sign in.{" "}
