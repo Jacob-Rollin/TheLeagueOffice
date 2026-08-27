@@ -55,17 +55,36 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
         .select("id, platform, label, sleeper_user_id, espn_league_id, yahoo_league_key")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []).map((row) => ({
+      const rows = (data ?? []).map((row) => ({
         id: String(row?.id ?? ""),
         platform: String(row?.platform ?? "sleeper"),
         leagueId: String(
           row?.sleeper_user_id ?? row?.espn_league_id ?? row?.yahoo_league_key ?? row?.label ?? "",
         ),
         name: row?.label ?? "League",
-        teamName: null,
-        avatar: null,
+        teamName: null as string | null,
+        avatar: null as string | null,
       }));
+
+      const { getConnectionMeta } = await import("@/lib/league.functions");
+      return await Promise.all(
+        rows.map(async (row) => {
+          if (row.platform !== "sleeper" || !row.leagueId) return row;
+          try {
+            const meta = await getConnectionMeta({ data: { identifier: row.leagueId } });
+            return {
+              ...row,
+              name: meta?.leagueName ?? row.name,
+              teamName: meta?.teamName ?? null,
+              avatar: meta?.avatar ?? null,
+            };
+          } catch {
+            return row;
+          }
+        }),
+      );
     },
+
   });
 
   const leagues = useMemo(() => (data ?? []).filter((row) => row.id.length > 0), [data]);
