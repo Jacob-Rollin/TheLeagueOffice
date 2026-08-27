@@ -203,59 +203,7 @@ function LeaguesPage() {
 
       <ul className="space-y-3">
         {rows.map((row) => (
-          <li
-            key={row.id}
-            className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card px-4 py-4"
-          >
-            <span
-              aria-label="Synced"
-              className="flex size-6 shrink-0 items-center justify-center rounded-full border border-emerald-500 text-xs font-bold text-emerald-600"
-            >
-              ✓
-            </span>
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-background font-display text-xs uppercase text-muted-foreground">
-              {(PLATFORM_LABEL[row.platform] ?? row.platform).slice(0, 2)}
-            </span>
-
-            <div className="min-w-[10rem] flex-1">
-              <p className="text-sm font-semibold text-foreground">{row.label ?? "The League"}</p>
-              <p className="text-xs text-muted-foreground">{PLATFORM_LABEL[row.platform] ?? row.platform}</p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <span className="rounded-md border border-border px-2 py-1">Half PPR</span>
-              <span className="rounded-md border border-border px-2 py-1">Redraft</span>
-              <span className="rounded-md border border-border px-2 py-1">10 Team</span>
-            </div>
-
-            <div className="ml-auto flex items-center gap-2">
-              <Link
-                to="/account/leagues/$connectionId"
-                params={{ connectionId: row.id }}
-                className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
-              >
-                Settings
-              </Link>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  aria-label="League options"
-                  className="rounded-md border border-border px-2 py-1.5 text-xs leading-none text-foreground"
-                >
-                  ⋮
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem asChild className="font-medium">
-                    <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }}>
-                      League Settings
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="font-medium" onSelect={() => remove(row.id)}>
-                    Delete League
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </li>
+          <LeagueRow key={row.id} row={row} onDelete={remove} />
         ))}
         {rows.length === 0 && (
           <li className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
