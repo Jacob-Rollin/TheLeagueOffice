@@ -42,6 +42,7 @@ export function MyTeamColumn({
   onOpen,
   showProj,
   showHeader,
+  fit,
 }: {
   settings: Settings;
   players: Player[];
@@ -49,6 +50,8 @@ export function MyTeamColumn({
   onOpen: (id: string) => void;
   showProj?: boolean;
   showHeader?: boolean;
+  /** Distribute rows evenly across the available height instead of scrolling. */
+  fit?: boolean;
 }) {
   const slots = fillRoster(players, settings.roster);
   const pickByPlayer = useMemo(
