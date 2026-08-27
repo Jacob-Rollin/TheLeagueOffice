@@ -23,6 +23,7 @@ import { Route as WaiverRouteImport } from './routes/waiver'
 import { Route as WarRoomRouteImport } from './routes/war-room'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as AccountLeaguesRouteImport } from './routes/account.leagues'
 import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
 import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
@@ -102,6 +103,11 @@ const Char91DotwellKnownChar93OauthProtectedResourceRoute =
     path: '/.well-known/oauth-protected-resource',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AccountLeaguesRoute = AccountLeaguesRouteImport.update({
+  id: '/leagues',
+  path: '/leagues',
+  getParentRoute: () => AccountRoute,
+} as any)
 const AuthConfirmedRoute = AuthConfirmedRouteImport.update({
   id: '/auth_/confirmed',
   path: '/auth/confirmed',
@@ -136,7 +142,7 @@ const ApiPublicScoreboardRoute = ApiPublicScoreboardRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/account': typeof AccountRoute
+  '/account': typeof AccountRouteWithChildren
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
@@ -149,6 +155,7 @@ export interface FileRoutesByFullPath {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/account/leagues': typeof AccountLeaguesRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -158,7 +165,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/account': typeof AccountRoute
+  '/account': typeof AccountRouteWithChildren
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
@@ -171,6 +178,7 @@ export interface FileRoutesByTo {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/account/leagues': typeof AccountLeaguesRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -181,7 +189,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/account': typeof AccountRoute
+  '/account': typeof AccountRouteWithChildren
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
@@ -194,6 +202,7 @@ export interface FileRoutesById {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/account/leagues': typeof AccountLeaguesRoute
   '/auth_/confirmed': typeof AuthConfirmedRoute
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -218,6 +227,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/account/leagues'
     | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
@@ -240,6 +250,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/account/leagues'
     | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
@@ -262,6 +273,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/account/leagues'
     | '/auth_/confirmed'
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
@@ -272,7 +284,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AccountRoute: typeof AccountRoute
+  AccountRoute: typeof AccountRouteWithChildren
   AuthRoute: typeof AuthRoute
   DraftRoute: typeof DraftRoute
   HofRoute: typeof HofRoute
@@ -393,6 +405,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account/leagues': {
+      id: '/account/leagues'
+      path: '/leagues'
+      fullPath: '/account/leagues'
+      preLoaderRoute: typeof AccountLeaguesRouteImport
+      parentRoute: typeof AccountRoute
+    }
     '/auth_/confirmed': {
       id: '/auth_/confirmed'
       path: '/auth/confirmed'
@@ -438,9 +457,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AccountRouteChildren {
+  AccountLeaguesRoute: typeof AccountLeaguesRoute
+}
+
+const AccountRouteChildren: AccountRouteChildren = {
+  AccountLeaguesRoute: AccountLeaguesRoute,
+}
+
+const AccountRouteWithChildren =
+  AccountRoute._addFileChildren(AccountRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AccountRoute: AccountRoute,
+  AccountRoute: AccountRouteWithChildren,
   AuthRoute: AuthRoute,
   DraftRoute: DraftRoute,
   HofRoute: HofRoute,
