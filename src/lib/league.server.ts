@@ -318,14 +318,25 @@ function espnTeamName(t: EspnTeam | undefined): string | null {
   return combined || null;
 }
 
+function espnSwidCookie(swid: string | null | undefined): string | null {
+  const raw = swid?.trim();
+  if (!raw) return null;
+  const bare = raw.replace(/[{}]/g, "");
+  return `{${bare.toUpperCase()}}`;
+}
+
 async function espnJson<T>(url: string, s2?: string | null, swid?: string | null): Promise<T | null> {
   try {
-    const headers: Record<string, string> = { "User-Agent": "Mozilla/5.0" };
-    if (s2 || swid) {
-      const parts = [];
-      if (s2) parts.push(`espn_s2=${s2}`);
-      if (swid) parts.push(`SWID=${swid}`);
-      headers["Cookie"] = parts.join("; ");
+    const headers: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0",
+      Accept: "application/json",
+    };
+    const cookieSwid = espnSwidCookie(swid);
+    if (s2 || cookieSwid) {
+      const parts: string[] = [];
+      if (s2) parts.push(`espn_s2=${s2.trim()}`);
+      if (cookieSwid) parts.push(`SWID=${cookieSwid}`);
+      headers["Cookie"] = `${parts.join("; ")};`;
     }
     const res = await fetch(url, { headers });
     if (!res.ok) return null;
