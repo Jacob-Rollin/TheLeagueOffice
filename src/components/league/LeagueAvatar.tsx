@@ -10,33 +10,34 @@ type LeagueAvatarProps = {
   className?: string | undefined;
 };
 
-/** Official slanted crimson ESPN "E" mark — real vector path geometry. */
+/** Official slanted crimson ESPN "E" mark — exact corporate SVG vector geometry. */
 function EspnMark() {
   return (
     <svg
-      viewBox="0 0 64 32"
-      className="h-8 w-8 -translate-x-[2px] object-contain"
+      viewBox="0 0 24 24"
+      className="h-7 w-7 object-contain transform -translate-x-[0.5px]"
+      fill="#CC0000"
+      xmlns="http://w3.org"
       aria-hidden="true"
       role="img"
     >
-      <path
-        fill="#D50A0A"
-        d="M54.8 9.2H27.9l-1 4.4h25.1l-1.1 5.1H25.8l-.9 4.1h26.9l-1.2 5.3H18.4l3.8-24.2h32.6zM14.1 5.1l-3.8 24.2H4.5L8.3 5.1h5.8z"
-      />
+      <path d="M23.111 6.133h-14.73l.363-1.6h14.73l-.363 1.6zm-.816 3.6H4.218l.363-1.6h18.077l-.363 1.6zm-1.18 5.2H1.28l.363-1.6h19.836l-.364 1.6zm.363-1.6h-5.26l.363-1.6h5.261l-.364 1.6zm-.726 3.2h-5.262l.363-1.6h5.262l-.363 1.6zm-12.015 0H.889l.363-1.6h7.848l-.363 1.6z" />
     </svg>
   );
 }
 
-/** Official deep-purple Yahoo "Y!" mark — real vector path geometry. */
+/** Official deep-purple Yahoo "Y!" mark — exact corporate SVG vector geometry. */
 function YahooMark() {
   return (
-    <svg viewBox="0 0 64 32" className="h-8 w-8 object-contain" aria-hidden="true" role="img">
-      <path
-        fill="#5F01D1"
-        d="M20.1 5.1h6.4l5 9.3 5-9.3h6.4l-8.4 15.2v9.4h-6.1v-9.4L20.1 5.1z"
-      />
-      <path fill="#5F01D1" d="M47.9 14.2h4.9l-2.6 15.5h-4.8l2.5-15.5z" />
-      <circle cx="49.6" cy="6.6" r="3" fill="#5F01D1" />
+    <svg
+      viewBox="0 0 24 24"
+      className="h-6 w-6 object-contain"
+      fill="#6001D2"
+      xmlns="http://w3.org"
+      aria-hidden="true"
+      role="img"
+    >
+      <path d="M12.923 11.625l5.525-8.225h-3.66l-3.61 5.795-3.627-5.795H3.846l5.518 8.197v5.54h3.56v-5.517zm7.391 2.502c-1.042 0-1.89.845-1.89 1.892 0 1.042.848 1.889 1.89 1.889 1.043 0 1.892-.847 1.892-1.889 0-1.047-.849-1.892-1.892-1.892zm-1.636-5.83h3.272v6.623h-3.272V8.297z" />
     </svg>
   );
 }
