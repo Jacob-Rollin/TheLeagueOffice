@@ -137,7 +137,7 @@ export function ProfileMenu() {
         <DropdownMenuTrigger
           aria-label="Profile and settings"
           className={cn(
-            "flex h-10 w-10 max-h-10 max-w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-primary-foreground/30 bg-primary-foreground/10 p-0 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
+            "flex items-center justify-center w-10 h-10 max-w-10 max-h-10 rounded-full p-0 overflow-hidden shrink-0 border border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground transition-colors hover:bg-primary-foreground/20",
           )}
         >
           {ready && user && (navPlatform || navAvatar) ? (
@@ -145,6 +145,7 @@ export function ProfileMenu() {
               platform={navPlatform}
               src={navAvatar}
               alt=""
+              className="size-8"
             />
           ) : (
             <UserIcon className="size-4" />
