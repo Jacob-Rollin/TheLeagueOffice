@@ -42,6 +42,8 @@ export type ConnectionRow = {
   sleeper_user_id: string | null;
   espn_league_id: string | null;
   yahoo_league_key: string | null;
+  espn_s2: string | null;
+  espn_swid: string | null;
 };
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -64,7 +66,7 @@ function LeaguesPage() {
     queryFn: async (): Promise<ConnectionRow[]> => {
       const { data, error } = await supabase
         .from("league_connections")
-        .select("id, platform, label, sleeper_user_id, espn_league_id, yahoo_league_key")
+        .select("id, platform, label, sleeper_user_id, espn_league_id, yahoo_league_key, espn_s2, espn_swid")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ConnectionRow[];
@@ -129,7 +131,15 @@ function LeagueRow({
     enabled: (platformKey === "sleeper" || platformKey === "espn") && identifier.length > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
-    queryFn: () => getConnectionMeta({ data: { identifier, platform: platformKey } }),
+    queryFn: () =>
+      getConnectionMeta({
+        data: {
+          identifier,
+          platform: platformKey,
+          s2: row?.espn_s2 ?? undefined,
+          swid: row?.espn_swid ?? undefined,
+        },
+      }),
   });
 
   const [imgOk, setImgOk] = useState(true);

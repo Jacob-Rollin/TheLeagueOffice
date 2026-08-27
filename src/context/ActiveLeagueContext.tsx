@@ -52,7 +52,7 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
     queryFn: async (): Promise<ActiveLeagueToken[]> => {
       const { data, error } = await supabase
         .from("league_connections")
-        .select("id, platform, label, sleeper_user_id, espn_league_id, yahoo_league_key")
+        .select("id, platform, label, sleeper_user_id, espn_league_id, yahoo_league_key, espn_s2, espn_swid")
         .order("created_at", { ascending: false });
       if (error) throw error;
       const rows = (data ?? []).map((row) => ({
