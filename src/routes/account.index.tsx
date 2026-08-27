@@ -10,7 +10,7 @@ import { AVATAR_CHOICES, useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/account")({
+export const Route = createFileRoute("/account/")({
   ssr: false,
   head: () => ({
     meta: [

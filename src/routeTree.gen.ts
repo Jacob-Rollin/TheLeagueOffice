@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AccountRouteImport } from './routes/account'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as DraftRouteImport } from './routes/draft'
 import { Route as HofRouteImport } from './routes/hof'
@@ -23,23 +22,19 @@ import { Route as WaiverRouteImport } from './routes/waiver'
 import { Route as WarRoomRouteImport } from './routes/war-room'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
-import { Route as AccountLeaguesRouteImport } from './routes/account.leagues'
+import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
 import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
 import { Route as PlayerIdRouteImport } from './routes/player.$id'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as AccountLeaguesIndexRouteImport } from './routes/account.leagues.index'
 import { Route as AccountLeaguesConnectionIdRouteImport } from './routes/account.leagues.$connectionId'
 import { Route as ApiPublicScoreboardRouteImport } from './routes/api/public/scoreboard'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AccountRoute = AccountRouteImport.update({
-  id: '/account',
-  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -104,10 +99,10 @@ const Char91DotwellKnownChar93OauthProtectedResourceRoute =
     path: '/.well-known/oauth-protected-resource',
     getParentRoute: () => rootRouteImport,
   } as any)
-const AccountLeaguesRoute = AccountLeaguesRouteImport.update({
-  id: '/leagues',
-  path: '/leagues',
-  getParentRoute: () => AccountRoute,
+const AccountIndexRoute = AccountIndexRouteImport.update({
+  id: '/account/',
+  path: '/account/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthConfirmedRoute = AuthConfirmedRouteImport.update({
   id: '/auth_/confirmed',
@@ -135,11 +130,16 @@ const Char91DotmcpChar93InvokeToolToolRoute =
     path: '/.mcp/invoke-tool/$tool',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AccountLeaguesIndexRoute = AccountLeaguesIndexRouteImport.update({
+  id: '/account/leagues/',
+  path: '/account/leagues/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AccountLeaguesConnectionIdRoute =
   AccountLeaguesConnectionIdRouteImport.update({
-    id: '/$connectionId',
-    path: '/$connectionId',
-    getParentRoute: () => AccountLeaguesRoute,
+    id: '/account/leagues/$connectionId',
+    path: '/account/leagues/$connectionId',
+    getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicScoreboardRoute = ApiPublicScoreboardRouteImport.update({
   id: '/api/public/scoreboard',
@@ -149,7 +149,6 @@ const ApiPublicScoreboardRoute = ApiPublicScoreboardRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/account': typeof AccountRouteWithChildren
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
@@ -162,18 +161,18 @@ export interface FileRoutesByFullPath {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
-  '/account/leagues': typeof AccountLeaguesRouteWithChildren
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
+  '/account/': typeof AccountIndexRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
+  '/account/leagues/': typeof AccountLeaguesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/account': typeof AccountRouteWithChildren
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
@@ -186,19 +185,19 @@ export interface FileRoutesByTo {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
-  '/account/leagues': typeof AccountLeaguesRouteWithChildren
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
+  '/account': typeof AccountIndexRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
+  '/account/leagues': typeof AccountLeaguesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/account': typeof AccountRouteWithChildren
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
@@ -211,20 +210,20 @@ export interface FileRoutesById {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
-  '/account/leagues': typeof AccountLeaguesRouteWithChildren
   '/auth_/confirmed': typeof AuthConfirmedRoute
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
+  '/account/': typeof AccountIndexRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
+  '/account/leagues/': typeof AccountLeaguesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/account'
     | '/auth'
     | '/draft'
     | '/hof'
@@ -237,18 +236,18 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
-    | '/account/leagues'
     | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
     | '/player/$id'
+    | '/account/'
     | '/.mcp/invoke-tool/$tool'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
+    | '/account/leagues/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/account'
     | '/auth'
     | '/draft'
     | '/hof'
@@ -261,18 +260,18 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
-    | '/account/leagues'
     | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
     | '/player/$id'
+    | '/account'
     | '/.mcp/invoke-tool/$tool'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
+    | '/account/leagues'
   id:
     | '__root__'
     | '/'
-    | '/account'
     | '/auth'
     | '/draft'
     | '/hof'
@@ -285,19 +284,19 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
-    | '/account/leagues'
     | '/auth_/confirmed'
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
     | '/player/$id'
+    | '/account/'
     | '/.mcp/invoke-tool/$tool'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
+    | '/account/leagues/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AccountRoute: typeof AccountRouteWithChildren
   AuthRoute: typeof AuthRoute
   DraftRoute: typeof DraftRoute
   HofRoute: typeof HofRoute
@@ -314,8 +313,11 @@ export interface RootRouteChildren {
   MockDraftSetupRoute: typeof MockDraftSetupRoute
   NflTeamNflIdRoute: typeof NflTeamNflIdRoute
   PlayerIdRoute: typeof PlayerIdRoute
+  AccountIndexRoute: typeof AccountIndexRoute
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
+  AccountLeaguesConnectionIdRoute: typeof AccountLeaguesConnectionIdRoute
   ApiPublicScoreboardRoute: typeof ApiPublicScoreboardRoute
+  AccountLeaguesIndexRoute: typeof AccountLeaguesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -325,13 +327,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/account': {
-      id: '/account'
-      path: '/account'
-      fullPath: '/account'
-      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -418,12 +413,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/account/leagues': {
-      id: '/account/leagues'
-      path: '/leagues'
-      fullPath: '/account/leagues'
-      preLoaderRoute: typeof AccountLeaguesRouteImport
-      parentRoute: typeof AccountRoute
+    '/account/': {
+      id: '/account/'
+      path: '/account'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AccountIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/auth_/confirmed': {
       id: '/auth_/confirmed'
@@ -460,12 +455,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account/leagues/': {
+      id: '/account/leagues/'
+      path: '/account/leagues'
+      fullPath: '/account/leagues/'
+      preLoaderRoute: typeof AccountLeaguesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/account/leagues/$connectionId': {
       id: '/account/leagues/$connectionId'
-      path: '/$connectionId'
+      path: '/account/leagues/$connectionId'
       fullPath: '/account/leagues/$connectionId'
       preLoaderRoute: typeof AccountLeaguesConnectionIdRouteImport
-      parentRoute: typeof AccountLeaguesRoute
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/scoreboard': {
       id: '/api/public/scoreboard'
@@ -477,32 +479,8 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AccountLeaguesRouteChildren {
-  AccountLeaguesConnectionIdRoute: typeof AccountLeaguesConnectionIdRoute
-}
-
-const AccountLeaguesRouteChildren: AccountLeaguesRouteChildren = {
-  AccountLeaguesConnectionIdRoute: AccountLeaguesConnectionIdRoute,
-}
-
-const AccountLeaguesRouteWithChildren = AccountLeaguesRoute._addFileChildren(
-  AccountLeaguesRouteChildren,
-)
-
-interface AccountRouteChildren {
-  AccountLeaguesRoute: typeof AccountLeaguesRouteWithChildren
-}
-
-const AccountRouteChildren: AccountRouteChildren = {
-  AccountLeaguesRoute: AccountLeaguesRouteWithChildren,
-}
-
-const AccountRouteWithChildren =
-  AccountRoute._addFileChildren(AccountRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AccountRoute: AccountRouteWithChildren,
   AuthRoute: AuthRoute,
   DraftRoute: DraftRoute,
   HofRoute: HofRoute,
@@ -520,8 +498,11 @@ const rootRouteChildren: RootRouteChildren = {
   MockDraftSetupRoute: MockDraftSetupRoute,
   NflTeamNflIdRoute: NflTeamNflIdRoute,
   PlayerIdRoute: PlayerIdRoute,
+  AccountIndexRoute: AccountIndexRoute,
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
+  AccountLeaguesConnectionIdRoute: AccountLeaguesConnectionIdRoute,
   ApiPublicScoreboardRoute: ApiPublicScoreboardRoute,
+  AccountLeaguesIndexRoute: AccountLeaguesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

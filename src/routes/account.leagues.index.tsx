@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export const Route = createFileRoute("/account/leagues")({
+export const Route = createFileRoute("/account/leagues/")({
   ssr: false,
   head: () => ({
     meta: [
