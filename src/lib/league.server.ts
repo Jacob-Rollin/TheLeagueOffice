@@ -299,6 +299,7 @@ type EspnTeam = {
   nickname?: string;
   logo?: string;
   abbrev?: string;
+  owners?: string[];
 };
 
 type EspnLeagueView = {
@@ -317,22 +318,45 @@ function espnTeamName(t: EspnTeam | undefined): string | null {
   return combined || null;
 }
 
-export async function loadEspnConnectionMeta(leagueId: string): Promise<ConnectionMeta> {
+async function espnJson<T>(url: string, s2?: string | null, swid?: string | null): Promise<T | null> {
+  try {
+    const headers: Record<string, string> = { "User-Agent": "Mozilla/5.0" };
+    if (s2 || swid) {
+      const parts = [];
+      if (s2) parts.push(`espn_s2=${s2}`);
+      if (swid) parts.push(`SWID=${swid}`);
+      headers["Cookie"] = parts.join("; ");
+    }
+    const res = await fetch(url, { headers });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadEspnConnectionMeta(
+  leagueId: string,
+  s2?: string | null,
+  swid?: string | null,
+): Promise<ConnectionMeta> {
   const empty: ConnectionMeta = { leagueName: null, teamName: null, avatar: null, scoring: null, teams: null };
   const id = leagueId.trim();
   if (!/^\d+$/.test(id)) return empty;
   const season = new Date().getFullYear();
+  const swidGuid = swid?.trim().replace(/[{}]/g, "").toUpperCase() ?? null;
 
   for (const year of [season, season - 1]) {
-    const league = await json<EspnLeagueView>(
+    const league = await espnJson<EspnLeagueView>(
       `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(id)}?view=mSettings&view=mTeam`,
+      s2,
+      swid,
     );
     const teams = league?.teams ?? [];
-    if (!league || teams.length === 0) continue;
+    if (!league?.settings || teams.length === 0) continue;
 
-    // The user's team isn't identifiable from the public payload, so surface the
-    // first active roster's branding as the card identity.
-    const mine = teams[0];
+    // Identify the user's own team from their SWID owner guid when available.
+    const mine = (swidGuid ? teams.find((t) => (t.owners ?? []).some((o) => o.toUpperCase().includes(swidGuid))) : undefined) ?? teams[0];
     const rec = league.settings?.scoringSettings?.scoringItems?.find((s) => s.statId === 53)?.points ?? null;
     return {
       leagueName: league.settings?.name ?? null,

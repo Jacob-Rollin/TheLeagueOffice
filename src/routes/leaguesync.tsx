@@ -205,7 +205,13 @@ function LeagueSyncPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                void saveConnection("espn", espnLeagueId.trim());
+                void saveConnection(
+                  "espn",
+                  espnLeagueId.trim(),
+                  espnTab === "private"
+                    ? { espn_s2: espnS2.trim() || null, espn_swid: espnSwid.trim() || null }
+                    : {},
+                );
               }}
               className="mt-4 w-full space-y-4 text-left"
             >
