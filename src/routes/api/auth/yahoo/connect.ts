@@ -9,10 +9,15 @@ export const Route = createFileRoute("/api/auth/yahoo/connect")({
         const origin = new URL(request.url).origin;
 
         if (!clientId) {
-          return new Response(
-            "Yahoo sync is not configured yet. Add YAHOO_CLIENT_ID and YAHOO_CLIENT_SECRET to enable it.",
-            { status: 503, headers: { "content-type": "text/plain" } },
-          );
+          // No credentials yet: send the user back to the sync page with a notice
+          // instead of failing the request with a blank error screen.
+          return new Response(null, {
+            status: 302,
+            headers: {
+              location: `${origin}/leaguesync?yahoo=unconfigured`,
+              "cache-control": "no-store",
+            },
+          });
         }
 
         const authorize = new URL("https://api.login.yahoo.com/oauth2/request_auth");
