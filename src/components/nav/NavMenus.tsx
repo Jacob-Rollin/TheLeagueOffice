@@ -4,6 +4,7 @@ import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronDown, Plus, User as UserIcon } from "lucide-react";
 
+import { LeagueAvatar } from "@/components/league/LeagueAvatar";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -173,16 +174,34 @@ export function ProfileMenu() {
                             : "border-transparent hover:bg-muted",
                         )}
                       >
-                        <span className="size-8 shrink-0 overflow-hidden rounded-full border border-border bg-background">
-                          {league.avatar && (
-                            <img src={league.avatar} alt="" className="size-full object-cover" />
+                        <span
+                          className={cn(
+                            "size-8 shrink-0 overflow-hidden rounded-full border border-border flex items-center justify-center",
+                            league.platform === "espn"
+                              ? "bg-neutral-800"
+                              : league.platform === "yahoo"
+                                ? "bg-purple-50"
+                                : "bg-background",
                           )}
+                        >
+                          <LeagueAvatar
+                            platform={league.platform}
+                            src={league.avatar}
+                            alt=""
+                            className={
+                              league.platform === "espn"
+                                ? "text-red-600"
+                                : league.platform === "yahoo"
+                                  ? "text-purple-700"
+                                  : undefined
+                            }
+                          />
                         </span>
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-foreground">
+                          <span className="block truncate text-sm font-semibold text-black">
                             {league.name}
                           </span>
-                          <span className="block truncate text-xs text-muted-foreground">
+                          <span className="block truncate text-xs text-black">
                             {league.teamName ?? "My Team"}
                           </span>
                         </span>
