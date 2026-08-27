@@ -12,13 +12,16 @@ const activeClass = "bg-muted text-foreground";
 export function AccountShell({
   title,
   active,
+  action,
   children,
 }: {
   title: string;
   active: "settings" | "leagues";
+  action?: ReactNode;
   children: ReactNode;
 }) {
   const { user, ready, signOut } = useAuth();
+
   const navigate = useNavigate();
 
   if (ready && !user) {
