@@ -115,6 +115,7 @@ export function ProfileMenu() {
   const navigate = useNavigate();
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
+  const [open, setOpen] = useState(false);
   const { data: profile } = useProfile(user?.id ?? null);
   const { leagues, activeLeagueId, setActiveLeagueId } = useActiveLeague();
 
@@ -130,7 +131,7 @@ export function ProfileMenu() {
 
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger
           aria-label="Profile and settings"
           className={cn(
@@ -197,9 +198,10 @@ export function ProfileMenu() {
                 </div>
                 <Link
                   to="/leaguesync"
+                  onClick={() => setOpen(false)}
                   className="mt-2 block w-full rounded-md bg-primary px-3 py-2 text-center font-display text-xs uppercase tracking-wide text-primary-foreground"
                 >
-                  Sync Another League
+                  Sync New League
                 </Link>
               </div>
 
@@ -209,13 +211,13 @@ export function ProfileMenu() {
                   {user.email}
                 </DropdownMenuLabel>
                 <DropdownMenuItem asChild className="font-medium">
-                  <Link to="/account/leagues" className="block w-full">
-                    My Leagues
+                  <Link to="/account" className="block w-full">
+                    Account
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="font-medium">
-                  <Link to="/account" className="block w-full">
-                    Account
+                  <Link to="/account/leagues" className="block w-full">
+                    My Leagues
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
