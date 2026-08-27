@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { AccountShell } from "@/components/account/AccountShell";
+import { LeagueAvatar } from "@/components/league/LeagueAvatar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { getConnectionMeta } from "@/lib/league.functions";
