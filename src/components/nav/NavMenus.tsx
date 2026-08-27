@@ -134,23 +134,31 @@ export function ProfileMenu() {
   return (
     <>
       <DropdownMenu open={open} onOpenChange={setOpen}>
-        <DropdownMenuTrigger
-          aria-label="Profile and settings"
-          className={cn(
-            "flex items-center justify-center w-8 h-8 max-w-8 max-h-8 rounded-full p-0 overflow-hidden border border-neutral-200 bg-white shrink-0",
-          )}
-        >
-          {ready && user && (navPlatform || navAvatar) ? (
+        {ready && user && (navPlatform || navAvatar) ? (
+          <DropdownMenuTrigger
+            aria-label="Profile and settings"
+            className={cn(
+              "flex items-center justify-center w-8 h-8 max-w-8 max-h-8 rounded-full p-0 overflow-hidden border border-neutral-200 bg-white shrink-0",
+            )}
+          >
             <LeagueAvatar
               platform={navPlatform}
               src={navAvatar}
               alt=""
               className="size-8"
             />
-          ) : (
-            <UserIcon className="size-8 text-black" />
-          )}
-        </DropdownMenuTrigger>
+          </DropdownMenuTrigger>
+        ) : (
+          <DropdownMenuTrigger
+            aria-label="Profile and settings"
+            className={cn(
+              "grid size-8 shrink-0 place-items-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
+            )}
+          >
+            <UserIcon className="size-4" />
+          </DropdownMenuTrigger>
+        )}
+
 
         <DropdownMenuContent align="end" className={ready && user ? "w-[26rem] p-0" : "w-56"}>
           {ready && user ? (
