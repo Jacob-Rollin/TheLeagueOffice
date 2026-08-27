@@ -24,11 +24,15 @@ export const Route = createFileRoute("/leaguesync")({
 });
 
 type Platform = "yahoo" | "espn" | "sleeper";
+type EspnTab = "public" | "private";
 
 const cardClass =
   "flex flex-1 items-center justify-center rounded-2xl px-6 py-12 font-display text-2xl font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5";
+const brandBlock =
+  "mt-6 flex w-40 items-center justify-center rounded-xl py-6 font-display text-lg font-bold text-white";
 const inputClass =
   "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-black placeholder:text-black/50 outline-none focus:border-ring";
+const labelClass = "block text-left text-xs font-semibold uppercase tracking-wide text-black";
 const blueButton =
   "rounded-md px-6 py-2 font-display text-sm uppercase tracking-wide text-white disabled:opacity-60";
 
@@ -39,30 +43,39 @@ function LeagueSyncPage() {
   const queryClient = useQueryClient();
 
   const [platform, setPlatform] = useState<Platform>("sleeper");
+  const [espnTab, setEspnTab] = useState<EspnTab>("public");
+  const [guideOpen, setGuideOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [identifier, setIdentifier] = useState("");
 
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [identifier, setIdentifier] = useState("");
+  const [espnLeagueId, setEspnLeagueId] = useState("");
+  const [espnS2, setEspnS2] = useState("");
+  const [espnSwid, setEspnSwid] = useState("");
+
+  const saveConnection = async (
+    next: Platform,
+    label: string,
+    extra: Record<string, string | null> = {},
+  ) => {
     if (!userId) {
       setStatus("Sign in to sync a league.");
       return;
     }
-    const label = identifier.trim();
     if (!label) {
-      setStatus("Enter your username first.");
+      setStatus("Enter your league details first.");
       return;
     }
     setBusy(true);
     setStatus(null);
     const { error } = await supabase.from("league_connections").insert({
       user_id: userId,
-      platform,
+      platform: next,
       label,
-      sleeper_user_id: platform === "sleeper" ? label : null,
-      espn_league_id: platform === "espn" ? label : null,
-      yahoo_league_key: platform === "yahoo" ? label : null,
+      sleeper_user_id: next === "sleeper" ? label : null,
+      espn_league_id: next === "espn" ? label : null,
+      yahoo_league_key: next === "yahoo" ? label : null,
+      ...extra,
     });
     setBusy(false);
     if (error) {
@@ -111,15 +124,18 @@ function LeagueSyncPage() {
       <section className="mt-10 rounded-2xl border border-border bg-card p-8">
         {platform === "sleeper" && (
           <div className="mx-auto flex max-w-md flex-col items-center text-center">
-            <h2 className="font-display text-2xl font-bold text-foreground">Connect with Sleeper</h2>
+            <h2 className="font-display text-2xl font-bold text-black">Connect with Sleeper</h2>
             <p className="mt-1 text-sm text-muted-foreground">Please enter your Sleeper username</p>
-            <div
-              className="mt-6 flex w-40 items-center justify-center rounded-xl py-6 font-display text-lg font-bold text-white"
-              style={{ backgroundColor: "#0f1e36" }}
-            >
+            <div className={brandBlock} style={{ backgroundColor: "#0f1e36" }}>
               Sleeper
             </div>
-            <form onSubmit={save} className="mt-6 w-full space-y-3">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void saveConnection("sleeper", identifier.trim());
+              }}
+              className="mt-6 w-full space-y-3"
+            >
               <input
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
@@ -144,42 +160,120 @@ function LeagueSyncPage() {
 
         {platform === "espn" && (
           <div className="mx-auto flex max-w-md flex-col items-center text-center">
-            <h2 className="font-display text-2xl font-bold text-foreground">Connect with ESPN</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Next, you'll be redirected to ESPN to finish syncing your league(s).
-            </p>
-            <div
-              className="mt-6 flex w-40 items-center justify-center rounded-xl py-6 font-display text-lg font-bold text-white"
-              style={{ backgroundColor: "#cc0000" }}
-            >
+            <h2 className="font-display text-2xl font-bold text-black">Connect with ESPN</h2>
+            <div className={brandBlock} style={{ backgroundColor: "#cc0000" }}>
               ESPN
             </div>
-            <button type="button" className={`${blueButton} mt-6`} style={{ backgroundColor: "#0077ff" }}>
-              Install Now
+
+            <div className="mt-6 flex w-full border-b border-border">
+              <button
+                type="button"
+                onClick={() => setEspnTab("public")}
+                className={`flex-1 px-4 py-2 text-sm ${
+                  espnTab === "public"
+                    ? "border-b-2 border-primary font-semibold text-black"
+                    : "text-muted-foreground"
+                }`}
+              >
+                Public League
+              </button>
+              <button
+                type="button"
+                onClick={() => setEspnTab("private")}
+                className={`flex-1 px-4 py-2 text-sm ${
+                  espnTab === "private"
+                    ? "border-b-2 border-primary font-semibold text-black"
+                    : "text-muted-foreground"
+                }`}
+              >
+                Private League
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              className="mt-4 self-start text-xs text-black underline"
+            >
+              How do I find these keys?
             </button>
-            <p className="mt-6 text-xs text-muted-foreground">
-              Once you have the extension installed, please refresh this page to complete your league
-              sync.
-            </p>
-            <a href="/faq" className="mt-4 text-xs text-foreground underline">
-              Have questions? Read our FAQ to learn more.
-            </a>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void saveConnection("espn", espnLeagueId.trim());
+              }}
+              className="mt-4 w-full space-y-4 text-left"
+            >
+              <div className="space-y-1">
+                <label className={labelClass} htmlFor="espn-league-id">
+                  League ID
+                </label>
+                <input
+                  id="espn-league-id"
+                  value={espnLeagueId}
+                  onChange={(e) => setEspnLeagueId(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              {espnTab === "private" && (
+                <>
+                  <div className="space-y-1">
+                    <label className={labelClass} htmlFor="espn-s2">
+                      espn_s2 Cookie Key
+                    </label>
+                    <input
+                      id="espn-s2"
+                      value={espnS2}
+                      onChange={(e) => setEspnS2(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={labelClass} htmlFor="espn-swid">
+                      SWID Cookie Key
+                    </label>
+                    <input
+                      id="espn-swid"
+                      value={espnSwid}
+                      onChange={(e) => setEspnSwid(e.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                </>
+              )}
+
+              <button
+                type="submit"
+                disabled={busy}
+                className={blueButton}
+                style={{ backgroundColor: "#0077ff" }}
+              >
+                {espnTab === "public" ? "Sync Public League" : "Sync Private League"}
+              </button>
+            </form>
+            {status && <p className="mt-3 text-sm text-muted-foreground">{status}</p>}
           </div>
         )}
 
         {platform === "yahoo" && (
           <div className="mx-auto flex max-w-md flex-col items-center text-center">
-            <h2 className="font-display text-2xl font-bold text-foreground">Connect with Yahoo</h2>
+            <h2 className="font-display text-2xl font-bold text-black">Connect with Yahoo</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Please authorize access to your Yahoo sports profile.
             </p>
-            <p className="mt-6 font-display text-3xl font-bold" style={{ color: "#6001d2" }}>
-              yahoo! fantasy
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Fantasy data provided by Yahoo Fantasy
-            </p>
-            <button type="button" className={`${blueButton} mt-6`} style={{ backgroundColor: "#0077ff" }}>
+            <div className={brandBlock} style={{ backgroundColor: "#6001d2" }}>
+              Yahoo
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/api/auth/yahoo/connect";
+              }}
+              className={`${blueButton} mt-6`}
+              style={{ backgroundColor: "#0077ff" }}
+            >
               Continue
             </button>
             <p className="mt-6 text-xs text-muted-foreground">
@@ -190,6 +284,29 @@ function LeagueSyncPage() {
           </div>
         )}
       </section>
+
+      {guideOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 text-left">
+            <h3 className="font-display text-xl font-bold text-black">Finding your ESPN keys</h3>
+            <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-black">
+              <li>Sign in to fantasy.espn.com in a desktop browser and open your league.</li>
+              <li>Your League ID is the number in the address bar after leagueId=.</li>
+              <li>Open developer tools with F12, then go to the Application tab.</li>
+              <li>Under Storage, expand Cookies and select https://fantasy.espn.com.</li>
+              <li>Copy the value of espn_s2 and the value of SWID, braces included.</li>
+              <li>Paste both values into the fields on this page and sync.</li>
+            </ol>
+            <button
+              type="button"
+              onClick={() => setGuideOpen(false)}
+              className="mt-6 rounded-md border border-border px-4 py-2 text-sm text-black"
+            >
+              Close Guide
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
