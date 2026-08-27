@@ -63,10 +63,13 @@ function AccountPage() {
       {tab === "profile" ? (
         <div className="space-y-6">
           <ProfileCard userId={userId} />
-          <AvatarCard userId={userId} />
+          <DeleteAccountLink />
         </div>
       ) : (
-        <PasswordCard />
+        <div className="space-y-6">
+          <PasswordCard />
+          <DeleteAccountLink />
+        </div>
       )}
     </AccountShell>
   );
@@ -74,14 +77,20 @@ function AccountPage() {
 
 function ProfileCard({ userId }: { userId: string | null }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { data: profile } = useProfile(userId);
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setName(profile?.full_name ?? "");
   }, [profile?.full_name]);
+
+  useEffect(() => {
+    setEmail(user?.email ?? "");
+  }, [user?.email]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,21 +104,48 @@ function ProfileCard({ userId }: { userId: string | null }) {
     setStatus(null);
     const { error } = await supabase.from("profiles").update({ full_name: clean }).eq("id", userId);
     if (!error) await supabase.auth.updateUser({ data: { full_name: clean, name: clean } });
+
+    let message = error ? error.message : "Profile updated.";
+    const nextEmail = email.trim();
+    if (!error && nextEmail && nextEmail !== user?.email) {
+      const { error: emailError } = await supabase.auth.updateUser({ email: nextEmail });
+      message = emailError ? emailError.message : "Profile updated. Confirm the new email address.";
+    }
+
     setBusy(false);
-    setStatus(error ? error.message : "Name updated.");
+    setStatus(message);
     queryClient.invalidateQueries({ queryKey: ["profile", userId] });
   };
 
   return (
     <section className={cardClass}>
-      <h2 className="display-title text-lg uppercase tracking-wide">Profile</h2>
-      <form onSubmit={save} className="mt-4 max-w-sm space-y-3">
+      <form onSubmit={save} className="space-y-4">
         <label className={labelClass}>
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} required minLength={2} />
+          Full Name
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={cn(inputClass, "max-w-sm")}
+            required
+            minLength={2}
+          />
         </label>
+        <label className={labelClass}>
+          Email
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={cn(inputClass, "max-w-sm")}
+            required
+          />
+        </label>
+        <div>
+          <span className={labelClass}>Avatar</span>
+          <AvatarRow userId={userId} />
+        </div>
         <button type="submit" disabled={busy} className={buttonClass}>
-          {busy ? "Saving…" : "Save Name"}
+          {busy ? "Saving…" : "Save Profile"}
         </button>
         {status && <p className="text-sm text-muted-foreground">{status}</p>}
       </form>
@@ -117,7 +153,7 @@ function ProfileCard({ userId }: { userId: string | null }) {
   );
 }
 
-function AvatarCard({ userId }: { userId: string | null }) {
+function AvatarRow({ userId }: { userId: string | null }) {
   const queryClient = useQueryClient();
   const { data: profile } = useProfile(userId);
   const [status, setStatus] = useState<string | null>(null);
@@ -130,10 +166,8 @@ function AvatarCard({ userId }: { userId: string | null }) {
   };
 
   return (
-    <section className={cardClass}>
-      <h2 className="display-title text-lg uppercase tracking-wide">Avatar</h2>
-      <p className="mt-1 text-xs text-muted-foreground">Pick a badge for your navbar profile icon.</p>
-      <div className="mt-4 flex flex-wrap gap-3">
+    <div>
+      <div className="mt-2 flex flex-wrap gap-3">
         {AVATAR_CHOICES.map((choice) => (
           <button
             key={choice.id}
@@ -149,10 +183,11 @@ function AvatarCard({ userId }: { userId: string | null }) {
           </button>
         ))}
       </div>
-      {status && <p className="mt-3 text-sm text-muted-foreground">{status}</p>}
-    </section>
+      {status && <p className="mt-2 text-sm text-muted-foreground">{status}</p>}
+    </div>
   );
 }
+
 
 function PasswordCard() {
   const [currentPassword, setCurrentPassword] = useState("");
