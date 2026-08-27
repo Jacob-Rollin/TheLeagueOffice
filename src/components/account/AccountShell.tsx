@@ -12,13 +12,16 @@ const activeClass = "bg-muted text-foreground";
 export function AccountShell({
   title,
   active,
+  action,
   children,
 }: {
   title: string;
   active: "settings" | "leagues";
+  action?: ReactNode;
   children: ReactNode;
 }) {
   const { user, ready, signOut } = useAuth();
+
   const navigate = useNavigate();
 
   if (ready && !user) {
@@ -46,6 +49,7 @@ export function AccountShell({
             >
               My Leagues
             </Link>
+            <div className="my-2 border-t border-border" />
             <button
               type="button"
               className={itemClass}
@@ -56,14 +60,19 @@ export function AccountShell({
             >
               Sign Out
             </button>
+
           </div>
         </nav>
 
         <section className="md:col-span-3">
-          <header className="mb-5">
-            <h1 className="display-title text-3xl uppercase tracking-wide">{title}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{user?.email}</p>
+          <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="display-title text-3xl uppercase tracking-wide">{title}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">{user?.email}</p>
+            </div>
+            {action}
           </header>
+
           {children}
         </section>
       </div>
