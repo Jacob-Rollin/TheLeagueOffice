@@ -168,9 +168,9 @@ function LeagueRow({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? fallback?.scoring ?? "Half PPR"}</span>
+        <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? "Scoring"}</span>
         <span className="rounded-md border border-border px-2 py-1">Redraft</span>
-        <span className="rounded-md border border-border px-2 py-1">{meta?.teams ?? fallback?.teams ?? 10} Team</span>
+        <span className="rounded-md border border-border px-2 py-1">{meta?.teams ? `${meta.teams} Team` : "Teams"}</span>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
