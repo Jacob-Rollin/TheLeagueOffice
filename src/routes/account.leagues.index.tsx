@@ -7,6 +7,7 @@ import { LeagueAvatar } from "@/components/league/LeagueAvatar";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { getConnectionMeta } from "@/lib/league.functions";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
