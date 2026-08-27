@@ -127,8 +127,9 @@ export function ProfileMenu() {
 
   // Subscribe to the global active league: the moment the last league is deleted,
   // activeLeague flushes to null and the navbar icon resets to the default silhouette.
-  const activeLeague = leagues.find((l) => l.id === activeLeagueId) ?? null;
-  const navAvatar = activeLeague?.avatar ?? profile?.avatar_url ?? null;
+  const activeLeague = leagues?.find((l) => l?.id === activeLeagueId) ?? null;
+  const navPlatform = activeLeague?.platform ?? null;
+  const navAvatar = activeLeague?.avatar ?? (navPlatform ? null : (profile?.avatar_url ?? null));
 
   return (
     <>
@@ -139,18 +140,18 @@ export function ProfileMenu() {
             "grid size-8 shrink-0 place-items-center overflow-hidden rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-foreground/20",
           )}
         >
-          {ready && user && navAvatar ? (
-            <img
+          {ready && user && (navPlatform || navAvatar) ? (
+            <LeagueAvatar
+              platform={navPlatform}
               src={navAvatar}
               alt=""
-              className="size-8 rounded-full border border-neutral-200 object-cover"
-              width={32}
-              height={32}
+              className="size-8"
             />
           ) : (
             <UserIcon className="size-4" />
           )}
         </DropdownMenuTrigger>
+
         <DropdownMenuContent align="end" className={ready && user ? "w-[26rem] p-0" : "w-56"}>
           {ready && user ? (
             <div className="flex">
@@ -161,52 +162,36 @@ export function ProfileMenu() {
                 </p>
 
                 <div className="mt-1 flex-1 space-y-1">
-                  {leagues.length > 0 ? (
-                    leagues.map((league) => (
+                  {(leagues?.length ?? 0) > 0 ? (
+                    (leagues ?? []).map((league) => (
                       <button
-                        key={league.id}
+                        key={league?.id}
                         type="button"
-                        onClick={() => setActiveLeagueId(league.id)}
+                        onClick={() => league?.id && setActiveLeagueId(league.id)}
                         className={cn(
                           "flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors",
-                          league.id === activeLeagueId
+                          league?.id === activeLeagueId
                             ? "border-accent bg-accent/10"
                             : "border-transparent hover:bg-muted",
                         )}
                       >
-                        <span
-                          className={cn(
-                            "size-8 shrink-0 overflow-hidden rounded-full border border-border flex items-center justify-center",
-                            league.platform === "espn"
-                              ? "bg-neutral-800"
-                              : league.platform === "yahoo"
-                                ? "bg-purple-50"
-                                : "bg-background",
-                          )}
-                        >
-                          <LeagueAvatar
-                            platform={league.platform}
-                            src={league.avatar}
-                            alt=""
-                            className={
-                              league.platform === "espn"
-                                ? "text-red-600"
-                                : league.platform === "yahoo"
-                                  ? "text-purple-700"
-                                  : undefined
-                            }
-                          />
-                        </span>
+                        <LeagueAvatar
+                          platform={league?.platform}
+                          src={league?.avatar}
+                          alt=""
+                          className="size-8"
+                        />
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-semibold text-black">
-                            {league.name}
+                            {league?.name ?? "League"}
                           </span>
                           <span className="block truncate text-xs text-black">
-                            {league.teamName ?? "My Team"}
+                            {league?.teamName ?? "My Team"}
                           </span>
                         </span>
                       </button>
                     ))
+
                   ) : (
                     <div className="flex items-center justify-center px-2 py-8">
                       <p className="font-display text-xs font-semibold uppercase tracking-widest text-black">
