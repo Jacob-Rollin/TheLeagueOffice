@@ -262,19 +262,27 @@ function LeagueSyncCard({ userId }: { userId: string | null }) {
     if (!userId) return;
     setBusy(true);
     setStatus(null);
-    const payload =
-      tab === "sleeper"
-        ? { user_id: userId, platform: tab, label: sleeperId.trim(), sleeper_user_id: sleeperId.trim() }
-        : tab === "espn"
-          ? {
-              user_id: userId,
-              platform: tab,
-              label: espnLeague.trim(),
-              espn_league_id: espnLeague.trim(),
-              espn_s2: espnS2.trim() || null,
-              espn_swid: espnSwid.trim() || null,
-            }
-          : { user_id: userId, platform: tab, label: yahooKey.trim(), yahoo_league_key: yahooKey.trim() };
+    const label =
+      tab === "sleeper" ? sleeperId.trim() : tab === "espn" ? espnLeague.trim() : yahooKey.trim();
+    const payload: {
+      user_id: string;
+      platform: string;
+      label: string;
+      sleeper_user_id: string | null;
+      espn_league_id: string | null;
+      espn_s2: string | null;
+      espn_swid: string | null;
+      yahoo_league_key: string | null;
+    } = {
+      user_id: userId,
+      platform: tab,
+      label,
+      sleeper_user_id: tab === "sleeper" ? label : null,
+      espn_league_id: tab === "espn" ? label : null,
+      espn_s2: tab === "espn" ? espnS2.trim() || null : null,
+      espn_swid: tab === "espn" ? espnSwid.trim() || null : null,
+      yahoo_league_key: tab === "yahoo" ? label : null,
+    };
 
     if (!payload.label) {
       setBusy(false);
