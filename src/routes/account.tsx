@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { AccountShell } from "@/components/account/AccountShell";
+import { DeleteAccountLink } from "@/components/account/DeleteAccountLink";
+
 import { useAuth } from "@/hooks/useAuth";
 import { AVATAR_CHOICES, useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";

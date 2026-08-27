@@ -49,6 +49,12 @@ export type ConnectionRow = {
   yahoo_league_key: string | null;
 };
 
+const PLATFORM_LABEL: Record<string, string> = {
+  sleeper: "Sleeper",
+  espn: "ESPN",
+  yahoo: "Yahoo",
+};
+
 function LeaguesPage() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -56,7 +62,6 @@ function LeaguesPage() {
 
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Platform>("sleeper");
-  const [filter, setFilter] = useState<"all" | Platform>("all");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -129,123 +134,135 @@ function LeaguesPage() {
       value === current ? "border-accent bg-accent/10 text-foreground" : "border-border text-muted-foreground",
     );
 
-  const rows = (connections ?? []).filter((r) => filter === "all" || r.platform === filter);
+  const rows = connections ?? [];
 
   return (
-    <AccountShell title="My Leagues" active="leagues">
-      <section className="rounded-xl border border-border bg-card p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <AccountShell
+      title="My Leagues"
+      active="leagues"
+      action={
+        <button type="button" onClick={() => setOpen((v) => !v)} className={buttonClass}>
+          {open ? "Close" : "Sync New League"}
+        </button>
+      }
+    >
+      {open && (
+        <div className="mb-6 rounded-xl border border-border bg-card p-6">
           <div className="flex flex-wrap gap-2">
-            {(["all", "sleeper", "espn", "yahoo"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={tabClass(value, filter)}
-                onClick={() => setFilter(value)}
-              >
-                {value}
+            {(["sleeper", "espn", "yahoo"] as const).map((value) => (
+              <button key={value} type="button" className={tabClass(value, tab)} onClick={() => setTab(value)}>
+                {PLATFORM_LABEL[value]}
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => setOpen((v) => !v)} className={buttonClass}>
-            {open ? "Close" : "Sync A League"}
-          </button>
-        </div>
 
-        {open && (
-          <div className="mt-5 rounded-lg border border-border p-4">
-            <div className="flex flex-wrap gap-2">
-              {(["sleeper", "espn", "yahoo"] as const).map((value) => (
-                <button key={value} type="button" className={tabClass(value, tab)} onClick={() => setTab(value)}>
-                  {value}
-                </button>
-              ))}
+          <form onSubmit={save} className="mt-4 max-w-md space-y-3">
+            {tab === "sleeper" && (
+              <label className={labelClass}>
+                Sleeper User Or League ID
+                <input value={sleeperId} onChange={(e) => setSleeperId(e.target.value)} className={inputClass} />
+              </label>
+            )}
+
+            {tab === "espn" && (
+              <>
+                <label className={labelClass}>
+                  ESPN League ID
+                  <input value={espnLeague} onChange={(e) => setEspnLeague(e.target.value)} className={inputClass} />
+                </label>
+                <label className={labelClass}>
+                  ESPN_S2
+                  <input value={espnS2} onChange={(e) => setEspnS2(e.target.value)} className={inputClass} />
+                </label>
+                <label className={labelClass}>
+                  SWID
+                  <input value={espnSwid} onChange={(e) => setEspnSwid(e.target.value)} className={inputClass} />
+                </label>
+              </>
+            )}
+
+            {tab === "yahoo" && (
+              <>
+                <label className={labelClass}>
+                  Yahoo League Key
+                  <input value={yahooKey} onChange={(e) => setYahooKey(e.target.value)} className={inputClass} />
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Yahoo requires an OAuth redirect. Save the league key now and authorize when prompted.
+                </p>
+              </>
+            )}
+
+            <button type="submit" disabled={busy} className={buttonClass}>
+              {busy ? "Saving…" : "Save Connection"}
+            </button>
+            {status && <p className="text-sm text-muted-foreground">{status}</p>}
+          </form>
+        </div>
+      )}
+
+      <ul className="space-y-3">
+        {rows.map((row) => (
+          <li
+            key={row.id}
+            className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card px-4 py-4"
+          >
+            <span
+              aria-label="Synced"
+              className="flex size-6 shrink-0 items-center justify-center rounded-full border border-emerald-500 text-xs font-bold text-emerald-600"
+            >
+              ✓
+            </span>
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-background font-display text-xs uppercase text-muted-foreground">
+              {(PLATFORM_LABEL[row.platform] ?? row.platform).slice(0, 2)}
+            </span>
+
+            <div className="min-w-[10rem] flex-1">
+              <p className="text-sm font-semibold text-foreground">{row.label ?? "The League"}</p>
+              <p className="text-xs text-muted-foreground">{PLATFORM_LABEL[row.platform] ?? row.platform}</p>
             </div>
 
-            <form onSubmit={save} className="mt-4 max-w-md space-y-3">
-              {tab === "sleeper" && (
-                <label className={labelClass}>
-                  Sleeper User Or League ID
-                  <input value={sleeperId} onChange={(e) => setSleeperId(e.target.value)} className={inputClass} />
-                </label>
-              )}
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="rounded-md border border-border px-2 py-1">Half PPR</span>
+              <span className="rounded-md border border-border px-2 py-1">Redraft</span>
+              <span className="rounded-md border border-border px-2 py-1">10 Team</span>
+            </div>
 
-              {tab === "espn" && (
-                <>
-                  <label className={labelClass}>
-                    ESPN League ID
-                    <input value={espnLeague} onChange={(e) => setEspnLeague(e.target.value)} className={inputClass} />
-                  </label>
-                  <label className={labelClass}>
-                    ESPN_S2
-                    <input value={espnS2} onChange={(e) => setEspnS2(e.target.value)} className={inputClass} />
-                  </label>
-                  <label className={labelClass}>
-                    SWID
-                    <input value={espnSwid} onChange={(e) => setEspnSwid(e.target.value)} className={inputClass} />
-                  </label>
-                </>
-              )}
-
-              {tab === "yahoo" && (
-                <>
-                  <label className={labelClass}>
-                    Yahoo League Key
-                    <input value={yahooKey} onChange={(e) => setYahooKey(e.target.value)} className={inputClass} />
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Yahoo requires an OAuth redirect. Save the league key now and authorize when prompted.
-                  </p>
-                </>
-              )}
-
-              <button type="submit" disabled={busy} className={buttonClass}>
-                {busy ? "Saving…" : "Save Connection"}
-              </button>
-              {status && <p className="text-sm text-muted-foreground">{status}</p>}
-            </form>
-          </div>
-        )}
-
-        <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-          {rows.map((row) => (
-            <li key={row.id} className="rounded-lg border border-border bg-background p-4">
-              <p className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
-                {row.platform}
-              </p>
-              <p className="mt-1 truncate text-sm font-semibold text-foreground">{row.label ?? "—"}</p>
-              <div className="mt-4 flex items-center gap-2">
-                <Link
-                  to="/account/leagues/$connectionId"
-                  params={{ connectionId: row.id }}
-                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
+            <div className="ml-auto flex items-center gap-2">
+              <Link
+                to="/account/leagues/$connectionId"
+                params={{ connectionId: row.id }}
+                className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
+              >
+                Settings
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label="League options"
+                  className="rounded-md border border-border px-2 py-1.5 text-xs leading-none text-foreground"
                 >
-                  Settings
-                </Link>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    aria-label="League options"
-                    className="rounded-md border border-border px-2 py-1.5 text-xs leading-none text-foreground"
-                  >
-                    ⋮
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-44">
-                    <DropdownMenuItem asChild className="font-medium">
-                      <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }}>
-                        League Settings
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="font-medium" onSelect={() => remove(row.id)}>
-                      Delete League
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </li>
-          ))}
-          {rows.length === 0 && <li className="text-sm text-muted-foreground">No leagues synced yet.</li>}
-        </ul>
-      </section>
+                  ⋮
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem asChild className="font-medium">
+                    <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }}>
+                      League Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="font-medium" onSelect={() => remove(row.id)}>
+                    Delete League
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </li>
+        ))}
+        {rows.length === 0 && (
+          <li className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
+            No leagues synced yet.
+          </li>
+        )}
+      </ul>
     </AccountShell>
   );
 }
