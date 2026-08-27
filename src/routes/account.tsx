@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
+import { AccountShell } from "@/components/account/AccountShell";
 import { useAuth } from "@/hooks/useAuth";
 import { AVATAR_CHOICES, useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,10 +15,10 @@ export const Route = createFileRoute("/account")({
       { title: "Account Settings — The League Office" },
       {
         name: "description",
-        content: "Update your League Office profile name, avatar, password, and sync your Sleeper, ESPN or Yahoo leagues.",
+        content: "Update your League Office profile name, avatar and password.",
       },
       { property: "og:title", content: "Account Settings — The League Office" },
-      { property: "og:description", content: "Manage your profile and connected fantasy platforms." },
+      { property: "og:description", content: "Manage your League Office profile and password." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex" },
@@ -33,31 +34,41 @@ const cardClass = "rounded-xl border border-border bg-card p-6";
 const buttonClass =
   "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
 
-function AccountPage() {
-  const { user, ready } = useAuth();
-  const userId = user?.id ?? null;
+type SubTab = "profile" | "password";
 
-  if (ready && !userId) {
-    return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-16">
-        <h1 className="display-title text-3xl">Account</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Sign in from the profile menu to manage your account.</p>
-      </main>
+function AccountPage() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const [tab, setTab] = useState<SubTab>("profile");
+
+  const tabClass = (value: SubTab) =>
+    cn(
+      "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+      tab === value
+        ? "border-accent text-foreground"
+        : "border-transparent text-muted-foreground hover:text-foreground",
     );
-  }
 
   return (
-    <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-10">
-      <header>
-        <h1 className="display-title text-3xl uppercase tracking-wide">Account</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{user?.email}</p>
-      </header>
+    <AccountShell title="Account Settings" active="settings">
+      <div className="mb-5 flex gap-2 border-b border-border">
+        <button type="button" className={tabClass("profile")} onClick={() => setTab("profile")}>
+          Profile
+        </button>
+        <button type="button" className={tabClass("password")} onClick={() => setTab("password")}>
+          Password
+        </button>
+      </div>
 
-      <ProfileCard userId={userId} />
-      <AvatarCard userId={userId} />
-      <PasswordCard />
-      <LeagueSyncCard userId={userId} />
-    </main>
+      {tab === "profile" ? (
+        <div className="space-y-6">
+          <ProfileCard userId={userId} />
+          <AvatarCard userId={userId} />
+        </div>
+      ) : (
+        <PasswordCard />
+      )}
+    </AccountShell>
   );
 }
 
@@ -215,199 +226,6 @@ function PasswordCard() {
         </button>
         {status && <p className="text-sm text-muted-foreground">{status}</p>}
       </form>
-    </section>
-  );
-}
-
-type Platform = "sleeper" | "espn" | "yahoo";
-
-type ConnectionRow = {
-  id: string;
-  platform: string;
-  label: string | null;
-  sleeper_user_id: string | null;
-  espn_league_id: string | null;
-  yahoo_league_key: string | null;
-};
-
-function LeagueSyncCard({ userId }: { userId: string | null }) {
-  const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<Platform>("sleeper");
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-
-  const [sleeperId, setSleeperId] = useState("");
-  const [espnLeague, setEspnLeague] = useState("");
-  const [espnS2, setEspnS2] = useState("");
-  const [espnSwid, setEspnSwid] = useState("");
-  const [yahooKey, setYahooKey] = useState("");
-
-  const { data: connections } = useQuery({
-    queryKey: ["league-connections", userId],
-    enabled: Boolean(userId),
-    retry: false,
-    queryFn: async (): Promise<ConnectionRow[]> => {
-      const { data, error } = await supabase
-        .from("league_connections")
-        .select("id, platform, label, sleeper_user_id, espn_league_id, yahoo_league_key")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as ConnectionRow[];
-    },
-  });
-
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userId) return;
-    setBusy(true);
-    setStatus(null);
-    const label =
-      tab === "sleeper" ? sleeperId.trim() : tab === "espn" ? espnLeague.trim() : yahooKey.trim();
-    const payload: {
-      user_id: string;
-      platform: string;
-      label: string;
-      sleeper_user_id: string | null;
-      espn_league_id: string | null;
-      espn_s2: string | null;
-      espn_swid: string | null;
-      yahoo_league_key: string | null;
-    } = {
-      user_id: userId,
-      platform: tab,
-      label,
-      sleeper_user_id: tab === "sleeper" ? label : null,
-      espn_league_id: tab === "espn" ? label : null,
-      espn_s2: tab === "espn" ? espnS2.trim() || null : null,
-      espn_swid: tab === "espn" ? espnSwid.trim() || null : null,
-      yahoo_league_key: tab === "yahoo" ? label : null,
-    };
-
-    if (!payload.label) {
-      setBusy(false);
-      setStatus("Enter a league identifier first.");
-      return;
-    }
-
-    const { error } = await supabase.from("league_connections").insert(payload);
-    setBusy(false);
-    setStatus(error ? error.message : "League connection saved.");
-    if (!error) {
-      setSleeperId("");
-      setEspnLeague("");
-      setEspnS2("");
-      setEspnSwid("");
-      setYahooKey("");
-      queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
-    }
-  };
-
-  const remove = async (id: string) => {
-    await supabase.from("league_connections").delete().eq("id", id);
-    queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
-  };
-
-  const tabClass = (value: Platform) =>
-    cn(
-      "rounded-md border px-3 py-1.5 font-display text-xs uppercase tracking-wide transition-colors",
-      tab === value ? "border-accent bg-accent/10 text-foreground" : "border-border text-muted-foreground",
-    );
-
-  return (
-    <section className={cardClass}>
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="display-title text-lg uppercase tracking-wide">Platform League Sync</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Bind your platform league identifiers to this account. No player data is copied to the cloud.
-          </p>
-        </div>
-        <button type="button" onClick={() => setOpen((v) => !v)} className={buttonClass}>
-          {open ? "Close" : "Sync a New League"}
-        </button>
-      </div>
-
-      {open && (
-        <div className="mt-5 rounded-lg border border-border p-4">
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={tabClass("sleeper")} onClick={() => setTab("sleeper")}>
-              Sleeper
-            </button>
-            <button type="button" className={tabClass("espn")} onClick={() => setTab("espn")}>
-              ESPN
-            </button>
-            <button type="button" className={tabClass("yahoo")} onClick={() => setTab("yahoo")}>
-              Yahoo
-            </button>
-          </div>
-
-          <form onSubmit={save} className="mt-4 max-w-md space-y-3">
-            {tab === "sleeper" && (
-              <label className={labelClass}>
-                Sleeper User Or League ID
-                <input value={sleeperId} onChange={(e) => setSleeperId(e.target.value)} className={inputClass} />
-              </label>
-            )}
-
-            {tab === "espn" && (
-              <>
-                <label className={labelClass}>
-                  ESPN League ID
-                  <input value={espnLeague} onChange={(e) => setEspnLeague(e.target.value)} className={inputClass} />
-                </label>
-                <label className={labelClass}>
-                  ESPN_S2
-                  <input value={espnS2} onChange={(e) => setEspnS2(e.target.value)} className={inputClass} />
-                </label>
-                <label className={labelClass}>
-                  SWID
-                  <input value={espnSwid} onChange={(e) => setEspnSwid(e.target.value)} className={inputClass} />
-                </label>
-              </>
-            )}
-
-            {tab === "yahoo" && (
-              <>
-                <label className={labelClass}>
-                  Yahoo League Key
-                  <input value={yahooKey} onChange={(e) => setYahooKey(e.target.value)} className={inputClass} />
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Yahoo requires an OAuth redirect. Save the league key now and authorize when prompted.
-                </p>
-              </>
-            )}
-
-            <button type="submit" disabled={busy} className={buttonClass}>
-              {busy ? "Saving…" : "Save Connection"}
-            </button>
-            {status && <p className="text-sm text-muted-foreground">{status}</p>}
-          </form>
-        </div>
-      )}
-
-      <ul className="mt-5 space-y-2">
-        {(connections ?? []).map((row) => (
-          <li
-            key={row.id}
-            className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"
-          >
-            <span className="font-display text-xs uppercase tracking-widest text-muted-foreground">{row.platform}</span>
-            <span className="flex-1 truncate">{row.label ?? "—"}</span>
-            <button
-              type="button"
-              onClick={() => remove(row.id)}
-              className="text-xs uppercase tracking-wide text-muted-foreground underline-offset-2 hover:underline"
-            >
-              Remove
-            </button>
-          </li>
-        ))}
-        {(connections ?? []).length === 0 && (
-          <li className="text-sm text-muted-foreground">No leagues synced yet.</li>
-        )}
-      </ul>
     </section>
   );
 }
