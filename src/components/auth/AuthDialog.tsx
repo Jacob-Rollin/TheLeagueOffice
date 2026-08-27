@@ -124,8 +124,9 @@ export function AuthDialog({
           email: cleanEmail,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/`,
+            emailRedirectTo: `${window.location.origin}/auth/confirmed`,
             data: {
+              full_name: cleanName,
               name: cleanName,
             },
           },
@@ -135,15 +136,18 @@ export function AuthDialog({
           return;
         }
 
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password,
         });
-        if (signInError) {
-          setNotice("Account created. You can sign in now.");
+        if (signInError || !signInData.session) {
+          setNotice("Account created. Check your email to confirm, then sign in.");
           setIsSignup(false);
           return;
         }
+
+        // Make sure the profile row carries the submitted name.
+        await supabase.from("profiles").update({ full_name: cleanName }).eq("id", signInData.user.id);
         onOpenChange(false);
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password });
