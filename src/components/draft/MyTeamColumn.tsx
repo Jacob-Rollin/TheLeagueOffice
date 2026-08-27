@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
+import { cn } from "@/lib/utils";
 import { fillRoster, roundOf, type Pick as DraftPick, type Player, type Settings } from "@/lib/draft";
 
 /** Sticky sidebar shell used by the War Room and Mock Draft workspaces. */
@@ -102,7 +103,7 @@ export function MyTeamColumn({
                   name={s.player.name}
                   className={cn("-ml-1", !fit && "size-9")}
                   logoClassName={cn(fit ? "size-[45%] -bottom-0.5 -right-0.5" : "size-3.5")}
-                  style={fit ? { width: avatarSize, height: avatarSize } : undefined}
+                  {...(fit ? { style: { width: avatarSize, height: avatarSize } } : {})}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-semibold" style={{ fontSize: nameSize }}>
