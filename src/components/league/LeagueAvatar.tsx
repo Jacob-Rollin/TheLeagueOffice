@@ -11,7 +11,7 @@ type LeagueAvatarProps = {
 };
 
 const FALLBACK_SHELL =
-  "bg-white border border-neutral-200 w-10 h-10 rounded-full flex items-center justify-center p-1.5 overflow-hidden";
+  "max-w-10 max-h-10 w-10 h-10 rounded-full bg-white border border-neutral-200 flex items-center justify-center p-1.5 overflow-hidden";
 
 export function LeagueAvatar({ platform, src, alt = "", className }: LeagueAvatarProps) {
   const [failed, setFailed] = useState(false);
@@ -23,7 +23,7 @@ export function LeagueAvatar({ platform, src, alt = "", className }: LeagueAvata
   }, [url]);
 
   const imageShell = cn(
-    "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-200 bg-white",
+    "flex size-10 max-h-10 max-w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-200 bg-white",
     className,
   );
 
