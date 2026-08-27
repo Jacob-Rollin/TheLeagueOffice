@@ -300,6 +300,8 @@ type EspnTeam = {
   logo?: string;
   abbrev?: string;
   owners?: string[];
+  primaryOwner?: string;
+  swid?: string;
 };
 
 type EspnLeagueView = {
