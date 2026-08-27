@@ -174,16 +174,24 @@ export function ProfileMenu() {
                             : "border-transparent hover:bg-muted",
                         )}
                       >
-                        <span className="size-8 shrink-0 overflow-hidden rounded-full border border-border bg-background">
-                          {league.avatar && (
-                            <img src={league.avatar} alt="" className="size-full object-cover" />
+                        <span
+                          className={cn(
+                            "size-8 shrink-0 overflow-hidden rounded-full border border-border flex items-center justify-center",
+                            isEspn ? "bg-neutral-800" : isYahoo ? "bg-purple-50" : "bg-background",
                           )}
+                        >
+                          <LeagueAvatar
+                            platform={league.platform}
+                            src={league.avatar}
+                            alt=""
+                            className={isEspn ? "text-red-600" : isYahoo ? "text-purple-700" : undefined}
+                          />
                         </span>
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-foreground">
+                          <span className="block truncate text-sm font-semibold text-black">
                             {league.name}
                           </span>
-                          <span className="block truncate text-xs text-muted-foreground">
+                          <span className="block truncate text-xs text-black">
                             {league.teamName ?? "My Team"}
                           </span>
                         </span>
