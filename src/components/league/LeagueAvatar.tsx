@@ -63,10 +63,7 @@ export function LeagueAvatar({ platform, src, alt = "", className }: LeagueAvata
     className,
   );
 
-  // Private ESPN/Yahoo assets are unauthenticated for us — always use the brand badge.
-  const forceFallback = key === "espn" || key === "yahoo";
-
-  if (!url || failed || forceFallback) {
+  if (!url || failed) {
     return (
       <span className={shell}>
         {key === "espn" ? (
