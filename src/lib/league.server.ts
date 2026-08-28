@@ -790,3 +790,445 @@ export async function loadConnectionRosters(
     teams,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Unified multi-platform league ingestion (Sleeper / ESPN / Yahoo)
+//
+// Every foreign payload is translated into the UnifiedLeague schema below
+// before it leaves the server, so the frontend never sees platform shapes.
+// ---------------------------------------------------------------------------
+
+export type UnifiedRosterPlayer = {
+  /** Sleeper id when the identity layer can resolve it, else the native key. */
+  player_id: string;
+  /** The id as it came from the source platform. */
+  source_player_id: string;
+  player_name: string;
+  position: string | null;
+  nfl_team: string | null;
+  /** true when the platform key was translated to a Sleeper anchor id. */
+  resolved: boolean;
+};
+
+export type UnifiedRosterTeam = {
+  team_id: string;
+  team_name: string;
+  owner_name: string;
+  is_mine: boolean;
+  roster_players_list: UnifiedRosterPlayer[];
+};
+
+export type UnifiedLeague = {
+  platform: "sleeper" | "espn" | "yahoo";
+  league_id: string;
+  league_name: string;
+  season: string;
+  total_teams: number;
+  playoff_start_week: number;
+  scoring_format: "std" | "half" | "ppr";
+  /** Starters + regular bench only; IR is excluded (not drafted). */
+  draft_roster_slots: RosterSlotCounts;
+  /** Full roster metadata including IR spots, for display only. */
+  roster_metadata: { starters: number; bench: number; ir: number; total: number };
+  teams: UnifiedRosterTeam[];
+};
+
+// --- Cross-platform player identity translation layer ----------------------
+
+type IdentityIndex = {
+  byEspn: Map<string, { id: string; name: string; pos: string | null; team: string | null }>;
+  byYahoo: Map<string, { id: string; name: string; pos: string | null; team: string | null }>;
+  byName: Map<string, { id: string; name: string; pos: string | null; team: string | null }>;
+  bySleeper: Map<string, { id: string; name: string; pos: string | null; team: string | null }>;
+};
+
+let identityCache: { at: number; index: IdentityIndex } | null = null;
+const IDENTITY_TTL = 12 * 60 * 60 * 1000;
+
+const normalizeName = (s: string) =>
+  s.toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "").replace(/[^a-z]/g, "");
+
+async function loadIdentityIndex(): Promise<IdentityIndex> {
+  const now = Date.now();
+  if (identityCache && now - identityCache.at < IDENTITY_TTL) return identityCache.index;
+
+  const index: IdentityIndex = {
+    byEspn: new Map(),
+    byYahoo: new Map(),
+    byName: new Map(),
+    bySleeper: new Map(),
+  };
+
+  const raw = await json<
+    Record<
+      string,
+      {
+        player_id?: string;
+        full_name?: string;
+        first_name?: string;
+        last_name?: string;
+        position?: string | null;
+        team?: string | null;
+        espn_id?: number | string | null;
+        yahoo_id?: number | string | null;
+      }
+    >
+  >(`${BASE}/players/nfl`);
+
+  for (const [key, p] of Object.entries(raw ?? {})) {
+    const name = (p?.full_name || `${p?.first_name ?? ""} ${p?.last_name ?? ""}`).trim();
+    if (!name) continue;
+    const entry = {
+      id: String(p?.player_id ?? key),
+      name,
+      pos: p?.position ?? null,
+      team: p?.team ?? null,
+    };
+    index.bySleeper.set(entry.id, entry);
+    if (p?.espn_id) index.byEspn.set(String(p.espn_id), entry);
+    if (p?.yahoo_id) index.byYahoo.set(String(p.yahoo_id), entry);
+    const nk = normalizeName(name);
+    if (nk && !index.byName.has(nk)) index.byName.set(nk, entry);
+  }
+
+  identityCache = { at: now, index };
+  return index;
+}
+
+/**
+ * Translate a foreign platform player key (or name) onto its Sleeper anchor id
+ * so the AI bots and local caches never mix identities across platforms.
+ */
+function translatePlayer(
+  index: IdentityIndex,
+  source: "sleeper" | "espn" | "yahoo",
+  sourceId: string,
+  fallbackName: string,
+): UnifiedRosterPlayer {
+  const direct =
+    source === "sleeper"
+      ? index.bySleeper.get(sourceId)
+      : source === "espn"
+        ? index.byEspn.get(sourceId)
+        : index.byYahoo.get(sourceId);
+  const hit = direct ?? (fallbackName ? index.byName.get(normalizeName(fallbackName)) : undefined);
+  return {
+    player_id: hit?.id ?? sourceId,
+    source_player_id: sourceId,
+    player_name: hit?.name ?? fallbackName ?? sourceId,
+    position: hit?.pos ?? null,
+    nfl_team: hit?.team ?? null,
+    resolved: Boolean(hit),
+  };
+}
+
+function rosterMetadata(draft: RosterSlotCounts, ir: number) {
+  const bench = draft.BENCH;
+  const starters = Object.values(draft).reduce((a, b) => a + b, 0) - bench;
+  return { starters, bench, ir, total: starters + bench + ir };
+}
+
+// --- Sleeper ---------------------------------------------------------------
+
+/** Fetch and normalize a public Sleeper league. */
+export async function fetchSleeperLeague(leagueId: string): Promise<UnifiedLeague | null> {
+  const id = leagueId.trim();
+  if (!/^\d+$/.test(id)) return null;
+
+  const [league, rosters, users, index] = await Promise.all([
+    json<{
+      league_id: string;
+      name: string;
+      season: string;
+      total_rosters?: number;
+      scoring_settings?: Record<string, unknown>;
+      roster_positions?: string[];
+      settings?: Record<string, number>;
+    }>(`${BASE}/league/${id}`),
+    json<{ roster_id: number; owner_id: string | null; players?: string[] | null }[]>(
+      `${BASE}/league/${id}/rosters`,
+    ),
+    json<{ user_id: string; display_name: string; metadata?: { team_name?: string } }[]>(
+      `${BASE}/league/${id}/users`,
+    ),
+    loadIdentityIndex(),
+  ]);
+  if (!league) return null;
+
+  const positions = league.roster_positions ?? [];
+  const draftSlots = slotCounts(positions);
+  const ir = positions.filter((p) => String(p).toUpperCase() === "IR").length;
+  const byUser = new Map((users ?? []).map((u) => [u.user_id, u]));
+  const ordered = [...(rosters ?? [])].sort((a, b) => a.roster_id - b.roster_id);
+
+  return {
+    platform: "sleeper",
+    league_id: league.league_id,
+    league_name: league.name,
+    season: String(league.season ?? ""),
+    total_teams: league.total_rosters || ordered.length || 0,
+    playoff_start_week: Number(league.settings?.["playoff_week_start"]) || 15,
+    scoring_format: scoringKey(league.scoring_settings),
+    draft_roster_slots: draftSlots,
+    roster_metadata: rosterMetadata(draftSlots, ir),
+    teams: ordered.map((r, i) => {
+      const u = r.owner_id ? byUser.get(r.owner_id) : undefined;
+      return {
+        team_id: String(r.roster_id ?? i + 1),
+        team_name: u?.metadata?.team_name?.trim() || u?.display_name || `Team ${i + 1}`,
+        owner_name: u?.display_name ?? "",
+        is_mine: false,
+        roster_players_list: (r.players ?? []).map((pid) =>
+          translatePlayer(index, "sleeper", String(pid), ""),
+        ),
+      };
+    }),
+  };
+}
+
+// --- ESPN ------------------------------------------------------------------
+
+type EspnUnifiedView = EspnRosterView &
+  EspnRosterSettings & {
+    seasonId?: number;
+    settings?: {
+      name?: string;
+      size?: number;
+      scheduleSettings?: { playoffMatchupPeriodId?: number; matchupPeriodCount?: number };
+      scoringSettings?: { scoringItems?: { statId?: number; points?: number }[] };
+      rosterSettings?: { lineupSlotCounts?: Record<string, number> };
+    };
+  };
+
+/** Fetch and normalize an ESPN league, injecting private cookie credentials. */
+export async function fetchEspnLeague(
+  leagueId: string,
+  espnS2?: string | null,
+  swid?: string | null,
+): Promise<UnifiedLeague | null> {
+  const id = leagueId.trim();
+  if (!/^\d+$/.test(id)) return null;
+
+  const season = new Date().getFullYear();
+  const index = await loadIdentityIndex();
+
+  for (const year of [season, season - 1]) {
+    const league = await espnJson<EspnUnifiedView>(
+      `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(id)}?view=mSettings&view=mRoster&view=mTeam`,
+      espnS2,
+      swid,
+    );
+    const rows = league?.teams ?? [];
+    if (!rows.length) continue;
+
+    const counts = league?.settings?.rosterSettings?.lineupSlotCounts ?? {};
+    const draftSlots = espnSlotCounts(counts);
+    const ir = Number(counts["21"] ?? 0) || 0;
+
+    const swidGuid = swid?.trim().replace(/[{}]/g, "").toUpperCase() ?? null;
+    const matchesSwid = (t: EspnTeam) => {
+      if (!swidGuid) return false;
+      const candidates: (string | undefined)[] = [...(t.owners ?? []), t.primaryOwner, t.swid];
+      return candidates.some((c) => c && c.replace(/[{}]/g, "").toUpperCase() === swidGuid);
+    };
+    const mineId = rows.find(matchesSwid)?.id ?? null;
+
+    const scoringPpr = (league?.settings?.scoringSettings?.scoringItems ?? []).find(
+      (s) => s.statId === 53,
+    )?.points;
+    const scoring: "std" | "half" | "ppr" =
+      Number(scoringPpr) >= 1 ? "ppr" : Number(scoringPpr) > 0 ? "half" : "std";
+
+    return {
+      platform: "espn",
+      league_id: id,
+      league_name: league?.settings?.name ?? `League ${id}`,
+      season: String(league?.seasonId ?? year),
+      total_teams: league?.settings?.size ?? rows.length,
+      playoff_start_week: Number(league?.settings?.scheduleSettings?.playoffMatchupPeriodId) || 15,
+      scoring_format: scoring,
+      // Draft capacity is starters + regular bench only; IR is tracked separately.
+      draft_roster_slots: draftSlots,
+      roster_metadata: rosterMetadata(draftSlots, ir),
+      teams: rows.map((t, i) => ({
+        team_id: String(t.id ?? i + 1),
+        team_name: espnTeamName(t) ?? `Team ${i + 1}`,
+        owner_name: t.abbrev ?? "",
+        is_mine: (t.id ?? i + 1) === mineId,
+        roster_players_list: (t.roster?.entries ?? []).map((e) =>
+          translatePlayer(
+            index,
+            "espn",
+            String(e.playerId ?? ""),
+            e.playerPoolEntry?.player?.fullName ?? "",
+          ),
+        ),
+      })),
+    };
+  }
+  return null;
+}
+
+// --- Yahoo -----------------------------------------------------------------
+
+type YahooNode = Record<string, unknown> | unknown[] | string | number | null;
+
+/** Yahoo's fantasy JSON nests values in mixed object/array containers. */
+function yahooFlatten(node: YahooNode, out: Record<string, unknown> = {}): Record<string, unknown> {
+  if (!node || typeof node !== "object") return out;
+  if (Array.isArray(node)) {
+    for (const child of node) yahooFlatten(child as YahooNode, out);
+    return out;
+  }
+  for (const [k, v] of Object.entries(node)) {
+    if (v && typeof v === "object") yahooFlatten(v as YahooNode, out);
+    else if (!(k in out)) out[k] = v;
+  }
+  return out;
+}
+
+/** Depth-first search for a nested key inside Yahoo's mixed containers. */
+function findNode(node: YahooNode, key: string): unknown {
+  if (!node || typeof node !== "object") return undefined;
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = findNode(child as YahooNode, key);
+      if (hit !== undefined) return hit;
+    }
+    return undefined;
+  }
+  const rec = node as Record<string, unknown>;
+  if (key in rec) return rec[key];
+  for (const v of Object.values(rec)) {
+    const hit = findNode(v as YahooNode, key);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
+function yahooCollection(node: unknown): unknown[] {
+  if (!node || typeof node !== "object") return [];
+  const rec = node as Record<string, unknown>;
+  const count = Number(rec["count"] ?? 0);
+  const rows: unknown[] = [];
+  for (let i = 0; i < count; i++) {
+    const row = rec[String(i)];
+    if (row) rows.push(row);
+  }
+  return rows;
+}
+
+/** Fetch and normalize a Yahoo league using an OAuth access token. */
+export async function fetchYahooLeague(
+  leagueId: string,
+  accessToken: string,
+): Promise<UnifiedLeague | null> {
+  const key = leagueId.trim();
+  if (!key || !accessToken) return null;
+
+  const request = async <T>(path: string): Promise<T | null> => {
+    try {
+      const res = await fetch(
+        `https://fantasysports.yahooapis.com/fantasy/v2/${path}?format=json`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/json",
+          },
+        },
+      );
+      if (!res.ok) return null;
+      return (await res.json()) as T;
+    } catch {
+      return null;
+    }
+  };
+
+  const [settingsRes, rostersRes, index] = await Promise.all([
+    request<Record<string, unknown>>(`league/${encodeURIComponent(key)}/settings`),
+    request<Record<string, unknown>>(`league/${encodeURIComponent(key)}/teams/roster`),
+    loadIdentityIndex(),
+  ]);
+  if (!settingsRes) return null;
+
+  const leagueFlat = yahooFlatten(settingsRes as YahooNode);
+  const leagueNode = ((settingsRes["fantasy_content"] as Record<string, unknown>)?.["league"] ??
+    null) as unknown;
+  const leagueArr = Array.isArray(leagueNode) ? leagueNode : [];
+  const teamsNode = ((rostersRes?.["fantasy_content"] as Record<string, unknown>)?.[
+    "league"
+  ] as unknown[] | undefined)?.find(
+    (n) => n && typeof n === "object" && "teams" in (n as Record<string, unknown>),
+  ) as Record<string, unknown> | undefined;
+
+  const teams: UnifiedRosterTeam[] = yahooCollection(teamsNode?.["teams"]).map((row, i) => {
+    const teamNode = (row as Record<string, unknown>)["team"];
+    const flat = yahooFlatten(teamNode as YahooNode);
+    const players = yahooCollection(findNode(teamNode as YahooNode, "players"));
+
+    return {
+      team_id: String(flat["team_key"] ?? flat["team_id"] ?? i + 1),
+      team_name: String(flat["name"] ?? `Team ${i + 1}`),
+      owner_name: String(flat["nickname"] ?? ""),
+      is_mine: String(flat["is_owned_by_current_login"] ?? "") === "1",
+      roster_players_list: players.map((p) => {
+        const pf = yahooFlatten((p as Record<string, unknown>)["player"] as YahooNode);
+        return translatePlayer(
+          index,
+          "yahoo",
+          String(pf["player_id"] ?? ""),
+          String(pf["full"] ?? pf["name"] ?? ""),
+        );
+      }),
+    };
+  });
+
+  const draftSlots: RosterSlotCounts = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DEF: 0, BENCH: 0 };
+  let ir = 0;
+  const rosterPositions = findNode(leagueArr as YahooNode, "roster_positions");
+  const positionRows = Array.isArray(rosterPositions) ? rosterPositions : [];
+  for (const rp of positionRows) {
+    const flat = yahooFlatten(rp as YahooNode);
+    const pos = String(flat["position"] ?? "").toUpperCase();
+    const count = Number(flat["count"] ?? 0) || 0;
+    if (pos === "QB") draftSlots.QB += count;
+    else if (pos === "RB") draftSlots.RB += count;
+    else if (pos === "WR") draftSlots.WR += count;
+    else if (pos === "TE") draftSlots.TE += count;
+    else if (pos === "K") draftSlots.K += count;
+    else if (pos === "DEF" || pos === "DST") draftSlots.DEF += count;
+    else if (pos.includes("FLEX") || pos === "W/R/T" || pos === "W/R") draftSlots.FLEX += count;
+    else if (pos === "BN") draftSlots.BENCH += count;
+    else if (pos === "IR" || pos === "IL" || pos === "IL+") ir += count;
+  }
+
+  return {
+    platform: "yahoo",
+    league_id: key,
+    league_name: String(leagueFlat["name"] ?? `League ${key}`),
+    season: String(leagueFlat["season"] ?? ""),
+    total_teams: Number(leagueFlat["num_teams"] ?? teams.length) || teams.length,
+    playoff_start_week: Number(leagueFlat["playoff_start_week"] ?? 15) || 15,
+    scoring_format: String(leagueFlat["scoring_type"] ?? "") === "point" ? "std" : "std",
+    draft_roster_slots: draftSlots,
+    roster_metadata: rosterMetadata(draftSlots, ir),
+    teams,
+  };
+}
+
+/** Single entry point: resolve any stored connection into the unified schema. */
+export async function fetchUnifiedLeague(input: {
+  platform: string;
+  leagueId: string;
+  espnS2?: string | null;
+  swid?: string | null;
+  accessToken?: string | null;
+}): Promise<UnifiedLeague | null> {
+  if (input.platform === "espn") {
+    return await fetchEspnLeague(input.leagueId, input.espnS2, input.swid);
+  }
+  if (input.platform === "yahoo") {
+    return input.accessToken ? await fetchYahooLeague(input.leagueId, input.accessToken) : null;
+  }
+  return await fetchSleeperLeague(input.leagueId);
+}
