@@ -6,12 +6,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
-import { teamName, type Player, type Scoring, type Settings } from "@/lib/draft";
+import { teamName, type Player, type Scoring } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
 import { useDraft } from "@/hooks/use-draft";
+import { useLeagueRosters } from "@/hooks/useLeagueRosters";
+
 
 const playersQuery = queryOptions({
   queryKey: ["players"],
@@ -136,6 +138,7 @@ function TradePage() {
   );
 
   const byId = useMemo(() => new Map(data.players.map((p) => [p.id, p])), [data.players]);
+  const league = useLeagueRosters(data.players);
   const rostersByTeam = useMemo(() => {
     const map = new Map<number, Player[]>();
     for (let t = 1; t <= draft.settings.teams; t++) map.set(t, []);
@@ -146,10 +149,34 @@ function TradePage() {
     }
     return map;
   }, [draft.picks, draft.settings.teams, byId]);
-  const roster = useMemo(
-    () => rostersByTeam.get(draft.settings.myTeam) ?? [],
-    [rostersByTeam, draft.settings.myTeam],
-  );
+
+  /** Synced league rosters win; the local draft board is the offline fallback. */
+  const roster = useMemo(() => {
+    if (league?.synced && league?.myTeam) return league.myTeam.players;
+    return rostersByTeam.get(draft.settings.myTeam) ?? [];
+  }, [league?.synced, league?.myTeam, rostersByTeam, draft.settings.myTeam]);
+
+  const myTeamLabel =
+    (league?.synced ? (league?.myTeam?.team ?? league?.myTeamName) : null) ??
+    teamName(draft.settings, draft.settings.myTeam);
+
+  const otherTeams = useMemo(() => {
+    if (league?.synced) {
+      return league.teams
+        .filter((t) => !t.isMine)
+        .map((t) => ({ key: `s${t.slot}`, name: t.team, owner: t.owner, players: t.players }));
+    }
+    return [...rostersByTeam.keys()]
+      .filter((t) => t !== draft.settings.myTeam)
+      .sort((a, b) => a - b)
+      .map((t) => ({
+        key: `t${t}`,
+        name: teamName(draft.settings, t),
+        owner: "",
+        players: rostersByTeam.get(t) ?? [],
+      }));
+  }, [league?.synced, league?.teams, rostersByTeam, draft.settings]);
+
 
   const needScore = (p: Player) => {
     const count = roster.filter((r) => r.pos === p.pos).length;
@@ -227,8 +254,9 @@ function TradePage() {
     <div className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[16rem_minmax(0,1fr)_18rem]">
       <RosterColumn
         title="My team"
-        subtitle={teamName(draft.settings, draft.settings.myTeam)}
+        subtitle={myTeamLabel}
         players={roster}
+
         selectedIds={new Set(give.map((p) => p.id))}
         onPick={(p) => setGive((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
       />
@@ -363,11 +391,11 @@ function TradePage() {
       </main>
 
       <OtherTeamsColumn
-        settings={draft.settings}
-        rosters={rostersByTeam}
+        teams={otherTeams}
         selectedIds={new Set(get.map((p) => p.id))}
         onPick={(p) => setGet((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
       />
+
     </div>
   );
 
@@ -558,19 +586,15 @@ function RosterColumn({
 }
 
 function OtherTeamsColumn({
-  settings,
-  rosters,
+  teams,
   selectedIds,
   onPick,
 }: {
-  settings: Settings;
-  rosters: Map<number, Player[]>;
+  teams: { key: string; name: string; owner: string; players: Player[] }[];
   selectedIds: Set<string>;
   onPick: (p: Player) => void;
 }) {
-  const teams = [...rosters.keys()]
-    .filter((t) => t !== settings.myTeam)
-    .sort((a, b) => a - b);
+
   return (
     <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
       <p className="eyebrow">League rosters</p>
@@ -578,12 +602,24 @@ function OtherTeamsColumn({
         Tap to add to “You receive”
       </p>
       <div className="mt-2 space-y-1">
+        {teams.length === 0 && (
+          <p className="px-1 py-2 text-xs text-muted-foreground">
+            No opposing teams yet — sync a league to load rosters.
+          </p>
+        )}
         {teams.map((t) => {
-          const players = rosters.get(t) ?? [];
+          const players = t.players;
           return (
-            <details key={t} className="rounded-md border border-border bg-surface">
+            <details key={t.key} className="rounded-md border border-border bg-surface">
               <summary className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium">
-                <span className="truncate">{teamName(settings, t)}</span>
+                <span className="min-w-0 truncate">
+                  <span className="block truncate">{t.name}</span>
+                  {t.owner && (
+                    <span className="block truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+                      {t.owner}
+                    </span>
+                  )}
+                </span>
                 <span className="tabnum shrink-0 text-[10px] text-muted-foreground">
                   {players.length}
                 </span>
@@ -606,6 +642,7 @@ function OtherTeamsColumn({
           );
         })}
       </div>
+
     </aside>
   );
 }

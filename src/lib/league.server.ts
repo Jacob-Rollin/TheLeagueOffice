@@ -654,3 +654,132 @@ export async function loadConnectionSync(
     teamNames: sync.teamNames,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Full league rosters resolved from a saved connection
+// ---------------------------------------------------------------------------
+
+export type LeagueRosterTeam = {
+  slot: number;
+  team: string;
+  owner: string;
+  isMine: boolean;
+  /** Sleeper player ids (empty for ESPN). */
+  playerIds: string[];
+  /** Player full names, used to resolve ESPN rosters against our registry. */
+  playerNames: string[];
+};
+
+export type LeagueRosters = {
+  myTeamName: string | null;
+  teams: LeagueRosterTeam[];
+};
+
+type EspnRosterView = {
+  settings?: { name?: string; size?: number };
+  teams?: (EspnTeam & {
+    roster?: {
+      entries?: {
+        playerId?: number;
+        playerPoolEntry?: { player?: { fullName?: string } };
+      }[];
+    };
+  })[];
+};
+
+/** Every team in the active league with its current roster. */
+export async function loadConnectionRosters(
+  identifier: string,
+  platform: string,
+  s2?: string | null,
+  swid?: string | null,
+): Promise<LeagueRosters | null> {
+  const clean = identifier.trim().replace(/^@/, "");
+  if (!clean) return null;
+
+  if (platform === "espn") {
+    if (!/^\d+$/.test(clean)) return null;
+    const season = new Date().getFullYear();
+    const swidGuid = swid?.trim().replace(/[{}]/g, "").toUpperCase() ?? null;
+    for (const year of [season, season - 1]) {
+      const league = await espnJson<EspnRosterView>(
+        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mRoster&view=mTeam&view=mSettings`,
+        s2,
+        swid,
+      );
+      const rows = league?.teams ?? [];
+      if (!rows.length) continue;
+      const matchesSwid = (t: EspnTeam) => {
+        if (!swidGuid) return false;
+        const candidates: (string | undefined)[] = [...(t.owners ?? []), t.primaryOwner, t.swid];
+        return candidates.some((c) => c && c.replace(/[{}]/g, "").toUpperCase() === swidGuid);
+      };
+      const mineId = (rows.find(matchesSwid) ?? rows[0])?.id;
+      const teams: LeagueRosterTeam[] = rows.map((t, i) => ({
+        slot: t.id ?? i + 1,
+        team: espnTeamName(t) ?? `Team ${i + 1}`,
+        owner: t.abbrev ?? "",
+        isMine: (t.id ?? i + 1) === mineId,
+        playerIds: [],
+        playerNames: (t.roster?.entries ?? [])
+          .map((e) => e.playerPoolEntry?.player?.fullName ?? "")
+          .filter(Boolean),
+      }));
+      return {
+        myTeamName: teams.find((t) => t.isMine)?.team ?? null,
+        teams,
+      };
+    }
+    return null;
+  }
+
+  // Sleeper: identifier may be a league id, a user id, or a username.
+  let leagueId: string | null = null;
+  let userId: string | null = null;
+  if (/^\d{6,}$/.test(clean)) {
+    const direct = await json<{ league_id?: string }>(`${BASE}/league/${clean}`);
+    if (direct?.league_id) leagueId = clean;
+    else {
+      userId = clean;
+      const leagues = await json<{ league_id: string }[]>(
+        `${BASE}/user/${clean}/leagues/nfl/${new Date().getFullYear()}`,
+      );
+      leagueId = leagues?.[0]?.league_id ?? null;
+    }
+  } else {
+    const user = await json<{ user_id?: string }>(`${BASE}/user/${encodeURIComponent(clean)}`);
+    userId = user?.user_id ?? null;
+    const leagues = await loadUserLeagues(clean);
+    leagueId = leagues[0]?.id ?? null;
+  }
+  if (!leagueId) return null;
+
+  const [rosters, users] = await Promise.all([
+    json<{ roster_id: number; owner_id: string | null; players?: string[] | null }[]>(
+      `${BASE}/league/${leagueId}/rosters`,
+    ),
+    json<
+      { user_id: string; display_name: string; metadata?: { team_name?: string } }[]
+    >(`${BASE}/league/${leagueId}/users`),
+  ]);
+  if (!rosters?.length) return null;
+
+  const byUser = new Map((users ?? []).map((u) => [u.user_id, u]));
+  const ordered = [...rosters].sort((a, b) => a.roster_id - b.roster_id);
+  const teams: LeagueRosterTeam[] = ordered.map((r, i) => {
+    const u = r.owner_id ? byUser.get(r.owner_id) : undefined;
+    return {
+      slot: r.roster_id ?? i + 1,
+      team: u?.metadata?.team_name?.trim() || u?.display_name || `Team ${i + 1}`,
+      owner: u?.display_name ?? "",
+      isMine: Boolean(userId && r.owner_id === userId),
+      playerIds: (r.players ?? []).map((p) => String(p)),
+      playerNames: [],
+    };
+  });
+
+  return {
+    myTeamName: teams.find((t) => t.isMine)?.team ?? null,
+    teams,
+  };
+}

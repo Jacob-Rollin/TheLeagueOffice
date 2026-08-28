@@ -9,6 +9,7 @@ import { PlayerPicker } from "@/components/league/PlayerPicker";
 import type { Player } from "@/lib/draft";
 import { evaluateWaiver } from "@/lib/evaluate";
 import { getPlayers } from "@/lib/players.functions";
+import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { cn } from "@/lib/utils";
 
 const playersQuery = queryOptions({
@@ -50,11 +51,24 @@ function WaiverRoute() {
 
 function WaiverPage() {
   const { data } = useSuspenseQuery(playersQuery);
+  const league = useLeagueRosters(data.players);
   const [add, setAdd] = useState<Player[]>([]);
   const [drop, setDrop] = useState<Player[]>([]);
 
+  /** Wire targets exclude anyone already rostered in the active synced league. */
+  const freeAgents = useMemo(() => {
+    if (!league?.synced) return data.players;
+    return data.players.filter((p) => !league.rosteredIds.has(p.id));
+  }, [data.players, league?.synced, league?.rosteredIds]);
+
+  const myRoster = useMemo(
+    () => (league?.synced ? (league?.myTeam?.players ?? []) : data.players),
+    [league?.synced, league?.myTeam, data.players],
+  );
+
   const result = useMemo(() => evaluateWaiver(add[0] ?? null, drop[0] ?? null), [add, drop]);
   const ready = add.length > 0;
+
 
   return (
     <main className="mx-auto w-full max-w-4xl px-3 pb-16 pt-6">
@@ -71,7 +85,7 @@ function WaiverPage() {
           label="Add from waivers"
           accent="get"
           single
-          players={data.players}
+          players={freeAgents}
           selected={add}
           onAdd={(p) => setAdd([p])}
           onRemove={() => setAdd([])}
@@ -79,7 +93,7 @@ function WaiverPage() {
         <PlayerPicker
           label="Drop"
           single
-          players={data.players}
+          players={myRoster}
           selected={drop}
           onAdd={(p) => setDrop([p])}
           onRemove={() => setDrop([])}
