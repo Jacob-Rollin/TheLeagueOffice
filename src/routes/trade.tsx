@@ -1,4 +1,5 @@
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
+import { SyncLock } from "@/components/league/SyncLock";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
