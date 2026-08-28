@@ -543,6 +543,34 @@ export type ConnectionSync = {
   teamNames: Record<string, string>;
 };
 
+// ESPN lineup slot IDs. IR (21) is intentionally omitted from draft counts.
+type EspnRosterSettings = {
+  settings?: {
+    rosterSettings?: {
+      lineupSlotCounts?: Record<string, number>;
+    };
+  };
+};
+
+function espnSlotCounts(lineupSlotCounts: Record<string, number> | undefined): RosterSlotCounts {
+  const roster: RosterSlotCounts = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DEF: 0, BENCH: 0 };
+  if (!lineupSlotCounts) return roster;
+  for (const [raw, count] of Object.entries(lineupSlotCounts)) {
+    const id = Number(raw);
+    const c = Number(count) || 0;
+    if (id === 0) roster.QB += c;
+    else if (id === 2) roster.RB += c;
+    else if (id === 4) roster.WR += c;
+    else if (id === 6) roster.TE += c;
+    else if (id === 17) roster.K += c;
+    else if (id === 16) roster.DEF += c;
+    else if (id === 23) roster.FLEX += c;
+    else if (id === 20) roster.BENCH += c;
+    // id === 21 is IR; explicitly excluded because IR spots are not drafted.
+  }
+  return roster;
+}
+
 /** Resolve draft-room settings for a stored connection identifier. */
 export async function loadConnectionSync(
   identifier: string,
