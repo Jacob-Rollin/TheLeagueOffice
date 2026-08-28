@@ -73,10 +73,10 @@ function WaiverPage() {
 
 
   return (
-    <main className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[1fr_2fr_1fr]">
+    <main className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[16rem_minmax(0,1fr)_18rem]">
       <div className="hidden min-w-0 xl:block" aria-hidden="true" />
 
-      <div className="min-w-0">
+      <main className="min-w-0">
         <div className="flex items-center gap-2">
           <h1 className="display-title text-3xl">Waiver Evaluator</h1>
           <ActiveLeagueLabel />
@@ -140,7 +140,7 @@ function WaiverPage() {
             </div>
           )}
         </section>
-      </div>
+      </main>
 
       <aside className="min-w-0">
         {locked ? (
