@@ -64,3 +64,15 @@ export const getConnectionSync = createServerFn({ method: "GET" })
     const { loadConnectionSync } = await import("./league.server");
     return await loadConnectionSync(data.identifier, data.platform, data.s2, data.swid);
   });
+
+export const getConnectionRosters = createServerFn({ method: "GET" })
+  .inputValidator((input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
+    identifier: String(input.identifier ?? "").slice(0, 64),
+    platform: String(input.platform ?? "sleeper").slice(0, 16),
+    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const { loadConnectionRosters } = await import("./league.server");
+    return await loadConnectionRosters(data.identifier, data.platform, data.s2, data.swid);
+  });
