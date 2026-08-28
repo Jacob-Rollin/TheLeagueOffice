@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/leaguesync")({
