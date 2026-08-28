@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/leaguesync")({
@@ -27,11 +28,11 @@ type Platform = "yahoo" | "espn" | "sleeper";
 type EspnTab = "public" | "private";
 
 const cardClass =
-  "flex flex-1 items-center justify-center rounded-2xl px-6 py-12 font-display text-2xl font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5";
+  "flex flex-1 items-center justify-center rounded-2xl px-6 py-12 font-display text-2xl font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0";
 const brandBlock =
   "mt-6 flex w-40 items-center justify-center rounded-xl py-6 font-display text-lg font-bold text-white";
 const inputClass =
-  "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-black placeholder:text-black/50 outline-none focus:border-ring";
+  "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-black placeholder:text-black/50 outline-none focus:border-ring disabled:opacity-60";
 const labelClass = "block text-left text-xs font-semibold uppercase tracking-wide text-black";
 const blueButton =
   "rounded-md px-6 py-2 font-display text-sm uppercase tracking-wide text-white disabled:opacity-60";
@@ -41,6 +42,7 @@ function LeagueSyncPage() {
   const userId = user?.id ?? null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { refresh } = useActiveLeague();
 
   const yahooUnconfigured =
     typeof window !== "undefined" &&
@@ -49,7 +51,7 @@ function LeagueSyncPage() {
   const [platform, setPlatform] = useState<Platform>(yahooUnconfigured ? "yahoo" : "sleeper");
   const [espnTab, setEspnTab] = useState<EspnTab>("public");
   const [guideOpen, setGuideOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   const [identifier, setIdentifier] = useState("");
@@ -70,7 +72,7 @@ function LeagueSyncPage() {
       setStatus("Enter your league details first.");
       return;
     }
-    setBusy(true);
+    setIsSyncing(true);
     setStatus(null);
     const { error } = await supabase.from("synced_leagues").insert({
       user_id: userId,
@@ -80,13 +82,14 @@ function LeagueSyncPage() {
       swid: extra?.["espn_swid"] ?? null,
       metadata: { label, platform: next, teams: [], rules: {} },
     });
-    setBusy(false);
     if (error) {
+      setIsSyncing(false);
       setStatus(error.message);
       return;
     }
-    queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
-    queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
+    await queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
+    await refresh();
+    setIsSyncing(false);
     navigate({ to: "/account/leagues" });
   };
 
@@ -101,6 +104,7 @@ function LeagueSyncPage() {
       <div className="mt-8 flex flex-row gap-5">
         <button
           type="button"
+          disabled={isSyncing}
           onClick={() => setPlatform("yahoo")}
           className={cardClass}
           style={{ backgroundColor: "#6001d2" }}
@@ -109,6 +113,7 @@ function LeagueSyncPage() {
         </button>
         <button
           type="button"
+          disabled={isSyncing}
           onClick={() => setPlatform("espn")}
           className={cardClass}
           style={{ backgroundColor: "#cc0000" }}
@@ -117,6 +122,7 @@ function LeagueSyncPage() {
         </button>
         <button
           type="button"
+          disabled={isSyncing}
           onClick={() => setPlatform("sleeper")}
           className={cardClass}
           style={{ backgroundColor: "#0f1e36" }}
@@ -144,16 +150,22 @@ function LeagueSyncPage() {
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 placeholder="Username"
+                disabled={isSyncing}
                 className={inputClass}
               />
               <button
                 type="submit"
-                disabled={busy}
+                disabled={isSyncing}
                 className={blueButton}
                 style={{ backgroundColor: "#0077ff" }}
               >
-                {busy ? "Saving…" : "Continue"}
+                {isSyncing ? "Syncing League Data..." : "Continue"}
               </button>
+              {isSyncing && (
+                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+                </div>
+              )}
             </form>
             {status && <p className="mt-3 text-sm text-muted-foreground">{status}</p>}
             <p className="mt-6 text-xs text-muted-foreground">
@@ -172,8 +184,9 @@ function LeagueSyncPage() {
             <div className="mt-6 flex w-full border-b border-border">
               <button
                 type="button"
+                disabled={isSyncing}
                 onClick={() => setEspnTab("public")}
-                className={`flex-1 px-4 py-2 text-sm ${
+                className={`flex-1 px-4 py-2 text-sm disabled:opacity-60 ${
                   espnTab === "public"
                     ? "border-b-2 border-primary font-semibold text-black"
                     : "text-muted-foreground"
@@ -183,8 +196,9 @@ function LeagueSyncPage() {
               </button>
               <button
                 type="button"
+                disabled={isSyncing}
                 onClick={() => setEspnTab("private")}
-                className={`flex-1 px-4 py-2 text-sm ${
+                className={`flex-1 px-4 py-2 text-sm disabled:opacity-60 ${
                   espnTab === "private"
                     ? "border-b-2 border-primary font-semibold text-black"
                     : "text-muted-foreground"
@@ -196,8 +210,9 @@ function LeagueSyncPage() {
 
             <button
               type="button"
+              disabled={isSyncing}
               onClick={() => setGuideOpen(true)}
-              className="mt-4 self-start text-xs text-black underline"
+              className="mt-4 self-start text-xs text-black underline disabled:opacity-60"
             >
               How do I find these keys?
             </button>
@@ -223,6 +238,7 @@ function LeagueSyncPage() {
                   id="espn-league-id"
                   value={espnLeagueId}
                   onChange={(e) => setEspnLeagueId(e.target.value)}
+                  disabled={isSyncing}
                   className={inputClass}
                 />
               </div>
@@ -237,6 +253,7 @@ function LeagueSyncPage() {
                       id="espn-s2"
                       value={espnS2}
                       onChange={(e) => setEspnS2(e.target.value)}
+                      disabled={isSyncing}
                       className={inputClass}
                     />
                   </div>
@@ -248,6 +265,7 @@ function LeagueSyncPage() {
                       id="espn-swid"
                       value={espnSwid}
                       onChange={(e) => setEspnSwid(e.target.value)}
+                      disabled={isSyncing}
                       className={inputClass}
                     />
                   </div>
@@ -256,12 +274,17 @@ function LeagueSyncPage() {
 
               <button
                 type="submit"
-                disabled={busy}
+                disabled={isSyncing}
                 className={blueButton}
                 style={{ backgroundColor: "#0077ff" }}
               >
-                {espnTab === "public" ? "Sync Public League" : "Sync Private League"}
+                {isSyncing ? "Syncing League Data..." : espnTab === "public" ? "Sync Public League" : "Sync Private League"}
               </button>
+              {isSyncing && (
+                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+                </div>
+              )}
             </form>
             {status && <p className="mt-3 text-sm text-muted-foreground">{status}</p>}
           </div>
@@ -278,6 +301,7 @@ function LeagueSyncPage() {
             </div>
             <button
               type="button"
+              disabled={isSyncing}
               onClick={() => {
                 window.location.href = "/api/auth/yahoo/connect";
               }}

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +21,7 @@ type ActiveLeagueValue = {
   activeLeague: ActiveLeagueToken | null;
   activeLeagueId: string | null;
   setActiveLeagueId: (id: string) => void;
+  refresh: () => Promise<void>;
 };
 
 const STORAGE_KEY = "tlo.active-league";
@@ -30,10 +31,12 @@ const ActiveLeagueContext = createContext<ActiveLeagueValue>({
   activeLeague: null,
   activeLeagueId: null,
   setActiveLeagueId: () => {},
+  refresh: async () => {},
 });
 
 export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
   const { user, ready } = useAuth();
+  const queryClient = useQueryClient();
   const userId = user?.id ?? null;
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -112,6 +115,14 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    await queryClient.refetchQueries({
+      queryKey: ["active-league-connections", userId],
+      exact: true,
+    });
+  }, [queryClient, userId]);
+
   const activeLeague = useMemo(
     () => leagues.find((l) => l.id === activeId) ?? leagues[0] ?? null,
     [leagues, activeId],
@@ -123,8 +134,9 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
       activeLeague,
       activeLeagueId: activeLeague?.id ?? null,
       setActiveLeagueId,
+      refresh,
     }),
-    [leagues, activeLeague, setActiveLeagueId],
+    [leagues, activeLeague, setActiveLeagueId, refresh],
   );
 
   return <ActiveLeagueContext.Provider value={value}>{children}</ActiveLeagueContext.Provider>;
