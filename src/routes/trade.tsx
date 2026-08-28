@@ -558,19 +558,15 @@ function RosterColumn({
 }
 
 function OtherTeamsColumn({
-  settings,
-  rosters,
+  teams,
   selectedIds,
   onPick,
 }: {
-  settings: Settings;
-  rosters: Map<number, Player[]>;
+  teams: { key: string; name: string; owner: string; players: Player[] }[];
   selectedIds: Set<string>;
   onPick: (p: Player) => void;
 }) {
-  const teams = [...rosters.keys()]
-    .filter((t) => t !== settings.myTeam)
-    .sort((a, b) => a - b);
+
   return (
     <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
       <p className="eyebrow">League rosters</p>
