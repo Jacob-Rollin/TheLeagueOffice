@@ -336,14 +336,26 @@ function TradePage() {
 
   return (
     <div className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[16rem_minmax(0,1fr)_18rem]">
-      <RosterColumn
-        title="My team"
-        subtitle={myTeamLabel}
-        players={roster}
+      {locked ? (
+        <SidebarLock authenticated={Boolean(user)} onSignIn={() => setAuthOpen(true)}>
+          <RosterColumn
+            title="My team"
+            subtitle="—"
+            players={[]}
+            selectedIds={new Set()}
+            onPick={() => {}}
+          />
+        </SidebarLock>
+      ) : (
+        <RosterColumn
+          title="My team"
+          subtitle={myTeamLabel}
+          players={userRoster}
+          selectedIds={new Set(give.map((p) => p.id))}
+          onPick={(p) => setGive((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+        />
+      )}
 
-        selectedIds={new Set(give.map((p) => p.id))}
-        onPick={(p) => setGive((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
-      />
       <main className="min-w-0">
 
       <div className="flex flex-wrap items-end justify-between gap-3">
