@@ -71,44 +71,37 @@ function WaiverPage() {
 
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-3 pb-16 pt-6">
-      <div className="flex items-center gap-2">
-        <h1 className="display-title text-3xl">Waiver Evaluator</h1>
-        <ActiveLeagueLabel />
-      </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Compare a waiver add to the roster spot it costs you.
-      </p>
+    <main className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <h1 className="display-title text-3xl">Waiver Evaluator</h1>
+          <ActiveLeagueLabel />
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Compare a waiver add to the roster spot it costs you.
+        </p>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        <PlayerPicker
-          label="Add from waivers"
-          accent="get"
-          single
-          players={freeAgents}
-          selected={add}
-          onAdd={(p) => setAdd([p])}
-          onRemove={() => setAdd([])}
-        />
-        <PlayerPicker
-          label="Drop from roster"
-          single
-          players={myRoster}
-          selected={drop}
-          onAdd={(p) => setDrop([p])}
-          onRemove={() => setDrop([])}
-        />
-        {locked ? (
-          <SyncLock authenticated={Boolean(user)} rows={5}>
-            <MyRosterPanel players={[]} onPick={() => {}} />
-          </SyncLock>
-        ) : (
-          <MyRosterPanel players={myRoster} onPick={(p) => setDrop([p])} />
-        )}
-      </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <PlayerPicker
+            label="Add from waivers"
+            accent="get"
+            single
+            players={freeAgents}
+            selected={add}
+            onAdd={(p) => setAdd([p])}
+            onRemove={() => setAdd([])}
+          />
+          <PlayerPicker
+            label="Drop from roster"
+            single
+            players={myRoster}
+            selected={drop}
+            onAdd={(p) => setDrop([p])}
+            onRemove={() => setDrop([])}
+          />
+        </div>
 
-
-      <section className="mt-4 rounded-lg border border-border bg-card p-4">
+        <section className="mt-4 rounded-lg border border-border bg-card p-4">
         <div className="flex items-center gap-4">
           <div
             className={cn(
@@ -142,7 +135,18 @@ function WaiverPage() {
             <Cell label="Value gain" value={`${result.gainPct > 0 ? "+" : ""}${result.gainPct.toFixed(0)}%`} />
           </div>
         )}
-      </section>
+        </section>
+      </div>
+
+      <aside className="min-w-0">
+        {locked ? (
+          <SyncLock authenticated={Boolean(user)} rows={5}>
+            <MyRosterPanel players={[]} onPick={() => {}} />
+          </SyncLock>
+        ) : (
+          <MyRosterPanel players={myRoster} onPick={(p) => setDrop([p])} />
+        )}
+      </aside>
     </main>
   );
 }
