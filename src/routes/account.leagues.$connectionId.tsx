@@ -26,12 +26,11 @@ export const Route = createFileRoute("/account/leagues/$connectionId")({
 type Row = {
   id: string;
   platform: string;
-  label: string | null;
-  sleeper_user_id: string | null;
-  espn_league_id: string | null;
-  yahoo_league_key: string | null;
+  league_id: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
 };
+
 
 const POINT_SETTINGS: [string, string][] = [
   ["Passing Yard", "0.04"],
@@ -65,8 +64,8 @@ function LeagueSettingsPage() {
     retry: false,
     queryFn: async (): Promise<Row | null> => {
       const { data, error } = await supabase
-        .from("league_connections")
-        .select("id, platform, label, sleeper_user_id, espn_league_id, yahoo_league_key, created_at")
+        .from("synced_leagues")
+        .select("id, platform, league_id, metadata, created_at")
         .eq("id", connectionId)
         .maybeSingle();
       if (error) throw error;
@@ -76,12 +75,13 @@ function LeagueSettingsPage() {
 
   const removeLink = async () => {
     if (!window.confirm("Remove this synced league link? This cannot be undone.")) return;
-    await supabase.from("league_connections").delete().eq("id", connectionId);
+    await supabase.from("synced_leagues").delete().eq("id", connectionId);
     queryClient.invalidateQueries({ queryKey: ["league-connections"] });
     // Flush the global navbar/context cache so the deleted league's avatar resets instantly.
     queryClient.invalidateQueries({ queryKey: ["active-league-connections"] });
     navigate({ to: "/account/leagues" });
   };
+
 
   return (
     <AccountShell title="League Settings" active="leagues">
@@ -94,7 +94,12 @@ function LeagueSettingsPage() {
               <p className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
                 {row.platform}
               </p>
-              <p className="mt-1 text-lg font-semibold text-foreground">{row.label ?? "—"}</p>
+              <p className="mt-1 text-lg font-semibold text-foreground">
+                {((row?.metadata as Record<string, unknown> | null)?.["label"] as string | undefined) ??
+                  row?.league_id ??
+                  "—"}
+              </p>
+
             </>
           ) : (
             <p className="text-sm text-muted-foreground">This synced league no longer exists.</p>

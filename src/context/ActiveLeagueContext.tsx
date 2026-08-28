@@ -53,22 +53,24 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<ActiveLeagueToken[]> => {
       const { data, error } = await supabase
-        .from("league_connections")
-        .select("id, platform, label, sleeper_user_id, espn_league_id, yahoo_league_key, espn_s2, espn_swid")
+        .from("synced_leagues")
+        .select("id, platform, league_id, espn_s2, swid, metadata")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const rows = (data ?? []).map((row) => ({
-        id: String(row?.id ?? ""),
-        platform: String(row?.platform ?? "sleeper"),
-        leagueId: String(
-          row?.sleeper_user_id ?? row?.espn_league_id ?? row?.yahoo_league_key ?? row?.label ?? "",
-        ),
-        name: row?.label ?? "League",
-        teamName: null as string | null,
-        avatar: null as string | null,
-        s2: (row?.espn_s2 as string | null) ?? null,
-        swid: (row?.espn_swid as string | null) ?? null,
-      }));
+      const rows = (data ?? []).map((row) => {
+        const meta = (row?.metadata ?? {}) as Record<string, unknown>;
+        return {
+          id: String(row?.id ?? ""),
+          platform: String(row?.platform ?? "sleeper"),
+          leagueId: String(row?.league_id ?? ""),
+          name: (meta?.["label"] as string | undefined) ?? "League",
+          teamName: null as string | null,
+          avatar: null as string | null,
+          s2: (row?.espn_s2 as string | null) ?? null,
+          swid: (row?.swid as string | null) ?? null,
+        };
+      });
+
 
       const { getConnectionMeta } = await import("@/lib/league.functions");
       return await Promise.all(

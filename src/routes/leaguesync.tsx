@@ -72,14 +72,13 @@ function LeagueSyncPage() {
     }
     setBusy(true);
     setStatus(null);
-    const { error } = await supabase.from("league_connections").insert({
+    const { error } = await supabase.from("synced_leagues").insert({
       user_id: userId,
       platform: next,
-      label,
-      sleeper_user_id: next === "sleeper" ? label : null,
-      espn_league_id: next === "espn" ? label : null,
-      yahoo_league_key: next === "yahoo" ? label : null,
-      ...extra,
+      league_id: label,
+      espn_s2: extra?.["espn_s2"] ?? null,
+      swid: extra?.["espn_swid"] ?? null,
+      metadata: { label, platform: next, teams: [], rules: {} },
     });
     setBusy(false);
     if (error) {
@@ -90,6 +89,7 @@ function LeagueSyncPage() {
     queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
     navigate({ to: "/account/leagues" });
   };
+
 
   return (
     <main className="mx-auto w-full max-w-4xl px-4 pb-20 pt-10">

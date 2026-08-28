@@ -53,14 +53,13 @@ function ConfirmedPage() {
     }
 
     void (async () => {
-      const { error } = await supabase.from("league_connections").insert({
+      const { error } = await supabase.from("synced_leagues").insert({
         user_id: userId,
         platform: "yahoo",
-        label,
-        yahoo_league_key: leagueKey,
-        sleeper_user_id: null,
-        espn_league_id: null,
+        league_id: leagueKey,
+        metadata: { label },
       });
+
       if (error) {
         setSyncNote(error.message);
         return;
