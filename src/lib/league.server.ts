@@ -1087,6 +1087,25 @@ function yahooFlatten(node: YahooNode, out: Record<string, unknown> = {}): Recor
   return out;
 }
 
+/** Depth-first search for a nested key inside Yahoo's mixed containers. */
+function findNode(node: YahooNode, key: string): unknown {
+  if (!node || typeof node !== "object") return undefined;
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = findNode(child as YahooNode, key);
+      if (hit !== undefined) return hit;
+    }
+    return undefined;
+  }
+  const rec = node as Record<string, unknown>;
+  if (key in rec) return rec[key];
+  for (const v of Object.values(rec)) {
+    const hit = findNode(v as YahooNode, key);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
 function yahooCollection(node: unknown): unknown[] {
   if (!node || typeof node !== "object") return [];
   const rec = node as Record<string, unknown>;
@@ -1166,12 +1185,7 @@ export async function fetchYahooLeague(
 
   const draftSlots: RosterSlotCounts = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DEF: 0, BENCH: 0 };
   let ir = 0;
-  const settingsNode = leagueArr.find(
-    (n) => n && typeof n === "object" && "settings" in (n as Record<string, unknown>),
-  ) as Record<string, unknown> | undefined;
-  const rosterPositions = settingsNode
-    ? ((yahooFlatten(settingsNode["settings"] as YahooNode)["roster_positions"] as unknown) ?? null)
-    : null;
+  const rosterPositions = findNode(leagueArr as YahooNode, "roster_positions");
   const positionRows = Array.isArray(rosterPositions) ? rosterPositions : [];
   for (const rp of positionRows) {
     const flat = yahooFlatten(rp as YahooNode);
