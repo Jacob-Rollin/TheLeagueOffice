@@ -1,18 +1,18 @@
-import { useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Link2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SyncLock } from "@/components/league/SyncLock";
+import { useActiveLeague, type ActiveLeagueToken } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { rosterSize } from "@/lib/draft";
-import { getLeagueSync, getUserLeagues } from "@/lib/league.functions";
-import type { LeagueSummary } from "@/lib/league.server";
+import { getConnectionSync } from "@/lib/league.functions";
+import { platformLabel } from "@/lib/league-link";
 import {
   DEFAULT_MOCK_CONFIG,
-  PLAYOFF_WEEKS,
   ROSTER_FIELDS,
   SCORING_CHOICES,
   TEAM_CHOICES,
@@ -22,6 +22,7 @@ import {
   type MockConfig,
 } from "@/lib/mock-config";
 import { cn } from "@/lib/utils";
+
 
 export const Route = createFileRoute("/mock-draft_/setup")({
   head: () => ({
@@ -52,17 +53,74 @@ function MockDraftSetupPage() {
     () => loadMockConfig() ?? DEFAULT_MOCK_CONFIG,
   );
   const [touchedName, setTouchedName] = useState(false);
+  const { activeLeague } = useActiveLeague();
+  // Baseline captured from the synced league payload; used for the status line.
+  const syncedRef = useRef<MockConfig | null>(null);
+  const appliedRef = useRef<string | null>(null);
+
+  const { data: synced } = useQuery({
+    queryKey: ["connection-sync", activeLeague?.id ?? null],
+    enabled: Boolean(activeLeague?.leagueId),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () =>
+      await getConnectionSync({
+        data: {
+          identifier: activeLeague?.leagueId ?? "",
+          platform: activeLeague?.platform ?? "sleeper",
+          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+        },
+      }),
+  });
+
+  // Auto-populate the left form the moment an active league resolves.
+  useEffect(() => {
+    const id = activeLeague?.id ?? null;
+    if (!id || !synced) return;
+    const teams = Number(synced?.teams) || DEFAULT_MOCK_CONFIG.teams;
+    const roster = { ...DEFAULT_MOCK_CONFIG.roster, ...(synced?.roster ?? {}) };
+    const slot = Math.min(Math.max(Number(synced?.myTeam) || 1, 1), teams);
+    const teamName =
+      activeLeague?.teamName?.trim() ||
+      synced?.teamNames?.[String(slot)] ||
+      DEFAULT_MOCK_CONFIG.teamName;
+    const next: MockConfig = {
+      ...DEFAULT_MOCK_CONFIG,
+      teamName,
+      teams,
+      slot,
+      scoring: synced?.scoring ?? DEFAULT_MOCK_CONFIG.scoring,
+      snake: Boolean(synced?.snake ?? DEFAULT_MOCK_CONFIG.snake),
+      roster,
+      playoffsStartWeek:
+        Number(synced?.playoffStartWeek) || DEFAULT_MOCK_CONFIG.playoffsStartWeek,
+    };
+    const signature = `${id}:${JSON.stringify(next)}`;
+    if (appliedRef.current === signature) return;
+    appliedRef.current = signature;
+    syncedRef.current = next;
+    setConfig((c) => ({ ...next, timerLabel: c.timerLabel }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [synced, activeLeague?.id]);
 
   // Default the team name to the signed-in profile name.
   useEffect(() => {
-    if (touchedName) return;
+    if (touchedName || syncedRef.current) return;
     const full = (user?.user_metadata as { full_name?: string } | undefined)?.full_name;
     if (full && config.teamName === DEFAULT_MOCK_CONFIG.teamName) {
       setConfig((c) => ({ ...c, teamName: full }));
     }
   }, [user, touchedName, config.teamName]);
 
+  const modified = Boolean(
+    syncedRef.current &&
+      JSON.stringify({ ...syncedRef.current, timerLabel: config.timerLabel }) !==
+        JSON.stringify(config),
+  );
+
   const patch = (p: Partial<MockConfig>) => setConfig((c) => ({ ...c, ...p }));
+
 
   const begin = () => {
     const clean: MockConfig = {
@@ -169,6 +227,35 @@ function MockDraftSetupPage() {
               </select>
             </Field>
 
+            <Field label="Playoffs Start Week">
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-background p-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    patch({ playoffsStartWeek: Math.max(1, config.playoffsStartWeek - 1) })
+                  }
+                  className="h-9 w-9 rounded-md border border-input bg-background text-sm font-display transition-colors hover:text-foreground"
+                >
+                  −
+                </button>
+                <div className="tabnum h-9 min-w-[80px] flex-1 rounded-md border border-input bg-background px-1 text-center text-sm leading-9">
+                  {config.playoffsStartWeek}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    patch({ playoffsStartWeek: Math.min(18, config.playoffsStartWeek + 1) })
+                  }
+                  className="h-9 w-9 rounded-md border border-input bg-background text-sm font-display transition-colors hover:text-foreground"
+                >
+                  +
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Regular season simulates {config.playoffsStartWeek - 1} weeks.
+              </p>
+            </Field>
+
             <Field label="Roster Positions Setup">
               <div className="grid grid-cols-4 gap-2 rounded-lg border border-border bg-background p-3 sm:grid-cols-8">
                 {ROSTER_FIELDS.map((f) => (
@@ -200,23 +287,6 @@ function MockDraftSetupPage() {
               </p>
             </Field>
 
-            <Field label="Playoffs Start Week" htmlFor="ms-playoffs">
-              <select
-                id="ms-playoffs"
-                value={config.playoffsStartWeek}
-                onChange={(e) => patch({ playoffsStartWeek: Number(e.target.value) })}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                {PLAYOFF_WEEKS.map((w) => (
-                  <option key={w} value={w}>
-                    Week {w}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Regular season simulates {config.playoffsStartWeek - 1} weeks.
-              </p>
-            </Field>
 
             <Button
               size="lg"
@@ -227,8 +297,15 @@ function MockDraftSetupPage() {
             </Button>
           </div>
 
-          {/* Right column — Sleeper sync */}
-          <SleeperSyncCard config={config} setConfig={setConfig} />
+          {/* Right column — connected sync data */}
+          <ConnectedSyncCard
+            config={config}
+            authenticated={Boolean(user)}
+            league={activeLeague}
+            modified={modified}
+            onRestore={() => syncedRef.current && setConfig(syncedRef.current)}
+          />
+
         </div>
       </div>
     </main>
@@ -285,92 +362,59 @@ function Choice({
   );
 }
 
-function SleeperSyncCard({
+function ConnectedSyncCard({
   config,
-  setConfig,
+  authenticated,
+  league,
+  modified,
+  onRestore,
 }: {
   config: MockConfig;
-  setConfig: (updater: (c: MockConfig) => MockConfig) => void;
+  authenticated: boolean;
+  league: ActiveLeagueToken | null;
+  modified: boolean;
+  onRestore: () => void;
 }) {
-  const [username, setUsername] = useState("");
-  const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
-  const [note, setNote] = useState<string | null>(null);
-
-  const leaguesM = useMutation({
-    mutationFn: (name: string) => getUserLeagues({ data: { username: name } }),
-  });
-  const syncM = useMutation({
-    mutationFn: (vars: { leagueId: string }) => getLeagueSync({ data: vars }),
-  });
-
-  const findLeagues = async () => {
-    setNote(null);
-    setLeagues([]);
-    const res = await leaguesM.mutateAsync(username.trim());
-    if (!res.length) return setNote("No leagues found for that Sleeper username.");
-    if (res.length === 1) return applyLeague(res[0]!.id, res[0]!.name);
-    setLeagues(res);
-  };
-
-  // Settings only: scoring, roster slots, league size. Team names are skipped.
-  const applyLeague = async (leagueId: string, name: string) => {
-    const res = await syncM.mutateAsync({ leagueId });
-    if (!res) return setNote("Couldn't load that league.");
-    const teams = TEAM_CHOICES.includes(res.teams)
-      ? res.teams
-      : Math.min(16, Math.max(8, res.teams));
-    setConfig((c) => ({
-      ...c,
-      teams,
-      slot: Math.min(c.slot, teams),
-      scoring: res.scoring,
-      roster: { ...c.roster, ...res.roster },
-    }));
-    setLeagues([]);
-    setNote(`Imported settings from ${res.league.name || name} (team names skipped).`);
-  };
-
-  const busy = leaguesM.isPending || syncM.isPending;
-
   return (
     <aside className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-      <div className="flex items-center gap-2">
-        <Link2 className="size-4 text-primary" />
-        <h2 className="font-display text-sm uppercase tracking-widest">Sleeper League Sync</h2>
-      </div>
-      <p className="mt-1 text-[11px] text-muted-foreground">
-        Imports scoring, roster slots and league size only — team names stay local.
-      </p>
-      <div className="mt-3 flex gap-2">
-        <Input
-          value={username}
-          placeholder="Sleeper username"
-          onChange={(e) => setUsername(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && username.trim() && void findLeagues()}
-        />
-        <Button type="button" disabled={busy || !username.trim()} onClick={() => void findLeagues()}>
-          {busy ? "…" : "Load"}
-        </Button>
-      </div>
-      {leagues.length > 0 && (
-        <ul className="mt-3 space-y-1">
-          {leagues.map((l) => (
-            <li key={l.id}>
+      {league ? (
+        <div className="space-y-1">
+          <h2 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
+            Connected Sync Data
+          </h2>
+          <p className="text-sm font-semibold text-black">
+            {league?.name ?? "League"}{" "}
+            <span className="font-normal text-muted-foreground">
+              [{platformLabel(league?.platform)}]
+            </span>
+          </p>
+          <p className="text-xs text-black">{league?.teamName ?? "Your team"}</p>
+          {modified && (
+            <div className="pt-2">
+              <p className="text-xs font-semibold text-red-600">
+                Status: Custom Settings (Modified)
+              </p>
               <button
                 type="button"
-                onClick={() => void applyLeague(l.id, l.name)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-left transition-colors hover:border-primary"
+                onClick={onRestore}
+                className="mt-1 text-xs font-semibold text-black underline underline-offset-4"
               >
-                <div className="truncate font-display text-sm">{l.name}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {l.season} · {l.teams} teams · {l.scoring}
-                </div>
+                Restore Synced Defaults
               </button>
-            </li>
-          ))}
-        </ul>
+            </div>
+          )}
+        </div>
+      ) : (
+        <SyncLock authenticated={authenticated} rows={3}>
+          <div className="space-y-1 py-3">
+            <h2 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
+              Connected Sync Data
+            </h2>
+            <p className="text-sm font-semibold">League</p>
+            <p className="text-xs">Your team</p>
+          </div>
+        </SyncLock>
       )}
-      {note && <p className="mt-3 text-[11px] text-muted-foreground">{note}</p>}
 
       <dl className="mt-5 space-y-2 border-t border-border pt-4 text-xs">
         <Row label="League size" value={`${config.teams} teams`} />
@@ -381,6 +425,7 @@ function SleeperSyncCard({
     </aside>
   );
 }
+
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
