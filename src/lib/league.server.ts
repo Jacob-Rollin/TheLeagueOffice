@@ -185,7 +185,9 @@ function slotCounts(positions: string[] | undefined): RosterSlotCounts {
     else if (p === "K") roster.K++;
     else if (p === "DEF" || p === "DST") roster.DEF++;
     else if (p.includes("FLEX") || p === "SUPER_FLEX" || p === "REC_FLEX") roster.FLEX++;
-    else if (p === "BN" || p === "TAXI" || p === "IR") roster.BENCH++;
+    // Only standard bench / taxi slots count toward draft bench. IR is explicitly
+    // excluded because injured-reserve spots are not picked during a draft.
+    else if (p === "BN" || p === "TAXI") roster.BENCH++;
   }
   return roster;
 }
