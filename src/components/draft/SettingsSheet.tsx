@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { useAuth } from "@/hooks/useAuth";
+import { SyncLock } from "@/components/league/SyncLock";
 import { getConnectionSync } from "@/lib/league.functions";
 import { platformLabel } from "@/lib/league-link";
 import { Button } from "@/components/ui/button";
@@ -79,6 +81,7 @@ export function SettingsSheet({
 }) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const { activeLeague } = useActiveLeague();
+  const { user } = useAuth();
   // Baseline captured from the synced league configuration on first render.
   const syncedRef = useRef<Settings>(settings);
   const appliedRef = useRef<string | null>(null);
