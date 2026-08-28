@@ -80,7 +80,7 @@ function WaiverPage() {
         Compare a waiver add to the roster spot it costs you.
       </p>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         <PlayerPicker
           label="Add from waivers"
           accent="get"
@@ -90,28 +90,23 @@ function WaiverPage() {
           onAdd={(p) => setAdd([p])}
           onRemove={() => setAdd([])}
         />
+        <PlayerPicker
+          label="Drop from roster"
+          single
+          players={myRoster}
+          selected={drop}
+          onAdd={(p) => setDrop([p])}
+          onRemove={() => setDrop([])}
+        />
         {locked ? (
           <SyncLock authenticated={Boolean(user)} rows={5}>
-            <PlayerPicker
-              label="Drop"
-              single
-              players={[]}
-              selected={[]}
-              onAdd={() => {}}
-              onRemove={() => {}}
-            />
+            <MyRosterPanel players={[]} onPick={() => {}} />
           </SyncLock>
         ) : (
-          <PlayerPicker
-            label="Drop"
-            single
-            players={myRoster}
-            selected={drop}
-            onAdd={(p) => setDrop([p])}
-            onRemove={() => setDrop([])}
-          />
+          <MyRosterPanel players={myRoster} onPick={(p) => setDrop([p])} />
         )}
       </div>
+
 
       <section className="mt-4 rounded-lg border border-border bg-card p-4">
         <div className="flex items-center gap-4">
