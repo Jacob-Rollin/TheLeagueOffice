@@ -39,12 +39,10 @@ const buttonClass =
 export type ConnectionRow = {
   id: string;
   platform: string;
-  label: string | null;
-  sleeper_user_id: string | null;
-  espn_league_id: string | null;
-  yahoo_league_key: string | null;
+  league_id: string | null;
   espn_s2: string | null;
-  espn_swid: string | null;
+  swid: string | null;
+  metadata: Record<string, unknown> | null;
 };
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -66,8 +64,8 @@ function LeaguesPage() {
     retry: false,
     queryFn: async (): Promise<ConnectionRow[]> => {
       const { data, error } = await supabase
-        .from("league_connections")
-        .select("id, platform, label, sleeper_user_id, espn_league_id, yahoo_league_key, espn_s2, espn_swid")
+        .from("synced_leagues")
+        .select("id, platform, league_id, espn_s2, swid, metadata")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ConnectionRow[];
@@ -75,8 +73,9 @@ function LeaguesPage() {
   });
 
   const remove = async (id: string) => {
+    if (!id) return;
     if (!window.confirm("Delete this synced league? This cannot be undone.")) return;
-    const { error } = await supabase.from("league_connections").delete().eq("id", id);
+    const { error } = await supabase.from("synced_leagues").delete().eq("id", id);
     if (error) setStatus(error.message);
     // Flush all league list caches — including the global navbar/context cache —
     // so the deleted league (and its avatar) disappears everywhere instantly.
@@ -85,6 +84,7 @@ function LeaguesPage() {
   };
 
   const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
+
 
   return (
     <AccountShell
