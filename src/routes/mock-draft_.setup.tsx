@@ -362,92 +362,59 @@ function Choice({
   );
 }
 
-function SleeperSyncCard({
+function ConnectedSyncCard({
   config,
-  setConfig,
+  authenticated,
+  league,
+  modified,
+  onRestore,
 }: {
   config: MockConfig;
-  setConfig: (updater: (c: MockConfig) => MockConfig) => void;
+  authenticated: boolean;
+  league: ActiveLeagueToken | null;
+  modified: boolean;
+  onRestore: () => void;
 }) {
-  const [username, setUsername] = useState("");
-  const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
-  const [note, setNote] = useState<string | null>(null);
-
-  const leaguesM = useMutation({
-    mutationFn: (name: string) => getUserLeagues({ data: { username: name } }),
-  });
-  const syncM = useMutation({
-    mutationFn: (vars: { leagueId: string }) => getLeagueSync({ data: vars }),
-  });
-
-  const findLeagues = async () => {
-    setNote(null);
-    setLeagues([]);
-    const res = await leaguesM.mutateAsync(username.trim());
-    if (!res.length) return setNote("No leagues found for that Sleeper username.");
-    if (res.length === 1) return applyLeague(res[0]!.id, res[0]!.name);
-    setLeagues(res);
-  };
-
-  // Settings only: scoring, roster slots, league size. Team names are skipped.
-  const applyLeague = async (leagueId: string, name: string) => {
-    const res = await syncM.mutateAsync({ leagueId });
-    if (!res) return setNote("Couldn't load that league.");
-    const teams = TEAM_CHOICES.includes(res.teams)
-      ? res.teams
-      : Math.min(16, Math.max(8, res.teams));
-    setConfig((c) => ({
-      ...c,
-      teams,
-      slot: Math.min(c.slot, teams),
-      scoring: res.scoring,
-      roster: { ...c.roster, ...res.roster },
-    }));
-    setLeagues([]);
-    setNote(`Imported settings from ${res.league.name || name} (team names skipped).`);
-  };
-
-  const busy = leaguesM.isPending || syncM.isPending;
-
   return (
     <aside className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-      <div className="flex items-center gap-2">
-        <Link2 className="size-4 text-primary" />
-        <h2 className="font-display text-sm uppercase tracking-widest">Sleeper League Sync</h2>
-      </div>
-      <p className="mt-1 text-[11px] text-muted-foreground">
-        Imports scoring, roster slots and league size only — team names stay local.
-      </p>
-      <div className="mt-3 flex gap-2">
-        <Input
-          value={username}
-          placeholder="Sleeper username"
-          onChange={(e) => setUsername(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && username.trim() && void findLeagues()}
-        />
-        <Button type="button" disabled={busy || !username.trim()} onClick={() => void findLeagues()}>
-          {busy ? "…" : "Load"}
-        </Button>
-      </div>
-      {leagues.length > 0 && (
-        <ul className="mt-3 space-y-1">
-          {leagues.map((l) => (
-            <li key={l.id}>
+      {league ? (
+        <div className="space-y-1">
+          <h2 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
+            Connected Sync Data
+          </h2>
+          <p className="text-sm font-semibold text-black">
+            {league?.name ?? "League"}{" "}
+            <span className="font-normal text-muted-foreground">
+              [{platformLabel(league?.platform)}]
+            </span>
+          </p>
+          <p className="text-xs text-black">{league?.teamName ?? "Your team"}</p>
+          {modified && (
+            <div className="pt-2">
+              <p className="text-xs font-semibold text-red-600">
+                Status: Custom Settings (Modified)
+              </p>
               <button
                 type="button"
-                onClick={() => void applyLeague(l.id, l.name)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-left transition-colors hover:border-primary"
+                onClick={onRestore}
+                className="mt-1 text-xs font-semibold text-black underline underline-offset-4"
               >
-                <div className="truncate font-display text-sm">{l.name}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {l.season} · {l.teams} teams · {l.scoring}
-                </div>
+                Restore Synced Defaults
               </button>
-            </li>
-          ))}
-        </ul>
+            </div>
+          )}
+        </div>
+      ) : (
+        <SyncLock authenticated={authenticated} rows={3}>
+          <div className="space-y-1 py-3">
+            <h2 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
+              Connected Sync Data
+            </h2>
+            <p className="text-sm font-semibold">League</p>
+            <p className="text-xs">Your team</p>
+          </div>
+        </SyncLock>
       )}
-      {note && <p className="mt-3 text-[11px] text-muted-foreground">{note}</p>}
 
       <dl className="mt-5 space-y-2 border-t border-border pt-4 text-xs">
         <Row label="League size" value={`${config.teams} teams`} />
@@ -458,6 +425,7 @@ function SleeperSyncCard({
     </aside>
   );
 }
+
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
