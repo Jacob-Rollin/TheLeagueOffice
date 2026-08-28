@@ -12,6 +12,8 @@ import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
 import { useDraft } from "@/hooks/use-draft";
+import { useLeagueRosters } from "@/hooks/useLeagueRosters";
+
 
 const playersQuery = queryOptions({
   queryKey: ["players"],
