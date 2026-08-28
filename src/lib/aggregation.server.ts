@@ -113,10 +113,10 @@ export async function runWarehouseIngestion(sources: {
 }) {
   const results: Record<string, number> = {};
 
-  if (sources.sleeper) results.sleeper = (await ingestSleeperBase(sources.sleeper)).written;
-  if (sources.fantasycalc) results.fantasycalc = (await ingestFantasyCalcValues(sources.fantasycalc)).written;
-  if (sources.leaguelogs) results.leaguelogs = (await ingestLeagueLogsStatus(sources.leaguelogs)).written;
-  if (sources.fantasypros) results.fantasypros = (await ingestFantasyProsRanks(sources.fantasypros)).written;
+  if (sources.sleeper) results["sleeper"] = (await ingestSleeperBase(sources.sleeper)).written;
+  if (sources.fantasycalc) results["fantasycalc"] = (await ingestFantasyCalcValues(sources.fantasycalc)).written;
+  if (sources.leaguelogs) results["leaguelogs"] = (await ingestLeagueLogsStatus(sources.leaguelogs)).written;
+  if (sources.fantasypros) results["fantasypros"] = (await ingestFantasyProsRanks(sources.fantasypros)).written;
 
   return results;
 }

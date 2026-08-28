@@ -8,8 +8,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * those flows stay on the default `supabase` client (Database A).
  */
 
-const rawUrl = import.meta.env.VITE_SUPABASE_URL_B as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY_B as string | undefined;
+const rawUrl = import.meta.env["VITE_SUPABASE_URL_B"] as string | undefined;
+const anonKey = import.meta.env["VITE_SUPABASE_ANON_KEY_B"] as string | undefined;
 
 // The stored URL may include a trailing "/rest/v1" path; createClient needs
 // the bare project origin.
