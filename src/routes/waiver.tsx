@@ -140,7 +140,7 @@ function WaiverPage() {
             </div>
           )}
         </section>
-      </div>
+      </main>
 
       <aside className="min-w-0">
         {locked ? (
