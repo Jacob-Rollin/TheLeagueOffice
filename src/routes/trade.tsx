@@ -109,7 +109,7 @@ function TradeRoute() {
 function TradePage() {
   const { data } = useSuspenseQuery(playersQuery);
   const { activeLeague } = useActiveLeague();
-  const { user, ready } = useAuth();
+  const { user, ready: authReady } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const draft = useDraft();
 
