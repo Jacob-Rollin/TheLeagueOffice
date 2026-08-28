@@ -1,7 +1,10 @@
 import { GripVertical, Settings2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { getConnectionSync } from "@/lib/league.functions";
+import { platformLabel } from "@/lib/league-link";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -78,7 +81,43 @@ export function SettingsSheet({
   const { activeLeague } = useActiveLeague();
   // Baseline captured from the synced league configuration on first render.
   const syncedRef = useRef<Settings>(settings);
+  const appliedRef = useRef<string | null>(null);
   const modified = JSON.stringify(syncedRef.current) !== JSON.stringify(settings);
+
+  const { data: synced } = useQuery({
+    queryKey: ["connection-sync", activeLeague?.id ?? null],
+    enabled: Boolean(activeLeague?.leagueId),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () =>
+      await getConnectionSync({
+        data: {
+          identifier: activeLeague?.leagueId ?? "",
+          platform: activeLeague?.platform ?? "sleeper",
+          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+        },
+      }),
+  });
+
+  // Populate the form from the synced league once per connection.
+  useEffect(() => {
+    const id = activeLeague?.id ?? null;
+    if (!id || !synced || appliedRef.current === id) return;
+    appliedRef.current = id;
+    const patch: Partial<Settings> = {
+      teams: synced.teams,
+      rounds: synced.rounds,
+      myTeam: Math.min(Math.max(synced.myTeam, 1), synced.teams),
+      scoring: synced.scoring,
+      snake: synced.snake,
+      roster: synced.roster,
+      teamNames: synced.teamNames,
+    };
+    syncedRef.current = { ...settings, ...patch } as Settings;
+    update(patch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [synced, activeLeague?.id]);
 
   const setRoster = (key: keyof RosterSlots, v: number) => {
     const roster = { ...settings.roster, [key]: v };
@@ -124,7 +163,12 @@ export function SettingsSheet({
             </h3>
             {activeLeague ? (
               <>
-                <p className="text-sm font-semibold text-black">{activeLeague?.name ?? "League"}</p>
+                <p className="text-sm font-semibold text-black">
+                  {activeLeague?.name ?? "League"}{" "}
+                  <span className="font-normal text-muted-foreground">
+                    [{platformLabel(activeLeague?.platform)}]
+                  </span>
+                </p>
                 <p className="text-xs text-black">{activeLeague?.teamName ?? "Your team"}</p>
               </>
             ) : (
@@ -194,18 +238,26 @@ export function SettingsSheet({
               onChange={(v) => update({ myTeam: v })}
             />
             <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
-              <span className="font-display text-sm uppercase tracking-wide">Snake order</span>
-              <button
-                onClick={() => update({ snake: !settings.snake })}
-                className={cn(
-                  "rounded-full border px-3 py-1 font-display text-xs uppercase tracking-wide",
-                  settings.snake
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border text-muted-foreground",
-                )}
-              >
-                {settings.snake ? "Snake" : "Linear"}
-              </button>
+              <span className="font-display text-sm uppercase tracking-wide">Draft type</span>
+              <div className="flex items-center gap-2">
+                {([
+                  ["Snake", true],
+                  ["Linear", false],
+                ] as const).map(([label, val]) => (
+                  <button
+                    key={label}
+                    onClick={() => update({ snake: val })}
+                    className={cn(
+                      "rounded-md border px-3 py-1 font-display text-xs uppercase tracking-wide",
+                      settings.snake === val
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 

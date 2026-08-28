@@ -524,3 +524,85 @@ export async function loadConnectionStandings(
   const first = leagues[0]?.id;
   return first ? await loadStandings(first) : null;
 }
+
+// ---------------------------------------------------------------------------
+// Draft settings resolved from a saved league connection
+// ---------------------------------------------------------------------------
+
+export type ConnectionSync = {
+  teams: number;
+  rounds: number;
+  myTeam: number;
+  scoring: "std" | "half" | "ppr";
+  snake: boolean;
+  roster: RosterSlotCounts;
+  teamNames: Record<string, string>;
+};
+
+/** Resolve draft-room settings for a stored connection identifier. */
+export async function loadConnectionSync(
+  identifier: string,
+  platform: string,
+  s2?: string | null,
+  swid?: string | null,
+): Promise<ConnectionSync | null> {
+  const clean = identifier.trim().replace(/^@/, "");
+  if (!clean) return null;
+
+  if (platform === "espn") {
+    const [standings, meta] = await Promise.all([
+      loadConnectionStandings(clean, "espn", s2, swid),
+      loadEspnConnectionMeta(clean, s2, swid),
+    ]);
+    const rows = standings?.rows ?? [];
+    if (!rows.length) return null;
+    const teamNames: Record<string, string> = {};
+    rows.forEach((r, i) => {
+      teamNames[String(i + 1)] = r.team;
+    });
+    const mineIdx = meta.teamName ? rows.findIndex((r) => r.team === meta.teamName) : -1;
+    const roster: RosterSlotCounts = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BENCH: 6 };
+    const scoring =
+      meta.scoring === "Full PPR" ? "ppr" : meta.scoring === "Half PPR" ? "half" : "std";
+    return {
+      teams: rows.length,
+      rounds: Object.values(roster).reduce((a, b) => a + b, 0),
+      myTeam: mineIdx === -1 ? 1 : mineIdx + 1,
+      scoring,
+      snake: true,
+      roster,
+      teamNames,
+    };
+  }
+
+  // Sleeper: identifier may be a league id or a user id / username.
+  let leagueId: string | null = null;
+  let username: string | undefined;
+  if (/^\d{6,}$/.test(clean)) {
+    const direct = await loadStandings(clean);
+    if (direct) leagueId = clean;
+    else {
+      const leagues = await json<{ league_id: string }[]>(
+        `${BASE}/user/${clean}/leagues/nfl/${new Date().getFullYear()}`,
+      );
+      leagueId = leagues?.[0]?.league_id ?? null;
+    }
+  } else {
+    username = clean;
+    const leagues = await loadUserLeagues(clean);
+    leagueId = leagues[0]?.id ?? null;
+  }
+  if (!leagueId) return null;
+
+  const sync = await loadLeagueSync(leagueId, username);
+  if (!sync) return null;
+  return {
+    teams: sync.teams,
+    rounds: sync.rounds,
+    myTeam: sync.myTeam ?? 1,
+    scoring: sync.scoring,
+    snake: sync.snake,
+    roster: sync.roster,
+    teamNames: sync.teamNames,
+  };
+}

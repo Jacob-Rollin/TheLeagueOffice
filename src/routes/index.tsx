@@ -3,6 +3,7 @@ import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { LeagueEmptyState } from "@/components/league/LeagueGate";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
+import { platformLabel } from "@/lib/league-link";
 import { cn } from "@/lib/utils";
 
 const NEWS_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news";
@@ -201,7 +202,10 @@ function Home() {
             <section className="rounded-xl border border-border bg-card p-4">
               <div className="mb-2 flex items-baseline justify-between gap-2">
                 <h2 className="display-title min-w-0 truncate text-lg text-black">
-                  {standings?.league?.name ?? activeLeague?.name}
+                  {(standings?.league?.name ?? activeLeague?.name ?? "").toUpperCase()}{" "}
+                  <span className="text-muted-foreground">
+                    [{platformLabel(activeLeague?.platform).toUpperCase()}]
+                  </span>
                 </h2>
                 <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
                   {standings?.league?.season ?? ""}
