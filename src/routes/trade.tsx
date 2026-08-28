@@ -100,6 +100,63 @@ function packageWeekly(rows: Metrics[]): number {
     .reduce((sum, v, i) => sum + v * Math.pow(0.9, i), 0);
 }
 
+type OpponentTeam = { key: string; name: string; owner: string; players: Player[] };
+
+/** Skull and crossbones emblem used by the locked sidebar overlays. */
+function SkullEmblem() {
+  return (
+    <svg viewBox="0 0 64 64" aria-hidden className="h-12 w-12 text-black">
+      <path
+        fill="currentColor"
+        d="M32 4c-11 0-20 8.3-20 18.6 0 6 3 11.3 7.7 14.7V43c0 1.7 1.4 3 3.1 3h18.4c1.7 0 3.1-1.3 3.1-3v-5.7C49 33.9 52 28.6 52 22.6 52 12.3 43 4 32 4Zm-9 20.4a4.6 4.6 0 1 1 0-9.2 4.6 4.6 0 0 1 0 9.2Zm18 0a4.6 4.6 0 1 1 0-9.2 4.6 4.6 0 0 1 0 9.2ZM32 28.5l3 6.6h-6l3-6.6Z"
+      />
+      <path
+        fill="currentColor"
+        d="M13.6 48.2a4.3 4.3 0 0 0-2 8.1 4.3 4.3 0 0 0 5.6-1.6l14.8 4.1 14.8-4.1a4.3 4.3 0 1 0 1.1-6.4l-15.9 4.4-15.9-4.4a4.3 4.3 0 0 0-2.5-.1Z"
+      />
+    </svg>
+  );
+}
+
+/** Light-themed mask for the roster sidebars when no league is synced. */
+function SidebarLock({
+  authenticated,
+  onSignIn,
+  children,
+}: {
+  authenticated: boolean;
+  onSignIn: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative min-w-0">
+      <div aria-hidden className="pointer-events-none select-none opacity-40 blur-[1px]">
+        {children}
+      </div>
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-background/85 px-4 text-center">
+        <SkullEmblem />
+        <p className="font-display text-sm font-bold uppercase tracking-widest text-black">
+          No Active League Sync
+        </p>
+        {authenticated ? (
+          <Link to="/leaguesync" className="text-sm font-semibold text-black underline underline-offset-4">
+            Sync a League
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={onSignIn}
+            className="text-sm font-semibold text-black underline underline-offset-4"
+          >
+            Sign In to Unlock Sync
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 function TradeRoute() {
   const { activeLeagueId } = useActiveLeague();
   return <TradePage key={activeLeagueId ?? "none"} />;
