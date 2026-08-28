@@ -76,3 +76,29 @@ export const getConnectionRosters = createServerFn({ method: "GET" })
     const { loadConnectionRosters } = await import("./league.server");
     return await loadConnectionRosters(data.identifier, data.platform, data.s2, data.swid);
   });
+
+/** Unified league payload for any connected platform. */
+export const getUnifiedLeague = createServerFn({ method: "GET" })
+  .inputValidator((input: {
+    leagueId: string;
+    platform?: string;
+    s2?: string;
+    swid?: string;
+    accessToken?: string;
+  }) => ({
+    leagueId: String(input.leagueId ?? "").slice(0, 64),
+    platform: String(input.platform ?? "sleeper").slice(0, 16),
+    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+    accessToken: input.accessToken ? String(input.accessToken).slice(0, 2048) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const { fetchUnifiedLeague } = await import("./league.server");
+    return await fetchUnifiedLeague({
+      platform: data.platform,
+      leagueId: data.leagueId,
+      espnS2: data.s2 ?? null,
+      swid: data.swid ?? null,
+      accessToken: data.accessToken ?? null,
+    });
+  });
