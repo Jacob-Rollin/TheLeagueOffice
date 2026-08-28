@@ -227,8 +227,9 @@ function TradePage() {
     <div className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[16rem_minmax(0,1fr)_18rem]">
       <RosterColumn
         title="My team"
-        subtitle={teamName(draft.settings, draft.settings.myTeam)}
+        subtitle={myTeamLabel}
         players={roster}
+
         selectedIds={new Set(give.map((p) => p.id))}
         onPick={(p) => setGive((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
       />
