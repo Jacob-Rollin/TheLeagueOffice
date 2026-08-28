@@ -174,7 +174,28 @@ function TradePage() {
         owner: "",
         players: rostersByTeam.get(t) ?? [],
       }));
-  }, [league?.synced, league?.teams, rostersByTeam, draft.settings]);
+
+  /**
+   * Flush the sidebar templates and re-seed them from the active league the
+   * moment the global selection (or its resolved rosters) changes.
+   */
+  const [userRoster, setUserRoster] = useState<Player[]>([]);
+  const [leagueTeams, setLeagueTeams] = useState<OpponentTeam[]>([]);
+  const [opponentRosters, setOpponentRosters] = useState<Record<string, Player[]>>({});
+
+  useEffect(() => {
+    setUserRoster([]);
+    setLeagueTeams([]);
+    setOpponentRosters({});
+  }, [activeLeague?.id]);
+
+  useEffect(() => {
+    setUserRoster(roster);
+    setLeagueTeams(otherTeams);
+    setOpponentRosters(Object.fromEntries(otherTeams.map((t) => [t.key, t.players])));
+  }, [roster, otherTeams]);
+
+
 
 
   const needScore = (p: Player) => {
