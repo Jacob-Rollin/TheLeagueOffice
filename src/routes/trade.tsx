@@ -474,13 +474,21 @@ function TradePage() {
       </p>
       </main>
 
-      <OtherTeamsColumn
-        teams={otherTeams}
-        selectedIds={new Set(get.map((p) => p.id))}
-        onPick={(p) => setGet((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
-      />
+      {locked ? (
+        <SidebarLock authenticated={Boolean(user)} onSignIn={() => setAuthOpen(true)}>
+          <OtherTeamsColumn teams={[]} selectedIds={new Set()} onPick={() => {}} />
+        </SidebarLock>
+      ) : (
+        <OtherTeamsColumn
+          teams={leagueTeams.map((t) => ({ ...t, players: opponentRosters[t.key] ?? t.players }))}
+          selectedIds={new Set(get.map((p) => p.id))}
+          onPick={(p) => setGet((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+        />
+      )}
 
+      <AuthDialog open={authOpen} mode="signin" onOpenChange={setAuthOpen} />
     </div>
+
   );
 
 }
