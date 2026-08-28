@@ -544,6 +544,8 @@ export type ConnectionSync = {
   snake: boolean;
   roster: RosterSlotCounts;
   teamNames: Record<string, string>;
+  /** First week of the fantasy playoffs in the synced league. */
+  playoffStartWeek: number;
 };
 
 // ESPN lineup slot IDs. IR (21) is intentionally omitted from draft counts.
@@ -621,6 +623,7 @@ export async function loadConnectionSync(
       myTeam: mineIdx === -1 ? 1 : mineIdx + 1,
       scoring,
       snake: true,
+      playoffStartWeek: 15,
       roster,
       teamNames,
     };
@@ -653,6 +656,7 @@ export async function loadConnectionSync(
     myTeam: sync.myTeam ?? 1,
     scoring: sync.scoring,
     snake: sync.snake,
+    playoffStartWeek: sync.playoffStartWeek,
     roster: sync.roster,
     teamNames: sync.teamNames,
   };
