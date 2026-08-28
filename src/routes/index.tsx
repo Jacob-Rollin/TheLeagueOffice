@@ -1,10 +1,8 @@
-import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getStandings, getUserLeagues } from "@/lib/league.functions";
-import type { LeagueSummary, Standings } from "@/lib/league.server";
-import { useLeagueLink } from "@/lib/league-link";
+import { LeagueEmptyState } from "@/components/league/LeagueGate";
+import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { cn } from "@/lib/utils";
 
 const NEWS_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news";
@@ -48,21 +46,11 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const { link, saveLink, clearLink } = useLeagueLink();
-  const [username, setUsername] = useState("");
-  const [leagues, setLeagues] = useState<LeagueSummary[]>([]);
-  const [standings, setStandings] = useState<Standings | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { activeLeague, standings, loading: standingsLoading } = useActiveStandings();
   const [news, setNews] = useState<NewsItem[]>([]);
   const [visibleNews, setVisibleNews] = useState(6);
   const [newsLimit, setNewsLimit] = useState(50);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [latency, setLatency] = useState(14);
-  useEffect(() => {
-    setLatency(Math.floor(Math.random() * 7) + 12);
-  }, []);
-  const leaguesM = useMutation({ mutationFn: (name: string) => getUserLeagues({ data: { username: name } }) });
-  const standingsM = useMutation({ mutationFn: (leagueId: string) => getStandings({ data: { leagueId } }) });
 
   const fetchNews = (limit: number) =>
     fetch(`${NEWS_BASE_URL}?limit=${limit}`)
@@ -96,147 +84,6 @@ function Home() {
     }
   };
 
-
-  // Hydrate from the globally shared league link (set here, in the War Room, or on Trade).
-  const linkedLeagueId = link?.leagueId ?? null;
-  useEffect(() => {
-    if (link?.username) setUsername((u) => u || link.username);
-    if (!linkedLeagueId) {
-      setStandings(null);
-      return;
-    }
-    let alive = true;
-    standingsM.mutateAsync(linkedLeagueId).then((res) => {
-      if (alive && res) setStandings(res);
-    });
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkedLeagueId, link?.username]);
-
-  const loadLeague = async (leagueId: string, name: string) => {
-    setError(null);
-    const res = await standingsM.mutateAsync(leagueId);
-    if (!res) return setError("Couldn't load that league.");
-    setStandings(res);
-    saveLink({
-      username: name.trim(),
-      leagueId,
-      leagueName: res.league?.name,
-      syncedAt: new Date().toISOString(),
-    });
-  };
-  const search = async () => {
-    setError(null);
-    setStandings(null);
-    const res = await leaguesM.mutateAsync(username);
-    setLeagues(res);
-    if (!res.length) setError("No leagues found for that Sleeper username.");
-    else if (res.length === 1) await loadLeague(res[0]!.id, username);
-  };
-  const unlink = () => {
-    clearLink();
-    setStandings(null);
-    setLeagues([]);
-  };
-
-  const connectBox = (
-    <section className="rounded-xl border border-border bg-card p-5">
-      <div className="flex flex-col gap-1">
-        <h2 className="display-title text-2xl">League Sync</h2>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          Import your active Sleeper league assets to instantly unlock custom front-office analytics and real- time
-          draft tracking.
-        </p>
-      </div>
-      <div className="mt-4 flex flex-col gap-2">
-        <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && search()}
-          placeholder="Enter Sleeper Username..."
-          className="w-full rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2.5 text-sm font-medium text-black outline-none placeholder:text-zinc-500 focus:border-zinc-400 focus:bg-white transition-colors"
-        />
-        <div className="flex gap-2">
-          <button
-            onClick={search}
-            disabled={!username.trim() || leaguesM.isPending}
-            className="flex-1 rounded-md bg-accent px-5 py-2.5 font-display uppercase tracking-wide text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {leaguesM.isPending ? "Looking…" : "Sync"}
-          </button>
-          {(standings || link) && (
-            <button
-              onClick={unlink}
-              className="rounded-md border border-border px-4 py-2.5 text-sm text-muted-foreground"
-            >
-              Unlink
-            </button>
-          )}
-        </div>
-      </div>
-      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
-      {leagues.length > 1 && !standings && (
-        <ul className="mt-3 space-y-1">
-          {leagues.map((l) => (
-            <li key={l.id}>
-              <button
-                onClick={() => loadLeague(l.id, username)}
-                className="flex w-full flex-col items-start gap-0.5 rounded-md border border-border bg-background px-3 py-2 text-left text-sm hover:border-primary"
-              >
-                <span className="w-full truncate">{l.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {l.season} · {l.teams} teams · {l.scoring}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {standingsM.isPending && <p className="mt-4 text-sm text-muted-foreground">Loading standings…</p>}
-    </section>
-  );
-
-  const commandConsole = (
-    <section className="w-full flex flex-col space-y-2 p-4 rounded-xl border border-zinc-200/80 bg-zinc-50/50 backdrop-blur-sm shadow-sm text-left items-start mb-4">
-      <span className="block w-full border-b border-zinc-200/60 pb-1.5 font-mono text-xs font-medium uppercase tracking-wider text-zinc-400">
-        // SYSTEM OPERATIONS TERMINAL v1.0
-      </span>
-      <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
-        <span className="relative flex h-2 w-2" aria-hidden="true">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
-        </span>
-        LIVE DATA STREAM // LINK ACTIVE
-      </div>
-      {standingsM.isPending || leaguesM.isPending ? (
-        <div className="flex w-full items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-amber-600">
-          <span className="relative flex h-2 w-2" aria-hidden="true">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-600 shadow-[0_0_15px_rgba(245,158,11,0.8)]" />
-          </span>
-          SYNC INITIALIZING // STANDBY
-        </div>
-      ) : standings || link ? (
-        <div className="flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 font-mono text-xs tracking-wider text-red-600">
-          <span className="relative flex h-2 w-2" aria-hidden="true">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
-          </span>
-          LEAGUE SYNC // LINK ACTIVE
-        </div>
-      ) : (
-        <div className="flex w-full items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-1.5 font-mono text-xs tracking-wider text-zinc-400">
-          <span className="h-2 w-2 rounded-full bg-zinc-400" aria-hidden="true" />
-          LEAGUE SYNC // DISCONNECTED
-        </div>
-      )}
-      <span className="block w-full font-mono text-xs font-bold uppercase tracking-widest text-blue-600">
-        LATENCY: {latency}ms // DB_STATUS: NOMINAL
-      </span>
-    </section>
-  );
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
@@ -344,14 +191,20 @@ function Home() {
         </div>
 
         <aside className="min-w-0 space-y-0 lg:col-span-1">
-          {commandConsole}
-          {connectBox}
-          {standings && (
-            <section className="mt-4 rounded-xl border border-border bg-card p-4">
+          {!activeLeague && <LeagueEmptyState className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card px-4 py-10 text-center" />}
+          {activeLeague && !standings && (
+            <section className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+              {standingsLoading ? "Loading standings…" : "Standings unavailable for this league."}
+            </section>
+          )}
+          {activeLeague && standings && (
+            <section className="rounded-xl border border-border bg-card p-4">
               <div className="mb-2 flex items-baseline justify-between gap-2">
-                <h2 className="display-title min-w-0 truncate text-lg">{standings.league.name}</h2>
+                <h2 className="display-title min-w-0 truncate text-lg text-black">
+                  {standings?.league?.name ?? activeLeague?.name}
+                </h2>
                 <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
-                  {standings.league.season}
+                  {standings?.league?.season ?? ""}
                 </span>
               </div>
               <div className="rounded-lg border border-border">
@@ -364,7 +217,7 @@ function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {standings.rows.map((r, i) => (
+                    {(standings?.rows ?? []).map((r, i) => (
                       <tr key={r.rosterId} className={cn("border-t border-border", i < 4 && "bg-primary/5")}>
                         <td className="tabnum px-1 py-1.5 text-muted-foreground">{i + 1}</td>
                         <td className="px-1 py-1.5">

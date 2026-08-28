@@ -1,4 +1,6 @@
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
+import { LeagueGate } from "@/components/league/LeagueGate";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { queryOptions, useQueries, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -45,7 +47,7 @@ export const Route = createFileRoute("/trade")({
   loader: ({ context }) => {
     void context.queryClient.ensureQueryData(playersQuery);
   },
-  component: TradePage,
+  component: TradeRoute,
 });
 
 const WEEKS = 17;
@@ -92,6 +94,15 @@ function packageWeekly(rows: Metrics[]): number {
     .map((r) => r.weekly)
     .sort((a, b) => b - a)
     .reduce((sum, v, i) => sum + v * Math.pow(0.9, i), 0);
+}
+
+function TradeRoute() {
+  const { activeLeagueId } = useActiveLeague();
+  return (
+    <LeagueGate>
+      <TradePage key={activeLeagueId ?? "none"} />
+    </LeagueGate>
+  );
 }
 
 function TradePage() {

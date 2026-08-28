@@ -1,4 +1,6 @@
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
+import { LeagueGate } from "@/components/league/LeagueGate";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Undo2, X } from "lucide-react";
@@ -44,8 +46,17 @@ export const Route = createFileRoute("/draft")({
       },
     ],
   }),
-  component: DraftRoom,
+  component: DraftRoute,
 });
+
+function DraftRoute() {
+  const { activeLeagueId } = useActiveLeague();
+  return (
+    <LeagueGate>
+      <DraftRoom key={activeLeagueId ?? "none"} />
+    </LeagueGate>
+  );
+}
 type Tab = "players" | "board" | "team";
 
 const EMPTY_PAYLOAD = { season: "", updatedAt: 0, players: [] as Player[] };
@@ -154,9 +165,6 @@ function DraftRoom() {
               settings={settings}
               update={draft.updateSettings}
               onReset={draft.reset}
-              link={draft.link}
-              onApplyLeague={draft.applyLeague}
-              onUnlinkLeague={draft.unlinkLeague}
               orderLocked={(draft.picks?.length ?? 0) > 0}
             />
           </div>
