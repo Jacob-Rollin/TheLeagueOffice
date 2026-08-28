@@ -28,11 +28,11 @@ type Platform = "yahoo" | "espn" | "sleeper";
 type EspnTab = "public" | "private";
 
 const cardClass =
-  "flex flex-1 items-center justify-center rounded-2xl px-6 py-12 font-display text-2xl font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5";
+  "flex flex-1 items-center justify-center rounded-2xl px-6 py-12 font-display text-2xl font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0";
 const brandBlock =
   "mt-6 flex w-40 items-center justify-center rounded-xl py-6 font-display text-lg font-bold text-white";
 const inputClass =
-  "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-black placeholder:text-black/50 outline-none focus:border-ring";
+  "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-black placeholder:text-black/50 outline-none focus:border-ring disabled:opacity-60";
 const labelClass = "block text-left text-xs font-semibold uppercase tracking-wide text-black";
 const blueButton =
   "rounded-md px-6 py-2 font-display text-sm uppercase tracking-wide text-white disabled:opacity-60";
@@ -42,6 +42,7 @@ function LeagueSyncPage() {
   const userId = user?.id ?? null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { refresh } = useActiveLeague();
 
   const yahooUnconfigured =
     typeof window !== "undefined" &&
@@ -50,7 +51,7 @@ function LeagueSyncPage() {
   const [platform, setPlatform] = useState<Platform>(yahooUnconfigured ? "yahoo" : "sleeper");
   const [espnTab, setEspnTab] = useState<EspnTab>("public");
   const [guideOpen, setGuideOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   const [identifier, setIdentifier] = useState("");
@@ -71,7 +72,7 @@ function LeagueSyncPage() {
       setStatus("Enter your league details first.");
       return;
     }
-    setBusy(true);
+    setIsSyncing(true);
     setStatus(null);
     const { error } = await supabase.from("synced_leagues").insert({
       user_id: userId,
@@ -81,13 +82,14 @@ function LeagueSyncPage() {
       swid: extra?.["espn_swid"] ?? null,
       metadata: { label, platform: next, teams: [], rules: {} },
     });
-    setBusy(false);
     if (error) {
+      setIsSyncing(false);
       setStatus(error.message);
       return;
     }
-    queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
-    queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
+    await queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
+    await refresh();
+    setIsSyncing(false);
     navigate({ to: "/account/leagues" });
   };
 
