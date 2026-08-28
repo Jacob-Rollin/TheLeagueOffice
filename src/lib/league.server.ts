@@ -185,7 +185,9 @@ function slotCounts(positions: string[] | undefined): RosterSlotCounts {
     else if (p === "K") roster.K++;
     else if (p === "DEF" || p === "DST") roster.DEF++;
     else if (p.includes("FLEX") || p === "SUPER_FLEX" || p === "REC_FLEX") roster.FLEX++;
-    else if (p === "BN" || p === "TAXI" || p === "IR") roster.BENCH++;
+    // Only standard bench / taxi slots count toward draft bench. IR is explicitly
+    // excluded because injured-reserve spots are not picked during a draft.
+    else if (p === "BN" || p === "TAXI") roster.BENCH++;
   }
   return roster;
 }
@@ -249,6 +251,8 @@ export async function loadLeagueSync(leagueId: string, username?: string): Promi
   }
 
   const roster = slotCounts(league.roster_positions);
+  // Draft rounds = starters + regular bench only. IR is already excluded from
+  // the slot counts above, so this total is the correct draft capacity.
   const total = Object.values(roster).reduce((a, b) => a + b, 0);
   const teams = league.total_rosters || ordered.length || 12;
 
@@ -262,7 +266,7 @@ export async function loadLeagueSync(leagueId: string, username?: string): Promi
       scoring: scoringLabel(league.scoring_settings),
     },
     teams,
-    rounds: draft?.settings?.rounds ?? total ?? 15,
+    rounds: total || Number(draft?.settings?.rounds) || 15,
     snake: (draft?.type ?? "snake") !== "linear",
     scoring: scoringKey(league.scoring_settings),
     roster,
@@ -539,6 +543,34 @@ export type ConnectionSync = {
   teamNames: Record<string, string>;
 };
 
+// ESPN lineup slot IDs. IR (21) is intentionally omitted from draft counts.
+type EspnRosterSettings = {
+  settings?: {
+    rosterSettings?: {
+      lineupSlotCounts?: Record<string, number>;
+    };
+  };
+};
+
+function espnSlotCounts(lineupSlotCounts: Record<string, number> | undefined): RosterSlotCounts {
+  const roster: RosterSlotCounts = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DEF: 0, BENCH: 0 };
+  if (!lineupSlotCounts) return roster;
+  for (const [raw, count] of Object.entries(lineupSlotCounts)) {
+    const id = Number(raw);
+    const c = Number(count) || 0;
+    if (id === 0) roster.QB += c;
+    else if (id === 2) roster.RB += c;
+    else if (id === 4) roster.WR += c;
+    else if (id === 6) roster.TE += c;
+    else if (id === 17) roster.K += c;
+    else if (id === 16) roster.DEF += c;
+    else if (id === 23) roster.FLEX += c;
+    else if (id === 20) roster.BENCH += c;
+    // id === 21 is IR; explicitly excluded because IR spots are not drafted.
+  }
+  return roster;
+}
+
 /** Resolve draft-room settings for a stored connection identifier. */
 export async function loadConnectionSync(
   identifier: string,
@@ -561,7 +593,23 @@ export async function loadConnectionSync(
       teamNames[String(i + 1)] = r.team;
     });
     const mineIdx = meta.teamName ? rows.findIndex((r) => r.team === meta.teamName) : -1;
-    const roster: RosterSlotCounts = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BENCH: 6 };
+
+    // Pull real roster slot counts from ESPN settings, excluding IR.
+    const season = new Date().getFullYear();
+    let roster: RosterSlotCounts = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BENCH: 6 };
+    for (const year of [season, season - 1]) {
+      const settings = await espnJson<EspnRosterSettings>(
+        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mSettings`,
+        s2,
+        swid,
+      );
+      const counts = settings?.settings?.rosterSettings?.lineupSlotCounts;
+      if (counts) {
+        roster = espnSlotCounts(counts);
+        break;
+      }
+    }
+
     const scoring =
       meta.scoring === "Full PPR" ? "ppr" : meta.scoring === "Half PPR" ? "half" : "std";
     return {
