@@ -12,6 +12,8 @@ export type ActiveLeagueToken = {
   name: string;
   teamName: string | null;
   avatar: string | null;
+  s2?: string | null;
+  swid?: string | null;
 };
 
 type ActiveLeagueValue = {
