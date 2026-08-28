@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { useAuth } from "@/hooks/useAuth";
+import { SyncLock } from "@/components/league/SyncLock";
 import { getConnectionSync } from "@/lib/league.functions";
 import { platformLabel } from "@/lib/league-link";
 import { Button } from "@/components/ui/button";
@@ -79,6 +81,7 @@ export function SettingsSheet({
 }) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const { activeLeague } = useActiveLeague();
+  const { user } = useAuth();
   // Baseline captured from the synced league configuration on first render.
   const syncedRef = useRef<Settings>(settings);
   const appliedRef = useRef<string | null>(null);
@@ -163,36 +166,43 @@ export function SettingsSheet({
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-10">
-          <section className="space-y-1 rounded-lg border border-border bg-card px-3 py-3">
-            <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
-              Connected Sync Data
-            </h3>
-            {activeLeague ? (
-              <>
-                <p className="text-sm font-semibold text-black">
-                  {activeLeague?.name ?? "League"}{" "}
-                  <span className="font-normal text-muted-foreground">
-                    [{platformLabel(activeLeague?.platform)}]
-                  </span>
-                </p>
-                <p className="text-xs text-black">{activeLeague?.teamName ?? "Your team"}</p>
-              </>
-            ) : (
-              <p className="text-xs text-black">No synced league selected.</p>
-            )}
-            {modified && (
-              <div className="pt-2">
-                <p className="text-xs font-semibold text-red-600">Status: Custom Settings (Modified)</p>
-                <button
-                  type="button"
-                  onClick={() => update(syncedRef.current)}
-                  className="mt-1 text-xs font-semibold text-black underline underline-offset-4"
-                >
-                  Restore Synced Defaults
-                </button>
-              </div>
-            )}
-          </section>
+          {activeLeague ? (
+            <section className="space-y-1 rounded-lg border border-border bg-card px-3 py-3">
+              <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
+                Connected Sync Data
+              </h3>
+              <p className="text-sm font-semibold text-black">
+                {activeLeague?.name ?? "League"}{" "}
+                <span className="font-normal text-muted-foreground">
+                  [{platformLabel(activeLeague?.platform)}]
+                </span>
+              </p>
+              <p className="text-xs text-black">{activeLeague?.teamName ?? "Your team"}</p>
+              {modified && (
+                <div className="pt-2">
+                  <p className="text-xs font-semibold text-red-600">Status: Custom Settings (Modified)</p>
+                  <button
+                    type="button"
+                    onClick={() => update(syncedRef.current)}
+                    className="mt-1 text-xs font-semibold text-black underline underline-offset-4"
+                  >
+                    Restore Synced Defaults
+                  </button>
+                </div>
+              )}
+            </section>
+          ) : (
+            <SyncLock authenticated={Boolean(user)} rows={3}>
+              <section className="space-y-1 px-3 py-3">
+                <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
+                  Connected Sync Data
+                </h3>
+                <p className="text-sm font-semibold">League</p>
+                <p className="text-xs">Your team</p>
+              </section>
+            </SyncLock>
+          )}
+
 
           <section className="space-y-2">
             <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
