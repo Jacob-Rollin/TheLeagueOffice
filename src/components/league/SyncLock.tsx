@@ -107,7 +107,7 @@ export function SyncLockCard({
 export function SyncLock({
   authenticated,
   children,
-  rows,
+  rows = 7,
 }: {
   authenticated: boolean;
   children: ReactNode;
