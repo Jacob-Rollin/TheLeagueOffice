@@ -593,7 +593,23 @@ export async function loadConnectionSync(
       teamNames[String(i + 1)] = r.team;
     });
     const mineIdx = meta.teamName ? rows.findIndex((r) => r.team === meta.teamName) : -1;
-    const roster: RosterSlotCounts = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BENCH: 6 };
+
+    // Pull real roster slot counts from ESPN settings, excluding IR.
+    const season = new Date().getFullYear();
+    let roster: RosterSlotCounts = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BENCH: 6 };
+    for (const year of [season, season - 1]) {
+      const settings = await espnJson<EspnRosterSettings>(
+        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mSettings`,
+        s2,
+        swid,
+      );
+      const counts = settings?.settings?.rosterSettings?.lineupSlotCounts;
+      if (counts) {
+        roster = espnSlotCounts(counts);
+        break;
+      }
+    }
+
     const scoring =
       meta.scoring === "Full PPR" ? "ppr" : meta.scoring === "Half PPR" ? "half" : "std";
     return {
