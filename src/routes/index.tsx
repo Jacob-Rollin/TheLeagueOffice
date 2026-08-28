@@ -217,7 +217,7 @@ function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {standings.rows.map((r, i) => (
+                    {(standings?.rows ?? []).map((r, i) => (
                       <tr key={r.rosterId} className={cn("border-t border-border", i < 4 && "bg-primary/5")}>
                         <td className="tabnum px-1 py-1.5 text-muted-foreground">{i + 1}</td>
                         <td className="px-1 py-1.5">
