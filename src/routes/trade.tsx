@@ -197,6 +197,10 @@ function TradePage() {
     [get, details.map, scoring],
   );
 
+  /** Sidebars only unlock for an authenticated user with an active synced league. */
+  const locked = !authReady || !user || !activeLeague?.id;
+
+
   const byId = useMemo(() => new Map(data.players.map((p) => [p.id, p])), [data.players]);
   const league = useLeagueRosters(data.players);
   const rostersByTeam = useMemo(() => {
