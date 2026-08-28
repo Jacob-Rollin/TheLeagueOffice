@@ -191,14 +191,20 @@ function Home() {
         </div>
 
         <aside className="min-w-0 space-y-0 lg:col-span-1">
-          {commandConsole}
-          {connectBox}
-          {standings && (
-            <section className="mt-4 rounded-xl border border-border bg-card p-4">
+          {!activeLeague && <LeagueEmptyState className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card px-4 py-10 text-center" />}
+          {activeLeague && !standings && (
+            <section className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+              {standingsLoading ? "Loading standings…" : "Standings unavailable for this league."}
+            </section>
+          )}
+          {activeLeague && standings && (
+            <section className="rounded-xl border border-border bg-card p-4">
               <div className="mb-2 flex items-baseline justify-between gap-2">
-                <h2 className="display-title min-w-0 truncate text-lg">{standings.league.name}</h2>
+                <h2 className="display-title min-w-0 truncate text-lg text-black">
+                  {standings?.league?.name ?? activeLeague?.name}
+                </h2>
                 <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
-                  {standings.league.season}
+                  {standings?.league?.season ?? ""}
                 </span>
               </div>
               <div className="rounded-lg border border-border">
