@@ -100,12 +100,9 @@ function packageWeekly(rows: Metrics[]): number {
 
 function TradeRoute() {
   const { activeLeagueId } = useActiveLeague();
-  return (
-    <LeagueGate>
-      <TradePage key={activeLeagueId ?? "none"} />
-    </LeagueGate>
-  );
+  return <TradePage key={activeLeagueId ?? "none"} />;
 }
+
 
 function TradePage() {
   const { data } = useSuspenseQuery(playersQuery);
