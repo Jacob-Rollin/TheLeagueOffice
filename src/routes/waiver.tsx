@@ -22,17 +22,19 @@ const playersQuery = queryOptions({
 export const Route = createFileRoute("/waiver")({
   head: () => ({
     meta: [
-      { title: "Waiver Evaluator — DraftRoom" },
+      { title: "Waiver Evaluator — The League Office" },
       {
         name: "description",
         content:
           "Grade waiver wire claims: compare the player you're adding to the one you're dropping and get a FAAB bid range.",
       },
-      { property: "og:title", content: "Waiver Evaluator — DraftRoom" },
+      { property: "og:title", content: "Waiver Evaluator — The League Office" },
       {
         property: "og:description",
         content: "Waiver claim grades and FAAB bid guidance for your fantasy roster.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   loader: ({ context }) => {
