@@ -64,8 +64,8 @@ function LeagueSettingsPage() {
     retry: false,
     queryFn: async (): Promise<Row | null> => {
       const { data, error } = await supabase
-        .from("league_connections")
-        .select("id, platform, label, sleeper_user_id, espn_league_id, yahoo_league_key, created_at")
+        .from("synced_leagues")
+        .select("id, platform, league_id, metadata, created_at")
         .eq("id", connectionId)
         .maybeSingle();
       if (error) throw error;
@@ -75,12 +75,13 @@ function LeagueSettingsPage() {
 
   const removeLink = async () => {
     if (!window.confirm("Remove this synced league link? This cannot be undone.")) return;
-    await supabase.from("league_connections").delete().eq("id", connectionId);
+    await supabase.from("synced_leagues").delete().eq("id", connectionId);
     queryClient.invalidateQueries({ queryKey: ["league-connections"] });
     // Flush the global navbar/context cache so the deleted league's avatar resets instantly.
     queryClient.invalidateQueries({ queryKey: ["active-league-connections"] });
     navigate({ to: "/account/leagues" });
   };
+
 
   return (
     <AccountShell title="League Settings" active="leagues">
