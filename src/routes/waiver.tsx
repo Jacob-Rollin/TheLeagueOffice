@@ -1,5 +1,6 @@
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
-import { LeagueGate } from "@/components/league/LeagueGate";
+import { SyncLock } from "@/components/league/SyncLock";
+import { useAuth } from "@/hooks/useAuth";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -42,16 +43,15 @@ export const Route = createFileRoute("/waiver")({
 
 function WaiverRoute() {
   const { activeLeagueId } = useActiveLeague();
-  return (
-    <LeagueGate>
-      <WaiverPage key={activeLeagueId ?? "none"} />
-    </LeagueGate>
-  );
+  return <WaiverPage key={activeLeagueId ?? "none"} />;
 }
 
 function WaiverPage() {
   const { data } = useSuspenseQuery(playersQuery);
   const league = useLeagueRosters(data.players);
+  const { user, ready: authReady } = useAuth();
+  const { activeLeague } = useActiveLeague();
+  const locked = !authReady || !user || !activeLeague?.id;
   const [add, setAdd] = useState<Player[]>([]);
   const [drop, setDrop] = useState<Player[]>([]);
 
@@ -90,14 +90,27 @@ function WaiverPage() {
           onAdd={(p) => setAdd([p])}
           onRemove={() => setAdd([])}
         />
-        <PlayerPicker
-          label="Drop"
-          single
-          players={myRoster}
-          selected={drop}
-          onAdd={(p) => setDrop([p])}
-          onRemove={() => setDrop([])}
-        />
+        {locked ? (
+          <SyncLock authenticated={Boolean(user)} rows={5}>
+            <PlayerPicker
+              label="Drop"
+              single
+              players={[]}
+              selected={[]}
+              onAdd={() => {}}
+              onRemove={() => {}}
+            />
+          </SyncLock>
+        ) : (
+          <PlayerPicker
+            label="Drop"
+            single
+            players={myRoster}
+            selected={drop}
+            onAdd={(p) => setDrop([p])}
+            onRemove={() => setDrop([])}
+          />
+        )}
       </div>
 
       <section className="mt-4 rounded-lg border border-border bg-card p-4">
