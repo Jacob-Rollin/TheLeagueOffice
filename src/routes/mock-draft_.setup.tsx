@@ -259,6 +259,26 @@ function MockDraftSetupPage() {
               </p>
             </Field>
 
+            <Field label="Playoffs Start Week">
+              <div className="flex flex-wrap gap-2">
+                {[14, 15, 16, 17].map((week) => (
+                  <Choice
+                    key={week}
+                    active={config.playoffsStartWeek === week}
+                    onClick={() => patch({ playoffsStartWeek: week })}
+                    wide
+                  >
+                    {week}
+                  </Choice>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                For post-draft reporting projections.
+              </p>
+            </Field>
+
+
+
 
             <Button
               size="lg"
