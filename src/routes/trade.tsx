@@ -174,6 +174,9 @@ function TradePage() {
         owner: "",
         players: rostersByTeam.get(t) ?? [],
       }));
+  }, [league?.synced, league?.teams, rostersByTeam, draft.settings]);
+
+
 
   /**
    * Flush the sidebar templates and re-seed them from the active league the
