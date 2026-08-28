@@ -445,3 +445,80 @@ export async function loadConnectionMeta(identifier: string): Promise<Connection
     teams: league?.total_rosters ?? null,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Standings resolved straight from a saved league connection
+// ---------------------------------------------------------------------------
+
+/** Resolve the standings table for a stored connection identifier. */
+export async function loadConnectionStandings(
+  identifier: string,
+  platform: string,
+  s2?: string | null,
+  swid?: string | null,
+): Promise<Standings | null> {
+  const clean = identifier.trim().replace(/^@/, "");
+  if (!clean) return null;
+
+  if (platform === "espn") {
+    const season = new Date().getFullYear();
+    if (!/^\d+$/.test(clean)) return null;
+    for (const year of [season, season - 1]) {
+      const league = await espnJson<
+        EspnLeagueView & {
+          teams?: (EspnTeam & {
+            record?: { overall?: { wins?: number; losses?: number; ties?: number; pointsFor?: number; pointsAgainst?: number } };
+          })[];
+        }
+      >(
+        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mSettings&view=mTeam`,
+        s2,
+        swid,
+      );
+      const teams = league?.teams ?? [];
+      if (!league?.settings || teams.length === 0) continue;
+      const rows: StandingRow[] = teams.map((t, i) => {
+        const o = t.record?.overall ?? {};
+        return {
+          rosterId: t.id ?? i + 1,
+          team: espnTeamName(t) ?? `Team ${i + 1}`,
+          owner: t.abbrev ?? "",
+          avatar: t.logo ?? null,
+          wins: Number(o.wins ?? 0),
+          losses: Number(o.losses ?? 0),
+          ties: Number(o.ties ?? 0),
+          pointsFor: Math.round(Number(o.pointsFor ?? 0) * 10) / 10,
+          pointsAgainst: Math.round(Number(o.pointsAgainst ?? 0) * 10) / 10,
+          streak: null,
+        };
+      });
+      rows.sort((a, b) => b.wins - a.wins || a.losses - b.losses || b.pointsFor - a.pointsFor);
+      return {
+        league: {
+          id: clean,
+          name: league.settings?.name ?? "ESPN League",
+          season: String(year),
+          teams: league.settings?.size ?? teams.length,
+          status: "in_season",
+          scoring: "",
+        },
+        rows,
+      };
+    }
+    return null;
+  }
+
+  // Sleeper: identifier may be a league id or a user id / username.
+  if (/^\d{6,}$/.test(clean)) {
+    const direct = await loadStandings(clean);
+    if (direct) return direct;
+    const leagues = await json<
+      { league_id: string; name: string; season: string; total_rosters: number; status: string }[]
+    >(`${BASE}/user/${clean}/leagues/nfl/${new Date().getFullYear()}`);
+    const first = leagues?.[0]?.league_id;
+    return first ? await loadStandings(first) : null;
+  }
+  const leagues = await loadUserLeagues(clean);
+  const first = leagues[0]?.id;
+  return first ? await loadStandings(first) : null;
+}
