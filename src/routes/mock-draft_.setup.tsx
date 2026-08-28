@@ -239,8 +239,15 @@ function MockDraftSetupPage() {
             </Button>
           </div>
 
-          {/* Right column — Sleeper sync */}
-          <SleeperSyncCard config={config} setConfig={setConfig} />
+          {/* Right column — connected sync data */}
+          <ConnectedSyncCard
+            config={config}
+            authenticated={Boolean(user)}
+            league={activeLeague}
+            modified={modified}
+            onRestore={() => syncedRef.current && setConfig(syncedRef.current)}
+          />
+
         </div>
       </div>
     </main>
