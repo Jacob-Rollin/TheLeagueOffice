@@ -1,18 +1,18 @@
-import { useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Link2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SyncLock } from "@/components/league/SyncLock";
+import { useActiveLeague, type ActiveLeagueToken } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { rosterSize } from "@/lib/draft";
-import { getLeagueSync, getUserLeagues } from "@/lib/league.functions";
-import type { LeagueSummary } from "@/lib/league.server";
+import { getConnectionSync } from "@/lib/league.functions";
+import { platformLabel } from "@/lib/league-link";
 import {
   DEFAULT_MOCK_CONFIG,
-  PLAYOFF_WEEKS,
   ROSTER_FIELDS,
   SCORING_CHOICES,
   TEAM_CHOICES,
@@ -22,6 +22,7 @@ import {
   type MockConfig,
 } from "@/lib/mock-config";
 import { cn } from "@/lib/utils";
+
 
 export const Route = createFileRoute("/mock-draft_/setup")({
   head: () => ({
