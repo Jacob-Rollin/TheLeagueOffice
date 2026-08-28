@@ -1,7 +1,10 @@
 import { GripVertical, Settings2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { getConnectionSync } from "@/lib/league.functions";
+import { platformLabel } from "@/lib/league-link";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
