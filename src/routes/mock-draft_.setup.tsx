@@ -227,34 +227,6 @@ function MockDraftSetupPage() {
               </select>
             </Field>
 
-            <Field label="Playoffs Start Week">
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-background p-3">
-                <button
-                  type="button"
-                  onClick={() =>
-                    patch({ playoffsStartWeek: Math.max(1, config.playoffsStartWeek - 1) })
-                  }
-                  className="h-9 w-9 rounded-md border border-input bg-background text-sm font-display transition-colors hover:text-foreground"
-                >
-                  −
-                </button>
-                <div className="tabnum h-9 min-w-[80px] flex-1 rounded-md border border-input bg-background px-1 text-center text-sm leading-9">
-                  {config.playoffsStartWeek}
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    patch({ playoffsStartWeek: Math.min(18, config.playoffsStartWeek + 1) })
-                  }
-                  className="h-9 w-9 rounded-md border border-input bg-background text-sm font-display transition-colors hover:text-foreground"
-                >
-                  +
-                </button>
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Regular season simulates {config.playoffsStartWeek - 1} weeks.
-              </p>
-            </Field>
 
             <Field label="Roster Positions Setup">
               <div className="grid grid-cols-4 gap-2 rounded-lg border border-border bg-background p-3 sm:grid-cols-8">
