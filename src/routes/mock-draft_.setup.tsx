@@ -277,9 +277,6 @@ function MockDraftSetupPage() {
               </p>
             </Field>
 
-
-
-
             <Button
               size="lg"
               className="mt-2 w-full font-display text-base uppercase tracking-wide"
