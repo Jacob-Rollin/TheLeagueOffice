@@ -101,3 +101,12 @@ export function useLeagueLink() {
   const clear = useCallback(() => clearLeagueLink(), []);
   return { link, saveLink: save, clearLink: clear };
 }
+
+/** Display token for a synced platform, e.g. "Sleeper", "ESPN", "Yahoo". */
+export function platformLabel(platform: string | null | undefined): string {
+  const p = String(platform ?? "").toLowerCase();
+  if (p === "espn") return "ESPN";
+  if (p === "yahoo") return "Yahoo";
+  if (p === "sleeper") return "Sleeper";
+  return p ? p.toUpperCase() : "";
+}
