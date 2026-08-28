@@ -94,7 +94,12 @@ function LeagueSettingsPage() {
               <p className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
                 {row.platform}
               </p>
-              <p className="mt-1 text-lg font-semibold text-foreground">{row.label ?? "—"}</p>
+              <p className="mt-1 text-lg font-semibold text-foreground">
+                {((row?.metadata as Record<string, unknown> | null)?.["label"] as string | undefined) ??
+                  row?.league_id ??
+                  "—"}
+              </p>
+
             </>
           ) : (
             <p className="text-sm text-muted-foreground">This synced league no longer exists.</p>
