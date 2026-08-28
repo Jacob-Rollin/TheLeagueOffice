@@ -52,17 +52,74 @@ function MockDraftSetupPage() {
     () => loadMockConfig() ?? DEFAULT_MOCK_CONFIG,
   );
   const [touchedName, setTouchedName] = useState(false);
+  const { activeLeague } = useActiveLeague();
+  // Baseline captured from the synced league payload; used for the status line.
+  const syncedRef = useRef<MockConfig | null>(null);
+  const appliedRef = useRef<string | null>(null);
+
+  const { data: synced } = useQuery({
+    queryKey: ["connection-sync", activeLeague?.id ?? null],
+    enabled: Boolean(activeLeague?.leagueId),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () =>
+      await getConnectionSync({
+        data: {
+          identifier: activeLeague?.leagueId ?? "",
+          platform: activeLeague?.platform ?? "sleeper",
+          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+        },
+      }),
+  });
+
+  // Auto-populate the left form the moment an active league resolves.
+  useEffect(() => {
+    const id = activeLeague?.id ?? null;
+    if (!id || !synced) return;
+    const teams = Number(synced?.teams) || DEFAULT_MOCK_CONFIG.teams;
+    const roster = { ...DEFAULT_MOCK_CONFIG.roster, ...(synced?.roster ?? {}) };
+    const slot = Math.min(Math.max(Number(synced?.myTeam) || 1, 1), teams);
+    const teamName =
+      activeLeague?.teamName?.trim() ||
+      synced?.teamNames?.[String(slot)] ||
+      DEFAULT_MOCK_CONFIG.teamName;
+    const next: MockConfig = {
+      ...DEFAULT_MOCK_CONFIG,
+      teamName,
+      teams,
+      slot,
+      scoring: synced?.scoring ?? DEFAULT_MOCK_CONFIG.scoring,
+      snake: Boolean(synced?.snake ?? DEFAULT_MOCK_CONFIG.snake),
+      roster,
+      playoffsStartWeek:
+        Number(synced?.playoffStartWeek) || DEFAULT_MOCK_CONFIG.playoffsStartWeek,
+    };
+    const signature = `${id}:${JSON.stringify(next)}`;
+    if (appliedRef.current === signature) return;
+    appliedRef.current = signature;
+    syncedRef.current = next;
+    setConfig((c) => ({ ...next, timerLabel: c.timerLabel }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [synced, activeLeague?.id]);
 
   // Default the team name to the signed-in profile name.
   useEffect(() => {
-    if (touchedName) return;
+    if (touchedName || syncedRef.current) return;
     const full = (user?.user_metadata as { full_name?: string } | undefined)?.full_name;
     if (full && config.teamName === DEFAULT_MOCK_CONFIG.teamName) {
       setConfig((c) => ({ ...c, teamName: full }));
     }
   }, [user, touchedName, config.teamName]);
 
+  const modified = Boolean(
+    syncedRef.current &&
+      JSON.stringify({ ...syncedRef.current, timerLabel: config.timerLabel }) !==
+        JSON.stringify(config),
+  );
+
   const patch = (p: Partial<MockConfig>) => setConfig((c) => ({ ...c, ...p }));
+
 
   const begin = () => {
     const clean: MockConfig = {
