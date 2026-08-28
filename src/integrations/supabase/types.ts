@@ -721,6 +721,42 @@ export type Database = {
           },
         ]
       }
+      synced_leagues: {
+        Row: {
+          created_at: string
+          espn_s2: string | null
+          id: string
+          league_id: string
+          metadata: Json | null
+          platform: string
+          swid: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          espn_s2?: string | null
+          id?: string
+          league_id: string
+          metadata?: Json | null
+          platform: string
+          swid?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          espn_s2?: string | null
+          id?: string
+          league_id?: string
+          metadata?: Json | null
+          platform?: string
+          swid?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           created_at: string
