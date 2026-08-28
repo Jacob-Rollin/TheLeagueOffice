@@ -73,7 +73,8 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
       const { getConnectionMeta } = await import("@/lib/league.functions");
       return await Promise.all(
         rows.map(async ({ s2, swid, ...row }) => {
-          if ((row.platform !== "sleeper" && row.platform !== "espn") || !row.leagueId) return row;
+          const base = { ...row, s2, swid };
+          if ((row.platform !== "sleeper" && row.platform !== "espn") || !row.leagueId) return base;
           try {
             const meta = await getConnectionMeta({
               data: {
@@ -84,13 +85,13 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
               },
             });
             return {
-              ...row,
+              ...base,
               name: meta?.leagueName ?? row.name,
               teamName: meta?.teamName ?? null,
               avatar: meta?.avatar ?? null,
             };
           } catch {
-            return row;
+            return base;
           }
         }),
       );
