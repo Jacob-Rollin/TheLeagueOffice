@@ -100,19 +100,25 @@ export function SettingsSheet({
       }),
   });
 
-  // Populate the form from the synced league once per connection.
+  // Populate the form instantly whenever synced league data loads or changes.
   useEffect(() => {
     const id = activeLeague?.id ?? null;
-    if (!id || !synced || appliedRef.current === id) return;
-    appliedRef.current = id;
+    if (!id || !synced) return;
+    const teams = Number(synced?.teams) || DEFAULT_SETTINGS.teams;
+    const roster = (synced?.roster ?? DEFAULT_SETTINGS.roster) as RosterSlots;
+    // ROUNDS always snaps to the synced total roster slot capacity.
+    const rounds = rosterSize(roster) || Number(synced?.rounds) || DEFAULT_SETTINGS.rounds;
+    const signature = `${id}:${JSON.stringify([teams, rounds, synced?.myTeam, synced?.scoring, synced?.snake, roster, synced?.teamNames])}`;
+    if (appliedRef.current === signature) return;
+    appliedRef.current = signature;
     const patch: Partial<Settings> = {
-      teams: synced.teams,
-      rounds: synced.rounds,
-      myTeam: Math.min(Math.max(synced.myTeam, 1), synced.teams),
-      scoring: synced.scoring,
-      snake: synced.snake,
-      roster: synced.roster,
-      teamNames: synced.teamNames,
+      teams,
+      rounds,
+      myTeam: Math.min(Math.max(Number(synced?.myTeam) || 1, 1), teams),
+      scoring: synced?.scoring ?? DEFAULT_SETTINGS.scoring,
+      snake: Boolean(synced?.snake ?? DEFAULT_SETTINGS.snake),
+      roster,
+      teamNames: synced?.teamNames ?? {},
     };
     syncedRef.current = { ...settings, ...patch } as Settings;
     update(patch);
