@@ -574,12 +574,24 @@ function OtherTeamsColumn({
         Tap to add to “You receive”
       </p>
       <div className="mt-2 space-y-1">
+        {teams.length === 0 && (
+          <p className="px-1 py-2 text-xs text-muted-foreground">
+            No opposing teams yet — sync a league to load rosters.
+          </p>
+        )}
         {teams.map((t) => {
-          const players = rosters.get(t) ?? [];
+          const players = t.players;
           return (
-            <details key={t} className="rounded-md border border-border bg-surface">
+            <details key={t.key} className="rounded-md border border-border bg-surface">
               <summary className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium">
-                <span className="truncate">{teamName(settings, t)}</span>
+                <span className="min-w-0 truncate">
+                  <span className="block truncate">{t.name}</span>
+                  {t.owner && (
+                    <span className="block truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+                      {t.owner}
+                    </span>
+                  )}
+                </span>
                 <span className="tabnum shrink-0 text-[10px] text-muted-foreground">
                   {players.length}
                 </span>
@@ -602,6 +614,7 @@ function OtherTeamsColumn({
           );
         })}
       </div>
+
     </aside>
   );
 }
