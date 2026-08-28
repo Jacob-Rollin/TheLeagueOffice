@@ -464,13 +464,15 @@ export async function loadConnectionStandings(
     const season = new Date().getFullYear();
     if (!/^\d+$/.test(clean)) return null;
     for (const year of [season, season - 1]) {
-      const league = await espnJson<
-        EspnLeagueView & {
-          teams?: (EspnTeam & {
-            record?: { overall?: { wins?: number; losses?: number; ties?: number; pointsFor?: number; pointsAgainst?: number } };
-          })[];
-        }
-      >(
+      type EspnRecordTeam = EspnTeam & {
+        record?: {
+          overall?: { wins?: number; losses?: number; ties?: number; pointsFor?: number; pointsAgainst?: number };
+        };
+      };
+      const league = await espnJson<{
+        settings?: EspnLeagueView["settings"];
+        teams?: EspnRecordTeam[];
+      }>(
         `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mSettings&view=mTeam`,
         s2,
         swid,
