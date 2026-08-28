@@ -135,7 +135,18 @@ function WaiverPage() {
             <Cell label="Value gain" value={`${result.gainPct > 0 ? "+" : ""}${result.gainPct.toFixed(0)}%`} />
           </div>
         )}
-      </section>
+        </section>
+      </div>
+
+      <aside className="min-w-0">
+        {locked ? (
+          <SyncLock authenticated={Boolean(user)} rows={5}>
+            <MyRosterPanel players={[]} onPick={() => {}} />
+          </SyncLock>
+        ) : (
+          <MyRosterPanel players={myRoster} onPick={(p) => setDrop([p])} />
+        )}
+      </aside>
     </main>
   );
 }
