@@ -26,12 +26,11 @@ export const Route = createFileRoute("/account/leagues/$connectionId")({
 type Row = {
   id: string;
   platform: string;
-  label: string | null;
-  sleeper_user_id: string | null;
-  espn_league_id: string | null;
-  yahoo_league_key: string | null;
+  league_id: string | null;
+  metadata: Record<string, unknown> | null;
   created_at: string;
 };
+
 
 const POINT_SETTINGS: [string, string][] = [
   ["Passing Yard", "0.04"],
