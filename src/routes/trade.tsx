@@ -136,6 +136,7 @@ function TradePage() {
   );
 
   const byId = useMemo(() => new Map(data.players.map((p) => [p.id, p])), [data.players]);
+  const league = useLeagueRosters(data.players);
   const rostersByTeam = useMemo(() => {
     const map = new Map<number, Player[]>();
     for (let t = 1; t <= draft.settings.teams; t++) map.set(t, []);
@@ -146,10 +147,34 @@ function TradePage() {
     }
     return map;
   }, [draft.picks, draft.settings.teams, byId]);
-  const roster = useMemo(
-    () => rostersByTeam.get(draft.settings.myTeam) ?? [],
-    [rostersByTeam, draft.settings.myTeam],
-  );
+
+  /** Synced league rosters win; the local draft board is the offline fallback. */
+  const roster = useMemo(() => {
+    if (league?.synced && league?.myTeam) return league.myTeam.players;
+    return rostersByTeam.get(draft.settings.myTeam) ?? [];
+  }, [league?.synced, league?.myTeam, rostersByTeam, draft.settings.myTeam]);
+
+  const myTeamLabel =
+    (league?.synced ? (league?.myTeam?.team ?? league?.myTeamName) : null) ??
+    teamName(draft.settings, draft.settings.myTeam);
+
+  const otherTeams = useMemo(() => {
+    if (league?.synced) {
+      return league.teams
+        .filter((t) => !t.isMine)
+        .map((t) => ({ key: `s${t.slot}`, name: t.team, owner: t.owner, players: t.players }));
+    }
+    return [...rostersByTeam.keys()]
+      .filter((t) => t !== draft.settings.myTeam)
+      .sort((a, b) => a - b)
+      .map((t) => ({
+        key: `t${t}`,
+        name: teamName(draft.settings, t),
+        owner: "",
+        players: rostersByTeam.get(t) ?? [],
+      }));
+  }, [league?.synced, league?.teams, rostersByTeam, draft.settings]);
+
 
   const needScore = (p: Player) => {
     const count = roster.filter((r) => r.pos === p.pos).length;
