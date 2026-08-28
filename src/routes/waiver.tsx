@@ -1,4 +1,6 @@
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
+import { LeagueGate } from "@/components/league/LeagueGate";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -34,8 +36,17 @@ export const Route = createFileRoute("/waiver")({
   loader: ({ context }) => {
     void context.queryClient.ensureQueryData(playersQuery);
   },
-  component: WaiverPage,
+  component: WaiverRoute,
 });
+
+function WaiverRoute() {
+  const { activeLeagueId } = useActiveLeague();
+  return (
+    <LeagueGate>
+      <WaiverPage key={activeLeagueId ?? "none"} />
+    </LeagueGate>
+  );
+}
 
 function WaiverPage() {
   const { data } = useSuspenseQuery(playersQuery);
