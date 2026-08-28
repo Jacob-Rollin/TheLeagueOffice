@@ -1,9 +1,11 @@
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
-import { LeagueGate } from "@/components/league/LeagueGate";
+import { AuthDialog } from "@/components/auth/AuthDialog";
+import { useAuth } from "@/hooks/useAuth";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { queryOptions, useQueries, useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { teamName, type Player, type Scoring } from "@/lib/draft";
