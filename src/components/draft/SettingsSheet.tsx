@@ -81,7 +81,43 @@ export function SettingsSheet({
   const { activeLeague } = useActiveLeague();
   // Baseline captured from the synced league configuration on first render.
   const syncedRef = useRef<Settings>(settings);
+  const appliedRef = useRef<string | null>(null);
   const modified = JSON.stringify(syncedRef.current) !== JSON.stringify(settings);
+
+  const { data: synced } = useQuery({
+    queryKey: ["connection-sync", activeLeague?.id ?? null],
+    enabled: Boolean(activeLeague?.leagueId),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () =>
+      await getConnectionSync({
+        data: {
+          identifier: activeLeague?.leagueId ?? "",
+          platform: activeLeague?.platform ?? "sleeper",
+          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+        },
+      }),
+  });
+
+  // Populate the form from the synced league once per connection.
+  useEffect(() => {
+    const id = activeLeague?.id ?? null;
+    if (!id || !synced || appliedRef.current === id) return;
+    appliedRef.current = id;
+    const patch: Partial<Settings> = {
+      teams: synced.teams,
+      rounds: synced.rounds,
+      myTeam: Math.min(Math.max(synced.myTeam, 1), synced.teams),
+      scoring: synced.scoring,
+      snake: synced.snake,
+      roster: synced.roster,
+      teamNames: synced.teamNames,
+    };
+    syncedRef.current = { ...settings, ...patch } as Settings;
+    update(patch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [synced, activeLeague?.id]);
 
   const setRoster = (key: keyof RosterSlots, v: number) => {
     const roster = { ...settings.roster, [key]: v };
