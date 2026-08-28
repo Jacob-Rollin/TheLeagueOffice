@@ -122,8 +122,8 @@ function LeagueRow({
   row: ConnectionRow;
   onDelete: (id: string) => void;
 }) {
-  const identifier =
-    row?.sleeper_user_id ?? row?.espn_league_id ?? row?.yahoo_league_key ?? row?.label ?? "";
+  const label = (row?.metadata as Record<string, unknown> | null)?.["label"] as string | undefined;
+  const identifier = row?.league_id ?? label ?? "";
   const platformKey = row?.platform ?? "sleeper";
   const platform = PLATFORM_LABEL[platformKey] ?? platformKey;
 
@@ -138,13 +138,14 @@ function LeagueRow({
           identifier,
           platform: platformKey,
           ...(row?.espn_s2 ? { s2: row.espn_s2 } : {}),
-          ...(row?.espn_swid ? { swid: row.espn_swid } : {}),
+          ...(row?.swid ? { swid: row.swid } : {}),
         },
       }),
   });
 
   const avatar = meta?.avatar ?? null;
-  const leagueName = meta?.leagueName ?? row?.label ?? "League";
+  const leagueName = meta?.leagueName ?? label ?? "League";
+
   const teamName = meta?.teamName ?? null;
   const subtitle = teamName ? `${teamName} - ${platform}` : platform;
 
