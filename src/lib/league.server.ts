@@ -157,6 +157,8 @@ export type LeagueSync = {
   teams: number;
   rounds: number;
   snake: boolean;
+  /** First week of the fantasy playoffs. */
+  playoffStartWeek: number;
   scoring: "std" | "half" | "ppr";
   roster: RosterSlotCounts;
   /** 1-based draft slot -> team name */
@@ -268,6 +270,7 @@ export async function loadLeagueSync(leagueId: string, username?: string): Promi
     teams,
     rounds: total || Number(draft?.settings?.rounds) || 15,
     snake: (draft?.type ?? "snake") !== "linear",
+    playoffStartWeek: Number(league.settings?.["playoff_week_start"]) || 15,
     scoring: scoringKey(league.scoring_settings),
     roster,
     teamNames,
