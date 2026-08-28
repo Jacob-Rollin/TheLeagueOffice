@@ -34,10 +34,11 @@ export function useLeagueRosters(players: Player[]) {
         data: {
           identifier,
           platform,
-          s2: activeLeague?.s2 ?? undefined,
-          swid: activeLeague?.swid ?? undefined,
+          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
         },
       }),
+
   });
 
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
