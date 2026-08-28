@@ -71,7 +71,9 @@ function WaiverPage() {
 
 
   return (
-    <main className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
+    <main className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[1fr_2fr_1fr]">
+      <div className="hidden min-w-0 xl:block" aria-hidden="true" />
+
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <h1 className="display-title text-3xl">Waiver Evaluator</h1>
@@ -83,7 +85,7 @@ function WaiverPage() {
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <PlayerPicker
-            label="Add from waivers"
+            label="Add From Waivers"
             accent="get"
             single
             players={freeAgents}
@@ -92,7 +94,7 @@ function WaiverPage() {
             onRemove={() => setAdd([])}
           />
           <PlayerPicker
-            label="Drop from roster"
+            label="Drop From Roster"
             single
             players={myRoster}
             selected={drop}
@@ -102,39 +104,39 @@ function WaiverPage() {
         </div>
 
         <section className="mt-4 rounded-lg border border-border bg-card p-4">
-        <div className="flex items-center gap-4">
-          <div
-            className={cn(
-              "flex h-16 w-16 items-center justify-center rounded-lg border font-display text-3xl font-bold",
-              !ready
-                ? "border-border text-muted-foreground"
-                : result.grade.tone === "good"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : result.grade.tone === "bad"
-                    ? "border-destructive bg-destructive/10 text-destructive"
-                    : "border-border bg-surface text-foreground",
-            )}
-          >
-            {ready ? result.grade.letter : "—"}
+          <div className="flex items-center gap-4">
+            <div
+              className={cn(
+                "flex h-16 w-16 items-center justify-center rounded-lg border font-display text-3xl font-bold",
+                !ready
+                  ? "border-border text-muted-foreground"
+                  : result.grade.tone === "good"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : result.grade.tone === "bad"
+                      ? "border-destructive bg-destructive/10 text-destructive"
+                      : "border-border bg-surface text-foreground",
+              )}
+            >
+              {ready ? result.grade.letter : "—"}
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">{result.verdict}</p>
+              {ready && (
+                <p className="tabnum mt-1 text-xs text-muted-foreground">
+                  Add {result.addValue} · Drop {result.dropValue} · Net{" "}
+                  {result.gain > 0 ? "+" : ""}
+                  {result.gain}
+                </p>
+              )}
+            </div>
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium">{result.verdict}</p>
-            {ready && (
-              <p className="tabnum mt-1 text-xs text-muted-foreground">
-                Add {result.addValue} · Drop {result.dropValue} · Net{" "}
-                {result.gain > 0 ? "+" : ""}
-                {result.gain}
-              </p>
-            )}
-          </div>
-        </div>
 
-        {ready && (
-          <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border">
-            <Cell label="Suggested FAAB" value={`${result.faabLow}–${result.faabHigh}%`} />
-            <Cell label="Value gain" value={`${result.gainPct > 0 ? "+" : ""}${result.gainPct.toFixed(0)}%`} />
-          </div>
-        )}
+          {ready && (
+            <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border">
+              <Cell label="Suggested FAAB" value={`${result.faabLow}–${result.faabHigh}%`} />
+              <Cell label="Value gain" value={`${result.gainPct > 0 ? "+" : ""}${result.gainPct.toFixed(0)}%`} />
+            </div>
+          )}
         </section>
       </div>
 
