@@ -1,7 +1,7 @@
 import { GripVertical, Settings2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
-import { SleeperSync } from "@/components/draft/SleeperSync";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -11,7 +11,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import type { LeagueLink, LeagueSyncInput } from "@/hooks/use-draft";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_SETTINGS,
@@ -67,21 +66,19 @@ export function SettingsSheet({
   settings,
   update,
   onReset,
-  link,
-  onApplyLeague,
-  onUnlinkLeague,
   orderLocked = false,
 }: {
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
   onReset: () => void;
-  link: LeagueLink | null;
-  onApplyLeague: (sync: LeagueSyncInput, meta: LeagueLink) => void;
-  onUnlinkLeague: () => void;
   /** Client-side gate; swap for commissioner role checks later. */
   orderLocked?: boolean;
 }) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const { activeLeague } = useActiveLeague();
+  // Baseline captured from the synced league configuration on first render.
+  const syncedRef = useRef<Settings>(settings);
+  const modified = JSON.stringify(syncedRef.current) !== JSON.stringify(settings);
 
   const setRoster = (key: keyof RosterSlots, v: number) => {
     const roster = { ...settings.roster, [key]: v };
@@ -121,7 +118,31 @@ export function SettingsSheet({
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-10">
-          <SleeperSync link={link} onApply={onApplyLeague} onUnlink={onUnlinkLeague} />
+          <section className="space-y-1 rounded-lg border border-border bg-card px-3 py-3">
+            <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
+              Connected Sync Data
+            </h3>
+            {activeLeague ? (
+              <>
+                <p className="text-sm font-semibold text-black">{activeLeague?.name ?? "League"}</p>
+                <p className="text-xs text-black">{activeLeague?.teamName ?? "Your team"}</p>
+              </>
+            ) : (
+              <p className="text-xs text-black">No synced league selected.</p>
+            )}
+            {modified && (
+              <div className="pt-2">
+                <p className="text-xs font-semibold text-red-600">Status: Custom Settings (Modified)</p>
+                <button
+                  type="button"
+                  onClick={() => update(syncedRef.current)}
+                  className="mt-1 text-xs font-semibold text-black underline underline-offset-4"
+                >
+                  Restore Synced Defaults
+                </button>
+              </div>
+            )}
+          </section>
 
           <section className="space-y-2">
             <h3 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
