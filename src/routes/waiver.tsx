@@ -9,6 +9,7 @@ import { PlayerPicker } from "@/components/league/PlayerPicker";
 import type { Player } from "@/lib/draft";
 import { evaluateWaiver } from "@/lib/evaluate";
 import { getPlayers } from "@/lib/players.functions";
+import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { cn } from "@/lib/utils";
 
 const playersQuery = queryOptions({
@@ -84,7 +85,7 @@ function WaiverPage() {
           label="Add from waivers"
           accent="get"
           single
-          players={data.players}
+          players={freeAgents}
           selected={add}
           onAdd={(p) => setAdd([p])}
           onRemove={() => setAdd([])}
@@ -92,7 +93,7 @@ function WaiverPage() {
         <PlayerPicker
           label="Drop"
           single
-          players={data.players}
+          players={myRoster}
           selected={drop}
           onAdd={(p) => setDrop([p])}
           onRemove={() => setDrop([])}
