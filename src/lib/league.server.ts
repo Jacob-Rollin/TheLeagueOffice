@@ -251,6 +251,8 @@ export async function loadLeagueSync(leagueId: string, username?: string): Promi
   }
 
   const roster = slotCounts(league.roster_positions);
+  // Draft rounds = starters + regular bench only. IR is already excluded from
+  // the slot counts above, so this total is the correct draft capacity.
   const total = Object.values(roster).reduce((a, b) => a + b, 0);
   const teams = league.total_rosters || ordered.length || 12;
 
@@ -264,7 +266,7 @@ export async function loadLeagueSync(leagueId: string, username?: string): Promi
       scoring: scoringLabel(league.scoring_settings),
     },
     teams,
-    rounds: draft?.settings?.rounds ?? total ?? 15,
+    rounds: total || Number(draft?.settings?.rounds) || 15,
     snake: (draft?.type ?? "snake") !== "linear",
     scoring: scoringKey(league.scoring_settings),
     roster,
