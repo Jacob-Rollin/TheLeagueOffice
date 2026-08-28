@@ -1,5 +1,4 @@
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
-import { LeagueGate } from "@/components/league/LeagueGate";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -51,11 +50,7 @@ export const Route = createFileRoute("/draft")({
 
 function DraftRoute() {
   const { activeLeagueId } = useActiveLeague();
-  return (
-    <LeagueGate>
-      <DraftRoom key={activeLeagueId ?? "none"} />
-    </LeagueGate>
-  );
+  return <DraftRoom key={activeLeagueId ?? "none"} />;
 }
 type Tab = "players" | "board" | "team";
 

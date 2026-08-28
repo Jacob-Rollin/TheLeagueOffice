@@ -80,7 +80,7 @@ function WaiverPage() {
         Compare a waiver add to the roster spot it costs you.
       </p>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         <PlayerPicker
           label="Add from waivers"
           accent="get"
@@ -90,28 +90,23 @@ function WaiverPage() {
           onAdd={(p) => setAdd([p])}
           onRemove={() => setAdd([])}
         />
+        <PlayerPicker
+          label="Drop from roster"
+          single
+          players={myRoster}
+          selected={drop}
+          onAdd={(p) => setDrop([p])}
+          onRemove={() => setDrop([])}
+        />
         {locked ? (
           <SyncLock authenticated={Boolean(user)} rows={5}>
-            <PlayerPicker
-              label="Drop"
-              single
-              players={[]}
-              selected={[]}
-              onAdd={() => {}}
-              onRemove={() => {}}
-            />
+            <MyRosterPanel players={[]} onPick={() => {}} />
           </SyncLock>
         ) : (
-          <PlayerPicker
-            label="Drop"
-            single
-            players={myRoster}
-            selected={drop}
-            onAdd={(p) => setDrop([p])}
-            onRemove={() => setDrop([])}
-          />
+          <MyRosterPanel players={myRoster} onPick={(p) => setDrop([p])} />
         )}
       </div>
+
 
       <section className="mt-4 rounded-lg border border-border bg-card p-4">
         <div className="flex items-center gap-4">
@@ -158,5 +153,38 @@ function Cell({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
       <div className="tabnum font-display text-lg font-semibold">{value}</div>
     </div>
+  );
+}
+
+/** Right column: the user's synced roster; clicking a row fills the drop slot. */
+function MyRosterPanel({ players, onPick }: { players: Player[]; onPick: (p: Player) => void }) {
+  return (
+    <section className="min-w-0 rounded-lg border border-border bg-card">
+      <div className="border-b border-border px-3 py-2">
+        <h2 className="font-display text-xs font-bold uppercase tracking-widest text-black">My Roster</h2>
+      </div>
+      <div className="max-h-[420px] overflow-y-auto">
+        {players.length === 0 ? (
+          <p className="px-3 py-4 text-xs text-muted-foreground">No players on this roster.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {players.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => onPick(p)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-surface"
+                >
+                  <span className="min-w-0 truncate text-sm font-medium text-black">{p.name}</span>
+                  <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {p.pos} · {p.team}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
