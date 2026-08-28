@@ -163,7 +163,12 @@ export function SettingsSheet({
             </h3>
             {activeLeague ? (
               <>
-                <p className="text-sm font-semibold text-black">{activeLeague?.name ?? "League"}</p>
+                <p className="text-sm font-semibold text-black">
+                  {activeLeague?.name ?? "League"}{" "}
+                  <span className="font-normal text-muted-foreground">
+                    [{platformLabel(activeLeague?.platform)}]
+                  </span>
+                </p>
                 <p className="text-xs text-black">{activeLeague?.teamName ?? "Your team"}</p>
               </>
             ) : (
