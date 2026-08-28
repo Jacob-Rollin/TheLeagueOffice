@@ -1145,17 +1145,8 @@ export async function fetchYahooLeague(
   const teams: UnifiedRosterTeam[] = yahooCollection(teamsNode?.["teams"]).map((row, i) => {
     const teamNode = (row as Record<string, unknown>)["team"];
     const flat = yahooFlatten(teamNode as YahooNode);
-    const players = yahooCollection(
-      (Array.isArray(teamNode) ? teamNode : []).find(
-        (n) => n && typeof n === "object" && "roster" in (n as Record<string, unknown>),
-      )
-        ? yahooFlatten(
-            ((Array.isArray(teamNode) ? teamNode : []).find(
-              (n) => n && typeof n === "object" && "roster" in (n as Record<string, unknown>),
-            ) as Record<string, unknown>)["roster"] as YahooNode,
-          )["players"]
-        : undefined,
-    );
+    const players = yahooCollection(findNode(teamNode as YahooNode, "players"));
+
     return {
       team_id: String(flat["team_key"] ?? flat["team_id"] ?? i + 1),
       team_name: String(flat["name"] ?? `Team ${i + 1}`),
