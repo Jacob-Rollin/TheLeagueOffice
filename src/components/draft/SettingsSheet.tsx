@@ -238,18 +238,26 @@ export function SettingsSheet({
               onChange={(v) => update({ myTeam: v })}
             />
             <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
-              <span className="font-display text-sm uppercase tracking-wide">Snake order</span>
-              <button
-                onClick={() => update({ snake: !settings.snake })}
-                className={cn(
-                  "rounded-full border px-3 py-1 font-display text-xs uppercase tracking-wide",
-                  settings.snake
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border text-muted-foreground",
-                )}
-              >
-                {settings.snake ? "Snake" : "Linear"}
-              </button>
+              <span className="font-display text-sm uppercase tracking-wide">Draft type</span>
+              <div className="flex items-center gap-2">
+                {([
+                  ["Snake", true],
+                  ["Linear", false],
+                ] as const).map(([label, val]) => (
+                  <button
+                    key={label}
+                    onClick={() => update({ snake: val })}
+                    className={cn(
+                      "rounded-md border px-3 py-1 font-display text-xs uppercase tracking-wide",
+                      settings.snake === val
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 
