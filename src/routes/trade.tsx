@@ -363,11 +363,11 @@ function TradePage() {
       </main>
 
       <OtherTeamsColumn
-        settings={draft.settings}
-        rosters={rostersByTeam}
+        teams={otherTeams}
         selectedIds={new Set(get.map((p) => p.id))}
         onPick={(p) => setGet((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
       />
+
     </div>
   );
 
