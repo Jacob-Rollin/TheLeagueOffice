@@ -119,6 +119,43 @@ export async function readBrainMatrix(): Promise<BrainMatrix | null> {
   }
 }
 
+const LOCAL_PLAYERS_CACHE_KEY = "players-v1";
+
+/**
+ * Offline safety guard. When the storage bucket is empty or answers 400/404,
+ * compile the matrix from the pre-existing local Sleeper player template so
+ * the War Room, Trade Desk, and search inputs stay fully usable.
+ */
+async function localTemplateMatrix(): Promise<BrainMatrix | null> {
+  try {
+    const hit = await readCache<PlayersPayload>(LOCAL_PLAYERS_CACHE_KEY);
+    const players = hit?.data?.players;
+    if (!players || players.length === 0) return null;
+
+    const matrix: BrainMatrix = {};
+    for (const p of players) {
+      if (!p?.id) continue;
+      matrix[p.id] = {
+        name: p.name ?? "",
+        position: String(p.pos ?? ""),
+        team: p.team ?? "",
+        value: 0,
+        ecr: p.rank?.ppr ?? 0,
+        sd: 0,
+        injuryStatus: p.injury ?? "Healthy",
+      };
+    }
+    return Object.keys(matrix).length > 0 ? matrix : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Local-only resolution chain: compiled matrix, then local player template. */
+async function localFallbackMatrix(): Promise<BrainMatrix | null> {
+  return (await readBrainMatrix()) ?? (await localTemplateMatrix());
+}
+
 let inFlight: Promise<BrainMatrix | null> | null = null;
 
 /**
