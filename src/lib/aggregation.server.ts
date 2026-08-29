@@ -455,6 +455,8 @@ export async function ingestFantasyProsRanks(records: ProviderRecord[]) {
       team: r.team ?? null,
       fantasypros_ecr: r.fantasypros_ecr ?? null,
       fantasypros_sd: r.fantasypros_sd ?? null,
+      injury_type: r.injury_type ?? null,
+      time_missed: r.time_missed ?? null,
       updated_at: new Date().toISOString(),
     })),
   );
@@ -480,6 +482,8 @@ export interface MasterPlayerBrain {
   ecr: number[];
   sd: number[];
   injuries: string[];
+  injury_types: string[];
+  timelines: string[];
 }
 
 export function compileBrain(rows: PlayerWarehouseRow[]): MasterPlayerBrain {
