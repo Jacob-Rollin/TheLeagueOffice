@@ -443,8 +443,6 @@ function PlayerListImpl({
             >
               ADP
             </button>
-            <MetricHeader label="ECR" metricKey="ecr" width="w-14" sort={sort} onSort={toggleSort} />
-            <MetricHeader label="SD" metricKey="sd" width="w-14" sort={sort} onSort={toggleSort} />
             <MetricHeader
               label="Trend"
               metricKey="trend"
@@ -603,31 +601,19 @@ function PlayerListImpl({
                     )}
                   />
                   <StatCell
-                    value={ecrOf(p) !== null ? String(Math.round(ecrOf(p)!)) : "—"}
-                    className={cn(
-                      "w-14 shrink-0 justify-center px-1",
-                      DIVIDER,
-                      sort === "ecr" && ACTIVE_COL,
-                    )}
-                  />
-                  <StatCell
-                    value={sdOf(p) !== null ? sdOf(p)!.toFixed(1) : "—"}
-                    className={cn(
-                      "w-14 shrink-0 justify-center px-1 font-normal text-muted-foreground",
-                      DIVIDER,
-                      sort === "sd" && ACTIVE_COL,
-                    )}
-                  />
-                  <StatCell
                     value={
-                      trendOf(p) !== null
-                        ? `${trendOf(p)! > 0 ? "+" : "-"}${Math.abs(trendOf(p)!).toFixed(0)}`
-                        : "—"
+                      (() => {
+                        const n = trendOf(p);
+                        if (n === null || n === 0) return "—";
+                        const pct = n / 100;
+                        return `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%`;
+                      })()
                     }
                     className={cn(
                       "w-16 shrink-0 justify-center px-1",
                       DIVIDER,
                       sort === "trend" && ACTIVE_COL,
+                      trendOf(p) !== null && trendOf(p)! > 0 ? "text-black" : "",
                     )}
                   />
                   <StatGroup
