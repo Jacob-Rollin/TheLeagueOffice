@@ -14,6 +14,9 @@
 
 import localforage from "localforage";
 
+import type { PlayersPayload } from "@/lib/players-build";
+import { readCache } from "@/lib/sleeper-cache";
+
 const BUCKET = "player_brain";
 const FILE = "master_player_brain.json";
 const HEARTBEAT_KEY = "player-brain:last-sync";
