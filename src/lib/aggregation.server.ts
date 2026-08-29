@@ -45,6 +45,8 @@ export interface PlayerWarehouseRow {
   leaguelogs_status?: string | null;
   fantasypros_ecr?: number | null;
   fantasypros_sd?: number | null;
+  injury_type?: string | null;
+  time_missed?: string | null;
   updated_at?: string;
 }
 
@@ -59,6 +61,8 @@ export interface ProviderRecord {
   leaguelogs_status?: string | null;
   fantasypros_ecr?: number | null;
   fantasypros_sd?: number | null;
+  injury_type?: string | null;
+  time_missed?: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -336,6 +340,11 @@ interface FantasyProsEntry {
   ecr?: number | string | null;
   standard_deviation?: number | string | null;
   sd?: number | string | null;
+  injury_type?: string | null;
+  injury_detail?: string | null;
+  injury_status?: string | null;
+  time_missed?: string | null;
+  player_injury_status?: string | null;
 }
 
 export async function harvestFantasyPros(index: IdentityIndex): Promise<ProviderRecord[]> {
@@ -368,6 +377,9 @@ export async function harvestFantasyPros(index: IdentityIndex): Promise<Provider
       team: base?.team ?? null,
       fantasypros_ecr: Number(entry?.rank_ecr ?? entry?.ecr ?? 0) || 0,
       fantasypros_sd: Number(entry?.standard_deviation ?? entry?.sd ?? 0) || 0,
+      injury_type:
+        (entry?.injury_type ?? entry?.injury_detail ?? entry?.player_injury_status ?? null) || null,
+      time_missed: (entry?.time_missed ?? entry?.injury_status ?? null) || null,
     });
   }
 
@@ -443,6 +455,8 @@ export async function ingestFantasyProsRanks(records: ProviderRecord[]) {
       team: r.team ?? null,
       fantasypros_ecr: r.fantasypros_ecr ?? null,
       fantasypros_sd: r.fantasypros_sd ?? null,
+      injury_type: r.injury_type ?? null,
+      time_missed: r.time_missed ?? null,
       updated_at: new Date().toISOString(),
     })),
   );
@@ -468,6 +482,8 @@ export interface MasterPlayerBrain {
   ecr: number[];
   sd: number[];
   injuries: string[];
+  injury_types: string[];
+  timelines: string[];
 }
 
 export function compileBrain(rows: PlayerWarehouseRow[]): MasterPlayerBrain {
@@ -485,6 +501,8 @@ export function compileBrain(rows: PlayerWarehouseRow[]): MasterPlayerBrain {
     ecr: [],
     sd: [],
     injuries: [],
+    injury_types: [],
+    timelines: [],
   };
 
   for (const r of sorted) {
@@ -496,6 +514,8 @@ export function compileBrain(rows: PlayerWarehouseRow[]): MasterPlayerBrain {
     brain.ecr.push(Number(r.fantasypros_ecr ?? 0) || 0);
     brain.sd.push(Number(r.fantasypros_sd ?? 0) || 0);
     brain.injuries.push(r.leaguelogs_status ?? "Healthy");
+    brain.injury_types.push(r.injury_type ?? "");
+    brain.timelines.push(r.time_missed ?? "");
   }
 
   return brain;
@@ -515,6 +535,8 @@ export function validateBrainAlignment(brain: MasterPlayerBrain): void {
     brain.ecr.length,
     brain.sd.length,
     brain.injuries.length,
+    brain.injury_types.length,
+    brain.timelines.length,
   ];
 
   if (brain.count === 0 || lengths.some((n) => n !== brain.count)) {

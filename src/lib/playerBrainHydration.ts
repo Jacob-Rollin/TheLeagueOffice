@@ -36,6 +36,8 @@ export interface MasterPlayerBrainPayload {
   ecr: number[];
   sd: number[];
   injuries: string[];
+  injury_types?: string[];
+  timelines?: string[];
 }
 
 export interface BrainEntry {
@@ -46,6 +48,8 @@ export interface BrainEntry {
   ecr: number;
   sd: number;
   injuryStatus: string;
+  injuryType: string;
+  timeMissed: string;
 }
 
 export type BrainMatrix = Record<string, BrainEntry>;
@@ -104,6 +108,8 @@ export function compileMatrix(brain: MasterPlayerBrainPayload): BrainMatrix {
       ecr: brain.ecr?.[i] ?? 0,
       sd: brain.sd?.[i] ?? 0,
       injuryStatus: brain.injuries?.[i] ?? "Healthy",
+      injuryType: brain.injury_types?.[i] ?? "",
+      timeMissed: brain.timelines?.[i] ?? "",
     };
   }
   return matrix;
@@ -143,6 +149,8 @@ async function localTemplateMatrix(): Promise<BrainMatrix | null> {
         ecr: p.rank?.ppr ?? 0,
         sd: 0,
         injuryStatus: p.injury ?? "Healthy",
+        injuryType: "",
+        timeMissed: "",
       };
     }
     return Object.keys(matrix).length > 0 ? matrix : null;
