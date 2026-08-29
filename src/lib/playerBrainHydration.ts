@@ -108,6 +108,8 @@ export function compileMatrix(brain: MasterPlayerBrainPayload): BrainMatrix {
       ecr: brain.ecr?.[i] ?? 0,
       sd: brain.sd?.[i] ?? 0,
       injuryStatus: brain.injuries?.[i] ?? "Healthy",
+      injuryType: brain.injury_types?.[i] ?? "",
+      timeMissed: brain.timelines?.[i] ?? "",
     };
   }
   return matrix;
@@ -147,6 +149,8 @@ async function localTemplateMatrix(): Promise<BrainMatrix | null> {
         ecr: p.rank?.ppr ?? 0,
         sd: 0,
         injuryStatus: p.injury ?? "Healthy",
+        injuryType: "",
+        timeMissed: "",
       };
     }
     return Object.keys(matrix).length > 0 ? matrix : null;
