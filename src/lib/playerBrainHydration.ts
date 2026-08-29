@@ -14,6 +14,9 @@
 
 import localforage from "localforage";
 
+import type { PlayersPayload } from "@/lib/players-build";
+import { readCache } from "@/lib/sleeper-cache";
+
 const BUCKET = "player_brain";
 const FILE = "master_player_brain.json";
 const HEARTBEAT_KEY = "player-brain:last-sync";
@@ -116,6 +119,43 @@ export async function readBrainMatrix(): Promise<BrainMatrix | null> {
   }
 }
 
+const LOCAL_PLAYERS_CACHE_KEY = "players-v1";
+
+/**
+ * Offline safety guard. When the storage bucket is empty or answers 400/404,
+ * compile the matrix from the pre-existing local Sleeper player template so
+ * the War Room, Trade Desk, and search inputs stay fully usable.
+ */
+async function localTemplateMatrix(): Promise<BrainMatrix | null> {
+  try {
+    const hit = await readCache<PlayersPayload>(LOCAL_PLAYERS_CACHE_KEY);
+    const players = hit?.data?.players;
+    if (!players || players.length === 0) return null;
+
+    const matrix: BrainMatrix = {};
+    for (const p of players) {
+      if (!p?.id) continue;
+      matrix[p.id] = {
+        name: p.name ?? "",
+        position: String(p.pos ?? ""),
+        team: p.team ?? "",
+        value: 0,
+        ecr: p.rank?.ppr ?? 0,
+        sd: 0,
+        injuryStatus: p.injury ?? "Healthy",
+      };
+    }
+    return Object.keys(matrix).length > 0 ? matrix : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Local-only resolution chain: compiled matrix, then local player template. */
+async function localFallbackMatrix(): Promise<BrainMatrix | null> {
+  return (await readBrainMatrix()) ?? (await localTemplateMatrix());
+}
+
 let inFlight: Promise<BrainMatrix | null> | null = null;
 
 /**
@@ -130,17 +170,17 @@ export function hydratePlayerBrain(options?: { force?: boolean }): Promise<Brain
     try {
       if (!options?.force && !heartbeatCleared()) {
         // Egress guard: serve entirely from local memory.
-        return await readBrainMatrix();
+        return await localFallbackMatrix();
       }
 
       const url = brainUrl();
-      if (!url) return await readBrainMatrix();
+      if (!url) return await localFallbackMatrix();
 
       const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) return await readBrainMatrix();
+      if (!res.ok) return await localFallbackMatrix();
 
       const brain = (await res.json()) as MasterPlayerBrainPayload;
-      if (!Array.isArray(brain?.ids) || brain.ids.length === 0) return await readBrainMatrix();
+      if (!Array.isArray(brain?.ids) || brain.ids.length === 0) return await localFallbackMatrix();
 
       const matrix = compileMatrix(brain);
       if (store) {
@@ -156,7 +196,7 @@ export function hydratePlayerBrain(options?: { force?: boolean }): Promise<Brain
       return matrix;
     } catch {
       // Silent by design — never surfaces to the UI.
-      return await readBrainMatrix();
+      return await localFallbackMatrix();
     } finally {
       inFlight = null;
     }
