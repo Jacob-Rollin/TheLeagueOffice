@@ -382,7 +382,8 @@ export async function harvestFantasyPros(index: IdentityIndex): Promise<Provider
       position: base?.position ?? null,
       team: base?.team ?? null,
       fantasypros_ecr: Number(entry?.rank_ecr ?? entry?.ecr ?? 0) || 0,
-      fantasypros_sd: Number(entry?.standard_deviation ?? entry?.sd ?? 0) || 0,
+      fantasypros_sd:
+        Number(entry?.rank_std ?? entry?.standard_deviation ?? entry?.sd ?? 0) || 0,
       injury_type:
         (entry?.injury_type ?? entry?.injury_detail ?? entry?.player_injury_status ?? null) || null,
       time_missed: (entry?.time_missed ?? entry?.injury_status ?? null) || null,
