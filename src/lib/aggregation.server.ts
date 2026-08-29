@@ -340,6 +340,11 @@ interface FantasyProsEntry {
   ecr?: number | string | null;
   standard_deviation?: number | string | null;
   sd?: number | string | null;
+  injury_type?: string | null;
+  injury_detail?: string | null;
+  injury_status?: string | null;
+  time_missed?: string | null;
+  player_injury_status?: string | null;
 }
 
 export async function harvestFantasyPros(index: IdentityIndex): Promise<ProviderRecord[]> {
@@ -372,6 +377,9 @@ export async function harvestFantasyPros(index: IdentityIndex): Promise<Provider
       team: base?.team ?? null,
       fantasypros_ecr: Number(entry?.rank_ecr ?? entry?.ecr ?? 0) || 0,
       fantasypros_sd: Number(entry?.standard_deviation ?? entry?.sd ?? 0) || 0,
+      injury_type:
+        (entry?.injury_type ?? entry?.injury_detail ?? entry?.player_injury_status ?? null) || null,
+      time_missed: (entry?.time_missed ?? entry?.injury_status ?? null) || null,
     });
   }
 
