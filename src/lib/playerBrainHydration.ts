@@ -36,6 +36,8 @@ export interface MasterPlayerBrainPayload {
   ecr: number[];
   sd: number[];
   injuries: string[];
+  injury_types?: string[];
+  timelines?: string[];
 }
 
 export interface BrainEntry {
@@ -46,6 +48,8 @@ export interface BrainEntry {
   ecr: number;
   sd: number;
   injuryStatus: string;
+  injuryType: string;
+  timeMissed: string;
 }
 
 export type BrainMatrix = Record<string, BrainEntry>;
