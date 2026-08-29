@@ -149,7 +149,15 @@ function SiteNav() {
 }
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  // Silent background player-brain hydration (30-min heartbeat guarded).
+  useEffect(() => {
+    void hydratePlayerBrain();
+  }, [pathname]);
+
   return (
+
     <QueryClientProvider client={queryClient}>
       <ActiveLeagueProvider>
         <ScoreTicker />
