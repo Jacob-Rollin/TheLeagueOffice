@@ -6,8 +6,8 @@
  * live in IndexedDB when available and fall back to localStorage.
  */
 
-const DB_NAME = "league-office";
-const STORE = "sleeper";
+const DB_NAME = "sleeper_player_catalog";
+const STORE = "catalog_records";
 
 type Record_<T> = { data: T; fetchedAt: number };
 
