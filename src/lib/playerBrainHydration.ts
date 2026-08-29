@@ -35,6 +35,7 @@ export interface MasterPlayerBrainPayload {
   values: number[];
   ecr: number[];
   sd: number[];
+  trends?: number[];
   injuries: string[];
   injury_types?: string[];
   timelines?: string[];
@@ -47,6 +48,8 @@ export interface BrainEntry {
   value: number;
   ecr: number;
   sd: number;
+  /** 7-day FantasyCalc trade market velocity (0 when unpublished). */
+  trend: number;
   injuryStatus: string;
   injuryType: string;
   timeMissed: string;
