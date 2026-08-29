@@ -58,6 +58,8 @@ export interface ProviderRecord {
   position?: string | null;
   team?: string | null;
   fantasycalc_value?: number | null;
+  /** FantasyCalc market trend velocity (signed value delta). */
+  fantasycalc_trend?: number | null;
   leaguelogs_status?: string | null;
   fantasypros_ecr?: number | null;
   fantasypros_sd?: number | null;
@@ -255,6 +257,8 @@ export function resolveSleeperId(
 
 interface FantasyCalcEntry {
   value?: number;
+  /** Market trend velocity (30-day value delta, signed). */
+  trend30Day?: number | null;
   player?: {
     sleeperId?: string | number | null;
     espnId?: string | number | null;
@@ -282,6 +286,7 @@ export async function harvestFantasyCalc(index: IdentityIndex): Promise<Provider
       position: base?.position ?? null,
       team: base?.team ?? null,
       fantasycalc_value: Number(entry?.value ?? 0) || 0,
+      fantasycalc_trend: Number(entry?.trend30Day ?? 0) || 0,
     });
   }
 
@@ -479,6 +484,8 @@ export interface MasterPlayerBrain {
   positions: string[];
   teams: string[];
   values: number[];
+  /** FantasyCalc market trend velocity per player (key emitted: "trends"). */
+  trends: number[];
   ecr: number[];
   sd: number[];
   injuries: string[];
@@ -486,7 +493,10 @@ export interface MasterPlayerBrain {
   timelines: string[];
 }
 
-export function compileBrain(rows: PlayerWarehouseRow[]): MasterPlayerBrain {
+export function compileBrain(
+  rows: PlayerWarehouseRow[],
+  trendsById?: ReadonlyMap<string, number>,
+): MasterPlayerBrain {
   const sorted = [...rows].sort((a, b) => a.sleeper_id.localeCompare(b.sleeper_id));
 
   const brain: MasterPlayerBrain = {
@@ -498,6 +508,7 @@ export function compileBrain(rows: PlayerWarehouseRow[]): MasterPlayerBrain {
     positions: [],
     teams: [],
     values: [],
+    trends: [],
     ecr: [],
     sd: [],
     injuries: [],
@@ -511,6 +522,7 @@ export function compileBrain(rows: PlayerWarehouseRow[]): MasterPlayerBrain {
     brain.positions.push(r.position ?? "");
     brain.teams.push(r.team ?? "");
     brain.values.push(Number(r.fantasycalc_value ?? 0) || 0);
+    brain.trends.push(Number(trendsById?.get(r.sleeper_id) ?? 0) || 0);
     brain.ecr.push(Number(r.fantasypros_ecr ?? 0) || 0);
     brain.sd.push(Number(r.fantasypros_sd ?? 0) || 0);
     brain.injuries.push(r.leaguelogs_status ?? "Healthy");
@@ -532,6 +544,7 @@ export function validateBrainAlignment(brain: MasterPlayerBrain): void {
     brain.positions.length,
     brain.teams.length,
     brain.values.length,
+    brain.trends.length,
     brain.ecr.length,
     brain.sd.length,
     brain.injuries.length,
@@ -611,9 +624,17 @@ export async function runWarehouseIngestion(): Promise<IngestionReport> {
     written["leaguelogs"] = (await ingestLeagueLogsStatus(leaguelogs)).written;
     written["fantasypros"] = (await ingestFantasyProsRanks(fantasypros)).written;
 
-    // 5. Compile + alignment gate + publish.
+    // 5. Compile + alignment gate + publish. Trend velocities ride the
+    // payload directly (no warehouse column on Database B), keyed by the
+    // same master Sleeper ID ordering as every other parallel array.
+    const trendMap = new Map<string, number>();
+    for (const r of fantasycalc) {
+      if (typeof r.fantasycalc_trend === "number" && r.fantasycalc_trend !== 0) {
+        trendMap.set(r.sleeper_id, r.fantasycalc_trend);
+      }
+    }
     const rows = await readWarehouse();
-    const brain = compileBrain(rows);
+    const brain = compileBrain(rows, trendMap);
     validateBrainAlignment(brain);
     const { bytes } = await uploadBrain(brain);
 
