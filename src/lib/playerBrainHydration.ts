@@ -35,6 +35,7 @@ export interface MasterPlayerBrainPayload {
   values: number[];
   ecr: number[];
   sd: number[];
+  trends?: number[];
   injuries: string[];
   injury_types?: string[];
   timelines?: string[];
@@ -47,6 +48,8 @@ export interface BrainEntry {
   value: number;
   ecr: number;
   sd: number;
+  /** 7-day FantasyCalc trade market velocity (0 when unpublished). */
+  trend: number;
   injuryStatus: string;
   injuryType: string;
   timeMissed: string;
@@ -107,6 +110,7 @@ export function compileMatrix(brain: MasterPlayerBrainPayload): BrainMatrix {
       value: brain.values?.[i] ?? 0,
       ecr: brain.ecr?.[i] ?? 0,
       sd: brain.sd?.[i] ?? 0,
+      trend: brain.trends?.[i] ?? 0,
       injuryStatus: brain.injuries?.[i] ?? "Healthy",
       injuryType: brain.injury_types?.[i] ?? "",
       timeMissed: brain.timelines?.[i] ?? "",
@@ -148,6 +152,7 @@ async function localTemplateMatrix(): Promise<BrainMatrix | null> {
         value: 0,
         ecr: p.rank?.ppr ?? 0,
         sd: 0,
+        trend: 0,
         injuryStatus: p.injury ?? "Healthy",
         injuryType: "",
         timeMissed: "",

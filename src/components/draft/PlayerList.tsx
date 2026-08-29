@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { detailQuery } from "./PlayerDetail";
 import { cn } from "@/lib/utils";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import {
   POSITIONS,
   roundOf,
@@ -19,7 +20,7 @@ import {
 
 const SEASON = new Date().getFullYear();
 
-type SortKey = "rank" | "adp" | "adpMin" | "adpMax" | "projPts" | "projAvg" | "prevPts" | "prevAvg";
+type SortKey = "rank" | "adp" | "ecr" | "sd" | "trend" | "projPts" | "projAvg" | "prevPts" | "prevAvg";
 /** null = default baseline order (overall rank). */
 type Sort = SortKey | null;
 
@@ -75,6 +76,56 @@ function PlayerListImpl({
   const [dragId, setDragId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const queryClient = useQueryClient();
+  const brain = usePlayerBrain();
+
+  /** Analytics reads: ECR / SD / 7-day trend out of the local matrix map. */
+  const ecrOf = useCallback(
+    (id: string) => {
+      const n = brain?.[id]?.ecr ?? 0;
+      return n > 0 ? n : null;
+    },
+    [brain],
+  );
+  const sdOf = useCallback(
+    (id: string) => {
+      const n = brain?.[id]?.sd ?? 0;
+      return n > 0 ? n : null;
+    },
+    [brain],
+  );
+  const trendOf = useCallback(
+    (id: string) => {
+      const n = brain?.[id]?.trend ?? 0;
+      return Number.isFinite(n) && n !== 0 ? n : null;
+    },
+    [brain],
+  );
+
+  /**
+   * True positional rank (RB1, WR12 …) — distinct from the overall board RK.
+   * Ordered by the analytics ECR when present, otherwise by board value.
+   */
+  const posRanks = useMemo(() => {
+    const groups = new Map<string, Player[]>();
+    for (const p of players) {
+      const g = groups.get(p.pos);
+      if (g) g.push(p);
+      else groups.set(p.pos, [p]);
+    }
+    const out = new Map<string, number>();
+    for (const [, group] of groups) {
+      const ordered = [...group].sort((a, b) => {
+        const ae = brain?.[a.id]?.ecr ?? 0;
+        const be = brain?.[b.id]?.ecr ?? 0;
+        const aKey = ae > 0 ? ae : value(a, settings.scoring).rank + 10000;
+        const bKey = be > 0 ? be : value(b, settings.scoring).rank + 10000;
+        return aKey - bKey;
+      });
+      ordered.forEach((p, i) => out.set(p.id, i + 1));
+    }
+    return out;
+  }, [players, brain, settings.scoring]);
+
 
   /** Click once to sort high-to-low, click again to clear back to baseline. */
   const toggleSort = useCallback((key: SortKey) => {
@@ -155,8 +206,9 @@ function PlayerListImpl({
       let diff = 0;
       if (sort === "rank") diff = bv.rank - av.rank;
       else if (sort === "adp") diff = bv.adp - av.adp;
-      else if (sort === "adpMin") diff = b.adpRange.min - a.adpRange.min;
-      else if (sort === "adpMax") diff = b.adpRange.max - a.adpRange.max;
+      else if (sort === "ecr") diff = (ecrOf(a.id) ?? 9999) - (ecrOf(b.id) ?? 9999);
+      else if (sort === "sd") diff = (sdOf(b.id) ?? -1) - (sdOf(a.id) ?? -1);
+      else if (sort === "trend") diff = (trendOf(b.id) ?? -Infinity) - (trendOf(a.id) ?? -Infinity);
       else if (sort === "projPts" || sort === "projAvg") diff = bv.proj - av.proj;
       else if (sort === "prevPts" || sort === "prevAvg") diff = (bv.prev ?? -1) - (av.prev ?? -1);
       if (diff !== 0) return diff;
@@ -178,7 +230,9 @@ function PlayerListImpl({
     needs,
     counts,
     currentOverall,
-
+    ecrOf,
+    sdOf,
+    trendOf,
   ]);
 
   // Render in chunks so a full-league player pool never blocks scrolling.
@@ -384,12 +438,12 @@ function PlayerListImpl({
             >
               ADP
             </button>
-            <StatGroupHeader
-              label="ADP Range"
-              totalLabel="MIN"
-              avgLabel="MAX"
-              totalKey="adpMin"
-              avgKey="adpMax"
+            <MetricHeader label="ECR" metricKey="ecr" width="w-14" sort={sort} onSort={toggleSort} />
+            <MetricHeader label="SD" metricKey="sd" width="w-14" sort={sort} onSort={toggleSort} />
+            <MetricHeader
+              label="Trend"
+              metricKey="trend"
+              width="w-16"
               sort={sort}
               onSort={toggleSort}
             />
@@ -441,7 +495,7 @@ function PlayerListImpl({
                 <div className="flex-1">
                   <div className="font-semibold whitespace-nowrap">{p.name}</div>
                   <div className="text-xs text-muted-foreground whitespace-nowrap">
-                    {p.pos}
+                    {`${p.pos}${posRanks.get(p.id) ?? ""}`}
                     {p.team ? ` · ${p.team}` : ""}
                     {p.bye ? ` · BYE ${p.bye}` : ""}
                     {!hideValueTags && reach !== null && reach < -6 ? " · reach" : ""}
@@ -543,11 +597,33 @@ function PlayerListImpl({
                       sort === "adp" && ACTIVE_COL,
                     )}
                   />
-                  <StatGroup
-                    total={p.adpRange.min < 900 ? p.adpRange.min.toFixed(1) : "—"}
-                    avg={p.adpRange.max < 900 ? p.adpRange.max.toFixed(1) : "—"}
-                    totalActive={sort === "adpMin"}
-                    avgActive={sort === "adpMax"}
+                  <StatCell
+                    value={ecrOf(p.id) !== null ? String(Math.round(ecrOf(p.id)!)) : "—"}
+                    className={cn(
+                      "w-14 shrink-0 justify-center px-1",
+                      DIVIDER,
+                      sort === "ecr" && ACTIVE_COL,
+                    )}
+                  />
+                  <StatCell
+                    value={sdOf(p.id) !== null ? sdOf(p.id)!.toFixed(1) : "—"}
+                    className={cn(
+                      "w-14 shrink-0 justify-center px-1 font-normal text-muted-foreground",
+                      DIVIDER,
+                      sort === "sd" && ACTIVE_COL,
+                    )}
+                  />
+                  <StatCell
+                    value={
+                      trendOf(p.id) !== null
+                        ? `${trendOf(p.id)! > 0 ? "+" : "-"}${Math.abs(trendOf(p.id)!).toFixed(0)}`
+                        : "—"
+                    }
+                    className={cn(
+                      "w-16 shrink-0 justify-center px-1",
+                      DIVIDER,
+                      sort === "trend" && ACTIVE_COL,
+                    )}
                   />
                   <StatGroup
                     total={v.proj.toFixed(0)}
@@ -581,6 +657,35 @@ function PlayerListImpl({
 }
 
 export const PlayerList = memo(PlayerListImpl);
+
+/** Single sortable metric column header (ECR / SD / TREND). */
+function MetricHeader({
+  label,
+  metricKey,
+  width,
+  sort,
+  onSort,
+}: {
+  label: string;
+  metricKey: SortKey;
+  width: string;
+  sort: Sort;
+  onSort: (key: SortKey) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSort(metricKey)}
+      className={cn(
+        "flex shrink-0 items-end justify-center self-stretch px-1 pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
+        width,
+        DIVIDER,
+        sort === metricKey && `${ACTIVE_COL} text-foreground`,
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
 function StatCell({ value, className }: { value: string; className?: string }) {
   return (
