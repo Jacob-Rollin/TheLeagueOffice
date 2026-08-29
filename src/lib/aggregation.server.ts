@@ -45,6 +45,8 @@ export interface PlayerWarehouseRow {
   leaguelogs_status?: string | null;
   fantasypros_ecr?: number | null;
   fantasypros_sd?: number | null;
+  injury_type?: string | null;
+  time_missed?: string | null;
   updated_at?: string;
 }
 
@@ -59,6 +61,8 @@ export interface ProviderRecord {
   leaguelogs_status?: string | null;
   fantasypros_ecr?: number | null;
   fantasypros_sd?: number | null;
+  injury_type?: string | null;
+  time_missed?: string | null;
 }
 
 /* ------------------------------------------------------------------ */
