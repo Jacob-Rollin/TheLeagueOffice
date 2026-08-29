@@ -206,8 +206,9 @@ function PlayerListImpl({
       let diff = 0;
       if (sort === "rank") diff = bv.rank - av.rank;
       else if (sort === "adp") diff = bv.adp - av.adp;
-      else if (sort === "adpMin") diff = b.adpRange.min - a.adpRange.min;
-      else if (sort === "adpMax") diff = b.adpRange.max - a.adpRange.max;
+      else if (sort === "ecr") diff = (ecrOf(a.id) ?? 9999) - (ecrOf(b.id) ?? 9999);
+      else if (sort === "sd") diff = (sdOf(b.id) ?? -1) - (sdOf(a.id) ?? -1);
+      else if (sort === "trend") diff = (trendOf(b.id) ?? -Infinity) - (trendOf(a.id) ?? -Infinity);
       else if (sort === "projPts" || sort === "projAvg") diff = bv.proj - av.proj;
       else if (sort === "prevPts" || sort === "prevAvg") diff = (bv.prev ?? -1) - (av.prev ?? -1);
       if (diff !== 0) return diff;
