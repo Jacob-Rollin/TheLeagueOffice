@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { detailQuery } from "./PlayerDetail";
 import { cn } from "@/lib/utils";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import {
   POSITIONS,
   roundOf,
@@ -19,7 +20,7 @@ import {
 
 const SEASON = new Date().getFullYear();
 
-type SortKey = "rank" | "adp" | "adpMin" | "adpMax" | "projPts" | "projAvg" | "prevPts" | "prevAvg";
+type SortKey = "rank" | "adp" | "ecr" | "sd" | "trend" | "projPts" | "projAvg" | "prevPts" | "prevAvg";
 /** null = default baseline order (overall rank). */
 type Sort = SortKey | null;
 
