@@ -535,6 +535,8 @@ export function validateBrainAlignment(brain: MasterPlayerBrain): void {
     brain.ecr.length,
     brain.sd.length,
     brain.injuries.length,
+    brain.injury_types.length,
+    brain.timelines.length,
   ];
 
   if (brain.count === 0 || lengths.some((n) => n !== brain.count)) {
