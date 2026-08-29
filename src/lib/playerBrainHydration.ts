@@ -19,7 +19,9 @@ import { readCache } from "@/lib/sleeper-cache";
 
 const BUCKET = "player_brain";
 const FILE = "master_player_brain.json";
-const HEARTBEAT_KEY = "player-brain:last-sync";
+// Key suffix bumped to v2: any stale v1 timestamp from the empty-bucket era is
+// ignored, so the next boot bypasses the 30-minute blockade and refetches.
+const HEARTBEAT_KEY = "player-brain:last-sync:v2";
 const MATRIX_KEY = "player-brain:matrix";
 const META_KEY = "player-brain:meta";
 const HEARTBEAT_MS = 30 * 60 * 1000;
