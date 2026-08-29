@@ -76,6 +76,56 @@ function PlayerListImpl({
   const [dragId, setDragId] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const queryClient = useQueryClient();
+  const brain = usePlayerBrain();
+
+  /** Analytics reads: ECR / SD / 7-day trend out of the local matrix map. */
+  const ecrOf = useCallback(
+    (id: string) => {
+      const n = brain?.[id]?.ecr ?? 0;
+      return n > 0 ? n : null;
+    },
+    [brain],
+  );
+  const sdOf = useCallback(
+    (id: string) => {
+      const n = brain?.[id]?.sd ?? 0;
+      return n > 0 ? n : null;
+    },
+    [brain],
+  );
+  const trendOf = useCallback(
+    (id: string) => {
+      const n = brain?.[id]?.trend ?? 0;
+      return Number.isFinite(n) && n !== 0 ? n : null;
+    },
+    [brain],
+  );
+
+  /**
+   * True positional rank (RB1, WR12 …) — distinct from the overall board RK.
+   * Ordered by the analytics ECR when present, otherwise by board value.
+   */
+  const posRanks = useMemo(() => {
+    const groups = new Map<string, Player[]>();
+    for (const p of players) {
+      const g = groups.get(p.pos);
+      if (g) g.push(p);
+      else groups.set(p.pos, [p]);
+    }
+    const out = new Map<string, number>();
+    for (const [, group] of groups) {
+      const ordered = [...group].sort((a, b) => {
+        const ae = brain?.[a.id]?.ecr ?? 0;
+        const be = brain?.[b.id]?.ecr ?? 0;
+        const aKey = ae > 0 ? ae : value(a, settings.scoring).rank + 10000;
+        const bKey = be > 0 ? be : value(b, settings.scoring).rank + 10000;
+        return aKey - bKey;
+      });
+      ordered.forEach((p, i) => out.set(p.id, i + 1));
+    }
+    return out;
+  }, [players, brain, settings.scoring]);
+
 
   /** Click once to sort high-to-low, click again to clear back to baseline. */
   const toggleSort = useCallback((key: SortKey) => {
