@@ -603,7 +603,7 @@ function PlayerListImpl({
                     )}
                   />
                   <StatCell
-                    value={ecrOf(p.id) !== null ? String(Math.round(ecrOf(p.id)!)) : "—"}
+                    value={ecrOf(p) !== null ? String(Math.round(ecrOf(p)!)) : "—"}
                     className={cn(
                       "w-14 shrink-0 justify-center px-1",
                       DIVIDER,
@@ -611,7 +611,7 @@ function PlayerListImpl({
                     )}
                   />
                   <StatCell
-                    value={sdOf(p.id) !== null ? sdOf(p.id)!.toFixed(1) : "—"}
+                    value={sdOf(p) !== null ? sdOf(p)!.toFixed(1) : "—"}
                     className={cn(
                       "w-14 shrink-0 justify-center px-1 font-normal text-muted-foreground",
                       DIVIDER,
@@ -620,8 +620,8 @@ function PlayerListImpl({
                   />
                   <StatCell
                     value={
-                      trendOf(p.id) !== null
-                        ? `${trendOf(p.id)! > 0 ? "+" : "-"}${Math.abs(trendOf(p.id)!).toFixed(0)}`
+                      trendOf(p) !== null
+                        ? `${trendOf(p)! > 0 ? "+" : "-"}${Math.abs(trendOf(p)!).toFixed(0)}`
                         : "—"
                     }
                     className={cn(
