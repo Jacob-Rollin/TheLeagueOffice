@@ -345,6 +345,7 @@ interface FantasyProsEntry {
   ecr?: number | string | null;
   standard_deviation?: number | string | null;
   sd?: number | string | null;
+  rank_std?: number | string | null;
   injury_type?: string | null;
   injury_detail?: string | null;
   injury_status?: string | null;
