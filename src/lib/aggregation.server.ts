@@ -345,6 +345,7 @@ interface FantasyProsEntry {
   ecr?: number | string | null;
   standard_deviation?: number | string | null;
   sd?: number | string | null;
+  rank_std?: number | string | null;
   injury_type?: string | null;
   injury_detail?: string | null;
   injury_status?: string | null;
@@ -353,8 +354,9 @@ interface FantasyProsEntry {
 }
 
 export async function harvestFantasyPros(index: IdentityIndex): Promise<ProviderRecord[]> {
-  const url = envUrl("FANTASYPROS_ECR_URL");
-  if (!url) return [];
+  const url =
+    envUrl("FANTASYPROS_ECR_URL") ??
+    "https://api.fantasypros.com/public/v2/json/nfl/2026/consensus-rankings?position=ALL&type=draft&scoring=PPR";
 
   const apiKey = process.env["FANTASYPROS_API_KEY"];
   const payload = await fetchJsonWithRetry<{ players?: FantasyProsEntry[] } | FantasyProsEntry[]>(
@@ -381,7 +383,8 @@ export async function harvestFantasyPros(index: IdentityIndex): Promise<Provider
       position: base?.position ?? null,
       team: base?.team ?? null,
       fantasypros_ecr: Number(entry?.rank_ecr ?? entry?.ecr ?? 0) || 0,
-      fantasypros_sd: Number(entry?.standard_deviation ?? entry?.sd ?? 0) || 0,
+      fantasypros_sd:
+        Number(entry?.rank_std ?? entry?.standard_deviation ?? entry?.sd ?? 0) || 0,
       injury_type:
         (entry?.injury_type ?? entry?.injury_detail ?? entry?.player_injury_status ?? null) || null,
       time_missed: (entry?.time_missed ?? entry?.injury_status ?? null) || null,
