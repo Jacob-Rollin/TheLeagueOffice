@@ -170,17 +170,17 @@ export function hydratePlayerBrain(options?: { force?: boolean }): Promise<Brain
     try {
       if (!options?.force && !heartbeatCleared()) {
         // Egress guard: serve entirely from local memory.
-        return await readBrainMatrix();
+        return await localFallbackMatrix();
       }
 
       const url = brainUrl();
-      if (!url) return await readBrainMatrix();
+      if (!url) return await localFallbackMatrix();
 
       const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) return await readBrainMatrix();
+      if (!res.ok) return await localFallbackMatrix();
 
       const brain = (await res.json()) as MasterPlayerBrainPayload;
-      if (!Array.isArray(brain?.ids) || brain.ids.length === 0) return await readBrainMatrix();
+      if (!Array.isArray(brain?.ids) || brain.ids.length === 0) return await localFallbackMatrix();
 
       const matrix = compileMatrix(brain);
       if (store) {
@@ -196,7 +196,7 @@ export function hydratePlayerBrain(options?: { force?: boolean }): Promise<Brain
       return matrix;
     } catch {
       // Silent by design — never surfaces to the UI.
-      return await readBrainMatrix();
+      return await localFallbackMatrix();
     } finally {
       inFlight = null;
     }
