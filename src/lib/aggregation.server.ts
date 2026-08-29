@@ -271,7 +271,14 @@ export async function harvestFantasyCalc(index: IdentityIndex): Promise<Provider
       position: entry?.player?.position ?? null,
     });
     if (!id) continue;
-    out.push({ sleeper_id: id, fantasycalc_value: Number(entry?.value ?? 0) || 0 });
+    const base = index.base.get(id);
+    out.push({
+      sleeper_id: id,
+      full_name: base?.full_name ?? null,
+      position: base?.position ?? null,
+      team: base?.team ?? null,
+      fantasycalc_value: Number(entry?.value ?? 0) || 0,
+    });
   }
 
   return out;
@@ -306,8 +313,12 @@ export async function harvestLeagueLogs(index: IdentityIndex): Promise<ProviderR
       position: entry?.position ?? null,
     });
     if (!id) continue;
+    const base = index.base.get(id);
     out.push({
       sleeper_id: id,
+      full_name: base?.full_name ?? null,
+      position: base?.position ?? null,
+      team: base?.team ?? null,
       leaguelogs_status: (entry?.status ?? entry?.injury_status ?? "Healthy") || "Healthy",
     });
   }
@@ -349,8 +360,12 @@ export async function harvestFantasyPros(index: IdentityIndex): Promise<Provider
       position: entry?.player_position_id ?? null,
     });
     if (!id) continue;
+    const base = index.base.get(id);
     out.push({
       sleeper_id: id,
+      full_name: base?.full_name ?? null,
+      position: base?.position ?? null,
+      team: base?.team ?? null,
       fantasypros_ecr: Number(entry?.rank_ecr ?? entry?.ecr ?? 0) || 0,
       fantasypros_sd: Number(entry?.standard_deviation ?? entry?.sd ?? 0) || 0,
     });
@@ -395,6 +410,9 @@ export async function ingestFantasyCalcValues(records: ProviderRecord[]) {
   return upsertBatch(
     records.map((r) => ({
       sleeper_id: r.sleeper_id,
+      player_name: r.full_name ?? null,
+      position: r.position ?? null,
+      team: r.team ?? null,
       fantasycalc_value: r.fantasycalc_value ?? null,
       updated_at: new Date().toISOString(),
     })),
@@ -406,6 +424,9 @@ export async function ingestLeagueLogsStatus(records: ProviderRecord[]) {
   return upsertBatch(
     records.map((r) => ({
       sleeper_id: r.sleeper_id,
+      player_name: r.full_name ?? null,
+      position: r.position ?? null,
+      team: r.team ?? null,
       leaguelogs_status: r.leaguelogs_status ?? null,
       updated_at: new Date().toISOString(),
     })),
@@ -417,6 +438,9 @@ export async function ingestFantasyProsRanks(records: ProviderRecord[]) {
   return upsertBatch(
     records.map((r) => ({
       sleeper_id: r.sleeper_id,
+      player_name: r.full_name ?? null,
+      position: r.position ?? null,
+      team: r.team ?? null,
       fantasypros_ecr: r.fantasypros_ecr ?? null,
       fantasypros_sd: r.fantasypros_sd ?? null,
       updated_at: new Date().toISOString(),
