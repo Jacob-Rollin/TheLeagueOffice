@@ -78,24 +78,26 @@ function PlayerListImpl({
   const queryClient = useQueryClient();
   const brain = usePlayerBrain();
 
-  /** Analytics reads: ECR / SD / 7-day trend out of the local matrix map. */
+  /** Analytics reads: ECR / SD / 7-day trend out of the local matrix map.
+   *  All lookups are keyed by the player's platform Sleeper ID (player.id). */
   const ecrOf = useCallback(
-    (id: string) => {
-      const n = brain?.[id]?.ecr ?? 0;
-      return n > 0 ? n : null;
+    (player: Player) => {
+      const n = brain?.[player.id]?.ecr ?? 0;
+      // 999 is the FantasyPros "unranked" sentinel; treat it as missing.
+      return n > 0 && n < 999 ? n : null;
     },
     [brain],
   );
   const sdOf = useCallback(
-    (id: string) => {
-      const n = brain?.[id]?.sd ?? 0;
+    (player: Player) => {
+      const n = brain?.[player.id]?.sd ?? 0;
       return n > 0 ? n : null;
     },
     [brain],
   );
   const trendOf = useCallback(
-    (id: string) => {
-      const n = brain?.[id]?.trend ?? 0;
+    (player: Player) => {
+      const n = brain?.[player.id]?.trend ?? 0;
       return Number.isFinite(n) && n !== 0 ? n : null;
     },
     [brain],
@@ -103,7 +105,7 @@ function PlayerListImpl({
 
   /**
    * True positional rank (RB1, WR12 …) — distinct from the overall board RK.
-   * Ordered by the analytics ECR when present, otherwise by board value.
+   * Ordered by the analytics ECR when present, otherwise by Sleeper's posRank.
    */
   const posRanks = useMemo(() => {
     const groups = new Map<string, Player[]>();
@@ -117,14 +119,17 @@ function PlayerListImpl({
       const ordered = [...group].sort((a, b) => {
         const ae = brain?.[a.id]?.ecr ?? 0;
         const be = brain?.[b.id]?.ecr ?? 0;
-        const aKey = ae > 0 ? ae : value(a, settings.scoring).rank + 10000;
-        const bKey = be > 0 ? be : value(b, settings.scoring).rank + 10000;
-        return aKey - bKey;
+        const aHas = ae > 0 && ae < 999;
+        const bHas = be > 0 && be < 999;
+        if (aHas && bHas) return ae - be;
+        if (aHas) return -1;
+        if (bHas) return 1;
+        return a.posRank - b.posRank;
       });
       ordered.forEach((p, i) => out.set(p.id, i + 1));
     }
     return out;
-  }, [players, brain, settings.scoring]);
+  }, [players, brain]);
 
 
   /** Click once to sort high-to-low, click again to clear back to baseline. */
