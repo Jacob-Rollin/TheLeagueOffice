@@ -355,7 +355,7 @@ interface FantasyProsEntry {
 export async function harvestFantasyPros(index: IdentityIndex): Promise<ProviderRecord[]> {
   const url =
     envUrl("FANTASYPROS_ECR_URL") ??
-    "https://api.fantasypros.com/v2/json/nfl/consensus-rankings?position=ALL&type=draft&scoring=PPR";
+    "https://api.fantasypros.com/public/v2/json/nfl/2026/consensus-rankings?position=ALL&type=draft&scoring=PPR";
 
   const apiKey = process.env["FANTASYPROS_API_KEY"];
   const payload = await fetchJsonWithRetry<{ players?: FantasyProsEntry[] } | FantasyProsEntry[]>(
