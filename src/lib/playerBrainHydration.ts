@@ -62,7 +62,7 @@ export type BrainMatrix = Record<string, BrainEntry>;
 const store = (() => {
   if (typeof window === "undefined") return null;
   try {
-    return localforage.createInstance({ name: "league-office", storeName: "master_player_analytics_db" });
+    return localforage.createInstance({ name: "master_player_analytics_db", storeName: "analytics_keyvaluepairs" });
   } catch {
     return null;
   }
