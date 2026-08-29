@@ -230,7 +230,9 @@ function PlayerListImpl({
     needs,
     counts,
     currentOverall,
-
+    ecrOf,
+    sdOf,
+    trendOf,
   ]);
 
   // Render in chunks so a full-league player pool never blocks scrolling.
@@ -436,12 +438,12 @@ function PlayerListImpl({
             >
               ADP
             </button>
-            <StatGroupHeader
-              label="ADP Range"
-              totalLabel="MIN"
-              avgLabel="MAX"
-              totalKey="adpMin"
-              avgKey="adpMax"
+            <MetricHeader label="ECR" metricKey="ecr" width="w-14" sort={sort} onSort={toggleSort} />
+            <MetricHeader label="SD" metricKey="sd" width="w-14" sort={sort} onSort={toggleSort} />
+            <MetricHeader
+              label="Trend"
+              metricKey="trend"
+              width="w-16"
               sort={sort}
               onSort={toggleSort}
             />
@@ -595,11 +597,33 @@ function PlayerListImpl({
                       sort === "adp" && ACTIVE_COL,
                     )}
                   />
-                  <StatGroup
-                    total={p.adpRange.min < 900 ? p.adpRange.min.toFixed(1) : "—"}
-                    avg={p.adpRange.max < 900 ? p.adpRange.max.toFixed(1) : "—"}
-                    totalActive={sort === "adpMin"}
-                    avgActive={sort === "adpMax"}
+                  <StatCell
+                    value={ecrOf(p.id) !== null ? String(Math.round(ecrOf(p.id)!)) : "—"}
+                    className={cn(
+                      "w-14 shrink-0 justify-center px-1",
+                      DIVIDER,
+                      sort === "ecr" && ACTIVE_COL,
+                    )}
+                  />
+                  <StatCell
+                    value={sdOf(p.id) !== null ? sdOf(p.id)!.toFixed(1) : "—"}
+                    className={cn(
+                      "w-14 shrink-0 justify-center px-1 font-normal text-muted-foreground",
+                      DIVIDER,
+                      sort === "sd" && ACTIVE_COL,
+                    )}
+                  />
+                  <StatCell
+                    value={
+                      trendOf(p.id) !== null
+                        ? `${trendOf(p.id)! > 0 ? "+" : "-"}${Math.abs(trendOf(p.id)!).toFixed(0)}`
+                        : "—"
+                    }
+                    className={cn(
+                      "w-16 shrink-0 justify-center px-1",
+                      DIVIDER,
+                      sort === "trend" && ACTIVE_COL,
+                    )}
                   />
                   <StatGroup
                     total={v.proj.toFixed(0)}
