@@ -495,7 +495,7 @@ function PlayerListImpl({
                 <div className="flex-1">
                   <div className="font-semibold whitespace-nowrap">{p.name}</div>
                   <div className="text-xs text-muted-foreground whitespace-nowrap">
-                    {p.pos}
+                    {`${p.pos}${posRanks.get(p.id) ?? ""}`}
                     {p.team ? ` · ${p.team}` : ""}
                     {p.bye ? ` · BYE ${p.bye}` : ""}
                     {!hideValueTags && reach !== null && reach < -6 ? " · reach" : ""}
@@ -657,6 +657,35 @@ function PlayerListImpl({
 }
 
 export const PlayerList = memo(PlayerListImpl);
+
+/** Single sortable metric column header (ECR / SD / TREND). */
+function MetricHeader({
+  label,
+  metricKey,
+  width,
+  sort,
+  onSort,
+}: {
+  label: string;
+  metricKey: SortKey;
+  width: string;
+  sort: Sort;
+  onSort: (key: SortKey) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSort(metricKey)}
+      className={cn(
+        "flex shrink-0 items-end justify-center self-stretch px-1 pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
+        width,
+        DIVIDER,
+        sort === metricKey && `${ACTIVE_COL} text-foreground`,
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
 function StatCell({ value, className }: { value: string; className?: string }) {
   return (
