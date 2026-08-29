@@ -38,7 +38,7 @@ const FANTASY_POSITIONS = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
 /** Normalized row shape for the player_warehouse table. */
 export interface PlayerWarehouseRow {
   sleeper_id: string; // primary anchor key
-  full_name?: string | null;
+  player_name?: string | null;
   position?: string | null;
   team?: string | null;
   fantasycalc_value?: number | null;
@@ -271,7 +271,14 @@ export async function harvestFantasyCalc(index: IdentityIndex): Promise<Provider
       position: entry?.player?.position ?? null,
     });
     if (!id) continue;
-    out.push({ sleeper_id: id, fantasycalc_value: Number(entry?.value ?? 0) || 0 });
+    const base = index.base.get(id);
+    out.push({
+      sleeper_id: id,
+      full_name: base?.full_name ?? null,
+      position: base?.position ?? null,
+      team: base?.team ?? null,
+      fantasycalc_value: Number(entry?.value ?? 0) || 0,
+    });
   }
 
   return out;
@@ -306,8 +313,12 @@ export async function harvestLeagueLogs(index: IdentityIndex): Promise<ProviderR
       position: entry?.position ?? null,
     });
     if (!id) continue;
+    const base = index.base.get(id);
     out.push({
       sleeper_id: id,
+      full_name: base?.full_name ?? null,
+      position: base?.position ?? null,
+      team: base?.team ?? null,
       leaguelogs_status: (entry?.status ?? entry?.injury_status ?? "Healthy") || "Healthy",
     });
   }
@@ -349,8 +360,12 @@ export async function harvestFantasyPros(index: IdentityIndex): Promise<Provider
       position: entry?.player_position_id ?? null,
     });
     if (!id) continue;
+    const base = index.base.get(id);
     out.push({
       sleeper_id: id,
+      full_name: base?.full_name ?? null,
+      position: base?.position ?? null,
+      team: base?.team ?? null,
       fantasypros_ecr: Number(entry?.rank_ecr ?? entry?.ecr ?? 0) || 0,
       fantasypros_sd: Number(entry?.standard_deviation ?? entry?.sd ?? 0) || 0,
     });
@@ -382,7 +397,7 @@ export async function ingestSleeperBase(records: ProviderRecord[]) {
   return upsertBatch(
     records.map((r) => ({
       sleeper_id: r.sleeper_id,
-      full_name: r.full_name ?? null,
+      player_name: r.full_name ?? null,
       position: r.position ?? null,
       team: r.team ?? null,
       updated_at: new Date().toISOString(),
@@ -395,6 +410,9 @@ export async function ingestFantasyCalcValues(records: ProviderRecord[]) {
   return upsertBatch(
     records.map((r) => ({
       sleeper_id: r.sleeper_id,
+      player_name: r.full_name ?? null,
+      position: r.position ?? null,
+      team: r.team ?? null,
       fantasycalc_value: r.fantasycalc_value ?? null,
       updated_at: new Date().toISOString(),
     })),
@@ -406,6 +424,9 @@ export async function ingestLeagueLogsStatus(records: ProviderRecord[]) {
   return upsertBatch(
     records.map((r) => ({
       sleeper_id: r.sleeper_id,
+      player_name: r.full_name ?? null,
+      position: r.position ?? null,
+      team: r.team ?? null,
       leaguelogs_status: r.leaguelogs_status ?? null,
       updated_at: new Date().toISOString(),
     })),
@@ -417,6 +438,9 @@ export async function ingestFantasyProsRanks(records: ProviderRecord[]) {
   return upsertBatch(
     records.map((r) => ({
       sleeper_id: r.sleeper_id,
+      player_name: r.full_name ?? null,
+      position: r.position ?? null,
+      team: r.team ?? null,
       fantasypros_ecr: r.fantasypros_ecr ?? null,
       fantasypros_sd: r.fantasypros_sd ?? null,
       updated_at: new Date().toISOString(),
@@ -465,7 +489,7 @@ export function compileBrain(rows: PlayerWarehouseRow[]): MasterPlayerBrain {
 
   for (const r of sorted) {
     brain.ids.push(r.sleeper_id);
-    brain.names.push(r.full_name ?? "");
+    brain.names.push(r.player_name ?? "");
     brain.positions.push(r.position ?? "");
     brain.teams.push(r.team ?? "");
     brain.values.push(Number(r.fantasycalc_value ?? 0) || 0);
