@@ -78,24 +78,26 @@ function PlayerListImpl({
   const queryClient = useQueryClient();
   const brain = usePlayerBrain();
 
-  /** Analytics reads: ECR / SD / 7-day trend out of the local matrix map. */
+  /** Analytics reads: ECR / SD / 7-day trend out of the local matrix map.
+   *  All lookups are keyed by the player's platform Sleeper ID (player.id). */
   const ecrOf = useCallback(
-    (id: string) => {
-      const n = brain?.[id]?.ecr ?? 0;
-      return n > 0 ? n : null;
+    (player: Player) => {
+      const n = brain?.[player.id]?.ecr ?? 0;
+      // 999 is the FantasyPros "unranked" sentinel; treat it as missing.
+      return n > 0 && n < 999 ? n : null;
     },
     [brain],
   );
   const sdOf = useCallback(
-    (id: string) => {
-      const n = brain?.[id]?.sd ?? 0;
+    (player: Player) => {
+      const n = brain?.[player.id]?.sd ?? 0;
       return n > 0 ? n : null;
     },
     [brain],
   );
   const trendOf = useCallback(
-    (id: string) => {
-      const n = brain?.[id]?.trend ?? 0;
+    (player: Player) => {
+      const n = brain?.[player.id]?.trend ?? 0;
       return Number.isFinite(n) && n !== 0 ? n : null;
     },
     [brain],
@@ -103,7 +105,7 @@ function PlayerListImpl({
 
   /**
    * True positional rank (RB1, WR12 …) — distinct from the overall board RK.
-   * Ordered by the analytics ECR when present, otherwise by board value.
+   * Ordered by the analytics ECR when present, otherwise by Sleeper's posRank.
    */
   const posRanks = useMemo(() => {
     const groups = new Map<string, Player[]>();
@@ -117,14 +119,17 @@ function PlayerListImpl({
       const ordered = [...group].sort((a, b) => {
         const ae = brain?.[a.id]?.ecr ?? 0;
         const be = brain?.[b.id]?.ecr ?? 0;
-        const aKey = ae > 0 ? ae : value(a, settings.scoring).rank + 10000;
-        const bKey = be > 0 ? be : value(b, settings.scoring).rank + 10000;
-        return aKey - bKey;
+        const aHas = ae > 0 && ae < 999;
+        const bHas = be > 0 && be < 999;
+        if (aHas && bHas) return ae - be;
+        if (aHas) return -1;
+        if (bHas) return 1;
+        return a.posRank - b.posRank;
       });
       ordered.forEach((p, i) => out.set(p.id, i + 1));
     }
     return out;
-  }, [players, brain, settings.scoring]);
+  }, [players, brain]);
 
 
   /** Click once to sort high-to-low, click again to clear back to baseline. */
@@ -206,9 +211,9 @@ function PlayerListImpl({
       let diff = 0;
       if (sort === "rank") diff = bv.rank - av.rank;
       else if (sort === "adp") diff = bv.adp - av.adp;
-      else if (sort === "ecr") diff = (ecrOf(a.id) ?? 9999) - (ecrOf(b.id) ?? 9999);
-      else if (sort === "sd") diff = (sdOf(b.id) ?? -1) - (sdOf(a.id) ?? -1);
-      else if (sort === "trend") diff = (trendOf(b.id) ?? -Infinity) - (trendOf(a.id) ?? -Infinity);
+      else if (sort === "ecr") diff = (ecrOf(a) ?? 9999) - (ecrOf(b) ?? 9999);
+      else if (sort === "sd") diff = (sdOf(b) ?? -1) - (sdOf(a) ?? -1);
+      else if (sort === "trend") diff = (trendOf(b) ?? -Infinity) - (trendOf(a) ?? -Infinity);
       else if (sort === "projPts" || sort === "projAvg") diff = bv.proj - av.proj;
       else if (sort === "prevPts" || sort === "prevAvg") diff = (bv.prev ?? -1) - (av.prev ?? -1);
       if (diff !== 0) return diff;
@@ -598,7 +603,7 @@ function PlayerListImpl({
                     )}
                   />
                   <StatCell
-                    value={ecrOf(p.id) !== null ? String(Math.round(ecrOf(p.id)!)) : "—"}
+                    value={ecrOf(p) !== null ? String(Math.round(ecrOf(p)!)) : "—"}
                     className={cn(
                       "w-14 shrink-0 justify-center px-1",
                       DIVIDER,
@@ -606,7 +611,7 @@ function PlayerListImpl({
                     )}
                   />
                   <StatCell
-                    value={sdOf(p.id) !== null ? sdOf(p.id)!.toFixed(1) : "—"}
+                    value={sdOf(p) !== null ? sdOf(p)!.toFixed(1) : "—"}
                     className={cn(
                       "w-14 shrink-0 justify-center px-1 font-normal text-muted-foreground",
                       DIVIDER,
@@ -615,8 +620,8 @@ function PlayerListImpl({
                   />
                   <StatCell
                     value={
-                      trendOf(p.id) !== null
-                        ? `${trendOf(p.id)! > 0 ? "+" : "-"}${Math.abs(trendOf(p.id)!).toFixed(0)}`
+                      trendOf(p) !== null
+                        ? `${trendOf(p)! > 0 ? "+" : "-"}${Math.abs(trendOf(p)!).toFixed(0)}`
                         : "—"
                     }
                     className={cn(
