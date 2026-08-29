@@ -501,6 +501,8 @@ export function compileBrain(rows: PlayerWarehouseRow[]): MasterPlayerBrain {
     ecr: [],
     sd: [],
     injuries: [],
+    injury_types: [],
+    timelines: [],
   };
 
   for (const r of sorted) {
@@ -512,6 +514,8 @@ export function compileBrain(rows: PlayerWarehouseRow[]): MasterPlayerBrain {
     brain.ecr.push(Number(r.fantasypros_ecr ?? 0) || 0);
     brain.sd.push(Number(r.fantasypros_sd ?? 0) || 0);
     brain.injuries.push(r.leaguelogs_status ?? "Healthy");
+    brain.injury_types.push(r.injury_type ?? "");
+    brain.timelines.push(r.time_missed ?? "");
   }
 
   return brain;
