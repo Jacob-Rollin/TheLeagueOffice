@@ -1,8 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { cn } from "@/lib/utils";
 import { getPlayerNews } from "@/lib/players.functions";
+
+/** Format the raw FantasyCalc 7-day trend into a market percentage move. */
+function formatTrendPct(raw: number): string {
+  const pct = raw / 100;
+  if (pct > 0) return `▲ ${pct.toFixed(1)}%`;
+  if (pct < 0) return `▼ ${Math.abs(pct).toFixed(1)}%`;
+  return "0.0%";
+}
 
 function timeAgo(iso: string): string {
   if (!iso) return "";
@@ -86,6 +95,9 @@ export function PlayerNews({ id, pos }: { id: string; pos?: string }) {
     queryFn: () => getPlayerNews({ data: { id } }),
     staleTime: 1000 * 60 * 10,
   });
+  const brain = usePlayerBrain();
+  const brainEntry = brain?.[id] ?? null;
+  const trend = brainEntry?.trend ?? 0;
 
   return (
     <div className="space-y-4 px-3 pt-4">
@@ -111,6 +123,23 @@ export function PlayerNews({ id, pos }: { id: string; pos?: string }) {
         </div>
         {data?.injury.note && (
           <p className="mt-1 text-xs text-muted-foreground">{data.injury.note}</p>
+        )}
+        {data?.injury.status && trend < 0 && (
+          <p className="mt-1 text-xs text-black">
+            · MARKET IMPACT: Trade market value has dropped {formatTrendPct(trend)} over the
+            last 7 days due to injury risk.
+          </p>
+        )}
+        {data?.injury.status && trend > 0 && (
+          <p className="mt-1 text-xs text-black">
+            · MARKET IMPACT: Trade market value has risen {formatTrendPct(trend)} over the
+            last 7 days despite the injury designation.
+          </p>
+        )}
+        {brainEntry?.injuryNotes && (
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            {brainEntry.injuryNotes}
+          </p>
         )}
       </div>
       )}
