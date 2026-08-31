@@ -660,6 +660,16 @@ function SideHead({
 }
 
 
+function injuryMicroBadge(status: string | null | undefined) {
+  if (!status || status === "Healthy") return null;
+  const s = status.trim();
+  if (s === "Out") return { label: "O", className: "bg-rose-600" };
+  if (s === "IR" || s === "Injured Reserve") return { label: "IR", className: "bg-rose-600" };
+  if (s === "Questionable") return { label: "Q", className: "bg-amber-500" };
+  if (s === "Doubtful") return { label: "D", className: "bg-orange-600" };
+  return null;
+}
+
 function RosterRow({
   player,
   selected,
@@ -672,18 +682,10 @@ function RosterRow({
   brain?: BrainMatrix | null | undefined;
 }) {
   const entry = brain?.[player.id] ?? null;
-  const pct =
-    entry?.value && entry?.trend ? (entry.trend / Math.abs(entry.value)) * 100 : 0;
-  const trend = pct ? `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%` : null;
-  const injury =
-    entry?.injuryStatus && entry.injuryStatus !== "Healthy"
-      ? entry.injuryStatus.toUpperCase()
-      : null;
-  const meta = [
-    player.pos,
-    player.team || null,
-    player.bye ? `BYE ${player.bye}` : null,
-  ].filter(Boolean) as string[];
+  const badge = injuryMicroBadge(entry?.injuryStatus);
+  const meta = [player.pos, player.team || null, player.bye ? `BYE ${player.bye}` : null].filter(
+    Boolean,
+  ) as string[];
   return (
     <button
       type="button"
@@ -705,24 +707,27 @@ function RosterRow({
         logoClassName="size-3.5"
       />
       <span className="min-w-0 flex-1 pr-12">
-        <span className="block truncate text-sm font-medium leading-tight text-black">
+        <span className="block truncate text-sm font-bold leading-tight text-black">
           {player.name}
         </span>
-        <span className="block truncate whitespace-nowrap text-[11px] leading-tight text-muted-foreground">
-          {meta.join(" · ")}
-        </span>
-        <span className="block truncate whitespace-nowrap text-[11px] leading-tight text-muted-foreground">
-          <span>Value: {entry?.value ? entry.value.toLocaleString() : "—"}</span>
-          <span className="ml-4">Trend: {trend ?? "—"}</span>
-          {injury ? (
-            <span className="ml-4 font-semibold text-destructive">· [{injury}]</span>
-          ) : null}
+        <span className="flex items-center gap-1.5 truncate whitespace-nowrap text-[11px] leading-tight text-muted-foreground">
+          {badge && (
+            <span
+              className={cn(
+                "grid h-5 w-5 shrink-0 place-items-center rounded-[2px] text-[10px] font-bold text-white",
+                badge.className,
+              )}
+            >
+              {badge.label}
+            </span>
+          )}
+          <span className="truncate">{meta.join(" · ")}</span>
         </span>
       </span>
       <span
         aria-hidden
         className={cn(
-          "absolute right-3 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded border border-input bg-secondary/40 text-sm font-semibold transition-colors",
+          "absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded border border-input bg-secondary/40 text-sm font-semibold transition-colors",
           selected
             ? "bg-muted text-muted-foreground"
             : "text-black group-hover:bg-primary group-hover:text-primary-foreground",
