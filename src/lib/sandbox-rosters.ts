@@ -33,6 +33,44 @@ export function injuryMicroBadge(
   return null;
 }
 
+type InjuryCarrier = {
+  id: string;
+  name?: string | null;
+  injury?: string | null;
+  injuryStatus?: string | null;
+  injury_status?: string | null;
+};
+
+/**
+ * Resolve a player's injury designation with robust fallbacks so badges render
+ * regardless of whether the row came from live draft state, sandbox mock
+ * rosters, or the global catalog:
+ *
+ *  a. Sandbox override by Sleeper ID, then by normalized name match.
+ *  b. Status embedded directly on the player object (injuryStatus / injury_status).
+ *  c. Cached brain matrix (IndexedDB) by ID, then Sleeper's raw injury string.
+ */
+export function resolveInjuryStatus(
+  player: InjuryCarrier,
+  brain?: Record<string, { injuryStatus?: string | null } | undefined> | null,
+): string | undefined {
+  const name = (player.name ?? "").toLowerCase();
+  // a. Sandbox overrides: ID match first, then normalized name match.
+  const sandbox =
+    SANDBOX_INJURY_OVERRIDES[player.id]?.injuryStatus ??
+    (name.includes("tee higgins")
+      ? "Questionable"
+      : name.includes("chuba hubbard")
+        ? "Out"
+        : undefined);
+  if (sandbox) return sandbox;
+  // b. Status embedded directly on the object (mock rosters / draft state).
+  const direct = player.injuryStatus ?? player.injury_status;
+  if (direct) return direct;
+  // c. Brain matrix by ID, then Sleeper's raw injury string.
+  return brain?.[player.id]?.injuryStatus ?? player.injury ?? undefined;
+}
+
 /** Apply any sandbox injury override onto a player record (non-mutating). */
 export function withSandboxInjury<T extends { id: string }>(player: T): T {
   const override = SANDBOX_INJURY_OVERRIDES[player.id];

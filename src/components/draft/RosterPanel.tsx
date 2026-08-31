@@ -1,6 +1,6 @@
 import { PositionBadge } from "./PositionBadge";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
-import { injuryMicroBadge, SANDBOX_INJURY_OVERRIDES } from "@/lib/sandbox-rosters";
+import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 import { fillRoster, teamName, value, type Pick, type Player, type Settings } from "@/lib/draft";
 
@@ -47,14 +47,12 @@ export function RosterPanel({
                 <PositionBadge pos={s.player.pos} className="h-5 text-[10px]" />
                 {(() => {
                   const badge = injuryMicroBadge(
-                    SANDBOX_INJURY_OVERRIDES[s.player.id]?.injuryStatus ??
-                      brain?.[s.player.id]?.injuryStatus ??
-                      s.player.injury,
+                    resolveInjuryStatus(s.player, brain),
                   );
                   return badge ? (
                     <span
                       className={cn(
-                        "grid h-4 w-4 shrink-0 place-items-center rounded-[2px] text-[9px] font-bold text-white",
+                        "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-[2px] px-1 text-[10px] font-bold leading-none text-white",
                         badge.className,
                       )}
                     >
