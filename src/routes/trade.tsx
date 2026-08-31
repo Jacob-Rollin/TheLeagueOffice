@@ -12,6 +12,7 @@ import { PositionBadge } from "@/components/draft/PositionBadge";
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import { executiveSummary, packageScore, rosterConstraint } from "@/lib/trade-engine";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
@@ -714,12 +715,14 @@ function RosterColumn({
   players,
   selectedIds,
   onPick,
+  brain,
 }: {
   title: string;
   subtitle: string;
   players: Player[];
   selectedIds: Set<string>;
   onPick: (p: Player) => void;
+  brain?: BrainMatrix | null;
 }) {
   return (
     <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
@@ -735,7 +738,7 @@ function RosterColumn({
       ) : (
         <div className="mt-2 space-y-0.5">
           {players.map((p) => (
-            <RosterRow key={p.id} player={p} selected={selectedIds.has(p.id)} onPick={onPick} />
+            <RosterRow key={p.id} player={p} selected={selectedIds.has(p.id)} onPick={onPick} brain={brain} />
           ))}
         </div>
       )}
@@ -747,10 +750,12 @@ function OtherTeamsColumn({
   teams,
   selectedIds,
   onPick,
+  brain,
 }: {
   teams: { key: string; name: string; owner: string; players: Player[] }[];
   selectedIds: Set<string>;
   onPick: (p: Player) => void;
+  brain?: BrainMatrix | null;
 }) {
 
   return (
@@ -792,6 +797,7 @@ function OtherTeamsColumn({
                       player={p}
                       selected={selectedIds.has(p.id)}
                       onPick={onPick}
+                      brain={brain}
                     />
                   ))
                 )}
