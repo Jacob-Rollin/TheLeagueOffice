@@ -515,9 +515,9 @@ function TradePage() {
       </section>
 
       <p className="mt-3 text-center text-[11px] text-muted-foreground">
-        The shaded column holds the statistical advantage. Grades blend this year's projections
-        (65%) with last season's per-game production (35%), apply a consolidation discount to the
-        wider package, then adjust for open roster slots configured in the War Room.
+        Green numbers hold the statistical advantage. Grades blend this year's projections (65%)
+        with last season's per-game production (35%), apply a consolidation discount to the wider
+        package, then adjust for open roster slots configured in the War Room.
       </p>
       </main>
 
@@ -591,8 +591,8 @@ function CompareTable({ title, rows }: { title: string; rows: CompareRow[] }) {
           <tr key={r.label} className="border-t border-border">
             <td
               className={cn(
-                "w-1/3 px-3 py-2 text-left font-mono text-[13px] tabular-nums",
-                r.giveWin ? "bg-muted/30 font-semibold text-foreground" : "text-foreground",
+                "w-1/3 px-3 py-2 text-left text-base tabular-nums",
+                r.giveWin ? "font-bold text-emerald-600" : "font-semibold text-foreground",
               )}
             >
               {r.give}
@@ -602,8 +602,8 @@ function CompareTable({ title, rows }: { title: string; rows: CompareRow[] }) {
             </td>
             <td
               className={cn(
-                "w-1/3 px-3 py-2 text-right font-mono text-[13px] tabular-nums",
-                r.getWin ? "bg-muted/30 font-semibold text-foreground" : "text-foreground",
+                "w-1/3 px-3 py-2 text-right text-base tabular-nums",
+                r.getWin ? "font-bold text-emerald-600" : "font-semibold text-foreground",
               )}
             >
               {r.get}
