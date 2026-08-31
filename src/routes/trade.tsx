@@ -802,7 +802,13 @@ function OtherTeamsColumn({
           >
             ◄ Back to All Teams
           </button>
-          <div className="rounded-md border border-border bg-surface p-2">
+          <div
+            className="cursor-pointer rounded-md border border-border bg-surface p-2"
+            onClick={() => {
+              setFocusedTeamId(null);
+              setOpenKey(null);
+            }}
+          >
             <div className="flex items-center justify-between gap-2">
               <span className="min-w-0 truncate text-sm font-medium">{focusedTeam.name}</span>
               <span className="tabnum shrink-0 text-[10px] text-muted-foreground">
