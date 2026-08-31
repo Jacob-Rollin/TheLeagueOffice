@@ -239,7 +239,19 @@ function TradePage() {
       teamName(draft.settings, draft.settings.myTeam);
 
   const otherTeams = useMemo(() => {
-    if (sandboxTeams) return sandboxTeams.rivalTeams;
+    if (sandboxMode) {
+      if (sandboxTeams) return sandboxTeams.rivalTeams;
+      // Live draft state: every other War Room draft slot becomes a rival roster.
+      return [...rostersByTeam.keys()]
+        .filter((t) => t !== draft.settings.myTeam)
+        .sort((a, b) => a - b)
+        .map((t) => ({
+          key: `t${t}`,
+          name: teamName(draft.settings, t),
+          owner: "",
+          players: rostersByTeam.get(t) ?? [],
+        }));
+    }
     if (league?.synced) {
       return league.teams
         .filter((t) => !t.isMine)
