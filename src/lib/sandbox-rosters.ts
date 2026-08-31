@@ -8,16 +8,6 @@ import type { Player, Pos } from "@/lib/draft";
  * player catalog (the same catalog the War Room and Mock Draft pages use).
  */
 
-/** Active demo injury flags injected for layout verification (keyed by Sleeper ID). */
-export const SANDBOX_INJURY_OVERRIDES: Record<
-  string,
-  { injuryStatus: string; injury_body_part: string }
-> = {
-  // Tee Higgins
-  "6801": { injuryStatus: "Questionable", injury_body_part: "Hamstring" },
-  // Chuba Hubbard
-  "7594": { injuryStatus: "Out", injury_body_part: "Knee" },
-};
 
 /** Case-insensitive injury status -> colored micro-badge descriptor. */
 export function injuryMicroBadge(
