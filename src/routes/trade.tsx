@@ -757,7 +757,7 @@ function RosterRow({
   brain?: BrainMatrix | null | undefined;
 }) {
   const entry = brain?.[player.id] ?? null;
-  const badge = injuryMicroBadge(entry?.injuryStatus);
+  const badge = injuryMicroBadge(player.injuryStatus ?? entry?.injuryStatus);
   const meta = [player.pos, player.team || null, player.bye ? `BYE ${player.bye}` : null].filter(
     Boolean,
   ) as string[];
