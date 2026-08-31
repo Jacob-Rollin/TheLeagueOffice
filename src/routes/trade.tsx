@@ -15,7 +15,7 @@ import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/
 import { grade } from "@/lib/evaluate";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
-import { executiveSummary, packageScore, rosterConstraint } from "@/lib/trade-engine";
+import { executiveSummary, packageScore, rosterConstraint, rosterFit } from "@/lib/trade-engine";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
