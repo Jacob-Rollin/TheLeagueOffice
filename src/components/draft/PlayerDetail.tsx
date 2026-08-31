@@ -7,9 +7,19 @@ import { PlayerNews } from "./PlayerNews";
 import { PositionBadge } from "./PositionBadge";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/hooks/use-draft";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { SCORING_LABEL } from "@/lib/draft";
 import { getPlayerDetail } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
+
+/** Dynamic risk bucket routing for the injury telemetry meter. */
+function riskTier(score: number): { label: string; text: string; fill: string } {
+  if (score >= 70)
+    return { label: "HIGH RISK", text: "text-rose-500", fill: "bg-rose-500" };
+  if (score >= 35)
+    return { label: "MODERATE RISK", text: "text-amber-500", fill: "bg-amber-500" };
+  return { label: "LOW RISK", text: "text-emerald-500", fill: "bg-emerald-500" };
+}
 
 export const detailQuery = (id: string) =>
   queryOptions({
