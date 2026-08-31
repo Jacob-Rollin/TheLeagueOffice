@@ -114,6 +114,7 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
 
   const setActiveLeagueId = useCallback((id: string) => {
     setActiveId(id);
+    setSandboxMode(false);
     try {
       window.localStorage.setItem(STORAGE_KEY, id);
     } catch {
@@ -121,28 +122,44 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const refresh = useCallback(async () => {
-    if (!userId) return;
-    await queryClient.refetchQueries({
-      queryKey: ["active-league-connections", userId],
-      exact: true,
+  const toggleSandbox = useCallback(() => {
+    setSandboxMode((prev) => {
+      if (!prev) {
+        lastLiveIdRef.current = activeId;
+        return true;
+      }
+      const restore = lastLiveIdRef.current ?? leagues[0]?.id ?? null;
+      if (restore) {
+        setActiveId(restore);
+        try {
+          window.localStorage.setItem(STORAGE_KEY, restore);
+        } catch {
+          /* storage unavailable */
+        }
+      }
+      return false;
     });
-  }, [queryClient, userId]);
-
+  }, [activeId, leagues, lastLiveIdRef]);
+...
   const activeLeague = useMemo(
-    () => leagues.find((l) => l.id === activeId) ?? leagues[0] ?? null,
-    [leagues, activeId],
+    () =>
+      sandboxMode
+        ? null
+        : leagues.find((l) => l.id === activeId) ?? leagues[0] ?? null,
+    [leagues, activeId, sandboxMode],
   );
 
   const value = useMemo<ActiveLeagueValue>(
     () => ({
       leagues,
       activeLeague,
-      activeLeagueId: activeLeague?.id ?? null,
+      activeLeagueId: sandboxMode ? null : (activeLeague?.id ?? null),
+      sandboxMode,
       setActiveLeagueId,
+      toggleSandbox,
       refresh,
     }),
-    [leagues, activeLeague, setActiveLeagueId, refresh],
+    [leagues, activeLeague, sandboxMode, setActiveLeagueId, toggleSandbox, refresh],
   );
 
   return <ActiveLeagueContext.Provider value={value}>{children}</ActiveLeagueContext.Provider>;
