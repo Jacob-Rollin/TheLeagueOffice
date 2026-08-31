@@ -8,16 +8,6 @@ import type { Player, Pos } from "@/lib/draft";
  * player catalog (the same catalog the War Room and Mock Draft pages use).
  */
 
-/** Active demo injury flags injected for layout verification (keyed by Sleeper ID). */
-export const SANDBOX_INJURY_OVERRIDES: Record<
-  string,
-  { injuryStatus: string; injury_body_part: string }
-> = {
-  // Tee Higgins
-  "6801": { injuryStatus: "Questionable", injury_body_part: "Hamstring" },
-  // Chuba Hubbard
-  "7594": { injuryStatus: "Out", injury_body_part: "Knee" },
-};
 
 /** Case-insensitive injury status -> colored micro-badge descriptor. */
 export function injuryMicroBadge(
@@ -39,43 +29,38 @@ type InjuryCarrier = {
   injury?: string | null;
   injuryStatus?: string | null;
   injury_status?: string | null;
+  status?: string | null;
 };
 
 /**
- * Resolve a player's injury designation with robust fallbacks so badges render
- * regardless of whether the row came from live draft state, sandbox mock
- * rosters, or the global catalog:
+ * Dynamically resolve a player's injury designation so badges render
+ * regardless of whether the row came from live draft state, mock rosters,
+ * or the global catalog — no hardcoded player names or overrides:
  *
- *  a. Sandbox override by Sleeper ID, then by normalized name match.
- *  b. Status embedded directly on the player object (injuryStatus / injury_status).
- *  c. Cached brain matrix (IndexedDB) by ID, then Sleeper's raw injury string.
+ *  a. Direct properties: injury_status / injuryStatus / status on the object.
+ *  b. Cached brain matrix (IndexedDB) by ID: injuryStatus / injury_status.
+ *  c. Sleeper's raw catalog injury string embedded on the record.
+ *
+ * Returns undefined for healthy/empty so no badge or spacing renders.
  */
 export function resolveInjuryStatus(
   player: InjuryCarrier,
-  brain?: Record<string, { injuryStatus?: string | null } | undefined> | null,
+  brain?: Record<
+    string,
+    { injuryStatus?: string | null; injury_status?: string | null } | undefined
+  > | null,
 ): string | undefined {
-  const name = (player.name ?? "").toLowerCase();
-  // a. Sandbox overrides: ID match first, then normalized name match.
-  const sandbox =
-    SANDBOX_INJURY_OVERRIDES[player.id]?.injuryStatus ??
-    (name.includes("tee higgins")
-      ? "Questionable"
-      : name.includes("chuba hubbard")
-        ? "Out"
-        : undefined);
-  if (sandbox) return sandbox;
-  // b. Status embedded directly on the object (mock rosters / draft state).
-  const direct = player.injuryStatus ?? player.injury_status;
-  if (direct) return direct;
-  // c. Brain matrix by ID, then Sleeper's raw injury string.
-  return brain?.[player.id]?.injuryStatus ?? player.injury ?? undefined;
-}
-
-/** Apply any sandbox injury override onto a player record (non-mutating). */
-export function withSandboxInjury<T extends { id: string }>(player: T): T {
-  const override = SANDBOX_INJURY_OVERRIDES[player.id];
-  if (!override) return player;
-  return { ...player, injuryStatus: override.injuryStatus, injury_body_part: override.injury_body_part };
+  // a. Direct properties (draft state / mock rosters / catalog rows).
+  const direct = player.injury_status ?? player.injuryStatus ?? player.status;
+  if (direct && direct.trim() && direct.trim().toLowerCase() !== "healthy") return direct;
+  // b. Brain matrix by ID.
+  const entry = brain?.[player.id];
+  const matrix = entry?.injuryStatus ?? entry?.injury_status;
+  if (matrix && matrix.trim() && matrix.trim().toLowerCase() !== "healthy") return matrix;
+  // c. Sleeper raw catalog fallback.
+  const raw = player.injury;
+  if (raw && raw.trim() && raw.trim().toLowerCase() !== "healthy") return raw;
+  return undefined;
 }
 
 type SandboxSpec = { id: string; name: string; pos: Pos; team: string };
@@ -152,7 +137,7 @@ export function buildSandboxTeams(catalog: Player[]): {
 } {
   const byId = new Map(catalog.map((p) => [p.id, p]));
   const resolve = (spec: SandboxSpec): Player =>
-    withSandboxInjury(byId.get(spec.id) ?? stubPlayer(spec));
+    byId.get(spec.id) ?? stubPlayer(spec);
   return {
     myTeam: SANDBOX_MY_TEAM_SPEC.map(resolve),
     rivalTeams: SANDBOX_RIVAL_SPECS.map((t) => ({
