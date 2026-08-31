@@ -767,6 +767,7 @@ function OtherTeamsColumn({
   onPick: (p: Player) => void;
   brain?: BrainMatrix | null | undefined;
 }) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   return (
     <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
