@@ -1,8 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { cn } from "@/lib/utils";
 import { getPlayerNews } from "@/lib/players.functions";
+
+/** Format the raw FantasyCalc 7-day trend into a market percentage move. */
+function formatTrendPct(raw: number): string {
+  const pct = raw / 100;
+  if (pct > 0) return `▲ ${pct.toFixed(1)}%`;
+  if (pct < 0) return `▼ ${Math.abs(pct).toFixed(1)}%`;
+  return "0.0%";
+}
 
 function timeAgo(iso: string): string {
   if (!iso) return "";
