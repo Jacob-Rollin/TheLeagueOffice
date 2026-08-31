@@ -385,6 +385,7 @@ function TradePage() {
           selected={give}
           onAdd={(p) => setGive((s) => [...s, p])}
           onRemove={(id) => setGive((s) => s.filter((p) => p.id !== id))}
+          renderMeta={(p) => <MarketRow player={p} line={marketLine(p)} />}
         />
         <PlayerPicker
           label="You receive"
@@ -393,14 +394,15 @@ function TradePage() {
           selected={get}
           onAdd={(p) => setGet((s) => [...s, p])}
           onRemove={(id) => setGet((s) => s.filter((p) => p.id !== id))}
+          renderMeta={(p) => <MarketRow player={p} line={marketLine(p)} />}
         />
       </div>
 
       <section className="mt-4 rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-start gap-4">
           <div
             className={cn(
-              "flex h-16 w-16 items-center justify-center rounded-lg border font-display text-3xl font-bold",
+              "flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border-2 font-display text-3xl font-bold",
               !ready
                 ? "border-border text-muted-foreground"
                 : adjustedGrade.tone === "good"
@@ -412,16 +414,27 @@ function TradePage() {
           >
             {ready ? adjustedGrade.letter : "—"}
           </div>
-          <div className="flex-1">
-            <p className="font-medium">{verdict}</p>
+          <div className="min-w-0 flex-1">
+            <p className="eyebrow">Executive summary</p>
+            <p className="mt-1 text-sm font-medium leading-snug text-foreground">{verdict}</p>
             {ready && (
               <p className="tabnum mt-1 text-xs text-muted-foreground">
-                Production: {basePct.toFixed(1)}% · Roster-fit adjustment: {needDelta > 0 ? "+" : ""}
-                {needDelta}% · Final: {adjustedPct.toFixed(1)}%
+                Production {basePct.toFixed(1)}% · Roster fit {needDelta > 0 ? "+" : ""}
+                {needDelta}% · Final {adjustedPct.toFixed(1)}%
+                {give.length !== get.length ? " · Consolidation modifier applied" : ""}
               </p>
             )}
           </div>
         </div>
+        {ready && constraint.overflow && (
+          <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs font-medium text-foreground">
+            ROSTER CONSTRAINT: Accepting this deal requires dropping {constraint.dropCount} bench
+            player{constraint.dropCount > 1 ? "s" : ""}.
+            {constraint.dropName
+              ? ` Model drops ${constraint.dropName} and subtracts ${constraint.penalty.toFixed(1)} pts/wk from the receive side.`
+              : ""}
+          </p>
+        )}
         {ready && (
           <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
             <div className="rounded bg-surface p-2">
