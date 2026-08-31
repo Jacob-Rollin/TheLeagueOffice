@@ -6,6 +6,7 @@ import { useState } from "react";
 import { PlayerNews } from "@/components/draft/PlayerNews";
 
 import { useDraft } from "@/hooks/use-draft";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { getGameLogs, getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
@@ -95,11 +96,21 @@ const POS_LABEL: Record<string, string> = {
   DEF: "Defense / Special Teams",
 };
 
+/** Dynamic risk bucket routing for the injury telemetry meter. */
+function riskTier(score: number): { label: string; text: string; fill: string } {
+  if (score >= 70)
+    return { label: "HIGH RISK", text: "text-rose-500", fill: "bg-rose-500" };
+  if (score >= 35)
+    return { label: "MODERATE RISK", text: "text-amber-500", fill: "bg-amber-500" };
+  return { label: "LOW RISK", text: "text-emerald-500", fill: "bg-emerald-500" };
+}
+
 function PlayerHubPage() {
   const { id } = Route.useParams();
   const { data, isLoading } = useQuery(profileQuery(id));
   const { data: bio } = useQuery(bioQuery(id));
   const { watchIds, toggleWatch } = useDraft();
+  const brain = usePlayerBrain();
   const [tab, setTab] = useState<TabKey>("overview");
 
   if (isLoading)
@@ -107,6 +118,8 @@ function PlayerHubPage() {
   if (!data) return <p className="py-24 text-center text-sm text-zinc-500">Player not found.</p>;
 
   const { player, history, projection, depthChart, sos, injuryRisk, season } = data;
+  const brainEntry = brain?.[player.id] ?? null;
+  const tier = riskTier(injuryRisk.score);
   const teamLogo = player.team
     ? `https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`
     : null;
@@ -305,27 +318,49 @@ function PlayerHubPage() {
             <Widget title="Injury risk">
 
               <div className="flex items-baseline justify-between">
-                <span
-                  className={cn(
-                    "font-display text-xl uppercase",
-                    injuryRisk.label === "High"
-                      ? "text-red-600"
-                      : injuryRisk.label === "Moderate"
-                        ? "text-amber-600"
-                        : "text-emerald-600",
-                  )}
-                >
-                  {injuryRisk.label}
+                <span className={cn("font-display text-xl uppercase", tier.text)}>
+                  {tier.label}
                 </span>
                 <span className="tabnum text-sm text-zinc-500">{injuryRisk.score}/100</span>
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded bg-zinc-200">
-                <div className="h-full bg-blue-600" style={{ width: `${injuryRisk.score}%` }} />
+                <div
+                  className={cn("h-full transition-[width] duration-500", tier.fill)}
+                  style={{ width: `${Math.min(100, Math.max(0, injuryRisk.score))}%` }}
+                />
               </div>
               <ul className="mt-2 space-y-1 text-xs text-zinc-500">
-                {injuryRisk.factors.map((f) => (
-                  <li key={f}>· {f}</li>
-                ))}
+                {player.injury && brainEntry?.injuryType && (
+                  <li>
+                    · <span className="font-semibold text-zinc-800">CORE DIAGNOSIS:</span>{" "}
+                    {brainEntry.injuryType}
+                  </li>
+                )}
+                {injuryRisk.factors
+                  .filter(
+                    (f) =>
+                      !f.toLowerCase().includes("currently listed") &&
+                      (!player.injury ||
+                        f.toLowerCase().trim() !== player.injury.toLowerCase().trim()),
+                  )
+                  .map((f) => {
+                    const lower = f.toLowerCase();
+                    const isWorkload =
+                      lower.includes("carries") ||
+                      lower.includes("touches") ||
+                      lower.includes("targets") ||
+                      lower.includes("snaps");
+                    const label = isWorkload ? "WORKLOAD NOTE" : "HISTORICAL TRACK";
+                    return (
+                      <li key={f}>
+                        · <span className="font-semibold text-zinc-800">{label}:</span> {f}
+                      </li>
+                    );
+                  })}
+                <li>
+                  · <span className="font-semibold text-zinc-800">CURRENT DESIGNATION:</span>{" "}
+                  {player.injury ?? "Healthy — no designation"}
+                </li>
               </ul>
             </Widget>
             )}
