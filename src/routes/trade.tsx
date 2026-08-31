@@ -735,12 +735,13 @@ function SideHead({
 
 
 function injuryMicroBadge(status: string | null | undefined) {
-  if (!status || status === "Healthy") return null;
-  const s = status.trim();
-  if (s === "Out") return { label: "O", className: "bg-rose-600" };
-  if (s === "IR" || s === "Injured Reserve") return { label: "IR", className: "bg-rose-600" };
-  if (s === "Questionable") return { label: "Q", className: "bg-amber-500" };
-  if (s === "Doubtful") return { label: "D", className: "bg-orange-600" };
+  const currentStatus = (status ?? "").trim().toLowerCase();
+  if (!currentStatus || currentStatus === "healthy") return null;
+  if (currentStatus === "out") return { label: "O", className: "bg-rose-600" };
+  if (currentStatus === "ir" || currentStatus === "injured reserve")
+    return { label: "IR", className: "bg-rose-600" };
+  if (currentStatus === "questionable") return { label: "Q", className: "bg-amber-500" };
+  if (currentStatus === "doubtful") return { label: "D", className: "bg-orange-600" };
   return null;
 }
 
