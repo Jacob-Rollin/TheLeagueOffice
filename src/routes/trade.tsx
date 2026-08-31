@@ -9,8 +9,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
-import { teamName, type Player, type Scoring } from "@/lib/draft";
+import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { executiveSummary, packageScore, rosterConstraint } from "@/lib/trade-engine";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
@@ -93,12 +95,26 @@ function metricsFor(player: Player, detail: PlayerDetail | undefined, scoring: S
   };
 }
 
-/** Star premium: the best asset in a package carries most of the weight. */
-function packageWeekly(rows: Metrics[]): number {
-  return rows
-    .map((r) => r.weekly)
-    .sort((a, b) => b - a)
-    .reduce((sum, v, i) => sum + v * Math.pow(0.9, i), 0);
+type MarketLine = { bits: string[]; trend: string | null; up: boolean };
+
+/** Single selected-player row: name plus cached market assets, no raw labels. */
+function MarketRow({ player, line }: { player: Player; line: MarketLine }) {
+  return (
+    <span className="block min-w-0">
+      <span className="block truncate text-sm font-medium leading-tight text-foreground">
+        {player.name}
+      </span>
+      <span className="tabnum block truncate text-[11px] leading-tight text-muted-foreground">
+        {line.bits.join(" · ")}
+        {line.trend ? " · " : ""}
+        {line.trend ? (
+          <span className={cn("font-medium", line.up ? "text-foreground" : "text-muted-foreground")}>
+            {line.trend}
+          </span>
+        ) : null}
+      </span>
+    </span>
+  );
 }
 
 type OpponentTeam = { key: string; name: string; owner: string; players: Player[] };
@@ -129,6 +145,18 @@ function TradePage() {
   const { user, ready: authReady } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const draft = useDraft();
+  /** Cached market analytics (value + 30-day trend) from the local brain matrix. */
+  const brain = usePlayerBrain();
+  const marketLine = (p: Player) => {
+    const entry = brain?.[p.id] ?? null;
+    const bits = [p.pos, p.team || "FA", p.bye ? `BYE ${p.bye}` : null].filter(Boolean) as string[];
+    if (entry?.value) bits.push(`Value: ${entry.value.toLocaleString()}`);
+    const pct =
+      entry?.value && entry?.trend ? (entry.trend / Math.abs(entry.value)) * 100 : 0;
+    const trend = pct ? `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%` : null;
+    return { bits, trend, up: pct > 0 };
+  };
+
 
   const [give, setGive] = useState<Player[]>([]);
   const [get, setGet] = useState<Player[]>([]);
@@ -237,19 +265,48 @@ function TradePage() {
     [get, give, roster, draft.settings.roster],
   );
 
-  const giveWeekly = packageWeekly(giveRows);
-  const getWeekly = packageWeekly(getRows);
+  /**
+   * Asymmetric packages: the side sending more bodies takes a consolidation
+   * discount, so a 2-for-1 must clear a higher bar than a straight swap.
+   */
+  const giveWeekly = packageScore(
+    giveRows.map((r) => r.weekly),
+    getRows.length,
+  );
+  const rawGetWeekly = packageScore(
+    getRows.map((r) => r.weekly),
+    giveRows.length,
+  );
+
+  /** Bench vacancy check: receiving more players than you send can force a drop. */
+  const rosterCap = rosterSize(draft.settings.roster);
+  const benchPool = useMemo(
+    () =>
+      userRoster
+        .filter((p) => !give.some((g) => g.id === p.id))
+        .map((p) => ({ name: p.name, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+    [userRoster, give, scoring],
+  );
+  const constraint = rosterConstraint({
+    rosterCount: userRoster.length,
+    rosterCap,
+    giveCount: give.length,
+    getCount: get.length,
+    bench: benchPool,
+  });
+
+  const getWeekly = Math.max(0, rawGetWeekly - constraint.penalty);
   const basePct = ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
   const adjustedPct = basePct + needDelta;
   const adjustedGrade = grade(adjustedPct);
   const ready = give.length > 0 && get.length > 0;
-  const verdict = !ready
-    ? "Add players to both sides to analyze this trade."
-    : adjustedPct >= 8
-      ? "You win this trade — production and roster fit both lean your way."
-      : adjustedPct <= -8
-        ? "You're giving up more weekly production than you get back."
-        : "Fair deal — weekly production is close on both sides.";
+  const verdict = executiveSummary({
+    ready,
+    pct: adjustedPct,
+    giveCount: give.length,
+    getCount: get.length,
+    overflow: constraint.overflow,
+  });
 
   const sum = (rows: Metrics[], key: keyof Metrics) =>
     rows.reduce((s, r) => s + (typeof r[key] === "number" ? (r[key] as number) : 0), 0);
@@ -342,6 +399,7 @@ function TradePage() {
           selected={give}
           onAdd={(p) => setGive((s) => [...s, p])}
           onRemove={(id) => setGive((s) => s.filter((p) => p.id !== id))}
+          renderMeta={(p) => <MarketRow player={p} line={marketLine(p)} />}
         />
         <PlayerPicker
           label="You receive"
@@ -350,14 +408,15 @@ function TradePage() {
           selected={get}
           onAdd={(p) => setGet((s) => [...s, p])}
           onRemove={(id) => setGet((s) => s.filter((p) => p.id !== id))}
+          renderMeta={(p) => <MarketRow player={p} line={marketLine(p)} />}
         />
       </div>
 
       <section className="mt-4 rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-start gap-4">
           <div
             className={cn(
-              "flex h-16 w-16 items-center justify-center rounded-lg border font-display text-3xl font-bold",
+              "flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border-2 font-display text-3xl font-bold",
               !ready
                 ? "border-border text-muted-foreground"
                 : adjustedGrade.tone === "good"
@@ -369,16 +428,27 @@ function TradePage() {
           >
             {ready ? adjustedGrade.letter : "—"}
           </div>
-          <div className="flex-1">
-            <p className="font-medium">{verdict}</p>
+          <div className="min-w-0 flex-1">
+            <p className="eyebrow">Executive summary</p>
+            <p className="mt-1 text-sm font-medium leading-snug text-foreground">{verdict}</p>
             {ready && (
               <p className="tabnum mt-1 text-xs text-muted-foreground">
-                Production: {basePct.toFixed(1)}% · Roster-fit adjustment: {needDelta > 0 ? "+" : ""}
-                {needDelta}% · Final: {adjustedPct.toFixed(1)}%
+                Production {basePct.toFixed(1)}% · Roster fit {needDelta > 0 ? "+" : ""}
+                {needDelta}% · Final {adjustedPct.toFixed(1)}%
+                {give.length !== get.length ? " · Consolidation modifier applied" : ""}
               </p>
             )}
           </div>
         </div>
+        {ready && constraint.overflow && (
+          <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs font-medium text-foreground">
+            ROSTER CONSTRAINT: Accepting this deal requires dropping {constraint.dropCount} bench
+            player{constraint.dropCount > 1 ? "s" : ""}.
+            {constraint.dropName
+              ? ` Model drops ${constraint.dropName} and subtracts ${constraint.penalty.toFixed(1)} pts/wk from the receive side.`
+              : ""}
+          </p>
+        )}
         {ready && (
           <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
             <div className="rounded bg-surface p-2">
@@ -445,8 +515,9 @@ function TradePage() {
       </section>
 
       <p className="mt-3 text-center text-[11px] text-muted-foreground">
-        Green marks the better side. Grades blend this year's projections (65%) with last season's
-        per-game production (35%), then adjust for open roster slots configured in the War Room.
+        The shaded column holds the statistical advantage. Grades blend this year's projections
+        (65%) with last season's per-game production (35%), apply a consolidation discount to the
+        wider package, then adjust for open roster slots configured in the War Room.
       </p>
       </main>
 
@@ -520,8 +591,8 @@ function CompareTable({ title, rows }: { title: string; rows: CompareRow[] }) {
           <tr key={r.label} className="border-t border-border">
             <td
               className={cn(
-                "tabnum w-1/3 px-3 py-2 text-left",
-                r.giveWin ? "font-bold text-success" : "text-foreground",
+                "w-1/3 px-3 py-2 text-left font-mono text-[13px] tabular-nums",
+                r.giveWin ? "bg-muted/30 font-semibold text-foreground" : "text-foreground",
               )}
             >
               {r.give}
@@ -531,8 +602,8 @@ function CompareTable({ title, rows }: { title: string; rows: CompareRow[] }) {
             </td>
             <td
               className={cn(
-                "tabnum w-1/3 px-3 py-2 text-right",
-                r.getWin ? "font-bold text-success" : "text-foreground",
+                "w-1/3 px-3 py-2 text-right font-mono text-[13px] tabular-nums",
+                r.getWin ? "bg-muted/30 font-semibold text-foreground" : "text-foreground",
               )}
             >
               {r.get}

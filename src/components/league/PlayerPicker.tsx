@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import type { Player } from "@/lib/draft";
@@ -14,6 +14,7 @@ export function PlayerPicker({
   placeholder = "Search players…",
   single,
   accent,
+  renderMeta,
 }: {
   players: Player[];
   selected: Player[];
@@ -23,6 +24,8 @@ export function PlayerPicker({
   placeholder?: string;
   single?: boolean;
   accent?: "give" | "get";
+  /** Optional replacement for the default value chip on a selected row. */
+  renderMeta?: (p: Player) => ReactNode;
 }) {
   const [q, setQ] = useState("");
 
@@ -89,10 +92,16 @@ export function PlayerPicker({
             className="flex items-center gap-2 rounded-md border border-border bg-surface px-2 py-1.5 text-sm"
           >
             <PositionBadge pos={p.pos} />
-            <span className="flex-1 truncate">{p.name}</span>
-            <span className="tabnum text-xs text-muted-foreground">
-              {playerValue(p)} pts val
-            </span>
+            {renderMeta ? (
+              <span className="min-w-0 flex-1">{renderMeta(p)}</span>
+            ) : (
+              <>
+                <span className="flex-1 truncate">{p.name}</span>
+                <span className="tabnum text-xs text-muted-foreground">
+                  {playerValue(p)} pts val
+                </span>
+              </>
+            )}
             <button
               type="button"
               onClick={() => onRemove(p.id)}
