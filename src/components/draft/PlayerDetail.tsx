@@ -163,11 +163,27 @@ export function PlayerDetail({
                     {brainEntry.injuryType}
                   </li>
                 )}
-                {injuryRisk.factors.map((f) => (
-                  <li key={f}>
-                    · <span className="font-semibold text-foreground">HISTORICAL TRACK:</span> {f}
-                  </li>
-                ))}
+                {injuryRisk.factors
+                  .filter(
+                    (f) =>
+                      !f.toLowerCase().includes("currently listed") &&
+                      (!player.injury ||
+                        f.toLowerCase().trim() !== player.injury.toLowerCase().trim()),
+                  )
+                  .map((f) => {
+                    const lower = f.toLowerCase();
+                    const isWorkload =
+                      lower.includes("carries") ||
+                      lower.includes("touches") ||
+                      lower.includes("targets") ||
+                      lower.includes("snaps");
+                    const label = isWorkload ? "WORKLOAD NOTE" : "HISTORICAL TRACK";
+                    return (
+                      <li key={f}>
+                        · <span className="font-semibold text-foreground">{label}:</span> {f}
+                      </li>
+                    );
+                  })}
                 <li>
                   · <span className="font-semibold text-foreground">CURRENT DESIGNATION:</span>{" "}
                   {player.injury ?? "Healthy — no designation"}
