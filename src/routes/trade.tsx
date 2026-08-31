@@ -239,19 +239,48 @@ function TradePage() {
     [get, give, roster, draft.settings.roster],
   );
 
-  const giveWeekly = packageWeekly(giveRows);
-  const getWeekly = packageWeekly(getRows);
+  /**
+   * Asymmetric packages: the side sending more bodies takes a consolidation
+   * discount, so a 2-for-1 must clear a higher bar than a straight swap.
+   */
+  const giveWeekly = packageScore(
+    giveRows.map((r) => r.weekly),
+    getRows.length,
+  );
+  const rawGetWeekly = packageScore(
+    getRows.map((r) => r.weekly),
+    giveRows.length,
+  );
+
+  /** Bench vacancy check: receiving more players than you send can force a drop. */
+  const rosterCap = rosterSize(draft.settings.roster);
+  const benchPool = useMemo(
+    () =>
+      userRoster
+        .filter((p) => !give.some((g) => g.id === p.id))
+        .map((p) => ({ name: p.name, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+    [userRoster, give, scoring],
+  );
+  const constraint = rosterConstraint({
+    rosterCount: userRoster.length,
+    rosterCap,
+    giveCount: give.length,
+    getCount: get.length,
+    bench: benchPool,
+  });
+
+  const getWeekly = Math.max(0, rawGetWeekly - constraint.penalty);
   const basePct = ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
   const adjustedPct = basePct + needDelta;
   const adjustedGrade = grade(adjustedPct);
   const ready = give.length > 0 && get.length > 0;
-  const verdict = !ready
-    ? "Add players to both sides to analyze this trade."
-    : adjustedPct >= 8
-      ? "You win this trade — production and roster fit both lean your way."
-      : adjustedPct <= -8
-        ? "You're giving up more weekly production than you get back."
-        : "Fair deal — weekly production is close on both sides.";
+  const verdict = executiveSummary({
+    ready,
+    pct: adjustedPct,
+    giveCount: give.length,
+    getCount: get.length,
+    overflow: constraint.overflow,
+  });
 
   const sum = (rows: Metrics[], key: keyof Metrics) =>
     rows.reduce((s, r) => s + (typeof r[key] === "number" ? (r[key] as number) : 0), 0);
