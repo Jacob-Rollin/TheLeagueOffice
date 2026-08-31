@@ -63,9 +63,12 @@ export function rosterFit(input: {
   const positions: FitPosition[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
   const countAt = (list: FitPlayer[], pos: string) => list.filter((p) => p.pos === pos).length;
 
-  const after = input.roster
-    .filter((p) => !input.give.includes(p))
-    .concat(input.get);
+  const countAfter = (pos: string) =>
+    Math.max(
+      0,
+      countAt(input.roster, pos) - countAt(input.give, pos) + countAt(input.get, pos),
+    );
+
 
   let pct = 0;
   const fills: string[] = [];
