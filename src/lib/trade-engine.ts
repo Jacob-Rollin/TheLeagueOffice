@@ -136,11 +136,19 @@ export type RosterConstraint = {
   penalty: number;
   /** Name of the simulated drop, when one was identified. */
   dropName: string | null;
+  /** Every simulated drop, in order. */
+  dropNames: string[];
+  /** True when the vacancy shield blocked every remaining candidate. */
+  shielded: boolean;
 };
 
 /**
  * Bench-vacancy verification. Only runs when the manager is receiving more
  * players than they send out.
+ *
+ * Vacancy shield: a player who is the last body at a required starting
+ * position (the only DEF, the only K, …) can never be recommended as a drop,
+ * so the suggestion always targets a genuine bench surplus.
  */
 export function rosterConstraint(input: {
   rosterCount: number;
@@ -148,9 +156,18 @@ export function rosterConstraint(input: {
   giveCount: number;
   getCount: number;
   /** Bench-eligible players on the manager's roster, with weekly projections. */
-  bench: { name: string; weekly: number }[];
+  bench: { name: string; weekly: number; pos?: string }[];
+  /** Required starters by position, used by the vacancy shield. */
+  starters?: Record<string, number>;
 }): RosterConstraint {
-  const none: RosterConstraint = { overflow: false, dropCount: 0, penalty: 0, dropName: null };
+  const none: RosterConstraint = {
+    overflow: false,
+    dropCount: 0,
+    penalty: 0,
+    dropName: null,
+    dropNames: [],
+    shielded: false,
+  };
   const net = input.getCount - input.giveCount;
   if (net <= 0 || input.rosterCap <= 0) return none;
 
@@ -158,15 +175,41 @@ export function rosterConstraint(input: {
   const over = projected - input.rosterCap;
   if (over <= 0) return none;
 
-  const sorted = [...input.bench].sort((a, b) => a.weekly - b.weekly).slice(0, over);
-  const penalty = sorted.reduce((s, p) => s + p.weekly, 0);
+  const starters = input.starters ?? {};
+  const remaining: Record<string, number> = {};
+  for (const p of input.bench) {
+    const pos = p.pos ?? "";
+    remaining[pos] = (remaining[pos] ?? 0) + 1;
+  }
+
+  const candidates = [...input.bench].sort((a, b) => a.weekly - b.weekly);
+  const picked: { name: string; weekly: number }[] = [];
+  let shielded = false;
+
+  for (const c of candidates) {
+    if (picked.length >= over) break;
+    const pos = c.pos ?? "";
+    const required = starters[pos] ?? 0;
+    // Hardlock: dropping this body would leave the lineup slot vacant.
+    if (required > 0 && (remaining[pos] ?? 0) <= required) {
+      shielded = true;
+      continue;
+    }
+    remaining[pos] = (remaining[pos] ?? 1) - 1;
+    picked.push({ name: c.name, weekly: c.weekly });
+  }
+
+  const penalty = picked.reduce((s, p) => s + p.weekly, 0);
   return {
     overflow: true,
     dropCount: over,
     penalty,
-    dropName: sorted[0]?.name ?? null,
+    dropName: picked[0]?.name ?? null,
+    dropNames: picked.map((p) => p.name),
+    shielded: shielded && picked.length < over,
   };
 }
+
 
 /** Thematic executive summary for the grading banner. */
 export function executiveSummary(input: {
