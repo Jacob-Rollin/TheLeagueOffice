@@ -78,7 +78,7 @@ function PlayerListImpl({
   const queryClient = useQueryClient();
   const brain = usePlayerBrain();
 
-  /** Analytics reads: ECR / SD / 7-day trend out of the local matrix map.
+  /** Analytics reads: ECR / SD / 30-day value trend out of the local matrix map.
    *  All lookups are keyed by the player's platform Sleeper ID (player.id). */
   const ecrOf = useCallback(
     (player: Player) => {
@@ -97,8 +97,12 @@ function PlayerListImpl({
   );
   const trendOf = useCallback(
     (player: Player) => {
-      const n = brain?.[player.id]?.trend ?? 0;
-      return Number.isFinite(n) && n !== 0 ? n : null;
+      const delta = brain?.[player.id]?.trend ?? 0;
+      const baseline = brain?.[player.id]?.value ?? 0;
+      if (!Number.isFinite(delta) || !Number.isFinite(baseline) || baseline === 0 || delta === 0)
+        return null;
+      // True value-weighted percentage change relative to the player's market baseline.
+      return (delta / baseline) * 100;
     },
     [brain],
   );
