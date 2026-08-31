@@ -281,15 +281,17 @@ function TradePage() {
     return map;
   }, [draft.picks, draft.settings.teams, byId]);
 
-  /** Synced league rosters win; the local draft board is the offline fallback. */
+  /** Synced league rosters win; sandbox demo rosters win when Sandbox Mode is active. */
   const roster = useMemo(() => {
+    if (sandboxMode) return SANDBOX_MY_TEAM;
     if (league?.synced && league?.myTeam) return league.myTeam.players;
     return rostersByTeam.get(draft.settings.myTeam) ?? [];
-  }, [league?.synced, league?.myTeam, rostersByTeam, draft.settings.myTeam]);
+  }, [sandboxMode, league?.synced, league?.myTeam, rostersByTeam, draft.settings.myTeam]);
 
-  const myTeamLabel =
-    (league?.synced ? (league?.myTeam?.team ?? league?.myTeamName) : null) ??
-    teamName(draft.settings, draft.settings.myTeam);
+  const myTeamLabel = sandboxMode
+    ? "My Team"
+    : (league?.synced ? (league?.myTeam?.team ?? league?.myTeamName) : null) ??
+      teamName(draft.settings, draft.settings.myTeam);
 
   const otherTeams = useMemo(() => {
     if (league?.synced) {
