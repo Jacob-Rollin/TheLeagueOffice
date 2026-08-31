@@ -142,7 +142,7 @@ function TradeRoute() {
 
 function TradePage() {
   const { data } = useSuspenseQuery(playersQuery);
-  const { activeLeague } = useActiveLeague();
+  const { activeLeague, sandboxMode } = useActiveLeague();
   const { user, ready: authReady } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const draft = useDraft();
@@ -186,8 +186,11 @@ function TradePage() {
     [get, details.map, scoring],
   );
 
-  /** Sidebars only unlock for an authenticated user with an active synced league. */
-  const locked = !authReady || !user || !activeLeague?.id;
+  /**
+   * Sidebars unlock for sandbox mode so mock rosters render freely, but stay
+   * locked behind the sync overlay for unsigned-out / unlinked live users.
+   */
+  const locked = !sandboxMode && (!authReady || !user || !activeLeague?.id);
 
 
   const byId = useMemo(() => new Map(data.players.map((p) => [p.id, p])), [data.players]);
