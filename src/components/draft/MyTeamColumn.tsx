@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { injuryMicroBadge, SANDBOX_INJURY_OVERRIDES } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 import { fillRoster, roundOf, type Pick as DraftPick, type Player, type Settings } from "@/lib/draft";
 
@@ -55,6 +57,7 @@ export function MyTeamColumn({
   fit?: boolean;
 }) {
   const slots = fillRoster(players, settings.roster);
+  const brain = usePlayerBrain();
   const pickByPlayer = useMemo(
     () =>
       picks.reduce<Record<string, DraftPick>>((acc, p) => {
@@ -113,6 +116,23 @@ export function MyTeamColumn({
                     className="flex items-center gap-1 truncate text-[10px] text-muted-foreground"
                     style={{ fontSize: metaSize }}
                   >
+                    {(() => {
+                      const badge = injuryMicroBadge(
+                        SANDBOX_INJURY_OVERRIDES[s.player!.id]?.injuryStatus ??
+                          brain?.[s.player!.id]?.injuryStatus ??
+                          s.player!.injury,
+                      );
+                      return badge ? (
+                        <span
+                          className={cn(
+                            "grid h-4 w-4 shrink-0 place-items-center rounded-[2px] text-[9px] font-bold text-white",
+                            badge.className,
+                          )}
+                        >
+                          {badge.label}
+                        </span>
+                      ) : null;
+                    })()}
                     <span
                       className="inline-block size-1.5 shrink-0 rounded-full"
                       style={{ backgroundColor: `var(--pos-${s.player.pos.toLowerCase()})` }}
