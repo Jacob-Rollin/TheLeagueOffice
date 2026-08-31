@@ -48,11 +48,89 @@ export type RosterFit = {
   note: string;
 };
 
+/** Strict starting-lineup benchmarks when the league config omits them. */
+export const BASE_STARTERS: Record<string, number> = {
+  QB: 1,
+  RB: 2,
+  WR: 2,
+  TE: 1,
+  K: 1,
+  DEF: 1,
+  FLEX: 1,
+};
+
+const FLEX_ELIGIBLE = ["RB", "WR", "TE"];
+
+export type Lineup = {
+  /** Weekly points produced by the optimized starting lineup. */
+  points: number;
+  /** Starting slots left unfilled, by position (FLEX included). */
+  vacancies: Record<string, number>;
+  /** Total unfilled starting slots. */
+  vacancyCount: number;
+  /** Players who did not crack the starting lineup. */
+  benchCount: number;
+};
+
 /**
- * Data-driven roster fit: compares positional depth before and after the deal
- * against the league's configured starting requirements, rewards filling a
- * deficit or upgrading the weakest starter, and penalises stacking a position
- * the manager already has buried on the bench.
+ * Two-pass optimizer: dedicated starting slots first, then the single best
+ * remaining RB/WR/TE fills each FLEX spot. Bench totals are irrelevant — only
+ * starting-lineup fulfillment counts.
+ */
+export function optimizeLineup(
+  players: FitPlayer[],
+  starters: Record<string, number>,
+): Lineup {
+  const req = { ...BASE_STARTERS, ...starters };
+  const pool = [...players].sort((a, b) => b.weekly - a.weekly);
+  const vacancies: Record<string, number> = {};
+  let points = 0;
+  let used = 0;
+
+  // Pass 1 — dedicated slots.
+  for (const pos of ["QB", "RB", "WR", "TE", "K", "DEF"]) {
+    const need = Math.max(0, req[pos] ?? 0);
+    let filled = 0;
+    for (let i = 0; i < pool.length && filled < need; i++) {
+      const p = pool[i]!;
+      if (p.pos !== pos || (p as { _used?: boolean })._used) continue;
+      (p as { _used?: boolean })._used = true;
+      points += p.weekly;
+      filled++;
+      used++;
+    }
+    if (filled < need) vacancies[pos] = need - filled;
+  }
+
+  // Pass 2 — dynamic flex optimization from the surplus RB/WR/TE pool.
+  const flexNeed = Math.max(0, req.FLEX ?? 0);
+  let flexFilled = 0;
+  for (const p of pool) {
+    if (flexFilled >= flexNeed) break;
+    if ((p as { _used?: boolean })._used) continue;
+    if (!FLEX_ELIGIBLE.includes(p.pos)) continue;
+    (p as { _used?: boolean })._used = true;
+    points += p.weekly;
+    flexFilled++;
+    used++;
+  }
+  if (flexFilled < flexNeed) vacancies.FLEX = flexNeed - flexFilled;
+
+  for (const p of pool) delete (p as { _used?: boolean })._used;
+
+  return {
+    points,
+    vacancies,
+    vacancyCount: Object.values(vacancies).reduce((a, b) => a + b, 0),
+    benchCount: Math.max(0, players.length - used),
+  };
+}
+
+/**
+ * Roster fit measured strictly against the optimized starting lineup: does the
+ * deal fill a vacant starting slot or raise starting-lineup output? Incoming
+ * players who cannot crack the lineup (a redundant second QB, a fifth WR) are
+ * bench depth and drag the fit percentage down when premium starters leave.
  */
 export function rosterFit(input: {
   roster: FitPlayer[];
@@ -60,74 +138,69 @@ export function rosterFit(input: {
   get: FitPlayer[];
   starters: Record<string, number>;
 }): RosterFit {
-  const positions: FitPosition[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
-  const countAt = (list: FitPlayer[], pos: string) => list.filter((p) => p.pos === pos).length;
+  const req = { ...BASE_STARTERS, ...input.starters };
+  const giveKey = new Set(input.give.map((p, i) => `${p.pos}:${p.weekly}:${i}`));
+  const after: FitPlayer[] = [];
+  const takenGive = [...input.give];
+  for (const p of input.roster) {
+    const idx = takenGive.findIndex((g) => g.pos === p.pos && g.weekly === p.weekly);
+    if (idx >= 0) {
+      takenGive.splice(idx, 1);
+      continue;
+    }
+    after.push(p);
+  }
+  void giveKey;
+  after.push(...input.get);
 
-  const countAfter = (pos: string) =>
-    Math.max(
-      0,
-      countAt(input.roster, pos) - countAt(input.give, pos) + countAt(input.get, pos),
-    );
+  const before = optimizeLineup(input.roster, req);
+  const now = optimizeLineup(after, req);
 
-
-  let pct = 0;
   const fills: string[] = [];
   const clogs: string[] = [];
+  let pct = 0;
 
+  const positions = Object.keys(req).filter((k) => (req[k] ?? 0) > 0);
   for (const pos of positions) {
-    const req = input.starters[pos] ?? 0;
-    if (req <= 0) continue;
-    const before = countAt(input.roster, pos);
-    const now = countAfter(pos);
-
-    // Starting-lineup deficit movement.
-    const deficitBefore = Math.max(0, req - before);
-    const deficitAfter = Math.max(0, req - now);
-    if (deficitBefore > deficitAfter) {
-      pct += (deficitBefore - deficitAfter) * 6;
+    const vb = before.vacancies[pos] ?? 0;
+    const va = now.vacancies[pos] ?? 0;
+    if (vb > va) {
+      pct += (vb - va) * 8;
       fills.push(pos);
-    } else if (deficitAfter > deficitBefore) {
-      pct -= (deficitAfter - deficitBefore) * 8;
+    } else if (va > vb) {
+      pct -= (va - vb) * 10;
     }
+  }
 
-    // Bench-clog surplus movement (anything beyond starters + 2 of depth).
-    const cap = req + 2;
-    const surplusBefore = Math.max(0, before - cap);
-    const surplusAfter = Math.max(0, now - cap);
-    if (surplusAfter > surplusBefore) {
-      pct -= (surplusAfter - surplusBefore) * 4;
-      clogs.push(pos);
-    }
+  // Starting-lineup production swing, normalised against the current lineup.
+  const swing = now.points - before.points;
+  pct += Math.max(-15, Math.min(15, (swing / Math.max(before.points, 1)) * 100));
 
-    // Weakest-starter upgrade: incoming beats the worst current starter.
-    const incoming = input.get.filter((p) => p.pos === pos);
-    if (incoming.length) {
-      const starters = input.roster
-        .filter((p) => p.pos === pos)
-        .sort((a, b) => b.weekly - a.weekly)
-        .slice(0, Math.max(1, req));
-      const worst = starters.length ? starters[starters.length - 1]!.weekly : 0;
-      const best = Math.max(...incoming.map((p) => p.weekly));
-      if (best > worst) {
-        pct += Math.min(6, ((best - worst) / Math.max(worst, 1)) * 10);
-        if (!fills.includes(pos)) fills.push(pos);
-      }
+  // Bench bloat: incoming bodies that never crack the optimized lineup.
+  const benchAdds = Math.max(0, now.benchCount - before.benchCount);
+  if (benchAdds > 0 && swing <= 0) {
+    pct -= benchAdds * 5;
+    for (const p of input.get) {
+      const filledSomething = fills.includes(p.pos);
+      if (!filledSomething && !clogs.includes(p.pos)) clogs.push(p.pos);
     }
   }
 
   pct = Math.max(-25, Math.min(25, Math.round(pct)));
+
   const note = !input.get.length
     ? "No incoming players to fit."
     : fills.length && !clogs.length
       ? `Fills starting need at ${fills.join(", ")}.`
       : clogs.length && !fills.length
-        ? `Adds bench surplus at ${clogs.join(", ")}.`
+        ? `Starting lineup is already full at ${clogs.join(", ")} — incoming players are bench depth.`
         : fills.length && clogs.length
-          ? `Upgrades ${fills.join(", ")} but deepens ${clogs.join(", ")}.`
-          : "Neutral fit — depth chart is unchanged.";
+          ? `Upgrades ${fills.join(", ")} but adds bench depth at ${clogs.join(", ")}.`
+          : "Neutral fit — the optimized starting lineup is unchanged.";
 
   return { pct, fills, clogs, note };
 }
+
 
 
 export type RosterConstraint = {
