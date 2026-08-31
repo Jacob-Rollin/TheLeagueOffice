@@ -685,7 +685,7 @@ function RosterRow({
       disabled={selected}
       onClick={() => onPick(player)}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors",
+        "group flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors",
         selected
           ? "cursor-default opacity-50"
           : "hover:border-border hover:bg-surface focus-visible:border-border",
@@ -712,7 +712,13 @@ function RosterRow({
           ) : null}
         </span>
       </span>
-      <span aria-hidden className="text-xs text-muted-foreground">
+      <span
+        aria-hidden
+        className={cn(
+          "shrink-0 text-sm font-semibold text-black transition-all duration-150 group-hover:text-base group-hover:font-extrabold group-hover:text-black",
+          selected && "text-muted-foreground",
+        )}
+      >
         {selected ? "✓" : "+"}
       </span>
     </button>
@@ -768,66 +774,114 @@ function OtherTeamsColumn({
   brain?: BrainMatrix | null | undefined;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [focusedTeamId, setFocusedTeamId] = useState<string | null>(null);
+
+  const focusedTeam = focusedTeamId ? teams.find((t) => t.key === focusedTeamId) : null;
 
   return (
     <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
-      <p className="eyebrow">League rosters</p>
-      <p className="mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-        Tap to add to “You receive”
-      </p>
-      <div className="mt-2 space-y-1">
-        {teams.length === 0 && (
-          <p className="px-1 py-2 text-xs text-muted-foreground">
-            No opposing teams yet — sync a league to load rosters.
+      {focusedTeam ? (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => {
+              setFocusedTeamId(null);
+              setOpenKey(null);
+            }}
+            className="pb-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            ◄ Back to All Teams
+          </button>
+          <div className="rounded-md border border-border bg-surface p-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-sm font-medium">{focusedTeam.name}</span>
+              <span className="tabnum shrink-0 text-[10px] text-muted-foreground">
+                {focusedTeam.players.length}
+              </span>
+            </div>
+            {focusedTeam.owner && (
+              <span className="block truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+                {focusedTeam.owner}
+              </span>
+            )}
+          </div>
+          <div className="space-y-0.5 pt-1">
+            {focusedTeam.players.length === 0 ? (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">No players rostered.</p>
+            ) : (
+              focusedTeam.players.map((p) => (
+                <RosterRow
+                  key={p.id}
+                  player={p}
+                  selected={selectedIds.has(p.id)}
+                  onPick={onPick}
+                  brain={brain}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="eyebrow">League rosters</p>
+          <p className="mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+            Tap to add to “You receive”
           </p>
-        )}
-        {teams.map((t) => {
-          const players = t.players;
-          return (
-            <details
-              key={t.key}
-              open={openKey === t.key}
-              className="rounded-md border border-border bg-surface"
-            >
-              <summary
-                className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setOpenKey((k) => (k === t.key ? null : t.key));
-                }}
-              >
-                <span className="min-w-0 truncate">
-                  <span className="block truncate">{t.name}</span>
-                  {t.owner && (
-                    <span className="block truncate text-[10px] uppercase tracking-widest text-muted-foreground">
-                      {t.owner}
+          <div className="mt-2 space-y-1">
+            {teams.length === 0 && (
+              <p className="px-1 py-2 text-xs text-muted-foreground">
+                No opposing teams yet — sync a league to load rosters.
+              </p>
+            )}
+            {teams.map((t) => {
+              const players = t.players;
+              return (
+                <details
+                  key={t.key}
+                  open={openKey === t.key}
+                  className="rounded-md border border-border bg-surface"
+                >
+                  <summary
+                    className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setOpenKey((k) => (k === t.key ? null : t.key));
+                      setFocusedTeamId(t.key);
+                    }}
+                  >
+                    <span className="min-w-0 truncate">
+                      <span className="block truncate">{t.name}</span>
+                      {t.owner && (
+                        <span className="block truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+                          {t.owner}
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-                <span className="tabnum shrink-0 text-[10px] text-muted-foreground">
-                  {players.length}
-                </span>
-              </summary>
-              <div className="space-y-0.5 border-t border-border p-1">
-                {players.length === 0 ? (
-                  <p className="px-2 py-1.5 text-xs text-muted-foreground">No players rostered.</p>
-                ) : (
-                  players.map((p) => (
-                    <RosterRow
-                      key={p.id}
-                      player={p}
-                      selected={selectedIds.has(p.id)}
-                      onPick={onPick}
-                      brain={brain}
-                    />
-                  ))
-                )}
-              </div>
-            </details>
-          );
-        })}
-      </div>
-
+                    <span className="tabnum shrink-0 text-[10px] text-muted-foreground">
+                      {players.length}
+                    </span>
+                  </summary>
+                  <div className="space-y-0.5 border-t border-border p-1">
+                    {players.length === 0 ? (
+                      <p className="px-2 py-1.5 text-xs text-muted-foreground">No players rostered.</p>
+                    ) : (
+                      players.map((p) => (
+                        <RosterRow
+                          key={p.id}
+                          player={p}
+                          selected={selectedIds.has(p.id)}
+                          onPick={onPick}
+                          brain={brain}
+                        />
+                      ))
+                    )}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        </>
+      )}
     </aside>
   );
 }
