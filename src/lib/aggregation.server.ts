@@ -6,10 +6,9 @@ import { supabaseB } from "@/lib/supabaseB";
  * Ingests 4 player data vectors and anchors every record to the master
  * `sleeper_id` primary key to prevent cross-platform identity confusion:
  *
- *   1. Sleeper base player registry (identity anchor)
+ *   1. Sleeper base player registry (identity anchor + native injury details)
  *   2. FantasyCalc trade values
  *   3. LeagueLogs injury status tags
- *   4. FantasyPros ECR + standard deviation
  *
  * All reads/writes go exclusively through `supabaseB`. Database A (auth,
  * profiles, synced leagues) is never touched from this module.
@@ -43,10 +42,8 @@ export interface PlayerWarehouseRow {
   team?: string | null;
   fantasycalc_value?: number | null;
   leaguelogs_status?: string | null;
-  fantasypros_ecr?: number | null;
-  fantasypros_sd?: number | null;
   injury_type?: string | null;
-  time_missed?: string | null;
+  injury_notes?: string | null;
   updated_at?: string;
 }
 
@@ -61,10 +58,8 @@ export interface ProviderRecord {
   /** FantasyCalc market trend velocity (signed value delta). */
   fantasycalc_trend?: number | null;
   leaguelogs_status?: string | null;
-  fantasypros_ecr?: number | null;
-  fantasypros_sd?: number | null;
   injury_type?: string | null;
-  time_missed?: string | null;
+  injury_notes?: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -160,6 +155,8 @@ interface SleeperPlayer {
   team?: string;
   espn_id?: number | string | null;
   yahoo_id?: number | string | null;
+  injury_body_part?: string | null;
+  injury_notes?: string | null;
   active?: boolean;
 }
 
@@ -191,6 +188,8 @@ export async function loadIdentityIndex(): Promise<IdentityIndex> {
       full_name: fullName,
       position,
       team: p?.team ?? null,
+      injury_type: p?.injury_body_part ?? null,
+      injury_notes: p?.injury_notes ?? null,
     });
 
     const norm = normalizeName(fullName);
@@ -335,65 +334,6 @@ export async function harvestLeagueLogs(index: IdentityIndex): Promise<ProviderR
   return out;
 }
 
-interface FantasyProsEntry {
-  player_id?: string | number | null;
-  sleeper_id?: string | number | null;
-  player_espn_id?: string | number | null;
-  player_name?: string | null;
-  player_position_id?: string | null;
-  rank_ecr?: number | string | null;
-  ecr?: number | string | null;
-  standard_deviation?: number | string | null;
-  sd?: number | string | null;
-  rank_std?: number | string | null;
-  injury_type?: string | null;
-  injury_detail?: string | null;
-  injury_status?: string | null;
-  time_missed?: string | null;
-  player_injury_status?: string | null;
-}
-
-export async function harvestFantasyPros(index: IdentityIndex): Promise<ProviderRecord[]> {
-  const url =
-    envUrl("FANTASYPROS_ECR_URL") ??
-    "https://api.fantasypros.com/public/v2/json/nfl/2026/consensus-rankings?position=ALL&type=draft&scoring=PPR";
-
-  const apiKey = process.env["FANTASYPROS_API_KEY"];
-  const payload = await fetchJsonWithRetry<{ players?: FantasyProsEntry[] } | FantasyProsEntry[]>(
-    url,
-    "fantasypros",
-    apiKey ? { headers: { "x-api-key": apiKey } } : undefined,
-  );
-
-  const rows = Array.isArray(payload) ? payload : (payload?.players ?? []);
-  const out: ProviderRecord[] = [];
-
-  for (const entry of rows) {
-    const id = resolveSleeperId(index, {
-      sleeperId: entry?.sleeper_id ?? null,
-      espnId: entry?.player_espn_id ?? null,
-      name: entry?.player_name ?? null,
-      position: entry?.player_position_id ?? null,
-    });
-    if (!id) continue;
-    const base = index.base.get(id);
-    out.push({
-      sleeper_id: id,
-      full_name: base?.full_name ?? null,
-      position: base?.position ?? null,
-      team: base?.team ?? null,
-      fantasypros_ecr: Number(entry?.rank_ecr ?? entry?.ecr ?? 0) || 0,
-      fantasypros_sd:
-        Number(entry?.rank_std ?? entry?.standard_deviation ?? entry?.sd ?? 0) || 0,
-      injury_type:
-        (entry?.injury_type ?? entry?.injury_detail ?? entry?.player_injury_status ?? null) || null,
-      time_missed: (entry?.time_missed ?? entry?.injury_status ?? null) || null,
-    });
-  }
-
-  return out;
-}
-
 /* ------------------------------------------------------------------ */
 /* Warehouse writes                                                    */
 /* ------------------------------------------------------------------ */
@@ -420,6 +360,8 @@ export async function ingestSleeperBase(records: ProviderRecord[]) {
       player_name: r.full_name ?? null,
       position: r.position ?? null,
       team: r.team ?? null,
+      injury_type: r.injury_type ?? null,
+      injury_notes: r.injury_notes ?? null,
       updated_at: new Date().toISOString(),
     })),
   );
@@ -453,23 +395,6 @@ export async function ingestLeagueLogsStatus(records: ProviderRecord[]) {
   );
 }
 
-/** Ingest FantasyPros ECR + standard deviation. */
-export async function ingestFantasyProsRanks(records: ProviderRecord[]) {
-  return upsertBatch(
-    records.map((r) => ({
-      sleeper_id: r.sleeper_id,
-      player_name: r.full_name ?? null,
-      position: r.position ?? null,
-      team: r.team ?? null,
-      fantasypros_ecr: r.fantasypros_ecr ?? null,
-      fantasypros_sd: r.fantasypros_sd ?? null,
-      injury_type: r.injury_type ?? null,
-      time_missed: r.time_missed ?? null,
-      updated_at: new Date().toISOString(),
-    })),
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* Parallel-array payload compactor                                    */
 /* ------------------------------------------------------------------ */
@@ -489,11 +414,9 @@ export interface MasterPlayerBrain {
   values: number[];
   /** FantasyCalc market trend velocity per player (key emitted: "trends"). */
   trends: number[];
-  ecr: number[];
-  sd: number[];
   injuries: string[];
   injury_types: string[];
-  timelines: string[];
+  injury_notes: string[];
 }
 
 export function compileBrain(
@@ -512,11 +435,9 @@ export function compileBrain(
     teams: [],
     values: [],
     trends: [],
-    ecr: [],
-    sd: [],
     injuries: [],
     injury_types: [],
-    timelines: [],
+    injury_notes: [],
   };
 
   for (const r of sorted) {
@@ -526,11 +447,9 @@ export function compileBrain(
     brain.teams.push(r.team ?? "");
     brain.values.push(Number(r.fantasycalc_value ?? 0) || 0);
     brain.trends.push(Number(trendsById?.get(r.sleeper_id) ?? 0) || 0);
-    brain.ecr.push(Number(r.fantasypros_ecr ?? 0) || 0);
-    brain.sd.push(Number(r.fantasypros_sd ?? 0) || 0);
     brain.injuries.push(r.leaguelogs_status ?? "Healthy");
     brain.injury_types.push(r.injury_type ?? "");
-    brain.timelines.push(r.time_missed ?? "");
+    brain.injury_notes.push(r.injury_notes ?? "");
   }
 
   return brain;
@@ -548,11 +467,9 @@ export function validateBrainAlignment(brain: MasterPlayerBrain): void {
     brain.teams.length,
     brain.values.length,
     brain.trends.length,
-    brain.ecr.length,
-    brain.sd.length,
     brain.injuries.length,
     brain.injury_types.length,
-    brain.timelines.length,
+    brain.injury_notes.length,
   ];
 
   if (brain.count === 0 || lengths.some((n) => n !== brain.count)) {
@@ -617,15 +534,13 @@ export async function runWarehouseIngestion(): Promise<IngestionReport> {
     written["sleeper"] = (await ingestSleeperBase(base)).written;
 
     // 2-4. Secondary vectors, identity-translated against the anchor index.
-    const [fantasycalc, leaguelogs, fantasypros] = await Promise.all([
+    const [fantasycalc, leaguelogs] = await Promise.all([
       harvestFantasyCalc(index),
       harvestLeagueLogs(index),
-      harvestFantasyPros(index),
     ]);
 
     written["fantasycalc"] = (await ingestFantasyCalcValues(fantasycalc)).written;
     written["leaguelogs"] = (await ingestLeagueLogsStatus(leaguelogs)).written;
-    written["fantasypros"] = (await ingestFantasyProsRanks(fantasypros)).written;
 
     // 5. Compile + alignment gate + publish. Trend velocities ride the
     // payload directly (no warehouse column on Database B), keyed by the
