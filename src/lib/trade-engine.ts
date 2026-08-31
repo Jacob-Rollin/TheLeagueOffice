@@ -21,15 +21,114 @@ export function starWeighted(values: number[]): number {
 
 /**
  * Aggregate score for one side of the deal, after the consolidation modifier.
- * The wider package takes a 15% discount per extra body (capped at 45%).
+ * The wider package takes a 15% discount per extra body (capped at 45%), and
+ * the side consolidating into fewer, better assets takes a matching 15%
+ * premium (capped at 45%) to reflect starting-lineup value over bench bloat.
  */
 export function packageScore(values: number[], opposingCount: number): number {
   const raw = starWeighted(values);
-  const extra = Math.max(0, values.length - opposingCount);
-  if (extra === 0) return raw;
-  const discount = Math.min(0.45, CONSOLIDATION_DISCOUNT * extra);
-  return raw * (1 - discount);
+  const diff = values.length - opposingCount;
+  if (diff === 0) return raw;
+  const steps = Math.min(3, Math.abs(diff));
+  const modifier = CONSOLIDATION_DISCOUNT * steps;
+  return diff > 0 ? raw * (1 - modifier) : raw * (1 + modifier);
 }
+
+export type FitPosition = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
+
+export type FitPlayer = { pos: string; weekly: number };
+
+export type RosterFit = {
+  /** Percentage shift applied to the production grade (-25 … +25). */
+  pct: number;
+  /** Positions the incoming package fills a real starting deficit at. */
+  fills: string[];
+  /** Positions where the deal deepens an existing bench surplus. */
+  clogs: string[];
+  note: string;
+};
+
+/**
+ * Data-driven roster fit: compares positional depth before and after the deal
+ * against the league's configured starting requirements, rewards filling a
+ * deficit or upgrading the weakest starter, and penalises stacking a position
+ * the manager already has buried on the bench.
+ */
+export function rosterFit(input: {
+  roster: FitPlayer[];
+  give: FitPlayer[];
+  get: FitPlayer[];
+  starters: Record<string, number>;
+}): RosterFit {
+  const positions: FitPosition[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
+  const countAt = (list: FitPlayer[], pos: string) => list.filter((p) => p.pos === pos).length;
+
+  const countAfter = (pos: string) =>
+    Math.max(
+      0,
+      countAt(input.roster, pos) - countAt(input.give, pos) + countAt(input.get, pos),
+    );
+
+
+  let pct = 0;
+  const fills: string[] = [];
+  const clogs: string[] = [];
+
+  for (const pos of positions) {
+    const req = input.starters[pos] ?? 0;
+    if (req <= 0) continue;
+    const before = countAt(input.roster, pos);
+    const now = countAfter(pos);
+
+    // Starting-lineup deficit movement.
+    const deficitBefore = Math.max(0, req - before);
+    const deficitAfter = Math.max(0, req - now);
+    if (deficitBefore > deficitAfter) {
+      pct += (deficitBefore - deficitAfter) * 6;
+      fills.push(pos);
+    } else if (deficitAfter > deficitBefore) {
+      pct -= (deficitAfter - deficitBefore) * 8;
+    }
+
+    // Bench-clog surplus movement (anything beyond starters + 2 of depth).
+    const cap = req + 2;
+    const surplusBefore = Math.max(0, before - cap);
+    const surplusAfter = Math.max(0, now - cap);
+    if (surplusAfter > surplusBefore) {
+      pct -= (surplusAfter - surplusBefore) * 4;
+      clogs.push(pos);
+    }
+
+    // Weakest-starter upgrade: incoming beats the worst current starter.
+    const incoming = input.get.filter((p) => p.pos === pos);
+    if (incoming.length) {
+      const starters = input.roster
+        .filter((p) => p.pos === pos)
+        .sort((a, b) => b.weekly - a.weekly)
+        .slice(0, Math.max(1, req));
+      const worst = starters.length ? starters[starters.length - 1]!.weekly : 0;
+      const best = Math.max(...incoming.map((p) => p.weekly));
+      if (best > worst) {
+        pct += Math.min(6, ((best - worst) / Math.max(worst, 1)) * 10);
+        if (!fills.includes(pos)) fills.push(pos);
+      }
+    }
+  }
+
+  pct = Math.max(-25, Math.min(25, Math.round(pct)));
+  const note = !input.get.length
+    ? "No incoming players to fit."
+    : fills.length && !clogs.length
+      ? `Fills starting need at ${fills.join(", ")}.`
+      : clogs.length && !fills.length
+        ? `Adds bench surplus at ${clogs.join(", ")}.`
+        : fills.length && clogs.length
+          ? `Upgrades ${fills.join(", ")} but deepens ${clogs.join(", ")}.`
+          : "Neutral fit — depth chart is unchanged.";
+
+  return { pct, fills, clogs, note };
+}
+
 
 export type RosterConstraint = {
   /** True when accepting the deal overflows the roster cap. */
@@ -40,11 +139,19 @@ export type RosterConstraint = {
   penalty: number;
   /** Name of the simulated drop, when one was identified. */
   dropName: string | null;
+  /** Every simulated drop, in order. */
+  dropNames: string[];
+  /** True when the vacancy shield blocked every remaining candidate. */
+  shielded: boolean;
 };
 
 /**
  * Bench-vacancy verification. Only runs when the manager is receiving more
  * players than they send out.
+ *
+ * Vacancy shield: a player who is the last body at a required starting
+ * position (the only DEF, the only K, …) can never be recommended as a drop,
+ * so the suggestion always targets a genuine bench surplus.
  */
 export function rosterConstraint(input: {
   rosterCount: number;
@@ -52,9 +159,18 @@ export function rosterConstraint(input: {
   giveCount: number;
   getCount: number;
   /** Bench-eligible players on the manager's roster, with weekly projections. */
-  bench: { name: string; weekly: number }[];
+  bench: { name: string; weekly: number; pos?: string }[];
+  /** Required starters by position, used by the vacancy shield. */
+  starters?: Record<string, number>;
 }): RosterConstraint {
-  const none: RosterConstraint = { overflow: false, dropCount: 0, penalty: 0, dropName: null };
+  const none: RosterConstraint = {
+    overflow: false,
+    dropCount: 0,
+    penalty: 0,
+    dropName: null,
+    dropNames: [],
+    shielded: false,
+  };
   const net = input.getCount - input.giveCount;
   if (net <= 0 || input.rosterCap <= 0) return none;
 
@@ -62,15 +178,41 @@ export function rosterConstraint(input: {
   const over = projected - input.rosterCap;
   if (over <= 0) return none;
 
-  const sorted = [...input.bench].sort((a, b) => a.weekly - b.weekly).slice(0, over);
-  const penalty = sorted.reduce((s, p) => s + p.weekly, 0);
+  const starters = input.starters ?? {};
+  const remaining: Record<string, number> = {};
+  for (const p of input.bench) {
+    const pos = p.pos ?? "";
+    remaining[pos] = (remaining[pos] ?? 0) + 1;
+  }
+
+  const candidates = [...input.bench].sort((a, b) => a.weekly - b.weekly);
+  const picked: { name: string; weekly: number }[] = [];
+  let shielded = false;
+
+  for (const c of candidates) {
+    if (picked.length >= over) break;
+    const pos = c.pos ?? "";
+    const required = starters[pos] ?? 0;
+    // Hardlock: dropping this body would leave the lineup slot vacant.
+    if (required > 0 && (remaining[pos] ?? 0) <= required) {
+      shielded = true;
+      continue;
+    }
+    remaining[pos] = (remaining[pos] ?? 1) - 1;
+    picked.push({ name: c.name, weekly: c.weekly });
+  }
+
+  const penalty = picked.reduce((s, p) => s + p.weekly, 0);
   return {
     overflow: true,
     dropCount: over,
     penalty,
-    dropName: sorted[0]?.name ?? null,
+    dropName: picked[0]?.name ?? null,
+    dropNames: picked.map((p) => p.name),
+    shielded: shielded && picked.length < over,
   };
 }
+
 
 /** Thematic executive summary for the grading banner. */
 export function executiveSummary(input: {

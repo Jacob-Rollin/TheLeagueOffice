@@ -15,7 +15,7 @@ import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/
 import { grade } from "@/lib/evaluate";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
-import { executiveSummary, packageScore, rosterConstraint } from "@/lib/trade-engine";
+import { executiveSummary, packageScore, rosterConstraint, rosterFit } from "@/lib/trade-engine";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
@@ -293,16 +293,19 @@ function TradePage() {
 
 
 
-  const needScore = (p: Player) => {
-    const count = roster.filter((r) => r.pos === p.pos).length;
-    const configured = draft.settings.roster[p.pos] ?? 0;
-    return configured > count ? Math.min(12, (configured - count) * 4) : 0;
-  };
-  const needDelta = useMemo(
-    () => get.reduce((s, p) => s + needScore(p), 0) - give.reduce((s, p) => s + needScore(p), 0),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [get, give, roster, draft.settings.roster],
+  /** Data-driven roster fit: positional scarcity before vs. after the deal. */
+  const fit = useMemo(
+    () =>
+      rosterFit({
+        roster: userRoster.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+        give: give.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+        get: get.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+        starters: draft.settings.roster as unknown as Record<string, number>,
+      }),
+    [userRoster, give, get, scoring, draft.settings.roster],
   );
+  const needDelta = fit.pct;
+
 
   /**
    * Asymmetric packages: the side sending more bodies takes a consolidation
@@ -323,8 +326,13 @@ function TradePage() {
     () =>
       userRoster
         .filter((p) => !give.some((g) => g.id === p.id))
-        .map((p) => ({ name: p.name, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
-    [userRoster, give, scoring],
+        .concat(get)
+        .map((p) => ({
+          name: p.name,
+          pos: p.pos,
+          weekly: (p.proj?.[scoring] ?? 0) / WEEKS,
+        })),
+    [userRoster, give, get, scoring],
   );
   const constraint = rosterConstraint({
     rosterCount: userRoster.length,
@@ -332,7 +340,9 @@ function TradePage() {
     giveCount: give.length,
     getCount: get.length,
     bench: benchPool,
+    starters: draft.settings.roster as unknown as Record<string, number>,
   });
+
 
   const getWeekly = Math.max(0, rawGetWeekly - constraint.penalty);
   const basePct = ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
@@ -460,10 +470,10 @@ function TradePage() {
               !ready
                 ? "border-border text-muted-foreground"
                 : adjustedGrade.tone === "good"
-                  ? "border-primary bg-primary/10 text-primary"
+                  ? "border-emerald-600 text-emerald-600"
                   : adjustedGrade.tone === "bad"
-                    ? "border-destructive bg-destructive/10 text-destructive"
-                    : "border-border bg-surface text-foreground",
+                    ? "border-destructive text-destructive"
+                    : "border-border text-foreground",
             )}
           >
             {ready ? adjustedGrade.letter : "—"}
@@ -472,40 +482,56 @@ function TradePage() {
             <p className="eyebrow">Executive summary</p>
             <p className="mt-1 text-sm font-medium leading-snug text-foreground">{verdict}</p>
             {ready && (
-              <p className="tabnum mt-1 text-xs text-muted-foreground">
-                Production {basePct.toFixed(1)}% · Roster fit {needDelta > 0 ? "+" : ""}
-                {needDelta}% · Final {adjustedPct.toFixed(1)}%
-                {give.length !== get.length ? " · Consolidation modifier applied" : ""}
-              </p>
+              <>
+                <p className="mt-1 text-xs text-muted-foreground">{fit.note}</p>
+                <p className="tabnum mt-1 text-xs text-muted-foreground">
+                  Production {basePct.toFixed(1)}% · Roster fit {needDelta > 0 ? "+" : ""}
+                  {needDelta}% · Final {adjustedPct.toFixed(1)}%
+                  {give.length !== get.length ? " · Consolidation modifier applied" : ""}
+                </p>
+              </>
             )}
           </div>
         </div>
         {ready && constraint.overflow && (
-          <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs font-medium text-foreground">
+          <p className="mt-3 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground">
             ROSTER CONSTRAINT: Accepting this deal requires dropping {constraint.dropCount} bench
             player{constraint.dropCount > 1 ? "s" : ""}.
-            {constraint.dropName
-              ? ` Model drops ${constraint.dropName} and subtracts ${constraint.penalty.toFixed(1)} pts/wk from the receive side.`
+            {constraint.dropNames.length
+              ? ` Model drops ${constraint.dropNames.join(", ")} and subtracts ${constraint.penalty.toFixed(1)} pts/wk from the receive side.`
+              : ""}
+            {constraint.shielded
+              ? " Remaining bodies are locked as your only starter at their position, so no further drop is legal."
               : ""}
           </p>
         )}
         {ready && (
           <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-            <div className="rounded bg-surface p-2">
+            <div className="p-2">
               <b className="tabnum block text-sm">{giveWeekly.toFixed(1)}</b>Give pts/wk
             </div>
-            <div className="rounded bg-surface p-2">
+            <div className="p-2">
               <b className="tabnum block text-sm">{getWeekly.toFixed(1)}</b>Get pts/wk
             </div>
-            <div className="rounded bg-surface p-2">
-              <b className="tabnum block text-sm">
+            <div className="p-2">
+              <b
+                className={cn(
+                  "tabnum block text-sm",
+                  needDelta > 0
+                    ? "text-emerald-600"
+                    : needDelta < 0
+                      ? "text-destructive"
+                      : undefined,
+                )}
+              >
                 {needDelta > 0 ? "+" : ""}
                 {needDelta}%
               </b>
-              Team need
+              Roster fit
             </div>
           </div>
         )}
+
       </section>
 
       <div className="mt-4 flex gap-1">
