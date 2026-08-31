@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
+import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
@@ -690,22 +691,26 @@ function RosterRow({
           : "hover:border-border hover:bg-surface focus-visible:border-border",
       )}
     >
-      <PositionBadge pos={player.pos} className="h-5 shrink-0 text-[10px]" />
+      <PlayerAvatar
+        id={player.id}
+        pos={player.pos}
+        team={player.team}
+        name={player.name}
+        className="size-9"
+        logoClassName="size-3.5"
+      />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium leading-tight">{player.name}</span>
-        <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
-          {player.team}
-          {player.bye ? ` · Bye ${player.bye}` : ""}
+        <span className="block truncate whitespace-nowrap text-[10px] uppercase tracking-widest text-muted-foreground">
+          {player.pos}
+          {player.team ? ` · ${player.team}` : ""}
+          {player.bye ? ` · BYE ${player.bye}` : ""}
+          {entry?.value ? ` · Value: ${entry.value.toLocaleString()}` : ""}
+          {trend ? ` · ${trend}` : ""}
+          {injury ? (
+            <span className="font-semibold text-destructive"> · [{injury}]</span>
+          ) : null}
         </span>
-        {entry ? (
-          <span className="tabnum block truncate text-[10px] leading-tight text-muted-foreground">
-            {entry.value ? `Value: ${entry.value.toLocaleString()}` : ""}
-            {trend ? ` · ${trend}` : ""}
-            {injury ? (
-              <span className="font-semibold text-destructive"> · [{injury}]</span>
-            ) : null}
-          </span>
-        ) : null}
       </span>
       <span aria-hidden className="text-xs text-muted-foreground">
         {selected ? "✓" : "+"}
@@ -762,6 +767,7 @@ function OtherTeamsColumn({
   onPick: (p: Player) => void;
   brain?: BrainMatrix | null | undefined;
 }) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   return (
     <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
@@ -778,8 +784,18 @@ function OtherTeamsColumn({
         {teams.map((t) => {
           const players = t.players;
           return (
-            <details key={t.key} className="rounded-md border border-border bg-surface">
-              <summary className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium">
+            <details
+              key={t.key}
+              open={openKey === t.key}
+              className="rounded-md border border-border bg-surface"
+            >
+              <summary
+                className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setOpenKey((k) => (k === t.key ? null : t.key));
+                }}
+              >
                 <span className="min-w-0 truncate">
                   <span className="block truncate">{t.name}</span>
                   {t.owner && (
