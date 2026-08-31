@@ -346,7 +346,15 @@ function TradePage() {
 
   const getWeekly = Math.max(0, rawGetWeekly - constraint.penalty);
   const basePct = ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
-  const adjustedPct = basePct + needDelta;
+  const impact = fit.impact;
+  /**
+   * Marginal lineup reality overrules package-size dilution: a real upgrade to
+   * the optimized starting lineup cannot be graded below the deal's true
+   * weekly impact just because it costs bench bodies.
+   */
+  let adjustedPct = basePct + needDelta;
+  if (impact.delta > 0.25) adjustedPct = Math.max(adjustedPct, needDelta);
+  if (impact.delta > 2) adjustedPct = Math.max(adjustedPct, 15);
   const adjustedGrade = grade(adjustedPct);
   const ready = give.length > 0 && get.length > 0;
   const verdict = executiveSummary({
@@ -355,7 +363,9 @@ function TradePage() {
     giveCount: give.length,
     getCount: get.length,
     overflow: constraint.overflow,
+    impact,
   });
+
 
   const sum = (rows: Metrics[], key: keyof Metrics) =>
     rows.reduce((s, r) => s + (typeof r[key] === "number" ? (r[key] as number) : 0), 0);
