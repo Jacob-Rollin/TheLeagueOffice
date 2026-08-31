@@ -663,7 +663,7 @@ function RosterRow({
   player: Player;
   selected: boolean;
   onPick: (p: Player) => void;
-  brain?: BrainMatrix | null;
+  brain?: BrainMatrix | null | undefined;
 }) {
   const entry = brain?.[player.id] ?? null;
   const pct =
@@ -722,7 +722,7 @@ function RosterColumn({
   players: Player[];
   selectedIds: Set<string>;
   onPick: (p: Player) => void;
-  brain?: BrainMatrix | null;
+  brain?: BrainMatrix | null | undefined;
 }) {
   return (
     <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
@@ -755,7 +755,7 @@ function OtherTeamsColumn({
   teams: { key: string; name: string; owner: string; players: Player[] }[];
   selectedIds: Set<string>;
   onPick: (p: Player) => void;
-  brain?: BrainMatrix | null;
+  brain?: BrainMatrix | null | undefined;
 }) {
 
   return (
