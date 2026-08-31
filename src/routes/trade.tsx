@@ -670,16 +670,6 @@ function SideHead({
 }
 
 
-function injuryMicroBadge(status: string | null | undefined) {
-  const currentStatus = (status ?? "").trim().toLowerCase();
-  if (!currentStatus || currentStatus === "healthy") return null;
-  if (currentStatus === "out") return { label: "O", className: "bg-rose-600" };
-  if (currentStatus === "ir" || currentStatus === "injured reserve")
-    return { label: "IR", className: "bg-rose-600" };
-  if (currentStatus === "questionable") return { label: "Q", className: "bg-amber-500" };
-  if (currentStatus === "doubtful") return { label: "D", className: "bg-orange-600" };
-  return null;
-}
 
 function RosterRow({
   player,
