@@ -11,7 +11,7 @@ import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
-import { buildSandboxTeams, injuryMicroBadge } from "@/lib/sandbox-rosters";
+import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { grade } from "@/lib/evaluate";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
@@ -706,8 +706,7 @@ function RosterRow({
   onPick: (p: Player) => void;
   brain?: BrainMatrix | null | undefined;
 }) {
-  const entry = brain?.[player.id] ?? null;
-  const badge = injuryMicroBadge(player.injuryStatus ?? entry?.injuryStatus);
+  const badge = injuryMicroBadge(resolveInjuryStatus(player, brain));
   const meta = [player.pos, player.team || null, player.bye ? `BYE ${player.bye}` : null].filter(
     Boolean,
   ) as string[];
