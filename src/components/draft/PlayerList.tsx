@@ -505,9 +505,7 @@ function PlayerListImpl({
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
                     {(() => {
                       const badge = injuryMicroBadge(
-                        SANDBOX_INJURY_OVERRIDES[p.id]?.injuryStatus ??
-                          brain?.[p.id]?.injuryStatus ??
-                          p.injury,
+                        resolveInjuryStatus(p, brain),
                       );
                       return badge ? (
                         <span
