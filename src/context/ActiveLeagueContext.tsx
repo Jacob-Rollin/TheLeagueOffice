@@ -43,6 +43,8 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const userId = user?.id ?? null;
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [sandboxMode, setSandboxMode] = useState(false);
+  const lastLiveIdRef = useMemo<{ current: string | null }>(() => ({ current: null }), []);
 
   useEffect(() => {
     try {
