@@ -657,11 +657,21 @@ function RosterRow({
   player,
   selected,
   onPick,
+  brain,
 }: {
   player: Player;
   selected: boolean;
   onPick: (p: Player) => void;
+  brain?: BrainMatrix | null;
 }) {
+  const entry = brain?.[player.id] ?? null;
+  const pct =
+    entry?.value && entry?.trend ? (entry.trend / Math.abs(entry.value)) * 100 : 0;
+  const trend = pct ? `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%` : null;
+  const injury =
+    entry?.injuryStatus && entry.injuryStatus !== "Healthy"
+      ? entry.injuryStatus.toUpperCase()
+      : null;
   return (
     <button
       type="button"
@@ -681,6 +691,15 @@ function RosterRow({
           {player.team}
           {player.bye ? ` · Bye ${player.bye}` : ""}
         </span>
+        {entry ? (
+          <span className="tabnum block truncate text-[10px] leading-tight text-muted-foreground">
+            {entry.value ? `Value: ${entry.value.toLocaleString()}` : ""}
+            {trend ? ` · ${trend}` : ""}
+            {injury ? (
+              <span className="font-semibold text-destructive"> · [{injury}]</span>
+            ) : null}
+          </span>
+        ) : null}
       </span>
       <span aria-hidden className="text-xs text-muted-foreground">
         {selected ? "✓" : "+"}
