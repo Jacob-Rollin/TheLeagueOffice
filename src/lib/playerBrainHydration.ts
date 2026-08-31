@@ -50,7 +50,7 @@ export interface BrainEntry {
   value: number;
   ecr: number;
   sd: number;
-  /** 7-day FantasyCalc trade market velocity (0 when unpublished). */
+  /** 30-day FantasyCalc value trend (0 when unpublished). */
   trend: number;
   injuryStatus: string;
   /** Sleeper native `injury_body_part` (e.g. "Hamstring"). */
