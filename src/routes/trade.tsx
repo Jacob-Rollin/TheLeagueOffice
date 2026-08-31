@@ -294,6 +294,7 @@ function TradePage() {
       teamName(draft.settings, draft.settings.myTeam);
 
   const otherTeams = useMemo(() => {
+    if (sandboxMode) return SANDBOX_RIVAL_TEAMS;
     if (league?.synced) {
       return league.teams
         .filter((t) => !t.isMine)
@@ -308,7 +309,7 @@ function TradePage() {
         owner: "",
         players: rostersByTeam.get(t) ?? [],
       }));
-  }, [league?.synced, league?.teams, rostersByTeam, draft.settings]);
+  }, [sandboxMode, league?.synced, league?.teams, rostersByTeam, draft.settings]);
 
 
 
