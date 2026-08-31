@@ -141,6 +141,14 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
     });
   }, [activeId, leagues, lastLiveIdRef]);
 
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    await queryClient.refetchQueries({
+      queryKey: ["active-league-connections", userId],
+      exact: true,
+    });
+  }, [queryClient, userId]);
+
   const activeLeague = useMemo(
     () =>
       sandboxMode
