@@ -305,27 +305,49 @@ function PlayerHubPage() {
             <Widget title="Injury risk">
 
               <div className="flex items-baseline justify-between">
-                <span
-                  className={cn(
-                    "font-display text-xl uppercase",
-                    injuryRisk.label === "High"
-                      ? "text-red-600"
-                      : injuryRisk.label === "Moderate"
-                        ? "text-amber-600"
-                        : "text-emerald-600",
-                  )}
-                >
-                  {injuryRisk.label}
+                <span className={cn("font-display text-xl uppercase", tier.text)}>
+                  {tier.label}
                 </span>
                 <span className="tabnum text-sm text-zinc-500">{injuryRisk.score}/100</span>
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded bg-zinc-200">
-                <div className="h-full bg-blue-600" style={{ width: `${injuryRisk.score}%` }} />
+                <div
+                  className={cn("h-full transition-[width] duration-500", tier.fill)}
+                  style={{ width: `${Math.min(100, Math.max(0, injuryRisk.score))}%` }}
+                />
               </div>
               <ul className="mt-2 space-y-1 text-xs text-zinc-500">
-                {injuryRisk.factors.map((f) => (
-                  <li key={f}>· {f}</li>
-                ))}
+                {player.injury && brainEntry?.injuryType && (
+                  <li>
+                    · <span className="font-semibold text-zinc-800">CORE DIAGNOSIS:</span>{" "}
+                    {brainEntry.injuryType}
+                  </li>
+                )}
+                {injuryRisk.factors
+                  .filter(
+                    (f) =>
+                      !f.toLowerCase().includes("currently listed") &&
+                      (!player.injury ||
+                        f.toLowerCase().trim() !== player.injury.toLowerCase().trim()),
+                  )
+                  .map((f) => {
+                    const lower = f.toLowerCase();
+                    const isWorkload =
+                      lower.includes("carries") ||
+                      lower.includes("touches") ||
+                      lower.includes("targets") ||
+                      lower.includes("snaps");
+                    const label = isWorkload ? "WORKLOAD NOTE" : "HISTORICAL TRACK";
+                    return (
+                      <li key={f}>
+                        · <span className="font-semibold text-zinc-800">{label}:</span> {f}
+                      </li>
+                    );
+                  })}
+                <li>
+                  · <span className="font-semibold text-zinc-800">CURRENT DESIGNATION:</span>{" "}
+                  {player.injury ?? "Healthy — no designation"}
+                </li>
               </ul>
             </Widget>
             )}
