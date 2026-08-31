@@ -293,16 +293,19 @@ function TradePage() {
 
 
 
-  const needScore = (p: Player) => {
-    const count = roster.filter((r) => r.pos === p.pos).length;
-    const configured = draft.settings.roster[p.pos] ?? 0;
-    return configured > count ? Math.min(12, (configured - count) * 4) : 0;
-  };
-  const needDelta = useMemo(
-    () => get.reduce((s, p) => s + needScore(p), 0) - give.reduce((s, p) => s + needScore(p), 0),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [get, give, roster, draft.settings.roster],
+  /** Data-driven roster fit: positional scarcity before vs. after the deal. */
+  const fit = useMemo(
+    () =>
+      rosterFit({
+        roster: userRoster.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+        give: give.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+        get: get.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+        starters: draft.settings.roster as unknown as Record<string, number>,
+      }),
+    [userRoster, give, get, scoring, draft.settings.roster],
   );
+  const needDelta = fit.pct;
+
 
   /**
    * Asymmetric packages: the side sending more bodies takes a consolidation
