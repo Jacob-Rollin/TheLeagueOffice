@@ -326,8 +326,13 @@ function TradePage() {
     () =>
       userRoster
         .filter((p) => !give.some((g) => g.id === p.id))
-        .map((p) => ({ name: p.name, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
-    [userRoster, give, scoring],
+        .concat(get)
+        .map((p) => ({
+          name: p.name,
+          pos: p.pos,
+          weekly: (p.proj?.[scoring] ?? 0) / WEEKS,
+        })),
+    [userRoster, give, get, scoring],
   );
   const constraint = rosterConstraint({
     rosterCount: userRoster.length,
@@ -335,7 +340,9 @@ function TradePage() {
     giveCount: give.length,
     getCount: get.length,
     bench: benchPool,
+    starters: draft.settings.roster as unknown as Record<string, number>,
   });
+
 
   const getWeekly = Math.max(0, rawGetWeekly - constraint.penalty);
   const basePct = ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
