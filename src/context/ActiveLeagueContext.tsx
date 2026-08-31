@@ -140,7 +140,7 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
       return false;
     });
   }, [activeId, leagues, lastLiveIdRef]);
-...
+
   const activeLeague = useMemo(
     () =>
       sandboxMode
