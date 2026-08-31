@@ -9,6 +9,7 @@ import { PlayerAvatar } from "./PlayerAvatar";
 import { detailQuery } from "./PlayerDetail";
 import { cn } from "@/lib/utils";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { injuryMicroBadge, SANDBOX_INJURY_OVERRIDES } from "@/lib/sandbox-rosters";
 import {
   POSITIONS,
   roundOf,

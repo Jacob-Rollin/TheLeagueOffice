@@ -242,7 +242,7 @@ function TradePage() {
         owner: "",
         players: rostersByTeam.get(t) ?? [],
       }));
-  }, [sandboxMode, league?.synced, league?.teams, rostersByTeam, draft.settings]);
+  }, [sandboxTeams, league?.synced, league?.teams, rostersByTeam, draft.settings]);
 
 
 
