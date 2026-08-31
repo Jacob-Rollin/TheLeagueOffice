@@ -591,8 +591,8 @@ function CompareTable({ title, rows }: { title: string; rows: CompareRow[] }) {
           <tr key={r.label} className="border-t border-border">
             <td
               className={cn(
-                "w-1/3 px-3 py-2 text-left font-mono text-[13px] tabular-nums",
-                r.giveWin ? "bg-muted/30 font-semibold text-foreground" : "text-foreground",
+                "w-1/3 px-3 py-2 text-left text-base tabular-nums",
+                r.giveWin ? "font-bold text-emerald-600" : "font-semibold text-foreground",
               )}
             >
               {r.give}
@@ -602,8 +602,8 @@ function CompareTable({ title, rows }: { title: string; rows: CompareRow[] }) {
             </td>
             <td
               className={cn(
-                "w-1/3 px-3 py-2 text-right font-mono text-[13px] tabular-nums",
-                r.getWin ? "bg-muted/30 font-semibold text-foreground" : "text-foreground",
+                "w-1/3 px-3 py-2 text-right text-base tabular-nums",
+                r.getWin ? "font-bold text-emerald-600" : "font-semibold text-foreground",
               )}
             >
               {r.get}
