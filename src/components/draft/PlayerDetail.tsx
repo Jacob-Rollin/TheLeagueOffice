@@ -37,12 +37,15 @@ export function PlayerDetail({
 }) {
   const { data, isLoading } = useQuery(detailQuery(id));
   const draft = useDraft();
+  const brain = usePlayerBrain();
   const [tab, setTab] = useState<"overview" | "news">("overview");
 
   if (isLoading) return <p className="p-6 text-center text-sm text-muted-foreground">Loading player…</p>;
   if (!data) return <p className="p-6 text-center text-sm text-muted-foreground">Player not found.</p>;
 
   const { player, history, projection, depthChart, sos, injuryRisk, season } = data;
+  const brainEntry = brain?.[player.id] ?? null;
+  const tier = riskTier(injuryRisk.score);
   const scoring = draft.settings.scoring;
   const drafted = draft.draftedIds.has(player.id);
   const watched = draft.watchIds.has(player.id);
