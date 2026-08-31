@@ -333,17 +333,59 @@ export function rosterConstraint(input: {
 }
 
 
-/** Thematic executive summary for the grading banner. */
+const SLOT_LABEL: Record<string, string> = {
+  QB: "QB",
+  RB: "RB",
+  WR: "WR",
+  TE: "TE",
+  K: "K",
+  DEF: "DEF",
+  FLEX: "flex",
+};
+
+/**
+ * Executive summary driven by the marginal starting-lineup simulation: it
+ * names the slots whose weekly floor actually moved, not the raw value gap.
+ */
 export function executiveSummary(input: {
   ready: boolean;
   pct: number;
   giveCount: number;
   getCount: number;
   overflow: boolean;
+  impact?: MarginalImpact;
 }): string {
   if (!input.ready) return "Add players to both sides to run the valuation model.";
   const consolidating = input.getCount < input.giveCount;
   const spreading = input.getCount > input.giveCount;
+
+  const impact = input.impact;
+  if (impact) {
+    const shifts = Object.entries(impact.slotDelta)
+      .filter(([, v]) => Math.abs(v) >= 0.25)
+      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+    const ups = shifts.filter(([, v]) => v > 0);
+    const downs = shifts.filter(([, v]) => v < 0);
+    const fmt = (e: [string, number]) =>
+      `${SLOT_LABEL[e[0]] ?? e[0]} tier floor (${e[1] > 0 ? "+" : ""}${e[1].toFixed(1)} pts/wk)`;
+
+    if (impact.delta > 0.25) {
+      const lead = ups.length ? fmt(ups[0]!) : "weekly starting floor";
+      const tail = downs.length
+        ? ` while giving back ${downs[0]![1].toFixed(1)} pts/wk at ${SLOT_LABEL[downs[0]![0]] ?? downs[0]![0]}`
+        : ", while holding positional parity everywhere else";
+      const scale = impact.delta >= 2 ? "significantly upgrades" : "upgrades";
+      return `TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`;
+    }
+    if (impact.delta < -0.25) {
+      const lead = downs.length ? fmt(downs[0]!) : "weekly starting floor";
+      const tail = ups.length ? ` The only gain is ${fmt(ups[0]!)}.` : "";
+      return `TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`;
+    }
+    return `TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`;
+  }
+
+
 
   if (input.pct >= 15)
     return consolidating
