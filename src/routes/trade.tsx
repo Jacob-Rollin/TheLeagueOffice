@@ -515,8 +515,9 @@ function TradePage() {
       </section>
 
       <p className="mt-3 text-center text-[11px] text-muted-foreground">
-        Green marks the better side. Grades blend this year's projections (65%) with last season's
-        per-game production (35%), then adjust for open roster slots configured in the War Room.
+        The shaded column holds the statistical advantage. Grades blend this year's projections
+        (65%) with last season's per-game production (35%), apply a consolidation discount to the
+        wider package, then adjust for open roster slots configured in the War Room.
       </p>
       </main>
 
