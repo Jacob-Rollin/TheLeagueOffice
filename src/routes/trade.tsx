@@ -375,6 +375,7 @@ function TradePage() {
           players={userRoster}
           selectedIds={new Set(give.map((p) => p.id))}
           onPick={(p) => setGive((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+          brain={brain}
         />
       )}
 
@@ -531,6 +532,7 @@ function TradePage() {
           teams={leagueTeams.map((t) => ({ ...t, players: opponentRosters[t.key] ?? t.players }))}
           selectedIds={new Set(get.map((p) => p.id))}
           onPick={(p) => setGet((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+          brain={brain}
         />
       )}
 
