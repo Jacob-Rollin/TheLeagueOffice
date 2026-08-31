@@ -690,22 +690,26 @@ function RosterRow({
           : "hover:border-border hover:bg-surface focus-visible:border-border",
       )}
     >
-      <PositionBadge pos={player.pos} className="h-5 shrink-0 text-[10px]" />
+      <PlayerAvatar
+        id={player.id}
+        pos={player.pos}
+        team={player.team}
+        name={player.name}
+        className="size-9"
+        logoClassName="size-3.5"
+      />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium leading-tight">{player.name}</span>
-        <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
-          {player.team}
-          {player.bye ? ` · Bye ${player.bye}` : ""}
+        <span className="block truncate whitespace-nowrap text-[10px] uppercase tracking-widest text-muted-foreground">
+          {player.pos}
+          {player.team ? ` · ${player.team}` : ""}
+          {player.bye ? ` · BYE ${player.bye}` : ""}
+          {entry?.value ? ` · Value: ${entry.value.toLocaleString()}` : ""}
+          {trend ? ` · ${trend}` : ""}
+          {injury ? (
+            <span className="font-semibold text-destructive"> · [{injury}]</span>
+          ) : null}
         </span>
-        {entry ? (
-          <span className="tabnum block truncate text-[10px] leading-tight text-muted-foreground">
-            {entry.value ? `Value: ${entry.value.toLocaleString()}` : ""}
-            {trend ? ` · ${trend}` : ""}
-            {injury ? (
-              <span className="font-semibold text-destructive"> · [{injury}]</span>
-            ) : null}
-          </span>
-        ) : null}
       </span>
       <span aria-hidden className="text-xs text-muted-foreground">
         {selected ? "✓" : "+"}
