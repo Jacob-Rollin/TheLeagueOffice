@@ -26,6 +26,10 @@ export type Player = {
   posRank: number;
   proj: { std: number; half: number; ppr: number };
   prev: { std: number; half: number; ppr: number } | null;
+  /** Sandbox/demo override for injury badge rendering. */
+  injuryStatus?: string;
+  /** Sandbox/demo override carrying the affected body part. */
+  injury_body_part?: string;
 };
 
 export type PlayersPayload = {
