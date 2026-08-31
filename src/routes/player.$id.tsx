@@ -6,6 +6,7 @@ import { useState } from "react";
 import { PlayerNews } from "@/components/draft/PlayerNews";
 
 import { useDraft } from "@/hooks/use-draft";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { getGameLogs, getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
@@ -109,6 +110,7 @@ function PlayerHubPage() {
   const { data, isLoading } = useQuery(profileQuery(id));
   const { data: bio } = useQuery(bioQuery(id));
   const { watchIds, toggleWatch } = useDraft();
+  const brain = usePlayerBrain();
   const [tab, setTab] = useState<TabKey>("overview");
 
   if (isLoading)
