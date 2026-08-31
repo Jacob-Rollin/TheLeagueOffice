@@ -131,6 +131,18 @@ function TradePage() {
   const { user, ready: authReady } = useAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const draft = useDraft();
+  /** Cached market analytics (value + 30-day trend) from the local brain matrix. */
+  const brain = usePlayerBrain();
+  const marketLine = (p: Player) => {
+    const entry = brain?.[p.id] ?? null;
+    const bits = [p.pos, p.team || "FA", p.bye ? `BYE ${p.bye}` : null].filter(Boolean) as string[];
+    if (entry?.value) bits.push(`Value: ${entry.value.toLocaleString()}`);
+    const pct =
+      entry?.value && entry?.trend ? (entry.trend / Math.abs(entry.value)) * 100 : 0;
+    const trend = pct ? `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%` : null;
+    return { bits, trend, up: pct > 0 };
+  };
+
 
   const [give, setGive] = useState<Player[]>([]);
   const [get, setGet] = useState<Player[]>([]);
