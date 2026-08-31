@@ -215,6 +215,16 @@ export function ProfileMenu() {
                 >
                   Sync New League
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleSandbox();
+                    setOpen(false);
+                  }}
+                  className="mt-3 block w-full text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {sandboxMode ? "Exit Sandbox Mode" : "Enter Sandbox Mode"}
+                </button>
               </div>
 
               {/* Right pane — account navigation */}
