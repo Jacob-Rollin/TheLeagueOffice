@@ -145,27 +145,33 @@ export function PlayerDetail({
           <Section title="Injury risk">
             <div className="rounded-lg border border-border bg-card p-3">
               <div className="flex items-center justify-between">
-                <span
-                  className={cn(
-                    "font-display text-lg uppercase",
-                    injuryRisk.label === "High"
-                      ? "text-destructive"
-                      : injuryRisk.label === "Moderate"
-                        ? "text-accent"
-                        : "text-primary",
-                  )}
-                >
-                  {injuryRisk.label}
+                <span className={cn("font-display text-lg uppercase", tier.text)}>
+                  {tier.label}
                 </span>
                 <span className="tabnum text-sm text-muted-foreground">{injuryRisk.score}/100</span>
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded bg-secondary">
-                <div className="h-full bg-primary" style={{ width: `${injuryRisk.score}%` }} />
+                <div
+                  className={cn("h-full transition-[width] duration-500", tier.fill)}
+                  style={{ width: `${Math.min(100, Math.max(0, injuryRisk.score))}%` }}
+                />
               </div>
               <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                {player.injury && brainEntry?.injuryType && (
+                  <li>
+                    · <span className="font-semibold text-foreground">CORE DIAGNOSIS:</span>{" "}
+                    {brainEntry.injuryType}
+                  </li>
+                )}
                 {injuryRisk.factors.map((f) => (
-                  <li key={f}>· {f}</li>
+                  <li key={f}>
+                    · <span className="font-semibold text-foreground">HISTORICAL TRACK:</span> {f}
+                  </li>
                 ))}
+                <li>
+                  · <span className="font-semibold text-foreground">CURRENT DESIGNATION:</span>{" "}
+                  {player.injury ?? "Healthy — no designation"}
+                </li>
               </ul>
             </div>
           </Section>
