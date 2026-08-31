@@ -608,9 +608,8 @@ function PlayerListImpl({
                     value={
                       (() => {
                         const n = trendOf(p);
-                        if (n === null || n === 0) return "—";
-                        const pct = n / 100;
-                        return `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%`;
+                        if (n === null) return "—";
+                        return `${n > 0 ? "▲" : "▼"} ${Math.abs(n).toFixed(1)}%`;
                       })()
                     }
                     className={cn(
