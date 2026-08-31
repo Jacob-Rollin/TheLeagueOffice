@@ -61,6 +61,80 @@ export const Route = createFileRoute("/trade")({
 
 const WEEKS = 17;
 
+/** Build a minimal Player object for sandbox/demo rosters. */
+function mockPlayer(p: Partial<Player> & { id: string; name: string; pos: Pos; team: string }): Player {
+  return {
+    age: null,
+    exp: null,
+    injury: null,
+    bye: null,
+    adp: { std: 999, half: 999, ppr: 999 },
+    adpRange: { min: 999, max: 999 },
+    rank: { std: 999, half: 999, ppr: 999 },
+    posRank: 999,
+    proj: { std: 0, half: 0, ppr: 0 },
+    prev: { std: 0, half: 0, ppr: 0 },
+    ...p,
+  } as Player;
+}
+
+/** Demo rosters surfaced when Sandbox Mode is active so users can test trades
+ *  without a live league connection. */
+const SANDBOX_MY_TEAM: Player[] = [
+  mockPlayer({ id: "4046", name: "Patrick Mahomes", pos: "QB", team: "KC" }),
+  mockPlayer({ id: "4866", name: "Saquon Barkley", pos: "RB", team: "PHI" }),
+  mockPlayer({ id: "9221", name: "Jahmyr Gibbs", pos: "RB", team: "DET" }),
+  mockPlayer({ id: "6786", name: "CeeDee Lamb", pos: "WR", team: "DAL" }),
+  mockPlayer({
+    id: "6801",
+    name: "Tee Higgins",
+    pos: "WR",
+    team: "CIN",
+    injuryStatus: "Questionable",
+    injury_body_part: "Hamstring",
+  }),
+  mockPlayer({ id: "10859", name: "Sam LaPorta", pos: "TE", team: "DET" }),
+  mockPlayer({ id: "6813", name: "Jonathan Taylor", pos: "RB", team: "IND" }),
+];
+
+const SANDBOX_RIVAL_TEAMS: OpponentTeam[] = [
+  {
+    key: "demo-1",
+    name: "Demo Team 1",
+    owner: "",
+    players: [
+      mockPlayer({ id: "4984", name: "Josh Allen", pos: "QB", team: "BUF" }),
+      mockPlayer({ id: "3198", name: "Derrick Henry", pos: "RB", team: "BAL" }),
+      mockPlayer({ id: "8155", name: "Breece Hall", pos: "RB", team: "NYJ" }),
+      mockPlayer({ id: "6794", name: "Justin Jefferson", pos: "WR", team: "MIN" }),
+      mockPlayer({ id: "7547", name: "Amon-Ra St. Brown", pos: "WR", team: "DET" }),
+      mockPlayer({ id: "1466", name: "Travis Kelce", pos: "TE", team: "KC" }),
+      mockPlayer({
+        id: "7594",
+        name: "Chuba Hubbard",
+        pos: "RB",
+        team: "CAR",
+        injuryStatus: "Out",
+        injury_body_part: "Knee",
+      }),
+    ],
+  },
+  {
+    key: "demo-2",
+    name: "Demo Team 2",
+    owner: "",
+    players: [
+      mockPlayer({ id: "6904", name: "Jalen Hurts", pos: "QB", team: "PHI" }),
+      mockPlayer({ id: "4199", name: "Aaron Jones", pos: "RB", team: "MIN" }),
+      mockPlayer({ id: "9509", name: "Bijan Robinson", pos: "RB", team: "ATL" }),
+      mockPlayer({ id: "7564", name: "Ja'Marr Chase", pos: "WR", team: "CIN" }),
+      mockPlayer({ id: "8146", name: "Garrett Wilson", pos: "WR", team: "NYJ" }),
+      mockPlayer({ id: "4039", name: "Cooper Kupp", pos: "WR", team: "SEA" }),
+      mockPlayer({ id: "4217", name: "George Kittle", pos: "TE", team: "SF" }),
+    ],
+  },
+];
+
 type Metrics = {
   player: Player;
   projTotal: number;
