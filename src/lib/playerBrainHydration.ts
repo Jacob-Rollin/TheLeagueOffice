@@ -19,9 +19,9 @@ import { readCache } from "@/lib/sleeper-cache";
 
 const BUCKET = "player_brain";
 const FILE = "master_player_brain.json";
-// Key suffix bumped to v4: any stale timestamp from the pre-ECR/SD payload era
+// Key suffix bumped to v5: stale timestamps from the FantasyPros payload era
 // is ignored, so the next boot bypasses the 30-minute blockade and refetches.
-const HEARTBEAT_KEY = "player-brain:last-sync:v4";
+const HEARTBEAT_KEY = "player-brain:last-sync:v5";
 const MATRIX_KEY = "player-brain:matrix";
 const META_KEY = "player-brain:meta";
 const HEARTBEAT_MS = 30 * 60 * 1000;
@@ -35,12 +35,12 @@ export interface MasterPlayerBrainPayload {
   positions: string[];
   teams: string[];
   values: number[];
-  ecr: number[];
-  sd: number[];
+  ecr?: number[];
+  sd?: number[];
   trends?: number[];
   injuries: string[];
   injury_types?: string[];
-  timelines?: string[];
+  injury_notes?: string[];
 }
 
 export interface BrainEntry {
@@ -53,8 +53,10 @@ export interface BrainEntry {
   /** 7-day FantasyCalc trade market velocity (0 when unpublished). */
   trend: number;
   injuryStatus: string;
+  /** Sleeper native `injury_body_part` (e.g. "Hamstring"). */
   injuryType: string;
-  timeMissed: string;
+  /** Sleeper native `injury_notes` free text. */
+  injuryNotes: string;
 }
 
 export type BrainMatrix = Record<string, BrainEntry>;
@@ -115,7 +117,7 @@ export function compileMatrix(brain: MasterPlayerBrainPayload): BrainMatrix {
       trend: brain.trends?.[i] ?? 0,
       injuryStatus: brain.injuries?.[i] ?? "Healthy",
       injuryType: brain.injury_types?.[i] ?? "",
-      timeMissed: brain.timelines?.[i] ?? "",
+      injuryNotes: brain.injury_notes?.[i] ?? "",
     };
   }
   return matrix;
@@ -157,7 +159,7 @@ async function localTemplateMatrix(): Promise<BrainMatrix | null> {
         trend: 0,
         injuryStatus: p.injury ?? "Healthy",
         injuryType: "",
-        timeMissed: "",
+        injuryNotes: "",
       };
     }
     return Object.keys(matrix).length > 0 ? matrix : null;
