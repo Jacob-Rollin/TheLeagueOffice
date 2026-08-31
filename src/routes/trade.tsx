@@ -9,8 +9,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
-import { teamName, type Player, type Scoring } from "@/lib/draft";
+import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { executiveSummary, packageScore, rosterConstraint } from "@/lib/trade-engine";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
