@@ -12,6 +12,7 @@ import { PositionBadge } from "@/components/draft/PositionBadge";
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import { executiveSummary, packageScore, rosterConstraint } from "@/lib/trade-engine";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
@@ -374,6 +375,7 @@ function TradePage() {
           players={userRoster}
           selectedIds={new Set(give.map((p) => p.id))}
           onPick={(p) => setGive((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+          brain={brain}
         />
       )}
 
@@ -530,6 +532,7 @@ function TradePage() {
           teams={leagueTeams.map((t) => ({ ...t, players: opponentRosters[t.key] ?? t.players }))}
           selectedIds={new Set(get.map((p) => p.id))}
           onPick={(p) => setGet((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+          brain={brain}
         />
       )}
 
@@ -657,11 +660,21 @@ function RosterRow({
   player,
   selected,
   onPick,
+  brain,
 }: {
   player: Player;
   selected: boolean;
   onPick: (p: Player) => void;
+  brain?: BrainMatrix | null | undefined;
 }) {
+  const entry = brain?.[player.id] ?? null;
+  const pct =
+    entry?.value && entry?.trend ? (entry.trend / Math.abs(entry.value)) * 100 : 0;
+  const trend = pct ? `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%` : null;
+  const injury =
+    entry?.injuryStatus && entry.injuryStatus !== "Healthy"
+      ? entry.injuryStatus.toUpperCase()
+      : null;
   return (
     <button
       type="button"
@@ -681,6 +694,15 @@ function RosterRow({
           {player.team}
           {player.bye ? ` · Bye ${player.bye}` : ""}
         </span>
+        {entry ? (
+          <span className="tabnum block truncate text-[10px] leading-tight text-muted-foreground">
+            {entry.value ? `Value: ${entry.value.toLocaleString()}` : ""}
+            {trend ? ` · ${trend}` : ""}
+            {injury ? (
+              <span className="font-semibold text-destructive"> · [{injury}]</span>
+            ) : null}
+          </span>
+        ) : null}
       </span>
       <span aria-hidden className="text-xs text-muted-foreground">
         {selected ? "✓" : "+"}
@@ -695,12 +717,14 @@ function RosterColumn({
   players,
   selectedIds,
   onPick,
+  brain,
 }: {
   title: string;
   subtitle: string;
   players: Player[];
   selectedIds: Set<string>;
   onPick: (p: Player) => void;
+  brain?: BrainMatrix | null | undefined;
 }) {
   return (
     <aside className="min-w-0 rounded-xl border border-border bg-card p-3 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
@@ -716,7 +740,7 @@ function RosterColumn({
       ) : (
         <div className="mt-2 space-y-0.5">
           {players.map((p) => (
-            <RosterRow key={p.id} player={p} selected={selectedIds.has(p.id)} onPick={onPick} />
+            <RosterRow key={p.id} player={p} selected={selectedIds.has(p.id)} onPick={onPick} brain={brain} />
           ))}
         </div>
       )}
@@ -728,10 +752,12 @@ function OtherTeamsColumn({
   teams,
   selectedIds,
   onPick,
+  brain,
 }: {
   teams: { key: string; name: string; owner: string; players: Player[] }[];
   selectedIds: Set<string>;
   onPick: (p: Player) => void;
+  brain?: BrainMatrix | null | undefined;
 }) {
 
   return (
@@ -773,6 +799,7 @@ function OtherTeamsColumn({
                       player={p}
                       selected={selectedIds.has(p.id)}
                       onPick={onPick}
+                      brain={brain}
                     />
                   ))
                 )}
