@@ -103,7 +103,7 @@ export function optimizeLineup(
   }
 
   // Pass 2 — dynamic flex optimization from the surplus RB/WR/TE pool.
-  const flexNeed = Math.max(0, req.FLEX ?? 0);
+  const flexNeed = Math.max(0, req['FLEX'] ?? 0);
   let flexFilled = 0;
   for (const p of pool) {
     if (flexFilled >= flexNeed) break;
@@ -114,7 +114,7 @@ export function optimizeLineup(
     flexFilled++;
     used++;
   }
-  if (flexFilled < flexNeed) vacancies.FLEX = flexNeed - flexFilled;
+  if (flexFilled < flexNeed) vacancies['FLEX'] = flexNeed - flexFilled;
 
   for (const p of pool) delete (p as { _used?: boolean })._used;
 
@@ -139,7 +139,6 @@ export function rosterFit(input: {
   starters: Record<string, number>;
 }): RosterFit {
   const req = { ...BASE_STARTERS, ...input.starters };
-  const giveKey = new Set(input.give.map((p, i) => `${p.pos}:${p.weekly}:${i}`));
   const after: FitPlayer[] = [];
   const takenGive = [...input.give];
   for (const p of input.roster) {
@@ -150,7 +149,6 @@ export function rosterFit(input: {
     }
     after.push(p);
   }
-  void giveKey;
   after.push(...input.get);
 
   const before = optimizeLineup(input.roster, req);
@@ -251,7 +249,7 @@ export function rosterConstraint(input: {
   const over = projected - input.rosterCap;
   if (over <= 0) return none;
 
-  const starters = input.starters ?? {};
+  const starters = { ...BASE_STARTERS, ...(input.starters ?? {}) };
   const remaining: Record<string, number> = {};
   for (const p of input.bench) {
     const pos = p.pos ?? "";
