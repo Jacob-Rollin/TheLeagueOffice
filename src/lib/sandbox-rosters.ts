@@ -137,7 +137,7 @@ export function buildSandboxTeams(catalog: Player[]): {
 } {
   const byId = new Map(catalog.map((p) => [p.id, p]));
   const resolve = (spec: SandboxSpec): Player =>
-    withSandboxInjury(byId.get(spec.id) ?? stubPlayer(spec));
+    byId.get(spec.id) ?? stubPlayer(spec);
   return {
     myTeam: SANDBOX_MY_TEAM_SPEC.map(resolve),
     rivalTeams: SANDBOX_RIVAL_SPECS.map((t) => ({
