@@ -95,12 +95,26 @@ function metricsFor(player: Player, detail: PlayerDetail | undefined, scoring: S
   };
 }
 
-/** Star premium: the best asset in a package carries most of the weight. */
-function packageWeekly(rows: Metrics[]): number {
-  return rows
-    .map((r) => r.weekly)
-    .sort((a, b) => b - a)
-    .reduce((sum, v, i) => sum + v * Math.pow(0.9, i), 0);
+type MarketLine = { bits: string[]; trend: string | null; up: boolean };
+
+/** Single selected-player row: name plus cached market assets, no raw labels. */
+function MarketRow({ player, line }: { player: Player; line: MarketLine }) {
+  return (
+    <span className="block min-w-0">
+      <span className="block truncate text-sm font-medium leading-tight text-foreground">
+        {player.name}
+      </span>
+      <span className="tabnum block truncate text-[11px] leading-tight text-muted-foreground">
+        {line.bits.join(" · ")}
+        {line.trend ? " · " : ""}
+        {line.trend ? (
+          <span className={cn("font-medium", line.up ? "text-foreground" : "text-muted-foreground")}>
+            {line.trend}
+          </span>
+        ) : null}
+      </span>
+    </span>
+  );
 }
 
 type OpponentTeam = { key: string; name: string; owner: string; players: Player[] };
