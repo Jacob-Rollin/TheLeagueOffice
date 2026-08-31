@@ -690,7 +690,7 @@ function RosterRow({
       disabled={selected}
       onClick={() => onPick(player)}
       className={cn(
-        "group flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors",
+        "group relative flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors",
         selected
           ? "cursor-default opacity-50"
           : "hover:border-border hover:bg-surface focus-visible:border-border",
@@ -704,13 +704,12 @@ function RosterRow({
         className="size-9"
         logoClassName="size-3.5"
       />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium leading-tight text-foreground">
+      <span className="min-w-0 flex-1 pr-12">
+        <span className="block truncate text-sm font-medium leading-tight text-black">
           {player.name}
-          <span className="ml-1 text-[11px] text-muted-foreground">
-            {" "}
-            ({meta.join(" · ")})
-          </span>
+        </span>
+        <span className="block truncate whitespace-nowrap text-[11px] leading-tight text-muted-foreground">
+          {meta.join(" · ")}
         </span>
         <span className="block truncate whitespace-nowrap text-[11px] leading-tight text-muted-foreground">
           <span>Value: {entry?.value ? entry.value.toLocaleString() : "—"}</span>
@@ -723,10 +722,10 @@ function RosterRow({
       <span
         aria-hidden
         className={cn(
-          "flex h-6 w-6 shrink-0 items-center justify-center rounded border text-sm font-semibold transition-colors",
+          "absolute right-3 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded border border-input bg-secondary/40 text-sm font-semibold transition-colors",
           selected
-            ? "border-border bg-muted text-muted-foreground"
-            : "border-border bg-secondary/40 text-black group-hover:bg-foreground group-hover:text-base group-hover:font-extrabold group-hover:text-background",
+            ? "bg-muted text-muted-foreground"
+            : "text-black group-hover:bg-primary group-hover:text-primary-foreground",
         )}
       >
         {selected ? "✓" : "+"}
