@@ -64,6 +64,8 @@ const FLEX_ELIGIBLE = ["RB", "WR", "TE"];
 export type Lineup = {
   /** Weekly points produced by the optimized starting lineup. */
   points: number;
+  /** Weekly points produced by each starting slot group (FLEX included). */
+  bySlot: Record<string, number>;
   /** Starting slots left unfilled, by position (FLEX included). */
   vacancies: Record<string, number>;
   /** Total unfilled starting slots. */
@@ -84,18 +86,21 @@ export function optimizeLineup(
   const req = { ...BASE_STARTERS, ...starters };
   const pool = [...players].sort((a, b) => b.weekly - a.weekly);
   const vacancies: Record<string, number> = {};
+  const bySlot: Record<string, number> = {};
   let points = 0;
   let used = 0;
 
-  // Pass 1 — dedicated slots.
+  // Pass A/B pass 1 — dedicated slots, highest projection first.
   for (const pos of ["QB", "RB", "WR", "TE", "K", "DEF"]) {
     const need = Math.max(0, req[pos] ?? 0);
     let filled = 0;
+    bySlot[pos] = 0;
     for (let i = 0; i < pool.length && filled < need; i++) {
       const p = pool[i]!;
       if (p.pos !== pos || (p as { _used?: boolean })._used) continue;
       (p as { _used?: boolean })._used = true;
       points += p.weekly;
+      bySlot[pos] = (bySlot[pos] ?? 0) + p.weekly;
       filled++;
       used++;
     }
@@ -105,12 +110,14 @@ export function optimizeLineup(
   // Pass 2 — dynamic flex optimization from the surplus RB/WR/TE pool.
   const flexNeed = Math.max(0, req['FLEX'] ?? 0);
   let flexFilled = 0;
+  bySlot['FLEX'] = 0;
   for (const p of pool) {
     if (flexFilled >= flexNeed) break;
     if ((p as { _used?: boolean })._used) continue;
     if (!FLEX_ELIGIBLE.includes(p.pos)) continue;
     (p as { _used?: boolean })._used = true;
     points += p.weekly;
+    bySlot['FLEX'] = (bySlot['FLEX'] ?? 0) + p.weekly;
     flexFilled++;
     used++;
   }
@@ -120,84 +127,125 @@ export function optimizeLineup(
 
   return {
     points,
+    bySlot,
     vacancies,
     vacancyCount: Object.values(vacancies).reduce((a, b) => a + b, 0),
     benchCount: Math.max(0, players.length - used),
   };
 }
 
+export type MarginalImpact = {
+  /** Optimized weekly starting points before the deal. */
+  before: number;
+  /** Optimized weekly starting points after the deal. */
+  after: number;
+  /** Marginal lineup margin: after − before, in weekly points. */
+  delta: number;
+  /** Per-slot weekly point shift (QB, RB, WR, TE, K, DEF, FLEX). */
+  slotDelta: Record<string, number>;
+};
+
+/** Build the post-trade roster pool (remove give, insert get). */
+function applyTrade(roster: FitPlayer[], give: FitPlayer[], get: FitPlayer[]): FitPlayer[] {
+  const after: FitPlayer[] = [];
+  const pending = [...give];
+  for (const p of roster) {
+    const idx = pending.findIndex((g) => g.pos === p.pos && Math.abs(g.weekly - p.weekly) < 1e-6);
+    if (idx >= 0) {
+      pending.splice(idx, 1);
+      continue;
+    }
+    after.push(p);
+  }
+  after.push(...get);
+  return after;
+}
+
 /**
- * Roster fit measured strictly against the optimized starting lineup: does the
- * deal fill a vacant starting slot or raise starting-lineup output? Incoming
- * players who cannot crack the lineup (a redundant second QB, a fifth WR) are
- * bench depth and drag the fit percentage down when premium starters leave.
+ * Marginal Starting Lineup Impact simulation.
+ *
+ * Pass A simulates the highest-scoring lineup from the current roster; Pass B
+ * re-optimizes after swapping the packages, so a superior incoming asset
+ * automatically benches the weaker starter it replaces. Raw value sums and
+ * static roster counts play no part in the result.
+ */
+export function marginalImpact(input: {
+  roster: FitPlayer[];
+  give: FitPlayer[];
+  get: FitPlayer[];
+  starters: Record<string, number>;
+}): MarginalImpact {
+  const req = { ...BASE_STARTERS, ...input.starters };
+  const before = optimizeLineup(input.roster, req);
+  const after = optimizeLineup(applyTrade(input.roster, input.give, input.get), req);
+  const slotDelta: Record<string, number> = {};
+  for (const slot of ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX"])
+    slotDelta[slot] = (after.bySlot[slot] ?? 0) - (before.bySlot[slot] ?? 0);
+  return {
+    before: before.points,
+    after: after.points,
+    delta: after.points - before.points,
+    slotDelta,
+  };
+}
+
+/**
+ * Roster fit measured strictly by the marginal starting-lineup margin: if the
+ * incoming assets physically raise the weekly point floor of the active
+ * starting slots, the trade scores favorably regardless of package size.
  */
 export function rosterFit(input: {
   roster: FitPlayer[];
   give: FitPlayer[];
   get: FitPlayer[];
   starters: Record<string, number>;
-}): RosterFit {
+}): RosterFit & { impact: MarginalImpact } {
   const req = { ...BASE_STARTERS, ...input.starters };
-  const after: FitPlayer[] = [];
-  const takenGive = [...input.give];
-  for (const p of input.roster) {
-    const idx = takenGive.findIndex((g) => g.pos === p.pos && g.weekly === p.weekly);
-    if (idx >= 0) {
-      takenGive.splice(idx, 1);
-      continue;
-    }
-    after.push(p);
-  }
-  after.push(...input.get);
-
   const before = optimizeLineup(input.roster, req);
-  const now = optimizeLineup(after, req);
+  const now = optimizeLineup(applyTrade(input.roster, input.give, input.get), req);
+  const impact = marginalImpact(input);
 
   const fills: string[] = [];
   const clogs: string[] = [];
   let pct = 0;
 
-  const positions = Object.keys(req).filter((k) => (req[k] ?? 0) > 0);
-  for (const pos of positions) {
-    const vb = before.vacancies[pos] ?? 0;
-    const va = now.vacancies[pos] ?? 0;
-    if (vb > va) {
-      pct += (vb - va) * 8;
-      fills.push(pos);
-    } else if (va > vb) {
-      pct -= (va - vb) * 10;
-    }
+  const slots = ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX"].filter((k) => (req[k] ?? 0) > 0);
+  for (const slot of slots) {
+    const vb = before.vacancies[slot] ?? 0;
+    const va = now.vacancies[slot] ?? 0;
+    if (vb > va) fills.push(slot);
+    else if (va > vb) pct -= (va - vb) * 6;
+    const d = impact.slotDelta[slot] ?? 0;
+    if (d > 0.5 && !fills.includes(slot)) fills.push(slot);
   }
 
-  // Starting-lineup production swing, normalised against the current lineup.
-  const swing = now.points - before.points;
-  pct += Math.max(-15, Math.min(15, (swing / Math.max(before.points, 1)) * 100));
+  // Core signal: marginal weekly margin, normalised against the current lineup.
+  const base = Math.max(before.points, 1);
+  pct += Math.max(-25, Math.min(25, (impact.delta / base) * 140));
 
-  // Bench bloat: incoming bodies that never crack the optimized lineup.
-  const benchAdds = Math.max(0, now.benchCount - before.benchCount);
-  if (benchAdds > 0 && swing <= 0) {
-    pct -= benchAdds * 5;
-    for (const p of input.get) {
-      const filledSomething = fills.includes(p.pos);
-      if (!filledSomething && !clogs.includes(p.pos)) clogs.push(p.pos);
-    }
+  // A genuine starting upgrade overrules package-size dilution.
+  if (impact.delta > 0.25) pct = Math.max(pct, 8);
+  if (impact.delta > 2) pct = Math.max(pct, 15);
+
+  // Incoming bodies that never crack the optimized lineup are bench depth.
+  if (impact.delta <= 0) {
+    for (const p of input.get) if (!fills.includes(p.pos) && !clogs.includes(p.pos)) clogs.push(p.pos);
   }
 
   pct = Math.max(-25, Math.min(25, Math.round(pct)));
 
+  const d = impact.delta;
   const note = !input.get.length
     ? "No incoming players to fit."
-    : fills.length && !clogs.length
-      ? `Fills starting need at ${fills.join(", ")}.`
-      : clogs.length && !fills.length
-        ? `Starting lineup is already full at ${clogs.join(", ")} — incoming players are bench depth.`
-        : fills.length && clogs.length
-          ? `Upgrades ${fills.join(", ")} but adds bench depth at ${clogs.join(", ")}.`
-          : "Neutral fit — the optimized starting lineup is unchanged.";
+    : d > 0.25
+      ? `Marginal lineup margin +${d.toFixed(1)} pts/wk — the incoming assets start for you at ${fills.join(", ") || "flex"}.`
+      : d < -0.25
+        ? `Marginal lineup margin ${d.toFixed(1)} pts/wk — your optimized starting lineup gets weaker${clogs.length ? ` and the return is bench depth at ${clogs.join(", ")}` : ""}.`
+        : "Neutral fit — the optimized starting lineup output is unchanged.";
 
-  return { pct, fills, clogs, note };
+  return { pct, fills, clogs, note, impact };
 }
+
 
 
 
@@ -285,17 +333,59 @@ export function rosterConstraint(input: {
 }
 
 
-/** Thematic executive summary for the grading banner. */
+const SLOT_LABEL: Record<string, string> = {
+  QB: "QB",
+  RB: "RB",
+  WR: "WR",
+  TE: "TE",
+  K: "K",
+  DEF: "DEF",
+  FLEX: "flex",
+};
+
+/**
+ * Executive summary driven by the marginal starting-lineup simulation: it
+ * names the slots whose weekly floor actually moved, not the raw value gap.
+ */
 export function executiveSummary(input: {
   ready: boolean;
   pct: number;
   giveCount: number;
   getCount: number;
   overflow: boolean;
+  impact?: MarginalImpact;
 }): string {
   if (!input.ready) return "Add players to both sides to run the valuation model.";
   const consolidating = input.getCount < input.giveCount;
   const spreading = input.getCount > input.giveCount;
+
+  const impact = input.impact;
+  if (impact) {
+    const shifts = Object.entries(impact.slotDelta)
+      .filter(([, v]) => Math.abs(v) >= 0.25)
+      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+    const ups = shifts.filter(([, v]) => v > 0);
+    const downs = shifts.filter(([, v]) => v < 0);
+    const fmt = (e: [string, number]) =>
+      `${SLOT_LABEL[e[0]] ?? e[0]} tier floor (${e[1] > 0 ? "+" : ""}${e[1].toFixed(1)} pts/wk)`;
+
+    if (impact.delta > 0.25) {
+      const lead = ups.length ? fmt(ups[0]!) : "weekly starting floor";
+      const tail = downs.length
+        ? ` while giving back ${downs[0]![1].toFixed(1)} pts/wk at ${SLOT_LABEL[downs[0]![0]] ?? downs[0]![0]}`
+        : ", while holding positional parity everywhere else";
+      const scale = impact.delta >= 2 ? "significantly upgrades" : "upgrades";
+      return `TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`;
+    }
+    if (impact.delta < -0.25) {
+      const lead = downs.length ? fmt(downs[0]!) : "weekly starting floor";
+      const tail = ups.length ? ` The only gain is ${fmt(ups[0]!)}.` : "";
+      return `TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`;
+    }
+    return `TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`;
+  }
+
+
 
   if (input.pct >= 15)
     return consolidating
