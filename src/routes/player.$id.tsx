@@ -95,6 +95,15 @@ const POS_LABEL: Record<string, string> = {
   DEF: "Defense / Special Teams",
 };
 
+/** Dynamic risk bucket routing for the injury telemetry meter. */
+function riskTier(score: number): { label: string; text: string; fill: string } {
+  if (score >= 70)
+    return { label: "HIGH RISK", text: "text-rose-500", fill: "bg-rose-500" };
+  if (score >= 35)
+    return { label: "MODERATE RISK", text: "text-amber-500", fill: "bg-amber-500" };
+  return { label: "LOW RISK", text: "text-emerald-500", fill: "bg-emerald-500" };
+}
+
 function PlayerHubPage() {
   const { id } = Route.useParams();
   const { data, isLoading } = useQuery(profileQuery(id));
@@ -107,6 +116,8 @@ function PlayerHubPage() {
   if (!data) return <p className="py-24 text-center text-sm text-zinc-500">Player not found.</p>;
 
   const { player, history, projection, depthChart, sos, injuryRisk, season } = data;
+  const brainEntry = brain?.[player.id] ?? null;
+  const tier = riskTier(injuryRisk.score);
   const teamLogo = player.team
     ? `https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`
     : null;
