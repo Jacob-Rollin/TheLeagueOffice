@@ -20,7 +20,9 @@ type ActiveLeagueValue = {
   leagues: ActiveLeagueToken[];
   activeLeague: ActiveLeagueToken | null;
   activeLeagueId: string | null;
+  sandboxMode: boolean;
   setActiveLeagueId: (id: string) => void;
+  toggleSandbox: () => void;
   refresh: () => Promise<void>;
 };
 
@@ -30,7 +32,9 @@ const ActiveLeagueContext = createContext<ActiveLeagueValue>({
   leagues: [],
   activeLeague: null,
   activeLeagueId: null,
+  sandboxMode: false,
   setActiveLeagueId: () => {},
+  toggleSandbox: () => {},
   refresh: async () => {},
 });
 
