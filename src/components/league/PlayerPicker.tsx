@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import type { Player } from "@/lib/draft";
@@ -14,6 +14,7 @@ export function PlayerPicker({
   placeholder = "Search players…",
   single,
   accent,
+  renderMeta,
 }: {
   players: Player[];
   selected: Player[];
@@ -23,6 +24,8 @@ export function PlayerPicker({
   placeholder?: string;
   single?: boolean;
   accent?: "give" | "get";
+  /** Optional replacement for the default value chip on a selected row. */
+  renderMeta?: (p: Player) => ReactNode;
 }) {
   const [q, setQ] = useState("");
 
