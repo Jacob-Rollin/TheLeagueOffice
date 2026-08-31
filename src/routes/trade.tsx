@@ -208,18 +208,30 @@ function TradePage() {
     return map;
   }, [draft.picks, draft.settings.teams, byId]);
 
-  /** Synced league rosters win; sandbox demo rosters win when Sandbox Mode is active.
-   *  Sandbox rosters are resolved from the same global player catalog used by
-   *  the War Room / Mock Draft pages (shared module: src/lib/sandbox-rosters.ts). */
+  /** Roster priority in Sandbox Mode: live War Room / Mock Draft state first
+   *  (same draft store the draft pages persist to), falling back to the shared
+   *  demo catalog teams only when no draft has ever been run. */
+  const hasDraftPicks = draft.picks.length > 0;
   const sandboxTeams = useMemo(
-    () => (sandboxMode ? buildSandboxTeams(data.players) : null),
-    [sandboxMode, data.players],
+    () => (sandboxMode && !hasDraftPicks ? buildSandboxTeams(data.players) : null),
+    [sandboxMode, hasDraftPicks, data.players],
   );
   const roster = useMemo(() => {
-    if (sandboxTeams) return sandboxTeams.myTeam;
+    if (sandboxMode) {
+      if (hasDraftPicks) return rostersByTeam.get(draft.settings.myTeam) ?? [];
+      return sandboxTeams?.myTeam ?? [];
+    }
     if (league?.synced && league?.myTeam) return league.myTeam.players;
     return rostersByTeam.get(draft.settings.myTeam) ?? [];
-  }, [sandboxTeams, league?.synced, league?.myTeam, rostersByTeam, draft.settings.myTeam]);
+  }, [
+    sandboxMode,
+    hasDraftPicks,
+    sandboxTeams,
+    league?.synced,
+    league?.myTeam,
+    rostersByTeam,
+    draft.settings.myTeam,
+  ]);
 
   const myTeamLabel = sandboxMode
     ? "My Team"
