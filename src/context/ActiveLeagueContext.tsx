@@ -20,7 +20,9 @@ type ActiveLeagueValue = {
   leagues: ActiveLeagueToken[];
   activeLeague: ActiveLeagueToken | null;
   activeLeagueId: string | null;
+  sandboxMode: boolean;
   setActiveLeagueId: (id: string) => void;
+  toggleSandbox: () => void;
   refresh: () => Promise<void>;
 };
 
@@ -30,7 +32,9 @@ const ActiveLeagueContext = createContext<ActiveLeagueValue>({
   leagues: [],
   activeLeague: null,
   activeLeagueId: null,
+  sandboxMode: false,
   setActiveLeagueId: () => {},
+  toggleSandbox: () => {},
   refresh: async () => {},
 });
 
@@ -39,6 +43,8 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const userId = user?.id ?? null;
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [sandboxMode, setSandboxMode] = useState(false);
+  const lastLiveIdRef = useMemo<{ current: string | null }>(() => ({ current: null }), []);
 
   useEffect(() => {
     try {
@@ -108,12 +114,32 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
 
   const setActiveLeagueId = useCallback((id: string) => {
     setActiveId(id);
+    setSandboxMode(false);
     try {
       window.localStorage.setItem(STORAGE_KEY, id);
     } catch {
       /* storage unavailable */
     }
   }, []);
+
+  const toggleSandbox = useCallback(() => {
+    setSandboxMode((prev) => {
+      if (!prev) {
+        lastLiveIdRef.current = activeId;
+        return true;
+      }
+      const restore = lastLiveIdRef.current ?? leagues[0]?.id ?? null;
+      if (restore) {
+        setActiveId(restore);
+        try {
+          window.localStorage.setItem(STORAGE_KEY, restore);
+        } catch {
+          /* storage unavailable */
+        }
+      }
+      return false;
+    });
+  }, [activeId, leagues, lastLiveIdRef]);
 
   const refresh = useCallback(async () => {
     if (!userId) return;
@@ -124,19 +150,24 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
   }, [queryClient, userId]);
 
   const activeLeague = useMemo(
-    () => leagues.find((l) => l.id === activeId) ?? leagues[0] ?? null,
-    [leagues, activeId],
+    () =>
+      sandboxMode
+        ? null
+        : leagues.find((l) => l.id === activeId) ?? leagues[0] ?? null,
+    [leagues, activeId, sandboxMode],
   );
 
   const value = useMemo<ActiveLeagueValue>(
     () => ({
       leagues,
       activeLeague,
-      activeLeagueId: activeLeague?.id ?? null,
+      activeLeagueId: sandboxMode ? null : (activeLeague?.id ?? null),
+      sandboxMode,
       setActiveLeagueId,
+      toggleSandbox,
       refresh,
     }),
-    [leagues, activeLeague, setActiveLeagueId, refresh],
+    [leagues, activeLeague, sandboxMode, setActiveLeagueId, toggleSandbox, refresh],
   );
 
   return <ActiveLeagueContext.Provider value={value}>{children}</ActiveLeagueContext.Provider>;
