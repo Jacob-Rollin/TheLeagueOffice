@@ -208,12 +208,18 @@ function TradePage() {
     return map;
   }, [draft.picks, draft.settings.teams, byId]);
 
-  /** Synced league rosters win; sandbox demo rosters win when Sandbox Mode is active. */
+  /** Synced league rosters win; sandbox demo rosters win when Sandbox Mode is active.
+   *  Sandbox rosters are resolved from the same global player catalog used by
+   *  the War Room / Mock Draft pages (shared module: src/lib/sandbox-rosters.ts). */
+  const sandboxTeams = useMemo(
+    () => (sandboxMode ? buildSandboxTeams(data.players) : null),
+    [sandboxMode, data.players],
+  );
   const roster = useMemo(() => {
-    if (sandboxMode) return SANDBOX_MY_TEAM;
+    if (sandboxTeams) return sandboxTeams.myTeam;
     if (league?.synced && league?.myTeam) return league.myTeam.players;
     return rostersByTeam.get(draft.settings.myTeam) ?? [];
-  }, [sandboxMode, league?.synced, league?.myTeam, rostersByTeam, draft.settings.myTeam]);
+  }, [sandboxTeams, league?.synced, league?.myTeam, rostersByTeam, draft.settings.myTeam]);
 
   const myTeamLabel = sandboxMode
     ? "My Team"
@@ -221,7 +227,7 @@ function TradePage() {
       teamName(draft.settings, draft.settings.myTeam);
 
   const otherTeams = useMemo(() => {
-    if (sandboxMode) return SANDBOX_RIVAL_TEAMS;
+    if (sandboxTeams) return sandboxTeams.rivalTeams;
     if (league?.synced) {
       return league.teams
         .filter((t) => !t.isMine)
