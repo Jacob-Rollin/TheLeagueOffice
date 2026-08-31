@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
-import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
+import { rosterSize, teamName, type Player, type Pos, type Scoring } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
@@ -60,6 +60,80 @@ export const Route = createFileRoute("/trade")({
 });
 
 const WEEKS = 17;
+
+/** Build a minimal Player object for sandbox/demo rosters. */
+function mockPlayer(p: Partial<Player> & { id: string; name: string; pos: Pos; team: string }): Player {
+  return {
+    age: null,
+    exp: null,
+    injury: null,
+    bye: null,
+    adp: { std: 999, half: 999, ppr: 999 },
+    adpRange: { min: 999, max: 999 },
+    rank: { std: 999, half: 999, ppr: 999 },
+    posRank: 999,
+    proj: { std: 0, half: 0, ppr: 0 },
+    prev: { std: 0, half: 0, ppr: 0 },
+    ...p,
+  } as Player;
+}
+
+/** Demo rosters surfaced when Sandbox Mode is active so users can test trades
+ *  without a live league connection. */
+const SANDBOX_MY_TEAM: Player[] = [
+  mockPlayer({ id: "4046", name: "Patrick Mahomes", pos: "QB", team: "KC" }),
+  mockPlayer({ id: "4866", name: "Saquon Barkley", pos: "RB", team: "PHI" }),
+  mockPlayer({ id: "9221", name: "Jahmyr Gibbs", pos: "RB", team: "DET" }),
+  mockPlayer({ id: "6786", name: "CeeDee Lamb", pos: "WR", team: "DAL" }),
+  mockPlayer({
+    id: "6801",
+    name: "Tee Higgins",
+    pos: "WR",
+    team: "CIN",
+    injuryStatus: "Questionable",
+    injury_body_part: "Hamstring",
+  }),
+  mockPlayer({ id: "10859", name: "Sam LaPorta", pos: "TE", team: "DET" }),
+  mockPlayer({ id: "6813", name: "Jonathan Taylor", pos: "RB", team: "IND" }),
+];
+
+const SANDBOX_RIVAL_TEAMS: OpponentTeam[] = [
+  {
+    key: "demo-1",
+    name: "Demo Team 1",
+    owner: "",
+    players: [
+      mockPlayer({ id: "4984", name: "Josh Allen", pos: "QB", team: "BUF" }),
+      mockPlayer({ id: "3198", name: "Derrick Henry", pos: "RB", team: "BAL" }),
+      mockPlayer({ id: "8155", name: "Breece Hall", pos: "RB", team: "NYJ" }),
+      mockPlayer({ id: "6794", name: "Justin Jefferson", pos: "WR", team: "MIN" }),
+      mockPlayer({ id: "7547", name: "Amon-Ra St. Brown", pos: "WR", team: "DET" }),
+      mockPlayer({ id: "1466", name: "Travis Kelce", pos: "TE", team: "KC" }),
+      mockPlayer({
+        id: "7594",
+        name: "Chuba Hubbard",
+        pos: "RB",
+        team: "CAR",
+        injuryStatus: "Out",
+        injury_body_part: "Knee",
+      }),
+    ],
+  },
+  {
+    key: "demo-2",
+    name: "Demo Team 2",
+    owner: "",
+    players: [
+      mockPlayer({ id: "6904", name: "Jalen Hurts", pos: "QB", team: "PHI" }),
+      mockPlayer({ id: "4199", name: "Aaron Jones", pos: "RB", team: "MIN" }),
+      mockPlayer({ id: "9509", name: "Bijan Robinson", pos: "RB", team: "ATL" }),
+      mockPlayer({ id: "7564", name: "Ja'Marr Chase", pos: "WR", team: "CIN" }),
+      mockPlayer({ id: "8146", name: "Garrett Wilson", pos: "WR", team: "NYJ" }),
+      mockPlayer({ id: "4039", name: "Cooper Kupp", pos: "WR", team: "SEA" }),
+      mockPlayer({ id: "4217", name: "George Kittle", pos: "TE", team: "SF" }),
+    ],
+  },
+];
 
 type Metrics = {
   player: Player;
@@ -207,17 +281,20 @@ function TradePage() {
     return map;
   }, [draft.picks, draft.settings.teams, byId]);
 
-  /** Synced league rosters win; the local draft board is the offline fallback. */
+  /** Synced league rosters win; sandbox demo rosters win when Sandbox Mode is active. */
   const roster = useMemo(() => {
+    if (sandboxMode) return SANDBOX_MY_TEAM;
     if (league?.synced && league?.myTeam) return league.myTeam.players;
     return rostersByTeam.get(draft.settings.myTeam) ?? [];
-  }, [league?.synced, league?.myTeam, rostersByTeam, draft.settings.myTeam]);
+  }, [sandboxMode, league?.synced, league?.myTeam, rostersByTeam, draft.settings.myTeam]);
 
-  const myTeamLabel =
-    (league?.synced ? (league?.myTeam?.team ?? league?.myTeamName) : null) ??
-    teamName(draft.settings, draft.settings.myTeam);
+  const myTeamLabel = sandboxMode
+    ? "My Team"
+    : (league?.synced ? (league?.myTeam?.team ?? league?.myTeamName) : null) ??
+      teamName(draft.settings, draft.settings.myTeam);
 
   const otherTeams = useMemo(() => {
+    if (sandboxMode) return SANDBOX_RIVAL_TEAMS;
     if (league?.synced) {
       return league.teams
         .filter((t) => !t.isMine)
@@ -232,7 +309,7 @@ function TradePage() {
         owner: "",
         players: rostersByTeam.get(t) ?? [],
       }));
-  }, [league?.synced, league?.teams, rostersByTeam, draft.settings]);
+  }, [sandboxMode, league?.synced, league?.teams, rostersByTeam, draft.settings]);
 
 
 
@@ -661,12 +738,13 @@ function SideHead({
 
 
 function injuryMicroBadge(status: string | null | undefined) {
-  if (!status || status === "Healthy") return null;
-  const s = status.trim();
-  if (s === "Out") return { label: "O", className: "bg-rose-600" };
-  if (s === "IR" || s === "Injured Reserve") return { label: "IR", className: "bg-rose-600" };
-  if (s === "Questionable") return { label: "Q", className: "bg-amber-500" };
-  if (s === "Doubtful") return { label: "D", className: "bg-orange-600" };
+  const currentStatus = (status ?? "").trim().toLowerCase();
+  if (!currentStatus || currentStatus === "healthy") return null;
+  if (currentStatus === "out") return { label: "O", className: "bg-rose-600" };
+  if (currentStatus === "ir" || currentStatus === "injured reserve")
+    return { label: "IR", className: "bg-rose-600" };
+  if (currentStatus === "questionable") return { label: "Q", className: "bg-amber-500" };
+  if (currentStatus === "doubtful") return { label: "D", className: "bg-orange-600" };
   return null;
 }
 
@@ -682,7 +760,7 @@ function RosterRow({
   brain?: BrainMatrix | null | undefined;
 }) {
   const entry = brain?.[player.id] ?? null;
-  const badge = injuryMicroBadge(entry?.injuryStatus);
+  const badge = injuryMicroBadge(player.injuryStatus ?? entry?.injuryStatus);
   const meta = [player.pos, player.team || null, player.bye ? `BYE ${player.bye}` : null].filter(
     Boolean,
   ) as string[];
