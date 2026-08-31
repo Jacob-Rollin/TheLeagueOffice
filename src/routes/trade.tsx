@@ -784,8 +784,18 @@ function OtherTeamsColumn({
         {teams.map((t) => {
           const players = t.players;
           return (
-            <details key={t.key} className="rounded-md border border-border bg-surface">
-              <summary className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium">
+            <details
+              key={t.key}
+              open={openKey === t.key}
+              className="rounded-md border border-border bg-surface"
+            >
+              <summary
+                className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setOpenKey((k) => (k === t.key ? null : t.key));
+                }}
+              >
                 <span className="min-w-0 truncate">
                   <span className="block truncate">{t.name}</span>
                   {t.owner && (
