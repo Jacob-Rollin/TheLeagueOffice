@@ -502,16 +502,35 @@ function PlayerListImpl({
                 />
                 <div className="flex-1">
                   <div className="font-semibold whitespace-nowrap">{p.name}</div>
-                  <div className="text-xs text-muted-foreground whitespace-nowrap">
-                    {`${p.pos}${posRanks.get(p.id) ?? ""}`}
-                    {p.team ? ` · ${p.team}` : ""}
-                    {p.bye ? ` · BYE ${p.bye}` : ""}
-                    {!hideValueTags && reach !== null && reach < -6 ? " · reach" : ""}
-                    {p.injury ? (
-                      <span className="font-semibold uppercase text-destructive">
-                        {` · ${p.injury}`}
-                      </span>
-                    ) : null}
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
+                    {(() => {
+                      const badge = injuryMicroBadge(
+                        SANDBOX_INJURY_OVERRIDES[p.id]?.injuryStatus ??
+                          brain?.[p.id]?.injuryStatus ??
+                          p.injury,
+                      );
+                      return badge ? (
+                        <span
+                          className={cn(
+                            "grid h-4 w-4 shrink-0 place-items-center rounded-[2px] text-[9px] font-bold text-white",
+                            badge.className,
+                          )}
+                        >
+                          {badge.label}
+                        </span>
+                      ) : null;
+                    })()}
+                    <span>
+                      {`${p.pos}${posRanks.get(p.id) ?? ""}`}
+                      {p.team ? ` · ${p.team}` : ""}
+                      {p.bye ? ` · BYE ${p.bye}` : ""}
+                      {!hideValueTags && reach !== null && reach < -6 ? " · reach" : ""}
+                      {p.injury ? (
+                        <span className="font-semibold uppercase text-destructive">
+                          {` · ${p.injury}`}
+                        </span>
+                      ) : null}
+                    </span>
                   </div>
                 </div>
               </>
