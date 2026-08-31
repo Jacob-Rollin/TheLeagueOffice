@@ -679,6 +679,11 @@ function RosterRow({
     entry?.injuryStatus && entry.injuryStatus !== "Healthy"
       ? entry.injuryStatus.toUpperCase()
       : null;
+  const meta = [
+    player.pos,
+    player.team || null,
+    player.bye ? `BYE ${player.bye}` : null,
+  ].filter(Boolean) as string[];
   return (
     <button
       type="button"
@@ -700,23 +705,28 @@ function RosterRow({
         logoClassName="size-3.5"
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium leading-tight">{player.name}</span>
-        <span className="block truncate whitespace-nowrap text-[10px] uppercase tracking-widest text-muted-foreground">
-          {player.pos}
-          {player.team ? ` · ${player.team}` : ""}
-          {player.bye ? ` · BYE ${player.bye}` : ""}
-          {entry?.value ? ` · Value: ${entry.value.toLocaleString()}` : ""}
-          {trend ? ` · ${trend}` : ""}
+        <span className="block truncate text-sm font-medium leading-tight text-foreground">
+          {player.name}
+          <span className="ml-1 text-[11px] text-muted-foreground">
+            {" "}
+            ({meta.join(" · ")})
+          </span>
+        </span>
+        <span className="block truncate whitespace-nowrap text-[11px] leading-tight text-muted-foreground">
+          <span>Value: {entry?.value ? entry.value.toLocaleString() : "—"}</span>
+          <span className="ml-4">Trend: {trend ?? "—"}</span>
           {injury ? (
-            <span className="font-semibold text-destructive"> · [{injury}]</span>
+            <span className="ml-4 font-semibold text-destructive">· [{injury}]</span>
           ) : null}
         </span>
       </span>
       <span
         aria-hidden
         className={cn(
-          "shrink-0 text-sm font-semibold text-black transition-all duration-150 group-hover:text-base group-hover:font-extrabold group-hover:text-black",
-          selected && "text-muted-foreground",
+          "flex h-6 w-6 shrink-0 items-center justify-center rounded border text-sm font-semibold transition-colors",
+          selected
+            ? "border-border bg-muted text-muted-foreground"
+            : "border-border bg-secondary/40 text-black group-hover:bg-foreground group-hover:text-base group-hover:font-extrabold group-hover:text-background",
         )}
       >
         {selected ? "✓" : "+"}
