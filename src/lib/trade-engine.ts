@@ -78,7 +78,7 @@ export function rosterFit(input: {
     const req = input.starters[pos] ?? 0;
     if (req <= 0) continue;
     const before = countAt(input.roster, pos);
-    const now = countAt(after, pos);
+    const now = countAfter(pos);
 
     // Starting-lineup deficit movement.
     const deficitBefore = Math.max(0, req - before);
