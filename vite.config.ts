@@ -5,7 +5,6 @@
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
-import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
 
 // Deploy target: Lovable/Cloudflare by default; Vercel builds get the `vercel` preset
 // so the SSR server + static assets land in .vercel/output instead of a Worker bundle.
@@ -54,7 +53,6 @@ export default defineConfig({
       },
     },
   },
-  // 🟢 Remove mcpPlugin completely for Vercel, but allow it for Lovable environments
-  plugins: process.env["VERCEL"] ? [] : [mcpPlugin()],
+  // 🟢 MCP Plugin completely removed to halt background token syncing and preserve credits
+  plugins: [],
 });
-
