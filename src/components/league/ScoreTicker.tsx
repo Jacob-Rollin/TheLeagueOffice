@@ -207,11 +207,21 @@ export function ScoreTicker() {
 
     const load = async () => {
       try {
-        const url =
-          selectedWeek != null && seasonType != null
-            ? `${SCOREBOARD_URL}?week=${selectedWeek}&seasontype=${seasonType}`
-            : SCOREBOARD_URL;
-        const res = await fetch(url);
+        const queryParams = selectedWeek != null && seasonType != null
+          ? `?week=${selectedWeek}&seasontype=${seasonType}`
+          : '';
+          
+        const url = `${SCOREBOARD_URL}${queryParams}`;
+        
+        let res = await fetch(url);
+        
+        // 🟢 THE FIX: If the local Vercel proxy route fails (like on Lovable's static platform),
+        // fall back directly to ESPN's public raw feed link so data still populates.
+        if (!res.ok) {
+          const backupUrl = `https://espn.com{queryParams}`;
+          res = await fetch(backupUrl);
+        }
+        
         if (!res.ok) return;
         const json = await res.json();
         if (cancelled) return;
