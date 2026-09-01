@@ -20,6 +20,9 @@ export function injuryMicroBadge(
     return { label: "IR", className: "bg-rose-600" };
   if (currentStatus === "questionable") return { label: "Q", className: "bg-amber-500" };
   if (currentStatus === "doubtful") return { label: "D", className: "bg-orange-600" };
+  if (currentStatus === "na" || currentStatus === "not active" || currentStatus === "suspended") return { label: "NA", className: "bg-red-500" };
+  return null;
+}
   return null;
 }
 
