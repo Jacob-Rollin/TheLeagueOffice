@@ -62,15 +62,15 @@ export function PlayerDetail({
             <div className="flex min-w-0 items-center gap-2">
               <PositionBadge pos={player.pos} />
               <h1 className="display-title truncate text-2xl">{player.name}</h1>
-{player.injury && (
-  <span className={cn(
-    "shrink-0 rounded px-1.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-white",
-    player.injury === 'Questionable' && "bg-amber-500",
-    (player.injury === 'Out' || player.injury === 'IR' || player.injury === 'Doubtful' || player.injury === 'NA') && "bg-red-500"
-  )}>
-    {player.injury}
-  </span>
-)}
+              {player.injury && (
+                <span className={cn(
+                  "shrink-0 rounded px-1.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-white",
+                  player.injury === 'Questionable' && "bg-amber-500",
+                  (player.injury === 'Out' || player.injury === 'IR' || player.injury === 'Doubtful' || player.injury === 'NA') && "bg-red-500"
+                )}>
+                  {player.injury}
+                </span>
+              )}
             </div>
             <p className="tabnum text-xs text-muted-foreground">
               Rank #{player.rank[scoring]} · {player.pos} · {player.team}
@@ -147,7 +147,12 @@ export function PlayerDetail({
 
           {player.pos !== "DEF" && (
           <Section title="Injury risk">
-            <div className="rounded-lg border border-border bg-card p-3">
+            <div className={cn(
+              "rounded-lg border p-3 shadow-sm",
+              player.injury === 'Questionable' ? "border-amber-200 bg-amber-50/40" :
+              (player.injury === 'Out' || player.injury === 'IR' || player.injury === 'Doubtful' || player.injury === 'NA') ? "border-red-200 bg-red-50/40" :
+              "border-border bg-card"
+            )}>
               <div className="flex items-center justify-between">
                 <span className={cn("font-display text-lg uppercase", tier.text)}>
                   {tier.label}
@@ -190,7 +195,13 @@ export function PlayerDetail({
                   })}
                 <li>
                   · <span className="font-semibold text-foreground">CURRENT DESIGNATION:</span>{" "}
-                  {player.injury ?? "Healthy — no designation"}
+                  <span className={cn(
+                    "font-bold uppercase",
+                    player.injury === 'Questionable' && "text-amber-600",
+                    (player.injury === 'Out' || player.injury === 'IR' || player.injury === 'Doubtful' || player.injury === 'NA') && "text-red-600"
+                  )}>
+                    {player.injury ?? "Healthy — no designation"}
+                  </span>
                 </li>
               </ul>
             </div>
