@@ -104,10 +104,10 @@ export function PlayerNews({ id, pos }: { id: string; pos?: string }) {
       {pos !== "DEF" && (
       <div
         className={cn(
-          "rounded-lg border p-3",
-          data?.injury.status
-            ? "border-destructive/60 bg-destructive/10"
-            : "border-border bg-card",
+          "rounded-lg border p-3 shadow-sm",
+          data?.injury.status === 'Questionable' ? "border-amber-200 bg-amber-50/40" :
+          (data?.injury.status === 'Out' || data?.injury.status === 'IR' || data?.injury.status === 'Doubtful' || data?.injury.status === 'NA') ? "border-red-200 bg-red-50/40" :
+          "border-border bg-card",
         )}
       >
         <div className="font-display text-xs uppercase tracking-widest text-muted-foreground">
@@ -115,8 +115,10 @@ export function PlayerNews({ id, pos }: { id: string; pos?: string }) {
         </div>
         <div
           className={cn(
-            "font-display text-lg uppercase",
-            data?.injury.status ? "text-destructive" : "text-primary",
+            "font-display text-lg uppercase tracking-wide font-bold",
+            data?.injury.status === 'Questionable' && "text-amber-600",
+            (data?.injury.status === 'Out' || data?.injury.status === 'IR' || data?.injury.status === 'Doubtful' || data?.injury.status === 'NA') && "text-red-600",
+            !data?.injury.status && "text-primary"
           )}
         >
           {data?.injury.status ?? "Healthy — no designation"}
