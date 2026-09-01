@@ -523,11 +523,6 @@ function PlayerListImpl({
                       {p.team ? ` · ${p.team}` : ""}
                       {p.bye ? ` · BYE ${p.bye}` : ""}
                       {!hideValueTags && reach !== null && reach < -6 ? " · reach" : ""}
-                      {p.injury ? (
-                        <span className="font-semibold uppercase text-destructive">
-                          {` · ${p.injury}`}
-                        </span>
-                      ) : null}
                     </span>
                   </div>
                 </div>
