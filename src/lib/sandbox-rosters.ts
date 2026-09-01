@@ -55,14 +55,26 @@ export function resolveInjuryStatus(
 ): string | undefined {
   // a. Direct properties (draft state / mock rosters / catalog rows).
   const direct = player.injury_status ?? player.injuryStatus ?? player.status;
-  if (direct && direct.trim() && direct.trim().toLowerCase() !== "healthy") return direct;
+  if (direct && direct.trim() && direct.trim().toLowerCase() !== "healthy") {
+    const dLower = direct.trim().toLowerCase();
+    if (dLower === "na" || dLower === "suspended") return "NA";
+    return direct;
+  }
   // b. Brain matrix by ID.
   const entry = brain?.[player.id];
   const matrix = entry?.injuryStatus ?? entry?.injury_status;
-  if (matrix && matrix.trim() && matrix.trim().toLowerCase() !== "healthy") return matrix;
+  if (matrix && matrix.trim() && matrix.trim().toLowerCase() !== "healthy") {
+    const mLower = matrix.trim().toLowerCase();
+    if (mLower === "na" || mLower === "suspended") return "NA";
+    return matrix;
+  }
   // c. Sleeper raw catalog fallback.
   const raw = player.injury;
-  if (raw && raw.trim() && raw.trim().toLowerCase() !== "healthy") return raw;
+  if (raw && raw.trim() && raw.trim().toLowerCase() !== "healthy") {
+    const rLower = raw.trim().toLowerCase();
+    if (rLower === "na" || rLower === "suspended" || rLower.includes("suspended")) return "NA";
+    return raw;
+  }
   return undefined;
 }
 
