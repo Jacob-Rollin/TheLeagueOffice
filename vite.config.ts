@@ -49,7 +49,6 @@ export default defineConfig({
     server: { entry: "server" },
   },
   ...(preset ? { nitro: { preset } } : {}),
-  // 🟢 Completely disabled to prevent Vercel deployment and local path crashes
-  plugins: [],
+  // 🟢 Remove mcpPlugin completely for Vercel, but allow it for Lovable environments
+  plugins: process.env["VERCEL"] ? [] : [mcpPlugin()],
 });
-
