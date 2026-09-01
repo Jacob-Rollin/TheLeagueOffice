@@ -253,7 +253,11 @@ export function PlayerDetail({
                       <PositionBadge pos={d.pos} className="h-5 text-[10px]" />
                       <span className="min-w-0 flex-1 truncate text-sm font-semibold">{d.name}</span>
                       {d.injury && (
-                        <span className="rounded bg-destructive/20 px-1 text-[10px] font-bold uppercase text-destructive">
+                        <span className={cn(
+                          "rounded px-1.5 py-0.5 text-[9px] font-bold text-white uppercase tracking-wide",
+                          d.injury === 'Questionable' && "bg-amber-500",
+                          (d.injury === 'Out' || d.injury === 'IR' || d.injury === 'Doubtful' || d.injury === 'NA') && "bg-red-500"
+                        )}>
                           {d.injury}
                         </span>
                       )}
