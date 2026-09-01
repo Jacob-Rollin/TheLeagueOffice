@@ -23,8 +23,6 @@ export function injuryMicroBadge(
   if (currentStatus === "na" || currentStatus === "not active" || currentStatus === "suspended") return { label: "NA", className: "bg-red-500" };
   return null;
 }
-  return null;
-}
 
 type InjuryCarrier = {
   id: string;
