@@ -49,6 +49,7 @@ export default defineConfig({
     server: { entry: "server" },
   },
   ...(preset ? { nitro: { preset } } : {}),
-  // 🟢 Only load mcpPlugin if we are NOT on a local Windows development machine
-  plugins: isLocalWindows ? [] : [mcpPlugin()],
+  // 🟢 Completely disabled to prevent Vercel deployment and local path crashes
+  plugins: [],
 });
+
