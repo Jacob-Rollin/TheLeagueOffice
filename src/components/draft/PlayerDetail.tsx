@@ -62,11 +62,15 @@ export function PlayerDetail({
             <div className="flex min-w-0 items-center gap-2">
               <PositionBadge pos={player.pos} />
               <h1 className="display-title truncate text-2xl">{player.name}</h1>
-              {player.injury && (
-                <span className="shrink-0 rounded border border-destructive/40 bg-destructive/15 px-1.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-destructive">
-                  {player.injury}
-                </span>
-              )}
+{player.injury && (
+  <span className={cn(
+    "shrink-0 rounded px-1.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-white",
+    player.injury === 'Questionable' && "bg-amber-500",
+    (player.injury === 'Out' || player.injury === 'IR' || player.injury === 'Doubtful' || player.injury === 'NA') && "bg-red-500"
+  )}>
+    {player.injury}
+  </span>
+)}
             </div>
             <p className="tabnum text-xs text-muted-foreground">
               Rank #{player.rank[scoring]} · {player.pos} · {player.team}
