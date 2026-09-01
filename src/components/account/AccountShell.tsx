@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/utils";
 
 const itemClass =
@@ -16,11 +17,13 @@ export function AccountShell({
   children,
 }: {
   title: string;
-  active: "settings" | "leagues";
+  active: "settings" | "leagues" | "admin";
   action?: ReactNode;
   children: ReactNode;
 }) {
   const { user, ready, signOut } = useAuth();
+  const { data: isAdmin } = useIsAdmin(user?.id ?? null);
+  const showAdmin = isAdmin === true;
 
   const navigate = useNavigate();
 
@@ -40,6 +43,14 @@ export function AccountShell({
       <div className="grid gap-6 md:grid-cols-4">
         <nav aria-label="Account sections" className="md:col-span-1">
           <div className="rounded-xl border border-border bg-card p-2">
+            {showAdmin && (
+              <Link
+                to="/account/admin"
+                className={cn(itemClass, active === "admin" && activeClass)}
+              >
+                Admin
+              </Link>
+            )}
             <Link to="/account" className={cn(itemClass, active === "settings" && activeClass)}>
               Account Settings
             </Link>

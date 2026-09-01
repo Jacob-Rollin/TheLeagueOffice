@@ -14,6 +14,9 @@ const preset = process.env["NITRO_PRESET"] ?? (process.env["VERCEL"] ? "vercel" 
 // Unique per build; injected into the client bundle so asset URLs change every deploy.
 const buildId = process.env["VERCEL_GIT_COMMIT_SHA"]?.slice(0, 8) ?? Date.now().toString(36);
 
+// 🟢 Detect if running locally on Windows to prevent path separator crashes
+const isLocalWindows = process.platform === "win32" && !process.env["VERCEL"] && !process.env["LOVABLE"];
+
 export default defineConfig({
   vite: {
     // Keep every emitted client asset rooted at the deployment host. This prevents
@@ -46,5 +49,6 @@ export default defineConfig({
     server: { entry: "server" },
   },
   ...(preset ? { nitro: { preset } } : {}),
-  plugins: [mcpPlugin()],
+  // 🟢 Only load mcpPlugin if we are NOT on a local Windows development machine
+  plugins: isLocalWindows ? [] : [mcpPlugin()],
 });

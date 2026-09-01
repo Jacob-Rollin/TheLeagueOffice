@@ -24,6 +24,7 @@ import { Route as WarRoomRouteImport } from './routes/war-room'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AccountIndexRouteImport } from './routes/account.index'
+import { Route as AccountAdminRouteImport } from './routes/account.admin'
 import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
 import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
@@ -112,6 +113,11 @@ const AccountIndexRoute = AccountIndexRouteImport.update({
   path: '/account/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AccountAdminRoute = AccountAdminRouteImport.update({
+  id: '/account/admin',
+  path: '/account/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthConfirmedRoute = AuthConfirmedRouteImport.update({
   id: '/auth_/confirmed',
   path: '/auth/confirmed',
@@ -180,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/account/admin': typeof AccountAdminRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -207,6 +214,7 @@ export interface FileRoutesByTo {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/account/admin': typeof AccountAdminRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -235,6 +243,7 @@ export interface FileRoutesById {
   '/war-room': typeof WarRoomRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/account/admin': typeof AccountAdminRoute
   '/auth_/confirmed': typeof AuthConfirmedRoute
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -264,6 +273,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/account/admin'
     | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
@@ -291,6 +301,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/account/admin'
     | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
@@ -318,6 +329,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/account/admin'
     | '/auth_/confirmed'
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
@@ -346,6 +358,7 @@ export interface RootRouteChildren {
   WarRoomRoute: typeof WarRoomRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  AccountAdminRoute: typeof AccountAdminRoute
   AuthConfirmedRoute: typeof AuthConfirmedRoute
   MockDraftSetupRoute: typeof MockDraftSetupRoute
   NflTeamNflIdRoute: typeof NflTeamNflIdRoute
@@ -466,6 +479,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account/admin': {
+      id: '/account/admin'
+      path: '/account/admin'
+      fullPath: '/account/admin'
+      preLoaderRoute: typeof AccountAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth_/confirmed': {
       id: '/auth_/confirmed'
       path: '/auth/confirmed'
@@ -555,6 +575,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  AccountAdminRoute: AccountAdminRoute,
   AuthConfirmedRoute: AuthConfirmedRoute,
   MockDraftSetupRoute: MockDraftSetupRoute,
   NflTeamNflIdRoute: NflTeamNflIdRoute,

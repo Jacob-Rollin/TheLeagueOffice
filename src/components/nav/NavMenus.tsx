@@ -7,6 +7,7 @@ import { ChevronDown, Plus, User as UserIcon } from "lucide-react";
 import { LeagueAvatar } from "@/components/league/LeagueAvatar";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -118,6 +119,7 @@ export function ProfileMenu() {
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [open, setOpen] = useState(false);
   const { data: profile } = useProfile(user?.id ?? null);
+  const { data: isAdmin } = useIsAdmin(user?.id ?? null);
   const { leagues, activeLeagueId, setActiveLeagueId, sandboxMode, toggleSandbox } = useActiveLeague();
 
   const openAuth = (mode: AuthMode) => {
@@ -233,7 +235,7 @@ export function ProfileMenu() {
                   {user.email}
                 </DropdownMenuLabel>
                 <DropdownMenuItem asChild className="font-medium">
-                  <Link to="/account" className="block w-full">
+                  <Link to={isAdmin ? "/account/admin" : "/account"} className="block w-full">
                     Account
                   </Link>
                 </DropdownMenuItem>

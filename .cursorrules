@@ -1,0 +1,15 @@
+# Project Styling & Layout Guidelines
+- The overall theme is very light with an almost white background.
+- Maintain the existing light aesthetic; do not apply terminal-style themes to components.
+- The only dark-themed exception is the Hall of Fame page, which uses an almost black background.
+
+# Shared UI & Component Rules
+- When creating new pages or views, always preserve and wrap them in the existing layout structure to retain the top navbar and live ticker.
+- Do not add icons next to descriptions in dropdown navigation layouts.
+- In dropdown menus and navigation bars, ensure the "Account" option is placed at the top of the profile dropdown list.
+- Never shrink or modify the size of the navbar profile circle icon.
+
+# Data & AI Logic Constraints
+- Never suggest dropping essential starting positions or players that would leave a roster vacancy (such as dropping a solo defense).
+- Use explicit text explanations for component placements instead of referencing user-provided images.
+- Use the text labels "Value/Trend" for player metrics instead of a standard dollar sign ($).
