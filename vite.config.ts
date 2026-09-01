@@ -45,7 +45,16 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  ...(preset ? { nitro: { preset } } : {}),
+  // 🟢 Configure Nitro to inline imports on server bundles and eliminate __exportAll TDZ circular chunks
+  nitro: {
+    ...(preset ? { preset } : {}),
+    rollupConfig: {
+      output: {
+        inlineDynamicImports: true,
+      },
+    },
+  },
   // 🟢 Remove mcpPlugin completely for Vercel, but allow it for Lovable environments
   plugins: process.env["VERCEL"] ? [] : [mcpPlugin()],
 });
+
