@@ -46,11 +46,22 @@ export type HofYear = {
 };
 
 function publicClient() {
-  const url = process.env["SUPABASE_URL"];
-  const key = process.env["SUPABASE_PUBLISHABLE_KEY"] || process.env["SUPABASE_ANON_KEY"];
+  const url =
+    process.env["VITE_SUPABASE_URL"] ||
+    process.env["SUPABASE_URL"] ||
+    (typeof import.meta.env !== "undefined" ? (import.meta.env["VITE_SUPABASE_URL"] as string | undefined) : undefined);
+  const key =
+    process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
+    process.env["VITE_SUPABASE_ANON_KEY"] ||
+    process.env["SUPABASE_PUBLISHABLE_KEY"] ||
+    process.env["SUPABASE_ANON_KEY"] ||
+    (typeof import.meta.env !== "undefined"
+      ? ((import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string | undefined) ||
+        (import.meta.env["VITE_SUPABASE_ANON_KEY"] as string | undefined))
+      : undefined);
   if (!url || !key) {
     throw new Error(
-      "Missing Supabase environment variable(s): SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY / SUPABASE_ANON_KEY."
+      "Missing Supabase environment variable(s): VITE_SUPABASE_URL / SUPABASE_URL, VITE_SUPABASE_ANON_KEY / SUPABASE_ANON_KEY.",
     );
   }
   return createClient<Database>(url, key, {

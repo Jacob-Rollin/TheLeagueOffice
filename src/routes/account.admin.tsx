@@ -34,13 +34,32 @@ const cardClass = "rounded-xl border border-border bg-card p-6";
 const buttonClass =
   "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
 
-function AdminPage() {
-  const { user, ready } = useAuth();
-  const { data: isAdmin, isFetched, isError } = useIsAdmin(user?.id ?? null);
-
-  if (ready && user && isFetched && (isError || !isAdmin)) {
-    return <Navigate to="/account" />;
-  }
+  function AdminPage() {
+    const { user, ready } = useAuth();
+    const { data: isAdmin, isFetched, isError } = useIsAdmin(user?.id ?? null);
+  
+    // If the authentication or admin data is still fetching, show a clean loading message
+    if (!ready || !isFetched) {
+      return (
+        <AccountShell>
+          <div className="p-6 font-display text-sm tracking-wide text-muted-foreground uppercase">
+            Loading Authorization...
+          </div>
+        </AccountShell>
+      );
+    }
+  
+    // 🟢 Safe Authorization Guard: Display a professional notice instead of a crashing layout redirect
+    if (isError || !isAdmin) {
+      return (
+        <AccountShell>
+          <div className="p-6 font-display text-sm uppercase tracking-wide text-destructive">
+            Unauthorized Access — Admin Privileges Required.
+          </div>
+        </AccountShell>
+      );
+    }
+  
 
   return (
     <AccountShell title="Admin" active="admin">

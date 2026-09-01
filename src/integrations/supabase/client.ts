@@ -28,23 +28,30 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 }
 
 
+function readEnv(name: string): string | undefined {
+  const viteEnv = typeof import.meta.env !== "undefined" ? import.meta.env : undefined;
+  const fromVite = viteEnv?.[name];
+  const fromProcess =
+    typeof process !== "undefined" && process.env ? process.env[name] : undefined;
+  const value = (typeof fromVite === "string" && fromVite) || (typeof fromProcess === "string" && fromProcess) || "";
+  return value.trim() ? value.trim() : undefined;
+}
+
 function createSupabaseClient() {
-  // Use import.meta.env for client-side (Vite build-time replacement)
-  // Fall back to process.env for SSR (server-side rendering) and non-Vite hosts (e.g. Vercel)
-  const viteEnv = typeof import.meta.env !== 'undefined' ? import.meta.env : undefined;
-  const SUPABASE_URL = viteEnv?.['VITE_SUPABASE_URL'] || process.env['SUPABASE_URL'];
+  // Vite inlines VITE_* at build time; Vercel SSR also exposes them on process.env.
+  const SUPABASE_URL = readEnv("VITE_SUPABASE_URL") || readEnv("SUPABASE_URL");
   const SUPABASE_KEY =
-    viteEnv?.['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
-    viteEnv?.['VITE_SUPABASE_ANON_KEY'] ||
-    process.env['SUPABASE_PUBLISHABLE_KEY'] ||
-    process.env['SUPABASE_ANON_KEY'];
+    readEnv("VITE_SUPABASE_PUBLISHABLE_KEY") ||
+    readEnv("VITE_SUPABASE_ANON_KEY") ||
+    readEnv("SUPABASE_PUBLISHABLE_KEY") ||
+    readEnv("SUPABASE_ANON_KEY");
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     const missing = [
-      ...(!SUPABASE_URL ? ['VITE_SUPABASE_URL / SUPABASE_URL'] : []),
-      ...(!SUPABASE_KEY ? ['VITE_SUPABASE_PUBLISHABLE_KEY / VITE_SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_KEY / SUPABASE_ANON_KEY'] : []),
+      ...(!SUPABASE_URL ? ["VITE_SUPABASE_URL / SUPABASE_URL"] : []),
+      ...(!SUPABASE_KEY ? ["VITE_SUPABASE_PUBLISHABLE_KEY / VITE_SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_KEY / SUPABASE_ANON_KEY"] : []),
     ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Connect Supabase in Lovable Cloud or set them in your deployment dashboard.`;
+    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud or set them in your deployment dashboard.`;
     console.error(`[Supabase] ${message}`);
     throw new Error(message);
   }
