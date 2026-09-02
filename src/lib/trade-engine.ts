@@ -338,7 +338,7 @@ export function rosterConstraint(input: {
   }
 
   const penalty = picked.reduce((s, p) => s + p.weekly, 0);
-  const primaryDropName = picked.length > 0 ? picked[0].name : null;
+  const primaryDropName = picked.length > 0 ? (picked[0]?.name ?? null) : null;
   
   return {
     overflow: true,
