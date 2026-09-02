@@ -560,6 +560,7 @@ function TradePage() {
     assets: getAssets,
     impact: valueOnly ? null : impact,
     benchDelta: valueOnly ? null : benchDelta,
+    dropSlots: benchSlotsRequired,
   });
   const depthRows = positionalDepth(giveAssets, getAssets);
   const risk = injuryRisk(giveAssets, getAssets);
