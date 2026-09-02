@@ -120,10 +120,13 @@ function TeamRosterPage() {
       slot: template[i] ?? (p ? p.pos : "FLEX"),
       player: p,
     }));
-    return { starters, bench: team.bench ?? [] };
+    return { starters: orderSlots(starters), bench: team.bench ?? [] };
   }, [team, rosterPositions, optimal]);
 
-  const lineup = view === "coach" ? optimal : actual;
+  const lineup = useMemo(() => {
+    const base = view === "coach" ? optimal : actual;
+    return { starters: orderSlots(base.starters), bench: base.bench };
+  }, [view, optimal, actual]);
 
   /** Bench assets the optimizer would promote into the starting lineup. */
   const promotions = useMemo(() => {
