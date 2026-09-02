@@ -319,7 +319,7 @@ function RosterCard({
   rows: { slot: string; player: Player | null }[];
   value: (p: Player) => number;
   action?: React.ReactNode;
-  highlight?: Set<string>;
+  highlight?: Set<string> | undefined;
 }) {
   return (
     <section className="rounded-xl border border-border bg-card p-4">
