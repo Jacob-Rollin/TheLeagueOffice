@@ -45,6 +45,7 @@ export default defineConfig({
     server: { entry: "server" },
   },
   // 🟢 Configure Nitro to inline imports on server bundles and eliminate __exportAll TDZ circular chunks
+  // (cast keeps the identical runtime config while satisfying the narrower published type)
   nitro: {
     ...(preset ? { preset } : {}),
     rollupConfig: {
@@ -52,7 +53,8 @@ export default defineConfig({
         inlineDynamicImports: true,
       },
     },
-  },
+  } as unknown as { preset?: string },
+
   // 🟢 MCP Plugin completely removed to halt background token syncing and preserve credits
   plugins: [],
 });
