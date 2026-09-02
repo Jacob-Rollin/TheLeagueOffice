@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
+import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
@@ -73,6 +74,17 @@ function TeamRosterPage() {
   });
   const [view, setView] = useState<"actual" | "coach">("actual");
   const brain = usePlayerBrain();
+  const { projectFor } = useLeagueProjections();
+
+  /**
+   * League-exact weekly projection: Sleeper's raw projected stat line scored
+   * against the active host league's own rule map, falling back to the
+   * season-long baseline when the week has no projected line.
+   */
+  const projPts = useMemo(
+    () => (p: Player) => projectFor(p.id) ?? weeklyOf(p),
+    [projectFor],
+  );
 
   const byName = useMemo(() => {
     const map = new Map<string, { value: number; trend: number }>();
@@ -211,7 +223,7 @@ function TeamRosterPage() {
             <RosterCard
               title="Active Starters"
               rows={lineup.starters}
-              points={weeklyOf}
+              points={projPts}
               highlight={view === "coach" ? promotions : undefined}
               action={
                 <div className="inline-flex items-center rounded-lg border border-border bg-muted/30 p-0.5">
@@ -236,7 +248,7 @@ function TeamRosterPage() {
             <RosterCard
               title="Bench Depth"
               rows={lineup.bench.map((p) => ({ slot: "BN", player: p }))}
-              points={weeklyOf}
+              points={projPts}
             />
 
             <section className="rounded-xl border border-border bg-muted/10 p-4">
@@ -381,7 +393,7 @@ function RosterCard({
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="tabnum text-sm font-bold">{points(r.player).toFixed(1)}</div>
+                  <div className="tabnum text-sm font-bold">{points(r.player).toFixed(2)}</div>
                   <div className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
                     Proj Pts
                   </div>
