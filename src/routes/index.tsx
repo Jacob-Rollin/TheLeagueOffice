@@ -1,10 +1,25 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, ChevronRight, Grid3X3, LayoutGrid, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { LeagueEmptyState } from "@/components/league/LeagueGate";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { platformLabel } from "@/lib/league-link";
 import { cn } from "@/lib/utils";
+
+const relativeTime = (iso?: string) => {
+  if (!iso) return "Fantasy Insight Feed";
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "Fantasy Insight Feed";
+  const mins = Math.max(1, Math.round((Date.now() - then) / 60000));
+  const label =
+    mins < 60
+      ? `${mins} minute${mins === 1 ? "" : "s"} ago`
+      : mins < 60 * 24
+        ? `${Math.round(mins / 60)} hour${Math.round(mins / 60) === 1 ? "" : "s"} ago`
+        : `${Math.round(mins / 1440)} day${Math.round(mins / 1440) === 1 ? "" : "s"} ago`;
+  return `Published ${label} • Fantasy Insight Feed`;
+};
+
 
 const NEWS_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news";
 type LinkNode = { web?: { href?: string }; href?: string };
@@ -145,23 +160,37 @@ function Home() {
                         rel="noreferrer"
                         className="group overflow-hidden rounded-xl border border-border bg-card hover:border-primary"
                       >
-                        {n.images?.[0]?.url && (
-                          <img
-                            src={n.images[0].url}
-                            alt={n.images[0].alt ?? "Fantasy football news"}
-                            loading="lazy"
-                            className="h-auto w-full object-contain"
-                          />
+                        {n.images?.[0]?.url ? (
+                          <div className="relative">
+                            <img
+                              src={n.images[0].url}
+                              alt={n.images[0].alt ?? "Fantasy football news"}
+                              loading="lazy"
+                              className="h-auto w-full object-contain"
+                            />
+                            <div className="absolute bottom-4 left-4 right-4 rounded-xl border border-white/10 bg-background/65 p-4 shadow-lg backdrop-blur-md">
+                              <h3 className="text-lg font-bold leading-snug tracking-tight group-hover:text-primary">
+                                {n.headline}
+                              </h3>
+                              <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                                {relativeTime(n.published)}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4">
+                            <h3 className="text-lg font-bold leading-snug tracking-tight group-hover:text-primary">
+                              {n.headline}
+                            </h3>
+                            <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                              {relativeTime(n.published)}
+                            </p>
+                            {n.description && (
+                              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{n.description}</p>
+                            )}
+                          </div>
                         )}
-                        <div className="p-4">
-                          <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
-                          <h3 className="mt-1 text-lg font-semibold leading-snug group-hover:text-primary">
-                            {n.headline}
-                          </h3>
-                          {n.description && (
-                            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{n.description}</p>
-                          )}
-                        </div>
+
                       </a>
                     ))
                 : ["Fantasy draft targets to watch", "Fantasy sleepers and busts", "Fantasy players trending up"].map(
@@ -211,32 +240,44 @@ function Home() {
                   {standings?.league?.season ?? ""}
                 </span>
               </div>
-              <div className="rounded-lg border border-border">
-                <table className="w-full table-fixed text-xs">
-                  <thead className="bg-surface text-[10px] uppercase tracking-widest text-muted-foreground">
-                    <tr>
-                      <th className="w-8 px-1 py-1.5 text-left">#</th>
-                      <th className="px-1 py-1.5 text-left">Team</th>
-                      <th className="w-16 px-1 py-1.5 text-right">W-L</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(standings?.rows ?? []).map((r, i) => (
-                      <tr key={r.rosterId} className={cn("border-t border-border", i < 4 && "bg-primary/5")}>
-                        <td className="tabnum px-1 py-1.5 text-muted-foreground">{i + 1}</td>
-                        <td className="px-1 py-1.5">
-                          <div className="truncate font-medium">{r.team}</div>
-                          <div className="truncate text-[10px] text-muted-foreground">{r.owner}</div>
-                        </td>
-                        <td className="tabnum px-1 py-1.5 text-right">
-                          {r.wins}-{r.losses}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="overflow-hidden rounded-lg border border-border">
+                <div className="grid grid-cols-[2rem_1fr_4rem_1rem] items-center gap-1 bg-surface px-1 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <span>#</span>
+                  <span>Team</span>
+                  <span className="text-right">W-L</span>
+                  <span />
+                </div>
+                {(standings?.rows ?? []).map((r, i) => (
+                  <Link
+                    key={r.rosterId}
+                    to="/team/$teamId"
+                    params={{ teamId: String(r.rosterId) }}
+                    className={cn(
+                      "grid grid-cols-[2rem_1fr_4rem_1rem] items-center gap-1 border-t border-border px-1 py-1.5 text-xs transition-colors hover:bg-muted/60",
+                      i < 4 && "bg-primary/5",
+                    )}
+                  >
+                    <span className="tabnum text-muted-foreground">{i + 1}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{r.team}</span>
+                      <span className="block truncate text-[10px] text-muted-foreground">{r.owner}</span>
+                    </span>
+                    <span className="tabnum text-right">
+                      {r.wins}-{r.losses}
+                    </span>
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                  </Link>
+                ))}
               </div>
+              <Link
+                to="/account/leagues"
+                className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-muted/40 py-2 text-xs font-bold uppercase tracking-wider text-foreground transition-all hover:bg-muted/70"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+                Manage My Leagues
+              </Link>
             </section>
+
           )}
         </aside>
       </div>
