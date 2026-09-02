@@ -28,6 +28,9 @@ export function useLeagueRosters(players: Player[]) {
     queryKey: ["league-rosters", activeLeague?.id ?? "none"],
     enabled: Boolean(identifier),
     staleTime: 5 * 60 * 1000,
+    // Stale-while-revalidate: serve the cached snapshot instantly, then
+    // silently refresh from the league provider on every mount.
+    refetchOnMount: "always",
     retry: false,
     queryFn: () =>
       getConnectionRosters({
