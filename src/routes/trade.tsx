@@ -381,9 +381,11 @@ function TradePage() {
    * the optimized starting lineup cannot be graded below the deal's true
    * weekly impact just because it costs bench bodies.
    */
-  let adjustedPct = basePct + needDelta;
-  if (impact.delta > 0.25) adjustedPct = Math.max(adjustedPct, needDelta);
-  if (impact.delta > 2) adjustedPct = Math.max(adjustedPct, 15);
+  // 🟢 THE FIX: Force adjustedPct to mirror the true value direction in sandbox mode so losses don't register as wins
+  let adjustedPct = valueOnly ? valueTilt : (basePct + needDelta);
+  if (!valueOnly && impact.delta > 0.25) adjustedPct = Math.max(adjustedPct, needDelta);
+  if (!valueOnly && impact.delta > 2) adjustedPct = Math.max(adjustedPct, 15);
+  
   const adjustedGrade = grade(adjustedPct);
   const ready = give.length > 0 && get.length > 0;
   const verdict = executiveSummary({
