@@ -188,19 +188,6 @@ function TradeAssetCard({
   );
 }
 
-/** Placeholder row appended when the receiving package needs an extra slot. */
-function BenchDropPlaceholder({ count }: { count: number }) {
-  return (
-    <li className="flex items-center gap-2 rounded-md border border-dashed border-border bg-surface/60 px-2 py-2.5 text-sm">
-      <span className="grid h-6 min-w-[2.4rem] place-items-center rounded border border-neutral-400/60 bg-neutral-400 px-1.5 font-display text-xs font-semibold uppercase tracking-wider text-white">
-        BN
-      </span>
-      <span className="truncate text-xs font-semibold text-muted-foreground">
-        +{count} Bench Slot{count > 1 ? "s" : ""} Required
-      </span>
-    </li>
-  );
-}
 
 
 type OpponentTeam = { key: string; name: string; owner: string; players: Player[] };
