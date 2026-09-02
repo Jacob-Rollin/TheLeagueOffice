@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
-import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
+import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { grade } from "@/lib/evaluate";
@@ -115,27 +115,92 @@ function metricsFor(player: Player, detail: PlayerDetail | undefined, scoring: S
   };
 }
 
-type MarketLine = { bits: string[]; trend: string | null; up: boolean };
 
-/** Single selected-player row: name plus cached market assets, no raw labels. */
-function MarketRow({ player, line }: { player: Player; line: MarketLine }) {
+
+/**
+ * Site-standard trade asset card: headshot overlaid on the team's graphical
+ * branding wash, name on top, colored position tag tucked directly beneath it,
+ * and cached market value / 30-day trend on the right rail.
+ */
+function TradeAssetCard({
+  player,
+  value,
+  trendPct,
+}: {
+  player: Player;
+  value: number | null;
+  trendPct: number | null;
+}) {
+  const logo = teamLogo(player.team);
   return (
-    <span className="block min-w-0">
-      <span className="block truncate text-sm font-medium leading-tight text-foreground">
-        {player.name}
+    <span className="relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-md">
+      {logo && (
+        <img
+          src={logo}
+          alt=""
+          aria-hidden
+          loading="lazy"
+          className="pointer-events-none absolute -left-2 top-1/2 size-14 -translate-y-1/2 opacity-[0.14] blur-[0.2px]"
+        />
+      )}
+      <span className="relative z-10 shrink-0">
+        <PlayerAvatar
+          id={player.id}
+          pos={player.pos}
+          team={player.team}
+          name={player.name}
+          className="size-10"
+          logoClassName="size-4"
+        />
       </span>
-      <span className="tabnum block truncate text-[11px] leading-tight text-muted-foreground">
-        {line.bits.join(" · ")}
-        {line.trend ? " · " : ""}
-        {line.trend ? (
-          <span className={cn("font-medium", line.up ? "text-foreground" : "text-muted-foreground")}>
-            {line.trend}
+      <span className="relative z-10 min-w-0 flex-1">
+        <span className="block truncate text-sm font-bold leading-tight text-foreground">
+          {player.name}
+        </span>
+        <span className="mt-0.5 flex items-center gap-1.5">
+          <PositionBadge pos={player.pos} className="h-4 min-w-[2rem] text-[9px]" />
+          <span className="truncate text-[11px] leading-tight text-muted-foreground">
+            {[player.team || "FA", player.bye ? `BYE ${player.bye}` : null]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
-        ) : null}
+        </span>
+      </span>
+      <span className="relative z-10 shrink-0 pr-1 text-right">
+        <span className="tabnum block text-sm font-semibold leading-tight text-foreground">
+          {value ? scaleValue(value).toFixed(1) : "—"}
+        </span>
+        <span
+          className={cn(
+            "tabnum block text-[10px] leading-tight",
+            !trendPct
+              ? "text-muted-foreground"
+              : trendPct > 0
+                ? "text-emerald-600"
+                : "text-destructive",
+          )}
+        >
+          {trendPct ? `${trendPct > 0 ? "▲" : "▼"} ${Math.abs(trendPct).toFixed(1)}%` : "flat"}
+        </span>
       </span>
     </span>
   );
 }
+
+/** Placeholder row appended when the receiving package needs an extra slot. */
+function BenchDropPlaceholder({ count }: { count: number }) {
+  return (
+    <li className="flex items-center gap-2 rounded-md border border-dashed border-border bg-surface/60 px-2 py-2.5 text-sm">
+      <span className="grid h-6 min-w-[2.4rem] place-items-center rounded border border-neutral-400/60 bg-neutral-400 px-1.5 font-display text-xs font-semibold uppercase tracking-wider text-white">
+        BN
+      </span>
+      <span className="truncate text-xs font-semibold text-muted-foreground">
+        +{count} Bench Slot{count > 1 ? "s" : ""} Required
+      </span>
+    </li>
+  );
+}
+
 
 type OpponentTeam = { key: string; name: string; owner: string; players: Player[] };
 
@@ -167,15 +232,15 @@ function TradePage() {
   const draft = useDraft();
   /** Cached market analytics (value + 30-day trend) from the local brain matrix. */
   const brain = usePlayerBrain();
-  const marketLine = (p: Player) => {
+  /** Cached value + 30-day trend percentage for a trade asset card. */
+  const assetMetrics = (p: Player) => {
     const entry = brain?.[p.id] ?? null;
-    const bits = [p.pos, p.team || "FA", p.bye ? `BYE ${p.bye}` : null].filter(Boolean) as string[];
-    if (entry?.value) bits.push(`Value: ${entry.value.toLocaleString()}`);
-    const pct =
-      entry?.value && entry?.trend ? (entry.trend / Math.abs(entry.value)) * 100 : 0;
-    const trend = pct ? `${pct > 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(1)}%` : null;
-    return { bits, trend, up: pct > 0 };
+    const value = entry?.value ?? null;
+    const trendPct =
+      entry?.value && entry?.trend ? (entry.trend / Math.abs(entry.value)) * 100 : null;
+    return { value, trendPct };
   };
+
 
 
   const [give, setGive] = useState<Player[]>([]);
@@ -392,7 +457,13 @@ function TradePage() {
    * the optimized starting lineup cannot be graded below the deal's true
    * weekly impact just because it costs bench bodies.
    */
-  const isSandbox = sandboxMode || !league?.synced;
+  /**
+   * Roster synchronization override: a synced league whose roster count is 0
+   * still falls back to pure sandbox asset-valuation rules so empty lineup
+   * deltas can never crash the analytics layout.
+   */
+  const isSandbox = sandboxMode || !league?.synced || userRoster.length === 0;
+
 
   /** Sandbox / unsynced desks show asset value only — no lineup telemetry. */
   const valueOnly = isSandbox;
@@ -543,25 +614,42 @@ function TradePage() {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <PlayerPicker
-          label="You give"
-          players={data.players}
-          selected={give}
-          onAdd={(p) => setGive((s) => [...s, p])}
-          onRemove={(id) => setGive((s) => s.filter((p) => p.id !== id))}
-          renderMeta={(p) => <MarketRow player={p} line={marketLine(p)} />}
-        />
-        <PlayerPicker
-          label="You receive"
-          accent="get"
-          players={data.players}
-          selected={get}
-          onAdd={(p) => setGet((s) => [...s, p])}
-          onRemove={(id) => setGet((s) => s.filter((p) => p.id !== id))}
-          renderMeta={(p) => <MarketRow player={p} line={marketLine(p)} />}
-        />
-      </div>
+      {/* Fused trade desk block: both sides share one cohesive card spine. */}
+      <section className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="grid gap-0 sm:grid-cols-2">
+          <div className="p-3 sm:border-r sm:border-border">
+            <PlayerPicker
+              bare
+              label="You give"
+              players={data.players}
+              selected={give}
+              onAdd={(p) => setGive((s) => [...s, p])}
+              onRemove={(id) => setGive((s) => s.filter((p) => p.id !== id))}
+              renderRow={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+              renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+            />
+          </div>
+          <div className="border-t border-border p-3 sm:border-t-0">
+            <PlayerPicker
+              bare
+              label="You receive"
+              accent="get"
+              players={data.players}
+              selected={get}
+              onAdd={(p) => setGet((s) => [...s, p])}
+              onRemove={(id) => setGet((s) => s.filter((p) => p.id !== id))}
+              renderRow={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+              renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+              footer={
+                get.length > give.length ? (
+                  <BenchDropPlaceholder count={get.length - give.length} />
+                ) : null
+              }
+            />
+          </div>
+        </div>
+      </section>
+
 
       <TradeDashboard
         ready={ready}
@@ -1057,6 +1145,9 @@ function TradeDashboard({
   showRosterRow: boolean;
   constraint: RosterConstraint;
 }) {
+  // Lower analytics stay hidden until both sides of the deal hold a player.
+  if (!ready) return null;
+
   const clamped = Math.max(-100, Math.min(100, ready ? tilt : 0));
   const mag = Math.abs(clamped);
   const zone = mag <= FAIR_ZONE ? "fair" : mag <= 18 ? "warn" : "unfair";
@@ -1067,15 +1158,24 @@ function TradeDashboard({
   const textTone =
     zone === "fair" ? "text-emerald-600" : zone === "warn" ? "text-amber-600" : "text-destructive";
 
+  /** Grade halo: the assessment card outline mirrors the deal's grade tone. */
+  const haloTone =
+    gradeTone === "good"
+      ? "border-emerald-500/70 shadow-[0_0_18px_-2px_rgba(16,185,129,0.55)]"
+      : gradeTone === "bad"
+        ? "border-destructive/70 shadow-[0_0_18px_-2px_rgba(220,38,38,0.45)]"
+        : "border-border";
+
   const giveScaled = scaleValue(giveValue);
   const getScaled = scaleValue(getValue);
   const gap = Math.round((getScaled - giveScaled) * 10) / 10;
 
   return (
-    <div className="mt-4 space-y-3">
+    <div className="mt-4 space-y-3 duration-300 animate-in fade-in slide-in-from-top-2">
       {/* ---------- Top analytical row ---------- */}
       <div className="grid gap-3 lg:grid-cols-2">
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <section className={cn("rounded-xl border-2 bg-card p-4 shadow-sm", haloTone)}>
+
           <div className="flex items-start gap-4">
             <div
               className={cn(
