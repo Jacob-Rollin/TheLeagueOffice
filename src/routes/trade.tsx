@@ -17,11 +17,22 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import {
   executiveSummary,
+  headlineVerdict,
+  injuryRisk,
   opponentImpact as computeOpponentImpact,
   packageScore,
+  positionalDepth,
   rosterConstraint,
   rosterFit,
+  scaleValue,
+  sideBullets,
+  type Bullet,
+  type BulletAsset,
+  type InjuryRisk,
+  type PositionalDepthRow,
+  type RosterConstraint,
 } from "@/lib/trade-engine";
+
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
@@ -463,6 +474,35 @@ function TradePage() {
     ),
   ];
 
+  /* ---------- Modular dashboard analytics ---------- */
+
+  const toAsset = (p: Player): BulletAsset => ({
+    name: p.name,
+    pos: String(p.pos ?? ""),
+    value: Math.max(0, brain?.[p.id]?.value ?? 0),
+    trend: brain?.[p.id]?.trend ?? 0,
+    injuryStatus: resolveInjuryStatus(p, brain) ?? "Healthy",
+    weekly: (p.proj?.[scoring] ?? 0) / WEEKS,
+  });
+
+  const giveAssets = give.map(toAsset);
+  const getAssets = get.map(toAsset);
+
+  /** Bench differential = total roster weekly swing minus the starting swing. */
+  const benchDelta =
+    getAssets.reduce((s, a) => s + a.weekly, 0) -
+    giveAssets.reduce((s, a) => s + a.weekly, 0) -
+    impact.delta;
+
+  const giveBullets = sideBullets({ side: "give", assets: giveAssets });
+  const getBullets = sideBullets({
+    side: "get",
+    assets: getAssets,
+    impact: valueOnly ? null : impact,
+    benchDelta: valueOnly ? null : benchDelta,
+  });
+  const depthRows = positionalDepth(giveAssets, getAssets);
+  const risk = injuryRisk(giveAssets, getAssets);
 
 
   return (
@@ -523,7 +563,7 @@ function TradePage() {
         />
       </div>
 
-      <BalanceMeter
+      <TradeDashboard
         ready={ready}
         tilt={balanceTilt}
         giveValue={giveValue}
@@ -532,79 +572,19 @@ function TradePage() {
         getWeekly={getWeekly}
         fitPct={needDelta}
         valueOnly={valueOnly}
+        gradeLetter={ready ? adjustedGrade.letter : "—"}
+        gradeTone={adjustedGrade.tone}
+        headline={headlineVerdict({ ready, pct: adjustedPct })}
+        verdict={verdict}
+        fitNote={fit.note}
+        giveBullets={giveBullets}
+        getBullets={getBullets}
+        depth={depthRows}
+        risk={risk}
+        showRosterRow={ready && !valueOnly && userRoster.length > 0}
+        constraint={constraint}
       />
 
-      <section className="mt-4 rounded-xl border border-border bg-card p-4">
-        <div className="flex items-start gap-4">
-          <div
-            className={cn(
-              "flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border-2 font-display text-3xl font-bold",
-              !ready
-                ? "border-border text-muted-foreground"
-                : adjustedGrade.tone === "good"
-                  ? "border-emerald-600 text-emerald-600"
-                  : adjustedGrade.tone === "bad"
-                    ? "border-destructive text-destructive"
-                    : "border-border text-foreground",
-            )}
-          >
-            {ready ? adjustedGrade.letter : "—"}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="eyebrow">Executive summary</p>
-            <p className="mt-1 text-sm font-medium leading-snug text-foreground">{verdict}</p>
-            {ready && !valueOnly && (
-              <>
-                <p className="mt-1 text-xs text-muted-foreground">{fit.note}</p>
-                <p className="tabnum mt-1 text-xs text-muted-foreground">
-                  Production {basePct.toFixed(1)}% · Roster fit {needDelta > 0 ? "+" : ""}
-                  {needDelta}% · Final {adjustedPct.toFixed(1)}%
-                  {give.length !== get.length ? " · Consolidation modifier applied" : ""}
-                </p>
-              </>
-            )}
-          </div>
-        </div>
-        {ready && constraint.overflow && (
-          <p className="mt-3 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground">
-            ROSTER CONSTRAINT: Accepting this deal requires dropping {constraint.dropCount} bench
-            player{constraint.dropCount > 1 ? "s" : ""}.
-            {constraint.dropNames.length
-              ? ` Model drops ${constraint.dropNames.join(", ")} and subtracts ${constraint.penalty.toFixed(1)} pts/wk from the receive side.`
-              : ""}
-            {constraint.shielded
-              ? " Remaining bodies are locked as your only starter at their position, so no further drop is legal."
-              : ""}
-          </p>
-        )}
-        {ready && !valueOnly && (
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-            <div className="p-2">
-              <b className="tabnum block text-sm">{giveWeekly.toFixed(1)}</b>Give pts/wk
-            </div>
-            <div className="p-2">
-              <b className="tabnum block text-sm">{getWeekly.toFixed(1)}</b>Get pts/wk
-            </div>
-            <div className="p-2">
-              <b
-                className={cn(
-                  "tabnum block text-sm",
-                  needDelta > 0
-                    ? "text-emerald-600"
-                    : needDelta < 0
-                      ? "text-destructive"
-                      : undefined,
-                )}
-              >
-                {needDelta > 0 ? "+" : ""}
-                {needDelta}%
-              </b>
-              Roster fit
-            </div>
-          </div>
-        )}
-
-      </section>
 
       <div className="mt-4 flex gap-1">
         {(
@@ -1036,7 +1016,7 @@ const FAIR_ZONE = 7;
  * the deal favors; the middle band glows green inside the fair-value window
  * and shifts to amber, then red, as the imbalance widens.
  */
-function BalanceMeter({
+function TradeDashboard({
   ready,
   tilt,
   giveValue,
@@ -1045,6 +1025,17 @@ function BalanceMeter({
   getWeekly,
   fitPct,
   valueOnly,
+  gradeLetter,
+  gradeTone,
+  headline,
+  verdict,
+  fitNote,
+  giveBullets,
+  getBullets,
+  depth,
+  risk,
+  showRosterRow,
+  constraint,
 }: {
   ready: boolean;
   tilt: number;
@@ -1054,98 +1045,259 @@ function BalanceMeter({
   getWeekly: number;
   fitPct: number;
   valueOnly: boolean;
+  gradeLetter: string;
+  gradeTone: string;
+  headline: string;
+  verdict: string;
+  fitNote: string;
+  giveBullets: Bullet[];
+  getBullets: Bullet[];
+  depth: PositionalDepthRow[];
+  risk: InjuryRisk;
+  showRosterRow: boolean;
+  constraint: RosterConstraint;
 }) {
   const clamped = Math.max(-100, Math.min(100, ready ? tilt : 0));
   const mag = Math.abs(clamped);
   const zone = mag <= FAIR_ZONE ? "fair" : mag <= 18 ? "warn" : "unfair";
-  const left = 50 - clamped / 2;
+  // Needle physically slides toward the heavier side of the deal.
+  const left = 50 + clamped / 2;
   const barTone =
-    zone === "fair"
-      ? "bg-emerald-500"
-      : zone === "warn"
-        ? "bg-amber-500"
-        : "bg-destructive";
+    zone === "fair" ? "bg-emerald-500" : zone === "warn" ? "bg-amber-500" : "bg-destructive";
   const textTone =
-    zone === "fair"
-      ? "text-emerald-600"
-      : zone === "warn"
-        ? "text-amber-600"
-        : "text-destructive";
+    zone === "fair" ? "text-emerald-600" : zone === "warn" ? "text-amber-600" : "text-destructive";
+
+  const giveScaled = scaleValue(giveValue);
+  const getScaled = scaleValue(getValue);
+  const gap = Math.round((getScaled - giveScaled) * 10) / 10;
 
   return (
-    <section className="mt-4 rounded-xl border border-border bg-card p-4">
-      {/* 🟢 THE FIX PART 1: Use absolute midpoints for the top description text label layer */}
-      <div className="relative flex items-center justify-between h-4 text-[11px] uppercase tracking-widest text-muted-foreground">
-        <span>You give</span>
-        <div className="absolute left-1/2 -translate-x-1/2 text-center whitespace-nowrap">
-          <span className={cn("font-display font-bold tracking-wider", textTone)}>
-            {!ready
-              ? "Awaiting both sides"
-              : zone === "fair"
-                ? "Fair zone"
-                : clamped > 0
-                  ? "Tilts to you"
-                  : "Tilts to them"}
-          </span>
-        </div>
-        <span>You receive</span>
-      </div>
-
-      <div className="relative mt-3 h-3 w-full overflow-hidden rounded-full border border-border bg-surface">
-        <div
-          className={cn(
-            "absolute inset-y-0 left-1/2 w-[14%] -translate-x-1/2 rounded-full transition-colors duration-300",
-            zone === "fair"
-              ? "bg-emerald-500/25 shadow-[0_0_14px_2px_rgba(16,185,129,0.55)]"
-              : zone === "warn"
-                ? "bg-amber-500/20"
-                : "bg-destructive/15",
-          )}
-        />
-        <div
-          className={cn(
-            "absolute top-1/2 h-5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-500 ease-out",
-            barTone,
-          )}
-          style={{ left: `${left}%` }}
-        />
-      </div>
-
-      {/* 🟢 THE FIX PART 2: Use absolute midpoints for the bottom numerical calculation output layer */}
-      <div className="relative flex items-center justify-between h-5 mt-2 text-xs text-muted-foreground">
-        <span className="tabnum">{giveValue > 0 ? giveValue.toLocaleString() : "—"}</span>
-        <div className="absolute left-1/2 -translate-x-1/2 text-center whitespace-nowrap">
-          <span className={cn("tabnum font-bold text-sm", textTone)}>
-            {ready ? `${clamped > 0 ? "+" : ""}${clamped.toFixed(1)}%` : "0.0%"}
-          </span>
-        </div>
-        <span className="tabnum">{getValue > 0 ? getValue.toLocaleString() : "—"}</span>
-      </div>
-
-      {ready && !valueOnly && (
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] text-muted-foreground">
-          <div>
-            <b className="tabnum block text-sm text-foreground">{giveWeekly.toFixed(1)}</b>
-            Give pts/wk
-          </div>
-          <div>
-            <b className="tabnum block text-sm text-foreground">{getWeekly.toFixed(1)}</b>
-            Get pts/wk
-          </div>
-          <div>
-            <b
+    <div className="mt-4 space-y-3">
+      {/* ---------- Top analytical row ---------- */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div
               className={cn(
-                "tabnum block text-sm",
-                fitPct > 0 ? "text-emerald-600" : fitPct < 0 ? "text-destructive" : "text-foreground",
+                "flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border-2 font-display text-3xl font-bold",
+                !ready
+                  ? "border-border text-muted-foreground"
+                  : gradeTone === "good"
+                    ? "border-emerald-600 text-emerald-600"
+                    : gradeTone === "bad"
+                      ? "border-destructive text-destructive"
+                      : "border-border text-foreground",
               )}
             >
-              {fitPct > 0 ? "+" : ""}
-              {fitPct}%
-            </b>
-            Roster fit
+              {gradeLetter}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="eyebrow">Overall assessment</p>
+              <p
+                className={cn(
+                  "font-display text-xl font-bold leading-tight tracking-tight",
+                  !ready
+                    ? "text-muted-foreground"
+                    : gradeTone === "good"
+                      ? "text-emerald-600"
+                      : gradeTone === "bad"
+                        ? "text-destructive"
+                        : "text-foreground",
+                )}
+              >
+                {headline}
+              </p>
+              <p className="mt-1 text-sm leading-snug text-foreground">{verdict}</p>
+              {ready && !valueOnly && (
+                <p className="mt-1 text-xs text-muted-foreground">{fitNote}</p>
+              )}
+            </div>
           </div>
-        </div>
+          {ready && constraint.overflow && (
+            <p className="mt-3 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground">
+              ROSTER CONSTRAINT: Accepting this deal requires dropping {constraint.dropCount} bench
+              player{constraint.dropCount > 1 ? "s" : ""}.
+              {constraint.dropNames.length
+                ? ` Model drops ${constraint.dropNames.join(", ")} and subtracts ${constraint.penalty.toFixed(1)} pts/wk from the receive side.`
+                : ""}
+            </p>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex items-baseline justify-between">
+            <p className="eyebrow">Value gap</p>
+            <span className={cn("font-display text-xl font-bold tabnum", textTone)}>
+              {!ready
+                ? "—"
+                : gap === 0
+                  ? "Even"
+                  : `${gap > 0 ? "Value Premium: +" : "Value Deficit: "}${gap.toFixed(1)}`}
+            </span>
+          </div>
+
+          <div className="relative mt-4 flex h-4 items-center justify-between text-[11px] uppercase tracking-widest text-muted-foreground">
+            <span>You give</span>
+            <span
+              className={cn(
+                "absolute left-1/2 -translate-x-1/2 whitespace-nowrap font-display font-bold tracking-wider",
+                textTone,
+              )}
+            >
+              {!ready
+                ? "Awaiting both sides"
+                : zone === "fair"
+                  ? "Fair zone"
+                  : clamped > 0
+                    ? "Tilts to you"
+                    : "Tilts to them"}
+            </span>
+            <span>You receive</span>
+          </div>
+
+          <div className="relative mt-3 h-3 w-full overflow-hidden rounded-full border border-border bg-surface">
+            <div
+              className={cn(
+                "absolute inset-y-0 left-1/2 w-[14%] -translate-x-1/2 rounded-full transition-colors duration-300",
+                zone === "fair"
+                  ? "bg-emerald-500/25 shadow-[0_0_14px_2px_rgba(16,185,129,0.55)]"
+                  : zone === "warn"
+                    ? "bg-amber-500/20"
+                    : "bg-destructive/15",
+              )}
+            />
+            <div
+              className={cn(
+                "absolute top-1/2 h-5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-500 ease-out",
+                barTone,
+              )}
+              style={{ left: `${left}%` }}
+            />
+          </div>
+
+          <div className="relative mt-2 flex h-5 items-center justify-between text-xs text-muted-foreground">
+            <span className="tabnum">{giveScaled > 0 ? giveScaled.toFixed(1) : "—"}</span>
+            <span
+              className={cn("absolute left-1/2 -translate-x-1/2 tabnum text-sm font-bold", textTone)}
+            >
+              {ready ? `${clamped > 0 ? "+" : ""}${clamped.toFixed(1)}%` : "0.0%"}
+            </span>
+            <span className="tabnum">{getScaled > 0 ? getScaled.toFixed(1) : "—"}</span>
+          </div>
+
+          {showRosterRow && (
+            <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center text-[11px] text-muted-foreground">
+              <div>
+                <b className="tabnum block text-sm text-foreground">{giveWeekly.toFixed(1)}</b>
+                Give pts/wk
+              </div>
+              <div>
+                <b className="tabnum block text-sm text-foreground">{getWeekly.toFixed(1)}</b>
+                Get pts/wk
+              </div>
+              <div>
+                <b
+                  className={cn(
+                    "tabnum block text-sm",
+                    fitPct > 0
+                      ? "text-emerald-600"
+                      : fitPct < 0
+                        ? "text-destructive"
+                        : "text-foreground",
+                  )}
+                >
+                  {fitPct > 0 ? "+" : ""}
+                  {fitPct}%
+                </b>
+                Roster fit
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* ---------- Middle analytical row ---------- */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <BulletCard title="Giving pros & cons" bullets={giveBullets} />
+        <BulletCard title="Getting pros & cons" bullets={getBullets} />
+      </div>
+
+      {/* ---------- Bottom analytical row ---------- */}
+      {showRosterRow && (
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <p className="eyebrow">Positional depth & risk analysis</p>
+          <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                Positional depth
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {depth.length ? (
+                  depth.map((d) => (
+                    <span
+                      key={d.pos}
+                      className={cn(
+                        "tabnum rounded-md border px-2.5 py-1 text-xs font-semibold",
+                        d.delta > 0
+                          ? "border-emerald-600/40 bg-emerald-500/10 text-emerald-600"
+                          : "border-destructive/40 bg-destructive/10 text-destructive",
+                      )}
+                    >
+                      {d.pos}: {d.delta > 0 ? "+" : ""}
+                      {d.delta.toFixed(1)} Value {d.delta > 0 ? "Gained" : "Lost"}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    No positional value shift on this deal.
+                  </span>
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                Injury vulnerability
+              </p>
+              <span
+                className={cn(
+                  "mt-2 inline-block rounded-md border px-2.5 py-1 font-display text-xs font-bold tracking-wide",
+                  risk.level === "INCREASED"
+                    ? "border-destructive/40 bg-destructive/10 text-destructive"
+                    : risk.level === "REDUCED"
+                      ? "border-emerald-600/40 bg-emerald-500/10 text-emerald-600"
+                      : "border-border bg-surface text-muted-foreground",
+                )}
+              >
+                INJURY RISK: {risk.level}
+              </span>
+              <p className="mt-2 text-xs leading-snug text-muted-foreground">{risk.note}</p>
+            </div>
+          </div>
+        </section>
       )}
+    </div>
+  );
+}
+
+function BulletCard({ title, bullets }: { title: string; bullets: Bullet[] }) {
+  return (
+    <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <p className="eyebrow">{title}</p>
+      <ul className="mt-2 space-y-1.5">
+        {bullets.map((b, i) => (
+          <li key={`${b.tone}-${i}`} className="flex gap-2 text-xs leading-snug">
+            <span
+              className={cn(
+                "mt-px font-bold",
+                b.tone === "pro" ? "text-emerald-600" : "text-destructive",
+              )}
+            >
+              {b.tone === "pro" ? "+" : "−"}
+            </span>
+            <span className="text-foreground">{b.text}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
