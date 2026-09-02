@@ -99,7 +99,17 @@ export function optimizeLineup(
   starters: Record<string, number>,
 ): Lineup {
   const req = { ...BASE_STARTERS, ...starters };
-  const pool = [...players].sort((a, b) => b.weekly - a.weekly);
+  // Airtight isolation: clone every entry so sandbox / live roster objects are
+  // never mutated by the optimizer's internal slot bookkeeping.
+  const pool = players
+    .filter((p): p is FitPlayer => Boolean(p) && typeof p.pos === "string")
+    .map((p) => ({
+      pos: String(p.pos ?? "").toUpperCase(),
+      weekly: Number.isFinite(p.weekly) ? Number(p.weekly) : 0,
+      _used: false,
+    }))
+    .sort((a, b) => b.weekly - a.weekly);
+
   const vacancies: Record<string, number> = {};
   const bySlot: Record<string, number> = {};
   let points = 0;
