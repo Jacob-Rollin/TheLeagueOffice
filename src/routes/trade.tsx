@@ -115,7 +115,7 @@ function metricsFor(player: Player, detail: PlayerDetail | undefined, scoring: S
   };
 }
 
-type MarketLine = { bits: string[]; trend: string | null; up: boolean };
+
 
 /**
  * Site-standard trade asset card: headshot overlaid on the team's graphical
