@@ -475,6 +475,12 @@ export function headlineVerdict(input: { ready: boolean; pct: number }): string 
   return "Walk away from this deal";
 }
 
+/** Prominent warning label for unequal packages that force bench drops. */
+export function benchSlotWarning(count: number): string {
+  if (count <= 0) return "";
+  return `⚠️ +${count} BENCH SLOT${count > 1 ? "S" : ""} REQUIRED`;
+}
+
 /** Roster statuses that freeze a player's active availability. */
 const FROZEN_STATUS: Record<string, string> = {
   EXEMPT: "roster-exempt list",
