@@ -548,10 +548,15 @@ function TradePage() {
   const giveAssets = give.map(toAsset);
   const getAssets = get.map(toAsset);
 
-  /** Bench differential = total roster weekly swing minus the starting swing. */
+  /**
+   * Bench differential = incoming bench weekly minus outgoing bench weekly
+   * minus the drop-candidate points an overflow constraint forces off the
+   * roster, minus the starting-lineup swing.
+   */
   const benchDelta =
     getAssets.reduce((s, a) => s + a.weekly, 0) -
     giveAssets.reduce((s, a) => s + a.weekly, 0) -
+    constraint.penalty -
     impact.delta;
 
   const giveBullets = sideBullets({ side: "give", assets: giveAssets });
@@ -606,8 +611,8 @@ function TradePage() {
 
       {/* Fused trade desk block: both sides share one cohesive card spine. */}
       <section className="mt-4 rounded-xl border border-border bg-card shadow-sm">
-        <div className="relative grid gap-2 sm:grid-cols-2">
-          <div className="px-4 pb-4 pt-3 md:px-5">
+        <div className="grid gap-2 sm:grid-cols-2 sm:gap-0">
+          <div className="bg-card px-4 pb-4 pt-3 md:px-5">
             <PlayerPicker
               bare
               label="You give"
@@ -619,7 +624,7 @@ function TradePage() {
               renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
             />
           </div>
-          <div className="px-4 pb-4 pt-3 md:px-5">
+          <div className="bg-muted/[0.18] px-4 pb-4 pt-3 md:px-5">
             <PlayerPicker
               bare
               label="You receive"
@@ -632,10 +637,6 @@ function TradePage() {
               renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
             />
           </div>
-          <div
-            className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-16 -translate-x-1/2 md:block bg-gradient-to-r from-transparent via-muted/[0.04] to-primary/[0.03] border-l border-dashed border-border/40"
-            aria-hidden="true"
-          />
         </div>
       </section>
 
