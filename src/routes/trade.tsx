@@ -1107,7 +1107,7 @@ function TradeDashboard({
   depth,
   risk,
   showRosterRow,
-  constraint,
+  dropSlots,
 }: {
   ready: boolean;
   tilt: number;
@@ -1127,7 +1127,7 @@ function TradeDashboard({
   depth: PositionalDepthRow[];
   risk: InjuryRisk;
   showRosterRow: boolean;
-  constraint: RosterConstraint;
+  dropSlots: number;
 }) {
   // Lower analytics stay hidden until both sides of the deal hold a player.
   if (!ready) return null;
