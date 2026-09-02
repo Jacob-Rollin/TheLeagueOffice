@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
+import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
