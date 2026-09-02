@@ -675,24 +675,64 @@ export type LeagueRosterTeam = {
   playerIds: string[];
   /** Player full names, used to resolve ESPN rosters against our registry. */
   playerNames: string[];
+  /** Native starter order as configured by the manager on the host platform. */
+  starterIds: string[];
+  starterNames: string[];
+  /** Players parked in a designated IR / IL slot on the host platform. */
+  irIds: string[];
+  irNames: string[];
 };
 
 export type LeagueRosters = {
   myTeamName: string | null;
   teams: LeagueRosterTeam[];
+  /** Normalized starting-slot template (QB/RB/WR/TE/FLEX/K/DEF), in host order. */
+  rosterPositions: string[];
 };
 
 type EspnRosterView = {
-  settings?: { name?: string; size?: number };
+  settings?: {
+    name?: string;
+    size?: number;
+    rosterSettings?: { lineupSlotCounts?: Record<string, number> };
+  };
   teams?: (EspnTeam & {
     roster?: {
       entries?: {
         playerId?: number;
+        lineupSlotId?: number;
         playerPoolEntry?: { player?: { fullName?: string } };
       }[];
     };
   })[];
 };
+
+/** Host platform slot token -> internal position tag. */
+export function normalizeSlotToken(raw: string): string {
+  const t = String(raw ?? "").toUpperCase().replace(/[^A-Z+/]/g, "");
+  if (t === "QB") return "QB";
+  if (t === "RB") return "RB";
+  if (t === "WR") return "WR";
+  if (t === "TE") return "TE";
+  if (t === "K" || t === "PK") return "K";
+  if (t === "DEF" || t === "DST" || t === "D/ST" || t === "DST/DEF" || t === "DEFENSE") return "DEF";
+  if (t.startsWith("FLEX") || t === "WRRBTE" || t === "RBWRTE" || t === "WRRB" || t === "REC")
+    return "FLEX";
+  if (t === "IR" || t === "IL" || t === "IL+") return "IR";
+  if (t === "BN" || t === "BE" || t === "BENCH") return "BN";
+  return t;
+}
+
+const ESPN_SLOT_TOKEN: Record<number, string> = {
+  0: "QB",
+  2: "RB",
+  4: "WR",
+  6: "TE",
+  16: "DEF",
+  17: "K",
+  23: "FLEX",
+};
+
 
 /** Every team in the active league with its current roster. */
 export async function loadConnectionRosters(
@@ -722,20 +762,44 @@ export async function loadConnectionRosters(
         return candidates.some((c) => c && c.replace(/[{}]/g, "").toUpperCase() === swidGuid);
       };
       const mineId = (rows.find(matchesSwid) ?? rows[0])?.id;
-      const teams: LeagueRosterTeam[] = rows.map((t, i) => ({
-        slot: t.id ?? i + 1,
-        team: espnTeamName(t) ?? `Team ${i + 1}`,
-        owner: t.abbrev ?? "",
-        isMine: (t.id ?? i + 1) === mineId,
-        playerIds: [],
-        playerNames: (t.roster?.entries ?? [])
-          .map((e) => e.playerPoolEntry?.player?.fullName ?? "")
-          .filter(Boolean),
-      }));
+      const teams: LeagueRosterTeam[] = rows.map((t, i) => {
+        const entries = t.roster?.entries ?? [];
+        const nameOf = (e: (typeof entries)[number]) =>
+          e.playerPoolEntry?.player?.fullName ?? "";
+        return {
+          slot: t.id ?? i + 1,
+          team: espnTeamName(t) ?? `Team ${i + 1}`,
+          owner: t.abbrev ?? "",
+          isMine: (t.id ?? i + 1) === mineId,
+          playerIds: [],
+          playerNames: entries.map(nameOf).filter(Boolean),
+          starterIds: [],
+          starterNames: entries
+            .filter((e) => ESPN_SLOT_TOKEN[e.lineupSlotId ?? -1] !== undefined)
+            .sort((a, b) => (a.lineupSlotId ?? 0) - (b.lineupSlotId ?? 0))
+            .map(nameOf)
+            .filter(Boolean),
+          irIds: [],
+          irNames: entries
+            .filter((e) => e.lineupSlotId === 21)
+            .map(nameOf)
+            .filter(Boolean),
+        };
+      });
+      // Build the starting-slot template from ESPN's lineup slot counts.
+      const counts = league?.settings?.rosterSettings?.lineupSlotCounts ?? {};
+      const rosterPositions: string[] = [];
+      for (const [raw, count] of Object.entries(counts)) {
+        const token = ESPN_SLOT_TOKEN[Number(raw)];
+        if (!token) continue;
+        for (let k = 0; k < (Number(count) || 0); k++) rosterPositions.push(token);
+      }
       return {
         myTeamName: teams.find((t) => t.isMine)?.team ?? null,
         teams,
+        rosterPositions,
       };
+
     }
     return null;
   }
@@ -761,13 +825,20 @@ export async function loadConnectionRosters(
   }
   if (!leagueId) return null;
 
-  const [rosters, users] = await Promise.all([
-    json<{ roster_id: number; owner_id: string | null; players?: string[] | null }[]>(
-      `${BASE}/league/${leagueId}/rosters`,
-    ),
+  const [rosters, users, league] = await Promise.all([
+    json<
+      {
+        roster_id: number;
+        owner_id: string | null;
+        players?: string[] | null;
+        starters?: string[] | null;
+        reserve?: string[] | null;
+      }[]
+    >(`${BASE}/league/${leagueId}/rosters`),
     json<
       { user_id: string; display_name: string; metadata?: { team_name?: string } }[]
     >(`${BASE}/league/${leagueId}/users`),
+    json<{ roster_positions?: string[] }>(`${BASE}/league/${leagueId}`),
   ]);
   if (!rosters?.length) return null;
 
@@ -775,6 +846,7 @@ export async function loadConnectionRosters(
   const ordered = [...rosters].sort((a, b) => a.roster_id - b.roster_id);
   const teams: LeagueRosterTeam[] = ordered.map((r, i) => {
     const u = r.owner_id ? byUser.get(r.owner_id) : undefined;
+    const reserve = (r.reserve ?? []).map((p) => String(p));
     return {
       slot: r.roster_id ?? i + 1,
       team: u?.metadata?.team_name?.trim() || u?.display_name || `Team ${i + 1}`,
@@ -782,12 +854,24 @@ export async function loadConnectionRosters(
       isMine: Boolean(userId && r.owner_id === userId),
       playerIds: (r.players ?? []).map((p) => String(p)),
       playerNames: [],
+      // Sleeper returns starters as an ordered array aligned to roster_positions;
+      // "0" marks an intentionally empty slot and is preserved for alignment.
+      starterIds: (r.starters ?? []).map((p) => String(p)),
+      starterNames: [],
+      irIds: reserve,
+      irNames: [],
     };
   });
+
+  const rosterPositions = (league?.roster_positions ?? [])
+    .map((p) => normalizeSlotToken(String(p)))
+    .filter((p) => p !== "BN" && p !== "IR" && p !== "TAXI");
 
   return {
     myTeamName: teams.find((t) => t.isMine)?.team ?? null,
     teams,
+    rosterPositions,
+
   };
 }
 
