@@ -391,15 +391,22 @@ export function executiveSummary(input: {
   getCount: number;
   overflow: boolean;
   impact?: MarginalImpact;
-  /** Marginal starting-lineup impact measured on the opposing roster. */
-  opponentImpact?: MarginalImpact | null;
 }): string {
   if (!input.ready) return "Add players to both sides to run the valuation model.";
-  const rivalWarning =
-    input.opponentImpact && input.opponentImpact.delta < -0.25
-      ? ` RIVAL ACCEPTANCE PROBABILITY: LOW. This deal reduces the opponent's active weekly starting floor by ${Math.abs(input.opponentImpact.delta).toFixed(1)} pts/wk.`
-      : "";
-  const withRival = (text: string) => `${text}${rivalWarning}`;
+  
+  const impact = input.impact;
+  
+  // 🟢 THE FIX: If impact is missing, OR if the baseline before-trade points are exactly 0, force pure sandbox value-analysis mode
+  if (!impact || impact.before === 0 || (impact.before === 0 && impact.after === 0)) {
+    const valueTrendDiff = input.pct;
+    if (Math.abs(valueTrendDiff) <= 5) {
+      return "TRADE PROPOSAL ANALYSIS: This trade prices out as balanced based on consensus market indicators and historical player trajectories.";
+    }
+    return valueTrendDiff > 0 
+      ? "TRADE PROPOSAL ANALYSIS: This deal tilts in your favor based on raw consensus market metrics and overall asset valuation." 
+      : "TRADE PROPOSAL ANALYSIS: This deal favors the rival side based on raw consensus market metrics and overall asset valuation.";
+  }
+
   const consolidating = input.getCount < input.giveCount;
   const spreading = input.getCount > input.giveCount;
 
