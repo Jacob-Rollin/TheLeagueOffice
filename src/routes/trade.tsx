@@ -1065,17 +1065,20 @@ function BalanceMeter({
 
   return (
     <section className="mt-4 rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between text-[11px] uppercase tracking-widest text-muted-foreground">
+      {/* 🟢 THE FIX PART 1: Use absolute midpoints for the top description text label layer */}
+      <div className="relative flex items-center justify-between h-4 text-[11px] uppercase tracking-widest text-muted-foreground">
         <span>You give</span>
-        <span className={cn("font-display", textTone)}>
-          {!ready
-            ? "Awaiting both sides"
-            : zone === "fair"
-              ? "Fair zone"
-              : clamped > 0
-                ? "Tilts to you"
-                : "Tilts to them"}
-        </span>
+        <div className="absolute left-1/2 -translate-x-1/2 text-center whitespace-nowrap">
+          <span className={cn("font-display font-bold tracking-wider", textTone)}>
+            {!ready
+              ? "Awaiting both sides"
+              : zone === "fair"
+                ? "Fair zone"
+                : clamped > 0
+                  ? "Tilts to you"
+                  : "Tilts to them"}
+          </span>
+        </div>
         <span>You receive</span>
       </div>
 
@@ -1099,12 +1102,15 @@ function BalanceMeter({
         />
       </div>
 
-      <div className="tabnum mt-2 flex items-center justify-between text-xs text-muted-foreground">
-        <span>{giveValue > 0 ? giveValue.toLocaleString() : "—"}</span>
-        <span className={cn("font-semibold", textTone)}>
-          {ready ? `${clamped > 0 ? "+" : ""}${clamped.toFixed(1)}%` : "0.0%"}
-        </span>
-        <span>{getValue > 0 ? getValue.toLocaleString() : "—"}</span>
+      {/* 🟢 THE FIX PART 2: Use absolute midpoints for the bottom numerical calculation output layer */}
+      <div className="relative flex items-center justify-between h-5 mt-2 text-xs text-muted-foreground">
+        <span className="tabnum">{giveValue > 0 ? giveValue.toLocaleString() : "—"}</span>
+        <div className="absolute left-1/2 -translate-x-1/2 text-center whitespace-nowrap">
+          <span className={cn("tabnum font-bold text-sm", textTone)}>
+            {ready ? `${clamped > 0 ? "+" : ""}${clamped.toFixed(1)}%` : "0.0%"}
+          </span>
+        </div>
+        <span className="tabnum">{getValue > 0 ? getValue.toLocaleString() : "—"}</span>
       </div>
 
       {ready && !valueOnly && (
