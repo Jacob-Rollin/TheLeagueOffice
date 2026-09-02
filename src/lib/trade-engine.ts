@@ -148,9 +148,6 @@ export function optimizeLineup(
   }
   if (flexFilled < flexNeed) vacancies['FLEX'] = flexNeed - flexFilled;
 
-
-  for (const p of pool) delete (p as { _used?: boolean })._used;
-
   return {
     points,
     bySlot,
