@@ -455,6 +455,13 @@ export function opponentImpact(input: {
  * Pure math + string building — no UI, no data fetching.
  * ------------------------------------------------------------------ */
 
+/** Human-readable package descriptor driven by the actual asset count. */
+function packagePhrase(count: number): string {
+  if (count <= 1) return "";
+  if (count === 2) return " inside a 2-player package";
+  return ` inside a ${count}-player bundle`;
+}
+
 /** Raw market values are stored in hundredths; the UI shows clean decimals. */
 export const VALUE_SCALE = 100;
 
@@ -561,7 +568,7 @@ export function sideBullets(input: {
       tone: incoming ? "pro" : "con",
       text: `${incoming ? "Headline return" : "Headline cost"}: ${top.name} at ${scaleValue(
         top.value,
-      ).toFixed(1)} market value${input.assets.length > 1 ? ` inside a ${input.assets.length}-player package` : ""}.`,
+      ).toFixed(1)} market value${packagePhrase(input.assets.length)}.`,
     });
   }
 
@@ -612,6 +619,11 @@ export function sideBullets(input: {
         : "No outgoing assets selected yet.",
     });
   }
+
+  // Force all green positives (+) to the top, then red negatives (-) below.
+  const toneOrder: Record<Bullet["tone"], number> = { pro: 0, con: 1, critical: 2 };
+  out.sort((a, b) => toneOrder[a.tone] - toneOrder[b.tone]);
+
   return out;
 }
 
