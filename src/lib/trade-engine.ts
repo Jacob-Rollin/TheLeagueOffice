@@ -398,27 +398,35 @@ export function executiveSummary(input: {
 
   const impact = input.impact;
   if (impact) {
-    const shifts = Object.entries(impact.slotDelta)
-      .filter(([, v]) => Math.abs(v) >= 0.25)
-      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
-    const ups = shifts.filter(([, v]) => v > 0);
-    const downs = shifts.filter(([, v]) => v < 0);
-    const fmt = (e: [string, number]) =>
-      `${SLOT_LABEL[e[0]] ?? e[0]} tier floor (${e[1] > 0 ? "+" : ""}${e[1].toFixed(1)} pts/wk)`;
+    // Explicit index mapping keeps the tuple types concrete for the compiler.
+    const shifts: Array<{ slot: string; delta: number }> = Object.entries(impact.slotDelta)
+      .map((entry) => ({ slot: String(entry[0]), delta: Number(entry[1]) }))
+      .filter((s) => Math.abs(s.delta) >= 0.25)
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    const ups = shifts.filter((s) => s.delta > 0);
+    const downs = shifts.filter((s) => s.delta < 0);
+    const label = (slot: string) => SLOT_LABEL[slot] ?? slot;
+    const fmt = (s: { slot: string; delta: number }) =>
+      `${label(s.slot)} tier floor (${s.delta > 0 ? "+" : ""}${s.delta.toFixed(1)} pts/wk)`;
 
     if (impact.delta > 0.25) {
-      const lead = ups.length ? fmt(ups[0]!) : "weekly starting floor";
-      const tail = downs.length
-        ? ` while giving back ${downs[0]![1].toFixed(1)} pts/wk at ${SLOT_LABEL[downs[0]![0]] ?? downs[0]![0]}`
+      const top = ups[0];
+      const bottom = downs[0];
+      const lead = top ? fmt(top) : "weekly starting floor";
+      const tail = bottom
+        ? ` while giving back ${bottom.delta.toFixed(1)} pts/wk at ${label(bottom.slot)}`
         : ", while holding positional parity everywhere else";
       const scale = impact.delta >= 2 ? "significantly upgrades" : "upgrades";
       return `TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`;
     }
     if (impact.delta < -0.25) {
-      const lead = downs.length ? fmt(downs[0]!) : "weekly starting floor";
-      const tail = ups.length ? ` The only gain is ${fmt(ups[0]!)}.` : "";
+      const worst = downs[0];
+      const best = ups[0];
+      const lead = worst ? fmt(worst) : "weekly starting floor";
+      const tail = best ? ` The only gain is ${fmt(best)}.` : "";
       return `TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`;
     }
+
     return `TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`;
   }
 
