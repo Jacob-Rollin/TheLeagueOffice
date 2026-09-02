@@ -94,6 +94,8 @@ export function useLeagueRosters(players: Player[]) {
   return {
     synced: Boolean(activeLeague) && teams.length > 0,
     loading: query.isLoading,
+    /** True while a silent background revalidation is in flight. */
+    refreshing: query.isFetching && !query.isLoading,
     teams,
     myTeam,
     myTeamName: query.data?.myTeamName ?? activeLeague?.teamName ?? null,
