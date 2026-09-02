@@ -81,7 +81,7 @@ export function PlayerPicker({
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
         />
         {results.length > 0 && (
-          <ul className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-md border border-border bg-surface shadow-lg">
+          <ul className="absolute z-30 mt-1 max-h-80 w-full overflow-auto rounded-md border border-border bg-surface shadow-lg">
             {results.map((p) => (
               <li key={p.id}>
                 <button
@@ -90,11 +90,17 @@ export function PlayerPicker({
                     onAdd(p);
                     setQ("");
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                  className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm hover:bg-accent"
                 >
-                  <PositionBadge pos={p.pos} />
-                  <span className="flex-1 truncate">{p.name}</span>
-                  <span className="text-xs text-muted-foreground">{p.team}</span>
+                  {renderOption ? (
+                    <span className="min-w-0 flex-1">{renderOption(p)}</span>
+                  ) : (
+                    <>
+                      <PositionBadge pos={p.pos} />
+                      <span className="flex-1 truncate">{p.name}</span>
+                      <span className="text-xs text-muted-foreground">{p.team}</span>
+                    </>
+                  )}
                 </button>
               </li>
             ))}
@@ -108,15 +114,21 @@ export function PlayerPicker({
             key={p.id}
             className="flex items-center gap-2 rounded-md border border-border bg-surface px-2 py-1.5 text-sm"
           >
-            <PositionBadge pos={p.pos} />
-            {renderMeta ? (
-              <span className="min-w-0 flex-1">{renderMeta(p)}</span>
+            {renderRow ? (
+              <span className="min-w-0 flex-1">{renderRow(p)}</span>
             ) : (
               <>
-                <span className="flex-1 truncate">{p.name}</span>
-                <span className="tabnum text-xs text-muted-foreground">
-                  {playerValue(p)} pts val
-                </span>
+                <PositionBadge pos={p.pos} />
+                {renderMeta ? (
+                  <span className="min-w-0 flex-1">{renderMeta(p)}</span>
+                ) : (
+                  <>
+                    <span className="flex-1 truncate">{p.name}</span>
+                    <span className="tabnum text-xs text-muted-foreground">
+                      {playerValue(p)} pts val
+                    </span>
+                  </>
+                )}
               </>
             )}
             <button
@@ -132,7 +144,9 @@ export function PlayerPicker({
         {!selected.length && (
           <li className="px-1 py-2 text-xs text-muted-foreground">No players yet.</li>
         )}
+        {footer}
       </ul>
     </div>
+
   );
 }
