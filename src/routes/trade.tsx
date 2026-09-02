@@ -473,6 +473,7 @@ function TradePage() {
 
   const adjustedGrade = grade(adjustedPct);
   const ready = give.length > 0 && get.length > 0;
+  const benchSlotsRequired = Math.max(0, get.length - give.length);
   const verdict = executiveSummary({
     ready,
     pct: adjustedPct,
