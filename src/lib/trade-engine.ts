@@ -391,13 +391,14 @@ export function executiveSummary(input: {
   getCount: number;
   overflow: boolean;
   impact?: MarginalImpact;
+  opponentImpact?: MarginalImpact | null; // 🟢 Ensures two-sided typing compatibility
 }): string {
   if (!input.ready) return "Add players to both sides to run the valuation model.";
   
   const impact = input.impact;
   
-  // 🟢 THE FIX: If impact is missing, OR if the baseline before-trade points are exactly 0, force pure sandbox value-analysis mode
-  if (!impact || impact.before === 0 || (impact.before === 0 && impact.after === 0)) {
+  // 🟢 THE FIX: Safely check if impact exists and use type-safe baseline checks to force Sandbox Mode
+  if (!impact || !impact.before || impact.before === 0) {
     const valueTrendDiff = input.pct;
     if (Math.abs(valueTrendDiff) <= 5) {
       return "TRADE PROPOSAL ANALYSIS: This trade prices out as balanced based on consensus market indicators and historical player trajectories.";
