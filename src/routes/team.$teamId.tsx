@@ -223,7 +223,7 @@ function TeamRosterPage() {
             <RosterCard
               title="Active Starters"
               rows={lineup.starters}
-              points={weeklyOf}
+              points={projPts}
               highlight={view === "coach" ? promotions : undefined}
               action={
                 <div className="inline-flex items-center rounded-lg border border-border bg-muted/30 p-0.5">
@@ -248,7 +248,7 @@ function TeamRosterPage() {
             <RosterCard
               title="Bench Depth"
               rows={lineup.bench.map((p) => ({ slot: "BN", player: p }))}
-              points={weeklyOf}
+              points={projPts}
             />
 
             <section className="rounded-xl border border-border bg-muted/10 p-4">
@@ -393,7 +393,7 @@ function RosterCard({
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="tabnum text-sm font-bold">{points(r.player).toFixed(1)}</div>
+                  <div className="tabnum text-sm font-bold">{points(r.player).toFixed(2)}</div>
                   <div className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
                     Proj Pts
                   </div>
