@@ -381,16 +381,13 @@ function TradePage() {
    * the optimized starting lineup cannot be graded below the deal's true
    * weekly impact just because it costs bench bodies.
    */
-  // 🟢 THE SAFELY REPAIRED TIER TRACKER:
-  // Maps directly to your local file's 'diff' calculation and 'getGrade' layout functions
-  const isSandbox = !league?.synced || sandboxMode;
-  let adjustedPct = isSandbox ? (diff || 0) : (basePct + needDelta);
-  
+  const isSandbox = sandboxMode || !league?.synced;
+  let adjustedPct = isSandbox ? basePct : basePct + needDelta;
+
   if (!isSandbox && impact.delta > 0.25) adjustedPct = Math.max(adjustedPct, needDelta);
   if (!isSandbox && impact.delta > 2) adjustedPct = Math.max(adjustedPct, 15);
-  
-  // 🟢 FIXED: Calls 'getGrade' (your file's authentic function signature name) instead of 'grade'
-  const adjustedGrade = getGrade(adjustedPct);
+
+  const adjustedGrade = grade(adjustedPct);
   const ready = give.length > 0 && get.length > 0;
   const verdict = executiveSummary({
     ready,
