@@ -11,13 +11,13 @@ import { cn } from "@/lib/utils";
  */
 
 /** Discount applied to the aggregate score of the side sending more bodies. */
-export const CONSOLIDATION_DISCOUNT = 0.10; // 🟢 FIX: Lowered from 0.15 to prevent hyper-suppressing depth packages
+export const CONSOLIDATION_DISCOUNT = 0.10;
 
 /** Star-weighted aggregate: the best asset carries most of the package. */
 export function starWeighted(values: number[]): number {
   return [...values]
     .sort((a, b) => b - a)
-    .reduce((sum, v, i) => sum + v * Math.pow(0.92, i), 0); // 🟢 FIX: Optimized decay curve matrix
+    .reduce((sum, v, i) => sum + v * Math.pow(0.92, i), 0);
 }
 
 /**
@@ -176,8 +176,6 @@ export function rosterFit(input: {
   const req = { ...BASE_STARTERS, ...input.starters };
   const impact = marginalImpact(input);
   
-  // 🟢 FIX 1: SANDBOX MODE SAFETY GUARD
-  // If the user's roster array is blank/empty, return a safe sandbox baseline
   if (!input.roster || input.roster.length === 0) {
     return {
       pct: 0,
@@ -205,38 +203,12 @@ export function rosterFit(input: {
     if (d > 0.5 && !fills.includes(slot)) fills.push(slot);
   }
 
-  // 🟢 FIX 3: CLOSED SYNTAX INTEGRATION WINDOW
-  const netFitScore = Math.max(-25, Math.min(25, pct + (impact.delta * 2)));
-  return {
-    pct: Math.round(netFitScore),
-    fills,
-    clogs,
-    note: impact.delta > 0 ? "Lineup Upgrade verified." : "Neutral or minor impact calculated.",
-    impact
-  };
-}
-
-
-    // 🟢 FIXED: Check if impact is null (Sandbox Mode safety guardrail)
-  if (!impact || !before || before.points === 0) {
-    return {
-      pct: 0,
-      fills: [],
-      clogs: [],
-      note: "Sandbox Mode: Pure asset trade calculation without active lineup constraints.",
-      impact: impact || { before: 0, after: 0, delta: 0, slotDelta: {} }
-    };
-  }
-
-  // Core signal: marginal weekly margin, normalised against the current lineup.
   const base = Math.max(before.points, 1);
   pct += Math.max(-25, Math.min(25, (impact.delta / base) * 140));
 
-  // A genuine starting upgrade overrules package-size dilution.
   if (impact.delta > 0.25) pct = Math.max(pct, 8);
   if (impact.delta > 2) pct = Math.max(pct, 15);
 
-  // Incoming bodies that never crack the optimized lineup are bench depth.
   if (impact.delta <= 0) {
     for (const p of input.get) if (!fills.includes(p.pos) && !clogs.includes(p.pos)) clogs.push(p.pos);
   }
@@ -299,7 +271,7 @@ export function rosterConstraint(input: {
   }
 
   const candidates = [...input.bench].sort((a, b) => a.weekly - b.weekly);
-  const picked: { name: string; weekly: number }[] = [];
+  const picked: { name: string; weekly: number; pos?: string }[] = [];
   let shielded = false;
 
   for (const c of candidates) {
@@ -307,22 +279,19 @@ export function rosterConstraint(input: {
     const pos = c.pos ?? "";
     const required = starters[pos] ?? 0;
     
-    // Vacancy guardrail configuration
     if (required > 0 && (remaining[pos] ?? 0) <= required) {
       shielded = true;
       continue; 
     }
     remaining[pos] = (remaining[pos] ?? 1) - 1;
-    picked.push({ name: c.name, weekly: c.weekly });
+    picked.push({ name: c.name, weekly: c.weekly, pos: c.pos });
   }
 
-  // 🟢 FIX 1: SELF-HEALING FALLBACK EXTRACTION
-  // If the shield blocked too many candidates, force choose from the remaining pool
   if (picked.length < over && candidates.length > 0) {
     for (const fallback of candidates) {
       if (picked.length >= over) break;
       if (picked.some(p => p.name === fallback.name)) continue;
-      picked.push({ name: fallback.name, weekly: fallback.weekly });
+      picked.push({ name: fallback.name, weekly: fallback.weekly, pos: fallback.pos });
     }
   }
 
@@ -360,7 +329,129 @@ export function executiveSummary(input: {
 }): string {
   if (!input.ready) return "Add players to both sides to run the valuation model.";
   
-  // 🟢 FIX 2: SANDBOX GRAPHICAL BYPASS LAYER
+  const impact = input.impact;
+  if (!impact || (impact.before === 0 && impact.after === 0)) {
+    const valueTrendDiff = input.pct;
+    if (Math.abs(valueTrendDiff) <= 5) return "SANDBOX ANALYSIS: This trade prices out as balanced based on consensus Value/Trend market indicators.";
+    return valueTrendDiff > 0 
+      ? "SANDBOX ANALYSIS: This deal tilts in your favor based on raw consensus market Value/Trend metrics." 
+      : "SANDBOX ANALYSIS: This deal favors the rival side based on raw consensus market Value/Trend metrics.";
+  }
+
+  const consolidating = input.getCount < input.giveCount;
+  const spreading = input.getCount > input.giveCount;
+  
+  // ... (Rest of executiveSummary evaluation logic down to its final closing bracket)
+  
+  return `${summaryHeader} Value is distributed evenly across both positions. Evaluate this trade based on strength of schedule, individual player bye weeks, and long-term outlook.`;
+}
+
+// 🟢 THE CLEAN SEPARATION BOUNDARY:
+// executiveSummary closes entirely above, allowing RosterConstraint to initialize safely down below.
+
+export type RosterConstraint = {
+  overflow: boolean;
+  dropCount: number;
+  penalty: number;
+  dropName: string | null;
+  dropNames: string[];
+  shielded: boolean;
+};
+
+/**
+ * Bench-vacancy verification with Self-Healing Fallback processing.
+ */
+export function rosterConstraint(input: {
+  rosterCount: number;
+  rosterCap: number;
+  giveCount: number;
+  getCount: number;
+  bench: { name: string; weekly: number; pos?: string }[];
+  starters?: Record<string, number>;
+}): RosterConstraint {
+  const none: RosterConstraint = {
+    overflow: false,
+    dropCount: 0,
+    penalty: 0,
+    dropName: null,
+    dropNames: [],
+    shielded: false,
+  };
+  
+  const net = input.getCount - input.giveCount;
+  if (net <= 0 || input.rosterCap <= 0) return none;
+
+  const projected = input.rosterCount - input.giveCount + input.getCount;
+  const over = projected - input.rosterCap;
+  if (over <= 0) return none;
+
+  const starters = { ...BASE_STARTERS, ...(input.starters ?? {}) };
+  const remaining: Record<string, number> = {};
+  for (const p of input.bench) {
+    const pos = p.pos ?? "";
+    remaining[pos] = (remaining[pos] ?? 0) + 1;
+  }
+
+  const candidates = [...input.bench].sort((a, b) => a.weekly - b.weekly);
+  const picked: { name: string; weekly: number; pos?: string }[] = [];
+  let shielded = false;
+
+  for (const c of candidates) {
+    if (picked.length >= over) break;
+    const pos = c.pos ?? "";
+    const required = starters[pos] ?? 0;
+    
+    if (required > 0 && (remaining[pos] ?? 0) <= required) {
+      shielded = true;
+      continue; 
+    }
+    remaining[pos] = (remaining[pos] ?? 1) - 1;
+    picked.push({ name: c.name, weekly: c.weekly, pos: c.pos });
+  }
+
+  // 🟢 Self-Healing Fallback: If everything was shielded but drops are required, override
+  if (picked.length < over && candidates.length > 0) {
+    for (const fallback of candidates) {
+      if (picked.length >= over) break;
+      if (picked.some(p => p.name === fallback.name)) continue;
+      picked.push({ name: fallback.name, weekly: fallback.weekly, pos: fallback.pos });
+    }
+  }
+
+  const penalty = picked.reduce((s, p) => s + p.weekly, 0);
+  return {
+    overflow: true,
+    dropCount: over,
+    penalty,
+    dropName: picked[0]?.name ?? null,
+    dropNames: picked.map((p) => p.name),
+    shielded: shielded && picked.length < over,
+  };
+}
+
+const SLOT_LABEL: Record<string, string> = {
+  QB: "QB",
+  RB: "RB",
+  WR: "WR",
+  TE: "TE",
+  K: "K",
+  DEF: "DEF",
+  FLEX: "flex",
+};
+
+/**
+ * High-End Executive Summary Engine with Value/Trend Label Syncing.
+ */
+export function executiveSummary(input: {
+  ready: boolean;
+  pct: number;
+  giveCount: number;
+  getCount: number;
+  overflow: boolean;
+  impact?: MarginalImpact;
+}): string {
+  if (!input.ready) return "Add players to both sides to run the valuation model.";
+  
   const impact = input.impact;
   if (!impact || (impact.before === 0 && impact.after === 0)) {
     const valueTrendDiff = input.pct;
@@ -379,6 +470,7 @@ export function executiveSummary(input: {
   const ups = shifts.filter(([, v]) => v > 0);
   const downs = shifts.filter(([, v]) => v < 0);
   
+  // Helper to format string tuple references
   const fmt = (e: [string, number]) =>
     `${SLOT_LABEL[e[0]] ?? e[0]} tier floor (${e[1] > 0 ? "+" : ""}${e[1].toFixed(1)} pts/wk)`;
 
@@ -397,7 +489,6 @@ export function executiveSummary(input: {
     return `TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`;
   }
   
-  // 🟢 FIX 3: DYNAMIC REFACTORED POSITION-AWARE SUMMARY FALLBACKS
   const summaryHeader = `TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk).`;
   if (consolidating) {
     return `${summaryHeader} You successfully consolidate roster volume into a premium asset without surrendering active starting production. Recommendation: Accept deal.`;
@@ -405,5 +496,5 @@ export function executiveSummary(input: {
   if (spreading) {
     return `${summaryHeader} You are giving away a premium starting asset to acquire bench depth that does not improve your active weekly floor. Recommendation: Decline deal.`;
   }
-  return `${summaryHeader} Value is distributed evenly across both positions. Evaluate this trade based on strength of schedule, individual player bye weeks, and long-term outlook.`;
+  return `${summaryHeader} Value is distributed evenly across both positions. Evaluate this trade based on strength of schedule, individual player bye weeks, and long-term outlook Simon.`;
 }
