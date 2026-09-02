@@ -7,7 +7,7 @@ import { getPlayerNews } from "@/lib/players.functions";
 
 /** Format the raw FantasyCalc 7-day trend into a market percentage move. */
 function formatTrendPct(raw: number): string {
-  const pct = raw / 100;
+  const pct = raw;
   if (pct > 0) return `▲ ${pct.toFixed(1)}%`;
   if (pct < 0) return `▼ ${Math.abs(pct).toFixed(1)}%`;
   return "0.0%";
@@ -128,14 +128,16 @@ export function PlayerNews({ id, pos }: { id: string; pos?: string }) {
         )}
         {data?.injury.status && trend < 0 && (
           <p className="mt-1 text-xs text-black">
+            {/* 🟢 THE FIX: Updated text block to accurately report the 30-day data window */}
             · MARKET IMPACT: Trade market value has dropped {formatTrendPct(trend)} over the
-            last 7 days due to injury risk.
+            last 30 days due to injury risk.
           </p>
         )}
         {data?.injury.status && trend > 0 && (
           <p className="mt-1 text-xs text-black">
+            {/* 🟢 THE FIX: Updated text block to accurately report the 30-day data window */}
             · MARKET IMPACT: Trade market value has risen {formatTrendPct(trend)} over the
-            last 7 days despite the injury designation.
+            last 30 days despite the injury designation.
           </p>
         )}
         {brainEntry?.injuryNotes && (
