@@ -10,10 +10,32 @@ export type ResolvedRosterTeam = {
   team: string;
   owner: string;
   isMine: boolean;
+  /** Every rostered asset (starters + bench + IR). */
   players: Player[];
+  /** Native starter order from the host platform, aligned to rosterPositions. */
+  starters: (Player | null)[];
+  /** Players parked in a designated IR / IL slot. */
+  ir: Player[];
+  /** Everything that is neither a native starter nor on IR. */
+  bench: Player[];
 };
 
 const normalize = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+
+/**
+ * Defense aliases: host platforms emit "Lions D/ST", "Detroit Lions",
+ * "DET D/ST" etc. Reduce all of them to the team nickname so multiple
+ * defenses on one roster resolve cleanly instead of falling through as
+ * unmapped "Empty slot" rows.
+ */
+const defenseKey = (raw: string) => {
+  const cleaned = raw
+    .toLowerCase()
+    .replace(/d\s*\/?\s*st|dst|defense|special teams/g, " ")
+    .trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  return parts.length ? normalize(parts[parts.length - 1]!) : "";
+};
 
 /**
  * Rosters for every team in the active synced league, resolved against the
@@ -48,37 +70,61 @@ export function useLeagueRosters(players: Player[]) {
   const byName = useMemo(() => {
     const map = new Map<string, Player>();
     for (const p of players) {
-      const key = normalize(p.name);
-      if (!map.has(key)) map.set(key, p);
+      const key = p.pos === "DEF" ? defenseKey(p.name) : normalize(p.name);
+      if (key && !map.has(key)) map.set(key, p);
+      const plain = normalize(p.name);
+      if (plain && !map.has(plain)) map.set(plain, p);
     }
     return map;
   }, [players]);
 
+  const rosterPositions = useMemo(
+    () => query.data?.rosterPositions ?? [],
+    [query.data],
+  );
+
   const teams = useMemo<ResolvedRosterTeam[]>(() => {
     const rows = query.data?.teams ?? [];
+    const lookup = (raw: string): Player | undefined =>
+      byName.get(normalize(raw)) ?? byName.get(defenseKey(raw));
+
     return rows.map((t) => {
       const resolved: Player[] = [];
       const seen = new Set<string>();
-      for (const id of t?.playerIds ?? []) {
-        const p = byId.get(id);
+      const push = (p: Player | undefined) => {
         if (p && !seen.has(p.id)) {
           seen.add(p.id);
           resolved.push(p);
         }
-      }
-      for (const name of t?.playerNames ?? []) {
-        const p = byName.get(normalize(name));
-        if (p && !seen.has(p.id)) {
-          seen.add(p.id);
-          resolved.push(p);
-        }
-      }
+      };
+      for (const id of t?.playerIds ?? []) push(byId.get(id));
+      for (const name of t?.playerNames ?? []) push(lookup(name));
+
+      // Native starters, aligned index-for-index with the slot template.
+      const starterSource = (t?.starterIds ?? []).length
+        ? (t?.starterIds ?? []).map((id) => (id && id !== "0" ? byId.get(id) ?? null : null))
+        : (t?.starterNames ?? []).map((n) => lookup(n) ?? null);
+      const starters = starterSource.map((p) => p ?? null);
+
+      const irSource = (t?.irIds ?? []).length
+        ? (t?.irIds ?? []).map((id) => byId.get(id))
+        : (t?.irNames ?? []).map((n) => lookup(n));
+      const ir = irSource.filter((p): p is Player => Boolean(p));
+
+      const usedIds = new Set<string>();
+      for (const p of starters) if (p) usedIds.add(p.id);
+      for (const p of ir) usedIds.add(p.id);
+      const bench = resolved.filter((p) => !usedIds.has(p.id));
+
       return {
         slot: t?.slot ?? 0,
         team: t?.team ?? "Team",
         owner: t?.owner ?? "",
         isMine: Boolean(t?.isMine),
         players: resolved,
+        starters,
+        ir,
+        bench,
       };
     });
   }, [query.data, byId, byName]);
@@ -99,6 +145,7 @@ export function useLeagueRosters(players: Player[]) {
     teams,
     myTeam,
     myTeamName: query.data?.myTeamName ?? activeLeague?.teamName ?? null,
+    rosterPositions,
     rosteredIds,
   };
 }
