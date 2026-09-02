@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { useMemo } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
@@ -124,6 +124,15 @@ function TeamRosterPage() {
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-16 pt-6 md:px-8">
+      {refreshing && (
+        <div
+          role="status"
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-full border border-border bg-card/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground shadow-lg backdrop-blur-md"
+        >
+          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+          Refreshing roster data...
+        </div>
+      )}
       <Link to="/" className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> League HQ
       </Link>
