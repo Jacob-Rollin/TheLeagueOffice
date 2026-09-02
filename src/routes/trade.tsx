@@ -382,7 +382,21 @@ function TradePage() {
    * weekly impact just because it costs bench bodies.
    */
   const isSandbox = sandboxMode || !league?.synced;
-  let adjustedPct = isSandbox ? basePct : basePct + needDelta;
+
+  /** Sandbox / unsynced desks show asset value only — no lineup telemetry. */
+  const valueOnly = isSandbox;
+  const marketValue = (list: Player[]) =>
+    list.reduce((s2, p) => s2 + Math.max(0, brain?.[p.id]?.value ?? 0), 0);
+  const giveValue = marketValue(give);
+  const getValue = marketValue(get);
+  const valueTilt =
+    giveValue + getValue > 0
+      ? ((getValue - giveValue) / Math.max(giveValue, getValue, 1)) * 100
+      : ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
+
+  // Direction is always relative to the user's gain: receive − give.
+  // In sandbox the market-value tilt IS the grade; live desks blend in roster fit.
+  let adjustedPct = isSandbox ? valueTilt : basePct + needDelta;
 
   if (!isSandbox && impact.delta > 0.25) adjustedPct = Math.max(adjustedPct, needDelta);
   if (!isSandbox && impact.delta > 2) adjustedPct = Math.max(adjustedPct, 15);
@@ -395,21 +409,13 @@ function TradePage() {
     giveCount: give.length,
     getCount: get.length,
     overflow: constraint.overflow,
-    impact,
-    opponentImpact: rivalImpact,
+    ...(isSandbox ? {} : { impact }),
+    opponentImpact: isSandbox ? null : rivalImpact,
+
   });
 
-  /** Sandbox / unsynced desks show asset value only — no lineup telemetry. */
-  const valueOnly = sandboxMode || !league?.synced;
-  const marketValue = (list: Player[]) =>
-    list.reduce((s2, p) => s2 + Math.max(0, brain?.[p.id]?.value ?? 0), 0);
-  const giveValue = marketValue(give);
-  const getValue = marketValue(get);
-  const valueTilt =
-    giveValue + getValue > 0
-      ? ((getValue - giveValue) / Math.max(giveValue, getValue, 1)) * 100
-      : ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
   const balanceTilt = valueOnly ? valueTilt : (valueTilt + adjustedPct) / 2;
+
 
 
   const sum = (rows: Metrics[], key: keyof Metrics) =>
