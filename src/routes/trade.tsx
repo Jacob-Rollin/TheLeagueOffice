@@ -544,7 +544,7 @@ function TradePage() {
           <div className="min-w-0 flex-1">
             <p className="eyebrow">Executive summary</p>
             <p className="mt-1 text-sm font-medium leading-snug text-foreground">{verdict}</p>
-            {ready && (
+            {ready && !valueOnly && (
               <>
                 <p className="mt-1 text-xs text-muted-foreground">{fit.note}</p>
                 <p className="tabnum mt-1 text-xs text-muted-foreground">
@@ -568,7 +568,7 @@ function TradePage() {
               : ""}
           </p>
         )}
-        {ready && (
+        {ready && !valueOnly && (
           <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
             <div className="p-2">
               <b className="tabnum block text-sm">{giveWeekly.toFixed(1)}</b>Give pts/wk
