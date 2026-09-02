@@ -55,7 +55,7 @@ function TeamRosterPage() {
   const { activeLeague, standings } = useActiveStandings();
   const { data } = useSleeperPlayers();
   const players = useMemo(() => data?.players ?? [], [data]);
-  const { teams, myTeam, loading } = useLeagueRosters(players);
+  const { teams, myTeam, loading, refreshing } = useLeagueRosters(players);
   const brain = usePlayerBrain();
 
   const byName = useMemo(() => {
