@@ -122,6 +122,8 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
       if (key && !map.has(key)) map.set(key, p);
       const plain = normalize(p.name);
       if (plain && !map.has(plain)) map.set(plain, p);
+      const bare = suffixlessKey(p.name);
+      if (bare && !map.has(bare)) map.set(bare, p);
     }
     return map;
   }, [players]);
