@@ -26,6 +26,7 @@ import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
 import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
 import { Route as PlayerIdRouteImport } from './routes/player.$id'
+import { Route as TeamTeamIdRouteImport } from './routes/team.$teamId'
 import { Route as AccountLeaguesIndexRouteImport } from './routes/account.leagues.index'
 import { Route as AccountLeaguesConnectionIdRouteImport } from './routes/account.leagues.$connectionId'
 import { Route as ApiPublicScoreboardRouteImport } from './routes/api/public/scoreboard'
@@ -117,6 +118,11 @@ const PlayerIdRoute = PlayerIdRouteImport.update({
   path: '/player/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeamTeamIdRoute = TeamTeamIdRouteImport.update({
+  id: '/team/$teamId',
+  path: '/team/$teamId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AccountLeaguesIndexRoute = AccountLeaguesIndexRouteImport.update({
   id: '/account/leagues/',
   path: '/account/leagues/',
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
+  '/team/$teamId': typeof TeamTeamIdRoute
   '/account/': typeof AccountIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
@@ -185,6 +192,7 @@ export interface FileRoutesByTo {
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
+  '/team/$teamId': typeof TeamTeamIdRoute
   '/account': typeof AccountIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
@@ -210,6 +218,7 @@ export interface FileRoutesById {
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/player/$id': typeof PlayerIdRoute
+  '/team/$teamId': typeof TeamTeamIdRoute
   '/account/': typeof AccountIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
@@ -236,6 +245,7 @@ export interface FileRouteTypes {
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
     | '/player/$id'
+    | '/team/$teamId'
     | '/account/'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
@@ -260,6 +270,7 @@ export interface FileRouteTypes {
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
     | '/player/$id'
+    | '/team/$teamId'
     | '/account'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
@@ -284,6 +295,7 @@ export interface FileRouteTypes {
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
     | '/player/$id'
+    | '/team/$teamId'
     | '/account/'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
@@ -309,6 +321,7 @@ export interface RootRouteChildren {
   MockDraftSetupRoute: typeof MockDraftSetupRoute
   NflTeamNflIdRoute: typeof NflTeamNflIdRoute
   PlayerIdRoute: typeof PlayerIdRoute
+  TeamTeamIdRoute: typeof TeamTeamIdRoute
   AccountIndexRoute: typeof AccountIndexRoute
   AccountLeaguesConnectionIdRoute: typeof AccountLeaguesConnectionIdRoute
   ApiPublicScoreboardRoute: typeof ApiPublicScoreboardRoute
@@ -438,6 +451,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlayerIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/team/$teamId': {
+      id: '/team/$teamId'
+      path: '/team/$teamId'
+      fullPath: '/team/$teamId'
+      preLoaderRoute: typeof TeamTeamIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/account/leagues/': {
       id: '/account/leagues/'
       path: '/account/leagues'
@@ -493,6 +513,7 @@ const rootRouteChildren: RootRouteChildren = {
   MockDraftSetupRoute: MockDraftSetupRoute,
   NflTeamNflIdRoute: NflTeamNflIdRoute,
   PlayerIdRoute: PlayerIdRoute,
+  TeamTeamIdRoute: TeamTeamIdRoute,
   AccountIndexRoute: AccountIndexRoute,
   AccountLeaguesConnectionIdRoute: AccountLeaguesConnectionIdRoute,
   ApiPublicScoreboardRoute: ApiPublicScoreboardRoute,

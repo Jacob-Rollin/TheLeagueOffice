@@ -1,10 +1,25 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, ChevronRight, Grid3X3, LayoutGrid, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { LeagueEmptyState } from "@/components/league/LeagueGate";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { platformLabel } from "@/lib/league-link";
 import { cn } from "@/lib/utils";
+
+const relativeTime = (iso?: string) => {
+  if (!iso) return "Fantasy Insight Feed";
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "Fantasy Insight Feed";
+  const mins = Math.max(1, Math.round((Date.now() - then) / 60000));
+  const label =
+    mins < 60
+      ? `${mins} minute${mins === 1 ? "" : "s"} ago`
+      : mins < 60 * 24
+        ? `${Math.round(mins / 60)} hour${Math.round(mins / 60) === 1 ? "" : "s"} ago`
+        : `${Math.round(mins / 1440)} day${Math.round(mins / 1440) === 1 ? "" : "s"} ago`;
+  return `Published ${label} • Fantasy Insight Feed`;
+};
+
 
 const NEWS_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news";
 type LinkNode = { web?: { href?: string }; href?: string };
