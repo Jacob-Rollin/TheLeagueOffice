@@ -81,7 +81,7 @@ export function PlayerPicker({
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
         />
         {results.length > 0 && (
-          <ul className="absolute z-30 mt-1 max-h-80 w-full overflow-auto rounded-md border border-border bg-surface shadow-lg">
+          <ul className="absolute left-0 right-0 top-full z-50 mt-1 max-h-80 overflow-auto rounded-md border border-border bg-card shadow-xl">
             {results.map((p) => (
               <li key={p.id}>
                 <button

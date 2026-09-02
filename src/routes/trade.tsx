@@ -615,9 +615,9 @@ function TradePage() {
       </div>
 
       {/* Fused trade desk block: both sides share one cohesive card spine. */}
-      <section className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="grid gap-0 sm:grid-cols-2">
-          <div className="p-3 sm:border-r sm:border-border">
+      <section className="mt-4 rounded-xl border border-border bg-card shadow-sm">
+        <div className="relative grid gap-0 sm:grid-cols-2">
+          <div className="px-4 pb-4 pt-3 md:px-5">
             <PlayerPicker
               bare
               label="You give"
@@ -629,7 +629,7 @@ function TradePage() {
               renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
             />
           </div>
-          <div className="border-t border-border p-3 sm:border-t-0">
+          <div className="px-4 pb-4 pt-3 md:px-5">
             <PlayerPicker
               bare
               label="You receive"
@@ -646,6 +646,12 @@ function TradePage() {
                 ) : null
               }
             />
+          </div>
+
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background shadow-sm text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              VS
+            </div>
           </div>
         </div>
       </section>
