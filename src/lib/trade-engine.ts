@@ -475,6 +475,12 @@ export function headlineVerdict(input: { ready: boolean; pct: number }): string 
   return "Walk away from this deal";
 }
 
+/** Prominent warning label for unequal packages that force bench drops. */
+export function benchSlotWarning(count: number): string {
+  if (count <= 0) return "";
+  return `⚠️ +${count} BENCH SLOT${count > 1 ? "S" : ""} REQUIRED`;
+}
+
 /** Roster statuses that freeze a player's active availability. */
 const FROZEN_STATUS: Record<string, string> = {
   EXEMPT: "roster-exempt list",
@@ -497,7 +503,7 @@ export type BulletAsset = {
   weekly: number;
 };
 
-export type Bullet = { tone: "pro" | "con"; text: string };
+export type Bullet = { tone: "pro" | "con" | "critical"; text: string };
 
 const WEEKS_LEFT = 17;
 
@@ -512,6 +518,8 @@ export function sideBullets(input: {
   impact?: MarginalImpact | null;
   /** Bench weekly-point differential; omitted for value-only desks. */
   benchDelta?: number | null;
+  /** Extra bench slots the receiving package forces the user to clear. */
+  dropSlots?: number;
 }): Bullet[] {
   const out: Bullet[] = [];
   const incoming = input.side === "get";
@@ -583,6 +591,17 @@ export function sideBullets(input: {
         )} pts/week (${b > 0 ? "+" : ""}${(b * WEEKS_LEFT).toFixed(1)} pts over season).`,
       });
     }
+  }
+
+  if (incoming && input.dropSlots && input.dropSlots > 0) {
+    out.push({
+      tone: "critical",
+      text: `Roster Impact: Completing this ${input.assets.length}-for-${
+        input.assets.length - input.dropSlots
+      } or multi-player deal will require manually dropping ${input.dropSlots} bench asset${
+        input.dropSlots > 1 ? "s" : ""
+      } to clear active roster cap constraints.`,
+    });
   }
 
   if (!out.length) {

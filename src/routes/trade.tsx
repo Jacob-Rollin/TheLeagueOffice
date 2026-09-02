@@ -16,6 +16,7 @@ import { grade } from "@/lib/evaluate";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import {
+  benchSlotWarning,
   executiveSummary,
   headlineVerdict,
   injuryRisk,
@@ -187,19 +188,6 @@ function TradeAssetCard({
   );
 }
 
-/** Placeholder row appended when the receiving package needs an extra slot. */
-function BenchDropPlaceholder({ count }: { count: number }) {
-  return (
-    <li className="flex items-center gap-2 rounded-md border border-dashed border-border bg-surface/60 px-2 py-2.5 text-sm">
-      <span className="grid h-6 min-w-[2.4rem] place-items-center rounded border border-neutral-400/60 bg-neutral-400 px-1.5 font-display text-xs font-semibold uppercase tracking-wider text-white">
-        BN
-      </span>
-      <span className="truncate text-xs font-semibold text-muted-foreground">
-        +{count} Bench Slot{count > 1 ? "s" : ""} Required
-      </span>
-    </li>
-  );
-}
 
 
 type OpponentTeam = { key: string; name: string; owner: string; players: Player[] };
@@ -485,6 +473,7 @@ function TradePage() {
 
   const adjustedGrade = grade(adjustedPct);
   const ready = give.length > 0 && get.length > 0;
+  const benchSlotsRequired = Math.max(0, get.length - give.length);
   const verdict = executiveSummary({
     ready,
     pct: adjustedPct,
@@ -571,6 +560,7 @@ function TradePage() {
     assets: getAssets,
     impact: valueOnly ? null : impact,
     benchDelta: valueOnly ? null : benchDelta,
+    dropSlots: benchSlotsRequired,
   });
   const depthRows = positionalDepth(giveAssets, getAssets);
   const risk = injuryRisk(giveAssets, getAssets);
@@ -616,8 +606,8 @@ function TradePage() {
 
       {/* Fused trade desk block: both sides share one cohesive card spine. */}
       <section className="mt-4 rounded-xl border border-border bg-card shadow-sm">
-        <div className="relative grid gap-0 sm:grid-cols-2">
-          <div className="px-4 pb-4 pt-3 md:px-5">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="bg-muted/40 px-4 pb-4 pt-3 md:px-5">
             <PlayerPicker
               bare
               label="You give"
@@ -629,7 +619,7 @@ function TradePage() {
               renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
             />
           </div>
-          <div className="px-4 pb-4 pt-3 md:px-5">
+          <div className="bg-muted/40 px-4 pb-4 pt-3 md:px-5">
             <PlayerPicker
               bare
               label="You receive"
@@ -640,18 +630,7 @@ function TradePage() {
               onRemove={(id) => setGet((s) => s.filter((p) => p.id !== id))}
               renderRow={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
               renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
-              footer={
-                get.length > give.length ? (
-                  <BenchDropPlaceholder count={get.length - give.length} />
-                ) : null
-              }
             />
-          </div>
-
-          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background shadow-sm text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              VS
-            </div>
           </div>
         </div>
       </section>
@@ -676,7 +655,7 @@ function TradePage() {
         depth={depthRows}
         risk={risk}
         showRosterRow={ready && !valueOnly && userRoster.length > 0}
-        constraint={constraint}
+        dropSlots={benchSlotsRequired}
       />
 
 
@@ -1129,7 +1108,7 @@ function TradeDashboard({
   depth,
   risk,
   showRosterRow,
-  constraint,
+  dropSlots,
 }: {
   ready: boolean;
   tilt: number;
@@ -1149,7 +1128,7 @@ function TradeDashboard({
   depth: PositionalDepthRow[];
   risk: InjuryRisk;
   showRosterRow: boolean;
-  constraint: RosterConstraint;
+  dropSlots: number;
 }) {
   // Lower analytics stay hidden until both sides of the deal hold a player.
   if (!ready) return null;
@@ -1199,35 +1178,33 @@ function TradeDashboard({
             </div>
             <div className="min-w-0 flex-1">
               <p className="eyebrow">Overall assessment</p>
-              <p
-                className={cn(
-                  "font-display text-xl font-bold leading-tight tracking-tight",
-                  !ready
-                    ? "text-muted-foreground"
-                    : gradeTone === "good"
-                      ? "text-emerald-600"
-                      : gradeTone === "bad"
-                        ? "text-destructive"
-                        : "text-foreground",
+              <div className="flex flex-wrap items-center gap-2">
+                <p
+                  className={cn(
+                    "font-display text-xl font-bold leading-tight tracking-tight",
+                    !ready
+                      ? "text-muted-foreground"
+                      : gradeTone === "good"
+                        ? "text-emerald-600"
+                        : gradeTone === "bad"
+                          ? "text-destructive"
+                          : "text-foreground",
+                  )}
+                >
+                  {headline}
+                </p>
+                {dropSlots > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-600/40 bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-700">
+                    {benchSlotWarning(dropSlots)}
+                  </span>
                 )}
-              >
-                {headline}
-              </p>
+              </div>
               <p className="mt-1 text-sm leading-snug text-foreground">{verdict}</p>
               {ready && !valueOnly && (
                 <p className="mt-1 text-xs text-muted-foreground">{fitNote}</p>
               )}
             </div>
           </div>
-          {ready && constraint.overflow && (
-            <p className="mt-3 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground">
-              ROSTER CONSTRAINT: Accepting this deal requires dropping {constraint.dropCount} bench
-              player{constraint.dropCount > 1 ? "s" : ""}.
-              {constraint.dropNames.length
-                ? ` Model drops ${constraint.dropNames.join(", ")} and subtracts ${constraint.penalty.toFixed(1)} pts/wk from the receive side.`
-                : ""}
-            </p>
-          )}
         </section>
 
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -1391,7 +1368,13 @@ function BulletCard({ title, bullets }: { title: string; bullets: Bullet[] }) {
       <p className="eyebrow">{title}</p>
       <ul className="mt-2 space-y-1.5">
         {bullets.map((b, i) => (
-          <li key={`${b.tone}-${i}`} className="flex gap-2 text-xs leading-snug">
+          <li
+            key={`${b.tone}-${i}`}
+            className={cn(
+              "flex gap-2 rounded-md px-1 py-0.5 text-xs leading-snug -mx-1",
+              b.tone === "critical" && "bg-destructive/10",
+            )}
+          >
             <span
               className={cn(
                 "mt-px font-bold",
@@ -1400,7 +1383,13 @@ function BulletCard({ title, bullets }: { title: string; bullets: Bullet[] }) {
             >
               {b.tone === "pro" ? "+" : "−"}
             </span>
-            <span className="text-foreground">{b.text}</span>
+            <span
+              className={cn(
+                b.tone === "critical" ? "font-semibold text-destructive" : "text-foreground",
+              )}
+            >
+              {b.text}
+            </span>
           </li>
         ))}
       </ul>
