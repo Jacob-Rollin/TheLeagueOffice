@@ -1367,7 +1367,13 @@ function BulletCard({ title, bullets }: { title: string; bullets: Bullet[] }) {
       <p className="eyebrow">{title}</p>
       <ul className="mt-2 space-y-1.5">
         {bullets.map((b, i) => (
-          <li key={`${b.tone}-${i}`} className="flex gap-2 text-xs leading-snug">
+          <li
+            key={`${b.tone}-${i}`}
+            className={cn(
+              "flex gap-2 rounded-md px-1 py-0.5 text-xs leading-snug -mx-1",
+              b.tone === "critical" && "bg-destructive/10",
+            )}
+          >
             <span
               className={cn(
                 "mt-px font-bold",
@@ -1376,7 +1382,13 @@ function BulletCard({ title, bullets }: { title: string; bullets: Bullet[] }) {
             >
               {b.tone === "pro" ? "+" : "−"}
             </span>
-            <span className="text-foreground">{b.text}</span>
+            <span
+              className={cn(
+                b.tone === "critical" ? "font-semibold text-destructive" : "text-foreground",
+              )}
+            >
+              {b.text}
+            </span>
           </li>
         ))}
       </ul>
