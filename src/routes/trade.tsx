@@ -619,7 +619,7 @@ function TradePage() {
               renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
             />
           </div>
-          <div className="bg-muted/30 px-4 pb-4 pt-3 md:px-5">
+          <div className="px-4 pb-4 pt-3 md:px-5">
             <PlayerPicker
               bare
               label="You receive"
@@ -633,7 +633,7 @@ function TradePage() {
             />
           </div>
           <div
-            className="pointer-events-none absolute inset-y-0 left-1/2 w-12 -translate-x-1/2 bg-gradient-to-r from-card/0 via-card/80 to-card/0 opacity-70"
+            className="pointer-events-none absolute inset-y-0 left-1/2 hidden -translate-x-1/2 md:block bg-gradient-to-r from-transparent via-muted/[0.04] to-primary/[0.03] border-l border-dashed border-border/40"
             aria-hidden="true"
           />
         </div>
