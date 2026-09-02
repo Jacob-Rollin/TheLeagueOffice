@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
@@ -55,7 +55,10 @@ function TeamRosterPage() {
   const { activeLeague, standings } = useActiveStandings();
   const { data } = useSleeperPlayers();
   const players = useMemo(() => data?.players ?? [], [data]);
-  const { teams, myTeam, loading, refreshing } = useLeagueRosters(players);
+  const { teams, myTeam, loading, refreshing, rosterPositions } = useLeagueRosters(players, {
+    cacheKey: teamId,
+  });
+  const [view, setView] = useState<"actual" | "coach">("actual");
   const brain = usePlayerBrain();
 
   const byName = useMemo(() => {
@@ -85,7 +88,41 @@ function TeamRosterPage() {
     return row ? `${row.wins}-${row.losses}` : null;
   }, [standings, teamId, team]);
 
-  const lineup = useMemo(() => buildLineup(team?.players ?? []), [team]);
+  /** Coach's View: our optimizer's highest-scoring legal combination. */
+  const optimal = useMemo(
+    () => buildLineup((team?.players ?? []).filter((p) => !(team?.ir ?? []).some((i) => i.id === p.id))),
+    [team],
+  );
+
+  /**
+   * Actual lineup: the host platform's own starter array mapped index-for-index
+   * against the normalized slot template, with bench = everything else.
+   */
+  const actual = useMemo(() => {
+    if (!team) return { starters: [] as { slot: string; player: Player | null }[], bench: [] as Player[] };
+    const native = team.starters ?? [];
+    if (!native.length) return optimal;
+    const template = rosterPositions.length ? rosterPositions : [...SLOT_ORDER];
+    const starters = native.map((p, i) => ({
+      slot: template[i] ?? (p ? p.pos : "FLEX"),
+      player: p,
+    }));
+    return { starters, bench: team.bench ?? [] };
+  }, [team, rosterPositions, optimal]);
+
+  const lineup = view === "coach" ? optimal : actual;
+
+  /** Bench assets the optimizer would promote into the starting lineup. */
+  const promotions = useMemo(() => {
+    const actualIds = new Set(
+      actual.starters.map((s) => s.player?.id).filter((id): id is string => Boolean(id)),
+    );
+    return new Set(
+      optimal.starters
+        .map((s) => s.player?.id)
+        .filter((id): id is string => Boolean(id) && !actualIds.has(id!)),
+    );
+  }, [actual, optimal]);
 
   const totalValue = useMemo(
     () => (team?.players ?? []).reduce((sum, p) => sum + scaleValue(marketValue(p)), 0),
@@ -155,12 +192,74 @@ function TeamRosterPage() {
       {team && (
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
-            <RosterCard title="Active Starters" rows={lineup.starters} value={marketValue} />
+            <RosterCard
+              title="Active Starters"
+              rows={lineup.starters}
+              value={marketValue}
+              highlight={view === "coach" ? promotions : undefined}
+              action={
+                <div className="inline-flex items-center rounded-lg border border-border bg-muted/30 p-0.5">
+                  {(["actual", "coach"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setView(mode)}
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest transition-all",
+                        view === mode
+                          ? "bg-card text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {mode === "actual" ? "Actual Lineup" : "Coach's View"}
+                    </button>
+                  ))}
+                </div>
+              }
+            />
             <RosterCard
               title="Bench Depth"
               rows={lineup.bench.map((p) => ({ slot: "BN", player: p }))}
               value={marketValue}
             />
+
+            <section className="rounded-xl border border-border bg-muted/10 p-4">
+              <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                Injured Reserve (IR)
+              </h2>
+              {team.ir?.length ? (
+                <ul className="mt-3 space-y-2">
+                  {team.ir.map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2"
+                    >
+                      <span className="w-10 shrink-0 text-center text-[10px] font-bold uppercase tracking-widest text-destructive">
+                        IR
+                      </span>
+                      <PlayerAvatar id={p.id} pos={p.pos} team={p.team} name={p.name} className="size-8" />
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          to="/player/$id"
+                          params={{ id: p.id }}
+                          className="block truncate text-sm font-semibold hover:text-primary"
+                        >
+                          {p.name}
+                        </Link>
+                        <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                          {p.pos} • {p.team || "FA"}
+                        </div>
+                      </div>
+                      <span className="tabnum shrink-0 text-sm font-bold">
+                        {scaleValue(marketValue(p)).toFixed(1)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-xs italic text-muted-foreground">IR Slot Empty</p>
+              )}
+            </section>
           </div>
 
           <aside className="space-y-4">
@@ -213,20 +312,32 @@ function RosterCard({
   title,
   rows,
   value,
+  action,
+  highlight,
 }: {
   title: string;
   rows: { slot: string; player: Player | null }[];
   value: (p: Player) => number;
+  action?: React.ReactNode;
+  highlight?: Set<string>;
 }) {
   return (
     <section className="rounded-xl border border-border bg-card p-4">
-      <h2 className="display-title text-xl">{title}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="display-title text-xl">{title}</h2>
+        {action}
+      </div>
       <ul className="mt-3 space-y-2">
         {rows.length === 0 && <li className="text-xs text-muted-foreground">No players.</li>}
         {rows.map((r, i) => (
           <li
             key={`${r.slot}-${r.player?.id ?? i}`}
-            className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2"
+            className={cn(
+              "flex items-center gap-3 rounded-lg border px-3 py-2",
+              r.player && highlight?.has(r.player.id)
+                ? "border-primary/50 bg-primary/10"
+                : "border-border bg-muted/20",
+            )}
           >
             <span className="w-10 shrink-0 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               {r.slot}
