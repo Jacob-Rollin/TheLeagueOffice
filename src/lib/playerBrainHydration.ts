@@ -64,7 +64,8 @@ export type BrainMatrix = Record<string, BrainEntry>;
 const store = (() => {
   if (typeof window === "undefined") return null;
   try {
-    return localforage.createInstance({ name: "master_player_analytics_db", storeName: "analytics_keyvaluepairs" });
+    // 🟢 THE FIX: Change the name namespace to prevent IndexedDB cache drop collisions
+    return localforage.createInstance({ name: "player-brain-data-hub", storeName: "brain_matrix_warehouse" });
   } catch {
     return null;
   }
