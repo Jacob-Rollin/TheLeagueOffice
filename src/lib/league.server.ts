@@ -675,24 +675,64 @@ export type LeagueRosterTeam = {
   playerIds: string[];
   /** Player full names, used to resolve ESPN rosters against our registry. */
   playerNames: string[];
+  /** Native starter order as configured by the manager on the host platform. */
+  starterIds: string[];
+  starterNames: string[];
+  /** Players parked in a designated IR / IL slot on the host platform. */
+  irIds: string[];
+  irNames: string[];
 };
 
 export type LeagueRosters = {
   myTeamName: string | null;
   teams: LeagueRosterTeam[];
+  /** Normalized starting-slot template (QB/RB/WR/TE/FLEX/K/DEF), in host order. */
+  rosterPositions: string[];
 };
 
 type EspnRosterView = {
-  settings?: { name?: string; size?: number };
+  settings?: {
+    name?: string;
+    size?: number;
+    rosterSettings?: { lineupSlotCounts?: Record<string, number> };
+  };
   teams?: (EspnTeam & {
     roster?: {
       entries?: {
         playerId?: number;
+        lineupSlotId?: number;
         playerPoolEntry?: { player?: { fullName?: string } };
       }[];
     };
   })[];
 };
+
+/** Host platform slot token -> internal position tag. */
+export function normalizeSlotToken(raw: string): string {
+  const t = String(raw ?? "").toUpperCase().replace(/[^A-Z+/]/g, "");
+  if (t === "QB") return "QB";
+  if (t === "RB") return "RB";
+  if (t === "WR") return "WR";
+  if (t === "TE") return "TE";
+  if (t === "K" || t === "PK") return "K";
+  if (t === "DEF" || t === "DST" || t === "D/ST" || t === "DST/DEF" || t === "DEFENSE") return "DEF";
+  if (t.startsWith("FLEX") || t === "WRRBTE" || t === "RBWRTE" || t === "WRRB" || t === "REC")
+    return "FLEX";
+  if (t === "IR" || t === "IL" || t === "IL+") return "IR";
+  if (t === "BN" || t === "BE" || t === "BENCH") return "BN";
+  return t;
+}
+
+const ESPN_SLOT_TOKEN: Record<number, string> = {
+  0: "QB",
+  2: "RB",
+  4: "WR",
+  6: "TE",
+  16: "DEF",
+  17: "K",
+  23: "FLEX",
+};
+
 
 /** Every team in the active league with its current roster. */
 export async function loadConnectionRosters(
