@@ -397,7 +397,7 @@ export function executiveSummary(input: {
   
   const impact = input.impact;
   
-  // 🟢 THE FIX: Safely check if impact exists and use type-safe baseline checks to force Sandbox Mode
+  // 🟢 Safely check if impact exists and use type-safe baseline checks to force Sandbox Mode
   if (!impact || !impact.before || impact.before === 0) {
     const valueTrendDiff = input.pct;
     if (Math.abs(valueTrendDiff) <= 5) {
@@ -411,41 +411,48 @@ export function executiveSummary(input: {
   const consolidating = input.getCount < input.giveCount;
   const spreading = input.getCount > input.giveCount;
 
-  const impact = input.impact;
-  if (impact) {
-    // Explicit index mapping keeps the tuple types concrete for the compiler.
-    const shifts: Array<{ slot: string; delta: number }> = Object.entries(impact.slotDelta)
-      .map((entry) => ({ slot: String(entry[0]), delta: Number(entry[1]) }))
-      .filter((s) => Math.abs(s.delta) >= 0.25)
-      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-    const ups = shifts.filter((s) => s.delta > 0);
-    const downs = shifts.filter((s) => s.delta < 0);
-    const label = (slot: string) => SLOT_LABEL[slot] ?? slot;
-    const fmt = (s: { slot: string; delta: number }) =>
-      `${label(s.slot)} tier floor (${s.delta > 0 ? "+" : ""}${s.delta.toFixed(1)} pts/wk)`;
-
-    if (impact.delta > 0.25) {
-      const top = ups[0];
-      const bottom = downs[0];
-      const lead = top ? fmt(top) : "weekly starting floor";
-      const tail = bottom
-        ? ` while giving back ${bottom.delta.toFixed(1)} pts/wk at ${label(bottom.slot)}`
-        : ", while holding positional parity everywhere else";
-      const scale = impact.delta >= 2 ? "significantly upgrades" : "upgrades";
-      return withRival(`TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`);
+  // 🟢 FIXED: Removed duplicate 'const impact' and open 'if' block.
+  // The function helper definition handles opponent text attachments cleanly
+  const withRival = (baseMsg: string) => {
+    if (input.opponentImpact && input.opponentImpact.delta < -0.25) {
+      return `${baseMsg} RIVAL ACCEPTANCE PROBABILITY: LOW. This deal reduces the opponent's active weekly starting floor by ${Math.abs(input.opponentImpact.delta).toFixed(1)} pts/wk.`;
     }
-    if (impact.delta < -0.25) {
-      const worst = downs[0];
-      const best = ups[0];
-      const lead = worst ? fmt(worst) : "weekly starting floor";
-      const tail = best ? ` The only gain is ${fmt(best)}.` : "";
-      return withRival(`TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`);
-    }
+    return baseMsg;
+  };
 
-    return withRival(`TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`);
+  // Explicit index mapping keeps the tuple types concrete for the compiler.
+  const shifts: Array<{ slot: string; delta: number }> = Object.entries(impact.slotDelta)
+    .map((entry) => ({ slot: String(entry[0]), delta: Number(entry[1]) }))
+    .filter((s) => Math.abs(s.delta) >= 0.25)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    
+  const ups = shifts.filter((s) => s.delta > 0);
+  const downs = shifts.filter((s) => s.delta < 0);
+  const label = (slot: string) => SLOT_LABEL[slot] ?? slot;
+  const fmt = (s: { slot: string; delta: number }) =>
+    `${label(s.slot)} tier floor (${s.delta > 0 ? "+" : ""}${s.delta.toFixed(1)} pts/wk)`;
+
+  if (impact.delta > 0.25) {
+    const top = ups[0];
+    const bottom = downs[0];
+    const lead = top ? fmt(top) : "weekly starting floor";
+    const tail = bottom
+      ? ` while giving back ${bottom.delta.toFixed(1)} pts/wk at ${label(bottom.slot)}`
+      : ", while holding positional parity everywhere else";
+    const scale = impact.delta >= 2 ? "significantly upgrades" : "upgrades";
+    return withRival(`TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`);
+  }
+  
+  if (impact.delta < -0.25) {
+    const worst = downs[0];
+    const best = ups[0];
+    const lead = worst ? fmt(worst) : "weekly starting floor";
+    const tail = best ? ` The only gain is ${fmt(best)}.` : "";
+    return withRival(`TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`);
   }
 
-
+  return withRival(`TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`);
+} // 🟢 Closes your executiveSummary block perfectly!
 
   if (input.pct >= 15)
     return withRival(consolidating
