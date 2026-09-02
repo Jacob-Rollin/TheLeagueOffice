@@ -619,6 +619,11 @@ export function sideBullets(input: {
         : "No outgoing assets selected yet.",
     });
   }
+
+  // Force all green positives (+) to the top, then red negatives (-) below.
+  const toneOrder: Record<Bullet["tone"], number> = { pro: 0, con: 1, critical: 2 };
+  out.sort((a, b) => toneOrder[a.tone] - toneOrder[b.tone]);
+
   return out;
 }
 
