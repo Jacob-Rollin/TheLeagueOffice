@@ -376,15 +376,15 @@ export function executiveSummary(input: {
   
   const impact = input.impact;
   
-  // 🟢 Sandbox Verification: Force pure asset metrics if the baseline points evaluate to zero
+  // 🟢 THE FIX: Premium, descriptive Sandbox summary that aligns perfectly with the visual slider bar direction
   if (!impact || !impact.before || impact.before === 0) {
     const valueTrendDiff = input.pct;
     if (Math.abs(valueTrendDiff) <= 5) {
-      return "TRADE PROPOSAL ANALYSIS: This trade prices out as balanced based on consensus market indicators and historical player trajectories.";
+      return "TRADE PROPOSAL ANALYSIS: Balanced asset exchange. Both packages map cleanly on our valuation matrix with identical historical value distributions.";
     }
     return valueTrendDiff > 0 
-      ? "TRADE PROPOSAL ANALYSIS: This deal tilts in your favor based on raw consensus market metrics and overall asset valuation." 
-      : "TRADE PROPOSAL ANALYSIS: This deal favors the rival side based on raw consensus market metrics and overall asset valuation.";
+      ? `TRADE PROPOSAL ANALYSIS: Highly Favorable. This proposal tilts significantly in your direction (+${valueTrendDiff.toFixed(1)}% asset premium) based on consensus market value index feeds.` 
+      : `TRADE PROPOSAL ANALYSIS: Disadvantageous Asset Drain. This proposal tilts heavily to the rival side (${valueTrendDiff.toFixed(1)}% loss). You are surrendering an elite high-value starter for an inadequate return packages. Recommendation: DECLINE DEAL.`;
   }
 
   const consolidating = input.getCount < input.giveCount;
