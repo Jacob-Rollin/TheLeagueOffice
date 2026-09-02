@@ -16,6 +16,7 @@ import { grade } from "@/lib/evaluate";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import {
+  benchSlotWarning,
   executiveSummary,
   headlineVerdict,
   injuryRisk,
