@@ -15,6 +15,10 @@ export function PlayerPicker({
   single,
   accent,
   renderMeta,
+  renderRow,
+  renderOption,
+  footer,
+  bare,
 }: {
   players: Player[];
   selected: Player[];
@@ -26,6 +30,14 @@ export function PlayerPicker({
   accent?: "give" | "get";
   /** Optional replacement for the default value chip on a selected row. */
   renderMeta?: (p: Player) => ReactNode;
+  /** Full replacement for the selected row body (badge + meta). */
+  renderRow?: (p: Player) => ReactNode;
+  /** Full replacement for a drop-down search result body. */
+  renderOption?: (p: Player) => ReactNode;
+  /** Extra content appended below the selected list. */
+  footer?: ReactNode;
+  /** Render without the outer card chrome (used inside a fused card block). */
+  bare?: boolean;
 }) {
   const [q, setQ] = useState("");
 
@@ -41,7 +53,12 @@ export function PlayerPicker({
   }, [q, players, selected]);
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
+    <div
+      className={cn(
+        bare ? "p-0" : "rounded-lg border border-border bg-card p-3",
+      )}
+    >
+
       <div className="flex items-baseline justify-between">
         <h3
           className={cn(
