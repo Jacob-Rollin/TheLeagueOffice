@@ -654,7 +654,7 @@ function TradePage() {
         depth={depthRows}
         risk={risk}
         showRosterRow={ready && !valueOnly && userRoster.length > 0}
-        constraint={constraint}
+        dropSlots={benchSlotsRequired}
       />
 
 
