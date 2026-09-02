@@ -12,12 +12,27 @@
 /** Discount applied to the aggregate score of the side sending more bodies. */
 export const CONSOLIDATION_DISCOUNT = 0.15;
 
-/** Star-weighted aggregate: the best asset carries most of the package. */
+/** Exponential power-curve exponent: elite assets bend the curve upward. */
+export const VALUE_CURVE_POWER = 1.18;
+/** Geometric decay applied to each successive (lesser) asset in a package. */
+export const PACKAGE_DECAY = 0.82;
+
+/**
+ * Star-weighted aggregate using an exponential power curve (KTC / Rototrade
+ * style): each value is raised to a superlinear exponent, successive assets
+ * decay geometrically, and the result is mapped back into value units.
+ */
 export function starWeighted(values: number[]): number {
-  return [...values]
+  const curved = [...values]
+    .map((v) => Math.max(0, v))
     .sort((a, b) => b - a)
-    .reduce((sum, v, i) => sum + v * Math.pow(0.9, i), 0);
+    .reduce(
+      (sum, v, i) => sum + Math.pow(v, VALUE_CURVE_POWER) * Math.pow(PACKAGE_DECAY, i),
+      0,
+    );
+  return curved <= 0 ? 0 : Math.pow(curved, 1 / VALUE_CURVE_POWER);
 }
+
 
 /**
  * Aggregate score for one side of the deal, after the consolidation modifier.
