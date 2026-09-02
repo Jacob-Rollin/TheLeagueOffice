@@ -34,6 +34,19 @@ const weeklyOf = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
 const SLOT_ORDER = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF"] as const;
 const FLEX_OK = ["RB", "WR", "TE"];
 
+/** Strict display sequence so FLEX always sits directly under TE. */
+const DISPLAY_ORDER = ["QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
+const slotRank = (slot: string) => {
+  const key = slot.toUpperCase();
+  const i = DISPLAY_ORDER.indexOf(key);
+  return i === -1 ? DISPLAY_ORDER.length : i;
+};
+const orderSlots = <T extends { slot: string }>(rows: T[]) =>
+  rows
+    .map((row, i) => ({ row, i }))
+    .sort((a, b) => slotRank(a.row.slot) - slotRank(b.row.slot) || a.i - b.i)
+    .map((e) => e.row);
+
 /** Fill a starting lineup by projection, dedicated slots first then FLEX. */
 function buildLineup(players: Player[]) {
   const pool = [...players].sort((a, b) => weeklyOf(b) - weeklyOf(a));
@@ -107,10 +120,13 @@ function TeamRosterPage() {
       slot: template[i] ?? (p ? p.pos : "FLEX"),
       player: p,
     }));
-    return { starters, bench: team.bench ?? [] };
+    return { starters: orderSlots(starters), bench: team.bench ?? [] };
   }, [team, rosterPositions, optimal]);
 
-  const lineup = view === "coach" ? optimal : actual;
+  const lineup = useMemo(() => {
+    const base = view === "coach" ? optimal : actual;
+    return { starters: orderSlots(base.starters), bench: base.bench };
+  }, [view, optimal, actual]);
 
   /** Bench assets the optimizer would promote into the starting lineup. */
   const promotions = useMemo(() => {
@@ -195,7 +211,7 @@ function TeamRosterPage() {
             <RosterCard
               title="Active Starters"
               rows={lineup.starters}
-              value={marketValue}
+              points={weeklyOf}
               highlight={view === "coach" ? promotions : undefined}
               action={
                 <div className="inline-flex items-center rounded-lg border border-border bg-muted/30 p-0.5">
@@ -220,7 +236,7 @@ function TeamRosterPage() {
             <RosterCard
               title="Bench Depth"
               rows={lineup.bench.map((p) => ({ slot: "BN", player: p }))}
-              value={marketValue}
+              points={weeklyOf}
             />
 
             <section className="rounded-xl border border-border bg-muted/10 p-4">
@@ -311,13 +327,13 @@ function TeamRosterPage() {
 function RosterCard({
   title,
   rows,
-  value,
+  points,
   action,
   highlight,
 }: {
   title: string;
   rows: { slot: string; player: Player | null }[];
-  value: (p: Player) => number;
+  points: (p: Player) => number;
   action?: React.ReactNode;
   highlight?: Set<string> | undefined;
 }) {
@@ -364,7 +380,12 @@ function RosterCard({
                     {r.player.bye ? ` • BYE ${r.player.bye}` : ""}
                   </div>
                 </div>
-                <span className={cn("tabnum shrink-0 text-sm font-bold")}>{scaleValue(value(r.player)).toFixed(1)}</span>
+                <div className="shrink-0 text-right">
+                  <div className="tabnum text-sm font-bold">{points(r.player).toFixed(1)}</div>
+                  <div className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Proj Pts
+                  </div>
+                </div>
               </>
             ) : (
               <span className="text-xs italic text-muted-foreground">Empty slot</span>
