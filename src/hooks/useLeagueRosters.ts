@@ -29,6 +29,14 @@ export type ResolvedRosterTeam = {
 const normalize = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
 
 /**
+ * Suffix-insensitive key: host platforms disagree on "Jr.", "Sr.", "II" etc.
+ * (e.g. "Harold Fannin Jr." vs "Harold Fannin"), which used to leave the
+ * player unmapped and the slot rendered as "Empty slot".
+ */
+const suffixlessKey = (raw: string) =>
+  normalize(raw.replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/gi, " "));
+
+/**
  * Defense aliases: host platforms emit "Lions D/ST", "Detroit Lions",
  * "DET D/ST" etc. Reduce all of them to the team nickname so multiple
  * defenses on one roster resolve cleanly instead of falling through as
