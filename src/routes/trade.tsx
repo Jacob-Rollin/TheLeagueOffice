@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
-import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
+import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { grade } from "@/lib/evaluate";
