@@ -136,7 +136,9 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
   const teams = useMemo<ResolvedRosterTeam[]>(() => {
     const rows = query.data?.teams ?? [];
     const lookup = (raw: string): Player | undefined =>
-      byName.get(normalize(raw)) ?? byName.get(defenseKey(raw));
+      byName.get(normalize(raw)) ??
+      byName.get(suffixlessKey(raw)) ??
+      byName.get(defenseKey(raw));
 
     return rows.map((t) => {
       const resolved: Player[] = [];
