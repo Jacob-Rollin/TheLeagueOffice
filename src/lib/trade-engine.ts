@@ -12,12 +12,27 @@
 /** Discount applied to the aggregate score of the side sending more bodies. */
 export const CONSOLIDATION_DISCOUNT = 0.15;
 
-/** Star-weighted aggregate: the best asset carries most of the package. */
+/** Exponential power-curve exponent: elite assets bend the curve upward. */
+export const VALUE_CURVE_POWER = 1.18;
+/** Geometric decay applied to each successive (lesser) asset in a package. */
+export const PACKAGE_DECAY = 0.82;
+
+/**
+ * Star-weighted aggregate using an exponential power curve (KTC / Rototrade
+ * style): each value is raised to a superlinear exponent, successive assets
+ * decay geometrically, and the result is mapped back into value units.
+ */
 export function starWeighted(values: number[]): number {
-  return [...values]
+  const curved = [...values]
+    .map((v) => Math.max(0, v))
     .sort((a, b) => b - a)
-    .reduce((sum, v, i) => sum + v * Math.pow(0.9, i), 0);
+    .reduce(
+      (sum, v, i) => sum + Math.pow(v, VALUE_CURVE_POWER) * Math.pow(PACKAGE_DECAY, i),
+      0,
+    );
+  return curved <= 0 ? 0 : Math.pow(curved, 1 / VALUE_CURVE_POWER);
 }
+
 
 /**
  * Aggregate score for one side of the deal, after the consolidation modifier.
@@ -84,7 +99,17 @@ export function optimizeLineup(
   starters: Record<string, number>,
 ): Lineup {
   const req = { ...BASE_STARTERS, ...starters };
-  const pool = [...players].sort((a, b) => b.weekly - a.weekly);
+  // Airtight isolation: clone every entry so sandbox / live roster objects are
+  // never mutated by the optimizer's internal slot bookkeeping.
+  const pool = players
+    .filter((p): p is FitPlayer => Boolean(p) && typeof p.pos === "string")
+    .map((p) => ({
+      pos: String(p.pos ?? "").toUpperCase(),
+      weekly: Number.isFinite(p.weekly) ? Number(p.weekly) : 0,
+      _used: false,
+    }))
+    .sort((a, b) => b.weekly - a.weekly);
+
   const vacancies: Record<string, number> = {};
   const bySlot: Record<string, number> = {};
   let points = 0;
@@ -97,8 +122,8 @@ export function optimizeLineup(
     bySlot[pos] = 0;
     for (let i = 0; i < pool.length && filled < need; i++) {
       const p = pool[i]!;
-      if (p.pos !== pos || (p as { _used?: boolean })._used) continue;
-      (p as { _used?: boolean })._used = true;
+      if (p.pos !== pos || p._used) continue;
+      p._used = true;
       points += p.weekly;
       bySlot[pos] = (bySlot[pos] ?? 0) + p.weekly;
       filled++;
@@ -113,17 +138,15 @@ export function optimizeLineup(
   bySlot['FLEX'] = 0;
   for (const p of pool) {
     if (flexFilled >= flexNeed) break;
-    if ((p as { _used?: boolean })._used) continue;
+    if (p._used) continue;
     if (!FLEX_ELIGIBLE.includes(p.pos)) continue;
-    (p as { _used?: boolean })._used = true;
+    p._used = true;
     points += p.weekly;
     bySlot['FLEX'] = (bySlot['FLEX'] ?? 0) + p.weekly;
     flexFilled++;
     used++;
   }
   if (flexFilled < flexNeed) vacancies['FLEX'] = flexNeed - flexFilled;
-
-  for (const p of pool) delete (p as { _used?: boolean })._used;
 
   return {
     points,
@@ -321,7 +344,21 @@ export function rosterConstraint(input: {
     picked.push({ name: c.name, weekly: c.weekly });
   }
 
+  // Self-healing fallback: the roster still overflows but every remaining body
+  // is shielded. A legal roster must exist, so force the lowest-projection
+  // unpicked players until the cap is satisfied.
+  if (picked.length < over) {
+    const pickedNames = new Set(picked.map((p) => p.name));
+    for (const c of candidates) {
+      if (picked.length >= over) break;
+      if (pickedNames.has(c.name)) continue;
+      pickedNames.add(c.name);
+      picked.push({ name: c.name, weekly: c.weekly });
+    }
+  }
+
   const penalty = picked.reduce((s, p) => s + p.weekly, 0);
+
   return {
     overflow: true,
     dropCount: over,
@@ -361,27 +398,35 @@ export function executiveSummary(input: {
 
   const impact = input.impact;
   if (impact) {
-    const shifts = Object.entries(impact.slotDelta)
-      .filter(([, v]) => Math.abs(v) >= 0.25)
-      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
-    const ups = shifts.filter(([, v]) => v > 0);
-    const downs = shifts.filter(([, v]) => v < 0);
-    const fmt = (e: [string, number]) =>
-      `${SLOT_LABEL[e[0]] ?? e[0]} tier floor (${e[1] > 0 ? "+" : ""}${e[1].toFixed(1)} pts/wk)`;
+    // Explicit index mapping keeps the tuple types concrete for the compiler.
+    const shifts: Array<{ slot: string; delta: number }> = Object.entries(impact.slotDelta)
+      .map((entry) => ({ slot: String(entry[0]), delta: Number(entry[1]) }))
+      .filter((s) => Math.abs(s.delta) >= 0.25)
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    const ups = shifts.filter((s) => s.delta > 0);
+    const downs = shifts.filter((s) => s.delta < 0);
+    const label = (slot: string) => SLOT_LABEL[slot] ?? slot;
+    const fmt = (s: { slot: string; delta: number }) =>
+      `${label(s.slot)} tier floor (${s.delta > 0 ? "+" : ""}${s.delta.toFixed(1)} pts/wk)`;
 
     if (impact.delta > 0.25) {
-      const lead = ups.length ? fmt(ups[0]!) : "weekly starting floor";
-      const tail = downs.length
-        ? ` while giving back ${downs[0]![1].toFixed(1)} pts/wk at ${SLOT_LABEL[downs[0]![0]] ?? downs[0]![0]}`
+      const top = ups[0];
+      const bottom = downs[0];
+      const lead = top ? fmt(top) : "weekly starting floor";
+      const tail = bottom
+        ? ` while giving back ${bottom.delta.toFixed(1)} pts/wk at ${label(bottom.slot)}`
         : ", while holding positional parity everywhere else";
       const scale = impact.delta >= 2 ? "significantly upgrades" : "upgrades";
       return `TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`;
     }
     if (impact.delta < -0.25) {
-      const lead = downs.length ? fmt(downs[0]!) : "weekly starting floor";
-      const tail = ups.length ? ` The only gain is ${fmt(ups[0]!)}.` : "";
+      const worst = downs[0];
+      const best = ups[0];
+      const lead = worst ? fmt(worst) : "weekly starting floor";
+      const tail = best ? ` The only gain is ${fmt(best)}.` : "";
       return `TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`;
     }
+
     return `TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`;
   }
 

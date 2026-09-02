@@ -41,7 +41,8 @@ const buttonClass =
     // If the authentication or admin data is still fetching, show a clean loading message
     if (!ready || !isFetched) {
       return (
-        <AccountShell>
+        <AccountShell title="Admin" active="admin">
+
           <div className="p-6 font-display text-sm tracking-wide text-muted-foreground uppercase">
             Loading Authorization...
           </div>
@@ -52,7 +53,7 @@ const buttonClass =
     // 🟢 Safe Authorization Guard: Display a professional notice instead of a crashing layout redirect
     if (isError || !isAdmin) {
       return (
-        <AccountShell>
+        <AccountShell title="Admin" active="admin">
           <div className="p-6 font-display text-sm uppercase tracking-wide text-destructive">
             Unauthorized Access — Admin Privileges Required.
           </div>

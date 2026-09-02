@@ -65,8 +65,11 @@ export function PlayerDetail({
               {player.injury && (
                 <span className={cn(
                   "shrink-0 rounded px-1.5 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider text-white",
-                  player.injury === 'Questionable' && "bg-amber-500",
-                  (player.injury === 'Out' || player.injury === 'IR' || player.injury === 'Doubtful' || player.injury === 'NA') && "bg-red-500"
+                  player.injury === 'Questionable'
+                    ? "bg-amber-500"
+                    : (player.injury === 'Out' || player.injury === 'IR' || player.injury === 'Doubtful' || player.injury === 'NA')
+                      ? "bg-red-500"
+                      : "bg-zinc-500"
                 )}>
                   {player.injury}
                 </span>
