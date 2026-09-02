@@ -1182,7 +1182,7 @@ function TradeDashboard({
               {gradeLetter}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="eyebrow">Overall assessment</p>
+              <p className="eyebrow">Overall Assessment</p>
               <div className="flex flex-wrap items-center gap-2">
                 <p
                   className={cn(
@@ -1214,7 +1214,7 @@ function TradeDashboard({
 
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="flex items-baseline justify-between">
-            <p className="eyebrow">Value gap</p>
+            <p className="eyebrow">Value Gap</p>
             <span className={cn("font-display text-xl font-bold tabnum", textTone)}>
               {!ready
                 ? "—"
@@ -1306,15 +1306,15 @@ function TradeDashboard({
 
       {/* ---------- Middle analytical row ---------- */}
       <div className="grid gap-3 lg:grid-cols-2">
-        <BulletCard title="Giving pros & cons" bullets={giveBullets} />
-        <BulletCard title="Getting pros & cons" bullets={getBullets} />
+        <BulletCard title="Giving Pros & Cons" bullets={giveBullets} />
+        <BulletCard title="Getting Pros & Cons" bullets={getBullets} />
       </div>
 
       {/* ---------- Bottom analytical row ---------- */}
       {showRosterRow && (
         <div className="grid gap-3 lg:grid-cols-2">
           <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-            <p className="eyebrow">Positional depth</p>
+            <p className="eyebrow">Positional Depth</p>
             <div className="mt-3 flex flex-col gap-2">
               {depth.length ? (
                 depth.map((d) => (
@@ -1340,7 +1340,7 @@ function TradeDashboard({
           </section>
 
           <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-            <p className="eyebrow">Injury vulnerability</p>
+            <p className="eyebrow">Injury Vulnerability</p>
             <div className="mt-3 flex flex-col items-center text-center">
               <span
                 className={cn(
