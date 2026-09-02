@@ -391,8 +391,15 @@ export function executiveSummary(input: {
   getCount: number;
   overflow: boolean;
   impact?: MarginalImpact;
+  /** Marginal starting-lineup impact measured on the opposing roster. */
+  opponentImpact?: MarginalImpact | null;
 }): string {
   if (!input.ready) return "Add players to both sides to run the valuation model.";
+  const rivalWarning =
+    input.opponentImpact && input.opponentImpact.delta < -0.25
+      ? ` RIVAL ACCEPTANCE PROBABILITY: LOW. This deal reduces the opponent's active weekly starting floor by ${Math.abs(input.opponentImpact.delta).toFixed(1)} pts/wk.`
+      : "";
+  const withRival = (text: string) => `${text}${rivalWarning}`;
   const consolidating = input.getCount < input.giveCount;
   const spreading = input.getCount > input.giveCount;
 
