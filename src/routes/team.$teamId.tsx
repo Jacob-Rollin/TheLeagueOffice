@@ -34,6 +34,19 @@ const weeklyOf = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
 const SLOT_ORDER = ["QB", "RB", "RB", "WR", "WR", "TE", "FLEX", "K", "DEF"] as const;
 const FLEX_OK = ["RB", "WR", "TE"];
 
+/** Strict display sequence so FLEX always sits directly under TE. */
+const DISPLAY_ORDER = ["QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
+const slotRank = (slot: string) => {
+  const key = slot.toUpperCase();
+  const i = DISPLAY_ORDER.indexOf(key);
+  return i === -1 ? DISPLAY_ORDER.length : i;
+};
+const orderSlots = <T extends { slot: string }>(rows: T[]) =>
+  rows
+    .map((row, i) => ({ row, i }))
+    .sort((a, b) => slotRank(a.row.slot) - slotRank(b.row.slot) || a.i - b.i)
+    .map((e) => e.row);
+
 /** Fill a starting lineup by projection, dedicated slots first then FLEX. */
 function buildLineup(players: Player[]) {
   const pool = [...players].sort((a, b) => weeklyOf(b) - weeklyOf(a));
