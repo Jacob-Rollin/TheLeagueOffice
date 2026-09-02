@@ -463,6 +463,35 @@ function TradePage() {
     ),
   ];
 
+  /* ---------- Modular dashboard analytics ---------- */
+
+  const toAsset = (p: Player): BulletAsset => ({
+    name: p.name,
+    pos: String(p.pos ?? ""),
+    value: Math.max(0, brain?.[p.id]?.value ?? 0),
+    trend: brain?.[p.id]?.trend ?? 0,
+    injuryStatus: resolveInjuryStatus(p, brain) ?? "Healthy",
+    weekly: (p.proj?.[scoring] ?? 0) / WEEKS,
+  });
+
+  const giveAssets = give.map(toAsset);
+  const getAssets = get.map(toAsset);
+
+  /** Bench differential = total roster weekly swing minus the starting swing. */
+  const benchDelta =
+    getAssets.reduce((s, a) => s + a.weekly, 0) -
+    giveAssets.reduce((s, a) => s + a.weekly, 0) -
+    impact.delta;
+
+  const giveBullets = sideBullets({ side: "give", assets: giveAssets });
+  const getBullets = sideBullets({
+    side: "get",
+    assets: getAssets,
+    impact: valueOnly ? null : impact,
+    benchDelta: valueOnly ? null : benchDelta,
+  });
+  const depthRows = positionalDepth(giveAssets, getAssets);
+  const risk = injuryRisk(giveAssets, getAssets);
 
 
   return (
