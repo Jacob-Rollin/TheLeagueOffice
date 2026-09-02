@@ -825,13 +825,20 @@ export async function loadConnectionRosters(
   }
   if (!leagueId) return null;
 
-  const [rosters, users] = await Promise.all([
-    json<{ roster_id: number; owner_id: string | null; players?: string[] | null }[]>(
-      `${BASE}/league/${leagueId}/rosters`,
-    ),
+  const [rosters, users, league] = await Promise.all([
+    json<
+      {
+        roster_id: number;
+        owner_id: string | null;
+        players?: string[] | null;
+        starters?: string[] | null;
+        reserve?: string[] | null;
+      }[]
+    >(`${BASE}/league/${leagueId}/rosters`),
     json<
       { user_id: string; display_name: string; metadata?: { team_name?: string } }[]
     >(`${BASE}/league/${leagueId}/users`),
+    json<{ roster_positions?: string[] }>(`${BASE}/league/${leagueId}`),
   ]);
   if (!rosters?.length) return null;
 
@@ -839,6 +846,7 @@ export async function loadConnectionRosters(
   const ordered = [...rosters].sort((a, b) => a.roster_id - b.roster_id);
   const teams: LeagueRosterTeam[] = ordered.map((r, i) => {
     const u = r.owner_id ? byUser.get(r.owner_id) : undefined;
+    const reserve = (r.reserve ?? []).map((p) => String(p));
     return {
       slot: r.roster_id ?? i + 1,
       team: u?.metadata?.team_name?.trim() || u?.display_name || `Team ${i + 1}`,
@@ -846,12 +854,24 @@ export async function loadConnectionRosters(
       isMine: Boolean(userId && r.owner_id === userId),
       playerIds: (r.players ?? []).map((p) => String(p)),
       playerNames: [],
+      // Sleeper returns starters as an ordered array aligned to roster_positions;
+      // "0" marks an intentionally empty slot and is preserved for alignment.
+      starterIds: (r.starters ?? []).map((p) => String(p)),
+      starterNames: [],
+      irIds: reserve,
+      irNames: [],
     };
   });
+
+  const rosterPositions = (league?.roster_positions ?? [])
+    .map((p) => normalizeSlotToken(String(p)))
+    .filter((p) => p !== "BN" && p !== "IR" && p !== "TAXI");
 
   return {
     myTeamName: teams.find((t) => t.isMine)?.team ?? null,
     teams,
+    rosterPositions,
+
   };
 }
 
