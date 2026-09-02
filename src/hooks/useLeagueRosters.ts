@@ -1,9 +1,15 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { getConnectionRosters } from "@/lib/league.functions";
 import type { Player } from "@/lib/draft";
+import {
+  markRevalidated,
+  readRosterCache,
+  shouldRevalidate,
+  writeRosterCache,
+} from "@/lib/roster-cache";
 
 export type ResolvedRosterTeam = {
   slot: number;
@@ -41,18 +47,45 @@ const defenseKey = (raw: string) => {
  * Rosters for every team in the active synced league, resolved against the
  * loaded player registry so the UI can work with plain Player objects.
  */
-export function useLeagueRosters(players: Player[]) {
+export function useLeagueRosters(players: Player[], options?: { cacheKey?: string }) {
   const { activeLeague } = useActiveLeague();
   const identifier = activeLeague?.leagueId ?? "";
   const platform = activeLeague?.platform ?? "sleeper";
+  const queryClient = useQueryClient();
+
+  const leagueKey = activeLeague?.id ?? "none";
+  const queryKey = useMemo(() => ["league-rosters", leagueKey] as const, [leagueKey]);
+  const storeKey = `${leagueKey}:${options?.cacheKey ?? "all"}`;
+
+  // Hard 5-minute barrier, resolved once per mount so the decision cannot
+  // flip mid-render and trigger an unexpected network burst.
+  const [barrierOpen] = useState(() => shouldRevalidate(storeKey));
+  const hydrated = useRef(false);
+
+  // Instant paint from the local IndexedDB snapshot.
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    void (async () => {
+      if (queryClient.getQueryData(queryKey)) return;
+      const cached = await readRosterCache<Awaited<ReturnType<typeof getConnectionRosters>>>(
+        storeKey,
+      );
+      if (cached && !queryClient.getQueryData(queryKey)) {
+        queryClient.setQueryData(queryKey, cached);
+      }
+    })();
+  }, [queryClient, queryKey, storeKey]);
 
   const query = useQuery({
-    queryKey: ["league-rosters", activeLeague?.id ?? "none"],
+    queryKey,
     enabled: Boolean(identifier),
     staleTime: 5 * 60 * 1000,
     // Stale-while-revalidate: serve the cached snapshot instantly, then
-    // silently refresh from the league provider on every mount.
-    refetchOnMount: "always",
+    // silently refresh from the league provider — but only once the
+    // 5-minute revalidation barrier has elapsed for this team.
+    refetchOnMount: barrierOpen ? "always" : false,
+    refetchOnWindowFocus: false,
     retry: false,
     queryFn: () =>
       getConnectionRosters({
@@ -65,6 +98,13 @@ export function useLeagueRosters(players: Player[]) {
       }),
 
   });
+
+  // Persist every successful sync and stamp the barrier.
+  useEffect(() => {
+    if (!query.data || query.isFetching) return;
+    markRevalidated(storeKey);
+    void writeRosterCache(storeKey, query.data);
+  }, [query.data, query.isFetching, storeKey]);
 
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const byName = useMemo(() => {
