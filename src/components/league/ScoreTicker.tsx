@@ -218,7 +218,7 @@ export function ScoreTicker() {
         // 🟢 THE FIX: If the local Vercel proxy route fails (like on Lovable's static platform),
         // fall back directly to ESPN's public raw feed link so data still populates.
         if (!res.ok) {
-          const backupUrl = `https://espn.com{queryParams}`;
+          const backupUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard${queryParams}`;
           res = await fetch(backupUrl);
         }
         
