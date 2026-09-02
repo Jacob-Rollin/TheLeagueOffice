@@ -15,7 +15,13 @@ import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/
 import { grade } from "@/lib/evaluate";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
-import { executiveSummary, packageScore, rosterConstraint, rosterFit } from "@/lib/trade-engine";
+import {
+  executiveSummary,
+  opponentImpact as computeOpponentImpact,
+  packageScore,
+  rosterConstraint,
+  rosterFit,
+} from "@/lib/trade-engine";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
@@ -347,6 +353,29 @@ function TradePage() {
   const getWeekly = Math.max(0, rawGetWeekly - constraint.penalty);
   const basePct = ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
   const impact = fit.impact;
+
+  /**
+   * Two-sided fairness. The rival roster is the opposing team that owns the
+   * incoming players; the same lineup optimizer runs on their pool with the
+   * packages reversed.
+   */
+  const rivalRoster = useMemo(() => {
+    if (!get.length) return null;
+    const owner = leagueTeams.find((t) =>
+      (opponentRosters[t.key] ?? t.players).some((p) => get.some((g) => g.id === p.id)),
+    );
+    return owner ? (opponentRosters[owner.key] ?? owner.players) : null;
+  }, [get, leagueTeams, opponentRosters]);
+
+  const rivalImpact = useMemo(() => {
+    if (!rivalRoster || !rivalRoster.length || !give.length || !get.length) return null;
+    return computeOpponentImpact({
+      roster: rivalRoster.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+      give: give.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+      get: get.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+      starters: draft.settings.roster as unknown as Record<string, number>,
+    });
+  }, [rivalRoster, give, get, scoring, draft.settings.roster]);
   /**
    * Marginal lineup reality overrules package-size dilution: a real upgrade to
    * the optimized starting lineup cannot be graded below the deal's true
@@ -364,7 +393,20 @@ function TradePage() {
     getCount: get.length,
     overflow: constraint.overflow,
     impact,
+    opponentImpact: rivalImpact,
   });
+
+  /** Sandbox / unsynced desks show asset value only — no lineup telemetry. */
+  const valueOnly = sandboxMode || !league?.synced;
+  const marketValue = (list: Player[]) =>
+    list.reduce((s2, p) => s2 + Math.max(0, brain?.[p.id]?.value ?? 0), 0);
+  const giveValue = marketValue(give);
+  const getValue = marketValue(get);
+  const valueTilt =
+    giveValue + getValue > 0
+      ? ((getValue - giveValue) / Math.max(giveValue, getValue, 1)) * 100
+      : ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
+  const balanceTilt = valueOnly ? valueTilt : (valueTilt + adjustedPct) / 2;
 
 
   const sum = (rows: Metrics[], key: keyof Metrics) =>
@@ -471,6 +513,17 @@ function TradePage() {
           renderMeta={(p) => <MarketRow player={p} line={marketLine(p)} />}
         />
       </div>
+
+      <BalanceMeter
+        ready={ready}
+        tilt={balanceTilt}
+        giveValue={giveValue}
+        getValue={getValue}
+        giveWeekly={giveWeekly}
+        getWeekly={getWeekly}
+        fitPct={needDelta}
+        valueOnly={valueOnly}
+      />
 
       <section className="mt-4 rounded-xl border border-border bg-card p-4">
         <div className="flex items-start gap-4">
@@ -963,5 +1016,121 @@ function OtherTeamsColumn({
         </>
       )}
     </aside>
+  );
+}
+
+/** Fair-value variance window, in percent, that counts as an even deal. */
+const FAIR_ZONE = 7;
+
+/**
+ * Center console tug-of-war meter. The marker slides toward whichever side
+ * the deal favors; the middle band glows green inside the fair-value window
+ * and shifts to amber, then red, as the imbalance widens.
+ */
+function BalanceMeter({
+  ready,
+  tilt,
+  giveValue,
+  getValue,
+  giveWeekly,
+  getWeekly,
+  fitPct,
+  valueOnly,
+}: {
+  ready: boolean;
+  tilt: number;
+  giveValue: number;
+  getValue: number;
+  giveWeekly: number;
+  getWeekly: number;
+  fitPct: number;
+  valueOnly: boolean;
+}) {
+  const clamped = Math.max(-100, Math.min(100, ready ? tilt : 0));
+  const mag = Math.abs(clamped);
+  const zone = mag <= FAIR_ZONE ? "fair" : mag <= 18 ? "warn" : "unfair";
+  const left = 50 + clamped / 2;
+  const barTone =
+    zone === "fair"
+      ? "bg-emerald-500"
+      : zone === "warn"
+        ? "bg-amber-500"
+        : "bg-destructive";
+  const textTone =
+    zone === "fair"
+      ? "text-emerald-600"
+      : zone === "warn"
+        ? "text-amber-600"
+        : "text-destructive";
+
+  return (
+    <section className="mt-4 rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between text-[11px] uppercase tracking-widest text-muted-foreground">
+        <span>You give</span>
+        <span className={cn("font-display", textTone)}>
+          {!ready
+            ? "Awaiting both sides"
+            : zone === "fair"
+              ? "Fair zone"
+              : clamped > 0
+                ? "Tilts to you"
+                : "Tilts to them"}
+        </span>
+        <span>You receive</span>
+      </div>
+
+      <div className="relative mt-3 h-3 w-full overflow-hidden rounded-full border border-border bg-surface">
+        <div
+          className={cn(
+            "absolute inset-y-0 left-1/2 w-[14%] -translate-x-1/2 rounded-full transition-colors duration-300",
+            zone === "fair"
+              ? "bg-emerald-500/25 shadow-[0_0_14px_2px_rgba(16,185,129,0.55)]"
+              : zone === "warn"
+                ? "bg-amber-500/20"
+                : "bg-destructive/15",
+          )}
+        />
+        <div
+          className={cn(
+            "absolute top-1/2 h-5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-500 ease-out",
+            barTone,
+          )}
+          style={{ left: `${left}%` }}
+        />
+      </div>
+
+      <div className="tabnum mt-2 flex items-center justify-between text-xs text-muted-foreground">
+        <span>{giveValue > 0 ? giveValue.toLocaleString() : "—"}</span>
+        <span className={cn("font-semibold", textTone)}>
+          {ready ? `${clamped > 0 ? "+" : ""}${clamped.toFixed(1)}%` : "0.0%"}
+        </span>
+        <span>{getValue > 0 ? getValue.toLocaleString() : "—"}</span>
+      </div>
+
+      {ready && !valueOnly && (
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] text-muted-foreground">
+          <div>
+            <b className="tabnum block text-sm text-foreground">{giveWeekly.toFixed(1)}</b>
+            Give pts/wk
+          </div>
+          <div>
+            <b className="tabnum block text-sm text-foreground">{getWeekly.toFixed(1)}</b>
+            Get pts/wk
+          </div>
+          <div>
+            <b
+              className={cn(
+                "tabnum block text-sm",
+                fitPct > 0 ? "text-emerald-600" : fitPct < 0 ? "text-destructive" : "text-foreground",
+              )}
+            >
+              {fitPct > 0 ? "+" : ""}
+              {fitPct}%
+            </b>
+            Roster fit
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
