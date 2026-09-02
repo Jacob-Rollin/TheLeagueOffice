@@ -522,7 +522,6 @@ function PlayerListImpl({
                       {`${p.pos}${posRanks.get(p.id) ?? ""}`}
                       {p.team ? ` · ${p.team}` : ""}
                       {p.bye ? ` · BYE ${p.bye}` : ""}
-                      {!hideValueTags && reach !== null && reach < -6 ? " · reach" : ""}
                     </span>
                   </div>
                 </div>
