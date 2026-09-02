@@ -633,7 +633,7 @@ function TradePage() {
             />
           </div>
           <div
-            className="pointer-events-none absolute inset-y-0 left-1/2 hidden -translate-x-1/2 md:block bg-gradient-to-r from-transparent via-muted/[0.04] to-primary/[0.03] border-l border-dashed border-border/40"
+            className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-16 -translate-x-1/2 md:block bg-gradient-to-r from-transparent via-muted/[0.04] to-primary/[0.03] border-l border-dashed border-border/40"
             aria-hidden="true"
           />
         </div>
