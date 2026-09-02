@@ -409,8 +409,9 @@ function TradePage() {
     giveCount: give.length,
     getCount: get.length,
     overflow: constraint.overflow,
-    impact: isSandbox ? undefined : impact,
+    ...(isSandbox ? {} : { impact }),
     opponentImpact: isSandbox ? null : rivalImpact,
+
   });
 
   const balanceTilt = valueOnly ? valueTilt : (valueTilt + adjustedPct) / 2;
