@@ -160,23 +160,37 @@ function Home() {
                         rel="noreferrer"
                         className="group overflow-hidden rounded-xl border border-border bg-card hover:border-primary"
                       >
-                        {n.images?.[0]?.url && (
-                          <img
-                            src={n.images[0].url}
-                            alt={n.images[0].alt ?? "Fantasy football news"}
-                            loading="lazy"
-                            className="h-auto w-full object-contain"
-                          />
+                        {n.images?.[0]?.url ? (
+                          <div className="relative">
+                            <img
+                              src={n.images[0].url}
+                              alt={n.images[0].alt ?? "Fantasy football news"}
+                              loading="lazy"
+                              className="h-auto w-full object-contain"
+                            />
+                            <div className="absolute bottom-4 left-4 right-4 rounded-xl border border-white/10 bg-background/65 p-4 shadow-lg backdrop-blur-md">
+                              <h3 className="text-lg font-bold leading-snug tracking-tight group-hover:text-primary">
+                                {n.headline}
+                              </h3>
+                              <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                                {relativeTime(n.published)}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-4">
+                            <h3 className="text-lg font-bold leading-snug tracking-tight group-hover:text-primary">
+                              {n.headline}
+                            </h3>
+                            <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                              {relativeTime(n.published)}
+                            </p>
+                            {n.description && (
+                              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{n.description}</p>
+                            )}
+                          </div>
                         )}
-                        <div className="p-4">
-                          <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
-                          <h3 className="mt-1 text-lg font-semibold leading-snug group-hover:text-primary">
-                            {n.headline}
-                          </h3>
-                          {n.description && (
-                            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{n.description}</p>
-                          )}
-                        </div>
+
                       </a>
                     ))
                 : ["Fantasy draft targets to watch", "Fantasy sleepers and busts", "Fantasy players trending up"].map(
