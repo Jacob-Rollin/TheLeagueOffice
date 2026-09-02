@@ -1058,7 +1058,7 @@ function BalanceMeter({
   const clamped = Math.max(-100, Math.min(100, ready ? tilt : 0));
   const mag = Math.abs(clamped);
   const zone = mag <= FAIR_ZONE ? "fair" : mag <= 18 ? "warn" : "unfair";
-  const left = 50 + clamped / 2;
+  const left = 50 - clamped / 2;
   const barTone =
     zone === "fair"
       ? "bg-emerald-500"
