@@ -344,7 +344,21 @@ export function rosterConstraint(input: {
     picked.push({ name: c.name, weekly: c.weekly });
   }
 
+  // Self-healing fallback: the roster still overflows but every remaining body
+  // is shielded. A legal roster must exist, so force the lowest-projection
+  // unpicked players until the cap is satisfied.
+  if (picked.length < over) {
+    const pickedNames = new Set(picked.map((p) => p.name));
+    for (const c of candidates) {
+      if (picked.length >= over) break;
+      if (pickedNames.has(c.name)) continue;
+      pickedNames.add(c.name);
+      picked.push({ name: c.name, weekly: c.weekly });
+    }
+  }
+
   const penalty = picked.reduce((s, p) => s + p.weekly, 0);
+
   return {
     overflow: true,
     dropCount: over,
