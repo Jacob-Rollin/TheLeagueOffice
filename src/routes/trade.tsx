@@ -117,25 +117,90 @@ function metricsFor(player: Player, detail: PlayerDetail | undefined, scoring: S
 
 type MarketLine = { bits: string[]; trend: string | null; up: boolean };
 
-/** Single selected-player row: name plus cached market assets, no raw labels. */
-function MarketRow({ player, line }: { player: Player; line: MarketLine }) {
+/**
+ * Site-standard trade asset card: headshot overlaid on the team's graphical
+ * branding wash, name on top, colored position tag tucked directly beneath it,
+ * and cached market value / 30-day trend on the right rail.
+ */
+function TradeAssetCard({
+  player,
+  value,
+  trendPct,
+}: {
+  player: Player;
+  value: number | null;
+  trendPct: number | null;
+}) {
+  const logo = teamLogo(player.team);
   return (
-    <span className="block min-w-0">
-      <span className="block truncate text-sm font-medium leading-tight text-foreground">
-        {player.name}
+    <span className="relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-md">
+      {logo && (
+        <img
+          src={logo}
+          alt=""
+          aria-hidden
+          loading="lazy"
+          className="pointer-events-none absolute -left-2 top-1/2 size-14 -translate-y-1/2 opacity-[0.14] blur-[0.2px]"
+        />
+      )}
+      <span className="relative z-10 shrink-0">
+        <PlayerAvatar
+          id={player.id}
+          pos={player.pos}
+          team={player.team}
+          name={player.name}
+          className="size-10"
+          logoClassName="size-4"
+        />
       </span>
-      <span className="tabnum block truncate text-[11px] leading-tight text-muted-foreground">
-        {line.bits.join(" · ")}
-        {line.trend ? " · " : ""}
-        {line.trend ? (
-          <span className={cn("font-medium", line.up ? "text-foreground" : "text-muted-foreground")}>
-            {line.trend}
+      <span className="relative z-10 min-w-0 flex-1">
+        <span className="block truncate text-sm font-bold leading-tight text-foreground">
+          {player.name}
+        </span>
+        <span className="mt-0.5 flex items-center gap-1.5">
+          <PositionBadge pos={player.pos} className="h-4 min-w-[2rem] text-[9px]" />
+          <span className="truncate text-[11px] leading-tight text-muted-foreground">
+            {[player.team || "FA", player.bye ? `BYE ${player.bye}` : null]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
-        ) : null}
+        </span>
+      </span>
+      <span className="relative z-10 shrink-0 pr-1 text-right">
+        <span className="tabnum block text-sm font-semibold leading-tight text-foreground">
+          {value ? scaleValue(value).toFixed(1) : "—"}
+        </span>
+        <span
+          className={cn(
+            "tabnum block text-[10px] leading-tight",
+            !trendPct
+              ? "text-muted-foreground"
+              : trendPct > 0
+                ? "text-emerald-600"
+                : "text-destructive",
+          )}
+        >
+          {trendPct ? `${trendPct > 0 ? "▲" : "▼"} ${Math.abs(trendPct).toFixed(1)}%` : "flat"}
+        </span>
       </span>
     </span>
   );
 }
+
+/** Placeholder row appended when the receiving package needs an extra slot. */
+function BenchDropPlaceholder({ count }: { count: number }) {
+  return (
+    <li className="flex items-center gap-2 rounded-md border border-dashed border-border bg-surface/60 px-2 py-2.5 text-sm">
+      <span className="grid h-6 min-w-[2.4rem] place-items-center rounded border border-neutral-400/60 bg-neutral-400 px-1.5 font-display text-xs font-semibold uppercase tracking-wider text-white">
+        BN
+      </span>
+      <span className="truncate text-xs font-semibold text-muted-foreground">
+        +{count} Bench Slot{count > 1 ? "s" : ""} Required
+      </span>
+    </li>
+  );
+}
+
 
 type OpponentTeam = { key: string; name: string; owner: string; players: Player[] };
 
