@@ -568,7 +568,7 @@ export function sideBullets(input: {
       tone: incoming ? "pro" : "con",
       text: `${incoming ? "Headline return" : "Headline cost"}: ${top.name} at ${scaleValue(
         top.value,
-      ).toFixed(1)} market value${input.assets.length > 1 ? ` inside a ${input.assets.length}-player package` : ""}.`,
+      ).toFixed(1)} market value${packagePhrase(input.assets.length)}.`,
     });
   }
 
