@@ -17,11 +17,22 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import {
   executiveSummary,
+  headlineVerdict,
+  injuryRisk,
   opponentImpact as computeOpponentImpact,
   packageScore,
+  positionalDepth,
   rosterConstraint,
   rosterFit,
+  scaleValue,
+  sideBullets,
+  type Bullet,
+  type BulletAsset,
+  type InjuryRisk,
+  type PositionalDepthRow,
+  type RosterConstraint,
 } from "@/lib/trade-engine";
+
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
