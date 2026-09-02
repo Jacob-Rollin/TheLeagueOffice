@@ -74,6 +74,17 @@ function TeamRosterPage() {
   });
   const [view, setView] = useState<"actual" | "coach">("actual");
   const brain = usePlayerBrain();
+  const { projectFor } = useLeagueProjections();
+
+  /**
+   * League-exact weekly projection: Sleeper's raw projected stat line scored
+   * against the active host league's own rule map, falling back to the
+   * season-long baseline when the week has no projected line.
+   */
+  const projPts = useMemo(
+    () => (p: Player) => projectFor(p.id) ?? weeklyOf(p),
+    [projectFor],
+  );
 
   const byName = useMemo(() => {
     const map = new Map<string, { value: number; trend: number }>();
