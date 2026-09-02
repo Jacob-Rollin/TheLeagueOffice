@@ -762,20 +762,44 @@ export async function loadConnectionRosters(
         return candidates.some((c) => c && c.replace(/[{}]/g, "").toUpperCase() === swidGuid);
       };
       const mineId = (rows.find(matchesSwid) ?? rows[0])?.id;
-      const teams: LeagueRosterTeam[] = rows.map((t, i) => ({
-        slot: t.id ?? i + 1,
-        team: espnTeamName(t) ?? `Team ${i + 1}`,
-        owner: t.abbrev ?? "",
-        isMine: (t.id ?? i + 1) === mineId,
-        playerIds: [],
-        playerNames: (t.roster?.entries ?? [])
-          .map((e) => e.playerPoolEntry?.player?.fullName ?? "")
-          .filter(Boolean),
-      }));
+      const teams: LeagueRosterTeam[] = rows.map((t, i) => {
+        const entries = t.roster?.entries ?? [];
+        const nameOf = (e: (typeof entries)[number]) =>
+          e.playerPoolEntry?.player?.fullName ?? "";
+        return {
+          slot: t.id ?? i + 1,
+          team: espnTeamName(t) ?? `Team ${i + 1}`,
+          owner: t.abbrev ?? "",
+          isMine: (t.id ?? i + 1) === mineId,
+          playerIds: [],
+          playerNames: entries.map(nameOf).filter(Boolean),
+          starterIds: [],
+          starterNames: entries
+            .filter((e) => ESPN_SLOT_TOKEN[e.lineupSlotId ?? -1] !== undefined)
+            .sort((a, b) => (a.lineupSlotId ?? 0) - (b.lineupSlotId ?? 0))
+            .map(nameOf)
+            .filter(Boolean),
+          irIds: [],
+          irNames: entries
+            .filter((e) => e.lineupSlotId === 21)
+            .map(nameOf)
+            .filter(Boolean),
+        };
+      });
+      // Build the starting-slot template from ESPN's lineup slot counts.
+      const counts = league?.settings?.rosterSettings?.lineupSlotCounts ?? {};
+      const rosterPositions: string[] = [];
+      for (const [raw, count] of Object.entries(counts)) {
+        const token = ESPN_SLOT_TOKEN[Number(raw)];
+        if (!token) continue;
+        for (let k = 0; k < (Number(count) || 0); k++) rosterPositions.push(token);
+      }
       return {
         myTeamName: teams.find((t) => t.isMine)?.team ?? null,
         teams,
+        rosterPositions,
       };
+
     }
     return null;
   }
