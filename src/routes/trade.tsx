@@ -606,8 +606,8 @@ function TradePage() {
 
       {/* Fused trade desk block: both sides share one cohesive card spine. */}
       <section className="mt-4 rounded-xl border border-border bg-card shadow-sm">
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div className="bg-muted/40 px-4 pb-4 pt-3 md:px-5">
+        <div className="relative grid gap-2 sm:grid-cols-2">
+          <div className="px-4 pb-4 pt-3 md:px-5">
             <PlayerPicker
               bare
               label="You give"
@@ -619,7 +619,7 @@ function TradePage() {
               renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
             />
           </div>
-          <div className="bg-muted/40 px-4 pb-4 pt-3 md:px-5">
+          <div className="bg-muted/30 px-4 pb-4 pt-3 md:px-5">
             <PlayerPicker
               bare
               label="You receive"
@@ -632,6 +632,10 @@ function TradePage() {
               renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
             />
           </div>
+          <div
+            className="pointer-events-none absolute inset-y-0 left-1/2 w-12 -translate-x-1/2 bg-gradient-to-r from-card/0 via-card/80 to-card/0 opacity-70"
+            aria-hidden="true"
+          />
         </div>
       </section>
 
@@ -1307,43 +1311,39 @@ function TradeDashboard({
 
       {/* ---------- Bottom analytical row ---------- */}
       {showRosterRow && (
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="eyebrow">Positional depth & risk analysis</p>
-          <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
-            <div>
-              <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
-                Positional depth
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {depth.length ? (
-                  depth.map((d) => (
-                    <span
-                      key={d.pos}
-                      className={cn(
-                        "tabnum rounded-md border px-2.5 py-1 text-xs font-semibold",
-                        d.delta > 0
-                          ? "border-emerald-600/40 bg-emerald-500/10 text-emerald-600"
-                          : "border-destructive/40 bg-destructive/10 text-destructive",
-                      )}
-                    >
-                      {d.pos}: {d.delta > 0 ? "+" : ""}
-                      {d.delta.toFixed(1)} Value {d.delta > 0 ? "Gained" : "Lost"}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    No positional value shift on this deal.
+        <div className="grid gap-3 lg:grid-cols-2">
+          <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <p className="eyebrow">Positional depth</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {depth.length ? (
+                depth.map((d) => (
+                  <span
+                    key={d.pos}
+                    className={cn(
+                      "tabnum rounded-md border px-2.5 py-1.5 text-xs font-semibold",
+                      d.delta > 0
+                        ? "border-emerald-600/40 bg-emerald-500/10 text-emerald-600"
+                        : "border-destructive/40 bg-destructive/10 text-destructive",
+                    )}
+                  >
+                    {d.pos}: {d.delta > 0 ? "+" : ""}
+                    {d.delta.toFixed(1)} Value {d.delta > 0 ? "Gained" : "Lost"}
                   </span>
-                )}
-              </div>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  No positional value shift on this deal.
+                </span>
+              )}
             </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
-                Injury vulnerability
-              </p>
+          </section>
+
+          <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <p className="eyebrow">Injury vulnerability</p>
+            <div className="mt-3 flex flex-col items-center text-center">
               <span
                 className={cn(
-                  "mt-2 inline-block rounded-md border px-2.5 py-1 font-display text-xs font-bold tracking-wide",
+                  "inline-block rounded-md border px-3 py-1.5 font-display text-xs font-bold tracking-wide",
                   risk.level === "INCREASED"
                     ? "border-destructive/40 bg-destructive/10 text-destructive"
                     : risk.level === "REDUCED"
@@ -1353,10 +1353,12 @@ function TradeDashboard({
               >
                 INJURY RISK: {risk.level}
               </span>
-              <p className="mt-2 text-xs leading-snug text-muted-foreground">{risk.note}</p>
+              <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                {risk.note}
+              </p>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       )}
     </div>
   );
