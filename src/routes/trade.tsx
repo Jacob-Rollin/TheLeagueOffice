@@ -1145,6 +1145,9 @@ function TradeDashboard({
   showRosterRow: boolean;
   constraint: RosterConstraint;
 }) {
+  // Lower analytics stay hidden until both sides of the deal hold a player.
+  if (!ready) return null;
+
   const clamped = Math.max(-100, Math.min(100, ready ? tilt : 0));
   const mag = Math.abs(clamped);
   const zone = mag <= FAIR_ZONE ? "fair" : mag <= 18 ? "warn" : "unfair";
@@ -1155,15 +1158,24 @@ function TradeDashboard({
   const textTone =
     zone === "fair" ? "text-emerald-600" : zone === "warn" ? "text-amber-600" : "text-destructive";
 
+  /** Grade halo: the assessment card outline mirrors the deal's grade tone. */
+  const haloTone =
+    gradeTone === "good"
+      ? "border-emerald-500/70 shadow-[0_0_18px_-2px_rgba(16,185,129,0.55)]"
+      : gradeTone === "bad"
+        ? "border-destructive/70 shadow-[0_0_18px_-2px_rgba(220,38,38,0.45)]"
+        : "border-border";
+
   const giveScaled = scaleValue(giveValue);
   const getScaled = scaleValue(getValue);
   const gap = Math.round((getScaled - giveScaled) * 10) / 10;
 
   return (
-    <div className="mt-4 space-y-3">
+    <div className="mt-4 space-y-3 duration-300 animate-in fade-in slide-in-from-top-2">
       {/* ---------- Top analytical row ---------- */}
       <div className="grid gap-3 lg:grid-cols-2">
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <section className={cn("rounded-xl border-2 bg-card p-4 shadow-sm", haloTone)}>
+
           <div className="flex items-start gap-4">
             <div
               className={cn(
