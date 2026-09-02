@@ -448,3 +448,219 @@ export function opponentImpact(input: {
     starters: input.starters,
   });
 }
+
+/* ------------------------------------------------------------------ *
+ * Dashboard analytics: headline verdicts, pros/cons bullets,
+ * positional depth deltas and injury vulnerability comparisons.
+ * Pure math + string building — no UI, no data fetching.
+ * ------------------------------------------------------------------ */
+
+/** Raw market values are stored in hundredths; the UI shows clean decimals. */
+export const VALUE_SCALE = 100;
+
+/** Scale a raw brain market value into the readable 0-100+ display scale. */
+export function scaleValue(raw: number): number {
+  return Math.round((Math.max(0, raw) / VALUE_SCALE) * 10) / 10;
+}
+
+/** Punchy conversational verdict paired with the letter grade. */
+export function headlineVerdict(input: { ready: boolean; pct: number }): string {
+  if (!input.ready) return "Load both sides";
+  const p = input.pct;
+  if (p >= 25) return "Yes, by all means";
+  if (p >= 15) return "Accept this deal";
+  if (p >= 8) return "Worth doing";
+  if (p > -8) return "Fair and balanced";
+  if (p > -15) return "Push for more";
+  return "Walk away from this deal";
+}
+
+/** Roster statuses that freeze a player's active availability. */
+const FROZEN_STATUS: Record<string, string> = {
+  EXEMPT: "roster-exempt list",
+  SUSPENDED: "suspension",
+  PUP: "PUP list",
+  IR: "injured reserve",
+  NA: "inactive roster designation",
+  DNR: "did-not-report list",
+};
+
+export type BulletAsset = {
+  name: string;
+  pos: string;
+  /** Raw (unscaled) market value. */
+  value: number;
+  /** 30-day market trend, raw units. */
+  trend: number;
+  injuryStatus: string;
+  /** Weekly projected points. */
+  weekly: number;
+};
+
+export type Bullet = { tone: "pro" | "con"; text: string };
+
+const WEEKS_LEFT = 17;
+
+/**
+ * Context-aware bullet generation for one side of the deal. `side` decides
+ * whether an asset leaving or arriving is framed as a gain or a loss.
+ */
+export function sideBullets(input: {
+  side: "give" | "get";
+  assets: BulletAsset[];
+  /** Marginal starting-lineup impact; omitted for value-only desks. */
+  impact?: MarginalImpact | null;
+  /** Bench weekly-point differential; omitted for value-only desks. */
+  benchDelta?: number | null;
+}): Bullet[] {
+  const out: Bullet[] = [];
+  const incoming = input.side === "get";
+
+  for (const a of input.assets) {
+    const status = (a.injuryStatus ?? "").trim().toUpperCase();
+    const frozen = FROZEN_STATUS[status];
+    if (frozen) {
+      out.push({
+        tone: incoming ? "con" : "pro",
+        text: incoming
+          ? `${a.name} arrives on the ${frozen} — a frozen roster spot with no weekly output until reinstated.`
+          : `${a.name} leaves on the ${frozen}, clearing a frozen roster spot off your books.`,
+      });
+    } else if (status && status !== "HEALTHY" && status !== "ACTIVE") {
+      out.push({
+        tone: incoming ? "con" : "pro",
+        text: incoming
+          ? `${a.name} carries a ${status.toLowerCase()} tag into your lineup.`
+          : `You offload ${a.name}'s ${status.toLowerCase()} tag.`,
+      });
+    }
+
+    const t = scaleValue(Math.abs(a.trend));
+    if (Math.abs(a.trend) >= 200) {
+      const rising = a.trend > 0;
+      out.push({
+        tone: incoming === rising ? "pro" : "con",
+        text: `${a.name} is ${rising ? "up" : "down"} ${t.toFixed(1)} on the 30-day market — ${
+          rising ? "momentum is climbing" : "value is bleeding"
+        }.`,
+      });
+    }
+  }
+
+  const top = [...input.assets].sort((a, b) => b.value - a.value)[0];
+  if (top && top.value > 0) {
+    out.push({
+      tone: incoming ? "pro" : "con",
+      text: `${incoming ? "Headline return" : "Headline cost"}: ${top.name} at ${scaleValue(
+        top.value,
+      ).toFixed(1)} market value${input.assets.length > 1 ? ` inside a ${input.assets.length}-player package` : ""}.`,
+    });
+  }
+
+  if (incoming && input.impact) {
+    const d = input.impact.delta;
+    if (d > 0.25) {
+      out.push({
+        tone: "pro",
+        text: `Starting Lineup Boost: Increases your projected active scoring by ${d.toFixed(
+          1,
+        )} pts/week (${(d * WEEKS_LEFT).toFixed(1)} pts over season).`,
+      });
+    } else if (d < -0.25) {
+      out.push({
+        tone: "con",
+        text: `Starting Lineup Drop: Reduces your projected active scoring by ${Math.abs(d).toFixed(
+          1,
+        )} pts/week (${Math.abs(d * WEEKS_LEFT).toFixed(1)} pts over season).`,
+      });
+    }
+    const b = input.benchDelta ?? 0;
+    if (Math.abs(b) >= 0.25) {
+      out.push({
+        tone: b > 0 ? "pro" : "con",
+        text: `Bench Depth Differential: Modifies bench totals by ${b > 0 ? "+" : ""}${b.toFixed(
+          1,
+        )} pts/week (${b > 0 ? "+" : ""}${(b * WEEKS_LEFT).toFixed(1)} pts over season).`,
+      });
+    }
+  }
+
+  if (!out.length) {
+    out.push({
+      tone: "con",
+      text: incoming
+        ? "No incoming assets selected yet."
+        : "No outgoing assets selected yet.",
+    });
+  }
+  return out;
+}
+
+export type PositionalDepthRow = { pos: string; delta: number };
+
+/** Net scaled value gained or lost at each individual position slot. */
+export function positionalDepth(
+  give: { pos: string; value: number }[],
+  get: { pos: string; value: number }[],
+): PositionalDepthRow[] {
+  const totals: Record<string, number> = {};
+  for (const p of give) {
+    const pos = String(p.pos ?? "").toUpperCase();
+    if (!pos) continue;
+    totals[pos] = (totals[pos] ?? 0) - Math.max(0, p.value);
+  }
+  for (const p of get) {
+    const pos = String(p.pos ?? "").toUpperCase();
+    if (!pos) continue;
+    totals[pos] = (totals[pos] ?? 0) + Math.max(0, p.value);
+  }
+  return Object.entries(totals)
+    .map(([pos, raw]) => ({ pos, delta: Math.round((raw / VALUE_SCALE) * 10) / 10 }))
+    .filter((r) => Math.abs(r.delta) > 0.05)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+}
+
+export type InjuryRisk = {
+  level: "INCREASED" | "REDUCED" | "NEUTRAL";
+  incoming: number;
+  outgoing: number;
+  note: string;
+};
+
+const RISK_WEIGHT: Record<string, number> = {
+  IR: 4,
+  PUP: 4,
+  SUSPENDED: 4,
+  EXEMPT: 3,
+  NA: 3,
+  DOUBTFUL: 3,
+  OUT: 3,
+  QUESTIONABLE: 2,
+  PROBABLE: 1,
+  DTD: 1,
+};
+
+function riskScore(list: { injuryStatus: string }[]): number {
+  return list.reduce(
+    (s, p) => s + (RISK_WEIGHT[(p.injuryStatus ?? "").trim().toUpperCase()] ?? 0),
+    0,
+  );
+}
+
+/** Compare the medical exposure of the incoming package against the outgoing. */
+export function injuryRisk(
+  give: { injuryStatus: string }[],
+  get: { injuryStatus: string }[],
+): InjuryRisk {
+  const outgoing = riskScore(give);
+  const incoming = riskScore(get);
+  const diff = incoming - outgoing;
+  const level = diff > 0 ? "INCREASED" : diff < 0 ? "REDUCED" : "NEUTRAL";
+  const note =
+    diff > 0
+      ? "The incoming package carries more active medical exposure than the players you send out."
+      : diff < 0
+        ? "You shed more medical exposure than you take on — the roster gets healthier."
+        : "Medical exposure is unchanged on both sides of this deal.";
+  return { level, incoming, outgoing, note };
+}
