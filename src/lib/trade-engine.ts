@@ -455,6 +455,13 @@ export function opponentImpact(input: {
  * Pure math + string building — no UI, no data fetching.
  * ------------------------------------------------------------------ */
 
+/** Human-readable package descriptor driven by the actual asset count. */
+function packagePhrase(count: number): string {
+  if (count <= 1) return "";
+  if (count === 2) return " inside a 2-player package";
+  return ` inside a ${count}-player bundle`;
+}
+
 /** Raw market values are stored in hundredths; the UI shows clean decimals. */
 export const VALUE_SCALE = 100;
 
