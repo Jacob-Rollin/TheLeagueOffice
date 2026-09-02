@@ -313,7 +313,7 @@ export function rosterConstraint(input: {
   }
 
   const candidates = [...input.bench].sort((a, b) => a.weekly - b.weekly);
-  const picked: { name: string; weekly: number; pos?: string }[] = [];
+  const picked: { name: string; weekly: number; pos?: string | undefined }[] = [];
   let shielded = false;
 
   for (const c of candidates) {
@@ -338,7 +338,7 @@ export function rosterConstraint(input: {
   }
 
   const penalty = picked.reduce((s, p) => s + p.weekly, 0);
-  const primaryDropName = picked.length > 0 ? picked[0].name : null;
+  const primaryDropName = picked.length > 0 ? (picked[0]?.name ?? null) : null;
   
   return {
     overflow: true,
