@@ -122,8 +122,8 @@ export function optimizeLineup(
     bySlot[pos] = 0;
     for (let i = 0; i < pool.length && filled < need; i++) {
       const p = pool[i]!;
-      if (p.pos !== pos || (p as { _used?: boolean })._used) continue;
-      (p as { _used?: boolean })._used = true;
+      if (p.pos !== pos || p._used) continue;
+      p._used = true;
       points += p.weekly;
       bySlot[pos] = (bySlot[pos] ?? 0) + p.weekly;
       filled++;
@@ -138,15 +138,16 @@ export function optimizeLineup(
   bySlot['FLEX'] = 0;
   for (const p of pool) {
     if (flexFilled >= flexNeed) break;
-    if ((p as { _used?: boolean })._used) continue;
+    if (p._used) continue;
     if (!FLEX_ELIGIBLE.includes(p.pos)) continue;
-    (p as { _used?: boolean })._used = true;
+    p._used = true;
     points += p.weekly;
     bySlot['FLEX'] = (bySlot['FLEX'] ?? 0) + p.weekly;
     flexFilled++;
     used++;
   }
   if (flexFilled < flexNeed) vacancies['FLEX'] = flexNeed - flexFilled;
+
 
   for (const p of pool) delete (p as { _used?: boolean })._used;
 
