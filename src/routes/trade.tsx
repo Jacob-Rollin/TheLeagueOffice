@@ -457,7 +457,13 @@ function TradePage() {
    * the optimized starting lineup cannot be graded below the deal's true
    * weekly impact just because it costs bench bodies.
    */
-  const isSandbox = sandboxMode || !league?.synced;
+  /**
+   * Roster synchronization override: a synced league whose roster count is 0
+   * still falls back to pure sandbox asset-valuation rules so empty lineup
+   * deltas can never crash the analytics layout.
+   */
+  const isSandbox = sandboxMode || !league?.synced || userRoster.length === 0;
+
 
   /** Sandbox / unsynced desks show asset value only — no lineup telemetry. */
   const valueOnly = isSandbox;
