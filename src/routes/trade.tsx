@@ -608,25 +608,42 @@ function TradePage() {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <PlayerPicker
-          label="You give"
-          players={data.players}
-          selected={give}
-          onAdd={(p) => setGive((s) => [...s, p])}
-          onRemove={(id) => setGive((s) => s.filter((p) => p.id !== id))}
-          renderMeta={(p) => <MarketRow player={p} line={marketLine(p)} />}
-        />
-        <PlayerPicker
-          label="You receive"
-          accent="get"
-          players={data.players}
-          selected={get}
-          onAdd={(p) => setGet((s) => [...s, p])}
-          onRemove={(id) => setGet((s) => s.filter((p) => p.id !== id))}
-          renderMeta={(p) => <MarketRow player={p} line={marketLine(p)} />}
-        />
-      </div>
+      {/* Fused trade desk block: both sides share one cohesive card spine. */}
+      <section className="mt-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="grid gap-0 sm:grid-cols-2">
+          <div className="p-3 sm:border-r sm:border-border">
+            <PlayerPicker
+              bare
+              label="You give"
+              players={data.players}
+              selected={give}
+              onAdd={(p) => setGive((s) => [...s, p])}
+              onRemove={(id) => setGive((s) => s.filter((p) => p.id !== id))}
+              renderRow={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+              renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+            />
+          </div>
+          <div className="border-t border-border p-3 sm:border-t-0">
+            <PlayerPicker
+              bare
+              label="You receive"
+              accent="get"
+              players={data.players}
+              selected={get}
+              onAdd={(p) => setGet((s) => [...s, p])}
+              onRemove={(id) => setGet((s) => s.filter((p) => p.id !== id))}
+              renderRow={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+              renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+              footer={
+                get.length > give.length ? (
+                  <BenchDropPlaceholder count={get.length - give.length} />
+                ) : null
+              }
+            />
+          </div>
+        </div>
+      </section>
+
 
       <TradeDashboard
         ready={ready}
