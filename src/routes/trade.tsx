@@ -1177,35 +1177,33 @@ function TradeDashboard({
             </div>
             <div className="min-w-0 flex-1">
               <p className="eyebrow">Overall assessment</p>
-              <p
-                className={cn(
-                  "font-display text-xl font-bold leading-tight tracking-tight",
-                  !ready
-                    ? "text-muted-foreground"
-                    : gradeTone === "good"
-                      ? "text-emerald-600"
-                      : gradeTone === "bad"
-                        ? "text-destructive"
-                        : "text-foreground",
+              <div className="flex flex-wrap items-center gap-2">
+                <p
+                  className={cn(
+                    "font-display text-xl font-bold leading-tight tracking-tight",
+                    !ready
+                      ? "text-muted-foreground"
+                      : gradeTone === "good"
+                        ? "text-emerald-600"
+                        : gradeTone === "bad"
+                          ? "text-destructive"
+                          : "text-foreground",
+                  )}
+                >
+                  {headline}
+                </p>
+                {dropSlots > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-600/40 bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-700">
+                    {benchSlotWarning(dropSlots)}
+                  </span>
                 )}
-              >
-                {headline}
-              </p>
+              </div>
               <p className="mt-1 text-sm leading-snug text-foreground">{verdict}</p>
               {ready && !valueOnly && (
                 <p className="mt-1 text-xs text-muted-foreground">{fitNote}</p>
               )}
             </div>
           </div>
-          {ready && constraint.overflow && (
-            <p className="mt-3 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground">
-              ROSTER CONSTRAINT: Accepting this deal requires dropping {constraint.dropCount} bench
-              player{constraint.dropCount > 1 ? "s" : ""}.
-              {constraint.dropNames.length
-                ? ` Model drops ${constraint.dropNames.join(", ")} and subtracts ${constraint.penalty.toFixed(1)} pts/wk from the receive side.`
-                : ""}
-            </p>
-          )}
         </section>
 
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
