@@ -269,40 +269,24 @@ export function rosterFit(input: {
   return { pct, fills, clogs, note, impact };
 }
 
-
-
-
 export type RosterConstraint = {
-  /** True when accepting the deal overflows the roster cap. */
   overflow: boolean;
-  /** How many players must be dropped. */
   dropCount: number;
-  /** Weekly projection subtracted from the "You receive" score. */
   penalty: number;
-  /** Name of the simulated drop, when one was identified. */
   dropName: string | null;
-  /** Every simulated drop, in order. */
   dropNames: string[];
-  /** True when the vacancy shield blocked every remaining candidate. */
   shielded: boolean;
 };
 
 /**
- * Bench-vacancy verification. Only runs when the manager is receiving more
- * players than they send out.
- *
- * Vacancy shield: a player who is the last body at a required starting
- * position (the only DEF, the only K, …) can never be recommended as a drop,
- * so the suggestion always targets a genuine bench surplus.
+ * Bench-vacancy verification with Self-Healing Fallback processing.
  */
 export function rosterConstraint(input: {
   rosterCount: number;
   rosterCap: number;
   giveCount: number;
   getCount: number;
-  /** Bench-eligible players on the manager's roster, with weekly projections. */
   bench: { name: string; weekly: number; pos?: string }[];
-  /** Required starters by position, used by the vacancy shield. */
   starters?: Record<string, number>;
 }): RosterConstraint {
   const none: RosterConstraint = {
@@ -313,6 +297,7 @@ export function rosterConstraint(input: {
     dropNames: [],
     shielded: false,
   };
+  
   const net = input.getCount - input.giveCount;
   if (net <= 0 || input.rosterCap <= 0) return none;
 
@@ -328,47 +313,42 @@ export function rosterConstraint(input: {
   }
 
   const candidates = [...input.bench].sort((a, b) => a.weekly - b.weekly);
-  const picked: { name: string; weekly: number }[] = [];
+  const picked: { name: string; weekly: number; pos?: string }[] = [];
   let shielded = false;
 
   for (const c of candidates) {
     if (picked.length >= over) break;
     const pos = c.pos ?? "";
     const required = starters[pos] ?? 0;
-    // Hardlock: dropping this body would leave the lineup slot vacant.
+    
     if (required > 0 && (remaining[pos] ?? 0) <= required) {
       shielded = true;
-      continue;
+      continue; 
     }
     remaining[pos] = (remaining[pos] ?? 1) - 1;
-    picked.push({ name: c.name, weekly: c.weekly });
+    picked.push({ name: c.name, weekly: c.weekly, pos: c.pos });
   }
 
-  // Self-healing fallback: the roster still overflows but every remaining body
-  // is shielded. A legal roster must exist, so force the lowest-projection
-  // unpicked players until the cap is satisfied.
-  if (picked.length < over) {
-    const pickedNames = new Set(picked.map((p) => p.name));
-    for (const c of candidates) {
+  if (picked.length < over && candidates.length > 0) {
+    for (const fallback of candidates) {
       if (picked.length >= over) break;
-      if (pickedNames.has(c.name)) continue;
-      pickedNames.add(c.name);
-      picked.push({ name: c.name, weekly: c.weekly });
+      if (picked.some(p => p.name === fallback.name)) continue;
+      picked.push({ name: fallback.name, weekly: fallback.weekly, pos: fallback.pos });
     }
   }
 
   const penalty = picked.reduce((s, p) => s + p.weekly, 0);
-
+  const primaryDropName = picked.length > 0 ? picked[0].name : null;
+  
   return {
     overflow: true,
     dropCount: over,
     penalty,
-    dropName: picked[0]?.name ?? null,
+    dropName: primaryDropName,
     dropNames: picked.map((p) => p.name),
     shielded: shielded && picked.length < over,
   };
 }
-
 
 const SLOT_LABEL: Record<string, string> = {
   QB: "QB",
@@ -381,8 +361,7 @@ const SLOT_LABEL: Record<string, string> = {
 };
 
 /**
- * Executive summary driven by the marginal starting-lineup simulation: it
- * names the slots whose weekly floor actually moved, not the raw value gap.
+ * High-End Executive Summary Engine with Two-Sided Opponent Evaluation.
  */
 export function executiveSummary(input: {
   ready: boolean;
@@ -391,13 +370,13 @@ export function executiveSummary(input: {
   getCount: number;
   overflow: boolean;
   impact?: MarginalImpact;
-  opponentImpact?: MarginalImpact | null; // 🟢 Ensures two-sided typing compatibility
+  opponentImpact?: MarginalImpact | null;
 }): string {
   if (!input.ready) return "Add players to both sides to run the valuation model.";
   
   const impact = input.impact;
   
-  // 🟢 Safely check if impact exists and use type-safe baseline checks to force Sandbox Mode
+  // 🟢 Sandbox Verification: Force pure asset metrics if the baseline points evaluate to zero
   if (!impact || !impact.before || impact.before === 0) {
     const valueTrendDiff = input.pct;
     if (Math.abs(valueTrendDiff) <= 5) {
@@ -411,8 +390,7 @@ export function executiveSummary(input: {
   const consolidating = input.getCount < input.giveCount;
   const spreading = input.getCount > input.giveCount;
 
-  // 🟢 FIXED: Removed duplicate 'const impact' and open 'if' block.
-  // The function helper definition handles opponent text attachments cleanly
+  // Attached evaluation function checking rival starting lineups dynamically
   const withRival = (baseMsg: string) => {
     if (input.opponentImpact && input.opponentImpact.delta < -0.25) {
       return `${baseMsg} RIVAL ACCEPTANCE PROBABILITY: LOW. This deal reduces the opponent's active weekly starting floor by ${Math.abs(input.opponentImpact.delta).toFixed(1)} pts/wk.`;
@@ -420,7 +398,7 @@ export function executiveSummary(input: {
     return baseMsg;
   };
 
-  // Explicit index mapping keeps the tuple types concrete for the compiler.
+  // Explicit type configuration mapping for structural array objects
   const shifts: Array<{ slot: string; delta: number }> = Object.entries(impact.slotDelta)
     .map((entry) => ({ slot: String(entry[0]), delta: Number(entry[1]) }))
     .filter((s) => Math.abs(s.delta) >= 0.25)
@@ -448,8 +426,25 @@ export function executiveSummary(input: {
     const best = ups[0];
     const lead = worst ? fmt(worst) : "weekly starting floor";
     const tail = best ? ` The only gain is ${fmt(best)}.` : "";
-    return withRival(`TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`);
+    return `TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`;
   }
 
   return withRival(`TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`);
-} // 🟢 Closes your executiveSummary block perfectly!
+}
+
+/**
+ * Two-sided fairness: the same marginal starting-lineup simulation, run on the opposing roster.
+ */
+export function opponentImpact(input: {
+  roster: FitPlayer[];
+  give: FitPlayer[];
+  get: FitPlayer[];
+  starters: Record<string, number>;
+}): MarginalImpact {
+  return marginalImpact({
+    roster: input.roster,
+    give: input.get,
+    get: input.give,
+    starters: input.starters,
+  });
+}
