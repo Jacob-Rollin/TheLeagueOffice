@@ -497,7 +497,7 @@ export type BulletAsset = {
   weekly: number;
 };
 
-export type Bullet = { tone: "pro" | "con"; text: string };
+export type Bullet = { tone: "pro" | "con" | "critical"; text: string };
 
 const WEEKS_LEFT = 17;
 
@@ -512,6 +512,8 @@ export function sideBullets(input: {
   impact?: MarginalImpact | null;
   /** Bench weekly-point differential; omitted for value-only desks. */
   benchDelta?: number | null;
+  /** Extra bench slots the receiving package forces the user to clear. */
+  dropSlots?: number;
 }): Bullet[] {
   const out: Bullet[] = [];
   const incoming = input.side === "get";
