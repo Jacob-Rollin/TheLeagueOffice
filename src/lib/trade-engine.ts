@@ -391,8 +391,15 @@ export function executiveSummary(input: {
   getCount: number;
   overflow: boolean;
   impact?: MarginalImpact;
+  /** Marginal starting-lineup impact measured on the opposing roster. */
+  opponentImpact?: MarginalImpact | null;
 }): string {
   if (!input.ready) return "Add players to both sides to run the valuation model.";
+  const rivalWarning =
+    input.opponentImpact && input.opponentImpact.delta < -0.25
+      ? ` RIVAL ACCEPTANCE PROBABILITY: LOW. This deal reduces the opponent's active weekly starting floor by ${Math.abs(input.opponentImpact.delta).toFixed(1)} pts/wk.`
+      : "";
+  const withRival = (text: string) => `${text}${rivalWarning}`;
   const consolidating = input.getCount < input.giveCount;
   const spreading = input.getCount > input.giveCount;
 
@@ -417,34 +424,55 @@ export function executiveSummary(input: {
         ? ` while giving back ${bottom.delta.toFixed(1)} pts/wk at ${label(bottom.slot)}`
         : ", while holding positional parity everywhere else";
       const scale = impact.delta >= 2 ? "significantly upgrades" : "upgrades";
-      return `TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`;
+      return withRival(`TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`);
     }
     if (impact.delta < -0.25) {
       const worst = downs[0];
       const best = ups[0];
       const lead = worst ? fmt(worst) : "weekly starting floor";
       const tail = best ? ` The only gain is ${fmt(best)}.` : "";
-      return `TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`;
+      return withRival(`TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`);
     }
 
-    return `TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`;
+    return withRival(`TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`);
   }
 
 
 
   if (input.pct >= 15)
-    return consolidating
+    return withRival(consolidating
       ? "Clear win. You are consolidating depth into the best asset in the deal, and that premium shows up in every weekly lineup."
-      : "Clear win. The incoming package returns materially more weekly production than what leaves your roster.";
+      : "Clear win. The incoming package returns materially more weekly production than what leaves your roster.");
   if (input.pct >= 8)
-    return "Favorable. Value tilts to your side once star weighting and roster fit are applied.";
+    return withRival("Favorable. Value tilts to your side once star weighting and roster fit are applied.");
   if (input.pct > -8)
-    return spreading
+    return withRival(spreading
       ? "Balanced. The two sides price out close, but you are trading a premium asset for quantity — make sure the depth actually starts for you."
-      : "Balanced. Value is distributed evenly across both packages; decide this one on scheme fit and bye weeks.";
+      : "Balanced. Value is distributed evenly across both packages; decide this one on scheme fit and bye weeks.");
   if (input.pct > -15)
-    return "Unfavorable. You are shipping out more weekly production than the return justifies.";
-  return spreading
+    return withRival("Unfavorable. You are shipping out more weekly production than the return justifies.");
+  return withRival(spreading
     ? "Decline. You are surrendering the best player in the deal and receiving filler that will not crack your starting lineup."
-    : "Decline. The value gap is wide and the incoming package does not close it.";
+    : "Decline. The value gap is wide and the incoming package does not close it.");
+}
+
+/**
+ * Two-sided fairness: the same marginal starting-lineup simulation, run on the
+ * opposing roster. The rival sends what the user receives and receives what
+ * the user sends, so a negative delta means the deal weakens their lineup.
+ */
+export function opponentImpact(input: {
+  roster: FitPlayer[];
+  /** Players the user sends (the rival receives these). */
+  give: FitPlayer[];
+  /** Players the user receives (the rival sends these). */
+  get: FitPlayer[];
+  starters: Record<string, number>;
+}): MarginalImpact {
+  return marginalImpact({
+    roster: input.roster,
+    give: input.get,
+    get: input.give,
+    starters: input.starters,
+  });
 }

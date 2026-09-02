@@ -140,24 +140,17 @@ function stubPlayer(spec: SandboxSpec): Player {
 export type SandboxTeam = { key: string; name: string; owner: string; players: Player[] };
 
 /**
- * Build sandbox rosters from the SAME global player catalog the War Room and
- * Mock Draft pages consume, so sandbox rows carry full live metadata (ADP,
- * projections, bye weeks) instead of isolated stub objects.
+ * Demo assets are decommissioned. With no synced league the sidebars stay
+ * empty so the desk runs in pure asset-valuation mode instead of grading
+ * against fabricated rosters.
  */
-export function buildSandboxTeams(catalog: Player[]): {
+export function buildSandboxTeams(_catalog: Player[]): {
   myTeam: Player[];
   rivalTeams: SandboxTeam[];
 } {
-  const byId = new Map(catalog.map((p) => [p.id, p]));
-  const resolve = (spec: SandboxSpec): Player =>
-    byId.get(spec.id) ?? stubPlayer(spec);
-  return {
-    myTeam: SANDBOX_MY_TEAM_SPEC.map(resolve),
-    rivalTeams: SANDBOX_RIVAL_SPECS.map((t) => ({
-      key: t.key,
-      name: t.name,
-      owner: "",
-      players: t.players.map(resolve),
-    })),
-  };
+  void _catalog;
+  void SANDBOX_MY_TEAM_SPEC;
+  void SANDBOX_RIVAL_SPECS;
+  void stubPlayer;
+  return { myTeam: [], rivalTeams: [] };
 }
