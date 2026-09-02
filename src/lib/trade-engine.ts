@@ -587,6 +587,17 @@ export function sideBullets(input: {
     }
   }
 
+  if (incoming && input.dropSlots && input.dropSlots > 0) {
+    out.push({
+      tone: "critical",
+      text: `Roster Impact: Completing this ${input.assets.length}-for-${
+        input.assets.length - input.dropSlots
+      } or multi-player deal will require manually dropping ${input.dropSlots} bench asset${
+        input.dropSlots > 1 ? "s" : ""
+      } to clear active roster cap constraints.`,
+    });
+  }
+
   if (!out.length) {
     out.push({
       tone: "con",
