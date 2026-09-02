@@ -523,7 +523,7 @@ function TradePage() {
         />
       </div>
 
-      <BalanceMeter
+      <TradeDashboard
         ready={ready}
         tilt={balanceTilt}
         giveValue={giveValue}
@@ -532,79 +532,19 @@ function TradePage() {
         getWeekly={getWeekly}
         fitPct={needDelta}
         valueOnly={valueOnly}
+        gradeLetter={ready ? adjustedGrade.letter : "—"}
+        gradeTone={adjustedGrade.tone}
+        headline={headlineVerdict({ ready, pct: adjustedPct })}
+        verdict={verdict}
+        fitNote={fit.note}
+        giveBullets={giveBullets}
+        getBullets={getBullets}
+        depth={depthRows}
+        risk={risk}
+        showRosterRow={ready && !valueOnly && userRoster.length > 0}
+        constraint={constraint}
       />
 
-      <section className="mt-4 rounded-xl border border-border bg-card p-4">
-        <div className="flex items-start gap-4">
-          <div
-            className={cn(
-              "flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border-2 font-display text-3xl font-bold",
-              !ready
-                ? "border-border text-muted-foreground"
-                : adjustedGrade.tone === "good"
-                  ? "border-emerald-600 text-emerald-600"
-                  : adjustedGrade.tone === "bad"
-                    ? "border-destructive text-destructive"
-                    : "border-border text-foreground",
-            )}
-          >
-            {ready ? adjustedGrade.letter : "—"}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="eyebrow">Executive summary</p>
-            <p className="mt-1 text-sm font-medium leading-snug text-foreground">{verdict}</p>
-            {ready && !valueOnly && (
-              <>
-                <p className="mt-1 text-xs text-muted-foreground">{fit.note}</p>
-                <p className="tabnum mt-1 text-xs text-muted-foreground">
-                  Production {basePct.toFixed(1)}% · Roster fit {needDelta > 0 ? "+" : ""}
-                  {needDelta}% · Final {adjustedPct.toFixed(1)}%
-                  {give.length !== get.length ? " · Consolidation modifier applied" : ""}
-                </p>
-              </>
-            )}
-          </div>
-        </div>
-        {ready && constraint.overflow && (
-          <p className="mt-3 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground">
-            ROSTER CONSTRAINT: Accepting this deal requires dropping {constraint.dropCount} bench
-            player{constraint.dropCount > 1 ? "s" : ""}.
-            {constraint.dropNames.length
-              ? ` Model drops ${constraint.dropNames.join(", ")} and subtracts ${constraint.penalty.toFixed(1)} pts/wk from the receive side.`
-              : ""}
-            {constraint.shielded
-              ? " Remaining bodies are locked as your only starter at their position, so no further drop is legal."
-              : ""}
-          </p>
-        )}
-        {ready && !valueOnly && (
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-            <div className="p-2">
-              <b className="tabnum block text-sm">{giveWeekly.toFixed(1)}</b>Give pts/wk
-            </div>
-            <div className="p-2">
-              <b className="tabnum block text-sm">{getWeekly.toFixed(1)}</b>Get pts/wk
-            </div>
-            <div className="p-2">
-              <b
-                className={cn(
-                  "tabnum block text-sm",
-                  needDelta > 0
-                    ? "text-emerald-600"
-                    : needDelta < 0
-                      ? "text-destructive"
-                      : undefined,
-                )}
-              >
-                {needDelta > 0 ? "+" : ""}
-                {needDelta}%
-              </b>
-              Roster fit
-            </div>
-          </div>
-        )}
-
-      </section>
 
       <div className="mt-4 flex gap-1">
         {(
