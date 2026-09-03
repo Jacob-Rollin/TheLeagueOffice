@@ -20,6 +20,7 @@ import {
   executiveSummary,
   headlineVerdict,
   injuryRisk,
+  leagueWeekly,
   opponentImpact as computeOpponentImpact,
   packageScore,
   positionalDepth,
