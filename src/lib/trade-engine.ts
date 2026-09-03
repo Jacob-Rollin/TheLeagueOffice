@@ -9,6 +9,8 @@
  * Pure math only — no UI, no data fetching.
  */
 
+import { scoreStats, type ScoringMap } from "./scoring-map";
+
 /** Discount applied to the aggregate score of the side sending more bodies. */
 export const CONSOLIDATION_DISCOUNT = 0.15;
 
@@ -138,8 +140,11 @@ export type Lineup = {
 export function optimizeLineup(
   players: FitPlayer[],
   starters: Record<string, number>,
+  scoring?: LeagueScoringContext | null,
 ): Lineup {
   const req = { ...BASE_STARTERS, ...starters };
+  // League scoring inheritance: re-price every projection in the host format.
+  players = applyLeagueScoring(players, scoring);
   // Airtight isolation: clone every entry so sandbox / live roster objects are
   // never mutated by the optimizer's internal slot bookkeeping.
   const pool = players
@@ -238,10 +243,14 @@ export function marginalImpact(input: {
   give: FitPlayer[];
   get: FitPlayer[];
   starters: Record<string, number>;
+  scoring?: LeagueScoringContext | null;
 }): MarginalImpact {
   const req = { ...BASE_STARTERS, ...input.starters };
-  const before = optimizeLineup(input.roster, req);
-  const after = optimizeLineup(applyTrade(input.roster, input.give, input.get), req);
+  const roster = applyLeagueScoring(input.roster, input.scoring);
+  const give = applyLeagueScoring(input.give, input.scoring);
+  const get = applyLeagueScoring(input.get, input.scoring);
+  const before = optimizeLineup(roster, req);
+  const after = optimizeLineup(applyTrade(roster, give, get), req);
   const slotDelta: Record<string, number> = {};
   for (const slot of ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX"])
     slotDelta[slot] = (after.bySlot[slot] ?? 0) - (before.bySlot[slot] ?? 0);
@@ -263,10 +272,14 @@ export function rosterFit(input: {
   give: FitPlayer[];
   get: FitPlayer[];
   starters: Record<string, number>;
+  scoring?: LeagueScoringContext | null;
 }): RosterFit & { impact: MarginalImpact } {
   const req = { ...BASE_STARTERS, ...input.starters };
-  const before = optimizeLineup(input.roster, req);
-  const now = optimizeLineup(applyTrade(input.roster, input.give, input.get), req);
+  const roster = applyLeagueScoring(input.roster, input.scoring);
+  const give = applyLeagueScoring(input.give, input.scoring);
+  const get = applyLeagueScoring(input.get, input.scoring);
+  const before = optimizeLineup(roster, req);
+  const now = optimizeLineup(applyTrade(roster, give, get), req);
   const impact = marginalImpact(input);
 
   const fills: string[] = [];
@@ -481,12 +494,14 @@ export function opponentImpact(input: {
   give: FitPlayer[];
   get: FitPlayer[];
   starters: Record<string, number>;
+  scoring?: LeagueScoringContext | null;
 }): MarginalImpact {
   return marginalImpact({
     roster: input.roster,
     give: input.get,
     get: input.give,
     starters: input.starters,
+    scoring: input.scoring ?? null,
   });
 }
 
