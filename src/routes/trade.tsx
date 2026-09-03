@@ -20,6 +20,7 @@ import {
   executiveSummary,
   headlineVerdict,
   injuryRisk,
+  leagueWeekly,
   opponentImpact as computeOpponentImpact,
   packageScore,
   positionalDepth,
@@ -39,6 +40,7 @@ import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
 import { useDraft } from "@/hooks/use-draft";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
+import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 
 
 const playersQuery = queryOptions({
@@ -92,6 +94,11 @@ type Metrics = {
   line: { label: string; value: string }[];
   weekly: number;
 };
+
+/** Lineup-simulation shape for a player, keyed by id so league scoring can apply. */
+function fitOf(p: Player, scoring: Scoring) {
+  return { id: p.id, pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS };
+}
 
 const LOWER_IS_BETTER = new Set(["Pts allowed"]);
 
@@ -267,6 +274,16 @@ function TradePage() {
 
   const byId = useMemo(() => new Map(data.players.map((p) => [p.id, p])), [data.players]);
   const league = useLeagueRosters(data.players);
+  /**
+   * Active league scoring inheritance: synced desks price every lineup
+   * simulation with the host league's own scoring multipliers. Sandbox and
+   * unsynced desks pass no context and keep the generic projection fallback.
+   */
+  const { projectFor } = useLeagueProjections();
+  const leagueScoring = useMemo(
+    () => (league?.synced ? { weeklyFor: projectFor } : null),
+    [league?.synced, projectFor],
+  );
   const rostersByTeam = useMemo(() => {
     const map = new Map<number, Player[]>();
     for (let t = 1; t <= draft.settings.teams; t++) map.set(t, []);
@@ -367,12 +384,13 @@ function TradePage() {
   const fit = useMemo(
     () =>
       rosterFit({
-        roster: userRoster.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
-        give: give.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
-        get: get.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+        roster: userRoster.map((p) => fitOf(p, scoring)),
+        give: give.map((p) => fitOf(p, scoring)),
+        get: get.map((p) => fitOf(p, scoring)),
         starters: draft.settings.roster as unknown as Record<string, number>,
+        scoring: leagueScoring,
       }),
-    [userRoster, give, get, scoring, draft.settings.roster],
+    [userRoster, give, get, scoring, draft.settings.roster, leagueScoring],
   );
   const needDelta = fit.pct;
 
@@ -382,11 +400,11 @@ function TradePage() {
    * discount, so a 2-for-1 must clear a higher bar than a straight swap.
    */
   const giveWeekly = packageScore(
-    giveRows.map((r) => r.weekly),
+    giveRows.map((r) => leagueWeekly(fitOf(r.player, scoring), leagueScoring) || r.weekly),
     getRows.length,
   );
   const rawGetWeekly = packageScore(
-    getRows.map((r) => r.weekly),
+    getRows.map((r) => leagueWeekly(fitOf(r.player, scoring), leagueScoring) || r.weekly),
     giveRows.length,
   );
 
@@ -400,9 +418,9 @@ function TradePage() {
         .map((p) => ({
           name: p.name,
           pos: p.pos,
-          weekly: (p.proj?.[scoring] ?? 0) / WEEKS,
+          weekly: leagueWeekly(fitOf(p, scoring), leagueScoring),
         })),
-    [userRoster, give, get, scoring],
+    [userRoster, give, get, scoring, leagueScoring],
   );
   const constraint = rosterConstraint({
     rosterCount: userRoster.length,
@@ -434,12 +452,13 @@ function TradePage() {
   const rivalImpact = useMemo(() => {
     if (!rivalRoster || !rivalRoster.length || !give.length || !get.length) return null;
     return computeOpponentImpact({
-      roster: rivalRoster.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
-      give: give.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
-      get: get.map((p) => ({ pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS })),
+      roster: rivalRoster.map((p) => fitOf(p, scoring)),
+      give: give.map((p) => fitOf(p, scoring)),
+      get: get.map((p) => fitOf(p, scoring)),
       starters: draft.settings.roster as unknown as Record<string, number>,
+      scoring: leagueScoring,
     });
-  }, [rivalRoster, give, get, scoring, draft.settings.roster]);
+  }, [rivalRoster, give, get, scoring, draft.settings.roster, leagueScoring]);
   /**
    * Marginal lineup reality overrules package-size dilution: a real upgrade to
    * the optimized starting lineup cannot be graded below the deal's true
@@ -542,7 +561,7 @@ function TradePage() {
     value: Math.max(0, brain?.[p.id]?.value ?? 0),
     trend: brain?.[p.id]?.trend ?? 0,
     injuryStatus: resolveInjuryStatus(p, brain) ?? "Healthy",
-    weekly: (p.proj?.[scoring] ?? 0) / WEEKS,
+    weekly: leagueWeekly(fitOf(p, scoring), leagueScoring),
   });
 
   const giveAssets = give.map(toAsset);
@@ -1276,11 +1295,11 @@ function TradeDashboard({
           {showRosterRow && (
             <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center text-[11px] text-muted-foreground">
               <div>
-                <b className="tabnum block text-sm text-foreground">{giveWeekly.toFixed(1)}</b>
+                <b className="tabnum block text-sm text-foreground">{giveWeekly.toFixed(2)}</b>
                 Give pts/wk
               </div>
               <div>
-                <b className="tabnum block text-sm text-foreground">{getWeekly.toFixed(1)}</b>
+                <b className="tabnum block text-sm text-foreground">{getWeekly.toFixed(2)}</b>
                 Get pts/wk
               </div>
               <div>
