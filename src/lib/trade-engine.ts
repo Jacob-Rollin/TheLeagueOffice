@@ -51,7 +51,48 @@ export function packageScore(values: number[], opposingCount: number): number {
 
 export type FitPosition = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
 
-export type FitPlayer = { pos: string; weekly: number };
+export type FitPlayer = { pos: string; weekly: number; id?: string };
+
+/**
+ * Active league scoring inheritance.
+ *
+ * When a league is synced, its custom `scoring_settings` multipliers (pass_td,
+ * rec, rush_yd, …) are normalized onto Sleeper's stat vocabulary and applied to
+ * each player's raw weekly projected stat line, so lineup deltas are computed
+ * in the exact point format the host league uses. Sandbox / unsynced desks pass
+ * no context and keep the generic projection fallback untouched.
+ */
+export type LeagueScoringContext = {
+  /** Normalized rule map: stat key -> points per unit. */
+  map?: ScoringMap | null;
+  /** Raw weekly projected stat lines keyed by player id. */
+  stats?: Map<string, Record<string, number>> | null;
+  /** Pre-scored resolver; takes precedence over map × stats. */
+  weeklyFor?: ((id: string) => number | null) | undefined;
+};
+
+/** League-format weekly points for one player, falling back to the generic projection. */
+export function leagueWeekly(p: FitPlayer, ctx?: LeagueScoringContext | null): number {
+  const fallback = Number.isFinite(p.weekly) ? Number(p.weekly) : 0;
+  if (!ctx || !p.id) return fallback;
+  const direct = ctx.weeklyFor?.(p.id);
+  if (direct != null && Number.isFinite(direct)) return Number(direct);
+  if (ctx.map) {
+    const scored = scoreStats(ctx.stats?.get(p.id), ctx.map);
+    if (scored != null && Number.isFinite(scored)) return scored;
+  }
+  return fallback;
+}
+
+/** Re-express a player pool in the active league's scoring format. */
+export function applyLeagueScoring(
+  list: FitPlayer[],
+  ctx?: LeagueScoringContext | null,
+): FitPlayer[] {
+  if (!ctx) return list;
+  return list.map((p) => ({ ...p, weekly: leagueWeekly(p, ctx) }));
+}
+
 
 export type RosterFit = {
   /** Percentage shift applied to the production grade (-25 … +25). */
