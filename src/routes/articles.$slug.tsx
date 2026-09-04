@@ -91,9 +91,31 @@ function ArticlePage() {
           )}
         </div>
 
-        <aside className="min-w-0 space-y-0 lg:col-span-1">
+        <aside className="min-w-0 space-y-4 lg:col-span-1">
           <StandingsPanel />
+          {isAdmin === true && (
+            <section className="rounded-xl border border-border bg-card p-4">
+              <h2 className="display-title text-sm uppercase tracking-widest text-black">
+                Admin Console
+              </h2>
+              <div className="mt-3 space-y-2">
+                {article && (
+                  <Link
+                    to="/account/admin"
+                    search={{ tab: "articles", edit: article.id }}
+                    className={blueButton}
+                  >
+                    Edit This Article
+                  </Link>
+                )}
+                <Link to="/account/admin" search={{ tab: "articles" }} className={blueButton}>
+                  Manage All Articles
+                </Link>
+              </div>
+            </section>
+          )}
         </aside>
+
       </div>
     </main>
   );
