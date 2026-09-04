@@ -21,7 +21,7 @@ import {
 import { generateInviteCode, listInviteCodes, type InviteCodeRow } from "@/lib/inviteCodes";
 import { cn } from "@/lib/utils";
 
-type AdminSearch = { tab?: "invites" | "articles"; edit?: string };
+type AdminSearch = { tab?: "invites" | "articles" | undefined; edit?: string | undefined };
 
 export const Route = createFileRoute("/account/admin")({
   ssr: false,
