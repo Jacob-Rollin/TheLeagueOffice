@@ -3,7 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 
 import { StandingsPanel } from "@/components/league/StandingsPanel";
+import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { getArticleBySlug } from "@/lib/articles";
+
 
 export const Route = createFileRoute("/articles/$slug")({
   ssr: false,
