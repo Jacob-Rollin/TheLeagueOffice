@@ -153,6 +153,46 @@ function Home() {
               <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Updated on load</span>
             </div>
             <div className="flex flex-col gap-4">
+              {featured && (
+                <Link
+                  to="/articles/$slug"
+                  params={{ slug: featured.slug }}
+                  className="group overflow-hidden rounded-xl border border-primary/40 bg-card hover:border-primary"
+                >
+                  {featured.image_url ? (
+                    <div className="relative">
+                      <img
+                        src={featured.image_url}
+                        alt={featured.title}
+                        loading="lazy"
+                        className="h-auto w-full object-contain"
+                      />
+                      <div className="absolute bottom-4 left-4 right-4 rounded-xl border border-white/10 bg-background/65 p-4 shadow-lg backdrop-blur-md">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">
+                          League Office • {featured.category}
+                        </p>
+                        <h3 className="mt-1 text-lg font-bold leading-snug tracking-tight group-hover:text-primary">
+                          {featured.title}
+                        </h3>
+                        <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                          By {featured.author_name}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">
+                        League Office • {featured.category}
+                      </p>
+                      <h3 className="mt-1 text-lg font-bold leading-snug tracking-tight group-hover:text-primary">
+                        {featured.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{featured.summary}</p>
+                    </div>
+                  )}
+                </Link>
+              )}
+
               {news.length
                 ? news
                     .filter((n) => Boolean(articleUrl(n)))
