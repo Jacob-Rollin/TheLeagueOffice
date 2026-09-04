@@ -124,12 +124,23 @@ function ArticlesManager({
   const [editing, setEditing] = useState<ArticleRow | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autoOpened, setAutoOpened] = useState(false);
 
   const { data: articles, isLoading, error } = useQuery({
     queryKey: ["admin-articles"],
     retry: false,
     queryFn: (): Promise<ArticleRow[]> => listArticles(),
   });
+
+  useEffect(() => {
+    if (autoOpened || !initialEditId || !articles?.length) return;
+    const row = articles.find((item) => item.id === initialEditId);
+    setAutoOpened(true);
+    if (!row) return;
+    setEditing(row);
+    setEditorOpen(true);
+  }, [articles, autoOpened, initialEditId]);
+
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["admin-articles"] });
