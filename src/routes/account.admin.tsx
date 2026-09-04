@@ -104,13 +104,22 @@ function AdminPage() {
       {tab === "invites" ? (
         <InviteCodeGenerator userId={user?.id ?? null} />
       ) : (
-        <ArticlesManager authorName={user?.email ?? "The League Office"} />
+        <ArticlesManager
+          authorName={user?.email ?? "The League Office"}
+          initialEditId={search.edit ?? null}
+        />
       )}
     </AccountShell>
   );
 }
 
-function ArticlesManager({ authorName }: { authorName: string }) {
+function ArticlesManager({
+  authorName,
+  initialEditId,
+}: {
+  authorName: string;
+  initialEditId: string | null;
+}) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<ArticleRow | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
