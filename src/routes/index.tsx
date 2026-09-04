@@ -62,7 +62,12 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const { activeLeague, standings, loading: standingsLoading } = useActiveStandings();
+  const { data: featured } = useQuery({
+    queryKey: ["latest-article"],
+    retry: false,
+    queryFn: () => latestPublishedArticle(),
+  });
+
   const [news, setNews] = useState<NewsItem[]>([]);
   const [visibleNews, setVisibleNews] = useState(6);
   const [newsLimit, setNewsLimit] = useState(50);
