@@ -3,7 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 
 import { StandingsPanel } from "@/components/league/StandingsPanel";
+import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { getArticleBySlug } from "@/lib/articles";
+
 
 export const Route = createFileRoute("/articles/$slug")({
   ssr: false,
@@ -28,8 +31,13 @@ export const Route = createFileRoute("/articles/$slug")({
 
 const imageClass = "w-full max-w-full h-auto object-cover rounded-xl shadow-sm border border-border/10";
 
+const blueButton =
+  "block w-full rounded-md bg-primary px-4 py-2 text-center text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90";
+
 function ArticlePage() {
   const { slug } = Route.useParams();
+  const { user } = useAuth();
+  const { data: isAdmin } = useIsAdmin(user?.id ?? null);
   const { data: article, isLoading, error } = useQuery({
     queryKey: ["article", slug],
     retry: false,
@@ -83,9 +91,31 @@ function ArticlePage() {
           )}
         </div>
 
-        <aside className="min-w-0 space-y-0 lg:col-span-1">
+        <aside className="min-w-0 space-y-4 lg:col-span-1">
           <StandingsPanel />
+          {isAdmin === true && (
+            <section className="rounded-xl border border-border bg-card p-4">
+              <h2 className="display-title text-sm uppercase tracking-widest text-black">
+                Admin Console
+              </h2>
+              <div className="mt-3 space-y-2">
+                {article && (
+                  <Link
+                    to="/account/admin"
+                    search={{ tab: "articles", edit: article.id }}
+                    className={blueButton}
+                  >
+                    Edit This Article
+                  </Link>
+                )}
+                <Link to="/account/admin" search={{ tab: "articles" }} className={blueButton}>
+                  Manage All Articles
+                </Link>
+              </div>
+            </section>
+          )}
         </aside>
+
       </div>
     </main>
   );

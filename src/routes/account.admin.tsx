@@ -21,8 +21,14 @@ import {
 import { generateInviteCode, listInviteCodes, type InviteCodeRow } from "@/lib/inviteCodes";
 import { cn } from "@/lib/utils";
 
+type AdminSearch = { tab?: "invites" | "articles" | undefined; edit?: string | undefined };
+
 export const Route = createFileRoute("/account/admin")({
   ssr: false,
+  validateSearch: (search: Record<string, unknown>): AdminSearch => ({
+    tab: search['tab'] === "articles" ? "articles" : search['tab'] === "invites" ? "invites" : undefined,
+    edit: typeof search['edit'] === "string" ? search['edit'] : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Admin — The League Office" },
@@ -40,6 +46,7 @@ export const Route = createFileRoute("/account/admin")({
   component: AdminPage,
 });
 
+
 const cardClass = "rounded-xl border border-border bg-card p-6";
 const buttonClass =
   "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
@@ -51,7 +58,8 @@ type SubTab = "invites" | "articles";
 function AdminPage() {
   const { user, ready } = useAuth();
   const { data: isAdmin, isFetched, isError } = useIsAdmin(user?.id ?? null);
-  const [tab, setTab] = useState<SubTab>("invites");
+  const search = Route.useSearch();
+  const [tab, setTab] = useState<SubTab>(search.tab ?? "invites");
 
   const tabClass = (value: SubTab) =>
     cn(
@@ -96,23 +104,43 @@ function AdminPage() {
       {tab === "invites" ? (
         <InviteCodeGenerator userId={user?.id ?? null} />
       ) : (
-        <ArticlesManager authorName={user?.email ?? "The League Office"} />
+        <ArticlesManager
+          authorName={user?.email ?? "The League Office"}
+          initialEditId={search.edit ?? null}
+        />
       )}
     </AccountShell>
   );
 }
 
-function ArticlesManager({ authorName }: { authorName: string }) {
+function ArticlesManager({
+  authorName,
+  initialEditId,
+}: {
+  authorName: string;
+  initialEditId: string | null;
+}) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<ArticleRow | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autoOpened, setAutoOpened] = useState(false);
 
   const { data: articles, isLoading, error } = useQuery({
     queryKey: ["admin-articles"],
     retry: false,
     queryFn: (): Promise<ArticleRow[]> => listArticles(),
   });
+
+  useEffect(() => {
+    if (autoOpened || !initialEditId || !articles?.length) return;
+    const row = articles.find((item) => item.id === initialEditId);
+    setAutoOpened(true);
+    if (!row) return;
+    setEditing(row);
+    setEditorOpen(true);
+  }, [articles, autoOpened, initialEditId]);
+
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["admin-articles"] });
