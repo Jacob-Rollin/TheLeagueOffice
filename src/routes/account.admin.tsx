@@ -58,7 +58,8 @@ type SubTab = "invites" | "articles";
 function AdminPage() {
   const { user, ready } = useAuth();
   const { data: isAdmin, isFetched, isError } = useIsAdmin(user?.id ?? null);
-  const [tab, setTab] = useState<SubTab>("invites");
+  const search = Route.useSearch();
+  const [tab, setTab] = useState<SubTab>(search.tab ?? "invites");
 
   const tabClass = (value: SubTab) =>
     cn(
