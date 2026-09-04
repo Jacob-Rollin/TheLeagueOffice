@@ -74,7 +74,7 @@ function ArticlePage() {
                 </p>
                 <p className="mt-4 text-base leading-relaxed text-muted-foreground">{article.summary}</p>
                 <div
-                  className="mt-6 space-y-4 text-base leading-relaxed text-foreground [&_a]:text-primary [&_a]:underline [&_img]:my-6 [&_img]:h-auto [&_img]:w-full [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-border/10 [&_img]:object-cover [&_img]:shadow-sm [&_p]:mb-4"
+                  className="mt-6 space-y-4 text-base leading-relaxed text-foreground [&_a]:text-primary [&_a]:underline [&_blockquote]:my-6 [&_blockquote]:rounded-r-lg [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:bg-muted/15 [&_blockquote]:px-5 [&_blockquote]:py-4 [&_blockquote]:italic [&_h1]:mb-3 [&_h1]:mt-8 [&_h1]:text-3xl [&_h1]:font-black [&_h1]:tracking-tight [&_h2]:mb-3 [&_h2]:mt-7 [&_h2]:text-2xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-semibold [&_img]:my-6 [&_img]:h-auto [&_img]:w-full [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-border/10 [&_img]:object-cover [&_img]:shadow-sm [&_p]:mb-4"
                   // Content is authored by league admins only.
                   dangerouslySetInnerHTML={{ __html: article.content }}
                 />
