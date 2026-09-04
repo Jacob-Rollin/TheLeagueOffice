@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      articles: {
+        Row: {
+          author_name: string
+          category: string
+          content: string
+          created_at: string | null
+          id: string
+          image_url: string
+          published: boolean
+          slug: string
+          summary: string
+          title: string
+        }
+        Insert: {
+          author_name?: string
+          category?: string
+          content: string
+          created_at?: string | null
+          id?: string
+          image_url: string
+          published?: boolean
+          slug: string
+          summary: string
+          title: string
+        }
+        Update: {
+          author_name?: string
+          category?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          image_url?: string
+          published?: boolean
+          slug?: string
+          summary?: string
+          title?: string
+        }
+        Relationships: []
+      }
       hof_championships: {
         Row: {
           created_at: string
