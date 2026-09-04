@@ -31,8 +31,13 @@ export const Route = createFileRoute("/articles/$slug")({
 
 const imageClass = "w-full max-w-full h-auto object-cover rounded-xl shadow-sm border border-border/10";
 
+const blueButton =
+  "block w-full rounded-md bg-primary px-4 py-2 text-center text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90";
+
 function ArticlePage() {
   const { slug } = Route.useParams();
+  const { user } = useAuth();
+  const { data: isAdmin } = useIsAdmin(user?.id ?? null);
   const { data: article, isLoading, error } = useQuery({
     queryKey: ["article", slug],
     retry: false,
