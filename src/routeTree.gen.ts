@@ -22,6 +22,7 @@ import { Route as WaiverRouteImport } from './routes/waiver'
 import { Route as WarRoomRouteImport } from './routes/war-room'
 import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as AccountAdminRouteImport } from './routes/account.admin'
+import { Route as ArticlesSlugRouteImport } from './routes/articles.$slug'
 import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
 import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
@@ -98,6 +99,11 @@ const AccountAdminRoute = AccountAdminRouteImport.update({
   path: '/account/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ArticlesSlugRoute = ArticlesSlugRouteImport.update({
+  id: '/articles/$slug',
+  path: '/articles/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthConfirmedRoute = AuthConfirmedRouteImport.update({
   id: '/auth_/confirmed',
   path: '/auth/confirmed',
@@ -163,6 +169,7 @@ export interface FileRoutesByFullPath {
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
   '/account/admin': typeof AccountAdminRoute
+  '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -188,6 +195,7 @@ export interface FileRoutesByTo {
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
   '/account/admin': typeof AccountAdminRoute
+  '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
   '/account/admin': typeof AccountAdminRoute
+  '/articles/$slug': typeof ArticlesSlugRoute
   '/auth_/confirmed': typeof AuthConfirmedRoute
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -241,6 +250,7 @@ export interface FileRouteTypes {
     | '/waiver'
     | '/war-room'
     | '/account/admin'
+    | '/articles/$slug'
     | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | '/waiver'
     | '/war-room'
     | '/account/admin'
+    | '/articles/$slug'
     | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | '/waiver'
     | '/war-room'
     | '/account/admin'
+    | '/articles/$slug'
     | '/auth_/confirmed'
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
@@ -317,6 +329,7 @@ export interface RootRouteChildren {
   WaiverRoute: typeof WaiverRoute
   WarRoomRoute: typeof WarRoomRoute
   AccountAdminRoute: typeof AccountAdminRoute
+  ArticlesSlugRoute: typeof ArticlesSlugRoute
   AuthConfirmedRoute: typeof AuthConfirmedRoute
   MockDraftSetupRoute: typeof MockDraftSetupRoute
   NflTeamNflIdRoute: typeof NflTeamNflIdRoute
@@ -423,6 +436,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountAdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/articles/$slug': {
+      id: '/articles/$slug'
+      path: '/articles/$slug'
+      fullPath: '/articles/$slug'
+      preLoaderRoute: typeof ArticlesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth_/confirmed': {
       id: '/auth_/confirmed'
       path: '/auth/confirmed'
@@ -509,6 +529,7 @@ const rootRouteChildren: RootRouteChildren = {
   WaiverRoute: WaiverRoute,
   WarRoomRoute: WarRoomRoute,
   AccountAdminRoute: AccountAdminRoute,
+  ArticlesSlugRoute: ArticlesSlugRoute,
   AuthConfirmedRoute: AuthConfirmedRoute,
   MockDraftSetupRoute: MockDraftSetupRoute,
   NflTeamNflIdRoute: NflTeamNflIdRoute,
