@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeftRight, ArrowRight, ChevronRight, Grid3X3, LayoutGrid, Radar } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
-import { LeagueEmptyState } from "@/components/league/LeagueGate";
-import { useActiveStandings } from "@/hooks/useActiveStandings";
-import { platformLabel } from "@/lib/league-link";
-import { cn } from "@/lib/utils";
+import { StandingsPanel } from "@/components/league/StandingsPanel";
+import { latestPublishedArticle } from "@/lib/articles";
+
 
 const relativeTime = (iso?: string) => {
   if (!iso) return "Fantasy Insight Feed";
