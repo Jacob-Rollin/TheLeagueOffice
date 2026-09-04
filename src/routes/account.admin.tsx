@@ -21,8 +21,14 @@ import {
 import { generateInviteCode, listInviteCodes, type InviteCodeRow } from "@/lib/inviteCodes";
 import { cn } from "@/lib/utils";
 
+type AdminSearch = { tab?: "invites" | "articles"; edit?: string };
+
 export const Route = createFileRoute("/account/admin")({
   ssr: false,
+  validateSearch: (search: Record<string, unknown>): AdminSearch => ({
+    tab: search['tab'] === "articles" ? "articles" : search['tab'] === "invites" ? "invites" : undefined,
+    edit: typeof search['edit'] === "string" ? search['edit'] : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Admin — The League Office" },
@@ -39,6 +45,7 @@ export const Route = createFileRoute("/account/admin")({
   }),
   component: AdminPage,
 });
+
 
 const cardClass = "rounded-xl border border-border bg-card p-6";
 const buttonClass =
