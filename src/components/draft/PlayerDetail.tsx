@@ -44,7 +44,7 @@ export function PlayerDetail({
   if (isLoading) return <p className="p-6 text-center text-sm text-muted-foreground">Loading player…</p>;
   if (!data) return <p className="p-6 text-center text-sm text-muted-foreground">Player not found.</p>;
 
-  const { player, history, projection, depthChart, sos, injuryRisk, season } = data;
+  const { player, history, projection, depthChart, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
   const brainSos = brainEntry?.sos ?? null;
   const tier = riskTier(injuryRisk.score);

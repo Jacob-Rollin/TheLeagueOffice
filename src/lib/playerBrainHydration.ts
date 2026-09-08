@@ -20,9 +20,8 @@ import { readCache } from "@/lib/sleeper-cache";
 
 const BUCKET = "player_brain";
 const FILE = "master_player_brain.json";
-// Key suffix bumped to v5: stale timestamps from the FantasyPros payload era
-// is ignored, so the next boot bypasses the 30-minute blockade and refetches.
-const HEARTBEAT_KEY = "player-brain:last-sync:v5";
+// Schema-versioned heartbeat forces one refresh when synchronized fields expand.
+const HEARTBEAT_KEY = "player-brain:last-sync:v6";
 const MATRIX_KEY = "player-brain:matrix";
 const META_KEY = "player-brain:meta";
 const HEARTBEAT_MS = 30 * 60 * 1000;

@@ -118,7 +118,7 @@ function PlayerHubPage() {
     return <p className="py-24 text-center text-sm text-zinc-500">Loading player hub…</p>;
   if (!data) return <p className="py-24 text-center text-sm text-zinc-500">Player not found.</p>;
 
-  const { player, history, projection, depthChart, sos, injuryRisk, season } = data;
+  const { player, history, projection, depthChart, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
   const brainSos = brainEntry?.sos ?? null;
   const tier = riskTier(injuryRisk.score);
