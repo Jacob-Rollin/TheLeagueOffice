@@ -16,7 +16,7 @@ function idb(): Promise<IDBDatabase | null> {
     if (typeof indexedDB === "undefined") return resolve(null);
     let req: IDBOpenDBRequest;
     try {
-      req = indexedDB.open(DB_NAME, 1);
+      req = indexedDB.open(DB_NAME);
     } catch {
       return resolve(null);
     }
