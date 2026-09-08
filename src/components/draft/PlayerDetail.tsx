@@ -10,6 +10,7 @@ import { useDraft } from "@/hooks/use-draft";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { SCORING_LABEL } from "@/lib/draft";
 import { getPlayerDetail } from "@/lib/players.functions";
+import { matchupGrade, matchupTone, strategicOutlook } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
 /** Dynamic risk bucket routing for the injury telemetry meter. */
@@ -43,8 +44,9 @@ export function PlayerDetail({
   if (isLoading) return <p className="p-6 text-center text-sm text-muted-foreground">Loading player…</p>;
   if (!data) return <p className="p-6 text-center text-sm text-muted-foreground">Player not found.</p>;
 
-  const { player, history, projection, depthChart, sos, injuryRisk, season } = data;
+  const { player, history, projection, depthChart, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
+  const brainSos = brainEntry?.sos ?? null;
   const tier = riskTier(injuryRisk.score);
   const scoring = draft.settings.scoring;
   const drafted = draft.draftedIds.has(player.id);
@@ -214,27 +216,26 @@ export function PlayerDetail({
 
           {player.pos !== "DEF" && (
           <Section title={`Strength of schedule vs ${player.pos}`}>
-            {!sos ? (
+            {!brainSos ? (
               <Empty>Schedule data unavailable for this player.</Empty>
             ) : (
               <div className="rounded-lg border border-border bg-card p-3">
-                <div className="flex items-baseline justify-between">
-                  <span className="font-display text-lg">{sos.grade}</span>
-                  <span className="tabnum text-xs text-muted-foreground">
-                    avg opponent rank {sos.rank ?? "—"} / 32 (1 = toughest)
-                  </span>
+                <div>
+                  <p className="font-display text-lg font-bold text-foreground">
+                    {matchupGrade(brainSos.rank)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{strategicOutlook(brainSos)}</p>
                 </div>
                 <div className="mt-3 grid grid-cols-6 gap-1 sm:grid-cols-9">
-                  {sos.opponents.map((o) => (
+                  {brainSos.matchups.map((o) => (
                     <div
                       key={o.week}
                       className={cn(
-                        "rounded border border-border px-1 py-1 text-center",
-                        o.rank !== null && o.rank <= 10 && "bg-destructive/20",
-                        o.rank !== null && o.rank >= 23 && "bg-primary/20",
+                        "rounded-lg border bg-card p-2 shadow-sm flex flex-col items-center justify-center",
+                        matchupTone(o.rank),
                       )}
                     >
-                      <div className="text-[9px] uppercase text-muted-foreground">W{o.week}</div>
+                      <div className="text-[9px] uppercase text-muted-foreground">Week {o.week}</div>
                       <div className="tabnum text-[11px] font-semibold">{o.opp}</div>
                     </div>
                   ))}

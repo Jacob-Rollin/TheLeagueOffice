@@ -48,7 +48,7 @@ export type PlayerDetail = {
     grade: string;
     rank: number | null;
     pointsAllowedPerGame: number | null;
-    opponents: { week: number; opp: string; rank: number | null }[];
+    opponents: { week: number; opp: string; rank: number | null; pointsAllowed: number | null }[];
   } | null;
   injuryRisk: { score: number; label: string; factors: string[] };
 };
@@ -262,9 +262,13 @@ const defenseAllowed = memo<Map<string, Map<Pos, { pts: number; games: number }>
     for (let i = 0; i < weeks.length; i += 6) {
       const chunk = weeks.slice(i, i + 6);
       const results = await Promise.all(
-        chunk.map((w) => fetchRows(`${BASE}/stats/nfl/${season}/${w}?${q}`).catch(() => [])),
+        chunk.map(async (week) => ({
+          week,
+          rows: await fetchRows(`${BASE}/stats/nfl/${season}/${week}?${q}`).catch(() => []),
+        })),
       );
-      for (const rows of results) {
+      for (const { week, rows } of results) {
+        const gamesSeen = new Set<string>();
         for (const row of rows) {
           const opp = row.opponent;
           const pos = (row.player?.position ?? "") as Pos;
@@ -275,13 +279,14 @@ const defenseAllowed = memo<Map<string, Map<Pos, { pts: number; games: number }>
           if (!byPos) table.set(opp, (byPos = new Map()));
           const cell = byPos.get(pos) ?? { pts: 0, games: 0 };
           cell.pts += pts;
+          const gameKey = `${opp}|${pos}|${week}`;
+          if (!gamesSeen.has(gameKey)) {
+            cell.games += 1;
+            gamesSeen.add(gameKey);
+          }
           byPos.set(pos, cell);
         }
       }
-    }
-    // Each defense plays ~17 games; normalise on that.
-    for (const byPos of table.values()) {
-      for (const cell of byPos.values()) cell.games = 17;
     }
     return table;
   },
@@ -295,18 +300,20 @@ function sosGrade(avgRank: number): string {
   return "Very easy";
 }
 
-async function buildSos(player: Player, season: string) {
-  if (player.team === "FA" || player.pos === "DEF") return null;
+async function buildSosFor(team: string, pos: Pos, season: string) {
+  if (team === "FA" || pos === "DEF") return null;
   const prev = String(Number(season) - 1);
-  const [allowed, schedule] = await Promise.all([
+  const [activeAllowed, previousAllowed, schedule] = await Promise.all([
+    defenseAllowed(season).catch(() => null),
     defenseAllowed(prev).catch(() => null),
     scheduleFor(season).catch(() => []),
   ]);
+  const allowed = activeAllowed && activeAllowed.size > 0 ? activeAllowed : previousAllowed;
   if (!allowed || allowed.size === 0) return null;
 
   const perGame = new Map<string, number>();
   for (const [team, byPos] of allowed) {
-    const cell = byPos.get(player.pos);
+    const cell = byPos.get(pos);
     if (cell && cell.games > 0) perGame.set(team, cell.pts / cell.games);
   }
   if (perGame.size === 0) return null;
@@ -316,12 +323,18 @@ async function buildSos(player: Player, season: string) {
   const rankOf = new Map(ranked.map(([team], i) => [team, i + 1]));
 
   const opponents = schedule
-    .filter((g) => g.home === player.team || g.away === player.team)
+    .filter((g) => g.home === team || g.away === team)
     .filter((g) => g.week <= 17)
     .sort((a, b) => a.week - b.week)
     .map((g) => {
-      const opp = g.home === player.team ? g.away : g.home;
-      return { week: g.week, opp, rank: rankOf.get(opp) ?? null };
+      const opp = g.home === team ? g.away : g.home;
+      const pointsAllowed = perGame.get(opp);
+      return {
+        week: g.week,
+        opp,
+        rank: rankOf.get(opp) ?? null,
+        pointsAllowed: pointsAllowed === undefined ? null : Math.round(pointsAllowed * 10) / 10,
+      };
     });
 
   const ranks = opponents.map((o) => o.rank).filter((r): r is number => r !== null);
@@ -331,9 +344,38 @@ async function buildSos(player: Player, season: string) {
     grade: avg === null ? "Unknown" : sosGrade(avg),
     rank: avg === null ? null : Math.round(avg),
     pointsAllowedPerGame:
-      avg === null ? null : Math.round((perGame.get(player.team) ?? 0) * 10) / 10,
+      avg === null ? null : Math.round((perGame.get(team) ?? 0) * 10) / 10,
     opponents,
   };
+}
+
+async function buildSos(player: Player, season: string) {
+  return buildSosFor(player.team, player.pos, season);
+}
+
+export type SosMatrixEntry = NonNullable<PlayerDetail["sos"]>;
+
+/** One synchronized schedule entry per unique NFL team and fantasy position. */
+export async function loadSosMatrix(
+  players: readonly { team?: string | null; position?: string | null }[],
+  season = currentSeason(),
+): Promise<Map<string, SosMatrixEntry>> {
+  const keys = new Set<string>();
+  for (const player of players) {
+    const team = (player.team ?? "").toUpperCase();
+    const pos = (player.position ?? "").toUpperCase() as Pos;
+    if (team && team !== "FA" && POSITIONS.includes(pos) && pos !== "DEF") keys.add(`${team}|${pos}`);
+  }
+
+  const matrix = new Map<string, SosMatrixEntry>();
+  await Promise.all(
+    [...keys].map(async (matrixKey) => {
+      const [team, pos] = matrixKey.split("|") as [string, Pos];
+      const sos = await buildSosFor(team, pos, season);
+      if (sos) matrix.set(matrixKey, sos);
+    }),
+  );
+  return matrix;
 }
 
 function injuryRisk(player: Player, history: SeasonLine[]) {

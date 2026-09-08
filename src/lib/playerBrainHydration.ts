@@ -15,13 +15,13 @@
 import localforage from "localforage";
 
 import type { PlayersPayload } from "@/lib/players-build";
+import type { PlayerSos } from "@/lib/sos-presentation";
 import { readCache } from "@/lib/sleeper-cache";
 
 const BUCKET = "player_brain";
 const FILE = "master_player_brain.json";
-// Key suffix bumped to v5: stale timestamps from the FantasyPros payload era
-// is ignored, so the next boot bypasses the 30-minute blockade and refetches.
-const HEARTBEAT_KEY = "player-brain:last-sync:v5";
+// Schema-versioned heartbeat forces one refresh when synchronized fields expand.
+const HEARTBEAT_KEY = "player-brain:last-sync:v6";
 const MATRIX_KEY = "player-brain:matrix";
 const META_KEY = "player-brain:meta";
 const HEARTBEAT_MS = 30 * 60 * 1000;
@@ -41,6 +41,11 @@ export interface MasterPlayerBrainPayload {
   injuries: string[];
   injury_types?: string[];
   injury_notes?: string[];
+  sos_keys?: string[];
+  sos?: Record<string, {
+    rank: number | null;
+    opponents: { week: number; opp: string; rank: number | null; pointsAllowed: number | null }[];
+  }>;
 }
 
 export interface BrainEntry {
@@ -57,6 +62,7 @@ export interface BrainEntry {
   injuryType: string;
   /** Sleeper native `injury_notes` free text. */
   injuryNotes: string;
+  sos: PlayerSos | null;
 }
 
 export type BrainMatrix = Record<string, BrainEntry>;
@@ -108,6 +114,8 @@ export function compileMatrix(brain: MasterPlayerBrainPayload): BrainMatrix {
   for (let i = 0; i < n; i += 1) {
     const id = brain.ids[i];
     if (!id) continue;
+    const sosKey = brain.sos_keys?.[i] ?? "";
+    const sos = sosKey ? brain.sos?.[sosKey] : undefined;
     matrix[id] = {
       name: brain.names?.[i] ?? "",
       position: brain.positions?.[i] ?? "",
@@ -119,6 +127,17 @@ export function compileMatrix(brain: MasterPlayerBrainPayload): BrainMatrix {
       injuryStatus: brain.injuries?.[i] ?? "Healthy",
       injuryType: brain.injury_types?.[i] ?? "",
       injuryNotes: brain.injury_notes?.[i] ?? "",
+      sos: sos
+        ? {
+            rank: sos.rank,
+            matchups: sos.opponents.map((opponent) => ({
+              week: opponent.week,
+              opp: opponent.opp,
+              rank: opponent.rank,
+              pointsAllowed: opponent.pointsAllowed,
+            })),
+          }
+        : null,
     };
   }
   return matrix;
@@ -161,6 +180,7 @@ async function localTemplateMatrix(): Promise<BrainMatrix | null> {
         injuryStatus: p.injury ?? "Healthy",
         injuryType: "",
         injuryNotes: "",
+        sos: null,
       };
     }
     return Object.keys(matrix).length > 0 ? matrix : null;
