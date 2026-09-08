@@ -9,6 +9,7 @@ import { useDraft } from "@/hooks/use-draft";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { getGameLogs, getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
+import { matchupGrade, matchupTone, strategicOutlook } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
 
@@ -119,6 +120,7 @@ function PlayerHubPage() {
 
   const { player, history, projection, depthChart, sos, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
+  const brainSos = brainEntry?.sos ?? null;
   const tier = riskTier(injuryRisk.score);
   const teamLogo = player.team
     ? `https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`
@@ -368,28 +370,27 @@ function PlayerHubPage() {
 
             {player.pos !== "DEF" && (
             <Widget title={`Strength of schedule vs ${player.pos}`}>
-              {!sos ? (
+              {!brainSos ? (
                 <p className="text-xs text-zinc-500">Schedule data unavailable.</p>
               ) : (
                 <>
-                  <div className="flex items-baseline justify-between">
-                    <span className="font-display text-xl text-zinc-900">{sos.grade}</span>
-                    <span className="tabnum text-[11px] text-zinc-500">
-                      avg opp rank {sos.rank ?? "—"}/32
-                    </span>
+                  <div>
+                    <p className="font-display text-xl font-bold text-foreground">
+                      {matchupGrade(brainSos.rank)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">{strategicOutlook(brainSos)}</p>
                   </div>
                   <div className="mt-3 grid grid-cols-6 gap-1">
-                    {sos.opponents.map((o) => (
+                    {brainSos.matchups.map((o) => (
                       <div
                         key={o.week}
                         className={cn(
-                          "rounded border border-zinc-200 bg-white px-1 py-1 text-center",
-                          o.rank !== null && o.rank <= 10 && "bg-red-50 border-red-200",
-                          o.rank !== null && o.rank >= 23 && "bg-emerald-50 border-emerald-200",
+                          "rounded-lg border bg-card p-2 shadow-sm flex flex-col items-center justify-center",
+                          matchupTone(o.rank),
                         )}
                       >
-                        <div className="text-[9px] uppercase text-zinc-400">W{o.week}</div>
-                        <div className="tabnum text-[11px] font-semibold text-zinc-800">{o.opp}</div>
+                        <div className="text-[9px] uppercase text-muted-foreground">Week {o.week}</div>
+                        <div className="tabnum text-[11px] font-semibold">{o.opp}</div>
                       </div>
                     ))}
                   </div>

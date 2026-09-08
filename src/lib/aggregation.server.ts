@@ -1,4 +1,5 @@
 import { supabaseB } from "@/lib/supabaseB";
+import { loadSosMatrix, type SosMatrixEntry } from "@/lib/players.server";
 
 /**
  * Player Warehouse aggregation pipeline (Database B).
@@ -417,11 +418,15 @@ export interface MasterPlayerBrain {
   injuries: string[];
   injury_types: string[];
   injury_notes: string[];
+  /** Per-player pointer into the deduplicated team/position matchup dictionary. */
+  sos_keys: string[];
+  sos: Record<string, SosMatrixEntry>;
 }
 
 export function compileBrain(
   rows: PlayerWarehouseRow[],
   trendsById?: ReadonlyMap<string, number>,
+  sosByKey?: ReadonlyMap<string, SosMatrixEntry>,
 ): MasterPlayerBrain {
   const sorted = [...rows].sort((a, b) => a.sleeper_id.localeCompare(b.sleeper_id));
 
@@ -438,6 +443,8 @@ export function compileBrain(
     injuries: [],
     injury_types: [],
     injury_notes: [],
+    sos_keys: [],
+    sos: Object.fromEntries(sosByKey ?? []),
   };
 
   for (const r of sorted) {
@@ -450,6 +457,7 @@ export function compileBrain(
     brain.injuries.push(r.leaguelogs_status ?? "Healthy");
     brain.injury_types.push(r.injury_type ?? "");
     brain.injury_notes.push(r.injury_notes ?? "");
+    brain.sos_keys.push(`${(r.team ?? "").toUpperCase()}|${(r.position ?? "").toUpperCase()}`);
   }
 
   return brain;
@@ -470,6 +478,7 @@ export function validateBrainAlignment(brain: MasterPlayerBrain): void {
     brain.injuries.length,
     brain.injury_types.length,
     brain.injury_notes.length,
+    brain.sos_keys.length,
   ];
 
   if (brain.count === 0 || lengths.some((n) => n !== brain.count)) {
@@ -552,7 +561,8 @@ export async function runWarehouseIngestion(): Promise<IngestionReport> {
       }
     }
     const rows = await readWarehouse();
-    const brain = compileBrain(rows, trendMap);
+    const sosByKey = await loadSosMatrix(rows);
+    const brain = compileBrain(rows, trendMap, sosByKey);
     validateBrainAlignment(brain);
     const { bytes } = await uploadBrain(brain);
 
