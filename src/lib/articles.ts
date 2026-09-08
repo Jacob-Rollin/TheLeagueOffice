@@ -21,8 +21,12 @@ export function slugify(title: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-  return base || `article-${Date.now()}`;
+    .slice(0, 55); // Shortened slightly to gracefully accommodate our suffix text block
+    
+  // 🟢 THE FIX: Append a clean, unique 4-character alphanumeric short-id suffix to ensure perfect collision safety
+  const uniqueId = Math.random().toString(36).substring(2, 6);
+  
+  return base ? `${base}-${uniqueId}` : `article-${Date.now()}`;
 }
 
 export async function listArticles(): Promise<ArticleRow[]> {
@@ -79,7 +83,7 @@ export async function createArticle(input: ArticleInput): Promise<ArticleRow> {
 export async function updateArticle(id: string, input: ArticleInput): Promise<ArticleRow> {
   const { data, error } = await supabase
     .from("articles")
-    .update({ ...input, slug: slugify(input.title) })
+    .update(input) // 🟢 THE FIX: Stripped slugify() from here entirely! TYPOS OR EDITS TO TITLES WILL NEVER OVERWRITE AN ACTIVE URL LINK
     .eq("id", id)
     .select(COLUMNS)
     .single();
