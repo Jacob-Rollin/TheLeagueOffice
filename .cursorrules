@@ -8,8 +8,249 @@
 - Do not add icons next to descriptions in dropdown navigation layouts.
 - In dropdown menus and navigation bars, ensure the "Account" option is placed at the top of the profile dropdown list.
 - Never shrink or modify the size of the navbar profile circle icon.
+- Maintain clean blue account-style text-only button designs. Strictly no bracket symbols [] or emojis in buttons or main section headers.
 
 # Data & AI Logic Constraints
 - Never suggest dropping essential starting positions or players that would leave a roster vacancy (such as dropping a solo defense).
 - Use explicit text explanations for component placements instead of referencing user-provided images.
 - Use the text labels "Value/Trend" for player metrics instead of a standard dollar sign ($).
+
+# Strict Schema Utilization Instructions
+- Always use these exact active tables and property data types when writing TypeScript functions, UI layout components, or custom Supabase mutations.
+- The table `public.user_roles` has been completely dropped from the database schema cache. Never generate code targeting it.
+- Admin privilege checks must read `profiles.role` and treat a value that strictly equals `admin` as admin access.
+
+# Database A — Primary User, Profile, & Site Management Tables
+
+## articles
+- id (uuid)
+- title (text)
+- slug (text)
+- category (text)
+- summary (text)
+- content (text)
+- image_url (text)
+- author_name (text)
+- published (boolean)
+- created_at (timestamp with time zone)
+
+## hof_championships
+- id (uuid)
+- year (integer)
+- fantasy_team_name (text)
+- manager_name (text)
+- wins_losses (text)
+- created_at (timestamp with time zone)
+
+## hof_player_week_records
+- id (uuid)
+- year (integer)
+- player_name (text)
+- week (text)
+- points (numeric)
+- fantasy_team_name (text)
+- manager_name (text)
+- created_at (timestamp with time zone)
+
+## hof_team_season_records
+- id (uuid)
+- year (integer)
+- points (numeric)
+- fantasy_team_name (text)
+- manager_name (text)
+- created_at (timestamp with time zone)
+
+## hof_team_week_records
+- id (uuid)
+- year (integer)
+- week (text)
+- points (numeric)
+- fantasy_team_name (text)
+- manager_name (text)
+- created_at (timestamp with time zone)
+
+## invite_codes
+- code (text)
+- created_by (uuid)
+- created_at (timestamp with time zone)
+
+## league_connections
+- id (uuid)
+- user_id (uuid)
+- platform (text)
+- label (text)
+- sleeper_user_id (text)
+- espn_league_id (text)
+- espn_s2 (text)
+- espn_swid (text)
+- yahoo_league_key (text)
+- created_at (timestamp with time zone)
+
+## league_historical_archive
+- id (uuid)
+- league_id (uuid)
+- year (integer)
+- champion_id (uuid)
+- final_rank_json (jsonb)
+- highest_week_player_id (text)
+- highest_week_player_score (numeric)
+- highest_week_player_user_id (uuid)
+- highest_week_team_user_id (uuid)
+- highest_week_team_score (numeric)
+- highest_reg_season_total_user_id (uuid)
+- highest_reg_season_total_score (numeric)
+- created_at (timestamp with time zone)
+
+## league_members
+- id (uuid)
+- league_id (uuid)
+- user_id (uuid)
+- team_name (text)
+- role (text)
+- is_creator (boolean)
+- waiver_priority_number (integer)
+- created_at (timestamp with time zone)
+
+## league_schedules
+- id (uuid)
+- league_id (uuid)
+- year (integer)
+- week (integer)
+- matchup_id (integer)
+- user_id (uuid)
+- opponent_id (uuid)
+- created_at (timestamp with time zone)
+
+## league_scoring_settings
+- league_id (uuid)
+- scoring_preset (text)
+- pass_yd (numeric)
+- pass_td (numeric)
+- pass_int (numeric)
+- pass_2pt (numeric)
+- rush_yd (numeric)
+- rush_td (numeric)
+- rush_2pt (numeric)
+- rec_points (numeric)
+- rec_yd (numeric)
+- rec_td (numeric)
+- rec_2pt (numeric)
+- fum_lost (numeric)
+- fum_rec_td (numeric)
+- pat_made (numeric)
+- pat_miss (numeric)
+- fgm_0_19 (numeric)
+- fgm_20_29 (numeric)
+- fgm_30_39 (numeric)
+- fgm_40_49 (numeric)
+- fgm_50_p (numeric)
+- fgmiss (numeric)
+- blk_kick (numeric)
+- def_st_td (numeric)
+- def_2pt (numeric)
+- ff (numeric)
+- fum_rec (numeric)
+- int_ret (numeric)
+- safe (numeric)
+- sack (numeric)
+- pts_allow_0 (numeric)
+- pts_allow_1_6 (numeric)
+- pts_allow_7_13 (numeric)
+- pts_allow_14_20 (numeric)
+- pts_allow_21_27 (numeric)
+- pts_allow_28_34 (numeric)
+- pts_allow_35_p (numeric)
+
+## leagues
+- id (uuid)
+- name (text)
+- invite_code (text)
+- current_week (integer)
+- is_locked (boolean)
+- created_at (timestamp with time zone)
+- playoff_start_week (integer)
+- draft_status (text)
+- draft_pick_time_limit (integer)
+- current_draft_round (integer)
+- current_draft_pick (integer)
+- draft_order_json (jsonb)
+- qb_slots (integer)
+- rb_slots (integer)
+- wr_slots (integer)
+- te_slots (integer)
+- flex_slots (integer)
+- bench_slots (integer)
+- ir_slots_allowed (integer)
+- max_roster_spots (integer)
+
+## lineups
+- id (uuid)
+- league_id (uuid)
+- user_id (uuid)
+- year (integer)
+- week (integer)
+- qb (ARRAY)
+- rb (ARRAY)
+- wr (ARRAY)
+- te (ARRAY)
+- flex (ARRAY)
+- bench (ARRAY)
+- ir (ARRAY)
+- team_total_points (numeric)
+- player_points (jsonb)
+- updated_at (timestamp with time zone)
+
+## profiles
+- id (uuid)
+- email (text)
+- avatar_url (text)
+- role (text)
+- is_verified (boolean)
+- created_at (timestamp with time zone)
+- full_name (text)
+
+## rosters
+- id (uuid)
+- league_id (uuid)
+- user_id (uuid)
+- player_ids (ARRAY)
+- updated_at (timestamp with time zone)
+
+## synced_leagues
+- id (uuid)
+- user_id (uuid)
+- platform (text)
+- league_id (text)
+- espn_s2 (text)
+- swid (text)
+- metadata (jsonb)
+- created_at (timestamp with time zone)
+- updated_at (timestamp with time zone)
+
+## transactions
+- id (uuid)
+- league_id (uuid)
+- type (text)
+- details (jsonb)
+- created_at (timestamp with time zone)
+
+## waiver_claims
+- id (uuid)
+- league_id (uuid)
+- user_id (uuid)
+- player_to_add (text)
+- player_to_drop (text)
+- created_at (timestamp with time zone)
+
+# Database B — Player Analytics & Market Valuations Warehouse Tables
+
+## player_warehouse
+- sleeper_id (text)
+- player_name (text)
+- position (text)
+- team (text)
+- fantasycalc_value (numeric)
+- leaguelogs_status (text)
+- updated_at (timestamp with time zone)
+- injury_type (text)
+- injury_notes (text)

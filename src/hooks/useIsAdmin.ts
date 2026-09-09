@@ -1,12 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-import { isAdminRole } from "@/lib/isAdmin";
 
-/** Reads user_roles for the signed-in user and reports an Admin role. */
+/** Reads profiles.role for the signed-in user and reports an Admin role. */
 export function useIsAdmin(userId: string | null) {
   return useQuery({
-    queryKey: ["user-roles-admin", userId],
+    queryKey: ["profile-role-admin", userId],
     enabled: Boolean(userId),
     staleTime: 1000 * 60,
     retry: false,
@@ -15,16 +14,15 @@ export function useIsAdmin(userId: string | null) {
       if (!userId) return false;
       try {
         const { data, error } = await supabase
-          .from("user_roles")
+          .from("profiles")
           .select("role")
-          .eq("user_id", userId)
-          .eq("role", "admin")
+          .eq("id", userId)
           .maybeSingle();
         if (error) {
           console.warn("[useIsAdmin]", error.message);
           return false;
         }
-        return isAdminRole(data?.role);
+        return data?.role === "admin";
       } catch (err) {
         console.warn("[useIsAdmin]", err);
         return false;

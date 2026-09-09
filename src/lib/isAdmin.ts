@@ -1,4 +1,4 @@
-/** True when a user_roles.role value is Admin (case-insensitive). */
+/** True when a profiles.role value is Admin (case-insensitive). */
 export function isAdminRole(role: string | null | undefined): boolean {
   return role?.toLowerCase() === "admin";
 }

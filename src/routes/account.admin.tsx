@@ -6,6 +6,12 @@ import { toast } from "sonner";
 
 import { AccountShell } from "@/components/account/AccountShell";
 import { ArticleEditor } from "@/components/account/ArticleEditor";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -21,13 +27,23 @@ import {
 import { generateInviteCode, listInviteCodes, type InviteCodeRow } from "@/lib/inviteCodes";
 import { cn } from "@/lib/utils";
 
-type AdminSearch = { tab?: "invites" | "articles" | undefined; edit?: string | undefined };
+type AdminSearch = {
+  tab?: "invites" | "articles" | "users" | undefined;
+  edit?: string | undefined;
+};
 
 export const Route = createFileRoute("/account/admin")({
   ssr: false,
   validateSearch: (search: Record<string, unknown>): AdminSearch => ({
-    tab: search['tab'] === "articles" ? "articles" : search['tab'] === "invites" ? "invites" : undefined,
-    edit: typeof search['edit'] === "string" ? search['edit'] : undefined,
+    tab:
+      search["tab"] === "articles"
+        ? "articles"
+        : search["tab"] === "users"
+          ? "users"
+          : search["tab"] === "invites"
+            ? "invites"
+            : undefined,
+    edit: typeof search["edit"] === "string" ? search["edit"] : undefined,
   }),
   head: () => ({
     meta: [
@@ -53,7 +69,16 @@ const buttonClass =
 const blueButton =
   "rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-60";
 
-type SubTab = "invites" | "articles";
+type SubTab = "invites" | "articles" | "users";
+
+type ProfileAdminRow = {
+  id: string;
+  full_name: string | null;
+  email: string;
+  avatar_url: string | null;
+  role: string | null;
+  is_verified: boolean | null;
+};
 
 function AdminPage() {
   const { user, ready } = useAuth();
@@ -99,17 +124,254 @@ function AdminPage() {
         <button type="button" className={tabClass("articles")} onClick={() => setTab("articles")}>
           Articles
         </button>
+        <button type="button" className={tabClass("users")} onClick={() => setTab("users")}>
+          Users
+        </button>
       </div>
 
       {tab === "invites" ? (
         <InviteCodeGenerator userId={user?.id ?? null} />
-      ) : (
+      ) : tab === "articles" ? (
         <ArticlesManager
           authorName={user?.email ?? "The League Office"}
           initialEditId={search.edit ?? null}
         />
+      ) : (
+        <UsersManager currentUserId={user?.id ?? null} currentUserEmail={user?.email ?? null} />
       )}
     </AccountShell>
+  );
+}
+
+function profileInitials(name: string | null, email: string): string {
+  const source = (name?.trim() || email.split("@")[0] || "?").trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
+  }
+  return source.slice(0, 2).toUpperCase();
+}
+
+function roleLabel(role: string | null | undefined): string {
+  const normalized = (role ?? "user").trim().toLowerCase();
+  if (normalized === "admin") return "admin";
+  if (normalized === "standard") return "standard";
+  return "user";
+}
+
+function UsersManager({
+  currentUserId,
+  currentUserEmail,
+}: {
+  currentUserId: string | null;
+  currentUserEmail: string | null;
+}) {
+  const { data: isAdmin, isFetched, isError } = useIsAdmin(currentUserId);
+  const queryClient = useQueryClient();
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const authorized = isFetched && !isError && isAdmin === true && Boolean(currentUserEmail);
+
+  const { data: profiles, isLoading, error } = useQuery({
+    queryKey: ["admin-profiles"],
+    enabled: authorized,
+    retry: false,
+    queryFn: async (): Promise<ProfileAdminRow[]> => {
+      // Fetch every profile row — no role or session filters.
+      const { data, error: queryError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, avatar_url, role, is_verified")
+        .order("created_at", { ascending: false });
+      if (queryError) throw new Error(queryError.message);
+      return (data ?? []) as ProfileAdminRow[];
+    },
+  });
+
+  // Render the full result set with no role-based client filtering.
+  const rows = profiles ?? [];
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["admin-profiles"] });
+  };
+
+  const toggleAdmin = async (row: ProfileAdminRow) => {
+    const currentRole = (row.role ?? "user").trim().toLowerCase();
+    const nextRole: "admin" | "user" = currentRole === "admin" ? "user" : "admin";
+    setBusyId(row.id);
+    try {
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ role: nextRole })
+        .eq("id", row.id);
+      if (updateError) {
+        console.error("[toggleAdmin]", updateError);
+        toast.error(updateError.message);
+        return;
+      }
+      toast.success(nextRole === "admin" ? "Admin role granted." : "Admin role removed.");
+      refresh();
+    } catch (err) {
+      console.error("[toggleAdmin]", err);
+      toast.error(err instanceof Error ? err.message : "Could not update user role.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeAccount = async (row: ProfileAdminRow) => {
+    if (row.id === currentUserId) {
+      toast.error("You cannot remove your own account from this list.");
+      return;
+    }
+    if (!window.confirm("Are you sure you want to remove this user account?")) return;
+    setBusyId(row.id);
+    try {
+      const { error: deleteError } = await supabase.from("profiles").delete().eq("id", row.id);
+      if (deleteError) throw new Error(deleteError.message);
+      toast.success("User account removed.");
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove user account.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (!isFetched) {
+    return (
+      <section className={cardClass}>
+        <p className="text-sm text-muted-foreground">Loading authorization…</p>
+      </section>
+    );
+  }
+
+  if (!authorized) {
+    return (
+      <section className={cardClass}>
+        <p className="font-display text-sm uppercase tracking-wide text-destructive">
+          Access denied. Admin privileges are required to manage users.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className={cardClass}>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="display-title text-lg uppercase tracking-wide">Users</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Review registered profiles, toggle admin access, and remove accounts when needed.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 overflow-x-auto rounded-lg border border-border">
+        <table className="w-full min-w-[640px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/40">
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                User
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Email
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Role
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-muted-foreground">
+                  Loading users…
+                </td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-destructive">
+                  {error instanceof Error ? error.message : "Could not load users."}
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-muted-foreground">
+                  No user profiles registered on the platform.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => {
+                const label = roleLabel(row.role);
+                const initials = profileInitials(row.full_name, row.email);
+                return (
+                  <tr key={row.id} className="border-t border-border">
+                    <td className="px-3 py-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        {row.avatar_url ? (
+                          <img
+                            src={row.avatar_url}
+                            alt=""
+                            loading="lazy"
+                            className="h-8 w-8 shrink-0 rounded-full border border-border object-cover"
+                          />
+                        ) : (
+                          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            {initials}
+                          </span>
+                        )}
+                        <span className="truncate font-medium text-foreground">
+                          {row.full_name?.trim() || "Unnamed user"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      <span className="block truncate">{row.email}</span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className="inline-flex rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium capitalize text-muted-foreground">
+                        {label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          disabled={busyId === row.id}
+                          className={cn(blueButton, "px-3 py-1.5 text-xs")}
+                        >
+                          {busyId === row.id ? "Working…" : "Actions"}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem
+                            className="font-medium"
+                            onSelect={() => {
+                              void toggleAdmin(row);
+                            }}
+                          >
+                            Toggle Admin
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="font-medium text-red-600 focus:text-red-700"
+                            onSelect={() => {
+                              void removeAccount(row);
+                            }}
+                          >
+                            Remove Account
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
