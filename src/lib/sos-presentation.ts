@@ -71,3 +71,63 @@ export function matchupTone(rank: number | null): string {
   }
   return "bg-transparent border-border/60 text-foreground";
 }
+/** Season-long burden score: higher = more favorable schedule. */
+export function scheduleBurden(sos: PlayerSos | null | undefined): number | null {
+  if (!sos || sos.matchups.length === 0) return null;
+  const pts = sos.matchups.map((m) => m.pointsAllowed).filter((v): v is number => v !== null);
+  if (pts.length > 0) return pts.reduce((sum, v) => sum + v, 0) / pts.length;
+  const ranks = sos.matchups.map((m) => m.rank).filter((v): v is number => v !== null);
+  if (ranks.length === 0) return null;
+  return ranks.reduce((sum, v) => sum + v, 0) / ranks.length;
+}
+
+type SosPeer = { position: string; sos: PlayerSos | null };
+
+/**
+ * Slide-scale placement of one player's full-schedule burden against every
+ * active player sharing the same position in the local brain matrix.
+ */
+export function positionPercentile(
+  playerId: string,
+  position: string,
+  matrix: Record<string, SosPeer> | null | undefined,
+  fallbackSos?: PlayerSos | null,
+): string | null {
+  const own = scheduleBurden(matrix?.[playerId]?.sos ?? fallbackSos ?? null);
+  if (own === null) return null;
+  const peers: number[] = [];
+  for (const entry of Object.values(matrix ?? {})) {
+    if (entry.position !== position) continue;
+    const score = scheduleBurden(entry.sos);
+    if (score !== null) peers.push(score);
+  }
+  if (peers.length < 5) return null;
+  const easier = peers.filter((p) => p > own).length;
+  const topFavorable = Math.max(1, Math.round(((easier + 1) / peers.length) * 100));
+  const harder = peers.filter((p) => p < own).length;
+  const topChallenging = Math.max(1, Math.round(((harder + 1) / peers.length) * 100));
+  if (topFavorable <= 33) return `Position percentile: Top ${topFavorable}% most favorable schedules`;
+  if (topChallenging <= 33) return `Position percentile: Top ${topChallenging}% most challenging schedules`;
+  return "Position percentile: Near baseline position average";
+}
+
+/** Weeks 14-17 look-ahead label. */
+export function playoffWindow(sos: PlayerSos | null | undefined): "Elite" | "Balanced" | "Challenging" {
+  const ranks = (sos?.matchups ?? [])
+    .filter((m) => m.week >= 14 && m.week <= 17)
+    .map((m) => m.rank)
+    .filter((r): r is number => r !== null);
+  if (ranks.length === 0) return "Balanced";
+  const avg = ranks.reduce((sum, r) => sum + r, 0) / ranks.length;
+  if (avg >= 21) return "Elite";
+  if (avg <= 11) return "Challenging";
+  return "Balanced";
+}
+
+export type WeekSlot = { week: number; matchup: SosMatchup | null };
+
+/** Continuous week 1-18 sequence with bye placeholders for skipped weeks. */
+export function weekSlots(matchups: SosMatchup[]): WeekSlot[] {
+  const byWeek = new Map(matchups.map((m) => [m.week, m]));
+  return Array.from({ length: 18 }, (_, i) => ({ week: i + 1, matchup: byWeek.get(i + 1) ?? null }));
+}
