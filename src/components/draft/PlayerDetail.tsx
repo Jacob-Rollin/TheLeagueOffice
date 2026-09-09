@@ -11,7 +11,14 @@ import { usePlayerSos } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { SCORING_LABEL } from "@/lib/draft";
 import { getPlayerDetail } from "@/lib/players.functions";
-import { matchupGrade, matchupTone, strategicOutlook } from "@/lib/sos-presentation";
+import {
+  matchupGrade,
+  matchupTone,
+  playoffWindow,
+  positionPercentile,
+  strategicOutlook,
+  weekSlots,
+} from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
 /** Dynamic risk bucket routing for the injury telemetry meter. */
