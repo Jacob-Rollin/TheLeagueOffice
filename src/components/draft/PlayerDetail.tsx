@@ -7,6 +7,7 @@ import { PlayerNews } from "./PlayerNews";
 import { PositionBadge } from "./PositionBadge";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/hooks/use-draft";
+import { usePlayerSos } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { SCORING_LABEL } from "@/lib/draft";
 import { getPlayerDetail } from "@/lib/players.functions";
@@ -39,6 +40,10 @@ export function PlayerDetail({
   const { data, isLoading } = useQuery(detailQuery(id));
   const draft = useDraft();
   const brain = usePlayerBrain();
+  const playerSos = usePlayerSos(
+    (data ? brain?.[data.player.id] : null) ?? null,
+    data?.player.team ?? null,
+  );
   const [tab, setTab] = useState<"overview" | "news">("overview");
 
   if (isLoading) return <p className="p-6 text-center text-sm text-muted-foreground">Loading player…</p>;
@@ -46,7 +51,7 @@ export function PlayerDetail({
 
   const { player, history, projection, depthChart, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
-  const brainSos = brainEntry?.sos ?? null;
+  const brainSos = playerSos;
   const tier = riskTier(injuryRisk.score);
   const scoring = draft.settings.scoring;
   const drafted = draft.draftedIds.has(player.id);

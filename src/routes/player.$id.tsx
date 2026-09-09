@@ -6,6 +6,7 @@ import { useState } from "react";
 import { PlayerNews } from "@/components/draft/PlayerNews";
 
 import { useDraft } from "@/hooks/use-draft";
+import { usePlayerSos } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { getGameLogs, getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
@@ -112,6 +113,10 @@ function PlayerHubPage() {
   const { data: bio } = useQuery(bioQuery(id));
   const { watchIds, toggleWatch } = useDraft();
   const brain = usePlayerBrain();
+  const playerSos = usePlayerSos(
+    (data ? brain?.[data.player.id] : null) ?? null,
+    data?.player.team ?? null,
+  );
   const [tab, setTab] = useState<TabKey>("overview");
 
   if (isLoading)
@@ -120,7 +125,7 @@ function PlayerHubPage() {
 
   const { player, history, projection, depthChart, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
-  const brainSos = brainEntry?.sos ?? null;
+  const brainSos = playerSos;
   const tier = riskTier(injuryRisk.score);
   const teamLogo = player.team
     ? `https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`
