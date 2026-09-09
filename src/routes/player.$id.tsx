@@ -10,7 +10,14 @@ import { usePlayerSos } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { getGameLogs, getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
-import { matchupGrade, matchupTone, strategicOutlook } from "@/lib/sos-presentation";
+import {
+  matchupGrade,
+  matchupTone,
+  playoffWindow,
+  positionPercentile,
+  strategicOutlook,
+  weekSlots,
+} from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
 
