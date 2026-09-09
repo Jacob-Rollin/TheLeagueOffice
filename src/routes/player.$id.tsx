@@ -386,25 +386,47 @@ function PlayerHubPage() {
                 <p className="text-xs text-zinc-500">Schedule data unavailable.</p>
               ) : (
                 <>
-                  <div>
-                    <p className="font-display text-xl font-bold text-foreground">
-                      {matchupGrade(brainSos.rank)}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground">{strategicOutlook(brainSos)}</p>
+                  <div className="flex items-start gap-3">
+                    <div className="min-w-0">
+                      <p className="font-display text-xl font-bold text-foreground">
+                        {matchupGrade(brainSos.rank)}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">{strategicOutlook(brainSos)}</p>
+                    </div>
+                    <div className="ml-auto text-right flex flex-col items-end">
+                      {positionPercentile(player.id, player.pos, brain, brainSos) && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {positionPercentile(player.id, player.pos, brain, brainSos)}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-muted-foreground">
+                        Playoff Window SoS: {playoffWindow(brainSos)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-3 grid grid-cols-6 gap-1">
-                    {brainSos.matchups.map((o) => (
-                      <div
-                        key={o.week}
-                        className={cn(
-                          "rounded-lg border bg-card p-2 shadow-sm flex flex-col items-center justify-center",
-                          matchupTone(o.rank),
-                        )}
-                      >
-                        <div className="text-[9px] uppercase text-muted-foreground">Week {o.week}</div>
-                        <div className="tabnum text-[11px] font-semibold">{o.opp}</div>
-                      </div>
-                    ))}
+                  <div className="mt-3 grid grid-cols-6 gap-1 sm:grid-cols-9">
+                    {weekSlots(brainSos.matchups).map((slot) =>
+                      slot.matchup ? (
+                        <div
+                          key={slot.week}
+                          className={cn(
+                            "rounded-lg border bg-card p-2 shadow-sm flex flex-col items-center justify-center",
+                            matchupTone(slot.matchup.rank),
+                          )}
+                        >
+                          <div className="text-[9px] uppercase text-muted-foreground">Week {slot.week}</div>
+                          <div className="tabnum text-[11px] font-semibold">{slot.matchup.opp}</div>
+                        </div>
+                      ) : (
+                        <div
+                          key={slot.week}
+                          className="rounded-lg border border-border/60 bg-transparent p-2 shadow-sm flex flex-col items-center justify-center"
+                        >
+                          <div className="text-[9px] uppercase text-muted-foreground">Week {slot.week}</div>
+                          <div className="tabnum text-[11px] font-semibold text-slate-400">BYE</div>
+                        </div>
+                      ),
+                    )}
                   </div>
                 </>
               )}
