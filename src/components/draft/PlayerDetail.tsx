@@ -46,7 +46,7 @@ export function PlayerDetail({
 
   const { player, history, projection, depthChart, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
-  const brainSos = brainEntry?.sos ?? null;
+  const brainSos = playerSos;
   const tier = riskTier(injuryRisk.score);
   const scoring = draft.settings.scoring;
   const drafted = draft.draftedIds.has(player.id);

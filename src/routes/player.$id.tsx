@@ -120,7 +120,7 @@ function PlayerHubPage() {
 
   const { player, history, projection, depthChart, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
-  const brainSos = brainEntry?.sos ?? null;
+  const brainSos = playerSos;
   const tier = riskTier(injuryRisk.score);
   const teamLogo = player.team
     ? `https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`
