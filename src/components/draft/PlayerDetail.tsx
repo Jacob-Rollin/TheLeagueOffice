@@ -52,6 +52,7 @@ export function PlayerDetail({
     data?.player.team ?? null,
   );
   const [tab, setTab] = useState<"overview" | "news">("overview");
+  const sosPeers = useSosPeerMatrix(data?.player.pos ?? null, brain);
 
   if (isLoading) return <p className="p-6 text-center text-sm text-muted-foreground">Loading player…</p>;
   if (!data) return <p className="p-6 text-center text-sm text-muted-foreground">Player not found.</p>;
@@ -59,7 +60,6 @@ export function PlayerDetail({
   const { player, history, projection, depthChart, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
   const brainSos = playerSos;
-  const sosPeers = useSosPeerMatrix(player.pos, brain);
   const percentileLabel = positionPercentile(player.id, player.pos, sosPeers ?? brain, brainSos);
   const tier = riskTier(injuryRisk.score);
   const scoring = draft.settings.scoring;
