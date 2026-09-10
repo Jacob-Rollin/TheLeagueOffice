@@ -7,7 +7,7 @@ import { PlayerNews } from "./PlayerNews";
 import { PositionBadge } from "./PositionBadge";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/hooks/use-draft";
-import { usePlayerSos } from "@/hooks/usePlayerSos";
+import { usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { SCORING_LABEL } from "@/lib/draft";
 import { getPlayerDetail } from "@/lib/players.functions";

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { PlayerNews } from "@/components/draft/PlayerNews";
 
 import { useDraft } from "@/hooks/use-draft";
-import { usePlayerSos } from "@/hooks/usePlayerSos";
+import { usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { getGameLogs, getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
