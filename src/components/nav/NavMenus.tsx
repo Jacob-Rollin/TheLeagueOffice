@@ -1,15 +1,13 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, Plus, User as UserIcon } from "lucide-react";
+import { ChevronDown, User as UserIcon } from "lucide-react";
 
 import { LeagueAvatar } from "@/components/league/LeagueAvatar";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useProfile } from "@/hooks/useProfile";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -53,32 +51,26 @@ export function FrontOfficeMenu() {
   );
 }
 
-type MemberRow = { league_id: string; team_name: string; leagues: { name: string } | null };
-
 export function ActiveOperationsMenu() {
   const { user, ready } = useAuth();
-  const userId = user?.id ?? null;
-  const canQuery = Boolean(ready && userId);
+  const navigate = useNavigate();
+  const { leagues, setActiveLeagueId } = useActiveLeague();
+  const canShow = Boolean(ready && user);
 
-  const { data: memberships } = useQuery({
-    queryKey: ["league-memberships", userId],
-    enabled: canQuery,
-    retry: false,
-    staleTime: 1000 * 60 * 5,
-    queryFn: async () => {
-      if (!userId) return [] as MemberRow[];
-      const { data, error } = await supabase
-        .from("league_members")
-        .select("league_id, team_name, leagues(name)")
-        .eq("user_id", userId);
-      if (error) throw error;
-      return (data ?? []) as unknown as MemberRow[];
-    },
-  });
+  if (!canShow) return null;
 
-  if (!canQuery) return null;
+  const platformLabel = (platform: string) => {
+    const value = platform.trim().toLowerCase();
+    if (value === "espn") return "ESPN";
+    if (value === "sleeper") return "Sleeper";
+    if (value === "yahoo") return "Yahoo";
+    return platform || "League";
+  };
 
-  const leagues = memberships ?? [];
+  const openLeague = (id: string) => {
+    setActiveLeagueId(id);
+    navigate({ to: "/league-hq" });
+  };
 
   return (
     <DropdownMenu>
@@ -86,24 +78,35 @@ export function ActiveOperationsMenu() {
         Active Operations
         <ChevronDown className="size-3.5" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuLabel className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
-          My Leagues
-        </DropdownMenuLabel>
+      <DropdownMenuContent align="start" className="w-72">
         {leagues.length > 0 ? (
-          leagues.map((m) => (
-            <DropdownMenuItem key={m.league_id} asChild>
-              <Link to="/" className="flex items-center gap-2">
-                <span className="flex-1 truncate font-medium">{m.leagues?.name ?? "League"}</span>
-                <span className="truncate text-xs text-muted-foreground">{m.team_name}</span>
-              </Link>
-            </DropdownMenuItem>
-          ))
+          <>
+            <DropdownMenuLabel className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
+              My Leagues
+            </DropdownMenuLabel>
+            {leagues.map((league) => {
+              const team = league.teamName?.trim() || league.name || "League";
+              const platform = platformLabel(league.platform);
+              return (
+                <DropdownMenuItem
+                  key={league.id}
+                  className="font-medium"
+                  onSelect={() => openLeague(league.id)}
+                >
+                  <span className="truncate">
+                    {team} · {platform}
+                  </span>
+                </DropdownMenuItem>
+              );
+            })}
+          </>
         ) : (
-          <DropdownMenuItem asChild>
-            <Link to="/" className="flex items-center gap-2 font-medium">
-              <Plus className="size-4" />
-              Create or Join a League
+          <DropdownMenuItem asChild className="font-medium">
+            <Link
+              to="/account/leagues"
+              className="block w-full text-sm font-semibold text-primary"
+            >
+              + Sync New League
             </Link>
           </DropdownMenuItem>
         )}

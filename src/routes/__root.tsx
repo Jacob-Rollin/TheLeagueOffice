@@ -129,7 +129,7 @@ function SiteNav() {
         {/* Left-side navigation grouping */}
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           <Link to="/" activeOptions={{ exact: true }} className={navLinkClass}>
-            League HQ
+            Front Office
           </Link>
           <FrontOfficeMenu />
           <ActiveOperationsMenu />

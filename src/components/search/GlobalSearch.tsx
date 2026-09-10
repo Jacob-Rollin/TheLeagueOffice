@@ -10,7 +10,8 @@ import { getPlayers } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
 
 const PAGES: { label: string; to: string; hint: string }[] = [
-  { label: "League HQ", to: "/", hint: "Home" },
+  { label: "Front Office", to: "/", hint: "Home" },
+  { label: "League HQ", to: "/league-hq", hint: "Active league dashboard" },
   { label: "War Room", to: "/draft", hint: "Draft board" },
   { label: "Trade Desk", to: "/trade", hint: "Trade Analyzer" },
   { label: "The Wire", to: "/waiver", hint: "Waivers" },

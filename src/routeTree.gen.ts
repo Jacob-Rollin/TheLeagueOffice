@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as DraftRouteImport } from './routes/draft'
 import { Route as HofRouteImport } from './routes/hof'
+import { Route as LeagueHqRouteImport } from './routes/league-hq'
 import { Route as LeaguesyncRouteImport } from './routes/leaguesync'
 import { Route as MockDraftRouteImport } from './routes/mock-draft'
 import { Route as TheWireRouteImport } from './routes/the-wire'
@@ -52,6 +53,11 @@ const DraftRoute = DraftRouteImport.update({
 const HofRoute = HofRouteImport.update({
   id: '/hof',
   path: '/hof',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeagueHqRoute = LeagueHqRouteImport.update({
+  id: '/league-hq',
+  path: '/league-hq',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeaguesyncRoute = LeaguesyncRouteImport.update({
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
+  '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
   '/the-wire': typeof TheWireRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
+  '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
   '/the-wire': typeof TheWireRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/hof': typeof HofRoute
+  '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
   '/the-wire': typeof TheWireRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/draft'
     | '/hof'
+    | '/league-hq'
     | '/leaguesync'
     | '/mock-draft'
     | '/the-wire'
@@ -268,6 +278,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/draft'
     | '/hof'
+    | '/league-hq'
     | '/leaguesync'
     | '/mock-draft'
     | '/the-wire'
@@ -294,6 +305,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/draft'
     | '/hof'
+    | '/league-hq'
     | '/leaguesync'
     | '/mock-draft'
     | '/the-wire'
@@ -321,6 +333,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   DraftRoute: typeof DraftRoute
   HofRoute: typeof HofRoute
+  LeagueHqRoute: typeof LeagueHqRoute
   LeaguesyncRoute: typeof LeaguesyncRoute
   MockDraftRoute: typeof MockDraftRoute
   TheWireRoute: typeof TheWireRoute
@@ -371,6 +384,13 @@ declare module '@tanstack/react-router' {
       path: '/hof'
       fullPath: '/hof'
       preLoaderRoute: typeof HofRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/league-hq': {
+      id: '/league-hq'
+      path: '/league-hq'
+      fullPath: '/league-hq'
+      preLoaderRoute: typeof LeagueHqRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leaguesync': {
@@ -521,6 +541,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   DraftRoute: DraftRoute,
   HofRoute: HofRoute,
+  LeagueHqRoute: LeagueHqRoute,
   LeaguesyncRoute: LeaguesyncRoute,
   MockDraftRoute: MockDraftRoute,
   TheWireRoute: TheWireRoute,

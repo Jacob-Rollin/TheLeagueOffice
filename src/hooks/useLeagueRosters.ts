@@ -16,6 +16,8 @@ export type ResolvedRosterTeam = {
   team: string;
   owner: string;
   isMine: boolean;
+  /** Host platform team logo / avatar URL when available. */
+  logo: string | null;
   /** Every rostered asset (starters + bench + IR). */
   players: Player[];
   /** Native starter order from the host platform, aligned to rosterPositions. */
@@ -173,6 +175,7 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
         team: t?.team ?? "Team",
         owner: t?.owner ?? "",
         isMine: Boolean(t?.isMine),
+        logo: t?.logo?.trim() || null,
         players: resolved,
         starters,
         ir,
