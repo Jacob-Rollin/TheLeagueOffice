@@ -7,7 +7,7 @@ import { PlayerNews } from "./PlayerNews";
 import { PositionBadge } from "./PositionBadge";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/hooks/use-draft";
-import { usePlayerSos } from "@/hooks/usePlayerSos";
+import { usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { SCORING_LABEL } from "@/lib/draft";
 import { getPlayerDetail } from "@/lib/players.functions";
@@ -59,6 +59,8 @@ export function PlayerDetail({
   const { player, history, projection, depthChart, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
   const brainSos = playerSos;
+  const sosPeers = useSosPeerMatrix(player.pos, brain);
+  const percentileLabel = positionPercentile(player.id, player.pos, sosPeers ?? brain, brainSos);
   const tier = riskTier(injuryRisk.score);
   const scoring = draft.settings.scoring;
   const drafted = draft.draftedIds.has(player.id);
@@ -240,9 +242,9 @@ export function PlayerDetail({
                     <p className="text-xs text-muted-foreground">{strategicOutlook(brainSos)}</p>
                   </div>
                   <div className="ml-auto text-right flex flex-col items-end">
-                    {positionPercentile(player.id, player.pos, brain, brainSos) && (
-                      <span className="text-[11px] text-muted-foreground">
-                        {positionPercentile(player.id, player.pos, brain, brainSos)}
+                    {percentileLabel && (
+                      <span className="text-right text-xs text-slate-500 font-medium">
+                        {percentileLabel}
                       </span>
                     )}
                     <span className="text-[11px] text-muted-foreground">
