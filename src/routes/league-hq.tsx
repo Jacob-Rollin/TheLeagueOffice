@@ -33,9 +33,10 @@ export const Route = createFileRoute("/league-hq")({
           : rawTab === "rankings"
             ? "rankings"
             : undefined;
+    const scout = typeof search["scout"] === "string" ? search["scout"] : undefined;
     return {
-      tab,
-      scout: typeof search["scout"] === "string" ? search["scout"] : undefined,
+      ...(tab ? { tab } : {}),
+      ...(scout ? { scout } : {}),
     };
   },
   head: () => ({
