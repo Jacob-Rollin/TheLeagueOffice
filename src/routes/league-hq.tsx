@@ -33,9 +33,10 @@ export const Route = createFileRoute("/league-hq")({
           : rawTab === "rankings"
             ? "rankings"
             : undefined;
+    const scout = typeof search["scout"] === "string" ? search["scout"] : undefined;
     return {
-      tab,
-      scout: typeof search["scout"] === "string" ? search["scout"] : undefined,
+      ...(tab ? { tab } : {}),
+      ...(scout ? { scout } : {}),
     };
   },
   head: () => ({
@@ -416,7 +417,7 @@ function TruePowerRankingsPanel({
                     <td className={cn("px-3 py-2 tabular-nums", trendClass)}>{trendLabel}</td>
                     <td className="px-3 py-2">
                       <div className="flex min-w-0 items-center">
-                        <TeamAvatarBadge name={row.team} logo={logoBySlot.get(row.slot)} />
+                        <TeamAvatarBadge name={row.team} logo={logoBySlot.get(row.slot) ?? null} />
                         <span className="min-w-0">
                           <span className="block truncate font-medium text-foreground">{row.team}</span>
                           <span className="block truncate text-xs text-muted-foreground">
