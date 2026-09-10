@@ -124,6 +124,7 @@ function PlayerHubPage() {
     (data ? brain?.[data.player.id] : null) ?? null,
     data?.player.team ?? null,
   );
+  const sosPeers = useSosPeerMatrix(data?.player.pos ?? null, brain);
   const [tab, setTab] = useState<TabKey>("overview");
 
   if (isLoading)
@@ -133,6 +134,7 @@ function PlayerHubPage() {
   const { player, history, projection, depthChart, injuryRisk, season } = data;
   const brainEntry = brain?.[player.id] ?? null;
   const brainSos = playerSos;
+  const percentileLabel = positionPercentile(player.id, player.pos, sosPeers ?? brain, brainSos);
   const tier = riskTier(injuryRisk.score);
   const teamLogo = player.team
     ? `https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`
@@ -394,9 +396,9 @@ function PlayerHubPage() {
                       <p className="text-[11px] text-muted-foreground">{strategicOutlook(brainSos)}</p>
                     </div>
                     <div className="ml-auto text-right flex flex-col items-end">
-                      {positionPercentile(player.id, player.pos, brain, brainSos) && (
-                        <span className="text-[11px] text-muted-foreground">
-                          {positionPercentile(player.id, player.pos, brain, brainSos)}
+                      {percentileLabel && (
+                        <span className="text-right text-xs text-slate-500 font-medium">
+                          {percentileLabel}
                         </span>
                       )}
                       <span className="text-[11px] text-muted-foreground">
