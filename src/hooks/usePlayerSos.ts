@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import type { BrainEntry } from "@/lib/playerBrainHydration";
+import type { BrainEntry, BrainMatrix } from "@/lib/playerBrainHydration";
 import { currentSeason, fetchSchedule, type PlayersPayload, type ScheduleGame } from "@/lib/players-build";
 import { getCached, readCache } from "@/lib/sleeper-cache";
 import type { PlayerSos, SosMatchup } from "@/lib/sos-presentation";
