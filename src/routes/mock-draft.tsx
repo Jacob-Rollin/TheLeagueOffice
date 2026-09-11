@@ -522,7 +522,7 @@ function MockDraftPage() {
         )}
       </div>
 
-      <PlayerModalHost ref={modalRef} />
+      <PlayerModalHost ref={modalRef} showDraftActions />
     </main>
   );
 }

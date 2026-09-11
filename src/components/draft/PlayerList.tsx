@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { GripVertical, Search, Star, Undo2, Zap } from "lucide-react";
 
@@ -9,7 +9,6 @@ import { PlayerAvatar } from "./PlayerAvatar";
 import { detailQuery } from "./PlayerDetail";
 import { cn } from "@/lib/utils";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
-import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import {
   POSITIONS,
   roundOf,
@@ -20,6 +19,60 @@ import {
 } from "@/lib/draft";
 
 const SEASON = new Date().getFullYear();
+
+/**
+ * Row injury chip — same TanStack Query pool / `player.injury` path as PlayerDetail.
+ */
+function PlayerListRowInjuryBadge({
+  player,
+  onOpen,
+}: {
+  player: Player;
+  onOpen: () => void;
+}) {
+  const { data } = useQuery({
+    ...detailQuery(player.id),
+    enabled: Boolean(player?.id),
+  });
+
+  if (!player?.id) return null;
+
+  const injury = data?.player?.injury;
+  if (!injury || injury === "Healthy" || injury === "Active" || injury === "None") {
+    return null;
+  }
+
+  let label = "Q";
+  let colorClass = "bg-amber-500";
+
+  if (injury === "Questionable") {
+    label = "Q";
+    colorClass = "bg-amber-500";
+  } else if (
+    injury === "Out" ||
+    injury === "Doubtful" ||
+    injury === "IR" ||
+    injury === "NA"
+  ) {
+    label = injury === "IR" ? "IR" : injury === "NA" ? "NA" : "O";
+    colorClass = "bg-rose-600";
+  } else {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        "grid h-4 w-4 shrink-0 place-items-center rounded-[2px] text-[9px] font-bold text-white cursor-pointer hover:opacity-85",
+        colorClass,
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
 type SortKey = "rank" | "adp" | "ecr" | "sd" | "trend" | "projPts" | "projAvg" | "prevPts" | "prevAvg";
 /** null = default baseline order (overall rank). */
@@ -503,21 +556,10 @@ function PlayerListImpl({
                 <div className="flex-1">
                   <div className="font-semibold whitespace-nowrap">{p.name}</div>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
-                    {(() => {
-                      const badge = injuryMicroBadge(
-                        resolveInjuryStatus(p, brain),
-                      );
-                      return badge ? (
-                        <span
-                          className={cn(
-                            "grid h-4 w-4 shrink-0 place-items-center rounded-[2px] text-[9px] font-bold text-white",
-                            badge.className,
-                          )}
-                        >
-                          {badge.label}
-                        </span>
-                      ) : null;
-                    })()}
+                    <PlayerListRowInjuryBadge
+                      player={p}
+                      onOpen={() => onOpenPlayer?.(p.id)}
+                    />
                     <span>
                       {`${p.pos}${posRanks.get(p.id) ?? ""}`}
                       {p.team ? ` · ${p.team}` : ""}

@@ -321,7 +321,12 @@ function DraftRoom() {
         ADP, projections and prior-season stats are sourced from Sleeper's pipeline API. Player
         detail pages provide deeper news, injury and team context.
       </footer>
-      <PlayerModal id={openId} onClose={() => setOpenId(null)} onSelectPlayer={setOpenId} />
+      <PlayerModal
+        id={openId}
+        onClose={() => setOpenId(null)}
+        onSelectPlayer={setOpenId}
+        showDraftActions
+      />
     </main>
   );
 }

@@ -124,6 +124,55 @@ export function playoffWindow(sos: PlayerSos | null | undefined): "Elite" | "Bal
   return "Balanced";
 }
 
+/**
+ * Compact weekly SoS label from a single-week defensive rank
+ * (1 = toughest matchup, 32 = softest). Matches popup-style percentile wording.
+ */
+export function weeklyMatchupLabel(rank: number | null | undefined): string | null {
+  if (rank == null || !Number.isFinite(rank)) return null;
+  const n = 32;
+  const clamped = Math.max(1, Math.min(n, Math.round(rank)));
+  const favorablePct = Math.max(1, Math.round(((n - clamped + 1) / n) * 100));
+  const toughPct = Math.max(1, Math.round((clamped / n) * 100));
+  if (clamped >= 22 || favorablePct <= 33) return `Top ${favorablePct}% matchup`;
+  if (clamped <= 11 || toughPct <= 33) return `Top ${toughPct}% toughest matchup`;
+  return "Average matchup";
+}
+
+/**
+ * Map a weekly defensive SoS rank (1 = toughest, 32 = softest) to 1–5 gold stars.
+ */
+export function sosStarsFromRank(rank: number | null | undefined): number | null {
+  if (rank == null || !Number.isFinite(rank)) return null;
+  if (rank >= 25) return 5;
+  if (rank >= 18) return 4;
+  if (rank >= 11) return 3;
+  if (rank >= 5) return 2;
+  return 1;
+}
+
+/** Look up the weekly SoS rank for a player from the brain matrix. */
+export function weeklySosRankFor(
+  brain: Record<string, { sos: PlayerSos | null }> | null | undefined,
+  playerId: string,
+  week: number,
+): number | null {
+  return weeklySosMatchupFor(brain, playerId, week)?.rank ?? null;
+}
+
+/** Full weekly SoS row (opponent + defensive rank) from the brain matrix. */
+export function weeklySosMatchupFor(
+  brain: Record<string, { sos: PlayerSos | null }> | null | undefined,
+  playerId: string,
+  week: number,
+): SosMatchup | null {
+  const matchups = brain?.[playerId]?.sos?.matchups;
+  if (!matchups?.length) return null;
+  const w = Number(week);
+  if (!Number.isFinite(w)) return null;
+  return matchups.find((m) => Number(m.week) === w) ?? null;
+}
+
 export type WeekSlot = { week: number; matchup: SosMatchup | null };
 
 /** Continuous week 1-18 sequence with bye placeholders for skipped weeks. */

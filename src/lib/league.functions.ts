@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
-export type { LeagueActivityEvent } from "./league.server";
+export type { LeagueActivityEvent, LeagueActivityMove } from "./league.server";
 
 export const getUserLeagues = createServerFn({ method: "GET" })
   .inputValidator((input: { username: string }) => ({
@@ -89,6 +89,36 @@ export const getConnectionTransactions = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const { loadConnectionTransactions } = await import("./league.server");
     return await loadConnectionTransactions(data.identifier, data.platform, data.s2, data.swid);
+  });
+
+export const getConnectionMatchups = createServerFn({ method: "GET" })
+  .inputValidator(
+    (input: {
+      identifier: string;
+      platform?: string;
+      week?: number;
+      s2?: string;
+      swid?: string;
+      connectionId?: string;
+    }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      week: Math.max(1, Math.floor(Number(input.week ?? 1) || 1)),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+      connectionId: input.connectionId ? String(input.connectionId).slice(0, 64) : undefined,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { loadConnectionMatchups } = await import("./league.server");
+    return await loadConnectionMatchups(
+      data.identifier,
+      data.platform,
+      data.week,
+      data.s2,
+      data.swid,
+      data.connectionId,
+    );
   });
 
 /** Unified league payload for any connected platform. */

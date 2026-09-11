@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, User as UserIcon } from "lucide-react";
+import { User as UserIcon } from "lucide-react";
 
 import { LeagueAvatar } from "@/components/league/LeagueAvatar";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
@@ -19,27 +19,38 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const triggerClass =
-  "flex items-center gap-1 rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[state=open]:border-accent data-[state=open]:text-primary-foreground";
+  "rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[state=open]:border-accent data-[state=open]:text-primary-foreground";
 
 export const navLinkClass =
   "rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[status=active]:border-accent data-[status=active]:text-primary-foreground";
 
-const PLAYBOOK: { to: string; label: string }[] = [
+const DRAFT_LINKS: { to: "/war-room" | "/mock-draft/setup"; label: string }[] = [
   { to: "/war-room", label: "War Room" },
   { to: "/mock-draft/setup", label: "Mock Draft Simulator" },
+];
+
+const RESEARCH_LINKS: { to: "/trade-desk" | "/the-wire"; label: string }[] = [
   { to: "/trade-desk", label: "Trade Desk" },
   { to: "/the-wire", label: "The Wire" },
 ];
 
-export function FrontOfficeMenu() {
+/** Logged-in gateway into the centralized league dashboard. */
+export function PlaybookNavLink() {
+  const { user, ready } = useAuth();
+  if (!ready || !user) return null;
+  return (
+    <Link to="/playbook" className={navLinkClass}>
+      Playbook
+    </Link>
+  );
+}
+
+export function DraftMenu() {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className={triggerClass}>
-        Playbook
-        <ChevronDown className="size-3.5" />
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger className={triggerClass}>Draft</DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        {PLAYBOOK.map((item) => (
+        {DRAFT_LINKS.map((item) => (
           <DropdownMenuItem key={item.to} asChild>
             <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
               {item.label}
@@ -51,65 +62,18 @@ export function FrontOfficeMenu() {
   );
 }
 
-export function ActiveOperationsMenu() {
-  const { user, ready } = useAuth();
-  const navigate = useNavigate();
-  const { leagues, setActiveLeagueId } = useActiveLeague();
-  const canShow = Boolean(ready && user);
-
-  if (!canShow) return null;
-
-  const platformLabel = (platform: string) => {
-    const value = platform.trim().toLowerCase();
-    if (value === "espn") return "ESPN";
-    if (value === "sleeper") return "Sleeper";
-    if (value === "yahoo") return "Yahoo";
-    return platform || "League";
-  };
-
-  const openLeague = (id: string) => {
-    setActiveLeagueId(id);
-    navigate({ to: "/league-hq" });
-  };
-
+export function ResearchMenu() {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className={triggerClass}>
-        Active Operations
-        <ChevronDown className="size-3.5" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72">
-        {leagues.length > 0 ? (
-          <>
-            <DropdownMenuLabel className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
-              My Leagues
-            </DropdownMenuLabel>
-            {leagues.map((league) => {
-              const team = league.teamName?.trim() || league.name || "League";
-              const platform = platformLabel(league.platform);
-              return (
-                <DropdownMenuItem
-                  key={league.id}
-                  className="font-medium"
-                  onSelect={() => openLeague(league.id)}
-                >
-                  <span className="truncate">
-                    {team} · {platform}
-                  </span>
-                </DropdownMenuItem>
-              );
-            })}
-          </>
-        ) : (
-          <DropdownMenuItem asChild className="font-medium">
-            <Link
-              to="/account/leagues"
-              className="block w-full text-sm font-semibold text-primary"
-            >
-              + Sync New League
+      <DropdownMenuTrigger className={triggerClass}>Research</DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        {RESEARCH_LINKS.map((item) => (
+          <DropdownMenuItem key={item.to} asChild>
+            <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+              {item.label}
             </Link>
           </DropdownMenuItem>
-        )}
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -164,7 +128,6 @@ export function ProfileMenu() {
           </DropdownMenuTrigger>
         )}
 
-
         <DropdownMenuContent align="end" className={ready && user ? "w-[26rem] p-0" : "w-56"}>
           {ready && user ? (
             <div className="flex">
@@ -204,7 +167,6 @@ export function ProfileMenu() {
                         </span>
                       </button>
                     ))
-
                   ) : (
                     <div className="flex items-center justify-center px-2 py-8">
                       <p className="font-display text-xs font-semibold uppercase tracking-widest text-black">

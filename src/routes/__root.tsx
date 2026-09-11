@@ -9,9 +9,10 @@ import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { ActiveLeagueProvider } from "@/context/ActiveLeagueContext";
 
 import {
-  ActiveOperationsMenu,
-  FrontOfficeMenu,
+  DraftMenu,
+  PlaybookNavLink,
   ProfileMenu,
+  ResearchMenu,
   navLinkClass,
 } from "@/components/nav/NavMenus";
 
@@ -131,8 +132,9 @@ function SiteNav() {
           <Link to="/" activeOptions={{ exact: true }} className={navLinkClass}>
             Front Office
           </Link>
-          <FrontOfficeMenu />
-          <ActiveOperationsMenu />
+          <PlaybookNavLink />
+          <DraftMenu />
+          <ResearchMenu />
           <Link to="/hof" className={navLinkClass}>
             Hall of Fame
           </Link>

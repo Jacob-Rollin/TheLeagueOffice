@@ -132,6 +132,7 @@ function PlayerHubPage() {
   if (!data) return <p className="py-24 text-center text-sm text-zinc-500">Player not found.</p>;
 
   const { player, history, projection, depthChart, injuryRisk, season } = data;
+  const posDepthChart = depthChart.filter((d) => d.pos === player.pos);
   const brainEntry = brain?.[player.id] ?? null;
   const brainSos = playerSos;
   const percentileLabel = positionPercentile(player.id, player.pos, sosPeers ?? brain, brainSos);
@@ -307,19 +308,19 @@ function PlayerHubPage() {
 
             {tab === "depth" && player.pos !== "DEF" && (
               <Module title={`${player.team} ${player.pos} depth chart`}>
-                {depthChart.length === 0 ? (
+                {posDepthChart.length === 0 ? (
                   <Empty>No teammates found.</Empty>
                 ) : (
                   <StatTable
                     head={["Player", "Proj", "ADP", "Status"]}
-                    rows={depthChart.map((d) => [
+                    rows={posDepthChart.map((d) => [
                       d.name,
                       d.proj.toFixed(1),
                       d.adp < 900 ? d.adp.toFixed(1) : "—",
                       d.injury ?? "Active",
                     ])}
-                    highlightRow={depthChart.findIndex((d) => d.id === player.id)}
-                    linkRow={(i) => depthChart[i]!.id}
+                    highlightRow={posDepthChart.findIndex((d) => d.id === player.id)}
+                    linkRow={(i) => posDepthChart[i]!.id}
                   />
                 )}
               </Module>
@@ -437,11 +438,11 @@ function PlayerHubPage() {
 
             {player.pos !== "DEF" && (
             <Widget title={`${player.team} ${player.pos} depth`}>
-              {depthChart.length === 0 ? (
+              {posDepthChart.length === 0 ? (
                 <p className="text-xs text-zinc-500">No teammates found.</p>
               ) : (
                 <ol className="space-y-1">
-                  {depthChart.slice(0, 6).map((d, i) => (
+                  {posDepthChart.slice(0, 6).map((d, i) => (
                     <li key={d.id}>
                       <Link
                         to="/player/$id"

@@ -11,8 +11,12 @@ import { cn } from "@/lib/utils";
 
 const PAGES: { label: string; to: string; hint: string }[] = [
   { label: "Front Office", to: "/", hint: "Home" },
-  { label: "League HQ", to: "/league-hq", hint: "Active league dashboard" },
+  { label: "Playbook", to: "/playbook", hint: "Active league dashboard" },
+  { label: "Power Rankings", to: "/playbook/rankings", hint: "True power leaderboard" },
+  { label: "Rosters", to: "/playbook/rosters", hint: "Roster matrix scouting" },
+  { label: "Transactions", to: "/playbook/transactions", hint: "League activity" },
   { label: "War Room", to: "/draft", hint: "Draft board" },
+  { label: "Mock Draft Simulator", to: "/mock-draft/setup", hint: "Mock draft arena" },
   { label: "Trade Desk", to: "/trade", hint: "Trade Analyzer" },
   { label: "The Wire", to: "/waiver", hint: "Waivers" },
   { label: "Hall of Fame", to: "/hof", hint: "League history" },

@@ -292,7 +292,11 @@ export type ConnectionMeta = {
 };
 
 function sleeperAvatar(id: string | null | undefined) {
-  return id ? `https://sleepercdn.com/avatars/thumbs/${id}` : null;
+  const clean = id?.trim();
+  if (!clean) return null;
+  const lower = clean.toLowerCase();
+  if (clean === "0" || lower === "default" || lower === "null" || lower === "none") return null;
+  return `https://sleepercdn.com/avatars/thumbs/${clean}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -891,14 +895,404 @@ export async function loadConnectionRosters(
 }
 
 // ---------------------------------------------------------------------------
-// Recent transaction feed for League HQ Activity Wire
+// Weekly matchup table for the active synced league
 // ---------------------------------------------------------------------------
+
+export type WeeklyMatchupEntry = {
+  rosterId: number;
+  matchupId: number | null;
+  /** Live / current fantasy points for the week (host platform). */
+  points: number;
+  /** Host-native live projection total (`custom_projections` / `matchup_projections` / ESPN live proj). */
+  projectedPoints: number;
+  /**
+   * Host-native win probability for this side of the matchup (0–100).
+   * Null only before pairing; stamped for every H2H pair before return.
+   */
+  winProbabilityPct: number | null;
+  teamName: string;
+  owner: string;
+  logo: string | null;
+  /** Host starter player ids for the week (Sleeper); empty when unavailable. */
+  starters: string[];
+  /** Per-player fantasy points scored so far this week. */
+  playerPoints: Record<string, number>;
+};
+
+export type LeagueWeekMatchups = {
+  week: number;
+  entries: WeeklyMatchupEntry[];
+  /** Where baseline projected values originated. */
+  source: "sleeper" | "espn" | "yahoo";
+};
+
+function roundHundredths(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** Provider-style win% from projected finals when the host omits raw odds. */
+function hostWinPctFromProjected(mine: number, opp: number): number {
+  if (!Number.isFinite(mine) || !Number.isFinite(opp)) return 50;
+  if (mine <= 0 && opp <= 0) return 50;
+  const p = 1 / (1 + Math.exp(-(mine - opp) / 12));
+  return Math.round(Math.min(99, Math.max(1, p * 100)));
+}
+
+/** Stamp complementary win% onto each H2H pair using host projected totals. */
+function stampMatchupWinProbabilities(entries: WeeklyMatchupEntry[]): void {
+  const byMatchup = new Map<number, WeeklyMatchupEntry[]>();
+  for (const entry of entries) {
+    if (entry.matchupId == null) continue;
+    const bucket = byMatchup.get(entry.matchupId) ?? [];
+    bucket.push(entry);
+    byMatchup.set(entry.matchupId, bucket);
+  }
+
+  for (const pair of byMatchup.values()) {
+    if (pair.length !== 2) continue;
+    const [a, b] = pair;
+    if (!a || !b) continue;
+
+    if (a.winProbabilityPct != null && b.winProbabilityPct == null) {
+      b.winProbabilityPct = Math.max(0, Math.min(100, 100 - a.winProbabilityPct));
+      continue;
+    }
+    if (b.winProbabilityPct != null && a.winProbabilityPct == null) {
+      a.winProbabilityPct = Math.max(0, Math.min(100, 100 - b.winProbabilityPct));
+      continue;
+    }
+    if (a.winProbabilityPct != null && b.winProbabilityPct != null) continue;
+
+    const minePct = hostWinPctFromProjected(a.projectedPoints, b.projectedPoints);
+    a.winProbabilityPct = minePct;
+    b.winProbabilityPct = 100 - minePct;
+  }
+}
+
+function readNativeNumber(row: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const raw = row[key];
+    if (raw == null) continue;
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    if (typeof raw === "string" && raw.trim() !== "" && Number.isFinite(Number(raw))) {
+      return Number(raw);
+    }
+  }
+  return null;
+}
+
+/**
+ * Pull Sleeper-native live projection totals when present on the matchup row
+ * (`custom_projections`, `matchup_projections`, or flat projected_* keys).
+ */
+function readNativeProjected(row: Record<string, unknown>): number | null {
+  const direct = readNativeNumber(row, [
+    "custom_projections",
+    "matchup_projections",
+    "projected_points",
+    "points_projected",
+    "proj_points",
+    "projected",
+  ]);
+  if (direct != null) return direct;
+
+  for (const key of ["custom_projections", "matchup_projections", "projections"]) {
+    const val = row[key];
+    if (!val || typeof val !== "object" || Array.isArray(val)) continue;
+    const obj = val as Record<string, unknown>;
+    const nested = readNativeNumber(obj, ["total", "points", "projected", "projected_points", "value"]);
+    if (nested != null) return nested;
+    let sum = 0;
+    let touched = false;
+    for (const v of Object.values(obj)) {
+      const n = Number(v);
+      if (!Number.isFinite(n)) continue;
+      sum += n;
+      touched = true;
+    }
+    if (touched) return sum;
+  }
+  return null;
+}
+
+/** Pull Sleeper-native matchup win% when present (0–1 or 0–100). */
+function readNativeWinPct(row: Record<string, unknown>): number | null {
+  const direct = readNativeNumber(row, [
+    "win_probability",
+    "win_pct",
+    "win_percentage",
+    "chance_to_win",
+    "probability",
+    "matchup_win_pct",
+  ]);
+  if (direct != null) {
+    return Math.round(Math.min(100, Math.max(0, direct <= 1 ? direct * 100 : direct)));
+  }
+  for (const key of ["matchup_projections", "custom_projections", "projections"]) {
+    const val = row[key];
+    if (!val || typeof val !== "object" || Array.isArray(val)) continue;
+    const nested = readNativeNumber(val as Record<string, unknown>, [
+      "win_probability",
+      "win_pct",
+      "win_percentage",
+      "chance_to_win",
+      "probability",
+    ]);
+    if (nested != null) {
+      return Math.round(Math.min(100, Math.max(0, nested <= 1 ? nested * 100 : nested)));
+    }
+  }
+  return null;
+}
+
+/** Sum Sleeper starter projections with the league's own scoring map (pre-game baseline). */
+async function enrichSleeperProjectedPoints(
+  leagueId: string,
+  week: number,
+  entries: WeeklyMatchupEntry[],
+): Promise<void> {
+  const needsEnrich = entries.some((e) => e.projectedPoints <= 0 && e.starters.length > 0);
+  if (!needsEnrich) return;
+
+  const state = await json<{ season?: string }>(`${BASE}/state/nfl`);
+  const season = String(state?.season ?? new Date().getUTCFullYear());
+  const { positionsQuery } = await import("./players-build");
+  const { loadLeagueScoring } = await import("./scoring.server");
+  const { scoreStats } = await import("./scoring-map");
+
+  const [scoring, projRows] = await Promise.all([
+    loadLeagueScoring(leagueId, "sleeper"),
+    json<{ player_id?: string; stats?: Record<string, number> }[]>(
+      `https://api.sleeper.app/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`,
+    ),
+  ]);
+
+  const projById = new Map<string, Record<string, number>>();
+  for (const row of projRows ?? []) {
+    if (row?.player_id && row.stats) projById.set(String(row.player_id), row.stats);
+  }
+
+  for (const entry of entries) {
+    if (entry.projectedPoints > 0) continue;
+    let sum = 0;
+    for (const starterId of entry.starters) {
+      const scored = scoreStats(projById.get(starterId), scoring.map);
+      if (scored != null) sum += scored;
+    }
+    entry.projectedPoints = roundHundredths(sum);
+  }
+}
+
+/** Load host-platform weekly matchup rows keyed by roster + matchup_id. */
+export async function loadConnectionMatchups(
+  identifier: string,
+  platform: string,
+  week: number,
+  s2?: string | null,
+  swid?: string | null,
+  _connectionId?: string | null,
+): Promise<LeagueWeekMatchups | null> {
+  const clean = identifier.trim().replace(/^@/, "");
+  const safeWeek = Math.max(1, Math.floor(Number(week) || 1));
+  const plat = platform.trim().toLowerCase();
+  if (!clean) return null;
+
+  // No Supabase writes for live scoreboard shifts — client caches handle refresh.
+  if (plat === "yahoo") {
+    return null;
+  }
+
+  if (plat === "espn") {
+    if (!/^\d+$/.test(clean)) return null;
+    const season = new Date().getFullYear();
+    for (const year of [season, season - 1]) {
+      const league = await espnJson<{
+        teams?: EspnTeam[];
+        schedule?: {
+          id?: number;
+          matchupPeriodId?: number;
+          home?: {
+            teamId?: number;
+            totalPoints?: number;
+            totalPointsLive?: number;
+            totalProjectedPoints?: number;
+            totalProjectedPointsLive?: number;
+          };
+          away?: {
+            teamId?: number;
+            totalPoints?: number;
+            totalPointsLive?: number;
+            totalProjectedPoints?: number;
+            totalProjectedPointsLive?: number;
+          };
+        }[];
+      }>(
+        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mMatchupScore&view=mScoreboard&view=mTeam&scoringPeriodId=${safeWeek}`,
+        s2,
+        swid,
+      );
+      const teams = league?.teams ?? [];
+      const byId = new Map(
+        teams.map((t, i) => [
+          Number(t.id ?? i + 1),
+          {
+            teamName: espnTeamName(t) ?? `Team ${i + 1}`,
+            owner: t.abbrev ?? "",
+            logo: t.logo?.trim() || null,
+          },
+        ]),
+      );
+      let schedule = (league?.schedule ?? []).filter(
+        (row) => Number(row.matchupPeriodId ?? 0) === safeWeek,
+      );
+      if (!schedule.length && (league?.schedule?.length ?? 0) > 0) {
+        schedule = league?.schedule ?? [];
+      }
+      if (!schedule.length) continue;
+
+      const entries: WeeklyMatchupEntry[] = [];
+      for (const row of schedule) {
+        const matchupId = Number(row.id ?? 0) || null;
+        const sides = [
+          {
+            rosterId: Number(row.home?.teamId ?? 0),
+            points: Number(row.home?.totalPointsLive ?? row.home?.totalPoints ?? 0),
+            projected: Number(
+              row.home?.totalProjectedPointsLive ?? row.home?.totalProjectedPoints ?? 0,
+            ),
+          },
+          {
+            rosterId: Number(row.away?.teamId ?? 0),
+            points: Number(row.away?.totalPointsLive ?? row.away?.totalPoints ?? 0),
+            projected: Number(
+              row.away?.totalProjectedPointsLive ?? row.away?.totalProjectedPoints ?? 0,
+            ),
+          },
+        ];
+        for (const side of sides) {
+          if (!side.rosterId) continue;
+          const meta = byId.get(side.rosterId);
+          entries.push({
+            rosterId: side.rosterId,
+            matchupId,
+            points: roundHundredths(side.points),
+            projectedPoints: roundHundredths(side.projected),
+            winProbabilityPct: null,
+            teamName: meta?.teamName ?? `Team ${side.rosterId}`,
+            owner: meta?.owner ?? "",
+            logo: meta?.logo ?? null,
+            starters: [],
+            playerPoints: {},
+          });
+        }
+      }
+      if (!entries.length) continue;
+
+      stampMatchupWinProbabilities(entries);
+      return { week: safeWeek, entries, source: "espn" };
+    }
+    return null;
+  }
+
+  const leagueId = await resolveSleeperLeagueId(clean);
+  if (!leagueId) return null;
+
+  const [rows, rosters, users] = await Promise.all([
+    json<Record<string, unknown>[]>(`${BASE}/league/${leagueId}/matchups/${safeWeek}`),
+    json<{ roster_id: number; owner_id: string | null }[]>(`${BASE}/league/${leagueId}/rosters`),
+    json<
+      {
+        user_id: string;
+        display_name: string;
+        avatar?: string | null;
+        metadata?: { team_name?: string; avatar?: string };
+      }[]
+    >(`${BASE}/league/${leagueId}/users`),
+  ]);
+  if (!rows?.length) return null;
+
+  const byUser = new Map((users ?? []).map((u) => [u.user_id, u]));
+  const metaByRoster = new Map<number, { teamName: string; owner: string; logo: string | null }>();
+  for (const r of rosters ?? []) {
+    const u = r.owner_id ? byUser.get(r.owner_id) : undefined;
+    const metaAvatar = u?.metadata?.avatar?.trim() || null;
+    const logo =
+      (metaAvatar && (metaAvatar.startsWith("http") ? metaAvatar : sleeperAvatar(metaAvatar))) ||
+      sleeperAvatar(u?.avatar) ||
+      null;
+    metaByRoster.set(r.roster_id, {
+      teamName: u?.metadata?.team_name?.trim() || u?.display_name || `Team ${r.roster_id}`,
+      owner: u?.display_name ?? "",
+      logo,
+    });
+  }
+
+  const entries: WeeklyMatchupEntry[] = rows
+    .map((row) => {
+      const rosterId = Number(row["roster_id"] ?? 0);
+      const meta = metaByRoster.get(rosterId);
+      const matchupRaw = row["matchup_id"];
+      const matchupId =
+        matchupRaw == null || matchupRaw === undefined || Number.isNaN(Number(matchupRaw))
+          ? null
+          : Number(matchupRaw);
+      const playerPoints: Record<string, number> = {};
+      const rawPoints = row["players_points"];
+      if (rawPoints && typeof rawPoints === "object") {
+        for (const [pid, pts] of Object.entries(rawPoints as Record<string, number>)) {
+          playerPoints[String(pid)] = Number(pts) || 0;
+        }
+      }
+      const starters = (Array.isArray(row["starters"]) ? (row["starters"] as (string | null)[]) : [])
+        .map((id) => (id && id !== "0" ? String(id) : ""))
+        .filter(Boolean);
+
+      const nativeProjected = readNativeProjected(row);
+      const nativeWin = readNativeWinPct(row);
+
+      return {
+        rosterId,
+        matchupId,
+        points: roundHundredths(Number(row["points"] ?? 0)),
+        projectedPoints: nativeProjected != null ? roundHundredths(nativeProjected) : 0,
+        winProbabilityPct: nativeWin,
+        teamName: meta?.teamName ?? `Team ${rosterId}`,
+        owner: meta?.owner ?? "",
+        logo: meta?.logo ?? null,
+        starters,
+        playerPoints,
+      };
+    })
+    .filter((e) => e.rosterId > 0);
+
+  await enrichSleeperProjectedPoints(leagueId, safeWeek, entries);
+  stampMatchupWinProbabilities(entries);
+
+  return { week: safeWeek, entries, source: "sleeper" };
+}
+
+// ---------------------------------------------------------------------------
+// Recent transaction feed for League HQ Activity
+// ---------------------------------------------------------------------------
+
+export type LeagueActivityMove = {
+  /** Prefer Sleeper id so client avatars resolve against the CDN. */
+  playerId: string;
+  name: string;
+  pos: string;
+  team: string;
+  action: "add" | "drop" | "ir";
+};
 
 export type LeagueActivityEvent = {
   id: string;
   at: number;
   kind: "waiver" | "free_agent" | "trade" | "ir";
+  /** Fallback sentence when structured moves are unavailable. */
   text: string;
+  /** Fantasy team that initiated the move (null for multi-side trades). */
+  teamName: string | null;
+  moves: LeagueActivityMove[];
 };
 
 type SleeperTxn = {
@@ -910,6 +1304,8 @@ type SleeperTxn = {
   roster_ids?: number[];
   adds?: Record<string, number> | null;
   drops?: Record<string, number> | null;
+  /** Slot / IR metadata when Sleeper encodes a pure roster move. */
+  metadata?: { to_slot?: string; from_slot?: string; [key: string]: unknown } | null;
 };
 
 function playerChip(
@@ -921,6 +1317,37 @@ function playerChip(
   const pos = hit?.pos?.trim() || "FA";
   const team = hit?.team?.trim() || "FA";
   return `${name} (${pos} - ${team})`;
+}
+
+function sleeperMove(
+  index: IdentityIndex,
+  playerId: string,
+  action: LeagueActivityMove["action"],
+): LeagueActivityMove {
+  const hit = index.bySleeper.get(playerId);
+  return {
+    playerId: hit?.id ?? playerId,
+    name: hit?.name ?? `Player ${playerId}`,
+    pos: hit?.pos?.trim() || "FA",
+    team: hit?.team?.trim() || "FA",
+    action,
+  };
+}
+
+function espnMove(
+  index: IdentityIndex,
+  playerId: number | undefined,
+  action: LeagueActivityMove["action"],
+): LeagueActivityMove | null {
+  if (playerId == null) return null;
+  const hit = index.byEspn.get(String(playerId));
+  return {
+    playerId: hit?.id ?? String(playerId),
+    name: hit?.name ?? `Player ${playerId}`,
+    pos: hit?.pos?.trim() || "FA",
+    team: hit?.team?.trim() || "FA",
+    action,
+  };
 }
 
 function teamLabel(map: Map<number, string>, rosterId: number | undefined): string {
@@ -935,19 +1362,35 @@ function formatSleeperTransaction(
 ): LeagueActivityEvent | null {
   const at = Number(txn.status_updated ?? txn.created ?? 0);
   if (!at) return null;
+
+  // Root type codes only — never infer IR from a player's injury tag.
   const type = String(txn.type ?? "").toLowerCase();
+  const isTrade = type === "trade";
+  const isWaiver = type === "waiver";
+  const isFreeAgent = type === "free_agent";
+  const toSlot = String(txn.metadata?.to_slot ?? "").toUpperCase();
+  const isActualIRMove =
+    type === "injury" ||
+    type === "ir" ||
+    (!isWaiver && !isFreeAgent && !isTrade && toSlot === "IR");
+
   const status = String(txn.status ?? "").toLowerCase();
   const adds = Object.entries(txn.adds ?? {});
   const drops = Object.entries(txn.drops ?? {});
   const id = String(txn.transaction_id ?? `${type}-${at}-${adds.map(([p]) => p).join("-")}`);
 
-  if (type === "trade") {
+  if (isTrade) {
     if (status && status !== "complete" && status !== "failed") return null;
     const byRoster = new Map<number, string[]>();
+    const moves: LeagueActivityMove[] = [];
     for (const [playerId, rosterId] of adds) {
       const list = byRoster.get(rosterId) ?? [];
       list.push(playerChip(index, playerId));
       byRoster.set(rosterId, list);
+      moves.push(sleeperMove(index, playerId, "add"));
+    }
+    for (const [playerId] of drops) {
+      moves.push(sleeperMove(index, playerId, "drop"));
     }
     const parts = [...byRoster.entries()].map(
       ([rosterId, players]) =>
@@ -960,35 +1403,21 @@ function formatSleeperTransaction(
       at,
       kind: "trade",
       text: `${prefix}: ${parts.join(", ")}`,
+      teamName: null,
+      moves,
     };
   }
 
-  if (type === "waiver" || type === "free_agent") {
+  // Waivers / free agents are always ADD / DROP rows — never IR, even when
+  // the involved player carries an IR injury designation on their card.
+  if (isWaiver || isFreeAgent) {
     const primaryRoster =
       adds[0]?.[1] ?? drops[0]?.[1] ?? txn.roster_ids?.[0] ?? undefined;
     const team = teamLabel(teams, primaryRoster);
-
-    if (type === "waiver" && adds.length && drops.length) {
-      const added = adds.map(([pid]) => playerChip(index, pid)).join(", ");
-      const dropped = drops.map(([pid]) => playerChip(index, pid)).join(", ");
-      return {
-        id,
-        at,
-        kind: "waiver",
-        text: `${team} ADDED ${added} from waivers, DROPPED ${dropped}`,
-      };
-    }
-
-    if (adds.length && !drops.length) {
-      const added = adds.map(([pid]) => playerChip(index, pid)).join(", ");
-      const source = type === "waiver" ? "from waivers" : "as a free agent";
-      return {
-        id,
-        at,
-        kind: type === "waiver" ? "waiver" : "free_agent",
-        text: `${team} ADDED ${added} ${source}`,
-      };
-    }
+    const addMoves = adds.map(([pid]) => sleeperMove(index, pid, "add"));
+    const dropMoves = drops.map(([pid]) => sleeperMove(index, pid, "drop"));
+    const kind: LeagueActivityEvent["kind"] = isWaiver ? "waiver" : "free_agent";
+    const addSource = isWaiver ? "from waivers" : "as a free agent";
 
     if (adds.length && drops.length) {
       const added = adds.map(([pid]) => playerChip(index, pid)).join(", ");
@@ -996,21 +1425,53 @@ function formatSleeperTransaction(
       return {
         id,
         at,
-        kind: "free_agent",
-        text: `${team} ADDED ${added} as a free agent, DROPPED ${dropped}`,
+        kind,
+        text: `${team} ADDED ${added} ${addSource}, DROPPED ${dropped}`,
+        teamName: team,
+        moves: [...addMoves, ...dropMoves],
+      };
+    }
+
+    if (adds.length && !drops.length) {
+      const added = adds.map(([pid]) => playerChip(index, pid)).join(", ");
+      return {
+        id,
+        at,
+        kind,
+        text: `${team} ADDED ${added} ${addSource}`,
+        teamName: team,
+        moves: addMoves,
       };
     }
 
     if (!adds.length && drops.length) {
-      // Pure drop with no add is often an IR / reserve placement on Sleeper.
       const dropped = drops.map(([pid]) => playerChip(index, pid)).join(", ");
       return {
         id,
         at,
-        kind: "ir",
-        text: `${team} PLACED ${dropped} on Injured Reserve`,
+        kind,
+        text: `${team} DROPPED ${dropped}`,
+        teamName: team,
+        moves: dropMoves,
       };
     }
+  }
+
+  if (isActualIRMove) {
+    const primaryRoster =
+      adds[0]?.[1] ?? drops[0]?.[1] ?? txn.roster_ids?.[0] ?? undefined;
+    const team = teamLabel(teams, primaryRoster);
+    const irPlayers = adds.length ? adds : drops;
+    if (!irPlayers.length) return null;
+    const labeled = irPlayers.map(([pid]) => playerChip(index, pid)).join(", ");
+    return {
+      id,
+      at,
+      kind: "ir",
+      text: `${team} PLACED ${labeled} on Injured Reserve`,
+      teamName: team,
+      moves: irPlayers.map(([pid]) => sleeperMove(index, pid, "ir")),
+    };
   }
 
   return null;
@@ -1092,45 +1553,97 @@ export async function loadConnectionTransactions(
 
         if (isTrade) {
           const byTeam = new Map<number, string[]>();
+          const moves: LeagueActivityMove[] = [];
           for (const item of items) {
             const to = item.toTeamId;
             if (to == null || item.playerId == null) continue;
             const list = byTeam.get(to) ?? [];
             list.push(chipFor(item.playerId));
             byTeam.set(to, list);
+            const move = espnMove(index, item.playerId, "add");
+            if (move) moves.push(move);
+          }
+          for (const item of drops) {
+            const move = espnMove(index, item.playerId, "drop");
+            if (move) moves.push(move);
           }
           const parts = [...byTeam.entries()].map(
             ([teamId, players]) => `${teamLabel(teamMap, teamId)} received ${players.join(", ")}`,
           );
           if (!parts.length) continue;
           const prefix = status.includes("reject") || status.includes("fail") ? "TRADE REJECTED" : "TRADE COMPLETED";
-          events.push({ id, at, kind: "trade", text: `${prefix}: ${parts.join(", ")}` });
+          events.push({
+            id,
+            at,
+            kind: "trade",
+            text: `${prefix}: ${parts.join(", ")}`,
+            teamName: null,
+            moves,
+          });
           continue;
         }
 
         const primaryTeam =
           adds[0]?.toTeamId ?? drops[0]?.fromTeamId ?? undefined;
         const team = teamLabel(teamMap, primaryTeam);
+        const espnType = String(txn.type ?? "").toLowerCase();
+        const espnIsWaiver = espnType.includes("waiver");
+        const espnIsFreeAgent =
+          espnType.includes("freeagent") ||
+          espnType.includes("free_agent") ||
+          espnType.includes("add") ||
+          espnType.includes("drop");
+        const espnIsActualIR =
+          espnType.includes("injury") ||
+          espnType === "ir" ||
+          espnType.includes("injured") ||
+          (!espnIsWaiver && !espnIsFreeAgent && espnType.includes("ir"));
+
         if (adds.length && drops.length) {
           events.push({
             id,
             at,
-            kind: "waiver",
+            kind: espnIsWaiver ? "waiver" : "free_agent",
             text: `${team} ADDED ${adds.map((i) => chipFor(i.playerId)).join(", ")} from waivers, DROPPED ${drops.map((i) => chipFor(i.playerId)).join(", ")}`,
+            teamName: team,
+            moves: [
+              ...adds.map((i) => espnMove(index, i.playerId, "add")).filter((m): m is LeagueActivityMove => Boolean(m)),
+              ...drops.map((i) => espnMove(index, i.playerId, "drop")).filter((m): m is LeagueActivityMove => Boolean(m)),
+            ],
           });
         } else if (adds.length) {
           events.push({
             id,
             at,
-            kind: "free_agent",
+            kind: espnIsWaiver ? "waiver" : "free_agent",
             text: `${team} ADDED ${adds.map((i) => chipFor(i.playerId)).join(", ")} as a free agent`,
+            teamName: team,
+            moves: adds
+              .map((i) => espnMove(index, i.playerId, "add"))
+              .filter((m): m is LeagueActivityMove => Boolean(m)),
           });
-        } else if (drops.length) {
+        } else if (drops.length && espnIsActualIR) {
           events.push({
             id,
             at,
             kind: "ir",
             text: `${team} PLACED ${drops.map((i) => chipFor(i.playerId)).join(", ")} on Injured Reserve`,
+            teamName: team,
+            moves: drops
+              .map((i) => espnMove(index, i.playerId, "ir"))
+              .filter((m): m is LeagueActivityMove => Boolean(m)),
+          });
+        } else if (drops.length) {
+          // Pure drop — free agency cut, not an IR placement.
+          events.push({
+            id,
+            at,
+            kind: espnIsWaiver ? "waiver" : "free_agent",
+            text: `${team} DROPPED ${drops.map((i) => chipFor(i.playerId)).join(", ")}`,
+            teamName: team,
+            moves: drops
+              .map((i) => espnMove(index, i.playerId, "drop"))
+              .filter((m): m is LeagueActivityMove => Boolean(m)),
           });
         }
       }

@@ -126,6 +126,7 @@ function stubPlayer(spec: SandboxSpec): Player {
     team: spec.team,
     age: null,
     exp: null,
+    injury_status: null,
     injury: null,
     bye: null,
     adp: { std: 999, half: 999, ppr: 999 },
@@ -134,7 +135,7 @@ function stubPlayer(spec: SandboxSpec): Player {
     posRank: 999,
     proj: { std: 0, half: 0, ppr: 0 },
     prev: { std: 0, half: 0, ppr: 0 },
-  } as Player;
+  };
 }
 
 export type SandboxTeam = { key: string; name: string; owner: string; players: Player[] };

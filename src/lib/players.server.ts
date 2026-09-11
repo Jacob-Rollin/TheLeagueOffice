@@ -446,21 +446,24 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
 
   const projection = toSeasonLine(season, player.pos, built.rawProj.get(id) ?? {});
 
+  const fantasyDepthPositions: Pos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
   const depthChart: DepthEntry[] =
     player.team === "FA"
       ? []
-      : built.all
-          .filter((p) => p.team === player.team && p.pos === player.pos)
-          .sort((a, b) => b.proj.half - a.proj.half)
-          .slice(0, 12)
-          .map((p) => ({
-            id: p.id,
-            name: p.name,
-            pos: p.pos,
-            proj: p.proj.half,
-            adp: p.adp.half,
-            injury: p.injury,
-          }));
+      : fantasyDepthPositions.flatMap((slot) =>
+          built.all
+            .filter((p) => p.team === player.team && p.pos === slot)
+            .sort((a, b) => b.proj.half - a.proj.half)
+            .slice(0, 12)
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              pos: p.pos,
+              proj: p.proj.half,
+              adp: p.adp.half,
+              injury: p.injury,
+            })),
+        );
 
   const sos = await buildSos(player, season).catch(() => null);
 
@@ -605,10 +608,14 @@ export async function loadPlayerNews(id: string): Promise<PlayerNews | null> {
   };
 
   for (const f of personal) {
+    const headline = f.headline ?? "Player update";
+    const description = stripTags(f.story ?? f.description ?? "");
+    // Guard against wrong ESPN athlete ID resolution — copy must mention this player.
+    if (!mentions({ headline, description } as EspnArticle, player.name)) continue;
     const item: NewsItem = {
       id: String(f.id ?? f.headline ?? Math.random()),
-      headline: f.headline ?? "Player update",
-      description: stripTags(f.story ?? f.description ?? ""),
+      headline,
+      description,
       published: f.published ?? f.lastModified ?? "",
       link: f.links?.web?.href ?? null,
       image: null,
@@ -619,9 +626,8 @@ export async function loadPlayerNews(id: string): Promise<PlayerNews | null> {
     items.push(item);
   }
 
+  // Only articles that explicitly mention this player — never bleed team/league recaps.
   for (const a of [...league, ...team]) if (mentions(a, player.name)) push(a, true);
-  for (const a of team) push(a, false);
-  for (const a of league) push(a, false);
 
   items.sort((a, b) => {
     if (a.aboutPlayer !== b.aboutPlayer) return a.aboutPlayer ? -1 : 1;
@@ -658,6 +664,208 @@ export async function loadTeamNews(team: string): Promise<NewsItem[]> {
   return items.slice(0, 12);
 }
 
+/** Compact league-wide sidebar rows for My Team → News. */
+export type LeagueWideNewsRow = {
+  id: string;
+  playerName: string;
+  sleeperId: string | null;
+  team: string | null;
+  pos: string | null;
+  snippet: string;
+  link: string | null;
+  /** Compact injury letter for sidebar chips. */
+  injuryLabel: "Q" | "O" | "IR" | "NA" | null;
+};
+
+const espnFantasyLeagueFeed = memo<EspnFeedItem[]>(1000 * 60 * 10, async (_key: string) => {
+  const res = await fetch(
+    "https://site.web.api.espn.com/apis/fantasy/v2/games/ffl/news/players?limit=40",
+    { headers: { accept: "application/json" } },
+  );
+  if (!res.ok) return [];
+  const json = (await res.json()) as { feed?: EspnFeedItem[] };
+  return Array.isArray(json.feed) ? json.feed : [];
+});
+
+function resolveCatalogPlayer(
+  name: string,
+  byLower: Map<string, Player>,
+  bySanitized: Map<string, Player>,
+): Player | null {
+  const clean = name.trim().toLowerCase();
+  if (!clean) return null;
+  const exact = byLower.get(clean);
+  if (exact) return exact;
+  const sanitized = sanitizePlayerName(name);
+  if (sanitized) {
+    const hit = bySanitized.get(sanitized);
+    if (hit) return hit;
+  }
+  for (const [key, player] of byLower) {
+    if (key.includes(clean) || clean.includes(key)) return player;
+  }
+  for (const [key, player] of bySanitized) {
+    if (sanitized && (key.includes(sanitized) || sanitized.includes(key))) return player;
+  }
+  return null;
+}
+
+function sanitizePlayerName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .replace(/(jr|sr|iii|ii|iv)$/g, "")
+    .trim();
+}
+
+function sidebarSnippet(playerName: string, headline: string, description: string): string {
+  const hay = `${headline} ${description}`.trim();
+  const injury = /\(([^)]+)\)/.exec(hay);
+  let rest = hay
+    .replace(new RegExp(playerName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[-–—:,.\s]+/, "");
+  if (injury && !rest.toLowerCase().includes(`(${injury[1]!.toLowerCase()})`)) {
+    rest = `(${injury[1]}) ${rest}`.trim();
+  }
+  if (!rest) rest = description.trim() || headline.trim();
+  if (rest.length > 92) rest = `${rest.slice(0, 89).trim()}…`;
+  return rest;
+}
+
+function playerNameFromHeadline(headline: string): string | null {
+  const m =
+    /^([A-Z][a-zA-Z.'-]+(?:\s+[A-Z][a-zA-Z.'-]+)+)\b/.exec(headline.trim()) ??
+    null;
+  return m?.[1]?.trim() || null;
+}
+
+const INJURY_COPY_RE =
+  /injur|questionable|doubtful|\bout\b|\bir\b|hamstring|ankle|knee|concussion|groin|calf|shoulder|ribs|thumb|wrist|quad|back|foot|toe|illness|practice|limited|full participant|dnp|did not practice|pup|nfi|inactive|designation|week-to-week|day-to-day/i;
+
+function isInjuryCopy(text: string): boolean {
+  return INJURY_COPY_RE.test(text);
+}
+
+function injuryLabelFromStatus(status: string | null | undefined): "Q" | "O" | "IR" | "NA" | null {
+  if (!status || status === "Healthy" || status === "Active" || status === "None") return null;
+  if (status === "Questionable") return "Q";
+  if (status === "Out" || status === "Doubtful") return "O";
+  if (status === "IR") return "IR";
+  if (status === "NA") return "NA";
+  return null;
+}
+
+/**
+ * Top active injury timelines across the NFL (not limited to a synced roster).
+ * Filters out general recaps / draft chatter; dedupes by player.
+ */
+export async function loadLeagueWidePlayerNews(limit = 10): Promise<LeagueWideNewsRow[]> {
+  const built = await buildPlayers("v1");
+  const byLower = new Map(built.all.map((p) => [p.name.toLowerCase(), p]));
+  const bySanitized = new Map(
+    built.all.map((p) => [sanitizePlayerName(p.name), p] as const).filter(([k]) => Boolean(k)),
+  );
+
+  const [fantasy, articles] = await Promise.all([
+    espnFantasyLeagueFeed("league").catch(() => [] as EspnFeedItem[]),
+    espnNews("").catch(() => [] as EspnArticle[]),
+  ]);
+
+  const rows: LeagueWideNewsRow[] = [];
+  const seenPlayers = new Set<string>();
+  const seenIds = new Set<string>();
+
+  const pushRow = (row: LeagueWideNewsRow) => {
+    if (rows.length >= limit) return;
+    const hay = `${row.playerName} ${row.snippet}`.toLowerCase();
+    if (
+      /\bnfl week\b/.test(hay) ||
+      /\buniforms?\b/.test(hay) ||
+      /\buniform combo\b/.test(hay) ||
+      !row.playerName?.trim()
+    ) {
+      return;
+    }
+    const playerKey = (row.sleeperId || row.playerName).toLowerCase();
+    if (seenPlayers.has(playerKey) || seenIds.has(row.id)) return;
+    seenPlayers.add(playerKey);
+    seenIds.add(row.id);
+    rows.push(row);
+  };
+
+  for (const f of fantasy) {
+    if (rows.length >= limit) break;
+    const headline = (f.headline ?? "").trim();
+    if (!headline) continue;
+    const desc = stripTags(f.story ?? f.description ?? "");
+    if (!isInjuryCopy(`${headline} ${desc}`)) continue;
+    const name = playerNameFromHeadline(headline);
+    if (!name) continue;
+    const hit = resolveCatalogPlayer(name, byLower, bySanitized);
+    pushRow({
+      id: String(f.id ?? headline),
+      playerName: hit?.name ?? name,
+      sleeperId: hit?.id ?? null,
+      team: hit?.team ?? null,
+      pos: hit?.pos ?? null,
+      snippet: sidebarSnippet(hit?.name ?? name, headline, desc),
+      link: f.links?.web?.href ?? null,
+      injuryLabel: injuryLabelFromStatus(hit?.injury ?? null),
+    });
+  }
+
+  for (const a of articles) {
+    if (rows.length >= limit) break;
+    const athleteName =
+      (a.categories ?? []).find((c) => (c.athlete?.description ?? "").trim())?.athlete
+        ?.description ??
+      playerNameFromHeadline(a.headline ?? "") ??
+      null;
+    if (!athleteName) continue;
+    const hit = resolveCatalogPlayer(athleteName, byLower, bySanitized);
+    const headline = (a.headline ?? "").trim();
+    const desc = (a.description ?? "").trim();
+    if (!isInjuryCopy(`${headline} ${desc}`) && !injuryLabelFromStatus(hit?.injury ?? null)) {
+      continue;
+    }
+    pushRow({
+      id: String(a.id ?? headline),
+      playerName: hit?.name ?? athleteName,
+      sleeperId: hit?.id ?? null,
+      team: hit?.team ?? null,
+      pos: hit?.pos ?? null,
+      snippet: sidebarSnippet(hit?.name ?? athleteName, headline, desc),
+      link: a.links?.web?.href ?? null,
+      injuryLabel: injuryLabelFromStatus(hit?.injury ?? null),
+    });
+  }
+
+  // Backfill from catalog players currently carrying injury designations.
+  if (rows.length < limit) {
+    const injured = built.all
+      .filter((p) => Boolean(injuryLabelFromStatus(p.injury)))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    for (const p of injured) {
+      if (rows.length >= limit) break;
+      const label = injuryLabelFromStatus(p.injury);
+      pushRow({
+        id: `catalog-injury-${p.id}`,
+        playerName: p.name,
+        sleeperId: p.id,
+        team: p.team || null,
+        pos: p.pos,
+        snippet: `Listed ${p.injury}${p.team && p.team !== "FA" ? ` on ${p.team}'s report` : ""}`,
+        link: null,
+        injuryLabel: label,
+      });
+    }
+  }
+
+  return rows.slice(0, limit);
+}
+
 /* ---------- player bio + game logs (ESPN-style profile page) ---------- */
 
 export type PlayerBio = {
@@ -675,6 +883,26 @@ export type GameLog = {
   opp: string | null;
   points: { std: number; half: number; ppr: number };
   line: { label: string; value: string }[];
+  raw: Record<string, number>;
+  /** False when the week is a placeholder for an unplayed / unavailable game. */
+  played?: boolean;
+  /** True when this week is the team's bye. */
+  isBye?: boolean;
+  /** Season year label used for CAREER concatenations. */
+  seasonYear?: string;
+  /** Weekly projected points by scoring format. */
+  proj?: { std: number | null; half: number | null; ppr: number | null } | null;
+  /** Weekly projected raw stats (Sleeper projection keys). */
+  projRaw?: Record<string, number>;
+};
+
+/** Year-by-year career rollup for the Game Logs footer table. */
+export type CareerSeasonRow = {
+  year: string;
+  team: string;
+  games: number;
+  pts: { std: number | null; half: number | null; ppr: number | null };
+  posRank: { std: number | null; half: number | null; ppr: number | null };
   raw: Record<string, number>;
 };
 
@@ -695,6 +923,16 @@ const LOG_KEYS = [
   "pass_int",
   "fum",
   "fum_lost",
+  "fgm",
+  "fga",
+  "fgmiss",
+  "xpm",
+  "sack",
+  "int",
+  "ff",
+  "fum_rec",
+  "def_st_td",
+  "pts_allow",
 ] as const;
 
 const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
@@ -741,43 +979,250 @@ async function weeklyRaw(
   return j && typeof j === "object" ? j : {};
 }
 
+type WeekProjectionBundle = {
+  std: number | null;
+  half: number | null;
+  ppr: number | null;
+  raw: Record<string, number>;
+};
+
+/** Weekly projected points + raw stats for one player across weeks 1–18. */
+const playerWeekProjections = memo<Map<number, WeekProjectionBundle>>(6 * HOUR, async (key) => {
+  const [id, season] = key.split("|") as [string, string];
+  const out = new Map<number, WeekProjectionBundle>();
+  await Promise.all(
+    Array.from({ length: 18 }, (_, i) => i + 1).map(async (week) => {
+      try {
+        const res = await fetch(
+          `${BASE}/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`,
+          { headers: { accept: "application/json" } },
+        );
+        if (!res.ok) return;
+        const rows = (await res.json().catch(() => null)) as
+          | { player_id?: string; stats?: Stats | null }[]
+          | null;
+        if (!Array.isArray(rows)) return;
+        const hit = rows.find((r) => String(r.player_id) === id);
+        const stats = hit?.stats;
+        if (!stats) return;
+        const std = stats["pts_std"];
+        const half = stats["pts_half_ppr"];
+        const ppr = stats["pts_ppr"];
+        const raw: Record<string, number> = {};
+        for (const k of LOG_KEYS) {
+          if (stats[k] != null && Number.isFinite(Number(stats[k]))) {
+            raw[k] = num(stats[k], 0);
+          }
+        }
+        out.set(week, {
+          std: std != null && Number.isFinite(Number(std)) ? Number(std) : null,
+          half: half != null && Number.isFinite(Number(half)) ? Number(half) : null,
+          ppr: ppr != null && Number.isFinite(Number(ppr)) ? Number(ppr) : null,
+          raw,
+        });
+      } catch {
+        /* ignore week miss */
+      }
+    }),
+  );
+  return out;
+});
+
+function sumRaw(logs: GameLog[], key: string): number | null {
+  let total = 0;
+  let any = false;
+  for (const log of logs) {
+    if (!log.played) continue;
+    const v = log.raw[key];
+    if (v == null || !Number.isFinite(v)) continue;
+    total += v;
+    any = true;
+  }
+  return any ? total : null;
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+async function buildSeasonLogsForPlayer(
+  id: string,
+  player: { team: string; pos: Pos },
+  season: string,
+): Promise<GameLog[]> {
+  const [raw, schedule, projByWeek, byeByTeam] = await Promise.all([
+    weeklyRaw(id, season),
+    scheduleFor(season).catch(() => [] as ScheduleGame[]),
+    playerWeekProjections(`${id}|${season}`).catch(() => new Map<number, WeekProjectionBundle>()),
+    byeWeeks(season).catch(() => new Map<string, number>()),
+  ]);
+  const byeWeek = byeByTeam.get(player.team.toUpperCase()) ?? null;
+  const byWeek = new Map<number, GameLog>();
+  for (const [wk, entry] of Object.entries(raw)) {
+    const stats = entry?.stats;
+    if (!stats) continue;
+    const week = Number(wk);
+    if (!Number.isFinite(week)) continue;
+    const game = schedule.find(
+      (g) => g.week === week && (g.home === player.team || g.away === player.team),
+    );
+    const opp = game ? (game.home === player.team ? `vs ${game.away}` : `@ ${game.home}`) : null;
+    const rawStats: Record<string, number> = {};
+    for (const k of LOG_KEYS) {
+      if (stats[k] != null && Number.isFinite(Number(stats[k]))) {
+        rawStats[k] = num(stats[k], 0);
+      }
+    }
+    const bundle = projByWeek.get(week) ?? null;
+    const proj = bundle
+      ? { std: bundle.std, half: bundle.half, ppr: bundle.ppr }
+      : null;
+    byWeek.set(week, {
+      week,
+      opp,
+      points: {
+        std: num(stats["pts_std"], 0),
+        half: num(stats["pts_half_ppr"], 0),
+        ppr: num(stats["pts_ppr"], 0),
+      },
+      line: statLine(player.pos, stats),
+      raw: rawStats,
+      played: true,
+      isBye: false,
+      seasonYear: season,
+      proj,
+      projRaw: bundle?.raw ?? {},
+    });
+  }
+
+  const logs: GameLog[] = [];
+  for (let week = 1; week <= 18; week++) {
+    const hit = byWeek.get(week);
+    if (hit) {
+      logs.push(hit);
+      continue;
+    }
+    const isBye = byeWeek != null && week === byeWeek;
+    const game = schedule.find(
+      (g) => g.week === week && (g.home === player.team || g.away === player.team),
+    );
+    const opp = isBye
+      ? "BYE"
+      : game
+        ? game.home === player.team
+          ? `vs ${game.away}`
+          : `@ ${game.home}`
+        : null;
+    const bundle = projByWeek.get(week) ?? null;
+    const proj = bundle
+      ? { std: bundle.std, half: bundle.half, ppr: bundle.ppr }
+      : null;
+    logs.push({
+      week,
+      opp,
+      points: { std: 0, half: 0, ppr: 0 },
+      line: [],
+      raw: {},
+      played: false,
+      isBye,
+      seasonYear: season,
+      proj,
+      projRaw: bundle?.raw ?? {},
+    });
+  }
+  return logs;
+}
+
+async function careerRowFromLogs(
+  id: string,
+  year: string,
+  team: string,
+  logs: GameLog[],
+): Promise<CareerSeasonRow | null> {
+  const played = logs.filter((l) => l.played);
+  if (!played.length) return null;
+
+  const raw: Record<string, number> = {};
+  for (const k of LOG_KEYS) {
+    const sum = sumRaw(played, k);
+    if (sum != null) raw[k] = sum;
+  }
+
+  const pts = { std: 0, half: 0, ppr: 0 };
+  let anyPts = false;
+  for (const log of played) {
+    if (Number.isFinite(log.points.std)) {
+      pts.std += log.points.std;
+      anyPts = true;
+    }
+    if (Number.isFinite(log.points.half)) {
+      pts.half += log.points.half;
+      anyPts = true;
+    }
+    if (Number.isFinite(log.points.ppr)) {
+      pts.ppr += log.points.ppr;
+      anyPts = true;
+    }
+  }
+
+  let posRank: CareerSeasonRow["posRank"] = { std: null, half: null, ppr: null };
+  try {
+    const seasonMap = await seasonStats(year);
+    const stats = seasonMap.get(id);
+    if (stats) {
+      posRank = {
+        std:
+          stats["pos_rank_std"] != null ? num(stats["pos_rank_std"], 0) : null,
+        half:
+          stats["pos_rank_half_ppr"] != null
+            ? num(stats["pos_rank_half_ppr"], 0)
+            : null,
+        ppr:
+          stats["pos_rank_ppr"] != null ? num(stats["pos_rank_ppr"], 0) : null,
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return {
+    year,
+    team: team || "FA",
+    games: played.length,
+    pts: {
+      std: anyPts ? round1(pts.std) : null,
+      half: anyPts ? round1(pts.half) : null,
+      ppr: anyPts ? round1(pts.ppr) : null,
+    },
+    posRank,
+    raw,
+  };
+}
+
 export async function loadGameLogs(
   id: string,
-): Promise<{ season: string; logs: GameLog[] } | null> {
+  seasonRequest?: string | null,
+): Promise<{ season: string; logs: GameLog[]; career: CareerSeasonRow[] } | null> {
   const built = await buildPlayers("v1");
   const player = built.all.find((p) => p.id === id);
   if (!player) return null;
 
-  const seasons = [built.payload.season, String(Number(built.payload.season) - 1)];
-  for (const season of seasons) {
-    const raw = await weeklyRaw(id, season);
-    const schedule = await scheduleFor(season).catch(() => []);
-    const logs: GameLog[] = [];
-    for (const [wk, entry] of Object.entries(raw)) {
-      const stats = entry?.stats;
-      if (!stats) continue;
-      const week = Number(wk);
-      if (!Number.isFinite(week)) continue;
-      const game = schedule.find(
-        (g) => g.week === week && (g.home === player.team || g.away === player.team),
-      );
-      const opp = game ? (game.home === player.team ? `vs ${game.away}` : `@ ${game.home}`) : null;
-      logs.push({
-        week,
-        opp,
-        points: {
-          std: num(stats["pts_std"], 0),
-          half: num(stats["pts_half_ppr"], 0),
-          ppr: num(stats["pts_ppr"], 0),
-        },
-        line: statLine(player.pos, stats),
-        raw: Object.fromEntries(LOG_KEYS.map((k) => [k, num(stats[k], 0)])),
-      });
-    }
-    if (logs.length) {
-      logs.sort((a, b) => a.week - b.week);
-      return { season, logs };
-    }
-  }
-  return { season: built.payload.season, logs: [] };
+  const current = built.payload.season;
+  const requested = (seasonRequest ?? "").trim().toLowerCase();
+  const season =
+    requested && /^\d{4}$/.test(requested) ? requested : current;
+
+  const careerYears = ["2026", "2025", "2024", "2023", "2022"];
+  const [logs, careerBundles] = await Promise.all([
+    buildSeasonLogsForPlayer(id, player, season),
+    Promise.all(
+      careerYears.map(async (year) => {
+        const seasonLogs = await buildSeasonLogsForPlayer(id, player, year);
+        return careerRowFromLogs(id, year, player.team, seasonLogs);
+      }),
+    ),
+  ]);
+
+  const career = careerBundles.filter((row): row is CareerSeasonRow => Boolean(row));
+  return { season, logs, career };
 }

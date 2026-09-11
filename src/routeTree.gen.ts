@@ -16,6 +16,7 @@ import { Route as HofRouteImport } from './routes/hof'
 import { Route as LeagueHqRouteImport } from './routes/league-hq'
 import { Route as LeaguesyncRouteImport } from './routes/leaguesync'
 import { Route as MockDraftRouteImport } from './routes/mock-draft'
+import { Route as PlaybookRouteImport } from './routes/playbook'
 import { Route as TheWireRouteImport } from './routes/the-wire'
 import { Route as TradeRouteImport } from './routes/trade'
 import { Route as TradeDeskRouteImport } from './routes/trade-desk'
@@ -27,6 +28,12 @@ import { Route as ArticlesSlugRouteImport } from './routes/articles.$slug'
 import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
 import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
+import { Route as PlaybookIndexRouteImport } from './routes/playbook.index'
+import { Route as PlaybookMatchupRouteImport } from './routes/playbook.matchup'
+import { Route as PlaybookMyTeamRouteImport } from './routes/playbook.my-team'
+import { Route as PlaybookRankingsRouteImport } from './routes/playbook.rankings'
+import { Route as PlaybookRostersRouteImport } from './routes/playbook.rosters'
+import { Route as PlaybookTransactionsRouteImport } from './routes/playbook.transactions'
 import { Route as PlayerIdRouteImport } from './routes/player.$id'
 import { Route as TeamTeamIdRouteImport } from './routes/team.$teamId'
 import { Route as AccountLeaguesIndexRouteImport } from './routes/account.leagues.index'
@@ -68,6 +75,11 @@ const LeaguesyncRoute = LeaguesyncRouteImport.update({
 const MockDraftRoute = MockDraftRouteImport.update({
   id: '/mock-draft',
   path: '/mock-draft',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlaybookRoute = PlaybookRouteImport.update({
+  id: '/playbook',
+  path: '/playbook',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TheWireRoute = TheWireRouteImport.update({
@@ -125,6 +137,36 @@ const NflTeamNflIdRoute = NflTeamNflIdRouteImport.update({
   path: '/nfl-team/$nflId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlaybookIndexRoute = PlaybookIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PlaybookRoute,
+} as any)
+const PlaybookMatchupRoute = PlaybookMatchupRouteImport.update({
+  id: '/matchup',
+  path: '/matchup',
+  getParentRoute: () => PlaybookRoute,
+} as any)
+const PlaybookMyTeamRoute = PlaybookMyTeamRouteImport.update({
+  id: '/my-team',
+  path: '/my-team',
+  getParentRoute: () => PlaybookRoute,
+} as any)
+const PlaybookRankingsRoute = PlaybookRankingsRouteImport.update({
+  id: '/rankings',
+  path: '/rankings',
+  getParentRoute: () => PlaybookRoute,
+} as any)
+const PlaybookRostersRoute = PlaybookRostersRouteImport.update({
+  id: '/rosters',
+  path: '/rosters',
+  getParentRoute: () => PlaybookRoute,
+} as any)
+const PlaybookTransactionsRoute = PlaybookTransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => PlaybookRoute,
+} as any)
 const PlayerIdRoute = PlayerIdRouteImport.update({
   id: '/player/$id',
   path: '/player/$id',
@@ -170,6 +212,7 @@ export interface FileRoutesByFullPath {
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
+  '/playbook': typeof PlaybookRouteWithChildren
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -180,9 +223,15 @@ export interface FileRoutesByFullPath {
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
+  '/playbook/matchup': typeof PlaybookMatchupRoute
+  '/playbook/my-team': typeof PlaybookMyTeamRoute
+  '/playbook/rankings': typeof PlaybookRankingsRoute
+  '/playbook/rosters': typeof PlaybookRostersRoute
+  '/playbook/transactions': typeof PlaybookTransactionsRoute
   '/player/$id': typeof PlayerIdRoute
   '/team/$teamId': typeof TeamTeamIdRoute
   '/account/': typeof AccountIndexRoute
+  '/playbook/': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
   '/account/leagues/': typeof AccountLeaguesIndexRoute
@@ -207,9 +256,15 @@ export interface FileRoutesByTo {
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
+  '/playbook/matchup': typeof PlaybookMatchupRoute
+  '/playbook/my-team': typeof PlaybookMyTeamRoute
+  '/playbook/rankings': typeof PlaybookRankingsRoute
+  '/playbook/rosters': typeof PlaybookRostersRoute
+  '/playbook/transactions': typeof PlaybookTransactionsRoute
   '/player/$id': typeof PlayerIdRoute
   '/team/$teamId': typeof TeamTeamIdRoute
   '/account': typeof AccountIndexRoute
+  '/playbook': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
   '/account/leagues': typeof AccountLeaguesIndexRoute
@@ -225,6 +280,7 @@ export interface FileRoutesById {
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
+  '/playbook': typeof PlaybookRouteWithChildren
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -235,9 +291,15 @@ export interface FileRoutesById {
   '/auth_/confirmed': typeof AuthConfirmedRoute
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
+  '/playbook/matchup': typeof PlaybookMatchupRoute
+  '/playbook/my-team': typeof PlaybookMyTeamRoute
+  '/playbook/rankings': typeof PlaybookRankingsRoute
+  '/playbook/rosters': typeof PlaybookRostersRoute
+  '/playbook/transactions': typeof PlaybookTransactionsRoute
   '/player/$id': typeof PlayerIdRoute
   '/team/$teamId': typeof TeamTeamIdRoute
   '/account/': typeof AccountIndexRoute
+  '/playbook/': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
   '/account/leagues/': typeof AccountLeaguesIndexRoute
@@ -254,6 +316,7 @@ export interface FileRouteTypes {
     | '/league-hq'
     | '/leaguesync'
     | '/mock-draft'
+    | '/playbook'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
@@ -264,9 +327,15 @@ export interface FileRouteTypes {
     | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
+    | '/playbook/matchup'
+    | '/playbook/my-team'
+    | '/playbook/rankings'
+    | '/playbook/rosters'
+    | '/playbook/transactions'
     | '/player/$id'
     | '/team/$teamId'
     | '/account/'
+    | '/playbook/'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
     | '/account/leagues/'
@@ -291,9 +360,15 @@ export interface FileRouteTypes {
     | '/auth/confirmed'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
+    | '/playbook/matchup'
+    | '/playbook/my-team'
+    | '/playbook/rankings'
+    | '/playbook/rosters'
+    | '/playbook/transactions'
     | '/player/$id'
     | '/team/$teamId'
     | '/account'
+    | '/playbook'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
     | '/account/leagues'
@@ -308,6 +383,7 @@ export interface FileRouteTypes {
     | '/league-hq'
     | '/leaguesync'
     | '/mock-draft'
+    | '/playbook'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
@@ -318,9 +394,15 @@ export interface FileRouteTypes {
     | '/auth_/confirmed'
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
+    | '/playbook/matchup'
+    | '/playbook/my-team'
+    | '/playbook/rankings'
+    | '/playbook/rosters'
+    | '/playbook/transactions'
     | '/player/$id'
     | '/team/$teamId'
     | '/account/'
+    | '/playbook/'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
     | '/account/leagues/'
@@ -336,6 +418,7 @@ export interface RootRouteChildren {
   LeagueHqRoute: typeof LeagueHqRoute
   LeaguesyncRoute: typeof LeaguesyncRoute
   MockDraftRoute: typeof MockDraftRoute
+  PlaybookRoute: typeof PlaybookRouteWithChildren
   TheWireRoute: typeof TheWireRoute
   TradeRoute: typeof TradeRoute
   TradeDeskRoute: typeof TradeDeskRoute
@@ -405,6 +488,13 @@ declare module '@tanstack/react-router' {
       path: '/mock-draft'
       fullPath: '/mock-draft'
       preLoaderRoute: typeof MockDraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/playbook': {
+      id: '/playbook'
+      path: '/playbook'
+      fullPath: '/playbook'
+      preLoaderRoute: typeof PlaybookRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/the-wire': {
@@ -484,6 +574,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NflTeamNflIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/playbook/': {
+      id: '/playbook/'
+      path: '/'
+      fullPath: '/playbook/'
+      preLoaderRoute: typeof PlaybookIndexRouteImport
+      parentRoute: typeof PlaybookRoute
+    }
+    '/playbook/matchup': {
+      id: '/playbook/matchup'
+      path: '/matchup'
+      fullPath: '/playbook/matchup'
+      preLoaderRoute: typeof PlaybookMatchupRouteImport
+      parentRoute: typeof PlaybookRoute
+    }
+    '/playbook/my-team': {
+      id: '/playbook/my-team'
+      path: '/my-team'
+      fullPath: '/playbook/my-team'
+      preLoaderRoute: typeof PlaybookMyTeamRouteImport
+      parentRoute: typeof PlaybookRoute
+    }
+    '/playbook/rankings': {
+      id: '/playbook/rankings'
+      path: '/rankings'
+      fullPath: '/playbook/rankings'
+      preLoaderRoute: typeof PlaybookRankingsRouteImport
+      parentRoute: typeof PlaybookRoute
+    }
+    '/playbook/rosters': {
+      id: '/playbook/rosters'
+      path: '/rosters'
+      fullPath: '/playbook/rosters'
+      preLoaderRoute: typeof PlaybookRostersRouteImport
+      parentRoute: typeof PlaybookRoute
+    }
+    '/playbook/transactions': {
+      id: '/playbook/transactions'
+      path: '/transactions'
+      fullPath: '/playbook/transactions'
+      preLoaderRoute: typeof PlaybookTransactionsRouteImport
+      parentRoute: typeof PlaybookRoute
+    }
     '/player/$id': {
       id: '/player/$id'
       path: '/player/$id'
@@ -536,6 +668,28 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface PlaybookRouteChildren {
+  PlaybookMatchupRoute: typeof PlaybookMatchupRoute
+  PlaybookMyTeamRoute: typeof PlaybookMyTeamRoute
+  PlaybookRankingsRoute: typeof PlaybookRankingsRoute
+  PlaybookRostersRoute: typeof PlaybookRostersRoute
+  PlaybookTransactionsRoute: typeof PlaybookTransactionsRoute
+  PlaybookIndexRoute: typeof PlaybookIndexRoute
+}
+
+const PlaybookRouteChildren: PlaybookRouteChildren = {
+  PlaybookMatchupRoute: PlaybookMatchupRoute,
+  PlaybookMyTeamRoute: PlaybookMyTeamRoute,
+  PlaybookRankingsRoute: PlaybookRankingsRoute,
+  PlaybookRostersRoute: PlaybookRostersRoute,
+  PlaybookTransactionsRoute: PlaybookTransactionsRoute,
+  PlaybookIndexRoute: PlaybookIndexRoute,
+}
+
+const PlaybookRouteWithChildren = PlaybookRoute._addFileChildren(
+  PlaybookRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
@@ -544,6 +698,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeagueHqRoute: LeagueHqRoute,
   LeaguesyncRoute: LeaguesyncRoute,
   MockDraftRoute: MockDraftRoute,
+  PlaybookRoute: PlaybookRouteWithChildren,
   TheWireRoute: TheWireRoute,
   TradeRoute: TradeRoute,
   TradeDeskRoute: TradeDeskRoute,

@@ -21,9 +21,13 @@ async function fetchState(): Promise<WeekState> {
   };
 }
 
-/** Raw Sleeper projected stat lines for the current week, keyed by player id. */
-async function fetchWeeklyProjections(): Promise<Map<string, Record<string, number>>> {
-  const { season, week } = await fetchState();
+/** Raw Sleeper projected stat lines for a given week, keyed by player id. */
+async function fetchWeeklyProjections(
+  weekOverride?: number | null,
+): Promise<Map<string, Record<string, number>>> {
+  const { season, week: stateWeek } = await fetchState();
+  const week =
+    weekOverride != null && weekOverride > 0 ? Math.max(1, Math.floor(weekOverride)) : stateWeek;
   const url = `${SLEEPER_BASE}/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`;
   const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
   const rows = res && res.ok ? ((await res.json()) as unknown) : null;
@@ -40,11 +44,14 @@ async function fetchWeeklyProjections(): Promise<Map<string, Record<string, numb
  * Weekly projections rendered in the host league's own scoring system:
  * Sleeper's raw projected stat line multiplied by the active league's
  * customized scoring rule map (Sleeper / ESPN / Yahoo).
+ *
+ * Pass `week` to lock projections to a selected NFL week (My Team week picker).
  */
-export function useLeagueProjections() {
+export function useLeagueProjections(week?: number | null) {
   const { activeLeague } = useActiveLeague();
   const identifier = activeLeague?.leagueId ?? "";
   const platform = activeLeague?.platform ?? "sleeper";
+  const safeWeek = week != null && week > 0 ? week : null;
 
   const scoring = useQuery({
     queryKey: ["league-scoring", platform, identifier],
@@ -63,10 +70,10 @@ export function useLeagueProjections() {
   });
 
   const projections = useQuery({
-    queryKey: ["sleeper-weekly-projections"],
+    queryKey: ["sleeper-weekly-projections", safeWeek ?? "auto"],
     staleTime: 6 * HOUR,
     retry: false,
-    queryFn: fetchWeeklyProjections,
+    queryFn: () => fetchWeeklyProjections(safeWeek),
   });
 
   const map: ScoringMap = useMemo(
@@ -83,8 +90,18 @@ export function useLeagueProjections() {
     [projections.data, map],
   );
 
+  /** Raw Sleeper projected stat line for a player id (pass_yd, rush_att, …). */
+  const statsFor = useCallback(
+    (playerId: string): Record<string, number> | null => {
+      const stats = projections.data?.get(playerId);
+      return stats ?? null;
+    },
+    [projections.data],
+  );
+
   return {
     projectFor,
+    statsFor,
     loading: projections.isLoading || scoring.isLoading,
     format: scoring.data?.format ?? "half",
   };

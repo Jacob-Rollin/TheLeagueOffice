@@ -14,6 +14,9 @@ export type Player = {
   pos: Pos;
   age: number | null;
   exp: number | null;
+  /** Sleeper high-level injury token (`injury_status`), e.g. Out / Questionable / IR. */
+  injury_status: string | null;
+  /** Alias of `injury_status` kept for PlayerDetail / legacy readers. */
   injury: string | null;
   /** Bye week for the player's team this season (null when unknown). */
   bye: number | null;
@@ -167,6 +170,7 @@ export function buildPlayersFromRows(input: {
 
     const prev = prevStats.get(row.player_id);
     rawProj.set(row.player_id, s);
+    const injuryStatus = p.injury_status ?? null;
     players.push({
       id: row.player_id,
       name,
@@ -174,7 +178,8 @@ export function buildPlayersFromRows(input: {
       pos,
       age: p.age ?? null,
       exp: p.years_exp ?? null,
-      injury: p.injury_status ?? null,
+      injury_status: injuryStatus,
+      injury: injuryStatus,
       bye: byeByTeam.get(row.team ?? p.team ?? "") ?? null,
       adp: { std, half, ppr },
       adpRange: adpSpread([
