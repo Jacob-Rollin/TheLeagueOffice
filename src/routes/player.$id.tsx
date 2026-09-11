@@ -1,11 +1,14 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
 
+import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { PlayerDetail } from "@/components/draft/PlayerDetail";
 import { usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
-import { NFL_TEAMS } from "@/lib/nfl-teams";
-import { getNextGame, getPlayerDetail } from "@/lib/players.functions";
+import type { Pos } from "@/lib/draft";
+import { getTeamPrimaryColor, NFL_TEAMS, teamById } from "@/lib/nfl-teams";
+import { getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
 import {
   matchupGrade,
   matchupTone,
@@ -16,6 +19,29 @@ import {
 } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
+const DETAIL_TABS = [
+  { key: "logs", label: "Game Logs" },
+  { key: "projections", label: "Projections" },
+  { key: "sos", label: "SOS" },
+  { key: "outlook", label: "Outlook" },
+  { key: "depth", label: "Depth Chart" },
+  { key: "news", label: "News" },
+] as const;
+
+type DetailTabKey = (typeof DETAIL_TABS)[number]["key"];
+
+/** Drive the hidden PlayerDetail tab buttons without editing that component. */
+function clickPlayerDetailTab(root: HTMLElement | null, label: string) {
+  if (!root) return;
+  const buttons = root.querySelectorAll("header button");
+  for (const btn of buttons) {
+    if (btn.textContent?.trim() === label) {
+      (btn as HTMLButtonElement).click();
+      return;
+    }
+  }
+}
+
 /* ---------- queries (page-local, not shared with the draft popup) ---------- */
 
 const profileQuery = (id: string) =>
@@ -23,6 +49,13 @@ const profileQuery = (id: string) =>
     queryKey: ["player", id],
     queryFn: () => getPlayerDetail({ data: { id } }),
     staleTime: 1000 * 60 * 30,
+  });
+
+const bioQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["player-bio", id],
+    queryFn: () => getPlayerBio({ data: { id } }),
+    staleTime: 1000 * 60 * 60 * 12,
   });
 
 const nextGameQuery = (team: string) =>
@@ -35,6 +68,85 @@ const nextGameQuery = (team: string) =>
 const TEAM_NAME: Record<string, string> = Object.fromEntries(
   NFL_TEAMS.map((t) => [t.id, t.name]),
 );
+
+const POS_STRIP_BG: Record<string, string> = {
+  QB: "bg-qb",
+  RB: "bg-rb",
+  WR: "bg-wr",
+  TE: "bg-te",
+  K: "bg-k",
+  DEF: "bg-def",
+};
+
+function getWatermarkLogoUrl(teamCode: string | null | undefined): string | null {
+  const formattedTeam = teamCode?.toUpperCase()?.trim() ?? "";
+  if (formattedTeam === "LV" || formattedTeam === "OAK") {
+    return "https://a.espncdn.com/i/teamlogos/nfl/500-dark/lv.png";
+  }
+  return teamLogo(teamCode);
+}
+
+function getFullInjuryBadgeDetails(status?: string | null) {
+  const cleanStatus = status?.toUpperCase()?.trim();
+  if (
+    !cleanStatus ||
+    cleanStatus === "NONE" ||
+    cleanStatus === "HEALTHY" ||
+    cleanStatus === "ACTIVE"
+  ) {
+    return null;
+  }
+  if (cleanStatus === "Q" || cleanStatus === "QUESTIONABLE") {
+    return {
+      text: "Questionable",
+      classes:
+        "bg-amber-500 text-slate-950 border-none font-black text-[10px] shadow-sm shadow-amber-500/10",
+    };
+  }
+  if (cleanStatus === "O" || cleanStatus === "OUT") {
+    return {
+      text: "Out",
+      classes:
+        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
+    };
+  }
+  if (cleanStatus === "D" || cleanStatus === "DOUBTFUL") {
+    return {
+      text: "Doubtful",
+      classes:
+        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
+    };
+  }
+  if (
+    cleanStatus === "IR" ||
+    cleanStatus === "INJURED_RESERVE" ||
+    cleanStatus === "INJURED RESERVE"
+  ) {
+    return {
+      text: "Injured Reserve",
+      classes:
+        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
+    };
+  }
+  if (
+    cleanStatus === "NA" ||
+    cleanStatus === "NOT_ACTIVE" ||
+    cleanStatus === "NOT ACTIVE" ||
+    cleanStatus === "EXEMPT" ||
+    cleanStatus === "INACTIVE"
+  ) {
+    return {
+      text: "Not Active",
+      classes:
+        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
+    };
+  }
+  return null;
+}
+
+function HeaderVitalsDivider() {
+  return <span className="mx-3 text-white/20">|</span>;
+}
 
 export const Route = createFileRoute("/player/$id")({
   head: () => ({
@@ -74,12 +186,29 @@ function riskTier(score: number): { label: string; text: string; fill: string } 
 function PlayerHubPage() {
   const { id } = Route.useParams();
   const { data, isLoading } = useQuery(profileQuery(id));
+  const { data: bio } = useQuery(bioQuery(id));
   const brain = usePlayerBrain();
   const playerSos = usePlayerSos(
     (data ? brain?.[data.player.id] : null) ?? null,
     data?.player.team ?? null,
   );
   const sosPeers = useSosPeerMatrix(data?.player.pos ?? null, brain);
+  const [activeTab, setActiveTab] = useState<DetailTabKey>("logs");
+  const detailHostRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setActiveTab("logs");
+  }, [id]);
+
+  useEffect(() => {
+    const label = DETAIL_TABS.find((t) => t.key === activeTab)?.label;
+    if (!label) return;
+    // Allow PlayerDetail to mount before bridging the visible page tabs.
+    const timer = window.setTimeout(() => {
+      clickPlayerDetailTab(detailHostRef.current, label);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, id, data?.player.id]);
 
   if (isLoading)
     return <p className="py-24 text-center text-sm text-zinc-500">Loading player hub…</p>;
@@ -96,9 +225,35 @@ function PlayerHubPage() {
     <main className="w-full min-h-screen bg-slate-50 text-slate-900 overflow-y-auto">
       <div className="mx-auto mt-0 w-full max-w-7xl overflow-visible px-4 pt-0 lg:px-6">
         <div className="grid w-full grid-cols-1 items-start gap-8 overflow-visible pt-0 lg:grid-cols-[1fr_360px] lg:pt-6">
-          {/* Left column — mirrors the premium player popup canvas */}
+          {/* Left column — isolated page header + docked subtabs + shared body */}
           <div className="relative z-10 flex w-full flex-col items-stretch overflow-visible border-0 bg-transparent p-0 shadow-none">
-            <PlayerDetail id={id} showFullProfileLink={false} />
+            <StandalonePlayerHeader player={player} bio={bio ?? null} />
+            <div className="flex w-full select-none items-center space-x-5 overflow-x-auto whitespace-nowrap border-x border-b border-slate-100 bg-white px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {DETAIL_TABS.map(({ key, label }) => {
+                const active = activeTab === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveTab(key)}
+                    className={cn(
+                      "shrink-0 text-xs font-black uppercase tracking-wider transition-colors",
+                      active
+                        ? "-mb-[1px] border-b-2 border-blue-600 pb-2.5 pt-3 text-slate-900"
+                        : "pb-2.5 pt-3 text-slate-400 hover:text-slate-600",
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div
+              ref={detailHostRef}
+              className="w-full overflow-visible bg-white [&>div>header]:hidden"
+            >
+              <PlayerDetail id={id} showFullProfileLink={false} />
+            </div>
           </div>
 
           {/* ---- sidebar widgets (unchanged) ---- */}
@@ -250,6 +405,195 @@ function PlayerHubPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+/** Page-only identity banner — isolated from the popup PlayerDetail header. */
+function StandalonePlayerHeader({
+  player,
+  bio,
+}: {
+  player: {
+    id: string;
+    name: string;
+    team: string;
+    pos: string;
+    age?: number | null;
+    exp?: number | null;
+    injury?: string | null;
+    injury_status?: string | null;
+    injuryStatus?: string | null;
+    posRank?: number;
+    rank?: number | { half?: number; std?: number; ppr?: number } | null;
+    [key: string]: unknown;
+  };
+  bio: { number?: number | null; height?: string | null; weight?: string | null; college?: string | null; birthDate?: string | null } | null;
+}) {
+  const teamMeta = teamById(player.team);
+  const teamNickname = (teamMeta?.name ?? player.team ?? "FA").toUpperCase();
+  const jerseyNumber = bio?.number != null ? String(bio.number) : null;
+  const isDefense = player.pos === "DEF";
+  const conference = teamMeta?.conference ?? "NFC";
+  const division = teamMeta?.division ?? "NORTH";
+  const watermarkLogo = getWatermarkLogoUrl(player.team);
+  const raidersWatermark =
+    player.team?.toUpperCase() === "LV" || player.team?.toUpperCase() === "OAK";
+
+  const birthDate =
+    (player as { birth_date?: string | null }).birth_date ?? bio?.birthDate ?? null;
+  const displayAge =
+    player.age ||
+    (birthDate
+      ? Math.floor((Date.now() - new Date(birthDate).getTime()) / 31557600000)
+      : "—");
+  const height = bio?.height?.trim() || "—";
+  const weight = bio?.weight?.trim() || "—";
+  const college = bio?.college?.trim() || "—";
+  const expYears =
+    player.exp != null
+      ? player.exp
+      : (player as { years_exp?: number | null }).years_exp != null
+        ? (player as { years_exp?: number | null }).years_exp
+        : "—";
+
+  const injuryStatusRaw =
+    player.injury_status ||
+    player.injuryStatus ||
+    player.injury ||
+    (player as { status?: string | null }).status ||
+    null;
+  const injuryDetails = getFullInjuryBadgeDetails(
+    typeof injuryStatusRaw === "string" ? injuryStatusRaw : null,
+  );
+
+  const rosteredPct =
+    (player as { rostered_pct?: number | null }).rostered_pct ??
+    (player as { rostered?: number | null }).rostered ??
+    (player as { percent_owned?: number | null }).percent_owned ??
+    83;
+  const startedPct =
+    (player as { started_pct?: number | null }).started_pct ??
+    (player as { started?: number | null }).started ??
+    39;
+  const positionRank =
+    (player as { position_rank?: number | null }).position_rank ??
+    (player as { pos_rank?: number | null }).pos_rank ??
+    player.posRank ??
+    999;
+  const overallRaw =
+    (player as { overall_rank?: number | null }).overall_rank ??
+    (typeof player.rank === "number" ? player.rank : null) ??
+    (typeof player.rank === "object" && player.rank ? player.rank.half ?? 999 : 999);
+  const posRankLabel = Number(positionRank) < 900 ? positionRank : "—";
+  const overallRankLabel = Number(overallRaw) < 900 ? overallRaw : "—";
+
+  return (
+    <div
+      className="relative flex h-[160px] min-h-[160px] w-full items-stretch overflow-hidden rounded-t-xl rounded-b-none border-x border-t border-slate-100 bg-slate-900 text-white shadow-sm"
+      style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
+    >
+      {watermarkLogo ? (
+        <img
+          src={watermarkLogo}
+          alt=""
+          aria-hidden="true"
+          className={
+            raidersWatermark
+              ? "pointer-events-none absolute right-2 top-1/2 z-0 h-40 w-40 -translate-y-1/2 select-none object-contain opacity-[0.08] mix-blend-screen"
+              : "pointer-events-none absolute right-2 top-1/2 z-0 h-40 w-40 -translate-y-1/2 select-none object-contain opacity-[0.14] mix-blend-overlay"
+          }
+        />
+      ) : null}
+
+      <div
+        className="relative z-20 mb-0 ml-0 mt-0 flex h-[160px] w-[140px] flex-shrink-0 items-end overflow-visible bg-transparent pl-0 select-none"
+        style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
+      >
+        <div
+          className="absolute inset-0 overflow-hidden bg-transparent"
+          style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
+        >
+          <img
+            src={playerImage(player.id, player.pos as Pos, player.team)}
+            alt=""
+            loading="lazy"
+            className="pointer-events-none relative z-20 h-full w-full select-none object-cover object-[55%_center] transition-all"
+            onError={(e) => {
+              e.currentTarget.style.visibility = "hidden";
+            }}
+          />
+        </div>
+        <div className="absolute bottom-0 left-0 z-30 flex min-w-full w-max max-w-[200px] flex-row items-center whitespace-nowrap rounded-tr-md rounded-br-none bg-transparent pl-0">
+          <span
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-none px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
+              POS_STRIP_BG[player.pos] ?? "bg-slate-700",
+            )}
+          >
+            {player.pos}
+          </span>
+          <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
+            <span>{teamNickname}</span>
+            {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
+          </span>
+        </div>
+      </div>
+
+      <div className="z-20 mt-0.5 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pl-6 pr-10 text-left">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-visible">
+          <h1 className="truncate text-3xl font-black tracking-tight text-white">{player.name}</h1>
+          {injuryDetails ? (
+            <span
+              className={cn(
+                "ml-2 inline-flex select-none items-center justify-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest shadow-sm",
+                injuryDetails.classes,
+              )}
+            >
+              {injuryDetails.text}
+            </span>
+          ) : null}
+        </div>
+
+        {isDefense ? (
+          <div className="mt-2 text-sm font-black uppercase tracking-wider text-white/70">
+            CONFERENCE <span className="font-black text-white">{conference}</span>
+            <span className="mx-3 text-white/20">|</span>
+            DIVISION <span className="font-black text-white">{division}</span>
+          </div>
+        ) : (
+          <div className="mt-2 flex flex-wrap items-center text-sm font-black uppercase tracking-wider text-white/70">
+            <span>AGE {displayAge}</span>
+            <HeaderVitalsDivider />
+            <span>HEIGHT {height}</span>
+            <HeaderVitalsDivider />
+            <span>WEIGHT {weight}</span>
+            <HeaderVitalsDivider />
+            <span>EXP {expYears}</span>
+            <HeaderVitalsDivider />
+            <span>
+              COLLEGE <span className="font-black text-white">{college}</span>
+            </span>
+          </div>
+        )}
+
+        <div className="mt-2 w-full min-w-0">
+          <span className="mb-1 block text-left text-[10px] font-black uppercase tracking-widest text-white/50">
+            Player Rankings
+          </span>
+          <div className="flex flex-wrap items-center text-xs font-black uppercase tracking-wide text-white">
+            <span>
+              #{posRankLabel} {player.pos}
+            </span>
+            <HeaderVitalsDivider />
+            <span>#{overallRankLabel} OVERALL</span>
+            <HeaderVitalsDivider />
+            <span>{Math.round(Number(rosteredPct) || 83)}% ROSTERED</span>
+            <HeaderVitalsDivider />
+            <span>{Math.round(Number(startedPct) || 39)}% STARTED</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
