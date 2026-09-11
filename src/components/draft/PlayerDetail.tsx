@@ -1264,6 +1264,12 @@ function SosHeatmapPanel({
     brainSos,
   );
   const percentileLabel = compactPercentileLabel(percentileRaw);
+  const percentileTone: "challenging" | "favorable" | "baseline" =
+    percentileRaw?.toLowerCase().includes("challenging")
+      ? "challenging"
+      : percentileRaw?.toLowerCase().includes("favorable")
+        ? "favorable"
+        : "baseline";
   const playoffLabel = playoffWindow(brainSos);
 
   const rows = useMemo(() => {
@@ -1355,11 +1361,24 @@ function SosHeatmapPanel({
             </span>
           </div>
           <div className="flex flex-col items-center justify-center p-3 text-center sm:p-2">
-            <span className="text-xl font-black uppercase tracking-tight text-slate-900">
+            <span
+              className={cn(
+                "text-xl font-black uppercase tracking-tight transition-colors",
+                percentileTone === "challenging"
+                  ? "text-rose-600"
+                  : percentileTone === "favorable"
+                    ? "text-emerald-600"
+                    : "text-slate-900",
+              )}
+            >
               {percentileLabel}
             </span>
-            <span className="mt-1.5 max-w-[160px] text-[9px] font-bold uppercase leading-tight tracking-widest text-slate-400">
-              Position Percentile Rank
+            <span className="mt-1 max-w-[180px] text-[10px] font-black uppercase leading-tight tracking-widest text-slate-400">
+              {percentileTone === "challenging"
+                ? "Most Challenging Schedule"
+                : percentileTone === "favorable"
+                  ? "Most Favorable Schedule"
+                  : "Near Baseline Average"}
             </span>
           </div>
           <div className="flex flex-col items-center justify-center p-3 text-center sm:p-2">
