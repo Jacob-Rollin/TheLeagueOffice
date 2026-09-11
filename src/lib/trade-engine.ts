@@ -1091,6 +1091,119 @@ export function injuryRisk(
 }
 
 /* ------------------------------------------------------------------ *
+ * Start/Sit advice: bench upgrades vs live starter slots.
+ * ------------------------------------------------------------------ */
+
+export type StartSitCandidate = {
+  id: string;
+  pos: string;
+  /** Optional synced lineup slot (`BN`, `IR`, or an active starter label). */
+  lineup_slot?: string | null;
+};
+
+export type StartSitAdvicePair<T extends StartSitCandidate = StartSitCandidate> = {
+  id: string;
+  start: T;
+  sit: T;
+  startPts: number;
+  sitPts: number;
+  /** Projection edge of the recommended swap (0 when suppressed). */
+  netGain: number;
+};
+
+function isBenchLineupSlot(slot: string | null | undefined): boolean {
+  if (slot == null || slot === "") return false;
+  const normalized = String(slot).trim().toUpperCase();
+  return normalized === "BN" || normalized === "BENCH";
+}
+
+function isActiveStarterSlot(
+  player: StartSitCandidate,
+  starterIds: Set<string>,
+): boolean {
+  if (starterIds.has(player.id)) return true;
+  const slot = player.lineup_slot;
+  if (slot == null || slot === "") return false;
+  const normalized = String(slot).trim().toUpperCase();
+  return normalized !== "BN" && normalized !== "BENCH" && normalized !== "IR";
+}
+
+/**
+ * Build Start/Sit upgrade pairs from the user's live starter + bench slots.
+ *
+ * Suppresses any pair that is already reflected in the synced lineup
+ * (recommended starter already starting AND recommended sit already benched),
+ * so a fully optimized roster returns an empty array.
+ */
+export function buildStartSitAdvice<T extends StartSitCandidate>(input: {
+  starters: (T | null | undefined)[];
+  bench: T[];
+  weeklyFor: (id: string) => number;
+  /** Minimum projection edge required to recommend a swap. */
+  minEdge?: number;
+  limit?: number;
+}): StartSitAdvicePair<T>[] {
+  const minEdge = input.minEdge ?? 0.8;
+  const limit = input.limit ?? 4;
+
+  const starters = input.starters.filter((p): p is T => Boolean(p?.id));
+  const starterIds = new Set(starters.map((p) => p.id));
+  // Bench candidates must not also occupy a starter slot (dedupe sync bleed).
+  const bench = input.bench.filter((p) => Boolean(p?.id) && !starterIds.has(p.id));
+  const benchIds = new Set(bench.map((p) => p.id));
+
+  const weekly = (p: T): number => {
+    const w = input.weeklyFor(p.id);
+    return Number.isFinite(w) ? Number(w) : 0;
+  };
+
+  const alerts: StartSitAdvicePair<T>[] = [];
+
+  for (const benchPlayer of bench) {
+    const benchPts = weekly(benchPlayer);
+    const samePosStarters = starters.filter((s) => s.pos === benchPlayer.pos);
+    const pool = samePosStarters.length > 0 ? samePosStarters : starters;
+    const weakest = [...pool]
+      .map((s) => ({ player: s, pts: weekly(s) }))
+      .sort((a, b) => a.pts - b.pts)[0];
+
+    if (!weakest || !(benchPts > weakest.pts + minEdge)) continue;
+
+    const start = benchPlayer;
+    const sit = weakest.player;
+
+    const startAlreadyStarting = isActiveStarterSlot(start, starterIds);
+    const sitAlreadyBenched =
+      (benchIds.has(sit.id) && !starterIds.has(sit.id)) ||
+      isBenchLineupSlot(sit.lineup_slot);
+
+    // Already-applied / duplicate recommendation — net gain is 0; discard.
+    if (startAlreadyStarting && sitAlreadyBenched) {
+      continue;
+    }
+
+    // Genuine upgrade only: start must currently sit, sit must currently start.
+    if (startAlreadyStarting || sitAlreadyBenched) {
+      continue;
+    }
+    if (!benchIds.has(start.id) || !starterIds.has(sit.id)) {
+      continue;
+    }
+
+    alerts.push({
+      id: `${start.id}-${sit.id}`,
+      start,
+      sit,
+      startPts: benchPts,
+      sitPts: weakest.pts,
+      netGain: benchPts - weakest.pts,
+    });
+  }
+
+  return alerts.sort((a, b) => b.netGain - a.netGain).slice(0, limit);
+}
+
+/* ------------------------------------------------------------------ *
  * Market Radar: net-value waiver adds with positional capacity guards.
  * ------------------------------------------------------------------ */
 

@@ -1,4 +1,3 @@
-import { X } from "lucide-react";
 import { useEffect } from "react";
 
 import { PlayerDetail } from "./PlayerDetail";
@@ -60,15 +59,28 @@ export function PlayerModal({
         onClick={(e) => e.stopPropagation()}
       >
         <button
-          aria-label="Close player"
+          type="button"
+          aria-label="Close player overlay"
           onClick={onClose}
-          className="absolute right-2 top-2 z-40 rounded-md border border-border bg-card p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+          className="absolute top-4 right-4 z-50 flex h-8 w-8 cursor-pointer select-none items-center justify-center rounded-lg border border-slate-200/80 bg-white text-slate-700 shadow-sm pointer-events-auto transition-all duration-200 hover:bg-slate-50 hover:text-slate-900 focus:outline-none group"
         >
-          <X className="size-4" />
+          <svg
+            className="h-3.5 w-3.5 text-slate-500 transition-colors group-hover:text-slate-800"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
         </button>
         <PlayerDetail
           id={id}
           onSelectPlayer={onSelectPlayer}
+          onClose={onClose}
           showDraftActions={showDraftActions}
         />
       </div>

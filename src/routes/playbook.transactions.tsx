@@ -7,6 +7,7 @@ import {
 } from "@/components/dashboard/ActivityFeed";
 import { playbookCardClass } from "@/components/playbook/panels";
 import { useLeagueActivity } from "@/hooks/useLeagueActivity";
+import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { LeagueActivityEvent } from "@/lib/league.functions";
 
 export const Route = createFileRoute("/playbook/transactions")({
@@ -90,6 +91,8 @@ function normalizeTransactionEvent(event: LeagueActivityEvent): LeagueActivityEv
 
 function PlaybookTransactionsPage() {
   const { events, loading, error } = useLeagueActivity();
+  const { data: playersPayload } = useSleeperPlayers();
+  const players = playersPayload?.players ?? [];
   const normalized = events.map(normalizeTransactionEvent);
 
   return (
@@ -103,7 +106,12 @@ function PlaybookTransactionsPage() {
         </p>
       </div>
 
-      <ActivityFeed events={normalized} loading={loading} error={error} />
+      <ActivityFeed
+        events={normalized}
+        players={players}
+        loading={loading}
+        error={error}
+      />
     </section>
   );
 }

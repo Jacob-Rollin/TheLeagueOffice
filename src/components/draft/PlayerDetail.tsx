@@ -5,13 +5,12 @@ import { ChevronDown, ChevronUp, Cloud, CloudRain, CloudSnow, Star, Sun } from "
 import { useEffect, useMemo, useRef, useState } from "react";
 import { playerImage, teamLogo } from "./PlayerAvatar";
 import { PositionBadge } from "./PositionBadge";
-import { Button } from "@/components/ui/button";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useDraft } from "@/hooks/use-draft";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
-import { usePlayerSos } from "@/hooks/usePlayerSos";
+import { usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Scoring } from "@/lib/draft";
@@ -25,22 +24,115 @@ import {
   getPlayerNews,
 } from "@/lib/players.functions";
 import type { CareerSeasonRow, GameLog } from "@/lib/players.server";
+import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
 import { formatNflGameStatusLabel, formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { getLeagueScoring } from "@/lib/scoring.functions";
-import type { PlayerSos } from "@/lib/sos-presentation";
-import { sosStarsFromRank } from "@/lib/sos-presentation";
+import {
+  matchupGrade,
+  playoffWindow,
+  positionPercentile,
+  sosStarsFromRank,
+  type PlayerSos,
+  type SosGrade,
+} from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
-/** Compact Sleeper-style injury letter for the branded header / depth rows. */
+/**
+ * Header watermark logo — Raiders use ESPN's dark-canvas (light line-art)
+ * asset so shield detail stays visible on black primary fills. No CSS invert.
+ */
+function getWatermarkLogoUrl(teamCode: string | null | undefined): string | null {
+  const formattedTeam = teamCode?.toUpperCase()?.trim() ?? "";
+  if (formattedTeam === "LV" || formattedTeam === "OAK") {
+    return "https://a.espncdn.com/i/teamlogos/nfl/500-dark/lv.png";
+  }
+  return teamLogo(teamCode);
+}
+
+function isRaidersTeam(teamCode: string | null | undefined): boolean {
+  const t = teamCode?.toUpperCase()?.trim() ?? "";
+  return t === "LV" || t === "OAK";
+}
+
+/** Compact Sleeper-style injury letter for depth-chart sidebar chips. */
 function injuryLetter(injury: string | null | undefined): "Q" | "O" | "IR" | "NA" | null {
   const raw = (injury ?? "").trim().toUpperCase();
   if (!raw || raw === "HEALTHY" || raw === "ACTIVE" || raw === "NONE") return null;
   if (raw === "QUESTIONABLE" || raw === "Q") return "Q";
-  if (raw === "OUT" || raw === "DOUBTFUL" || raw === "O") return "O";
+  if (raw === "OUT" || raw === "DOUBTFUL" || raw === "O" || raw === "D") return "O";
   if (raw === "IR" || raw === "INJURED RESERVE") return "IR";
   if (raw === "NA" || raw === "INACTIVE") return "NA";
   return null;
 }
+
+/** Full-text header injury capsule with high-contrast broadcast colors. */
+function getFullInjuryBadgeDetails(status?: string | null) {
+  const cleanStatus = status?.toUpperCase()?.trim();
+  if (
+    !cleanStatus ||
+    cleanStatus === "NONE" ||
+    cleanStatus === "HEALTHY" ||
+    cleanStatus === "ACTIVE"
+  ) {
+    return null;
+  }
+  if (cleanStatus === "Q" || cleanStatus === "QUESTIONABLE") {
+    return {
+      text: "Questionable",
+      classes:
+        "bg-amber-500 text-slate-950 border-none font-black text-[10px] shadow-sm shadow-amber-500/10",
+      tone: "amber" as const,
+    };
+  }
+  if (cleanStatus === "O" || cleanStatus === "OUT") {
+    return {
+      text: "Out",
+      classes:
+        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
+      tone: "rose" as const,
+    };
+  }
+  if (cleanStatus === "D" || cleanStatus === "DOUBTFUL") {
+    return {
+      text: "Doubtful",
+      classes:
+        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
+      tone: "rose" as const,
+    };
+  }
+  if (
+    cleanStatus === "IR" ||
+    cleanStatus === "INJURED_RESERVE" ||
+    cleanStatus === "INJURED RESERVE"
+  ) {
+    return {
+      text: "Injured Reserve",
+      classes:
+        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
+      tone: "rose" as const,
+    };
+  }
+  // ESPN compliance: NA is an active non-football roster restriction.
+  if (
+    cleanStatus === "NA" ||
+    cleanStatus === "NOT_ACTIVE" ||
+    cleanStatus === "NOT ACTIVE" ||
+    cleanStatus === "EXEMPT" ||
+    cleanStatus === "INACTIVE"
+  ) {
+    return {
+      text: "Not Active",
+      classes:
+        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
+      tone: "rose" as const,
+    };
+  }
+  // Healthy / unrecognized statuses stay badge-free.
+  return null;
+}
+
+const MEDICAL_NOTES_FALLBACK =
+  "Evaluating daily recovery milestones. Monitor official team practice logs for updated depth-chart clearance status leading up to kickoff.";
 
 /** Solid position theme fill for the cutout jersey strip. */
 const POS_STRIP_BG: Record<string, string> = {
@@ -56,11 +148,12 @@ function VitalsDivider() {
   return <span className="mx-3 text-white/20">|</span>;
 }
 
-type DetailTab = "logs" | "projections" | "outlook" | "depth" | "news";
+type DetailTab = "logs" | "projections" | "sos" | "outlook" | "depth" | "news";
 
 const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "logs", label: "Game Logs" },
   { key: "projections", label: "Projections" },
+  { key: "sos", label: "SOS" },
   { key: "outlook", label: "Outlook" },
   { key: "depth", label: "Depth Chart" },
   { key: "news", label: "News" },
@@ -82,12 +175,18 @@ export const detailQuery = (id: string) =>
 export function PlayerDetail({
   id,
   onSelectPlayer,
+  onClose,
   showDraftActions = false,
+  showFullProfileLink = true,
 }: {
   id: string;
   onSelectPlayer?: (id: string) => void;
+  /** Close the hosting modal when navigating to the full profile page. */
+  onClose?: () => void;
   /** When true, render Draft action controls (War Room / Mock Draft only). */
   showDraftActions?: boolean;
+  /** When false, hide the Full Profile utility (standalone profile page). */
+  showFullProfileLink?: boolean;
 }) {
   const { data, isLoading } = useQuery(detailQuery(id));
   const { data: bio } = useQuery({
@@ -151,7 +250,8 @@ export function PlayerDetail({
   const scoring = scoringFormat;
   const drafted = draft.draftedIds.has(player.id);
   const watched = draft.watchIds.has(player.id);
-  const logo = teamLogo(player.team);
+  const watermarkLogo = getWatermarkLogoUrl(player.team);
+  const raidersWatermark = isRaidersTeam(player.team);
   const teamMeta = teamById(player.team);
   const teamNickname = (teamMeta?.name ?? player.team ?? "FA").toUpperCase();
   const jerseyNumber = bio?.number != null ? String(bio.number) : null;
@@ -174,7 +274,24 @@ export function PlayerDetail({
       ? Math.floor((Date.now() - new Date(birthDate).getTime()) / 31557600000)
       : "—");
 
-  const injury = injuryLetter(player.injury || player.injury_status);
+  const injuryStatusRaw =
+    player.injury_status ||
+    player.injuryStatus ||
+    player.injury ||
+    (player as { status?: string | null }).status ||
+    null;
+  const injuryDetails = getFullInjuryBadgeDetails(injuryStatusRaw);
+  const injuryBodyPart =
+    player.injury_body_part?.trim() ||
+    brain?.[player.id]?.injuryType?.trim() ||
+    "";
+  const injuryNotesText =
+    player.injury_notes?.trim() ||
+    (
+      player as { metadata?: { injury_notes?: string | null } | null }
+    ).metadata?.injury_notes?.trim() ||
+    brain?.[player.id]?.injuryNotes?.trim() ||
+    MEDICAL_NOTES_FALLBACK;
   const height = bio?.height?.trim() || (player as { height?: string | null }).height || "—";
   const weight = bio?.weight?.trim() || (player as { weight?: string | null }).weight || "—";
   const college = bio?.college?.trim() || (player as { college?: string | null }).college || "—";
@@ -208,20 +325,27 @@ export function PlayerDetail({
     <div className="overflow-visible pb-8">
       <header className="overflow-visible">
         <div
-          className="relative flex min-h-[160px] w-full items-stretch overflow-visible text-white"
+          className={cn(
+            "relative flex min-h-[160px] w-full items-stretch overflow-visible text-white shadow-sm",
+            !showFullProfileLink && "rounded-t-xl",
+          )}
           style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
         >
-          {logo ? (
+          {watermarkLogo ? (
             <img
-              src={logo}
+              src={watermarkLogo}
               alt=""
               aria-hidden="true"
-              className="pointer-events-none absolute right-2 top-1/2 z-0 h-40 w-40 -translate-y-1/2 select-none object-contain opacity-[0.14] mix-blend-overlay"
+              className={
+                raidersWatermark
+                  ? "pointer-events-none absolute right-2 top-1/2 z-0 h-40 w-40 -translate-y-1/2 select-none object-contain opacity-[0.08] mix-blend-screen"
+                  : "pointer-events-none absolute right-2 top-1/2 z-0 h-40 w-40 -translate-y-1/2 select-none object-contain opacity-[0.14] mix-blend-overlay"
+              }
             />
           ) : null}
 
           <div
-            className="relative z-20 h-[160px] w-[140px] flex-shrink-0 select-none overflow-visible rounded-bl-none bg-transparent"
+            className="relative z-20 mb-0 ml-0 mt-0 flex h-[160px] w-[140px] flex-shrink-0 items-end overflow-visible rounded-bl-none bg-transparent pl-0 select-none"
             style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
           >
             <div
@@ -232,13 +356,13 @@ export function PlayerDetail({
                 src={playerImage(player.id, player.pos, player.team)}
                 alt=""
                 loading="lazy"
-                className="relative z-20 h-full w-full select-none object-cover object-[55%_center] pointer-events-none transition-all"
+                className="pointer-events-none relative z-20 h-full w-full select-none object-cover object-[55%_center] transition-all"
                 onError={(e) => {
                   e.currentTarget.style.visibility = "hidden";
                 }}
               />
             </div>
-            <div className="absolute bottom-0 left-0 z-30 flex min-w-full w-max max-w-[200px] flex-row items-center whitespace-nowrap rounded-tr-md rounded-br-none">
+            <div className="absolute bottom-0 left-0 z-30 flex min-w-full w-max max-w-[200px] flex-row items-center whitespace-nowrap rounded-tr-md rounded-br-none bg-transparent pl-0">
               <span
                 className={cn(
                   "flex shrink-0 items-center justify-center rounded-none px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
@@ -247,7 +371,7 @@ export function PlayerDetail({
               >
                 {player.pos}
               </span>
-              <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
+              <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
                 <span>{teamNickname}</span>
                 {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
               </span>
@@ -259,38 +383,53 @@ export function PlayerDetail({
               <h1 className="truncate text-3xl font-black tracking-tight text-white">
                 {player.name}
               </h1>
-              {injury ? (
+              {injuryDetails ? (
                 <span
                   className={cn(
-                    "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white",
-                    injury === "Q"
-                      ? "bg-amber-500"
-                      : injury === "O" || injury === "IR" || injury === "NA"
-                        ? "bg-red-500"
-                        : "bg-zinc-500/80",
+                    "ml-2 inline-flex select-none items-center justify-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest shadow-sm",
+                    injuryDetails.classes,
                   )}
                 >
-                  {injury}
+                  {injuryDetails.text}
                 </span>
               ) : null}
-              <button
-                type="button"
-                aria-label={watched ? "Unwatch" : "Watch"}
-                aria-pressed={watched}
-                onClick={() => draft.toggleWatch(player.id)}
-                className="group relative z-30 inline-flex max-w-[38px] cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-2.5 py-1.5 transition-all duration-300 hover:max-w-[130px] hover:border-white/40 hover:bg-white/10"
-              >
-                <Star
-                  className={cn(
-                    "size-3.5 shrink-0",
-                    watched ? "fill-amber-400 text-amber-400" : "text-white/90",
-                  )}
-                  strokeWidth={watched ? 0 : 2}
-                />
-                <span className="ml-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                  {watched ? "Unwatch" : "Watch"}
-                </span>
-              </button>
+              <div className="relative z-30 ml-3 flex items-center space-x-3">
+                <button
+                  type="button"
+                  aria-label={watched ? "Unwatch" : "Watch"}
+                  aria-pressed={watched}
+                  onClick={() => draft.toggleWatch(player.id)}
+                  className="group inline-flex max-w-[38px] cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-2.5 py-1.5 transition-all duration-300 hover:max-w-[130px] hover:border-white/40 hover:bg-white/10"
+                >
+                  <Star
+                    className={cn(
+                      "size-3.5 shrink-0",
+                      watched ? "fill-amber-400 text-amber-400" : "text-white/90",
+                    )}
+                    strokeWidth={watched ? 0 : 2}
+                  />
+                  <span className="ml-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                    {watched ? "Unwatch" : "Watch"}
+                  </span>
+                </button>
+                {showDraftActions ? (
+                  <button
+                    type="button"
+                    disabled={drafted}
+                    onClick={() => {
+                      if (!drafted) draft.draftPlayer(player.id);
+                    }}
+                    className={cn(
+                      "relative z-30 inline-flex min-w-[76px] items-center justify-center rounded-full px-4 py-1.5 text-xs font-black tracking-wide uppercase whitespace-nowrap shadow-sm transition-all duration-200",
+                      drafted
+                        ? "pointer-events-none cursor-default border border-white/10 bg-white/10 text-white/40"
+                        : "cursor-pointer border border-white bg-white text-slate-900 hover:bg-slate-100",
+                    )}
+                  >
+                    {drafted ? "Drafted" : "Draft"}
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             {isDefense ? (
@@ -329,7 +468,7 @@ export function PlayerDetail({
                 <span>{Math.round(Number(rosteredPct) || 83)}% ROSTERED</span>
                 <VitalsDivider />
                 <span>{Math.round(Number(startedPct) || 39)}% STARTED</span>
-                <div ref={scoringMenuRef} className="relative ml-6 inline-block text-left">
+                <div ref={scoringMenuRef} className="relative z-50 ml-6 inline-block text-left">
                   <button
                     type="button"
                     aria-label="Scoring format"
@@ -351,7 +490,7 @@ export function PlayerDetail({
                     <div
                       role="listbox"
                       aria-label="Scoring formats"
-                      className="absolute top-full right-0 z-50 mt-1.5 flex w-20 origin-top-right transform flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white py-0.5 text-left shadow-xl transition-all"
+                      className="absolute top-full right-0 z-50 mt-1.5 flex w-20 origin-top-right transform flex-col overflow-visible rounded-lg border border-slate-200/80 bg-white py-0.5 text-left shadow-xl transition-all"
                     >
                       {SCORING_OPTIONS.map((option) => {
                         const active = scoringFormat === option.value;
@@ -384,50 +523,65 @@ export function PlayerDetail({
           </div>
         </div>
 
-        {showDraftActions ? (
-          <div className="border-b border-slate-100 bg-white px-7 py-3">
-            <Button
-              className="w-full font-display uppercase"
-              disabled={drafted}
-              onClick={() => draft.draftPlayer(player.id)}
-            >
-              {drafted ? "Drafted" : "Draft"}
-            </Button>
+        <div className="flex w-full select-none items-center justify-between overflow-visible border-b border-slate-100 bg-white px-6">
+          <div className="flex items-center space-x-5 overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {DETAIL_TABS.map(({ key, label }) => {
+              const active = tab === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setTab(key)}
+                  className={cn(
+                    "shrink-0 text-xs font-black uppercase tracking-wider transition-colors",
+                    active
+                      ? "-mb-[1px] border-b-2 border-blue-600 pb-2.5 pt-3 text-slate-900"
+                      : "pb-2.5 pt-3 text-slate-400 hover:text-slate-600",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
-        ) : null}
-
-        <div className="flex w-full select-none items-center space-x-5 overflow-x-auto border-b border-slate-100 bg-white px-6">
-          {DETAIL_TABS.map(({ key, label }) => {
-            const active = tab === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setTab(key)}
-                className={cn(
-                  "shrink-0 text-xs font-black uppercase tracking-wider transition-colors",
-                  active
-                    ? "-mb-[1px] border-b-2 border-blue-600 pb-2.5 pt-3 text-slate-900"
-                    : "pb-2.5 pt-3 text-slate-400 hover:text-slate-600",
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
+          {showFullProfileLink ? (
+            <Link
+              to="/player/$id"
+              params={{ id: player.id }}
+              onClick={() => onClose?.()}
+              className="relative z-30 ml-auto flex cursor-pointer select-none items-center pb-0.5 text-xs font-black uppercase tracking-wider text-slate-400 transition-colors hover:text-blue-600"
+            >
+              <span>Full Profile</span>
+              <span className="ml-1 text-sm font-light leading-none">→</span>
+            </Link>
+          ) : null}
         </div>
       </header>
 
       <div
         className={cn(
-          tab === "logs" || tab === "projections" ? "px-0 py-0" : "px-7 py-5",
+          tab === "logs" || tab === "projections" || tab === "sos" ? "px-0 py-0" : "px-7 py-5",
         )}
       >
         {tab === "logs" && (
-          <GameLogsPanel id={player.id} pos={player.pos} scoringFormat={scoringFormat} />
+          <GameLogsPanel
+            id={player.id}
+            pos={player.pos}
+            team={player.team}
+            scoringFormat={scoringFormat}
+            exp={player.exp}
+          />
         )}
         {tab === "projections" && (
           <ProjectionsPanel id={player.id} pos={player.pos} scoringFormat={scoringFormat} />
+        )}
+        {tab === "sos" && (
+          <SosHeatmapPanel
+            playerId={player.id}
+            pos={player.pos}
+            team={player.team}
+            brainSos={playerSos}
+          />
         )}
         {tab === "outlook" && (
           <OutlookPanel
@@ -450,7 +604,15 @@ export function PlayerDetail({
             {...(onSelectPlayer ? { onSelectPlayer } : {})}
           />
         )}
-        {tab === "news" && <EditorialNewsPanel id={player.id} />}
+        {tab === "news" && (
+          <EditorialNewsPanel
+            id={player.id}
+            injuryDetails={injuryDetails}
+            injuryStatus={injuryStatusRaw}
+            injuryBodyPart={injuryBodyPart}
+            injuryNotes={injuryNotesText}
+          />
+        )}
       </div>
     </div>
   );
@@ -705,16 +867,42 @@ function renderStatCells(
 function GameLogsPanel({
   id,
   pos,
+  team,
   scoringFormat,
+  exp,
 }: {
   id: string;
   pos: string;
+  team: string;
   scoringFormat: Scoring;
+  exp?: number | null;
 }) {
-  const [season, setSeason] = useState<LogSeason>("2026");
+  // Parse experience to an integer; default to 1 for rookies or empty values.
+  // Team defenses bypass career limits and unlock the full historical log range.
+  const isDefense = pos === "DEF";
+  const yearsExp = Math.max(1, Math.floor(Number(exp)) || 1);
+  const currentSeasonYear = 2026;
+  const rookieEntryYear = isDefense ? 2022 : currentSeasonYear - (yearsExp - 1);
+  const availableSeasons = useMemo(
+    () =>
+      LOG_SEASONS.filter((yearStr) => Number.parseInt(yearStr, 10) >= rookieEntryYear),
+    [rookieEntryYear],
+  );
+
+  const [season, setSeason] = useState<LogSeason>(
+    () => availableSeasons[0] ?? "2026",
+  );
+
+  useEffect(() => {
+    if (!availableSeasons.includes(season)) {
+      setSeason(availableSeasons[0] ?? "2026");
+    }
+  }, [availableSeasons, season]);
+
   const statGroups = useMemo(() => positionStatGroups(pos), [pos]);
   const statCols = useMemo(() => positionStatCols(pos), [pos]);
   const formatTag = formatLabel(scoringFormat);
+  const teamPrimary = getTeamPrimaryColor(team);
 
   const { data, isLoading } = useQuery({
     queryKey: ["player-logs", id, season],
@@ -726,20 +914,20 @@ function GameLogsPanel({
 
   return (
     <div className="w-full">
-      <div className="flex w-full items-center space-x-2.5 overflow-x-auto border-b border-slate-800 bg-slate-900 px-6 py-2.5 text-xs font-bold text-slate-400">
-        {LOG_SEASONS.map((option) => {
-          const active = season === option;
+      <div className="relative z-20 flex w-full select-none items-center space-x-2.5 overflow-x-auto whitespace-nowrap border-b border-slate-100 bg-white px-6 py-2.5 shadow-sm [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {availableSeasons.map((option) => {
+          const isActive = season === option;
           return (
             <button
               key={option}
               type="button"
               onClick={() => setSeason(option)}
-              className={cn(
-                "cursor-pointer px-3 py-1 tracking-wide transition-colors",
-                active
-                  ? "rounded-full bg-teal-500 font-black text-white shadow-sm"
-                  : "font-bold text-slate-400 hover:text-slate-200",
-              )}
+              style={isActive ? { backgroundColor: teamPrimary } : undefined}
+              className={
+                isActive
+                  ? "select-none rounded-full px-3 py-1.5 text-xs font-black tracking-wide text-white shadow-sm"
+                  : "cursor-pointer select-none rounded-full px-3 py-1.5 text-xs font-black text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-700"
+              }
             >
               {option}
             </button>
@@ -781,14 +969,18 @@ function GameLogsPanel({
                       <td className="px-3 py-2.5 text-left font-semibold text-slate-900">
                         {String(g.week)}
                       </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td className="px-3 py-2.5 text-center font-bold text-slate-700">
                         {isBye ? (
                           <span className="text-xs font-extrabold tracking-wide text-slate-400">
                             BYE
                           </span>
                         ) : (
                           <span className="text-slate-600">
-                            {g.opp?.replace(/^vs\s+|^@\s+/i, "").trim() || "-"}
+                            {(g as { isAway?: boolean }).isAway ||
+                            (g as { location?: string }).location === "away" ||
+                            g.opp?.trim().startsWith("@")
+                              ? `@ ${g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ?? ""}`
+                              : g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() || "-"}
                           </span>
                         )}
                       </td>
@@ -919,14 +1111,18 @@ function ProjectionsPanel({
                 <td className="px-3 py-2.5 text-left font-semibold text-slate-900">
                   {String(g.week)}
                 </td>
-                <td className="px-3 py-2.5 text-center">
+                <td className="px-3 py-2.5 text-center font-bold text-slate-700">
                   {isBye ? (
                     <span className="text-xs font-extrabold tracking-wide text-slate-400">
                       BYE
                     </span>
                   ) : (
                     <span className="text-slate-600">
-                      {g.opp?.replace(/^vs\s+|^@\s+/i, "").trim() || "-"}
+                      {(g as { isAway?: boolean }).isAway ||
+                      (g as { location?: string }).location === "away" ||
+                      g.opp?.trim().startsWith("@")
+                        ? `@ ${g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ?? ""}`
+                        : g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() || "-"}
                     </span>
                   )}
                 </td>
@@ -973,6 +1169,277 @@ function formatOutlookKickoff(iso?: string | null, dateOnly?: string | null): st
     .replace(/\s+/g, "")
     .replace(/([ap]m)/i, (m) => m.toUpperCase());
   return `${day} ${time} ET`;
+}
+
+/** NFL franchises with indoor / domed / retractable-roof home venues. */
+const INDOOR_HOME_TEAMS = new Set([
+  "ARI",
+  "ATL",
+  "DAL",
+  "DET",
+  "HOU",
+  "IND",
+  "LAC",
+  "LAR",
+  "LV",
+  "MIN",
+  "NO",
+]);
+
+type SosDifficultyTone = "elite" | "neutral" | "tough" | "bye";
+
+function sosDifficultyFromStars(stars: number | null): {
+  tone: SosDifficultyTone;
+  label: string | null;
+} {
+  if (stars == null) return { tone: "bye", label: null };
+  if (stars >= 5) return { tone: "elite", label: "Great" };
+  if (stars >= 3) return { tone: "neutral", label: "Neutral" };
+  return { tone: "tough", label: "Tough" };
+}
+
+function SosStarRow({ count }: { count: number }) {
+  const activeCount = Math.max(0, Math.min(5, count));
+  return (
+    <div className="flex select-none items-center space-x-0.5 text-left text-sm tracking-tight">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const starIndex = i + 1;
+        const isActive = starIndex <= activeCount;
+        return (
+          <span
+            key={i}
+            className={isActive ? "fill-amber-500 text-amber-500" : "text-slate-200"}
+          >
+            ★
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function sosOverviewBadge(grade: SosGrade): string {
+  if (grade === "CAKEWALK") return "ELITE";
+  if (grade === "ADVANTAGEOUS") return "SOFT";
+  if (grade === "CATASTROPHIC") return "HARD";
+  return "MID";
+}
+
+function compactPercentileLabel(raw: string | null): string {
+  if (!raw) return "Baseline";
+  const top = raw.match(/Top\s+(\d+)%/i);
+  if (top?.[1]) return `Top ${top[1]}%`;
+  if (raw.toLowerCase().includes("baseline")) return "Baseline";
+  return "Balanced";
+}
+
+function SosHeatmapPanel({
+  playerId,
+  pos,
+  team,
+  brainSos,
+}: {
+  playerId: string;
+  pos: string;
+  team: string;
+  brainSos: PlayerSos | null;
+}) {
+  const upperTeam = (team || "").toUpperCase();
+  const brain = usePlayerBrain();
+  const sosPeers = useSosPeerMatrix(pos, brain);
+
+  const scheduleQuery = useQuery({
+    queryKey: ["player-sos-schedule", currentSeason()],
+    queryFn: () => fetchSchedule(currentSeason()),
+    staleTime: 1000 * 60 * 60 * 12,
+    enabled: Boolean(upperTeam && upperTeam !== "FA"),
+  });
+
+  const overallGrade = matchupGrade(brainSos?.rank ?? null);
+  const overallBadge = sosOverviewBadge(overallGrade);
+  const percentileRaw = positionPercentile(
+    playerId,
+    pos,
+    sosPeers ?? brain,
+    brainSos,
+  );
+  const percentileLabel = compactPercentileLabel(percentileRaw);
+  const playoffLabel = playoffWindow(brainSos);
+
+  const rows = useMemo(() => {
+    const matchups = brainSos?.matchups ?? [];
+    const byWeek = new Map(matchups.map((m) => [Number(m.week), m]));
+    const games = (scheduleQuery.data ?? []) as ScheduleGame[];
+    const out: {
+      week: number;
+      isBye: boolean;
+      isAway: boolean;
+      opp: string;
+      stars: number | null;
+      tone: SosDifficultyTone;
+      label: string | null;
+      stadium: string;
+    }[] = [];
+
+    for (let week = 1; week <= 18; week++) {
+      const hit = byWeek.get(week);
+      if (!hit || !hit.opp || hit.opp.toUpperCase() === "BYE") {
+        out.push({
+          week,
+          isBye: true,
+          isAway: false,
+          opp: "BYE",
+          stars: null,
+          tone: "bye",
+          label: null,
+          stadium: "—",
+        });
+        continue;
+      }
+
+      const stars = sosStarsFromRank(hit.rank);
+      const { tone, label } = sosDifficultyFromStars(stars);
+      const game = games.find((g) => {
+        if (Number(g.week) !== week) return false;
+        const home = (g.home || "").toUpperCase();
+        const away = (g.away || "").toUpperCase();
+        return home === upperTeam || away === upperTeam;
+      });
+      const isHome = game ? (game.home || "").toUpperCase() === upperTeam : true;
+      const isAway = Boolean(game) && !isHome;
+      const venueTeam = isHome ? upperTeam : (hit.opp || "").toUpperCase();
+      const stadium = INDOOR_HOME_TEAMS.has(venueTeam) ? "Indoor" : "Outdoor";
+
+      out.push({
+        week,
+        isBye: false,
+        isAway,
+        opp: hit.opp.toUpperCase(),
+        stars,
+        tone,
+        label,
+        stadium,
+      });
+    }
+    return out;
+  }, [brainSos, scheduleQuery.data, upperTeam]);
+
+  if (!upperTeam || upperTeam === "FA") {
+    return (
+      <div className="flex w-full flex-col overflow-visible bg-white px-6 py-4 text-left">
+        <p className="py-8 text-center text-sm text-slate-400">
+          Strength of schedule is unavailable for free agents.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex w-full flex-col overflow-visible bg-white px-6 py-4 text-left">
+      <div className="relative mb-6 flex w-full select-none flex-col items-start overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50/50 p-5 text-left">
+        <span className="mb-3 block text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
+          Strength of Schedule Overview
+        </span>
+        <div className="grid w-full grid-cols-1 divide-y divide-slate-100 rounded-xl border border-slate-200/60 bg-white p-4 text-center shadow-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="flex flex-col items-center justify-center p-3 text-center sm:p-2">
+            <div className="flex items-center space-x-2.5">
+              <span className="text-xl font-black uppercase tracking-wide text-slate-900">
+                {overallGrade}
+              </span>
+              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-950 shadow-inner">
+                {overallBadge}
+              </span>
+            </div>
+            <span className="mt-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+              Overall Matchup Rating
+            </span>
+          </div>
+          <div className="flex flex-col items-center justify-center p-3 text-center sm:p-2">
+            <span className="text-xl font-black uppercase tracking-tight text-slate-900">
+              {percentileLabel}
+            </span>
+            <span className="mt-1.5 max-w-[160px] text-[9px] font-bold uppercase leading-tight tracking-widest text-slate-400">
+              Position Percentile Rank
+            </span>
+          </div>
+          <div className="flex flex-col items-center justify-center p-3 text-center sm:p-2">
+            <span className="text-xl font-black uppercase tracking-tight text-slate-900">
+              {playoffLabel}
+            </span>
+            <span className="mt-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">
+              Playoff Window Outlook
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="w-full overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              {["WK", "OPPONENT", "MATCHUP STRENGTH", "DIFFICULTY", "STADIUM STATUS"].map(
+                (label) => (
+                  <th
+                    key={label}
+                    className="border-b border-slate-100 pb-2 text-left text-[10px] font-black uppercase tracking-widest text-slate-400"
+                  >
+                    {label}
+                  </th>
+                ),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr
+                key={row.week}
+                className={cn(
+                  "border-b border-slate-100 last:border-0",
+                  index % 2 === 1 ? "bg-slate-50/40" : "bg-white",
+                )}
+              >
+                <td className="px-0 py-2.5 pr-3 text-left font-semibold text-slate-900">
+                  {row.week}
+                </td>
+                <td className="px-3 py-2.5 text-left font-bold text-slate-800">
+                  {row.isBye ? "BYE" : row.isAway ? `@ ${row.opp}` : row.opp}
+                </td>
+                <td className="px-3 py-2.5 text-left">
+                  {row.isBye ? (
+                    <span className="pl-4 text-xs font-extrabold tracking-wide text-slate-400">
+                      -
+                    </span>
+                  ) : (
+                    <SosStarRow count={row.stars ?? 0} />
+                  )}
+                </td>
+                <td className="px-3 py-2.5 text-left">
+                  {row.isBye || !row.label ? (
+                    <span className="text-xs font-extrabold tracking-wide text-slate-400">-</span>
+                  ) : row.tone === "elite" ? (
+                    <span className="ml-0 rounded-full bg-emerald-500 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
+                      Great
+                    </span>
+                  ) : row.tone === "neutral" ? (
+                    <span className="ml-0 rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-950 shadow-sm">
+                      Neutral
+                    </span>
+                  ) : (
+                    <span className="ml-0 rounded-full bg-rose-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
+                      Tough
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2.5 text-left text-xs font-medium text-slate-600">
+                  {row.stadium}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 /** Map outdoor scoreboard weather into a stroke icon, or null when hidden. */
@@ -1445,26 +1912,91 @@ function oneSentenceSummary(raw: string | null | undefined, fallback: string): s
   return `${clipped}…`;
 }
 
-function EditorialNewsPanel({ id }: { id: string }) {
+function EditorialNewsPanel({
+  id,
+  injuryDetails,
+  injuryStatus,
+  injuryBodyPart,
+  injuryNotes,
+}: {
+  id: string;
+  injuryDetails: ReturnType<typeof getFullInjuryBadgeDetails>;
+  injuryStatus?: string | null;
+  injuryBodyPart?: string;
+  injuryNotes?: string;
+}) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["player-news", id],
     queryFn: () => getPlayerNews({ data: { id } }),
     staleTime: 1000 * 60 * 10,
   });
 
+  const statusUpper = (injuryStatus ?? "").toUpperCase().trim();
+  const isCritical =
+    statusUpper === "O" ||
+    statusUpper === "OUT" ||
+    statusUpper === "IR" ||
+    statusUpper === "INJURED RESERVE" ||
+    statusUpper === "INJURED_RESERVE" ||
+    statusUpper === "D" ||
+    statusUpper === "DOUBTFUL" ||
+    injuryDetails?.tone === "rose";
+  const accentText = isCritical ? "text-rose-600" : "text-amber-600";
+  const accentBorder = isCritical ? "border-l-rose-600" : "border-l-amber-500";
+
+  const medicalIntel = injuryDetails ? (
+    <div
+      className={cn(
+        "relative mb-5 flex w-full select-none flex-col items-start overflow-hidden rounded-xl border border-slate-200/80 border-l-4 bg-slate-50/40 p-5 text-left shadow-sm",
+        accentBorder,
+      )}
+    >
+      <div className="mb-2 flex items-center space-x-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+        <span className={accentText}>Medical Report</span>
+      </div>
+      <div className="text-left text-sm font-black tracking-wide text-slate-900">
+        Designation: <span className={accentText}>{injuryDetails.text}</span>
+        <span className="mx-3 text-slate-200">|</span>
+        Diagnosis:{" "}
+        <span className="capitalize font-black text-slate-800">
+          {injuryBodyPart?.trim() || "Evaluation Pending"}
+        </span>
+      </div>
+      <p className="mt-2.5 block w-full text-left text-xs font-medium leading-relaxed text-slate-500">
+        {injuryNotes?.trim() || MEDICAL_NOTES_FALLBACK}
+      </p>
+    </div>
+  ) : null;
+
   if (isLoading) {
-    return <p className="py-8 text-center text-sm text-slate-400">Loading latest news…</p>;
+    return (
+      <div className="w-full">
+        {medicalIntel}
+        <p className="py-8 text-center text-sm text-slate-400">Loading latest news…</p>
+      </div>
+    );
   }
   if (isError) {
-    return <p className="py-8 text-center text-sm text-slate-400">News feed unavailable right now.</p>;
+    return (
+      <div className="w-full">
+        {medicalIntel}
+        <p className="py-8 text-center text-sm text-slate-400">News feed unavailable right now.</p>
+      </div>
+    );
   }
   const items = data?.items ?? [];
   if (!items.length) {
-    return <p className="py-8 text-center text-sm text-slate-400">No recent articles for this player.</p>;
+    return (
+      <div className="w-full">
+        {medicalIntel}
+        <p className="py-8 text-center text-sm text-slate-400">No recent articles for this player.</p>
+      </div>
+    );
   }
 
   return (
     <div className="w-full">
+      {medicalIntel}
       {items.map((n) => {
         const ago = timeAgo(n.published);
         const summary = oneSentenceSummary(

@@ -28,6 +28,7 @@ import {
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
 import {
+  buildStartSitAdvice,
   loadFantasyCalcMarketMap,
   scaleValue,
   suggestMarketRadarTrade,
@@ -846,47 +847,21 @@ function PlaybookDashboardPage() {
         sitPts: number;
       }[];
     }
-    const starters = myTeam.starters.filter((p): p is Player => Boolean(p));
+    const starters = (myTeam.starters ?? []).filter((p): p is Player => Boolean(p));
     const starterIds = new Set(starters.map((p) => p.id));
     const bench = (myTeam.bench ?? []).filter((p) => !starterIds.has(p.id));
-    const alerts: {
-      id: string;
-      start: Player;
-      sit: Player;
-      startPts: number;
-      sitPts: number;
-    }[] = [];
 
-    for (const benchPlayer of bench) {
-      const benchPts = projectFor(benchPlayer.id) ?? weeklyFallback(benchPlayer);
-      const samePosStarters = starters.filter((s) => s.pos === benchPlayer.pos);
-      const weakest =
-        samePosStarters.length > 0
-          ? samePosStarters
-              .map((s) => ({
-                player: s,
-                pts: projectFor(s.id) ?? weeklyFallback(s),
-              }))
-              .sort((a, b) => a.pts - b.pts)[0]
-          : starters
-              .map((s) => ({
-                player: s,
-                pts: projectFor(s.id) ?? weeklyFallback(s),
-              }))
-              .sort((a, b) => a.pts - b.pts)[0];
-
-      if (weakest && benchPts > weakest.pts + 0.8) {
-        alerts.push({
-          id: `${benchPlayer.id}-${weakest.player.id}`,
-          start: benchPlayer,
-          sit: weakest.player,
-          startPts: benchPts,
-          sitPts: weakest.pts,
-        });
-      }
-    }
-
-    return alerts.slice(0, 4);
+    return buildStartSitAdvice({
+      starters,
+      bench,
+      weeklyFor: (id) => {
+        const hit = [...starters, ...bench].find((p) => p.id === id);
+        if (!hit) return 0;
+        return projectFor(id) ?? weeklyFallback(hit);
+      },
+      minEdge: 0.8,
+      limit: 4,
+    });
   }, [myTeam, projectFor]);
 
   const marketRadar = useMemo(() => {
@@ -1099,6 +1074,7 @@ function PlaybookDashboardPage() {
             ) : (
               <ActivityFeed
                 events={newsEvents}
+                players={players}
                 compact
                 emptyMessage="No recent transactions recorded. Summaries will appear here after the next league moves."
               />
@@ -1216,9 +1192,19 @@ function PlaybookDashboardPage() {
             action={{ to: "/playbook/my-team", label: "Review Lineup" }}
           >
             {!startSitAlerts.length ? (
-              <p className="text-sm text-muted-foreground">
-                No clear bench upgrades detected against current starters.
-              </p>
+              <div className="mt-1.5 flex w-full select-none items-center space-x-4 overflow-hidden rounded-xl border border-slate-100 bg-slate-50/40 p-4 text-left shadow-sm">
+                <span className="flex flex-shrink-0 items-center justify-center rounded bg-emerald-100 px-2 py-0.5 text-[9px] font-extrabold tracking-wider text-emerald-800 uppercase shadow-sm">
+                  OPTIMIZED
+                </span>
+                <div className="flex min-w-0 flex-col items-start text-left">
+                  <span className="block w-full truncate text-xs font-black tracking-wide text-slate-900">
+                    Your Starting Lineup is Locked
+                  </span>
+                  <span className="mt-0.5 block w-full text-[11px] font-bold text-slate-400">
+                    No projection upgrades detected on your bench slots.
+                  </span>
+                </div>
+              </div>
             ) : (
               <div className="w-full">
                 {startSitAlerts.map((alert) => (
@@ -1468,7 +1454,7 @@ function PlaybookDashboardPage() {
                           </span>
                         </span>
                         <span className="ml-auto text-xs font-bold text-slate-800">
-                          {target.dropProj.toFixed(1)} Proj
+                          -{target.dropProj.toFixed(1)} Proj
                         </span>
                       </button>
                     </div>

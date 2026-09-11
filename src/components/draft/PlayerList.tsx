@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { GripVertical, Search, Star, Undo2, Zap } from "lucide-react";
 
@@ -17,47 +17,50 @@ import {
   type Pos,
   type Settings,
 } from "@/lib/draft";
+import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 
 const SEASON = new Date().getFullYear();
 
 /**
- * Row injury chip — same TanStack Query pool / `player.injury` path as PlayerDetail.
+ * Pure injury chip — status is resolved once at the list parent from the
+ * bulk catalog / brain matrix. Never fetches.
  */
 function PlayerListRowInjuryBadge({
-  player,
+  injuryStatus,
   onOpen,
 }: {
-  player: Player;
+  injuryStatus?: string | null;
   onOpen: () => void;
 }) {
-  const { data } = useQuery({
-    ...detailQuery(player.id),
-    enabled: Boolean(player?.id),
-  });
-
-  if (!player?.id) return null;
-
-  const injury = data?.player?.injury;
-  if (!injury || injury === "Healthy" || injury === "Active" || injury === "None") {
-    return null;
-  }
+  const raw = (injuryStatus ?? "").trim();
+  if (!raw || /^(healthy|active|none)$/i.test(raw)) return null;
 
   let label = "Q";
   let colorClass = "bg-amber-500";
+  const upper = raw.toUpperCase();
 
-  if (injury === "Questionable") {
+  if (upper === "QUESTIONABLE" || upper === "Q") {
     label = "Q";
     colorClass = "bg-amber-500";
+  } else if (upper === "IR" || upper === "INJURED RESERVE") {
+    label = "IR";
+    colorClass = "bg-rose-600";
   } else if (
-    injury === "Out" ||
-    injury === "Doubtful" ||
-    injury === "IR" ||
-    injury === "NA"
+    upper === "OUT" ||
+    upper === "DOUBTFUL" ||
+    upper === "O" ||
+    upper === "NA" ||
+    upper === "INACTIVE" ||
+    upper === "SUSPENDED"
   ) {
-    label = injury === "IR" ? "IR" : injury === "NA" ? "NA" : "O";
+    label = upper === "NA" || upper === "INACTIVE" || upper === "SUSPENDED" ? "NA" : "O";
     colorClass = "bg-rose-600";
   } else {
-    return null;
+    // Fall back to shared micro-badge mapping for any other token.
+    const badge = injuryMicroBadge(raw);
+    if (!badge) return null;
+    label = badge.label;
+    colorClass = badge.className;
   }
 
   return (
@@ -131,6 +134,12 @@ function PlayerListImpl({
   const listRef = useRef<HTMLUListElement>(null);
   const queryClient = useQueryClient();
   const brain = usePlayerBrain();
+
+  /** One in-memory lookup map for the entire list — never per-row network. */
+  const playersById = useMemo(
+    () => new Map(players.map((p) => [p.id, p])),
+    [players],
+  );
 
   /** Analytics reads: ECR / SD / 30-day value trend out of the local matrix map.
    *  All lookups are keyed by the player's platform Sleeper ID (player.id). */
@@ -543,6 +552,13 @@ function PlayerListImpl({
             const drafted = draftedIds.has(p.id);
             const watched = watchIds.has(p.id);
             const reach = v.adp < 900 ? Math.round(v.adp - currentOverall) : null;
+            const playerDetails = playersById.get(p.id) ?? p;
+            const injuryStatus =
+              resolveInjuryStatus(playerDetails, brain) ??
+              playerDetails.injury_status ??
+              playerDetails.injuryStatus ??
+              playerDetails.injury ??
+              null;
             const playerBody = (
               <>
                 <PlayerAvatar
@@ -557,7 +573,7 @@ function PlayerListImpl({
                   <div className="font-semibold whitespace-nowrap">{p.name}</div>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
                     <PlayerListRowInjuryBadge
-                      player={p}
+                      injuryStatus={injuryStatus}
                       onOpen={() => onOpenPlayer?.(p.id)}
                     />
                     <span>

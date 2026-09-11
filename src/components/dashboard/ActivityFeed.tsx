@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
@@ -13,6 +13,56 @@ export type ActivityTransactionLike = {
   adds?: Record<string, unknown> | null;
   drops?: Record<string, unknown> | null;
 };
+
+type ActivityCatalogPlayer = {
+  id: string;
+  name: string;
+  pos: string;
+  team: string;
+};
+
+function sanitizeActivityPlayerName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
+/**
+ * Remap activity moves onto catalog players so ESPN name-matched rows render
+ * real headshots / names instead of "Player 4685702" ghosts.
+ */
+export function hydrateActivityMove(
+  move: LeagueActivityMove,
+  playersById: Map<string, ActivityCatalogPlayer>,
+  playersByName: Map<string, ActivityCatalogPlayer>,
+): LeagueActivityMove {
+  const direct = playersById.get(move.playerId);
+  if (direct) {
+    return {
+      ...move,
+      playerId: direct.id,
+      name: direct.name,
+      pos: direct.pos || move.pos,
+      team: direct.team || move.team,
+    };
+  }
+
+  const ghost = /^Player\s+\d+$/i.test(move.name.trim());
+  if (ghost) return move;
+
+  const byName = playersByName.get(sanitizeActivityPlayerName(move.name));
+  if (!byName) return move;
+
+  return {
+    ...move,
+    playerId: byName.id,
+    name: byName.name,
+    pos: byName.pos || move.pos,
+    team: byName.team || move.team,
+  };
+}
 
 /**
  * Strict root-type evaluation for Sleeper (and compatible) payloads.
@@ -93,13 +143,14 @@ function formatActivityTime(at: number): string {
 
 function activityHeadline(event: LeagueActivityEvent): string {
   const kind = resolveActivityKind(event);
+  const manager = (event.teamName ?? "").trim() || "Manager Team";
   if (kind === "trade") {
-    return event.teamName ? `${event.teamName} completed a trade` : "Trade completed";
+    return event.teamName ? `${manager} completed a trade` : "Trade completed";
   }
   if (kind === "ir") {
-    return event.teamName ? `${event.teamName} made an IR move` : "IR move";
+    return `${manager} made an IR move`;
   }
-  return event.teamName ? `${event.teamName} made a move` : "League move";
+  return `${manager} made a move`;
 }
 
 function toAvatarPos(pos: string): Pos {
@@ -186,6 +237,7 @@ export function ActivityFeed({
   emptyMessage = "No recent transactions recorded.",
   className,
   compact = false,
+  players,
 }: {
   events: LeagueActivityEvent[];
   loading?: boolean;
@@ -193,9 +245,28 @@ export function ActivityFeed({
   emptyMessage?: string;
   className?: string;
   compact?: boolean;
+  /** Optional Sleeper catalog used to wipe ESPN numeric ghost labels. */
+  players?: ActivityCatalogPlayer[];
 }) {
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
+
+  const playersById = useMemo(() => {
+    const map = new Map<string, ActivityCatalogPlayer>();
+    for (const p of players ?? []) {
+      if (p?.id) map.set(p.id, p);
+    }
+    return map;
+  }, [players]);
+
+  const playersByName = useMemo(() => {
+    const map = new Map<string, ActivityCatalogPlayer>();
+    for (const p of players ?? []) {
+      const key = sanitizeActivityPlayerName(p.name);
+      if (key && !map.has(key)) map.set(key, p);
+    }
+    return map;
+  }, [players]);
 
   return (
     <>
@@ -219,7 +290,9 @@ export function ActivityFeed({
           <ul className="space-y-0 divide-y divide-border">
             {events.map((event) => {
               const kind = resolveActivityKind(event);
-              const moves = event.moves?.length ? event.moves : [];
+              const moves = (event.moves ?? []).map((m) =>
+                hydrateActivityMove(m, playersById, playersByName),
+              );
               // Waiver / free-agent: ADD rows above DROP rows (Sleeper stack).
               const orderedMoves =
                 kind === "waiver" || kind === "free_agent"

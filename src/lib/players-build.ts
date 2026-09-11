@@ -31,8 +31,10 @@ export type Player = {
   prev: { std: number; half: number; ppr: number } | null;
   /** Sandbox/demo override for injury badge rendering. */
   injuryStatus?: string;
-  /** Sandbox/demo override carrying the affected body part. */
-  injury_body_part?: string;
+  /** Sleeper native affected body region (e.g. Hamstring). */
+  injury_body_part?: string | null;
+  /** Sleeper free-text recovery / practice notes. */
+  injury_notes?: string | null;
 };
 
 export type PlayersPayload = {
@@ -57,6 +59,8 @@ export type SleeperRow = {
     age?: number | null;
     years_exp?: number | null;
     injury_status?: string | null;
+    injury_body_part?: string | null;
+    injury_notes?: string | null;
     active?: boolean | null;
     status?: string | null;
   } | null;
@@ -180,6 +184,8 @@ export function buildPlayersFromRows(input: {
       exp: p.years_exp ?? null,
       injury_status: injuryStatus,
       injury: injuryStatus,
+      injury_body_part: p.injury_body_part?.trim() || null,
+      injury_notes: p.injury_notes?.trim() || null,
       bye: byeByTeam.get(row.team ?? p.team ?? "") ?? null,
       adp: { std, half, ppr },
       adpRange: adpSpread([

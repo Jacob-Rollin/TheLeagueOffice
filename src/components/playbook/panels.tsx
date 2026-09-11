@@ -218,6 +218,8 @@ function TeamAvatarBadge({
 
 export function LeagueActivityWirePanel() {
   const { events, loading, error } = useLeagueActivity();
+  const { data: playersPayload } = useSleeperPlayers();
+  const players = playersPayload?.players ?? [];
 
   return (
     <section className={playbookCardClass}>
@@ -230,7 +232,7 @@ export function LeagueActivityWirePanel() {
         </p>
       </div>
 
-      <ActivityFeed events={events} loading={loading} error={error} />
+      <ActivityFeed events={events} players={players} loading={loading} error={error} />
     </section>
   );
 }

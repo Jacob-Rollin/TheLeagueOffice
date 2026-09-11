@@ -338,11 +338,17 @@ function espnSwidCookie(swid: string | null | undefined): string | null {
   return `{${bare.toUpperCase()}}`;
 }
 
-async function espnJson<T>(url: string, s2?: string | null, swid?: string | null): Promise<T | null> {
+async function espnJson<T>(
+  url: string,
+  s2?: string | null,
+  swid?: string | null,
+  extraHeaders?: Record<string, string>,
+): Promise<T | null> {
   try {
     const headers: Record<string, string> = {
       "User-Agent": "Mozilla/5.0",
       Accept: "application/json",
+      ...(extraHeaders ?? {}),
     };
     const cookieSwid = espnSwidCookie(swid);
     if (s2 || cookieSwid) {
@@ -1305,15 +1311,156 @@ type SleeperTxn = {
   adds?: Record<string, number> | null;
   drops?: Record<string, number> | null;
   /** Slot / IR metadata when Sleeper encodes a pure roster move. */
-  metadata?: { to_slot?: string; from_slot?: string; [key: string]: unknown } | null;
+  metadata?: {
+    to_slot?: string;
+    from_slot?: string;
+    is_draft?: boolean;
+    [key: string]: unknown;
+  } | null;
+  action_type?: string;
+  execution_type?: string;
+  scoring_period?: number;
 };
+
+type IdentityPlayer = {
+  id: string;
+  name: string;
+  pos: string | null;
+  team: string | null;
+};
+
+/** Strip suffixes / punctuation so ESPN + Sleeper display names can match. */
+function sanitizePlayerSearchName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
+/**
+ * Linear name scan across the identity catalog when keyed lookups miss
+ * (incomplete espn_id coverage on Sleeper's NFL dump).
+ */
+function findIdentityBySanitizedName(
+  index: IdentityIndex,
+  playerNameText: string,
+): IdentityPlayer | null {
+  const cleanSearchName = sanitizePlayerSearchName(playerNameText);
+  if (!cleanSearchName) return null;
+
+  const keyed = index.byName.get(normalizeName(playerNameText));
+  if (keyed) return keyed;
+
+  for (const p of index.bySleeper.values()) {
+    if (sanitizePlayerSearchName(p.name) === cleanSearchName) return p;
+  }
+  return null;
+}
+
+/**
+ * Platform-aware player resolution for activity / transaction feeds.
+ * Keeps ESPN numeric ids from being treated as Sleeper ids (no data bleed),
+ * and falls back to sanitized full-name matching when foreign ids miss.
+ */
+function resolvePlayerFromTransaction(
+  index: IdentityIndex,
+  rawId: string | number | null | undefined,
+  opts?: { playerNameText?: string | null; isEspnLeague?: boolean },
+): IdentityPlayer | null {
+  const cleanId = rawId != null ? String(rawId).trim() : "";
+  const isEspnLeague = Boolean(opts?.isEspnLeague);
+  const playerNameText = opts?.playerNameText?.trim() || "";
+
+  // PASS 1: Sleeper leagues resolve directly against the Sleeper id map.
+  if (!isEspnLeague && cleanId) {
+    const sleeperHit = index.bySleeper.get(cleanId);
+    if (sleeperHit) return sleeperHit;
+  }
+
+  // PASS 2: ESPN leagues resolve only through the espn_id map — never bySleeper
+  // with the raw ESPN numeric key (that produces "Player 4242355" ghosts).
+  if (isEspnLeague && cleanId) {
+    const espnHit = index.byEspn.get(cleanId);
+    if (espnHit) return espnHit;
+  }
+
+  // PASS 3: Cross-platform sanitized name fallback (keyed + linear scan).
+  if (playerNameText) {
+    const nameHit = findIdentityBySanitizedName(index, playerNameText);
+    if (nameHit) return nameHit;
+  }
+
+  return null;
+}
+
+/**
+ * Resolve ESPN playerIds → display names for transaction items that omit
+ * fullName (typical for mTransactions2 payloads).
+ */
+async function loadEspnPlayerNamesByIds(
+  year: number,
+  playerIds: string[],
+  s2?: string | null,
+  swid?: string | null,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = [...new Set(playerIds.map((id) => String(id).trim()).filter(Boolean))];
+  if (!ids.length) return out;
+
+  const chunkSize = 40;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids
+      .slice(i, i + chunkSize)
+      .map((id) => Number(id))
+      .filter((n) => Number.isFinite(n));
+    if (!chunk.length) continue;
+
+    const filter = JSON.stringify({ players: { filterIds: { value: chunk } } });
+    const data = await espnJson<{
+      players?: {
+        id?: number;
+        player?: { id?: number; fullName?: string };
+      }[];
+    }>(
+      `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/players?scoringPeriodId=0&view=players_wl`,
+      s2,
+      swid,
+      { "X-Fantasy-Filter": filter },
+    );
+
+    for (const row of data?.players ?? []) {
+      const id = String(row.id ?? row.player?.id ?? "").trim();
+      const name = row.player?.fullName?.trim();
+      if (id && name) out.set(id, name);
+    }
+  }
+
+  return out;
+}
+
+function activityMoveFromHit(
+  hit: IdentityPlayer | null,
+  rawId: string,
+  action: LeagueActivityMove["action"],
+  fallbackName?: string | null,
+): LeagueActivityMove {
+  return {
+    playerId: hit?.id ?? rawId,
+    name: hit?.name ?? (fallbackName?.trim() || `Player ${rawId}`),
+    pos: hit?.pos?.trim() || "FA",
+    team: hit?.team?.trim() || "FA",
+    action,
+  };
+}
 
 function playerChip(
   index: IdentityIndex,
   playerId: string,
+  opts?: { playerNameText?: string | null; isEspnLeague?: boolean },
 ): string {
-  const hit = index.bySleeper.get(playerId);
-  const name = hit?.name ?? `Player ${playerId}`;
+  const hit = resolvePlayerFromTransaction(index, playerId, opts);
+  const name = hit?.name ?? opts?.playerNameText?.trim() ?? `Player ${playerId}`;
   const pos = hit?.pos?.trim() || "FA";
   const team = hit?.team?.trim() || "FA";
   return `${name} (${pos} - ${team})`;
@@ -1324,30 +1471,36 @@ function sleeperMove(
   playerId: string,
   action: LeagueActivityMove["action"],
 ): LeagueActivityMove {
-  const hit = index.bySleeper.get(playerId);
-  return {
-    playerId: hit?.id ?? playerId,
-    name: hit?.name ?? `Player ${playerId}`,
-    pos: hit?.pos?.trim() || "FA",
-    team: hit?.team?.trim() || "FA",
-    action,
-  };
+  const hit = resolvePlayerFromTransaction(index, playerId, { isEspnLeague: false });
+  return activityMoveFromHit(hit, playerId, action);
+}
+
+function espnItemPlayerName(item: {
+  playerId?: number;
+  playerName?: string;
+  player?: { fullName?: string };
+  playerPoolEntry?: { player?: { fullName?: string } };
+}): string | undefined {
+  const full =
+    item.playerPoolEntry?.player?.fullName ??
+    item.player?.fullName ??
+    item.playerName;
+  return typeof full === "string" && full.trim() ? full.trim() : undefined;
 }
 
 function espnMove(
   index: IdentityIndex,
   playerId: number | undefined,
   action: LeagueActivityMove["action"],
+  playerNameText?: string | null,
 ): LeagueActivityMove | null {
-  if (playerId == null) return null;
-  const hit = index.byEspn.get(String(playerId));
-  return {
-    playerId: hit?.id ?? String(playerId),
-    name: hit?.name ?? `Player ${playerId}`,
-    pos: hit?.pos?.trim() || "FA",
-    team: hit?.team?.trim() || "FA",
-    action,
-  };
+  if (playerId == null && !playerNameText?.trim()) return null;
+  const raw = playerId != null ? String(playerId) : playerNameText!.trim();
+  const hit = resolvePlayerFromTransaction(index, playerId, {
+    isEspnLeague: true,
+    ...(playerNameText != null ? { playerNameText } : {}),
+  });
+  return activityMoveFromHit(hit, raw, action, playerNameText);
 }
 
 function teamLabel(map: Map<number, string>, rosterId: number | undefined): string {
@@ -1355,11 +1508,120 @@ function teamLabel(map: Map<number, string>, rosterId: number | undefined): stri
   return map.get(rosterId) ?? `Team ${rosterId}`;
 }
 
+/**
+ * Ban draft-board acquisitions from the League Activity timeline.
+ * Only in-season waivers, free agents, trades, drops, and IR moves remain.
+ */
+function isDraftActivityTransaction(txn: {
+  type?: string | null;
+  action_type?: string | null;
+  execution_type?: string | null;
+  executionType?: string | null;
+  scoring_period?: number | null;
+  scoringPeriodId?: number | null;
+  metadata?: { is_draft?: boolean; [key: string]: unknown } | null;
+  items?: { type?: string | null }[] | null;
+}): boolean {
+  if (txn.metadata?.is_draft === true) return true;
+
+  const type = String(txn.type ?? "").trim().toUpperCase();
+  const actionType = String(txn.action_type ?? "").trim().toUpperCase();
+  const executionType = String(txn.execution_type ?? txn.executionType ?? "")
+    .trim()
+    .toUpperCase();
+
+  if (
+    type === "DRAFT" ||
+    type.includes("DRAFT") ||
+    actionType === "DRAFT" ||
+    actionType.includes("DRAFT") ||
+    executionType === "DRAFT" ||
+    executionType.includes("DRAFT")
+  ) {
+    return true;
+  }
+
+  // ESPN draft selections often land as ADD rows in scoring period 0 / preseason.
+  const scoringPeriod = Number(txn.scoring_period ?? txn.scoringPeriodId);
+  if (
+    Number.isFinite(scoringPeriod) &&
+    scoringPeriod <= 0 &&
+    (type === "ADD" || type === "FREEAGENT" || type.includes("ADD"))
+  ) {
+    return true;
+  }
+
+  // Any item coded as a draft pick → entire transaction is draft noise.
+  if ((txn.items ?? []).some((item) => String(item.type ?? "").toUpperCase().includes("DRAFT"))) {
+    return true;
+  }
+
+  return false;
+}
+
+/** ESPN free-agent / waiver pool uses 0 or -1; real fantasy clubs are positive ids. */
+function isEspnFantasyTeamId(id: number | null | undefined): id is number {
+  return typeof id === "number" && Number.isFinite(id) && id > 0;
+}
+
+/**
+ * Resolve the manager who executed an ESPN transaction.
+ * Prefer transaction-level teamId; never treat FA pool (0 / -1) as a club.
+ */
+function resolveEspnActingTeamId(txn: {
+  teamId?: number | null;
+  items?: { type?: string; fromTeamId?: number; toTeamId?: number }[];
+}): number | undefined {
+  if (isEspnFantasyTeamId(txn.teamId)) return txn.teamId;
+
+  const items = txn.items ?? [];
+  for (const item of items) {
+    const type = String(item.type ?? "").toUpperCase();
+    if (type.includes("ADD") && isEspnFantasyTeamId(item.toTeamId)) return item.toTeamId;
+    if (type.includes("DROP") && isEspnFantasyTeamId(item.fromTeamId)) return item.fromTeamId;
+  }
+  for (const item of items) {
+    if (isEspnFantasyTeamId(item.toTeamId)) return item.toTeamId;
+    if (isEspnFantasyTeamId(item.fromTeamId)) return item.fromTeamId;
+  }
+  return undefined;
+}
+
+function espnManagerTeamName(
+  teamMap: Map<number, string>,
+  teams: {
+    id?: number;
+    abbrev?: string;
+    name?: string;
+    location?: string;
+    nickname?: string;
+  }[],
+  teamId: number | undefined,
+): string {
+  if (!isEspnFantasyTeamId(teamId)) return "Manager Team";
+
+  const mapped = teamMap.get(teamId)?.trim();
+  if (mapped && !/^Team\s+0$/i.test(mapped)) return mapped;
+
+  const matched = teams.find((t) => Number(t.id) === teamId);
+  const resolved =
+    espnTeamName(matched as never)?.trim() ||
+    matched?.abbrev?.trim() ||
+    matched?.name?.trim() ||
+    "";
+  if (resolved) return resolved;
+
+  return `Team ${teamId}`;
+}
+
 function formatSleeperTransaction(
   txn: SleeperTxn,
   teams: Map<number, string>,
   index: IdentityIndex,
 ): LeagueActivityEvent | null {
+  // Forceful exclusion: draft-day picks never enter the activity feed.
+  if (isDraftActivityTransaction(txn)) return null;
+
   const at = Number(txn.status_updated ?? txn.created ?? 0);
   if (!at) return null;
 
@@ -1373,6 +1635,9 @@ function formatSleeperTransaction(
     type === "injury" ||
     type === "ir" ||
     (!isWaiver && !isFreeAgent && !isTrade && toSlot === "IR");
+
+  // Only keep live in-season front-office activity.
+  if (!isTrade && !isWaiver && !isFreeAgent && !isActualIRMove) return null;
 
   const status = String(txn.status ?? "").toLowerCase();
   const adds = Object.entries(txn.adds ?? {});
@@ -1506,23 +1771,45 @@ export async function loadConnectionTransactions(
     const index = await loadIdentityIndex();
     for (const year of [season, season - 1]) {
       const league = await espnJson<{
-        teams?: { id?: number; abbrev?: string; name?: string; location?: string; nickname?: string }[];
+        teams?: {
+          id?: number;
+          abbrev?: string;
+          name?: string;
+          location?: string;
+          nickname?: string;
+          roster?: {
+            entries?: {
+              playerId?: number;
+              playerPoolEntry?: { id?: number; player?: { fullName?: string } };
+            }[];
+          };
+        }[];
         transactions?: {
           id?: number | string;
           proposedDate?: number;
           processDate?: number;
           type?: string;
           status?: string;
+          /** Acting fantasy team for waiver / FA / roster moves. */
+          teamId?: number;
+          executionType?: string;
+          execution_type?: string;
+          scoringPeriodId?: number;
+          scoring_period?: number;
+          action_type?: string;
           members?: unknown[];
           items?: {
             type?: string;
             playerId?: number;
+            playerName?: string;
             fromTeamId?: number;
             toTeamId?: number;
+            player?: { fullName?: string };
+            playerPoolEntry?: { player?: { fullName?: string } };
           }[];
         }[];
       }>(
-        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mTeam&view=mTransactions2`,
+        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mTeam&view=mTransactions2&view=mRoster`,
         s2,
         swid,
       );
@@ -1530,45 +1817,106 @@ export async function loadConnectionTransactions(
       if (!teams.length && !league?.transactions?.length) continue;
       const teamMap = new Map<number, string>();
       for (const t of teams) {
-        const id = t.id ?? 0;
-        teamMap.set(id, espnTeamName(t as never) ?? t.abbrev ?? `Team ${id}`);
+        if (!isEspnFantasyTeamId(t.id)) continue;
+        teamMap.set(t.id, espnTeamName(t as never) ?? t.abbrev ?? `Team ${t.id}`);
       }
+
+      // ESPN transaction items usually omit fullName — seed names from live
+      // rosters, then fetch any remaining ids from the ESPN players catalog.
+      const espnNameById = new Map<string, string>();
+      for (const t of teams) {
+        for (const e of t.roster?.entries ?? []) {
+          const pid = e.playerId ?? e.playerPoolEntry?.id;
+          const name = e.playerPoolEntry?.player?.fullName?.trim();
+          if (pid != null && name) espnNameById.set(String(pid), name);
+        }
+      }
+
+      const txnPlayerIds: string[] = [];
+      for (const txn of league?.transactions ?? []) {
+        for (const item of txn.items ?? []) {
+          if (item.playerId != null) txnPlayerIds.push(String(item.playerId));
+          const inline = espnItemPlayerName(item);
+          if (item.playerId != null && inline) {
+            espnNameById.set(String(item.playerId), inline);
+          }
+        }
+      }
+
+      const missingNames = [...new Set(txnPlayerIds)].filter((id) => !espnNameById.has(id));
+      if (missingNames.length) {
+        const fetched = await loadEspnPlayerNamesByIds(year, missingNames, s2, swid);
+        for (const [id, name] of fetched) espnNameById.set(id, name);
+      }
+
+      const nameForEspnItem = (item: {
+        playerId?: number;
+        playerName?: string;
+        player?: { fullName?: string };
+        playerPoolEntry?: { player?: { fullName?: string } };
+      }): string | undefined =>
+        espnItemPlayerName(item) ??
+        (item.playerId != null ? espnNameById.get(String(item.playerId)) : undefined);
+
       const events: LeagueActivityEvent[] = [];
       for (const txn of league?.transactions ?? []) {
+        // Forceful exclusion: draft-board records never enter the activity feed.
+        if (isDraftActivityTransaction(txn)) continue;
+
         const at = Number(txn.processDate ?? txn.proposedDate ?? 0);
         if (!at) continue;
         const status = String(txn.status ?? "").toLowerCase();
         const items = txn.items ?? [];
         const id = String(txn.id ?? `${at}`);
-        const adds = items.filter((i) => String(i.type ?? "").toUpperCase().includes("ADD") || i.toTeamId != null);
-        const drops = items.filter((i) => String(i.type ?? "").toUpperCase().includes("DROP") || (i.fromTeamId != null && i.toTeamId == null));
+        const adds = items.filter((i) => {
+          const type = String(i.type ?? "").toUpperCase();
+          if (type.includes("DRAFT")) return false;
+          return (
+            type.includes("ADD") ||
+            (isEspnFantasyTeamId(i.toTeamId) && !isEspnFantasyTeamId(i.fromTeamId))
+          );
+        });
+        const drops = items.filter((i) => {
+          const type = String(i.type ?? "").toUpperCase();
+          if (type.includes("DRAFT")) return false;
+          return (
+            type.includes("DROP") ||
+            (isEspnFantasyTeamId(i.fromTeamId) && !isEspnFantasyTeamId(i.toTeamId))
+          );
+        });
         const isTrade = String(txn.type ?? "").toUpperCase().includes("TRADE") || items.some((i) => String(i.type ?? "").toUpperCase().includes("TRADE"));
 
-        const chipFor = (playerId: number | undefined) => {
-          if (playerId == null) return "Unknown Player";
-          const hit = index.byEspn.get(String(playerId));
-          if (!hit) return `Player ${playerId}`;
-          return `${hit.name} (${hit.pos ?? "FA"} - ${hit.team ?? "FA"})`;
+        const chipFor = (item: (typeof items)[number]) => {
+          if (item.playerId == null && !nameForEspnItem(item)) return "Unknown Player";
+          const raw = item.playerId != null ? String(item.playerId) : "unknown";
+          const nameText = nameForEspnItem(item);
+          return playerChip(index, raw, {
+            isEspnLeague: true,
+            ...(nameText ? { playerNameText: nameText } : {}),
+          });
         };
 
         if (isTrade) {
           const byTeam = new Map<number, string[]>();
           const moves: LeagueActivityMove[] = [];
           for (const item of items) {
+            const itemType = String(item.type ?? "").toUpperCase();
+            if (itemType.includes("DRAFT")) continue;
             const to = item.toTeamId;
-            if (to == null || item.playerId == null) continue;
+            if (!isEspnFantasyTeamId(to) || item.playerId == null) continue;
             const list = byTeam.get(to) ?? [];
-            list.push(chipFor(item.playerId));
+            list.push(chipFor(item));
             byTeam.set(to, list);
-            const move = espnMove(index, item.playerId, "add");
+            const move = espnMove(index, item.playerId, "add", nameForEspnItem(item));
             if (move) moves.push(move);
           }
           for (const item of drops) {
-            const move = espnMove(index, item.playerId, "drop");
+            const move = espnMove(index, item.playerId, "drop", nameForEspnItem(item));
             if (move) moves.push(move);
           }
           const parts = [...byTeam.entries()].map(
-            ([teamId, players]) => `${teamLabel(teamMap, teamId)} received ${players.join(", ")}`,
+            ([teamId, players]) =>
+              `${espnManagerTeamName(teamMap, teams, teamId)} received ${players.join(", ")}`,
           );
           if (!parts.length) continue;
           const prefix = status.includes("reject") || status.includes("fail") ? "TRADE REJECTED" : "TRADE COMPLETED";
@@ -1583,32 +1931,44 @@ export async function loadConnectionTransactions(
           continue;
         }
 
-        const primaryTeam =
-          adds[0]?.toTeamId ?? drops[0]?.fromTeamId ?? undefined;
-        const team = teamLabel(teamMap, primaryTeam);
+        const primaryTeam = resolveEspnActingTeamId(txn);
+        const team = espnManagerTeamName(teamMap, teams, primaryTeam);
         const espnType = String(txn.type ?? "").toLowerCase();
+        // Skip residual draft / commissioner noise that slipped past the gate.
+        if (espnType.includes("draft") || espnType.includes("keeper")) continue;
+
         const espnIsWaiver = espnType.includes("waiver");
         const espnIsFreeAgent =
           espnType.includes("freeagent") ||
           espnType.includes("free_agent") ||
-          espnType.includes("add") ||
-          espnType.includes("drop");
+          espnType === "add" ||
+          espnType === "drop" ||
+          espnType.includes("free agent");
         const espnIsActualIR =
           espnType.includes("injury") ||
           espnType === "ir" ||
           espnType.includes("injured") ||
           (!espnIsWaiver && !espnIsFreeAgent && espnType.includes("ir"));
 
+        // Only emit known in-season activity kinds.
+        if (!espnIsWaiver && !espnIsFreeAgent && !espnIsActualIR && !adds.length && !drops.length) {
+          continue;
+        }
+
         if (adds.length && drops.length) {
           events.push({
             id,
             at,
             kind: espnIsWaiver ? "waiver" : "free_agent",
-            text: `${team} ADDED ${adds.map((i) => chipFor(i.playerId)).join(", ")} from waivers, DROPPED ${drops.map((i) => chipFor(i.playerId)).join(", ")}`,
+            text: `${team} ADDED ${adds.map((i) => chipFor(i)).join(", ")} from waivers, DROPPED ${drops.map((i) => chipFor(i)).join(", ")}`,
             teamName: team,
             moves: [
-              ...adds.map((i) => espnMove(index, i.playerId, "add")).filter((m): m is LeagueActivityMove => Boolean(m)),
-              ...drops.map((i) => espnMove(index, i.playerId, "drop")).filter((m): m is LeagueActivityMove => Boolean(m)),
+              ...adds
+                .map((i) => espnMove(index, i.playerId, "add", nameForEspnItem(i)))
+                .filter((m): m is LeagueActivityMove => Boolean(m)),
+              ...drops
+                .map((i) => espnMove(index, i.playerId, "drop", nameForEspnItem(i)))
+                .filter((m): m is LeagueActivityMove => Boolean(m)),
             ],
           });
         } else if (adds.length) {
@@ -1616,10 +1976,10 @@ export async function loadConnectionTransactions(
             id,
             at,
             kind: espnIsWaiver ? "waiver" : "free_agent",
-            text: `${team} ADDED ${adds.map((i) => chipFor(i.playerId)).join(", ")} as a free agent`,
+            text: `${team} ADDED ${adds.map((i) => chipFor(i)).join(", ")} as a free agent`,
             teamName: team,
             moves: adds
-              .map((i) => espnMove(index, i.playerId, "add"))
+              .map((i) => espnMove(index, i.playerId, "add", nameForEspnItem(i)))
               .filter((m): m is LeagueActivityMove => Boolean(m)),
           });
         } else if (drops.length && espnIsActualIR) {
@@ -1627,10 +1987,10 @@ export async function loadConnectionTransactions(
             id,
             at,
             kind: "ir",
-            text: `${team} PLACED ${drops.map((i) => chipFor(i.playerId)).join(", ")} on Injured Reserve`,
+            text: `${team} PLACED ${drops.map((i) => chipFor(i)).join(", ")} on Injured Reserve`,
             teamName: team,
             moves: drops
-              .map((i) => espnMove(index, i.playerId, "ir"))
+              .map((i) => espnMove(index, i.playerId, "ir", nameForEspnItem(i)))
               .filter((m): m is LeagueActivityMove => Boolean(m)),
           });
         } else if (drops.length) {
@@ -1639,10 +1999,10 @@ export async function loadConnectionTransactions(
             id,
             at,
             kind: espnIsWaiver ? "waiver" : "free_agent",
-            text: `${team} DROPPED ${drops.map((i) => chipFor(i.playerId)).join(", ")}`,
+            text: `${team} DROPPED ${drops.map((i) => chipFor(i)).join(", ")}`,
             teamName: team,
             moves: drops
-              .map((i) => espnMove(index, i.playerId, "drop"))
+              .map((i) => espnMove(index, i.playerId, "drop", nameForEspnItem(i)))
               .filter((m): m is LeagueActivityMove => Boolean(m)),
           });
         }
@@ -1752,7 +2112,10 @@ let identityCache: { at: number; index: IdentityIndex } | null = null;
 const IDENTITY_TTL = 12 * 60 * 60 * 1000;
 
 const normalizeName = (s: string) =>
-  s.toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "").replace(/[^a-z]/g, "");
+  s
+    .toLowerCase()
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "")
+    .replace(/[^a-z0-9]/g, "");
 
 async function loadIdentityIndex(): Promise<IdentityIndex> {
   const now = Date.now();
