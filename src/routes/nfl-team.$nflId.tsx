@@ -3,16 +3,24 @@ import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { PositionBadge } from "@/components/draft/PositionBadge";
-import { teamLogo } from "@/components/draft/PlayerAvatar";
+import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { PlayerDetail } from "@/components/draft/PlayerDetail";
-import type { Scoring } from "@/lib/draft";
+import type { Pos, Scoring } from "@/lib/draft";
 import { NFL_TEAMS, getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
 import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
 
 type TeamTabKey = "logs" | "projections" | "sos" | "outlook" | "depth" | "news";
 
+function injuryLetter(injury: string | null | undefined): "Q" | "O" | "IR" | "NA" | null {
+  const raw = injury?.toUpperCase()?.trim() ?? "";
+  if (!raw || raw === "HEALTHY" || raw === "ACTIVE" || raw === "NONE") return null;
+  if (raw === "QUESTIONABLE" || raw === "Q") return "Q";
+  if (raw === "OUT" || raw === "DOUBTFUL" || raw === "O" || raw === "D") return "O";
+  if (raw === "IR" || raw === "INJURED RESERVE" || raw === "INJURED_RESERVE") return "IR";
+  if (raw === "NA" || raw === "INACTIVE" || raw === "NOT ACTIVE" || raw === "NOT_ACTIVE") return "NA";
+  return null;
+}
 const TEAM_TABS: { key: TeamTabKey; label: string }[] = [
   { key: "logs", label: "Game Logs" },
   { key: "projections", label: "Projections" },
@@ -336,33 +344,73 @@ function NflTeamHub() {
             </div>
           </div>
 
-          {/* Right column — preserved for later revamp */}
+          {/* Right column — injury tracker + team jump */}
           <aside>
             <h2 className="font-display text-sm uppercase tracking-widest">Injury tracker</h2>
-            <ul className="mt-2 space-y-2">
-              {injured.map((p) => (
-                <li key={p.id} className="rounded-lg border border-border bg-card p-3">
+            <div className="mt-2">
+              {injured.map((p) => {
+                const letter = injuryLetter(p.injury);
+                const badge = letter === "Q" || letter === "O" || letter === "IR" ? letter : "IR";
+                const headshot = playerImage(p.id, p.pos as Pos, p.team || team.id);
+                const fallbackLogo =
+                  teamLogo(team.id) ??
+                  `https://sleepercdn.com/images/team_logos/nfl/${team.id.toLowerCase()}.png`;
+                return (
                   <Link
+                    key={p.id}
                     to="/player/$id"
                     params={{ id: p.id }}
-                    className="flex items-center gap-2 text-sm font-medium hover:underline"
+                    className="relative mb-2.5 flex w-full items-center justify-between overflow-hidden rounded-xl border border-slate-100 bg-white p-2.5 text-left shadow-sm transition-all hover:bg-slate-50/40"
                   >
-                    <PositionBadge pos={p.pos} />
-                    <span className="truncate">{p.name}</span>
+                    <div
+                      className="absolute bottom-0 left-0 top-0 w-1"
+                      style={{ backgroundColor: getTeamPrimaryColor(team.id) }}
+                      aria-hidden="true"
+                    />
+                    <div className="flex w-full min-w-0 items-center space-x-3 pl-2.5">
+                      <div className="relative h-8 w-8 flex-shrink-0 select-none">
+                        <span
+                          className={cn(
+                            "absolute -left-1 -top-1 z-30 flex h-4 w-4 select-none items-center justify-center rounded-full border text-[8px] font-black uppercase leading-none tracking-wide text-white shadow-sm",
+                            badge === "IR" && "border-red-800 bg-red-700",
+                            badge === "O" && "border-rose-700 bg-rose-600",
+                            badge === "Q" && "border-amber-600 bg-amber-500",
+                          )}
+                        >
+                          {badge}
+                        </span>
+                        <div className="relative z-20 h-8 w-8 overflow-hidden rounded-full border border-slate-100 bg-white shadow-sm">
+                          <img
+                            src={headshot}
+                            alt={p.name}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = fallbackLogo;
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <span className="flex shrink-0 select-none items-center justify-center rounded border border-blue-100 bg-blue-50/70 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-blue-600">
+                        {p.pos}
+                      </span>
+                      <div className="min-w-0 flex-1 text-left">
+                        <span className="block truncate text-xs font-black text-slate-900">
+                          {p.name}
+                        </span>
+                      </div>
+                    </div>
                   </Link>
-                  <p className="mt-1 text-xs uppercase tracking-wide text-destructive">
-                    {p.injury}
-                  </p>
-                </li>
-              ))}
+                );
+              })}
               {!injured.length && (
-                <li className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+                <div className="rounded-xl border border-slate-100 bg-white p-4 text-sm text-slate-500 shadow-sm">
                   {playersLoading
                     ? "Checking camp reports…"
                     : "No reported injuries. Fully healthy."}
-                </li>
+                </div>
               )}
-            </ul>
+            </div>
 
             <h2 className="mt-6 font-display text-sm uppercase tracking-widest">Jump to team</h2>
             <div className="mt-2 flex flex-wrap gap-1">
