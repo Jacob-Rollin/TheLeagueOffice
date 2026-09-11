@@ -207,6 +207,7 @@ function PlayerHubPage() {
     data?.player.team ?? null,
   );
   const [activeTab, setActiveTab] = useState<DetailTabKey>("logs");
+  const [scoringFormat, setScoringFormat] = useState<Scoring>("half");
   const detailHostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -267,7 +268,12 @@ function PlayerHubPage() {
         <div className="grid w-full grid-cols-1 items-start gap-8 overflow-visible pt-0 lg:grid-cols-[1fr_360px] lg:pt-6">
           {/* Left column — isolated page header + docked subtabs + shared body */}
           <div className="relative z-10 flex w-full flex-col items-stretch overflow-visible border-0 bg-transparent p-0 shadow-none">
-            <StandalonePlayerHeader player={player} bio={bio ?? null} />
+            <StandalonePlayerHeader
+              player={player}
+              bio={bio ?? null}
+              scoringFormat={scoringFormat}
+              onScoringFormatChange={setScoringFormat}
+            />
             <div className="flex w-full select-none items-center space-x-5 overflow-x-auto whitespace-nowrap border-x border-b border-slate-100 bg-white px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {DETAIL_TABS.map(({ key, label }) => {
                 const active = activeTab === key;
@@ -292,7 +298,12 @@ function PlayerHubPage() {
               ref={detailHostRef}
               className="w-full overflow-visible bg-white [&>div>header]:hidden"
             >
-              <PlayerDetail id={id} showFullProfileLink={false} />
+              <PlayerDetail
+                id={id}
+                showFullProfileLink={false}
+                scoringFormat={scoringFormat}
+                onScoringFormatChange={setScoringFormat}
+              />
             </div>
           </div>
 
@@ -541,6 +552,8 @@ function PlayerHubPage() {
 function StandalonePlayerHeader({
   player,
   bio,
+  scoringFormat,
+  onScoringFormatChange,
 }: {
   player: {
     id: string;
@@ -557,6 +570,8 @@ function StandalonePlayerHeader({
     [key: string]: unknown;
   };
   bio: { number?: number | null; height?: string | null; weight?: string | null; college?: string | null; birthDate?: string | null } | null;
+  scoringFormat: Scoring;
+  onScoringFormatChange: (format: Scoring) => void;
 }) {
   const teamMeta = teamById(player.team);
   const teamNickname = (teamMeta?.name ?? player.team ?? "FA").toUpperCase();
@@ -612,11 +627,12 @@ function StandalonePlayerHeader({
   const overallRaw =
     (player as { overall_rank?: number | null }).overall_rank ??
     (typeof player.rank === "number" ? player.rank : null) ??
-    (typeof player.rank === "object" && player.rank ? player.rank.half ?? 999 : 999);
+    (typeof player.rank === "object" && player.rank
+      ? player.rank[scoringFormat] ?? player.rank.half ?? 999
+      : 999);
   const posRankLabel = Number(positionRank) < 900 ? positionRank : "—";
   const overallRankLabel = Number(overallRaw) < 900 ? overallRaw : "—";
 
-  const [scoringFormat, setScoringFormat] = useState<Scoring>("half");
   const [isScoringOpen, setIsScoringOpen] = useState(false);
   const scoringMenuRef = useRef<HTMLDivElement>(null);
 
@@ -754,7 +770,7 @@ function StandalonePlayerHeader({
                         role="option"
                         aria-selected={active}
                         onClick={() => {
-                          setScoringFormat(option.value);
+                          onScoringFormatChange(option.value);
                           setIsScoringOpen(false);
                         }}
                         className={cn(

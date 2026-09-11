@@ -178,6 +178,8 @@ export function PlayerDetail({
   onClose,
   showDraftActions = false,
   showFullProfileLink = true,
+  scoringFormat: scoringFormatProp,
+  onScoringFormatChange,
 }: {
   id: string;
   onSelectPlayer?: (id: string) => void;
@@ -187,6 +189,9 @@ export function PlayerDetail({
   showDraftActions?: boolean;
   /** When false, hide the Full Profile utility (standalone profile page). */
   showFullProfileLink?: boolean;
+  /** Optional controlled scoring format from a standalone page header. */
+  scoringFormat?: Scoring;
+  onScoringFormatChange?: (format: Scoring) => void;
 }) {
   const { data, isLoading } = useQuery(detailQuery(id));
   const { data: bio } = useQuery({
@@ -202,7 +207,15 @@ export function PlayerDetail({
     data?.player.team ?? null,
   );
   const [tab, setTab] = useState<DetailTab>("logs");
-  const [scoringFormat, setScoringFormat] = useState<Scoring>(draft.settings.scoring);
+  const [internalScoringFormat, setInternalScoringFormat] = useState<Scoring>(
+    draft.settings.scoring,
+  );
+  const scoringControlled = scoringFormatProp !== undefined;
+  const scoringFormat = scoringControlled ? scoringFormatProp : internalScoringFormat;
+  const setScoringFormat = (format: Scoring) => {
+    if (scoringControlled) onScoringFormatChange?.(format);
+    else setInternalScoringFormat(format);
+  };
   const [isScoringOpen, setIsScoringOpen] = useState(false);
   const scoringMenuRef = useRef<HTMLDivElement>(null);
 
@@ -212,7 +225,7 @@ export function PlayerDetail({
       activeLeague?.platform,
       activeLeague?.leagueId,
     ],
-    enabled: Boolean(activeLeague?.leagueId),
+    enabled: Boolean(activeLeague?.leagueId) && !scoringControlled,
     staleTime: 1000 * 60 * 60,
     queryFn: () =>
       getLeagueScoring({
@@ -226,11 +239,12 @@ export function PlayerDetail({
   });
 
   useEffect(() => {
+    if (scoringControlled) return;
     const format = leagueScoringQuery.data?.format;
     if (format === "std" || format === "half" || format === "ppr") {
-      setScoringFormat(format);
+      setInternalScoringFormat(format);
     }
-  }, [leagueScoringQuery.data?.format]);
+  }, [leagueScoringQuery.data?.format, scoringControlled]);
 
   useEffect(() => {
     if (!isScoringOpen) return;
