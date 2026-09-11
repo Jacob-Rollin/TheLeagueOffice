@@ -4,16 +4,14 @@ import { useEffect, useRef, useState } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { PlayerDetail } from "@/components/draft/PlayerDetail";
-import { usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
+import { usePlayerSos } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { Pos } from "@/lib/draft";
 import { getTeamPrimaryColor, NFL_TEAMS, teamById } from "@/lib/nfl-teams";
 import { getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
 import {
   matchupGrade,
-  matchupTone,
   playoffWindow,
-  positionPercentile,
   strategicOutlook,
   weekSlots,
 } from "@/lib/sos-presentation";
@@ -148,6 +146,16 @@ function HeaderVitalsDivider() {
   return <span className="mx-3 text-white/20">|</span>;
 }
 
+function injuryLetter(injury: string | null | undefined): "Q" | "O" | "IR" | "NA" | null {
+  const raw = injury?.toUpperCase()?.trim() ?? "";
+  if (!raw || raw === "HEALTHY" || raw === "ACTIVE" || raw === "NONE") return null;
+  if (raw === "QUESTIONABLE" || raw === "Q") return "Q";
+  if (raw === "OUT" || raw === "DOUBTFUL" || raw === "O" || raw === "D") return "O";
+  if (raw === "IR" || raw === "INJURED RESERVE" || raw === "INJURED_RESERVE") return "IR";
+  if (raw === "NA" || raw === "INACTIVE" || raw === "NOT ACTIVE" || raw === "NOT_ACTIVE") return "NA";
+  return null;
+}
+
 export const Route = createFileRoute("/player/$id")({
   head: () => ({
     meta: [
@@ -192,7 +200,6 @@ function PlayerHubPage() {
     (data ? brain?.[data.player.id] : null) ?? null,
     data?.player.team ?? null,
   );
-  const sosPeers = useSosPeerMatrix(data?.player.pos ?? null, brain);
   const [activeTab, setActiveTab] = useState<DetailTabKey>("logs");
   const detailHostRef = useRef<HTMLDivElement>(null);
 
@@ -218,8 +225,15 @@ function PlayerHubPage() {
   const posDepthChart = depthChart.filter((d) => d.pos === player.pos);
   const brainEntry = brain?.[player.id] ?? null;
   const brainSos = playerSos;
-  const percentileLabel = positionPercentile(player.id, player.pos, sosPeers ?? brain, brainSos);
   const tier = riskTier(injuryRisk.score);
+  const playoff = brainSos ? playoffWindow(brainSos) : null;
+  const playoffChallenging = playoff === "Challenging";
+  const outlookLower = brainSos ? strategicOutlook(brainSos).toLowerCase() : "";
+  const trendLabel = /favor|friendly|steady/.test(outlookLower)
+    ? "FAVORABLE"
+    : /brutal|caution|limited|demand/.test(outlookLower)
+      ? "CAUTION"
+      : "BALANCED";
 
   return (
     <main className="w-full min-h-screen bg-slate-50 text-slate-900 overflow-y-auto">
@@ -316,57 +330,95 @@ function PlayerHubPage() {
                   <p className="text-xs text-zinc-500">Schedule data unavailable.</p>
                 ) : (
                   <>
-                    <div className="flex items-start gap-3">
-                      <div className="min-w-0">
-                        <p className="font-display text-xl font-bold text-foreground">
-                          {matchupGrade(brainSos.rank)}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {strategicOutlook(brainSos)}
-                        </p>
+                    <div className="grid w-full select-none grid-cols-3 gap-2 border-b border-slate-100 pb-4">
+                      <div className="flex h-[64px] min-w-0 flex-1 flex-col items-center justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-2.5 text-center shadow-sm">
+                        <span className="text-sm font-black uppercase tracking-tight text-slate-900">
+                          {matchupGrade(brainSos.rank) || "NEUTRAL"}
+                        </span>
+                        <span className="mt-1 text-[9px] font-black uppercase leading-none tracking-widest text-slate-400">
+                          Overall Matchup
+                        </span>
                       </div>
-                      <div className="ml-auto flex flex-col items-end text-right">
-                        {percentileLabel && (
-                          <span className="text-right text-xs font-medium text-slate-500">
-                            {percentileLabel}
-                          </span>
-                        )}
-                        <span className="text-[11px] text-muted-foreground">
-                          Playoff Window SoS: {playoffWindow(brainSos)}
+                      <div className="flex h-[64px] min-w-0 flex-1 flex-col items-center justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-2.5 text-center shadow-sm">
+                        <span
+                          className={cn(
+                            "text-xs font-black uppercase leading-none tracking-tight",
+                            playoffChallenging ? "text-rose-600" : "text-emerald-600",
+                          )}
+                        >
+                          {playoffChallenging ? "CHALLENGING" : "FAVORABLE"}
+                        </span>
+                        <span className="mt-1.5 text-[9px] font-black uppercase leading-none tracking-widest text-slate-400">
+                          Playoff Window
+                        </span>
+                      </div>
+                      <div className="flex h-[64px] min-w-0 flex-1 flex-col items-center justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-2.5 text-center shadow-sm">
+                        <span className="line-clamp-1 text-center text-[10px] font-extrabold uppercase leading-tight text-slate-600">
+                          {trendLabel}
+                        </span>
+                        <span className="mt-1.5 text-[9px] font-black uppercase leading-none tracking-widest text-slate-400">
+                          Trend Outlook
                         </span>
                       </div>
                     </div>
-                    <div className="mt-3 grid grid-cols-6 gap-1 sm:grid-cols-9">
-                      {weekSlots(brainSos.matchups).map((slot) =>
-                        slot.matchup ? (
+                    <div className="mt-4 grid w-full select-none grid-cols-3 gap-2">
+                      {weekSlots(brainSos.matchups).map((slot) => {
+                        const isBye = !slot.matchup;
+                        const rank = slot.matchup?.rank ?? null;
+                        const difficulty = isBye
+                          ? "bye"
+                          : rank == null
+                            ? "neutral"
+                            : rank >= 25
+                              ? "great"
+                              : rank >= 18
+                                ? "good"
+                                : rank >= 11
+                                  ? "neutral"
+                                  : rank >= 6
+                                    ? "tough"
+                                    : "bad";
+                        const opp = isBye
+                          ? "BYE"
+                          : (slot.matchup?.opp ?? "—").replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ||
+                            "—";
+                        const isCurrentWeek = slot.week === 1;
+                        const difficultyLabel = isBye
+                          ? "BYE"
+                          : difficulty === "neutral"
+                            ? "MID"
+                            : difficulty.toUpperCase();
+                        return (
                           <div
                             key={slot.week}
                             className={cn(
-                              "flex flex-col items-center justify-center rounded-lg border bg-card p-2 shadow-sm",
-                              matchupTone(slot.matchup.rank),
+                              "flex h-[72px] flex-col items-center justify-between rounded-xl border border-slate-100 bg-white p-2 shadow-sm transition-all",
+                              isCurrentWeek &&
+                                "border-blue-100 shadow-md ring-2 ring-blue-600 ring-offset-1",
                             )}
                           >
-                            <div className="text-[9px] uppercase text-muted-foreground">
-                              Week {slot.week}
-                            </div>
-                            <div className="tabnum text-[11px] font-semibold">
-                              {slot.matchup.opp}
-                            </div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                              WK {slot.week}
+                            </span>
+                            <span className="mt-0.5 text-xs font-black uppercase leading-none tracking-wide text-slate-800">
+                              {opp}
+                            </span>
+                            <span
+                              className={cn(
+                                "w-full max-w-[46px] select-none rounded-md py-0.5 text-center text-[8px] font-black uppercase tracking-wider text-white transition-colors",
+                                difficulty === "great" && "bg-emerald-600",
+                                difficulty === "good" && "bg-emerald-500",
+                                difficulty === "neutral" && "bg-slate-400",
+                                difficulty === "tough" && "bg-rose-400",
+                                difficulty === "bad" && "bg-rose-600",
+                                isBye && "bg-slate-200 font-extrabold text-slate-500",
+                              )}
+                            >
+                              {difficultyLabel}
+                            </span>
                           </div>
-                        ) : (
-                          <div
-                            key={slot.week}
-                            className="flex flex-col items-center justify-center rounded-lg border border-border/60 bg-transparent p-2 shadow-sm"
-                          >
-                            <div className="text-[9px] uppercase text-muted-foreground">
-                              Week {slot.week}
-                            </div>
-                            <div className="tabnum text-[11px] font-semibold text-slate-400">
-                              BYE
-                            </div>
-                          </div>
-                        ),
-                      )}
+                        );
+                      })}
                     </div>
                   </>
                 )}
@@ -378,26 +430,86 @@ function PlayerHubPage() {
                 {posDepthChart.length === 0 ? (
                   <p className="text-xs text-zinc-500">No teammates found.</p>
                 ) : (
-                  <ol className="space-y-1">
-                    {posDepthChart.slice(0, 6).map((d, i) => (
-                      <li key={d.id}>
+                  <div className="space-y-0">
+                    {posDepthChart.slice(0, 6).map((d, index) => {
+                      const headshot = playerImage(d.id, player.pos as Pos, player.team);
+                      const fallbackLogo =
+                        teamLogo(player.team) ??
+                        `https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`;
+                      return (
                         <Link
+                          key={d.id}
                           to="/player/$id"
                           params={{ id: d.id }}
                           className={cn(
-                            "flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-white",
-                            d.id === player.id && "bg-white font-semibold text-blue-600",
+                            "relative mb-2 flex w-full items-center justify-between overflow-hidden rounded-xl border border-slate-100 bg-white p-2.5 text-left shadow-sm transition-all",
+                            d.id === player.id && "border-blue-100 bg-blue-50/30",
                           )}
                         >
-                          <span className="tabnum w-4 text-xs text-zinc-400">{i + 1}</span>
-                          <span className="min-w-0 flex-1 truncate">{d.name}</span>
-                          <span className="tabnum text-xs text-zinc-500">
-                            {d.proj.toFixed(1)}
-                          </span>
+                          <div
+                            className="absolute bottom-0 left-0 top-0 w-1"
+                            style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
+                            aria-hidden="true"
+                          />
+                          <div className="flex min-w-0 flex-1 items-center space-x-3 pl-2.5">
+                            <div className="relative h-8 w-8 flex-shrink-0 select-none">
+                              <span className="absolute -left-1 -top-1 z-30 flex h-4 w-4 select-none items-center justify-center rounded-full border border-slate-200 bg-white font-mono text-[9px] font-black text-slate-500 shadow-sm">
+                                {index + 1}
+                              </span>
+                              <div className="relative z-20 h-8 w-8 overflow-hidden rounded-full border border-slate-100 bg-white shadow-sm">
+                                <img
+                                  src={headshot}
+                                  alt={d.name}
+                                  loading="lazy"
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.src = fallbackLogo;
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex min-w-0 flex-1 flex-row items-center space-x-1.5 pl-2.5 text-left">
+                              <span
+                                className={cn(
+                                  "truncate text-xs font-black",
+                                  d.id === player.id ? "text-blue-600" : "text-slate-900",
+                                )}
+                              >
+                                {d.name}
+                              </span>
+                              {d.injury &&
+                              (injuryLetter(d.injury) === "Q" || d.injury === "Questionable") ? (
+                                <span className="flex shrink-0 select-none items-center justify-center rounded bg-amber-500 px-1 py-0.5 text-[9px] font-black uppercase leading-none tracking-wider text-white">
+                                  Q
+                                </span>
+                              ) : null}
+                              {d.injury &&
+                              (injuryLetter(d.injury) === "O" ||
+                                d.injury === "Out" ||
+                                d.injury === "Doubtful") ? (
+                                <span className="flex shrink-0 select-none items-center justify-center rounded bg-rose-600 px-1 py-0.5 text-[9px] font-black uppercase leading-none tracking-wider text-white">
+                                  O
+                                </span>
+                              ) : null}
+                              {d.injury &&
+                              (injuryLetter(d.injury) === "IR" ||
+                                d.injury === "Injured Reserve") ? (
+                                <span className="flex shrink-0 select-none items-center justify-center rounded bg-red-700 px-1 py-0.5 text-[9px] font-black uppercase leading-none tracking-wider text-white">
+                                  IR
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="flex flex-row items-baseline space-x-0.5 pr-1 text-right text-xs font-black tracking-wide text-slate-900">
+                            <span>{Number.isFinite(d.proj) ? d.proj.toFixed(1) : "0.0"}</span>
+                            <span className="select-none text-[9px] font-bold lowercase text-slate-400">
+                              proj
+                            </span>
+                          </div>
                         </Link>
-                      </li>
-                    ))}
-                  </ol>
+                      );
+                    })}
+                  </div>
                 )}
               </Widget>
             )}
