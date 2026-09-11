@@ -234,6 +234,26 @@ function PlayerHubPage() {
     : /brutal|caution|limited|demand/.test(outlookLower)
       ? "CAUTION"
       : "BALANCED";
+  const historicalBody =
+    injuryRisk.factors
+      .filter(
+        (f) =>
+          !f.toLowerCase().includes("currently listed") &&
+          (!player.injury || f.toLowerCase().trim() !== player.injury.toLowerCase().trim()),
+      )
+      .find((f) => {
+        const lower = f.toLowerCase();
+        return !(
+          lower.includes("carries") ||
+          lower.includes("touches") ||
+          lower.includes("targets") ||
+          lower.includes("snaps")
+        );
+      }) ??
+    (player.injury && brainEntry?.injuryType
+      ? brainEntry.injuryType
+      : "No significant historical flags");
+  const injuryDesignation = player.injury ?? "Healthy — no designation";
 
   return (
     <main className="w-full min-h-screen bg-slate-50 text-slate-900 overflow-y-auto">
@@ -276,51 +296,42 @@ function PlayerHubPage() {
 
             {player.pos !== "DEF" && (
               <Widget title="Injury risk">
-                <div className="flex items-baseline justify-between">
-                  <span className={cn("font-display text-xl uppercase", tier.text)}>
-                    {tier.label}
-                  </span>
-                  <span className="tabnum text-sm text-zinc-500">{injuryRisk.score}/100</span>
+                <div className="flex w-full select-none flex-col border-b border-slate-100/80 pb-4">
+                  <div className="mb-2 flex items-baseline justify-between">
+                    <span className={cn("text-sm font-black uppercase tracking-tight", tier.text)}>
+                      {tier.label}
+                    </span>
+                    <span className="font-mono text-xs font-bold text-slate-500">
+                      {injuryRisk.score}/100
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className={cn("h-full rounded-full transition-all duration-500", tier.fill)}
+                      style={{
+                        width: `${Math.min(100, Math.max(0, injuryRisk.score))}%`,
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded bg-zinc-200">
-                  <div
-                    className={cn("h-full transition-[width] duration-500", tier.fill)}
-                    style={{ width: `${Math.min(100, Math.max(0, injuryRisk.score))}%` }}
-                  />
+                <div className="mt-4 flex w-full select-none flex-col space-y-2">
+                  <div className="flex min-h-[58px] w-full flex-col items-start justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-3 shadow-sm">
+                    <span className="mb-1 text-[9px] font-black uppercase leading-none tracking-widest text-slate-400">
+                      Historical Track
+                    </span>
+                    <span className="text-left text-xs font-bold leading-normal text-slate-600">
+                      {historicalBody}
+                    </span>
+                  </div>
+                  <div className="flex min-h-[58px] w-full flex-col items-start justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-3 shadow-sm">
+                    <span className="mb-1 text-[9px] font-black uppercase leading-none tracking-widest text-slate-400">
+                      Current Designation
+                    </span>
+                    <span className="text-left text-xs font-bold leading-normal text-slate-600">
+                      {injuryDesignation}
+                    </span>
+                  </div>
                 </div>
-                <ul className="mt-2 space-y-1 text-xs text-zinc-500">
-                  {player.injury && brainEntry?.injuryType && (
-                    <li>
-                      · <span className="font-semibold text-zinc-800">CORE DIAGNOSIS:</span>{" "}
-                      {brainEntry.injuryType}
-                    </li>
-                  )}
-                  {injuryRisk.factors
-                    .filter(
-                      (f) =>
-                        !f.toLowerCase().includes("currently listed") &&
-                        (!player.injury ||
-                          f.toLowerCase().trim() !== player.injury.toLowerCase().trim()),
-                    )
-                    .map((f) => {
-                      const lower = f.toLowerCase();
-                      const isWorkload =
-                        lower.includes("carries") ||
-                        lower.includes("touches") ||
-                        lower.includes("targets") ||
-                        lower.includes("snaps");
-                      const label = isWorkload ? "WORKLOAD NOTE" : "HISTORICAL TRACK";
-                      return (
-                        <li key={f}>
-                          · <span className="font-semibold text-zinc-800">{label}:</span> {f}
-                        </li>
-                      );
-                    })}
-                  <li>
-                    · <span className="font-semibold text-zinc-800">CURRENT DESIGNATION:</span>{" "}
-                    {player.injury ?? "Healthy — no designation"}
-                  </li>
-                </ul>
               </Widget>
             )}
 
