@@ -1,12 +1,13 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { PlayerDetail } from "@/components/draft/PlayerDetail";
 import { usePlayerSos } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
-import type { Pos } from "@/lib/draft";
+import type { Pos, Scoring } from "@/lib/draft";
 import { getTeamPrimaryColor, NFL_TEAMS, teamById } from "@/lib/nfl-teams";
 import { getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
 import {
@@ -17,6 +18,11 @@ import {
 } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
+const SCORING_OPTIONS: { value: Scoring; label: string }[] = [
+  { value: "std", label: "STD" },
+  { value: "half", label: "HALF" },
+  { value: "ppr", label: "PPR" },
+];
 const DETAIL_TABS = [
   { key: "logs", label: "Game Logs" },
   { key: "projections", label: "Projections" },
@@ -610,9 +616,26 @@ function StandalonePlayerHeader({
   const posRankLabel = Number(positionRank) < 900 ? positionRank : "—";
   const overallRankLabel = Number(overallRaw) < 900 ? overallRaw : "—";
 
+  const [scoringFormat, setScoringFormat] = useState<Scoring>("half");
+  const [isScoringOpen, setIsScoringOpen] = useState(false);
+  const scoringMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isScoringOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!scoringMenuRef.current?.contains(event.target as Node)) {
+        setIsScoringOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [isScoringOpen]);
+
   return (
     <div
-      className="relative flex h-[160px] min-h-[160px] w-full items-stretch overflow-hidden rounded-t-xl rounded-b-none border-x border-t border-slate-100 bg-slate-900 text-white shadow-sm"
+      className={cn(
+        "relative z-40 flex h-[160px] min-h-[160px] w-full flex-row items-center overflow-visible rounded-t-xl rounded-b-none border-x border-t border-slate-100 pt-0 pr-6 pb-0 text-white shadow-sm",
+      )}
       style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
     >
       {watermarkLogo ? (
@@ -628,41 +651,21 @@ function StandalonePlayerHeader({
         />
       ) : null}
 
-      <div
-        className="relative z-20 mb-0 ml-0 mt-0 flex h-[160px] w-[140px] flex-shrink-0 items-end overflow-visible bg-transparent pl-0 select-none"
-        style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
-      >
-        <div
-          className="absolute inset-0 overflow-hidden bg-transparent"
-          style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
-        >
+      <div className="absolute bottom-0 left-0 z-20 mb-0 ml-0 mt-0 flex h-[160px] w-[140px] items-end overflow-visible bg-transparent pl-0 select-none">
+        <div className="absolute inset-0 overflow-hidden bg-transparent">
           <img
             src={playerImage(player.id, player.pos as Pos, player.team)}
             alt=""
             loading="lazy"
-            className="pointer-events-none relative z-20 h-full w-full select-none object-cover object-[55%_center] transition-all"
+            className="pointer-events-none relative z-20 h-full w-full select-none object-cover object-[55%_center]"
             onError={(e) => {
               e.currentTarget.style.visibility = "hidden";
             }}
           />
         </div>
-        <div className="absolute bottom-0 left-0 z-30 flex min-w-full w-max max-w-[200px] flex-row items-center whitespace-nowrap rounded-tr-md rounded-br-none bg-transparent pl-0">
-          <span
-            className={cn(
-              "flex shrink-0 items-center justify-center rounded-none px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
-              POS_STRIP_BG[player.pos] ?? "bg-slate-700",
-            )}
-          >
-            {player.pos}
-          </span>
-          <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
-            <span>{teamNickname}</span>
-            {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
-          </span>
-        </div>
       </div>
 
-      <div className="z-20 mt-0.5 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pl-6 pr-10 text-left">
+      <div className="z-20 mt-1 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pl-[164px] pr-10 text-left">
         <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-visible">
           <h1 className="truncate text-3xl font-black tracking-tight text-white">{player.name}</h1>
           {injuryDetails ? (
@@ -699,22 +702,92 @@ function StandalonePlayerHeader({
           </div>
         )}
 
-        <div className="mt-2 w-full min-w-0">
+        <div className="mt-2 w-full min-w-0 overflow-visible">
           <span className="mb-1 block text-left text-[10px] font-black uppercase tracking-widest text-white/50">
             Player Rankings
           </span>
-          <div className="flex flex-wrap items-center text-xs font-black uppercase tracking-wide text-white">
+          <div className="flex flex-wrap items-center overflow-visible text-xs font-black uppercase tracking-wide text-white">
             <span>
               #{posRankLabel} {player.pos}
             </span>
-            <HeaderVitalsDivider />
+            <span className="mx-3 text-white/20">|</span>
             <span>#{overallRankLabel} OVERALL</span>
-            <HeaderVitalsDivider />
+            <span className="mx-3 text-white/20">|</span>
             <span>{Math.round(Number(rosteredPct) || 83)}% ROSTERED</span>
-            <HeaderVitalsDivider />
+            <span className="mx-3 text-white/20">|</span>
             <span>{Math.round(Number(startedPct) || 39)}% STARTED</span>
+            <span className="mx-3 text-white/20">|</span>
+
+            <div
+              ref={scoringMenuRef}
+              className="relative inline-block overflow-visible text-left"
+            >
+              <button
+                type="button"
+                aria-label="Scoring format"
+                aria-expanded={isScoringOpen}
+                aria-haspopup="listbox"
+                onClick={() => setIsScoringOpen(!isScoringOpen)}
+                className="relative z-50 flex min-w-[64px] cursor-pointer items-center justify-between rounded-lg border border-white/20 bg-white/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white transition-all select-none hover:bg-white/15 focus:outline-none"
+              >
+                <span>
+                  {SCORING_OPTIONS.find((o) => o.value === scoringFormat)?.label ?? "HALF"}
+                </span>
+                {isScoringOpen ? (
+                  <ChevronUp className="ml-1 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
+                ) : (
+                  <ChevronDown className="ml-1 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
+                )}
+              </button>
+              {isScoringOpen ? (
+                <div
+                  role="listbox"
+                  aria-label="Scoring formats"
+                  className="absolute top-full left-0 z-50 mt-1 flex w-20 flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white py-0.5 text-left shadow-xl transition-all"
+                >
+                  {SCORING_OPTIONS.map((option) => {
+                    const active = scoringFormat === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        onClick={() => {
+                          setScoringFormat(option.value);
+                          setIsScoringOpen(false);
+                        }}
+                        className={cn(
+                          "w-full cursor-pointer select-none px-3 py-1.5 text-left text-[11px] transition-colors",
+                          active
+                            ? "bg-slate-100 font-black text-slate-900"
+                            : "font-bold text-slate-600 hover:bg-slate-50/80 hover:text-slate-900",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
+      </div>
+
+      <div className="pointer-events-none absolute bottom-0 left-0 z-50 flex select-none flex-row items-center whitespace-nowrap bg-transparent pl-0 text-center uppercase">
+        <span
+          className={cn(
+            "flex shrink-0 items-center justify-center px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
+            POS_STRIP_BG[player.pos] ?? "bg-slate-700",
+          )}
+        >
+          {player.pos}
+        </span>
+        <span className="flex flex-row items-center justify-center space-x-1.5 rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
+          <span>{teamNickname}</span>
+          {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
+        </span>
       </div>
     </div>
   );
