@@ -202,12 +202,13 @@ function PlayerHubPage() {
   const { data, isLoading } = useQuery(profileQuery(id));
   const { data: bio } = useQuery(bioQuery(id));
   const brain = usePlayerBrain();
+  const [activeTab, setActiveTab] = useState<DetailTabKey>("logs");
+  const [scoringFormat, setScoringFormat] = useState<Scoring>("half");
   const playerSos = usePlayerSos(
     (data ? brain?.[data.player.id] : null) ?? null,
     data?.player.team ?? null,
+    scoringFormat,
   );
-  const [activeTab, setActiveTab] = useState<DetailTabKey>("logs");
-  const [scoringFormat, setScoringFormat] = useState<Scoring>("half");
   const detailHostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

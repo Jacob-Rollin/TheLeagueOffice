@@ -202,10 +202,6 @@ export function PlayerDetail({
   const draft = useDraft();
   const { activeLeague } = useActiveLeague();
   const brain = usePlayerBrain();
-  const playerSos = usePlayerSos(
-    (data ? brain?.[data.player.id] : null) ?? null,
-    data?.player.team ?? null,
-  );
   const [tab, setTab] = useState<DetailTab>("logs");
   const [internalScoringFormat, setInternalScoringFormat] = useState<Scoring>(
     draft.settings.scoring,
@@ -216,6 +212,11 @@ export function PlayerDetail({
     if (scoringControlled) onScoringFormatChange?.(format);
     else setInternalScoringFormat(format);
   };
+  const playerSos = usePlayerSos(
+    (data ? brain?.[data.player.id] : null) ?? null,
+    data?.player.team ?? null,
+    scoringFormat,
+  );
   const [isScoringOpen, setIsScoringOpen] = useState(false);
   const scoringMenuRef = useRef<HTMLDivElement>(null);
 
@@ -1212,20 +1213,76 @@ function sosDifficultyFromStars(stars: number | null): {
   return { tone: "tough", label: "Tough" };
 }
 
-function SosStarRow({ count }: { count: number }) {
-  const activeCount = Math.max(0, Math.min(5, count));
+/** Week/matchup payloads may use several backend rank key spellings. */
+type MatchupRankSource =
+  | number
+  | null
+  | undefined
+  | {
+      rank?: number | null;
+      rating?: number | null;
+      oppRank?: number | null;
+      opp_rank?: number | null;
+      stars?: number | null;
+      starsCount?: number | null;
+      [key: string]: unknown;
+    };
+
+/** Resolve 1–5 stars from synchronized week rankings (scoring-aware SOS). */
+function resolveStarCount(w: MatchupRankSource): number {
+  if (w != null && typeof w === "object") {
+    const direct = w.stars ?? w.starsCount;
+    if (direct !== undefined && direct !== null && Number.isFinite(Number(direct))) {
+      return Math.max(0, Math.min(5, Math.round(Number(direct))));
+    }
+    const inferredRank = w.rank ?? w.oppRank ?? w.opp_rank ?? w.rating;
+    const fromRank =
+      inferredRank !== undefined && inferredRank !== null
+        ? sosStarsFromRank(Number(inferredRank))
+        : null;
+    if (fromRank != null && Number.isFinite(fromRank)) {
+      return Math.max(0, Math.min(5, Math.round(fromRank)));
+    }
+  } else if (typeof w === "number") {
+    const fromRank = sosStarsFromRank(w);
+    if (fromRank != null) return fromRank;
+  }
+  return 3;
+}
+
+/**
+ * Shared 1–5 gold star row for SOS + Outlook.
+ * Consumes scoring-synchronized week ranks from usePlayerSos.
+ */
+function SosStarRow({
+  matchup,
+  rank,
+  week = 0,
+}: {
+  matchup?: MatchupRankSource;
+  rank?: number | null;
+  week?: number;
+}) {
+  const filled = resolveStarCount(matchup !== undefined ? matchup : rank);
+
   return (
-    <div className="flex select-none items-center space-x-0.5 text-left text-sm tracking-tight">
-      {Array.from({ length: 5 }).map((_, i) => {
-        const starIndex = i + 1;
-        const isActive = starIndex <= activeCount;
+    <div
+      className="flex select-none items-center space-x-0.5"
+      aria-label={`${filled} of 5 stars`}
+    >
+      {Array.from({ length: 5 }).map((_, starIndex) => {
+        const isFilled = starIndex < filled;
         return (
-          <span
-            key={i}
-            className={isActive ? "fill-amber-500 text-amber-500" : "text-slate-200"}
-          >
-            ★
-          </span>
+          <Star
+            key={`sos-star-matrix-${week}-${starIndex}`}
+            className={cn(
+              "h-3 w-3 shrink-0 transition-all duration-200",
+              isFilled ? "text-amber-500" : "text-slate-200",
+            )}
+            fill={isFilled ? "currentColor" : "none"}
+            strokeWidth={2}
+            aria-hidden="true"
+          />
         );
       })}
     </div>
@@ -1295,6 +1352,7 @@ function SosHeatmapPanel({
       isBye: boolean;
       isAway: boolean;
       opp: string;
+      rank: number | null;
       stars: number | null;
       tone: SosDifficultyTone;
       label: string | null;
@@ -1302,13 +1360,27 @@ function SosHeatmapPanel({
     }[] = [];
 
     for (let week = 1; week <= 18; week++) {
-      const hit = byWeek.get(week);
-      if (!hit || !hit.opp || hit.opp.toUpperCase() === "BYE") {
+      const hit = byWeek.get(week) ?? null;
+      const game = games.find((g) => {
+        if (Number(g.week) !== week) return false;
+        const home = (g.home || "").toUpperCase();
+        const away = (g.away || "").toUpperCase();
+        return home === upperTeam || away === upperTeam;
+      });
+
+      // Prefer live schedule for bye detection so Week 18 never false-byes
+      // when brain matchups omit the final week.
+      const dataSaysBye =
+        !hit || !hit.opp || hit.opp.trim() === "" || hit.opp.toUpperCase() === "BYE";
+      const isBye = games.length > 0 ? !game : dataSaysBye;
+
+      if (isBye) {
         out.push({
           week,
           isBye: true,
           isAway: false,
           opp: "BYE",
+          rank: null,
           stars: null,
           tone: "bye",
           label: null,
@@ -1317,24 +1389,34 @@ function SosHeatmapPanel({
         continue;
       }
 
-      const stars = sosStarsFromRank(hit.rank);
-      const { tone, label } = sosDifficultyFromStars(stars);
-      const game = games.find((g) => {
-        if (Number(g.week) !== week) return false;
-        const home = (g.home || "").toUpperCase();
-        const away = (g.away || "").toUpperCase();
-        return home === upperTeam || away === upperTeam;
-      });
+      const scheduleOpp = game
+        ? (game.home || "").toUpperCase() === upperTeam
+          ? (game.away || "").toUpperCase()
+          : (game.home || "").toUpperCase()
+        : "";
+      const rawOpp = !dataSaysBye ? hit!.opp : scheduleOpp;
+      const opp =
+        (rawOpp || scheduleOpp || "—").replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ||
+        "—";
+      // Match Outlook: stars derive only from sosStarsFromRank(weekly defensive rank).
+      const rank =
+        hit?.rank != null && Number.isFinite(Number(hit.rank)) ? Number(hit.rank) : null;
+      const stars = sosStarsFromRank(rank);
+      const { tone, label } =
+        stars != null
+          ? sosDifficultyFromStars(stars)
+          : { tone: "neutral" as const, label: "Neutral" };
       const isHome = game ? (game.home || "").toUpperCase() === upperTeam : true;
       const isAway = Boolean(game) && !isHome;
-      const venueTeam = isHome ? upperTeam : (hit.opp || "").toUpperCase();
+      const venueTeam = isHome ? upperTeam : opp;
       const stadium = INDOOR_HOME_TEAMS.has(venueTeam) ? "Indoor" : "Outdoor";
 
       out.push({
         week,
         isBye: false,
         isAway,
-        opp: hit.opp.toUpperCase(),
+        opp,
+        rank,
         stars,
         tone,
         label,
@@ -1443,7 +1525,7 @@ function SosHeatmapPanel({
                       -
                     </span>
                   ) : (
-                    <SosStarRow count={row.stars ?? 0} />
+                    <SosStarRow matchup={row} week={row.week} />
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-left">
@@ -1531,7 +1613,6 @@ function OutlookPanel({
     return brainSos.matchups[0] ?? null;
   }, [brainSos, week]);
 
-  const stars = sosStarsFromRank(currentMatchup?.rank) ?? 3;
   const opponentAbbr = (
     currentMatchup?.opp ||
     nextGame?.opponent ||
@@ -1698,20 +1779,8 @@ function OutlookPanel({
           </p>
         </div>
         <div className="px-2">
-          <div
-            className="flex items-center justify-center gap-0.5"
-            aria-label={`${stars} of 5 stars`}
-          >
-            {Array.from({ length: 5 }, (_, i) => (
-              <Star
-                key={i}
-                className={cn(
-                  "size-3.5",
-                  i < stars ? "fill-amber-500 text-amber-500 text-sm" : "text-slate-200",
-                )}
-                strokeWidth={i < stars ? 0 : 1.5}
-              />
-            ))}
+          <div className="flex items-center justify-center">
+            <SosStarRow matchup={currentMatchup} week={week ?? 0} />
           </div>
           <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Matchup
