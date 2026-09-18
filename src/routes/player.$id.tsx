@@ -359,35 +359,37 @@ function PlayerHubPage() {
                   <p className="text-xs text-zinc-500">Schedule data unavailable.</p>
                 ) : (
                   <>
-                    <div className="grid w-full select-none grid-cols-3 gap-2 border-b border-slate-100 pb-4">
-                      <div className="flex h-[64px] min-w-0 flex-1 flex-col items-center justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-2.5 text-center shadow-sm">
+                    <div className="flex w-full select-none flex-col gap-2 border-b border-slate-100 pb-4">
+                      <div className="flex h-[64px] w-full flex-col items-center justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-3 text-center shadow-sm">
                         <span className="text-sm font-black uppercase tracking-tight text-slate-900">
                           {matchupGrade(brainSos.rank) || "NEUTRAL"}
                         </span>
-                        <span className="mt-1 text-[9px] font-black uppercase leading-none tracking-widest text-slate-400">
-                          Overall Matchup
+                        <span className="mt-1.5 text-[9px] font-black uppercase leading-none tracking-widest text-slate-400">
+                          Overall Matchup Rating
                         </span>
                       </div>
-                      <div className="flex h-[64px] min-w-0 flex-1 flex-col items-center justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-2.5 text-center shadow-sm">
-                        <span
-                          className={cn(
-                            "text-xs font-black uppercase leading-none tracking-tight",
-                            playoffChallenging ? "text-rose-600" : "text-emerald-600",
-                          )}
-                        >
-                          {playoffChallenging ? "CHALLENGING" : "FAVORABLE"}
-                        </span>
-                        <span className="mt-1.5 text-[9px] font-black uppercase leading-none tracking-widest text-slate-400">
-                          Playoff Window
-                        </span>
-                      </div>
-                      <div className="flex h-[64px] min-w-0 flex-1 flex-col items-center justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-2.5 text-center shadow-sm">
-                        <span className="line-clamp-1 text-center text-[10px] font-extrabold uppercase leading-tight text-slate-600">
-                          {trendLabel}
-                        </span>
-                        <span className="mt-1.5 text-[9px] font-black uppercase leading-none tracking-widest text-slate-400">
-                          Trend Outlook
-                        </span>
+                      <div className="grid w-full grid-cols-2 gap-2">
+                        <div className="flex h-[64px] flex-col items-center justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-2.5 text-center shadow-sm">
+                          <span
+                            className={cn(
+                              "text-xs font-black uppercase leading-none tracking-tight",
+                              playoffChallenging ? "text-rose-600" : "text-emerald-600",
+                            )}
+                          >
+                            {playoffChallenging ? "CHALLENGING" : "FAVORABLE"}
+                          </span>
+                          <span className="mt-1.5 text-[8px] font-black uppercase leading-none tracking-widest text-slate-400">
+                            Playoff Window
+                          </span>
+                        </div>
+                        <div className="flex h-[64px] flex-col items-center justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-2.5 text-center shadow-sm">
+                          <span className="text-center text-xs font-extrabold uppercase leading-tight text-slate-600">
+                            {trendLabel}
+                          </span>
+                          <span className="mt-1.5 text-[8px] font-black uppercase leading-none tracking-widest text-slate-400">
+                            Trend Outlook
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <div className="mt-4 grid w-full select-none grid-cols-3 gap-2">
