@@ -1618,12 +1618,12 @@ function formatSleeperTransaction(
   txn: SleeperTxn,
   teams: Map<number, string>,
   index: IdentityIndex,
-): LeagueActivityEvent | null {
+): LeagueActivityEvent[] {
   // Forceful exclusion: draft-day picks never enter the activity feed.
-  if (isDraftActivityTransaction(txn)) return null;
+  if (isDraftActivityTransaction(txn)) return [];
 
   const at = Number(txn.status_updated ?? txn.created ?? 0);
-  if (!at) return null;
+  if (!at) return [];
 
   // Root type codes only — never infer IR from a player's injury tag.
   const type = String(txn.type ?? "").toLowerCase();
@@ -1637,7 +1637,7 @@ function formatSleeperTransaction(
     (!isWaiver && !isFreeAgent && !isTrade && toSlot === "IR");
 
   // Only keep live in-season front-office activity.
-  if (!isTrade && !isWaiver && !isFreeAgent && !isActualIRMove) return null;
+  if (!isTrade && !isWaiver && !isFreeAgent && !isActualIRMove) return [];
 
   const status = String(txn.status ?? "").toLowerCase();
   const adds = Object.entries(txn.adds ?? {});
@@ -1645,7 +1645,7 @@ function formatSleeperTransaction(
   const id = String(txn.transaction_id ?? `${type}-${at}-${adds.map(([p]) => p).join("-")}`);
 
   if (isTrade) {
-    if (status && status !== "complete" && status !== "failed") return null;
+    if (status && status !== "complete" && status !== "failed") return [];
     const byRoster = new Map<number, string[]>();
     const moves: LeagueActivityMove[] = [];
     for (const [playerId, rosterId] of adds) {
@@ -1661,85 +1661,125 @@ function formatSleeperTransaction(
       ([rosterId, players]) =>
         `${teamLabel(teams, rosterId)} received ${players.join(", ")}`,
     );
-    if (!parts.length) return null;
+    if (!parts.length) return [];
     const prefix = status === "failed" ? "TRADE REJECTED" : "TRADE COMPLETED";
-    return {
-      id,
-      at,
-      kind: "trade",
-      text: `${prefix}: ${parts.join(", ")}`,
-      teamName: null,
-      moves,
-    };
+    return [
+      {
+        id,
+        at,
+        kind: "trade",
+        text: `${prefix}: ${parts.join(", ")}`,
+        teamName: null,
+        moves,
+      },
+    ];
   }
 
-  // Waivers / free agents are always ADD / DROP rows — never IR, even when
-  // the involved player carries an IR injury designation on their card.
+  // Waivers / free agents: group strictly by roster_id so Team A's open-bench
+  // add never inherits Team B's drop from the same transaction payload.
   if (isWaiver || isFreeAgent) {
-    const primaryRoster =
-      adds[0]?.[1] ?? drops[0]?.[1] ?? txn.roster_ids?.[0] ?? undefined;
-    const team = teamLabel(teams, primaryRoster);
-    const addMoves = adds.map(([pid]) => sleeperMove(index, pid, "add"));
-    const dropMoves = drops.map(([pid]) => sleeperMove(index, pid, "drop"));
+    // Block failed / losing blind bids — only successful executions reach the feed.
+    if (status && status !== "complete" && status !== "successful") return [];
+
     const kind: LeagueActivityEvent["kind"] = isWaiver ? "waiver" : "free_agent";
     const addSource = isWaiver ? "from waivers" : "as a free agent";
 
-    if (adds.length && drops.length) {
-      const added = adds.map(([pid]) => playerChip(index, pid)).join(", ");
-      const dropped = drops.map(([pid]) => playerChip(index, pid)).join(", ");
-      return {
-        id,
-        at,
-        kind,
-        text: `${team} ADDED ${added} ${addSource}, DROPPED ${dropped}`,
-        teamName: team,
-        moves: [...addMoves, ...dropMoves],
-      };
+    const rosterIds = new Set<number>();
+    for (const [, rosterId] of adds) {
+      const rid = Number(rosterId);
+      if (Number.isFinite(rid)) rosterIds.add(rid);
+    }
+    for (const [, rosterId] of drops) {
+      const rid = Number(rosterId);
+      if (Number.isFinite(rid)) rosterIds.add(rid);
+    }
+    for (const rosterId of txn.roster_ids ?? []) {
+      const rid = Number(rosterId);
+      if (Number.isFinite(rid)) rosterIds.add(rid);
     }
 
-    if (adds.length && !drops.length) {
-      const added = adds.map(([pid]) => playerChip(index, pid)).join(", ");
-      return {
-        id,
-        at,
-        kind,
-        text: `${team} ADDED ${added} ${addSource}`,
-        teamName: team,
-        moves: addMoves,
-      };
-    }
+    const events: LeagueActivityEvent[] = [];
+    for (const rosterId of rosterIds) {
+      // Ironclad isolation: only players whose mapped roster_id matches this block.
+      const rosterAdds = adds.filter(([, rid]) => Number(rid) === rosterId);
+      const rosterDrops = drops.filter(([, rid]) => Number(rid) === rosterId);
+      if (!rosterAdds.length && !rosterDrops.length) continue;
 
-    if (!adds.length && drops.length) {
-      const dropped = drops.map(([pid]) => playerChip(index, pid)).join(", ");
-      return {
-        id,
-        at,
-        kind,
-        text: `${team} DROPPED ${dropped}`,
-        teamName: team,
-        moves: dropMoves,
-      };
+      const team = teamLabel(teams, rosterId);
+      const addMoves = rosterAdds
+        .map(([pid]) => sleeperMove(index, pid, "add"))
+        .filter((m): m is LeagueActivityMove => Boolean(m));
+      // Drop list is roster-scoped only — empty when the club filled an open slot.
+      const dropMoves = rosterDrops
+        .map(([pid]) => sleeperMove(index, pid, "drop"))
+        .filter((m): m is LeagueActivityMove => Boolean(m));
+
+      const eventId = `${id}-r${rosterId}`;
+      if (rosterAdds.length && rosterDrops.length) {
+        const added = rosterAdds.map(([pid]) => playerChip(index, pid)).join(", ");
+        const dropped = rosterDrops.map(([pid]) => playerChip(index, pid)).join(", ");
+        events.push({
+          id: eventId,
+          at,
+          kind,
+          text: `${team} ADDED ${added} ${addSource}, DROPPED ${dropped}`,
+          teamName: team,
+          moves: [...addMoves, ...dropMoves],
+        });
+        continue;
+      }
+
+      if (rosterAdds.length) {
+        const added = rosterAdds.map(([pid]) => playerChip(index, pid)).join(", ");
+        events.push({
+          id: eventId,
+          at,
+          kind,
+          text: `${team} ADDED ${added} ${addSource}`,
+          teamName: team,
+          moves: addMoves,
+        });
+        continue;
+      }
+
+      if (rosterDrops.length) {
+        const dropped = rosterDrops.map(([pid]) => playerChip(index, pid)).join(", ");
+        events.push({
+          id: eventId,
+          at,
+          kind,
+          text: `${team} DROPPED ${dropped}`,
+          teamName: team,
+          moves: dropMoves,
+        });
+      }
     }
+    return events;
   }
 
   if (isActualIRMove) {
+    // Mirror waiver gate: unfinished / failed IR moves stay off the feed.
+    if (status && status !== "complete" && status !== "successful") return [];
+
     const primaryRoster =
       adds[0]?.[1] ?? drops[0]?.[1] ?? txn.roster_ids?.[0] ?? undefined;
     const team = teamLabel(teams, primaryRoster);
     const irPlayers = adds.length ? adds : drops;
-    if (!irPlayers.length) return null;
+    if (!irPlayers.length) return [];
     const labeled = irPlayers.map(([pid]) => playerChip(index, pid)).join(", ");
-    return {
-      id,
-      at,
-      kind: "ir",
-      text: `${team} PLACED ${labeled} on Injured Reserve`,
-      teamName: team,
-      moves: irPlayers.map(([pid]) => sleeperMove(index, pid, "ir")),
-    };
+    return [
+      {
+        id,
+        at,
+        kind: "ir",
+        text: `${team} PLACED ${labeled} on Injured Reserve`,
+        teamName: team,
+        moves: irPlayers.map(([pid]) => sleeperMove(index, pid, "ir")),
+      },
+    ];
   }
 
-  return null;
+  return [];
 }
 
 async function resolveSleeperLeagueId(clean: string): Promise<string | null> {
@@ -1931,6 +1971,19 @@ export async function loadConnectionTransactions(
           continue;
         }
 
+        // Non-trade moves: skip failed / losing / cancelled bids.
+        if (
+          status &&
+          (status === "failed" ||
+            status === "pre_executed" ||
+            status.includes("fail") ||
+            status.includes("reject") ||
+            status.includes("unsuccessful") ||
+            status.includes("cancel"))
+        ) {
+          continue;
+        }
+
         const primaryTeam = resolveEspnActingTeamId(txn);
         const team = espnManagerTeamName(teamMap, teams, primaryTeam);
         const espnType = String(txn.type ?? "").toLowerCase();
@@ -1955,34 +2008,66 @@ export async function loadConnectionTransactions(
           continue;
         }
 
-        if (adds.length && drops.length) {
+        // Scope adds/drops to the acting fantasy club only — never borrow
+        // another team's drop when this club filled an open roster slot.
+        const rosterAdds = isEspnFantasyTeamId(primaryTeam)
+          ? adds.filter((i) => Number(i.toTeamId) === primaryTeam)
+          : adds;
+        const rosterDrops = isEspnFantasyTeamId(primaryTeam)
+          ? drops.filter((i) => Number(i.fromTeamId) === primaryTeam)
+          : [];
+
+        if (rosterAdds.length && rosterDrops.length) {
           events.push({
             id,
             at,
             kind: espnIsWaiver ? "waiver" : "free_agent",
-            text: `${team} ADDED ${adds.map((i) => chipFor(i)).join(", ")} from waivers, DROPPED ${drops.map((i) => chipFor(i)).join(", ")}`,
+            text: `${team} ADDED ${rosterAdds.map((i) => chipFor(i)).join(", ")} from waivers, DROPPED ${rosterDrops.map((i) => chipFor(i)).join(", ")}`,
             teamName: team,
             moves: [
-              ...adds
+              ...rosterAdds
                 .map((i) => espnMove(index, i.playerId, "add", nameForEspnItem(i)))
                 .filter((m): m is LeagueActivityMove => Boolean(m)),
-              ...drops
+              ...rosterDrops
                 .map((i) => espnMove(index, i.playerId, "drop", nameForEspnItem(i)))
                 .filter((m): m is LeagueActivityMove => Boolean(m)),
             ],
           });
-        } else if (adds.length) {
+        } else if (rosterAdds.length) {
           events.push({
             id,
             at,
             kind: espnIsWaiver ? "waiver" : "free_agent",
-            text: `${team} ADDED ${adds.map((i) => chipFor(i)).join(", ")} as a free agent`,
+            text: `${team} ADDED ${rosterAdds.map((i) => chipFor(i)).join(", ")} as a free agent`,
             teamName: team,
-            moves: adds
+            moves: rosterAdds
               .map((i) => espnMove(index, i.playerId, "add", nameForEspnItem(i)))
               .filter((m): m is LeagueActivityMove => Boolean(m)),
           });
-        } else if (drops.length && espnIsActualIR) {
+        } else if (rosterDrops.length && espnIsActualIR) {
+          events.push({
+            id,
+            at,
+            kind: "ir",
+            text: `${team} PLACED ${rosterDrops.map((i) => chipFor(i)).join(", ")} on Injured Reserve`,
+            teamName: team,
+            moves: rosterDrops
+              .map((i) => espnMove(index, i.playerId, "ir", nameForEspnItem(i)))
+              .filter((m): m is LeagueActivityMove => Boolean(m)),
+          });
+        } else if (rosterDrops.length) {
+          // Pure drop — free agency cut, not an IR placement.
+          events.push({
+            id,
+            at,
+            kind: espnIsWaiver ? "waiver" : "free_agent",
+            text: `${team} DROPPED ${rosterDrops.map((i) => chipFor(i)).join(", ")}`,
+            teamName: team,
+            moves: rosterDrops
+              .map((i) => espnMove(index, i.playerId, "drop", nameForEspnItem(i)))
+              .filter((m): m is LeagueActivityMove => Boolean(m)),
+          });
+        } else if (espnIsActualIR && drops.length) {
           events.push({
             id,
             at,
@@ -1991,18 +2076,6 @@ export async function loadConnectionTransactions(
             teamName: team,
             moves: drops
               .map((i) => espnMove(index, i.playerId, "ir", nameForEspnItem(i)))
-              .filter((m): m is LeagueActivityMove => Boolean(m)),
-          });
-        } else if (drops.length) {
-          // Pure drop — free agency cut, not an IR placement.
-          events.push({
-            id,
-            at,
-            kind: espnIsWaiver ? "waiver" : "free_agent",
-            text: `${team} DROPPED ${drops.map((i) => chipFor(i)).join(", ")}`,
-            teamName: team,
-            moves: drops
-              .map((i) => espnMove(index, i.playerId, "drop", nameForEspnItem(i)))
               .filter((m): m is LeagueActivityMove => Boolean(m)),
           });
         }
@@ -2046,10 +2119,11 @@ export async function loadConnectionTransactions(
   const seen = new Set<string>();
   for (const list of weekTxnLists) {
     for (const txn of list ?? []) {
-      const event = formatSleeperTransaction(txn, teamMap, index);
-      if (!event || seen.has(event.id)) continue;
-      seen.add(event.id);
-      events.push(event);
+      for (const event of formatSleeperTransaction(txn, teamMap, index)) {
+        if (seen.has(event.id)) continue;
+        seen.add(event.id);
+        events.push(event);
+      }
     }
   }
 
