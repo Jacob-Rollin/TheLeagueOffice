@@ -97,7 +97,14 @@ function Panel({
 }: {
   title: string;
   action?: {
-    to: "/playbook/rankings" | "/playbook/matchup" | "/playbook/transactions" | "/playbook/my-team" | "/playbook/rosters";
+    to:
+      | "/standings"
+      | "/playbook/rankings"
+      | "/playbook/matchup"
+      | "/playbook/transactions"
+      | "/playbook/my-team"
+      | "/playbook/rosters";
+    search?: { tab?: "actual" | "all-play" | "power" };
     label: string;
   };
   children: ReactNode;
@@ -109,7 +116,11 @@ function Panel({
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className={cn(panelTitleClass, titleClassName)}>{title}</h2>
         {action ? (
-          <Link to={action.to} className="text-xs font-semibold text-primary hover:underline">
+          <Link
+            to={action.to}
+            {...(action.search ? { search: action.search } : {})}
+            className="text-xs font-semibold text-primary hover:underline"
+          >
             {action.label}
           </Link>
         ) : null}
@@ -1443,7 +1454,7 @@ function PlaybookDashboardPage() {
           <Panel
             title="Power Rankings"
             titleClassName="text-sm font-bold uppercase tracking-wide text-slate-900"
-            action={{ to: "/playbook/rankings", label: "Full Rankings" }}
+            action={{ to: "/standings", search: { tab: "power" }, label: "Full Rankings" }}
           >
             {loading && !leaderboard.length ? (
               <p className="text-sm text-muted-foreground">Calculating power index…</p>

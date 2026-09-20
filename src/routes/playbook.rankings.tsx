@@ -1,6 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
-
-import { TruePowerRankingsPanel } from "@/components/playbook/panels";
+import { createFileRoute, Navigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/playbook/rankings")({
   ssr: false,
@@ -11,5 +9,5 @@ export const Route = createFileRoute("/playbook/rankings")({
 });
 
 function PlaybookRankingsPage() {
-  return <TruePowerRankingsPanel />;
+  return <Navigate to="/standings" search={{ tab: "power" }} replace />;
 }

@@ -16,15 +16,16 @@ const LINKS: {
   to:
     | "/playbook"
     | "/playbook/my-team"
-    | "/playbook/rankings"
+    | "/standings"
     | "/playbook/matchup"
     | "/playbook/rosters"
     | "/playbook/transactions";
   label: string;
+  search?: { tab?: "actual" | "all-play" | "power" };
 }[] = [
   { to: "/playbook", label: "Dashboard" },
   { to: "/playbook/my-team", label: "My Team" },
-  { to: "/playbook/rankings", label: "Power Rankings" },
+  { to: "/standings", label: "Standings" },
   { to: "/playbook/matchup", label: "Matchup" },
   { to: "/playbook/rosters", label: "Rosters" },
   { to: "/playbook/transactions", label: "Transactions" },
@@ -280,6 +281,7 @@ export function PlaybookSubNav() {
                 <Link
                   key={item.to}
                   to={item.to}
+                  {...(item.search ? { search: item.search } : {})}
                   className={cn(
                     "whitespace-nowrap transition-colors",
                     active ? "border-b-2 border-blue-600 text-blue-600" : "hover:text-slate-900",

@@ -157,7 +157,7 @@ export function powerRankMovementDelta(
   return prevRank - currentRank;
 }
 
-function TeamAvatarBadge({
+export function TeamAvatarBadge({
   name,
   logo,
   platform,
@@ -303,15 +303,15 @@ export function TruePowerRankingsPanel() {
 
   const rankBadgeClass = (rank: number): string => {
     if (rank === 1) {
-      return "inline-flex min-w-[2.75rem] items-center justify-center rounded-lg border border-amber-200 bg-amber-100/80 px-3 py-1 text-center text-xs font-extrabold text-amber-900 shadow-sm";
+      return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-amber-200 bg-amber-100/80 px-2 py-0.5 text-center text-xs font-extrabold text-amber-900 shadow-sm";
     }
     if (rank === 2) {
-      return "inline-flex min-w-[2.75rem] items-center justify-center rounded-lg border border-slate-200 bg-slate-100 px-3 py-1 text-center text-xs font-extrabold text-slate-900 shadow-sm";
+      return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-center text-xs font-extrabold text-slate-900 shadow-sm";
     }
     if (rank === 3) {
-      return "inline-flex min-w-[2.75rem] items-center justify-center rounded-lg border border-orange-200/40 bg-orange-100/60 px-3 py-1 text-center text-xs font-extrabold text-orange-800 shadow-sm";
+      return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-orange-200/40 bg-orange-100/60 px-2 py-0.5 text-center text-xs font-extrabold text-orange-800 shadow-sm";
     }
-    return "inline-flex min-w-[2.75rem] items-center justify-center px-3 py-1 text-center text-xs font-semibold tabular-nums text-slate-500";
+    return "inline-flex min-w-[2rem] items-center justify-center px-2 py-0.5 text-center text-xs font-semibold tabular-nums text-slate-500";
   };
 
   return (
@@ -375,11 +375,13 @@ export function TruePowerRankingsPanel() {
 
                 return (
                   <tr key={row.slot} className={cn("border-t border-border", podiumClass)}>
-                    <td className="pl-4 pr-3 py-2">
+                    <td className="pl-4 pr-3 py-2.5 align-middle">
                       <span className={rankBadgeClass(row.rank)}>#{row.rank}</span>
                     </td>
-                    <td className={cn("px-3 py-2 tabular-nums", trendClass)}>{trendLabel}</td>
-                    <td className="px-3 py-2">
+                    <td className={cn("px-3 py-2.5 align-middle tabular-nums", trendClass)}>
+                      {trendLabel}
+                    </td>
+                    <td className="px-3 py-2.5 align-middle">
                       <div className="flex min-w-0 items-center">
                         <TeamAvatarBadge
                           key={`${activeLeagueId ?? leagueKey}-${row.slot}-${resolveAvatarUrl(logoBySlot.get(row.slot) ?? null) ?? "fallback"}`}
@@ -389,26 +391,28 @@ export function TruePowerRankingsPanel() {
                           cacheKey={`${activeLeagueId ?? leagueKey}-${row.slot}`}
                         />
                         <span className="min-w-0">
-                          <span className="block truncate font-medium text-foreground">{row.team}</span>
+                          <span className="block truncate text-sm font-medium text-foreground">
+                            {row.team}
+                          </span>
                           <span className="block truncate text-xs text-muted-foreground">
                             {row.owner || "Owner"}
                           </span>
                         </span>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-foreground">
+                    <td className="px-3 py-2.5 align-middle text-right tabular-nums font-semibold text-foreground">
                       {row.powerIndex.toFixed(1)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                    <td className="px-3 py-2.5 align-middle text-right tabular-nums text-foreground">
                       {row.marketValue.toFixed(1)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                    <td className="px-3 py-2.5 align-middle text-right tabular-nums text-foreground">
                       {row.weeklyProjection.toFixed(1)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                    <td className="px-3 py-2.5 align-middle text-right tabular-nums text-muted-foreground">
                       {row.recordLabel}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-2.5 align-middle text-right">
                       <button
                         type="button"
                         aria-label={`Scout ${row.team}`}

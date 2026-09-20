@@ -17,6 +17,7 @@ import { Route as LeagueHqRouteImport } from './routes/league-hq'
 import { Route as LeaguesyncRouteImport } from './routes/leaguesync'
 import { Route as MockDraftRouteImport } from './routes/mock-draft'
 import { Route as PlaybookRouteImport } from './routes/playbook'
+import { Route as StandingsRouteImport } from './routes/standings'
 import { Route as TheWireRouteImport } from './routes/the-wire'
 import { Route as TradeRouteImport } from './routes/trade'
 import { Route as TradeDeskRouteImport } from './routes/trade-desk'
@@ -80,6 +81,11 @@ const MockDraftRoute = MockDraftRouteImport.update({
 const PlaybookRoute = PlaybookRouteImport.update({
   id: '/playbook',
   path: '/playbook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StandingsRoute = StandingsRouteImport.update({
+  id: '/standings',
+  path: '/standings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TheWireRoute = TheWireRouteImport.update({
@@ -213,6 +219,7 @@ export interface FileRoutesByFullPath {
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
   '/playbook': typeof PlaybookRouteWithChildren
+  '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -246,6 +253,7 @@ export interface FileRoutesByTo {
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
+  '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -281,6 +289,7 @@ export interface FileRoutesById {
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
   '/playbook': typeof PlaybookRouteWithChildren
+  '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -317,6 +326,7 @@ export interface FileRouteTypes {
     | '/leaguesync'
     | '/mock-draft'
     | '/playbook'
+    | '/standings'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
@@ -350,6 +360,7 @@ export interface FileRouteTypes {
     | '/league-hq'
     | '/leaguesync'
     | '/mock-draft'
+    | '/standings'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
@@ -384,6 +395,7 @@ export interface FileRouteTypes {
     | '/leaguesync'
     | '/mock-draft'
     | '/playbook'
+    | '/standings'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
@@ -419,6 +431,7 @@ export interface RootRouteChildren {
   LeaguesyncRoute: typeof LeaguesyncRoute
   MockDraftRoute: typeof MockDraftRoute
   PlaybookRoute: typeof PlaybookRouteWithChildren
+  StandingsRoute: typeof StandingsRoute
   TheWireRoute: typeof TheWireRoute
   TradeRoute: typeof TradeRoute
   TradeDeskRoute: typeof TradeDeskRoute
@@ -495,6 +508,13 @@ declare module '@tanstack/react-router' {
       path: '/playbook'
       fullPath: '/playbook'
       preLoaderRoute: typeof PlaybookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/standings': {
+      id: '/standings'
+      path: '/standings'
+      fullPath: '/standings'
+      preLoaderRoute: typeof StandingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/the-wire': {
@@ -699,6 +719,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaguesyncRoute: LeaguesyncRoute,
   MockDraftRoute: MockDraftRoute,
   PlaybookRoute: PlaybookRouteWithChildren,
+  StandingsRoute: StandingsRoute,
   TheWireRoute: TheWireRoute,
   TradeRoute: TradeRoute,
   TradeDeskRoute: TradeDeskRoute,

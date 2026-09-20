@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 const PAGES: { label: string; to: string; hint: string }[] = [
   { label: "Front Office", to: "/", hint: "Home" },
   { label: "Playbook", to: "/playbook", hint: "Active league dashboard" },
-  { label: "Power Rankings", to: "/playbook/rankings", hint: "True power leaderboard" },
+  { label: "Standings", to: "/standings", hint: "Actual, All Play, and Power Rankings" },
   { label: "Rosters", to: "/playbook/rosters", hint: "Roster matrix scouting" },
   { label: "Transactions", to: "/playbook/transactions", hint: "League activity" },
   { label: "War Room", to: "/draft", hint: "Draft board" },
