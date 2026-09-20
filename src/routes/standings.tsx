@@ -148,8 +148,8 @@ function StandingsTable({
                     className={cn(
                       "flex items-center justify-between px-4 py-2.5",
                       row.isMine
-                        ? cn(highlightClass, "rounded-lg")
-                        : "text-slate-800 hover:bg-slate-50/80",
+                        ? cn(highlightClass, "rounded-none")
+                        : "bg-white text-slate-800 hover:bg-slate-50/60",
                     )}
                   >
                     <div className="flex min-w-0 flex-1 items-center">
