@@ -34,13 +34,15 @@ const RESEARCH_LINKS: {
     | "/weekly-projections"
     | "/season-projections"
     | "/fantasy-points-allowed"
-    | "/red-zone-stats";
+    | "/red-zone-stats"
+    | "/most-targeted-players";
   label: string;
 }[] = [
   { to: "/weekly-projections", label: "Weekly Projections" },
   { to: "/season-projections", label: "Season Projections" },
   { to: "/fantasy-points-allowed", label: "Fantasy Points Allowed" },
   { to: "/red-zone-stats", label: "Red Zone Stats" },
+  { to: "/most-targeted-players", label: "Most Targeted Players" },
 ];
 
 /** Logged-in gateway into the centralized league dashboard. */

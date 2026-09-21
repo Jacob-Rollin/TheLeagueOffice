@@ -85,3 +85,12 @@ export const getRedZoneStats = createServerFn({ method: "POST" })
     return await loadRedZoneStats(data.season, data.yardline);
   });
 
+export const getMostTargetedPlayers = createServerFn({ method: "POST" })
+  .inputValidator((input?: { season?: string }) => ({
+    season: input?.season != null ? String(input.season).slice(0, 16) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const { loadMostTargetedPlayers } = await import("./targets.server");
+    return await loadMostTargetedPlayers(data.season);
+  });
+

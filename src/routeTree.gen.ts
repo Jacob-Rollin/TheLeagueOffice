@@ -17,6 +17,7 @@ import { Route as HofRouteImport } from './routes/hof'
 import { Route as LeagueHqRouteImport } from './routes/league-hq'
 import { Route as LeaguesyncRouteImport } from './routes/leaguesync'
 import { Route as MockDraftRouteImport } from './routes/mock-draft'
+import { Route as MostTargetedPlayersRouteImport } from './routes/most-targeted-players'
 import { Route as PlaybookRouteImport } from './routes/playbook'
 import { Route as RedZoneStatsRouteImport } from './routes/red-zone-stats'
 import { Route as SeasonProjectionsRouteImport } from './routes/season-projections'
@@ -86,6 +87,11 @@ const LeaguesyncRoute = LeaguesyncRouteImport.update({
 const MockDraftRoute = MockDraftRouteImport.update({
   id: '/mock-draft',
   path: '/mock-draft',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MostTargetedPlayersRoute = MostTargetedPlayersRouteImport.update({
+  id: '/most-targeted-players',
+  path: '/most-targeted-players',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlaybookRoute = PlaybookRouteImport.update({
@@ -249,6 +255,7 @@ export interface FileRoutesByFullPath {
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
+  '/most-targeted-players': typeof MostTargetedPlayersRoute
   '/playbook': typeof PlaybookRouteWithChildren
   '/red-zone-stats': typeof RedZoneStatsRoute
   '/season-projections': typeof SeasonProjectionsRoute
@@ -289,6 +296,7 @@ export interface FileRoutesByTo {
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
+  '/most-targeted-players': typeof MostTargetedPlayersRoute
   '/red-zone-stats': typeof RedZoneStatsRoute
   '/season-projections': typeof SeasonProjectionsRoute
   '/standings': typeof StandingsRoute
@@ -329,6 +337,7 @@ export interface FileRoutesById {
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
+  '/most-targeted-players': typeof MostTargetedPlayersRoute
   '/playbook': typeof PlaybookRouteWithChildren
   '/red-zone-stats': typeof RedZoneStatsRoute
   '/season-projections': typeof SeasonProjectionsRoute
@@ -371,6 +380,7 @@ export interface FileRouteTypes {
     | '/league-hq'
     | '/leaguesync'
     | '/mock-draft'
+    | '/most-targeted-players'
     | '/playbook'
     | '/red-zone-stats'
     | '/season-projections'
@@ -411,6 +421,7 @@ export interface FileRouteTypes {
     | '/league-hq'
     | '/leaguesync'
     | '/mock-draft'
+    | '/most-targeted-players'
     | '/red-zone-stats'
     | '/season-projections'
     | '/standings'
@@ -450,6 +461,7 @@ export interface FileRouteTypes {
     | '/league-hq'
     | '/leaguesync'
     | '/mock-draft'
+    | '/most-targeted-players'
     | '/playbook'
     | '/red-zone-stats'
     | '/season-projections'
@@ -491,6 +503,7 @@ export interface RootRouteChildren {
   LeagueHqRoute: typeof LeagueHqRoute
   LeaguesyncRoute: typeof LeaguesyncRoute
   MockDraftRoute: typeof MockDraftRoute
+  MostTargetedPlayersRoute: typeof MostTargetedPlayersRoute
   PlaybookRoute: typeof PlaybookRouteWithChildren
   RedZoneStatsRoute: typeof RedZoneStatsRoute
   SeasonProjectionsRoute: typeof SeasonProjectionsRoute
@@ -572,6 +585,13 @@ declare module '@tanstack/react-router' {
       path: '/mock-draft'
       fullPath: '/mock-draft'
       preLoaderRoute: typeof MockDraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/most-targeted-players': {
+      id: '/most-targeted-players'
+      path: '/most-targeted-players'
+      fullPath: '/most-targeted-players'
+      preLoaderRoute: typeof MostTargetedPlayersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/playbook': {
@@ -820,6 +840,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeagueHqRoute: LeagueHqRoute,
   LeaguesyncRoute: LeaguesyncRoute,
   MockDraftRoute: MockDraftRoute,
+  MostTargetedPlayersRoute: MostTargetedPlayersRoute,
   PlaybookRoute: PlaybookRouteWithChildren,
   RedZoneStatsRoute: RedZoneStatsRoute,
   SeasonProjectionsRoute: SeasonProjectionsRoute,
@@ -847,3 +868,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
