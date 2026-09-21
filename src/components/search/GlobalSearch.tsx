@@ -20,6 +20,8 @@ const PAGES: { label: string; to: string; hint: string }[] = [
   { label: "Mock Draft Simulator", to: "/mock-draft/setup", hint: "Mock draft arena" },
   { label: "Trade Desk", to: "/trade", hint: "Trade Analyzer" },
   { label: "The Wire", to: "/waiver", hint: "Waivers" },
+  { label: "Weekly Projections", to: "/weekly-projections", hint: "Week projections by roster ownership" },
+  { label: "Season Projections", to: "/season-projections", hint: "Season projections by roster ownership" },
   { label: "Hall of Fame", to: "/hof", hint: "League history" },
 ];
 

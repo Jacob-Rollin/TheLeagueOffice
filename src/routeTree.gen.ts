@@ -17,12 +17,14 @@ import { Route as LeagueHqRouteImport } from './routes/league-hq'
 import { Route as LeaguesyncRouteImport } from './routes/leaguesync'
 import { Route as MockDraftRouteImport } from './routes/mock-draft'
 import { Route as PlaybookRouteImport } from './routes/playbook'
+import { Route as SeasonProjectionsRouteImport } from './routes/season-projections'
 import { Route as StandingsRouteImport } from './routes/standings'
 import { Route as TheWireRouteImport } from './routes/the-wire'
 import { Route as TradeRouteImport } from './routes/trade'
 import { Route as TradeDeskRouteImport } from './routes/trade-desk'
 import { Route as WaiverRouteImport } from './routes/waiver'
 import { Route as WarRoomRouteImport } from './routes/war-room'
+import { Route as WeeklyProjectionsRouteImport } from './routes/weekly-projections'
 import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as AccountAdminRouteImport } from './routes/account.admin'
 import { Route as ArticlesSlugRouteImport } from './routes/articles.$slug'
@@ -84,6 +86,11 @@ const PlaybookRoute = PlaybookRouteImport.update({
   path: '/playbook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SeasonProjectionsRoute = SeasonProjectionsRouteImport.update({
+  id: '/season-projections',
+  path: '/season-projections',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StandingsRoute = StandingsRouteImport.update({
   id: '/standings',
   path: '/standings',
@@ -112,6 +119,11 @@ const WaiverRoute = WaiverRouteImport.update({
 const WarRoomRoute = WarRoomRouteImport.update({
   id: '/war-room',
   path: '/war-room',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WeeklyProjectionsRoute = WeeklyProjectionsRouteImport.update({
+  id: '/weekly-projections',
+  path: '/weekly-projections',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountIndexRoute = AccountIndexRouteImport.update({
@@ -225,12 +237,14 @@ export interface FileRoutesByFullPath {
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
   '/playbook': typeof PlaybookRouteWithChildren
+  '/season-projections': typeof SeasonProjectionsRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
+  '/weekly-projections': typeof WeeklyProjectionsRoute
   '/account/admin': typeof AccountAdminRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
@@ -260,12 +274,14 @@ export interface FileRoutesByTo {
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
+  '/season-projections': typeof SeasonProjectionsRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
+  '/weekly-projections': typeof WeeklyProjectionsRoute
   '/account/admin': typeof AccountAdminRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
@@ -297,12 +313,14 @@ export interface FileRoutesById {
   '/leaguesync': typeof LeaguesyncRoute
   '/mock-draft': typeof MockDraftRoute
   '/playbook': typeof PlaybookRouteWithChildren
+  '/season-projections': typeof SeasonProjectionsRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
+  '/weekly-projections': typeof WeeklyProjectionsRoute
   '/account/admin': typeof AccountAdminRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth_/confirmed': typeof AuthConfirmedRoute
@@ -335,12 +353,14 @@ export interface FileRouteTypes {
     | '/leaguesync'
     | '/mock-draft'
     | '/playbook'
+    | '/season-projections'
     | '/standings'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
     | '/waiver'
     | '/war-room'
+    | '/weekly-projections'
     | '/account/admin'
     | '/articles/$slug'
     | '/auth/confirmed'
@@ -370,12 +390,14 @@ export interface FileRouteTypes {
     | '/league-hq'
     | '/leaguesync'
     | '/mock-draft'
+    | '/season-projections'
     | '/standings'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
     | '/waiver'
     | '/war-room'
+    | '/weekly-projections'
     | '/account/admin'
     | '/articles/$slug'
     | '/auth/confirmed'
@@ -406,12 +428,14 @@ export interface FileRouteTypes {
     | '/leaguesync'
     | '/mock-draft'
     | '/playbook'
+    | '/season-projections'
     | '/standings'
     | '/the-wire'
     | '/trade'
     | '/trade-desk'
     | '/waiver'
     | '/war-room'
+    | '/weekly-projections'
     | '/account/admin'
     | '/articles/$slug'
     | '/auth_/confirmed'
@@ -443,12 +467,14 @@ export interface RootRouteChildren {
   LeaguesyncRoute: typeof LeaguesyncRoute
   MockDraftRoute: typeof MockDraftRoute
   PlaybookRoute: typeof PlaybookRouteWithChildren
+  SeasonProjectionsRoute: typeof SeasonProjectionsRoute
   StandingsRoute: typeof StandingsRoute
   TheWireRoute: typeof TheWireRoute
   TradeRoute: typeof TradeRoute
   TradeDeskRoute: typeof TradeDeskRoute
   WaiverRoute: typeof WaiverRoute
   WarRoomRoute: typeof WarRoomRoute
+  WeeklyProjectionsRoute: typeof WeeklyProjectionsRoute
   AccountAdminRoute: typeof AccountAdminRoute
   ArticlesSlugRoute: typeof ArticlesSlugRoute
   AuthConfirmedRoute: typeof AuthConfirmedRoute
@@ -522,6 +548,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlaybookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/season-projections': {
+      id: '/season-projections'
+      path: '/season-projections'
+      fullPath: '/season-projections'
+      preLoaderRoute: typeof SeasonProjectionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/standings': {
       id: '/standings'
       path: '/standings'
@@ -562,6 +595,13 @@ declare module '@tanstack/react-router' {
       path: '/war-room'
       fullPath: '/war-room'
       preLoaderRoute: typeof WarRoomRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/weekly-projections': {
+      id: '/weekly-projections'
+      path: '/weekly-projections'
+      fullPath: '/weekly-projections'
+      preLoaderRoute: typeof WeeklyProjectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/account/': {
@@ -740,12 +780,14 @@ const rootRouteChildren: RootRouteChildren = {
   LeaguesyncRoute: LeaguesyncRoute,
   MockDraftRoute: MockDraftRoute,
   PlaybookRoute: PlaybookRouteWithChildren,
+  SeasonProjectionsRoute: SeasonProjectionsRoute,
   StandingsRoute: StandingsRoute,
   TheWireRoute: TheWireRoute,
   TradeRoute: TradeRoute,
   TradeDeskRoute: TradeDeskRoute,
   WaiverRoute: WaiverRoute,
   WarRoomRoute: WarRoomRoute,
+  WeeklyProjectionsRoute: WeeklyProjectionsRoute,
   AccountAdminRoute: AccountAdminRoute,
   ArticlesSlugRoute: ArticlesSlugRoute,
   AuthConfirmedRoute: AuthConfirmedRoute,
@@ -763,13 +805,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
