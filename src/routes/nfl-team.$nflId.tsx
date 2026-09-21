@@ -164,12 +164,12 @@ function NflTeamHub() {
     (detailPlayer as { rostered?: number | null; percent_owned?: number | null } | undefined)
       ?.rostered ??
     (detailPlayer as { percent_owned?: number | null } | undefined)?.percent_owned ??
-    83;
+    null;
   const startedPct =
     (detailPlayer as { started_pct?: number | null; started?: number | null } | undefined)
       ?.started_pct ??
     (detailPlayer as { started?: number | null } | undefined)?.started ??
-    39;
+    null;
   const defRankLabel =
     typeof positionRank === "number" && positionRank < 900 ? positionRank : 8;
   const overallRankLabel =
@@ -223,9 +223,13 @@ function NflTeamHub() {
                     <span className="mx-3 text-white/20">|</span>
                     <span>#{overallRankLabel} OVERALL</span>
                     <span className="mx-3 text-white/20">|</span>
-                    <span>{Math.round(Number(rosteredPct) || 83)}% ROSTERED</span>
+                    <span>
+                      {rosteredPct != null ? `${Math.round(Number(rosteredPct))}%` : "—"} ROSTERED
+                    </span>
                     <span className="mx-3 text-white/20">|</span>
-                    <span>{Math.round(Number(startedPct) || 39)}% STARTED</span>
+                    <span>
+                      {startedPct != null ? `${Math.round(Number(startedPct))}%` : "—"} STARTED
+                    </span>
                     <span className="mx-3 text-white/20">|</span>
 
                     <div

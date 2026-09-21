@@ -617,11 +617,11 @@ function StandalonePlayerHeader({
     (player as { rostered_pct?: number | null }).rostered_pct ??
     (player as { rostered?: number | null }).rostered ??
     (player as { percent_owned?: number | null }).percent_owned ??
-    83;
+    null;
   const startedPct =
     (player as { started_pct?: number | null }).started_pct ??
     (player as { started?: number | null }).started ??
-    39;
+    null;
   const positionRank =
     (player as { position_rank?: number | null }).position_rank ??
     (player as { pos_rank?: number | null }).pos_rank ??
@@ -732,9 +732,13 @@ function StandalonePlayerHeader({
             <span className="mx-3 text-white/20">|</span>
             <span>#{overallRankLabel} OVERALL</span>
             <span className="mx-3 text-white/20">|</span>
-            <span>{Math.round(Number(rosteredPct) || 83)}% ROSTERED</span>
+            <span>
+              {rosteredPct != null ? `${Math.round(Number(rosteredPct))}%` : "—"} ROSTERED
+            </span>
             <span className="mx-3 text-white/20">|</span>
-            <span>{Math.round(Number(startedPct) || 39)}% STARTED</span>
+            <span>
+              {startedPct != null ? `${Math.round(Number(startedPct))}%` : "—"} STARTED
+            </span>
             <span className="mx-3 text-white/20">|</span>
 
             <div

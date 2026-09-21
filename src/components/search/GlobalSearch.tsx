@@ -22,6 +22,8 @@ const PAGES: { label: string; to: string; hint: string }[] = [
   { label: "The Wire", to: "/waiver", hint: "Waivers" },
   { label: "Weekly Projections", to: "/weekly-projections", hint: "Week projections by roster ownership" },
   { label: "Season Projections", to: "/season-projections", hint: "Season projections by roster ownership" },
+  { label: "Fantasy Points Allowed", to: "/fantasy-points-allowed", hint: "Defense PA ranks by position" },
+  { label: "Red Zone Stats", to: "/red-zone-stats", hint: "Inside-the-20 player stats by position" },
   { label: "Hall of Fame", to: "/hof", hint: "League history" },
 ];
 

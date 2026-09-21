@@ -30,13 +30,21 @@ const DRAFT_LINKS: { to: "/war-room" | "/mock-draft/setup"; label: string }[] = 
 ];
 
 const RESEARCH_LINKS: {
-  to: "/weekly-projections" | "/season-projections" | "/trade-desk" | "/the-wire";
+  to:
+    | "/weekly-projections"
+    | "/season-projections"
+    | "/fantasy-points-allowed"
+    | "/red-zone-stats"
+    | "/trade-desk"
+    | "/the-wire";
   label: string;
 }[] = [
   { to: "/trade-desk", label: "Trade Desk" },
   { to: "/the-wire", label: "The Wire" },
   { to: "/weekly-projections", label: "Weekly Projections" },
   { to: "/season-projections", label: "Season Projections" },
+  { to: "/fantasy-points-allowed", label: "Fantasy Points Allowed" },
+  { to: "/red-zone-stats", label: "Red Zone Stats" },
 ];
 
 /** Logged-in gateway into the centralized league dashboard. */

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
-import { PositionBadge } from "@/components/draft/PositionBadge";
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
 import {
   Select,
@@ -279,16 +278,12 @@ function WeeklyProjectionsPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex w-full items-center gap-4 border-b border-slate-200/80 bg-slate-50 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-700 select-none sm:px-4">
-          <div className="flex min-w-0 flex-[1.35] items-center">
-            <span className="w-12 shrink-0">Pos</span>
-            <span>Player</span>
-          </div>
-          <div className="grid w-full max-w-xl flex-1 grid-cols-3 items-center gap-3">
-            <span className="text-center">Status</span>
-            <span className="text-center">Value / Trend</span>
-            <span className="text-right">Proj</span>
-          </div>
+        <div className="grid w-full grid-cols-[2.5rem_minmax(0,1.35fr)_minmax(5rem,0.7fr)_minmax(7.5rem,0.95fr)_3.5rem] items-center gap-x-2 border-b border-slate-200/80 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700 select-none sm:grid-cols-[2.75rem_minmax(12rem,1.45fr)_minmax(5.5rem,0.75fr)_minmax(8.5rem,1fr)_4rem] sm:gap-x-4 sm:px-4">
+          <span className="text-center">Rk</span>
+          <span>Player</span>
+          <span className="text-center">Status</span>
+          <span className="text-center">Value / Trend</span>
+          <span className="text-right">Proj</span>
         </div>
 
         {loading ? (
@@ -299,12 +294,14 @@ function WeeklyProjectionsPage() {
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {rows.map(({ player, proj, ownership, value, trend }) => {
+            {rows.map(({ player, proj, ownership, value, trend }, index) => {
               const meta = OWNERSHIP_META[ownership];
-              const byeLabel =
+              const posLabel = player.pos === "DEF" ? "DST" : player.pos;
+              const team = player.team?.trim() || "FA";
+              const metaLine =
                 player.bye != null && player.bye > 0
-                  ? `${player.team?.trim() || "FA"} · Bye ${player.bye}`
-                  : player.team?.trim() || "FA";
+                  ? `${posLabel} · ${team} · Bye ${player.bye}`
+                  : `${posLabel} · ${team}`;
               const trendUp = trend > 0.05;
               const trendDown = trend < -0.05;
               return (
@@ -312,64 +309,59 @@ function WeeklyProjectionsPage() {
                   <button
                     type="button"
                     onClick={() => openPlayer(player.id)}
-                    className="flex w-full cursor-pointer items-center gap-4 px-3 py-3 text-left transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 sm:px-4"
+                    className="grid w-full cursor-pointer grid-cols-[2.5rem_minmax(0,1.35fr)_minmax(5rem,0.7fr)_minmax(7.5rem,0.95fr)_3.5rem] items-center gap-x-2 px-3 py-2.5 text-left transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 sm:grid-cols-[2.75rem_minmax(12rem,1.45fr)_minmax(5.5rem,0.75fr)_minmax(8.5rem,1fr)_4rem] sm:gap-x-4 sm:px-4"
                   >
-                    <div className="flex min-w-0 flex-[1.35] items-center gap-3">
-                      <span className="flex w-12 shrink-0 justify-start">
-                        <PositionBadge pos={player.pos} />
-                      </span>
-                      <span className="flex min-w-0 items-center gap-3">
-                        <PlayerAvatar
-                          id={player.id}
-                          pos={player.pos}
-                          team={player.team}
-                          name={player.name}
-                          className="size-10 flex-shrink-0 rounded-full border-2 border-slate-200 bg-white"
-                          logoClassName="size-3.5"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate font-semibold text-slate-900">
-                            {player.name}
-                          </span>
-                          <span className="mt-0.5 block truncate text-[11px] font-medium uppercase text-slate-400">
-                            {byeLabel}
-                          </span>
+                    <span className="text-center text-sm tabular-nums text-slate-500">
+                      {index + 1}
+                    </span>
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <PlayerAvatar
+                        id={player.id}
+                        pos={player.pos}
+                        team={player.team}
+                        name={player.name}
+                        className="size-9 flex-shrink-0 rounded-full border-2 border-slate-200 bg-white"
+                        logoClassName="size-3"
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-blue-700">
+                          {player.name}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[11px] font-medium uppercase text-slate-400">
+                          {metaLine}
                         </span>
                       </span>
-                    </div>
-
-                    <div className="grid w-full max-w-xl flex-1 grid-cols-3 items-center gap-3 text-sm tabular-nums">
-                      <span className="flex justify-center">
-                        <span
-                          className={cn(
-                            "inline-flex min-w-[4.75rem] items-center justify-center rounded px-2 py-0.5 text-center text-[9px] font-black uppercase tracking-wider",
-                            meta.chip,
-                          )}
-                        >
-                          {meta.label}
-                        </span>
+                    </span>
+                    <span className="flex justify-center">
+                      <span
+                        className={cn(
+                          "inline-flex items-center justify-center rounded px-2 py-0.5 text-center text-[9px] font-black uppercase tracking-wider",
+                          meta.chip,
+                        )}
+                      >
+                        {meta.label}
                       </span>
-                      <span className="inline-flex items-center justify-center gap-1.5 text-slate-500">
-                        <span>{value.toFixed(1)}</span>
-                        <span className="text-slate-300">/</span>
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-0.5 font-semibold",
-                            trendUp
-                              ? "text-emerald-600"
-                              : trendDown
-                                ? "text-rose-600"
-                                : "text-slate-400",
-                          )}
-                        >
-                          <span aria-hidden="true">{trendUp ? "▲" : trendDown ? "▼" : "–"}</span>
-                          <span>{Math.abs(trend).toFixed(1)}</span>
-                        </span>
+                    </span>
+                    <span className="inline-flex items-center justify-center gap-1.5 text-sm tabular-nums text-slate-500">
+                      <span>{value.toFixed(1)}</span>
+                      <span className="text-slate-300">/</span>
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-0.5 font-semibold",
+                          trendUp
+                            ? "text-emerald-600"
+                            : trendDown
+                              ? "text-rose-600"
+                              : "text-slate-400",
+                        )}
+                      >
+                        <span aria-hidden="true">{trendUp ? "▲" : trendDown ? "▼" : "–"}</span>
+                        <span>{Math.abs(trend).toFixed(1)}</span>
                       </span>
-                      <span className="text-right font-semibold text-slate-900">
-                        {proj.toFixed(1)}
-                      </span>
-                    </div>
+                    </span>
+                    <span className="text-right text-sm font-semibold tabular-nums text-slate-900">
+                      {proj.toFixed(1)}
+                    </span>
                   </button>
                 </li>
               );

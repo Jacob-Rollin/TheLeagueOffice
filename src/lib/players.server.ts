@@ -16,6 +16,7 @@ import {
   type SleeperRow,
   type Stats,
 } from "./players-build";
+import { NFL_TEAMS, teamFullName } from "./nfl-teams";
 
 export type { Player, PlayersPayload, Pos };
 
@@ -54,6 +55,7 @@ export type PlayerDetail = {
 };
 
 const BASE = "https://api.sleeper.app";
+const RESEARCH_BASE = "https://api.sleeper.com";
 
 function memo<T>(ttl: number, fn: (key: string) => Promise<T>) {
   const store = new Map<string, { at: number; value: Promise<T> }>();
@@ -70,6 +72,62 @@ function memo<T>(ttl: number, fn: (key: string) => Promise<T>) {
 }
 
 const HOUR = 1000 * 60 * 60;
+
+/** Sleeper global ownership / start rates from the research endpoint. */
+export type SleeperOwnership = { owned: number; started: number };
+
+const ownershipResearch = memo<Map<string, SleeperOwnership>>(6 * HOUR, async (key) => {
+  const [seasonType, season, week] = key.split("|");
+  const res = await fetch(
+    `${RESEARCH_BASE}/players/nfl/research/${seasonType}/${season}/${week}`,
+    { headers: { accept: "application/json" } },
+  );
+  if (!res.ok) return new Map();
+  const json = (await res.json().catch(() => null)) as Record<
+    string,
+    { owned?: number; started?: number }
+  > | null;
+  const map = new Map<string, SleeperOwnership>();
+  if (!json || typeof json !== "object") return map;
+  for (const [id, row] of Object.entries(json)) {
+    if (!row) continue;
+    const owned = Number(row.owned);
+    const started = Number(row.started);
+    map.set(id, {
+      owned: Number.isFinite(owned) ? Math.round(owned) : 0,
+      started: Number.isFinite(started) ? Math.round(started) : 0,
+    });
+  }
+  return map;
+});
+
+/** Current-week Sleeper rostered % map keyed by player id. */
+export async function loadSleeperOwnershipMap(): Promise<Map<string, SleeperOwnership>> {
+  const stateRes = await fetch(`${BASE}/v1/state/nfl`, {
+    headers: { accept: "application/json" },
+  }).catch(() => null);
+  const state = stateRes?.ok
+    ? ((await stateRes.json().catch(() => null)) as {
+        season?: string;
+        week?: number;
+        season_type?: string;
+        previous_season?: string;
+      } | null)
+    : null;
+  const season = String(state?.season ?? currentSeason());
+  const week = Math.max(1, Number(state?.week) || 1);
+  const seasonType =
+    state?.season_type === "post" ||
+    state?.season_type === "pre" ||
+    state?.season_type === "off"
+      ? state.season_type
+      : "regular";
+  let map = await ownershipResearch(`${seasonType}|${season}|${week}`);
+  if (map.size === 0 && state?.previous_season) {
+    map = await ownershipResearch(`regular|${state.previous_season}|18`);
+  }
+  return map;
+}
 
 /** Season-long stats for every player, keyed by player id. */
 const seasonStats = memo<Map<string, Stats>>(6 * HOUR, (season) => fetchSeasonStats(season));
@@ -254,10 +312,9 @@ const defenseAllowed = memo<Map<string, Map<Pos, { pts: number; games: number }>
   12 * HOUR,
   async (season) => {
     const weeks = Array.from({ length: 17 }, (_, i) => i + 1);
-    const q = `season_type=regular&${POSITIONS.filter((p) => p !== "DEF")
-      .map((p) => `position[]=${p}`)
-      .join("&")}`;
+    const q = `season_type=regular&${POSITIONS.map((p) => `position[]=${p}`).join("&")}`;
     const table = new Map<string, Map<Pos, { pts: number; games: number }>>();
+    let maxWeekSeen = 0;
 
     for (let i = 0; i < weeks.length; i += 6) {
       const chunk = weeks.slice(i, i + 6);
@@ -268,13 +325,19 @@ const defenseAllowed = memo<Map<string, Map<Pos, { pts: number; games: number }>
         })),
       );
       for (const { week, rows } of results) {
+        if (!rows.length) continue;
+        maxWeekSeen = Math.max(maxWeekSeen, week);
         const gamesSeen = new Set<string>();
         for (const row of rows) {
           const opp = row.opponent;
           const pos = (row.player?.position ?? "") as Pos;
           if (!opp || !POSITIONS.includes(pos)) continue;
-          const pts = num(row.stats?.["pts_half_ppr"], 0);
-          if (pts <= 0) continue;
+          const pts = num(
+            row.stats?.["pts_half_ppr"] ?? row.stats?.["pts_ppr"] ?? row.stats?.["pts_std"],
+            0,
+          );
+          // Keep zero lines for DEF (can finish negative / near-zero) but skip blank offense.
+          if (pos !== "DEF" && pts <= 0) continue;
           let byPos = table.get(opp);
           if (!byPos) table.set(opp, (byPos = new Map()));
           const cell = byPos.get(pos) ?? { pts: 0, games: 0 };
@@ -288,9 +351,102 @@ const defenseAllowed = memo<Map<string, Map<Pos, { pts: number; games: number }>
         }
       }
     }
+    // Stash max week on a sentinel so callers can read coverage without a second scan.
+    (table as Map<string, Map<Pos, { pts: number; games: number }>> & { __maxWeek?: number }).__maxWeek =
+      maxWeekSeen;
     return table;
   },
 );
+
+export type FantasyPointsAllowedPos = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
+
+export type FantasyPointsAllowedCell = {
+  rank: number | null;
+  pa: number | null;
+};
+
+export type FantasyPointsAllowedRow = {
+  team: string;
+  teamName: string;
+  cells: Record<FantasyPointsAllowedPos, FantasyPointsAllowedCell>;
+};
+
+export type FantasyPointsAllowedPayload = {
+  season: string;
+  weeksFrom: number;
+  weeksTo: number;
+  rows: FantasyPointsAllowedRow[];
+};
+
+const PA_POSITIONS: FantasyPointsAllowedPos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
+
+/**
+ * League-wide Fantasy Points Allowed board:
+ * For each NFL defense × fantasy position, PA = avg half-PPR points allowed
+ * per game, ranked high→low so rank 1 is the easiest offensive matchup.
+ */
+export async function loadFantasyPointsAllowed(
+  season = currentSeason(),
+): Promise<FantasyPointsAllowedPayload> {
+  const prev = String(Number(season) - 1);
+  const [active, previous] = await Promise.all([
+    defenseAllowed(season).catch(() => null),
+    defenseAllowed(prev).catch(() => null),
+  ]);
+  const table = active && active.size > 0 ? active : previous;
+  const usedSeason = active && active.size > 0 ? season : prev;
+  const maxWeek =
+    (
+      table as (Map<string, Map<Pos, { pts: number; games: number }>> & {
+        __maxWeek?: number;
+      }) | null
+    )?.__maxWeek ?? 0;
+
+  const emptyCell = (): FantasyPointsAllowedCell => ({ rank: null, pa: null });
+  const perPos = new Map<FantasyPointsAllowedPos, Map<string, number>>();
+
+  for (const pos of PA_POSITIONS) {
+    const scores = new Map<string, number>();
+    if (table) {
+      for (const [team, byPos] of table) {
+        if (team.startsWith("__")) continue;
+        const cell = byPos.get(pos);
+        if (cell && cell.games > 0) {
+          scores.set(team, Math.round((cell.pts / cell.games) * 10) / 10);
+        }
+      }
+    }
+    perPos.set(pos, scores);
+  }
+
+  // Rank 1 = highest PA (easiest matchup for that position).
+  const rankOf = new Map<FantasyPointsAllowedPos, Map<string, number>>();
+  for (const pos of PA_POSITIONS) {
+    const ranked = [...(perPos.get(pos)?.entries() ?? [])].sort((a, b) => b[1] - a[1]);
+    rankOf.set(pos, new Map(ranked.map(([team], i) => [team, i + 1])));
+  }
+
+  const rows: FantasyPointsAllowedRow[] = NFL_TEAMS.map((t) => {
+    const cells = {} as Record<FantasyPointsAllowedPos, FantasyPointsAllowedCell>;
+    for (const pos of PA_POSITIONS) {
+      const pa = perPos.get(pos)?.get(t.id) ?? null;
+      const rank = rankOf.get(pos)?.get(t.id) ?? null;
+      cells[pos] = pa == null && rank == null ? emptyCell() : { pa, rank };
+    }
+    return {
+      team: t.id,
+      teamName: teamFullName(t.id),
+      cells,
+    };
+  }).sort((a, b) => a.teamName.localeCompare(b.teamName));
+
+  return {
+    season: usedSeason,
+    weeksFrom: maxWeek > 0 ? 1 : 0,
+    weeksTo: maxWeek,
+    rows,
+  };
+}
 
 function sosGrade(avgRank: number): string {
   if (avgRank <= 10) return "Very hard";
@@ -466,10 +622,16 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
         );
 
   const sos = await buildSos(player, season).catch(() => null);
+  const ownership = (await loadSleeperOwnershipMap().catch(() => null))?.get(id) ?? null;
+  const enrichedPlayer = {
+    ...player,
+    rostered_pct: ownership?.owned ?? null,
+    started_pct: ownership?.started ?? null,
+  } as Player & { rostered_pct: number | null; started_pct: number | null };
 
   return {
     season,
-    player,
+    player: enrichedPlayer,
     history,
     projection,
     depthChart,

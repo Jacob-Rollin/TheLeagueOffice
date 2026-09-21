@@ -59,3 +59,29 @@ export const getNextGame = createServerFn({ method: "GET" })
     return await loadNextGame(data.team);
   });
 
+export const getFantasyPointsAllowed = createServerFn({ method: "GET" })
+  .inputValidator((input?: { season?: string }) => ({
+    season: input?.season != null ? String(input.season).slice(0, 16) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const { loadFantasyPointsAllowed } = await import("./players.server");
+    return await loadFantasyPointsAllowed(data.season);
+  });
+
+export const getRedZoneStats = createServerFn({ method: "POST" })
+  .inputValidator((input?: { season?: string; yardline?: number | string }) => {
+    const yardlineRaw = input?.yardline != null ? Number(input.yardline) : 20;
+    const yardline =
+      yardlineRaw === 5 || yardlineRaw === 10 || yardlineRaw === 15 || yardlineRaw === 20
+        ? yardlineRaw
+        : 20;
+    return {
+      season: input?.season != null ? String(input.season).slice(0, 16) : undefined,
+      yardline,
+    };
+  })
+  .handler(async ({ data }) => {
+    const { loadRedZoneStats } = await import("./redzone.server");
+    return await loadRedZoneStats(data.season, data.yardline);
+  });
+
