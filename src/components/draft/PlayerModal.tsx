@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, type MouseEvent } from "react";
+import { X } from "lucide-react";
 
 import { PlayerDetail } from "./PlayerDetail";
 
@@ -46,36 +47,39 @@ export function PlayerModal({
 
   if (!id) return null;
 
+  const handleBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    e.stopPropagation();
+    e.preventDefault();
+    onClose();
+  };
+
+  const handleClose = (e: MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onClose();
+  };
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-start justify-center bg-foreground/50 p-2 sm:p-6"
-      onClick={onClose}
+      onClick={handleBackdropClick}
     >
       <div
         id="player-popup-scroll-container"
-        className="relative h-full max-h-full w-full max-w-5xl overflow-x-visible overflow-y-auto rounded-xl border border-border bg-background shadow-2xl"
+        className="relative h-full max-h-full w-full max-w-5xl overflow-x-visible overflow-y-auto rounded-xl border border-border bg-background shadow-2xl pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
-          aria-label="Close player overlay"
-          onClick={onClose}
-          className="absolute top-4 right-4 z-50 flex h-8 w-8 cursor-pointer select-none items-center justify-center rounded-lg border border-slate-200/80 bg-white text-slate-700 shadow-sm pointer-events-auto transition-all duration-200 hover:bg-slate-50 hover:text-slate-900 focus:outline-none group"
+          onMouseDown={handleClose}
+          onClick={handleClose}
+          className="pointer-events-auto absolute right-4 top-4 z-[200] flex h-8 w-8 cursor-pointer select-none items-center justify-center rounded-lg border border-white/45 bg-transparent text-white transition-colors hover:border-white/80 hover:bg-white/10 focus:outline-none"
+          aria-label="Close popup"
         >
-          <svg
-            className="h-3.5 w-3.5 text-slate-500 transition-colors group-hover:text-slate-800"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+          <X className="size-4 shrink-0" strokeWidth={2.5} />
         </button>
         <PlayerDetail
           id={id}

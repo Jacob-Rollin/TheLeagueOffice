@@ -393,7 +393,7 @@ export function PlayerDetail({
             </div>
           </div>
 
-          <div className="relative z-50 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pl-6 pr-10 text-left">
+          <div className="relative z-10 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pl-6 pr-12 text-left">
             <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-visible">
               <h1 className="truncate text-3xl font-black tracking-tight text-white">
                 {player.name}
