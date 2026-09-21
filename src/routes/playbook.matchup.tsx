@@ -1,13 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { Lock } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { detailQuery } from "@/components/draft/PlayerDetail";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { playbookCardClass, resolveAvatarUrl } from "@/components/playbook/panels";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
+import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
@@ -79,13 +88,36 @@ const ZERO_PROJ_INJURY = new Set([
   "EXEMPT",
 ]);
 
-function sleeperZeroProjection(player: Player): boolean {
-  const raw = (player.injury || player.injury_status || player.injuryStatus || "")
+/** Always-zero designations (IR slot / long-term inactive) — never show weekly upside. */
+const HARD_ZERO_PROJ_INJURY = new Set([
+  "IR",
+  "INJURED RESERVE",
+  "PUP",
+  "SUSPENDED",
+  "NA",
+  "INACTIVE",
+  "EXEMPT",
+]);
+
+function injuryToken(player: Player): string {
+  return (player.injury || player.injury_status || player.injuryStatus || "")
     .trim()
     .toUpperCase();
+}
+
+function sleeperZeroProjection(player: Player): boolean {
+  const raw = injuryToken(player);
   if (!raw || /^(HEALTHY|ACTIVE|NONE|PROBABLE)$/.test(raw)) return false;
   if (ZERO_PROJ_INJURY.has(raw)) return true;
   return /\b(out|doubtful|injured reserve|\bir\b|pup|suspended|inactive)\b/i.test(raw);
+}
+
+/** IR / PUP / suspended etc. — projections stay 0.00 even after games finish. */
+function hardZeroProjection(player: Player): boolean {
+  const raw = injuryToken(player);
+  if (!raw) return false;
+  if (HARD_ZERO_PROJ_INJURY.has(raw)) return true;
+  return /\b(injured reserve|\bir\b|pup|suspended|inactive|exempt)\b/i.test(raw);
 }
 
 type LineMode = "current" | "optimal";
@@ -131,38 +163,38 @@ function badgeLabel(slot: string): string {
   return slot;
 }
 
-/** Muted position tokens — same as PositionBadge / player popup. */
+/** Opaque pastel pos fills (same look as the old /15 tints) with solid pos-colored labels. */
 const SLOT_PILL_TONE: Record<string, string> = {
-  QB: "bg-qb/15 text-qb border-qb/40",
-  RB: "bg-rb/15 text-rb border-rb/40",
-  WR: "bg-wr/15 text-wr border-wr/40",
-  TE: "bg-te/15 text-te border-te/40",
-  K: "bg-k/15 text-k border-k/40",
-  DEF: "bg-def/15 text-def border-def/40",
-  BN: "bg-muted text-muted-foreground border-border",
-  IR: "bg-muted text-muted-foreground border-border",
+  QB: "border-[color-mix(in_oklab,var(--color-qb)_32%,white)] bg-[color-mix(in_oklab,var(--color-qb)_18%,white)] text-qb",
+  RB: "border-[color-mix(in_oklab,var(--color-rb)_32%,white)] bg-[color-mix(in_oklab,var(--color-rb)_18%,white)] text-rb",
+  WR: "border-[color-mix(in_oklab,var(--color-wr)_32%,white)] bg-[color-mix(in_oklab,var(--color-wr)_18%,white)] text-wr",
+  TE: "border-[color-mix(in_oklab,var(--color-te)_32%,white)] bg-[color-mix(in_oklab,var(--color-te)_18%,white)] text-te",
+  K: "border-[color-mix(in_oklab,var(--color-k)_32%,white)] bg-[color-mix(in_oklab,var(--color-k)_18%,white)] text-k",
+  DEF: "border-[color-mix(in_oklab,var(--color-def)_32%,white)] bg-[color-mix(in_oklab,var(--color-def)_18%,white)] text-def",
+  BN: "border-slate-300 bg-slate-100 text-slate-600",
+  IR: "border-slate-300 bg-slate-100 text-slate-600",
 };
 
-/** Standalone center badge — floats in the 64px spacer, never overlaps cards. */
+/** Standalone center badge — overlaps the seam between left/right cards. */
 function MatchupSlotBadge({ slot }: { slot: string }) {
   const label = badgeLabel(slot);
   const display = slot === "IR" ? "IR" : label;
   const isFlx = display === "FLX" || slot === "FLEX" || slot === "FLX";
   const pillBase =
-    "mx-auto z-10 flex h-8 w-10 items-center justify-center rounded-md border text-[11px] font-bold uppercase shadow-sm";
+    "mx-auto z-20 flex h-9 w-11 items-center justify-center rounded-md border text-xs font-bold uppercase shadow-md ring-2 ring-white";
 
   if (isFlx) {
     return (
       <span
         className={cn(
           pillBase,
-          "relative isolate overflow-hidden border-border text-slate-800",
+          "relative isolate overflow-hidden border-slate-300 text-slate-800",
         )}
       >
         <span className="pointer-events-none absolute inset-0 flex" aria-hidden="true">
-          <span className="h-full w-1/3 bg-rb/35" />
-          <span className="h-full w-1/3 bg-wr/35" />
-          <span className="h-full w-1/3 bg-te/35" />
+          <span className="h-full w-1/3 bg-[color-mix(in_oklab,var(--color-rb)_22%,white)]" />
+          <span className="h-full w-1/3 bg-[color-mix(in_oklab,var(--color-wr)_22%,white)]" />
+          <span className="h-full w-1/3 bg-[color-mix(in_oklab,var(--color-te)_22%,white)]" />
         </span>
         <span className="relative z-10">FLX</span>
       </span>
@@ -172,6 +204,19 @@ function MatchupSlotBadge({ slot }: { slot: string }) {
   return (
     <span className={cn(pillBase, SLOT_PILL_TONE[display] ?? SLOT_PILL_TONE["BN"])}>
       {display}
+    </span>
+  );
+}
+
+/** Compact lock chip — game started / final; lineup slot is frozen. */
+function LineupLockBadge() {
+  return (
+    <span
+      className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border border-slate-200 bg-slate-50 text-slate-400"
+      title="Lineup locked"
+      aria-label="Lineup locked — this player's game has started"
+    >
+      <Lock className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden="true" />
     </span>
   );
 }
@@ -252,6 +297,58 @@ function WeekSelector({
   );
 }
 
+type MatchupOption = {
+  id: string;
+  matchupId: number;
+  leftRosterId: number;
+  rightRosterId: number | null;
+  label: string;
+  isMine: boolean;
+};
+
+function MatchupPicker({
+  options,
+  value,
+  onChange,
+}: {
+  options: MatchupOption[];
+  value: string | null;
+  onChange: (id: string) => void;
+}) {
+  if (!options.length) {
+    return (
+      <div className="inline-flex h-9 min-w-[12rem] items-center rounded-lg border border-border bg-white px-3 text-xs font-medium text-slate-400 shadow-sm">
+        No matchups
+      </div>
+    );
+  }
+
+  return (
+    <Select value={value ?? undefined} onValueChange={onChange}>
+      <SelectTrigger
+        aria-label="Select matchup"
+        className="h-9 w-[min(100vw-8rem,20rem)] border-border bg-white shadow-sm sm:w-[22rem]"
+      >
+        <SelectValue placeholder="Select matchup" />
+      </SelectTrigger>
+      <SelectContent align="center" className="max-h-72">
+        {options.map((opt) => (
+          <SelectItem key={opt.id} value={opt.id}>
+            <span className="flex items-center gap-2">
+              <span className="truncate">{opt.label}</span>
+              {opt.isMine ? (
+                <span className="shrink-0 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">
+                  You
+                </span>
+              ) : null}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function TeamLogoAvatar({
   name,
   logo,
@@ -328,34 +425,113 @@ function buildCurrentStarterRows(
   if (team.starters.length) {
     return labels.map((_, i) => team.starters[i] ?? null);
   }
-  return buildOptimalStarterRows(team, labels, (id) => null);
+  return buildOptimalStarterRows(team, labels, (id) => null, {
+    pointsMap: {},
+    progressByNflTeam: new Map(),
+    activeWeek: 0,
+  });
 }
 
+/**
+ * Optimal lineup value for a player this week:
+ * - Final games → actual fantasy points (retrospective ideal)
+ * - In progress → live rolling projection
+ * - Yet to play → weekly projection (0 if Out/IR/bye on the current week)
+ */
+function optimalPlayerValue(
+  player: Player,
+  projectFor: (id: string) => number | null,
+  pointsMap: Record<string, number>,
+  progressByNflTeam: Map<string, NflGameProgress>,
+  activeWeek: number,
+  /** Only apply Out/Doubtful zeroing on the live NFL week — not when looking ahead. */
+  applyOutZero: boolean,
+): number {
+  if (player.bye != null && Number(player.bye) === Number(activeWeek)) return 0;
+
+  const progress = progressForNflTeam(player.team, progressByNflTeam);
+  const phase = progress?.phase ?? "pre";
+  const live = Math.max(0, Number(pointsMap[player.id] ?? 0) || 0);
+  const baseline = projectFor(player.id) ?? weeklyFallback(player);
+
+  if (hardZeroProjection(player)) return 0;
+  // Out/Doubtful with no points scored → not a start candidate (current week only).
+  if (applyOutZero && sleeperZeroProjection(player) && live < 0.005) return 0;
+
+  if (phase === "post") return live;
+
+  if (phase === "in") {
+    return playerLiveRollingProjection({
+      livePoints: live,
+      baselineProjection: baseline,
+      progress,
+    });
+  }
+
+  return Math.max(0, baseline);
+}
+
+function playerFitsSlot(player: Player, slot: string): boolean {
+  if (slot === "FLEX" || slot === "FLX") return FLEX_OK.has(player.pos);
+  if (slot === "DEF" || slot === "DST") return player.pos === "DEF";
+  return player.pos === slot;
+}
+
+/**
+ * Build the ideal starter set for the week.
+ * Finished players compete on actuals; yet-to-play compete on projections.
+ * Non-FLEX slots fill first so FLEX gets the best leftover skill player.
+ */
 function buildOptimalStarterRows(
   team: ResolvedRosterTeam | null,
   labels: string[],
   projectFor: (id: string) => number | null,
+  opts: {
+    pointsMap: Record<string, number>;
+    progressByNflTeam: Map<string, NflGameProgress>;
+    activeWeek: number;
+    applyOutZero?: boolean;
+  },
 ): (Player | null)[] {
   if (!team) return labels.map(() => null);
   const irIds = new Set((team.ir ?? []).map((p) => p.id));
+  const applyOutZero = opts.applyOutZero !== false;
   const pool = team.players
     .filter((p) => !irIds.has(p.id))
     .map((p) => ({
       player: p,
-      weekly: projectFor(p.id) ?? weeklyFallback(p),
+      value: optimalPlayerValue(
+        p,
+        projectFor,
+        opts.pointsMap,
+        opts.progressByNflTeam,
+        opts.activeWeek,
+        applyOutZero,
+      ),
     }))
-    .sort((a, b) => b.weekly - a.weekly);
+    .sort((a, b) => b.value - a.value || a.player.name.localeCompare(b.player.name));
 
   const used = new Set<string>();
-  return labels.map((slot) => {
+  const pickForSlot = (slot: string): Player | null => {
     const match = pool.find((entry) => {
       if (used.has(entry.player.id)) return false;
-      if (slot === "FLEX") return FLEX_OK.has(entry.player.pos);
-      return entry.player.pos === slot;
+      return playerFitsSlot(entry.player, slot);
     });
     if (match) used.add(match.player.id);
     return match?.player ?? null;
+  };
+
+  const out: (Player | null)[] = labels.map(() => null);
+  // Fill locked positions before FLEX so the leftover best skill piece can flex.
+  labels.forEach((slot, i) => {
+    if (slot === "FLEX" || slot === "FLX") return;
+    out[i] = pickForSlot(slot);
   });
+  labels.forEach((slot, i) => {
+    if (slot !== "FLEX" && slot !== "FLX") return;
+    out[i] = pickForSlot(slot);
+  });
+  return out;
 }
 
 function padPairRows(
@@ -455,18 +631,18 @@ function SosStarRankLine({
 
   if (align === "right") {
     return (
-      <div className="mt-0.5 flex max-w-full items-center justify-end truncate text-[11px] leading-none">
+      <div className="mt-1 flex max-w-full items-center justify-end truncate text-xs leading-none">
         {rankEl}
-        {rankEl ? divider : null}
+        {rankEl && (stars != null || opp) ? divider : null}
         {starsAndVs}
       </div>
     );
   }
 
   return (
-    <div className="mt-0.5 flex max-w-full items-center truncate text-[11px] leading-none">
+    <div className="mt-1 flex max-w-full items-center truncate text-xs leading-none">
       {starsAndVs}
-      {rankEl ? divider : null}
+      {(stars != null || opp) && rankEl ? divider : null}
       {rankEl}
     </div>
   );
@@ -535,7 +711,7 @@ function MatchupPlayerThumb({
       onClick={onOpen}
       aria-label={`Open ${player.name} details`}
       className={cn(
-        "relative h-12 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-slate-200 bg-white shadow-sm transition-all hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "relative h-14 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-slate-200 bg-white shadow-sm transition-all hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         className,
       )}
     >
@@ -599,13 +775,13 @@ function MatchupScoreColumn({
   }
 
   return (
-    <div className="flex w-12 flex-shrink-0 flex-col items-center justify-center">
-      <p className="text-center text-sm font-bold tabular-nums leading-none text-slate-900">
+    <div className="flex w-14 flex-shrink-0 flex-col items-center justify-center">
+      <p className="text-center text-base font-bold tabular-nums leading-none text-slate-900">
         {liveLabel}
       </p>
       <p
         className={cn(
-          "mt-1 flex items-center justify-center gap-0.5 text-[11px] font-medium tabular-nums leading-none",
+          "mt-1.5 flex items-center justify-center gap-0.5 text-xs font-medium tabular-nums leading-none",
           projClass,
         )}
       >
@@ -640,9 +816,20 @@ function liveScoreLabel(
   return "-";
 }
 
+/** Live vs original weekly proj — grey before kickoff or on an exact match. */
+function projVsLiveTone(livePts: number, projPts: number, weekStarted: boolean): string {
+  if (!weekStarted) return "text-slate-400";
+  const live = Number(livePts) || 0;
+  const proj = Number(projPts) || 0;
+  if (Math.abs(live - proj) < 0.005) return "text-slate-400";
+  if (live > proj + 0.005) return "text-emerald-600";
+  if (live < proj - 0.005) return "text-rose-600";
+  return "text-slate-400";
+}
+
 /**
  * LEFT card: avatar | left text stack | scores
- * One discrete bordered box — never spans into the center badge column.
+ * One discrete bordered box — center badge overlaps the outer seam.
  */
 function LeftPlayerCard({
   player,
@@ -657,6 +844,7 @@ function LeftPlayerCard({
   onOpenPlayer,
 }: SideCardProps) {
   const isFinal = phase === "post";
+  const isLocked = phase === "post" || phase === "in";
   const shell = cn(
     "flex h-full w-full items-center justify-between rounded-xl border p-3.5 shadow-sm",
     isFinal
@@ -667,7 +855,7 @@ function LeftPlayerCard({
   if (!player) {
     return (
       <div className="flex h-full w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-        <span className="w-full text-center text-[11px] font-medium text-slate-400">Empty</span>
+        <span className="w-full text-center text-xs font-medium text-slate-400">Empty</span>
       </div>
     );
   }
@@ -681,7 +869,7 @@ function LeftPlayerCard({
     <div className={shell}>
       <MatchupPlayerThumb player={player} onOpen={open} />
       <div className="flex min-w-0 flex-1 flex-col items-start justify-center pl-3.5 text-left">
-        <p className="flex max-w-full items-center gap-1.5 truncate text-left text-sm leading-none">
+        <p className="flex max-w-full items-center gap-1.5 truncate text-left text-[15px] leading-none">
           <button
             type="button"
             onClick={open}
@@ -694,16 +882,22 @@ function LeftPlayerCard({
             playerName={player.name}
             onOpen={open}
           />
-          <span className="shrink-0 font-medium text-slate-400">{teamAbbr}</span>
+          <span className="shrink-0 text-sm font-medium text-slate-400">{teamAbbr}</span>
         </p>
-        <p className="mt-0.5 max-w-full truncate text-[11px] font-medium leading-none text-slate-500">
-          {line2}
+        <p className="mt-1 flex max-w-full items-center gap-1.5 truncate text-xs font-medium leading-none text-slate-500">
+          <span className="truncate">{line2}</span>
+          {phase === "in" ? <LineupLockBadge /> : null}
         </p>
         {isFinal ? (
           line3Final ? (
-            <p className="mt-0.5 max-w-full truncate text-[11px] font-medium tabular-nums leading-none text-slate-500">
-              {line3Final}
+            <p className="mt-1 flex max-w-full items-center gap-1.5 truncate text-xs font-medium tabular-nums leading-none text-slate-500">
+              <span className="truncate">{line3Final}</span>
+              {isLocked ? <LineupLockBadge /> : null}
             </p>
+          ) : isLocked ? (
+            <span className="mt-1">
+              <LineupLockBadge />
+            </span>
           ) : null
         ) : (
           <SosStarRankLine
@@ -743,6 +937,7 @@ function RightPlayerCard({
   onOpenPlayer,
 }: SideCardProps) {
   const isFinal = phase === "post";
+  const isLocked = phase === "post" || phase === "in";
   const shell = cn(
     "flex h-full w-full items-center justify-between rounded-xl border p-3.5 shadow-sm",
     isFinal
@@ -753,7 +948,7 @@ function RightPlayerCard({
   if (!player) {
     return (
       <div className="flex h-full w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-        <span className="w-full text-center text-[11px] font-medium text-slate-400">Empty</span>
+        <span className="w-full text-center text-xs font-medium text-slate-400">Empty</span>
       </div>
     );
   }
@@ -774,7 +969,7 @@ function RightPlayerCard({
         checkSide="right"
       />
       <div className="flex min-w-0 flex-1 flex-col items-end justify-center pr-3.5 text-right">
-        <p className="flex max-w-full items-center justify-end gap-1.5 truncate text-right text-sm leading-none">
+        <p className="flex max-w-full items-center justify-end gap-1.5 truncate text-right text-[15px] leading-none">
           <button
             type="button"
             onClick={open}
@@ -787,16 +982,22 @@ function RightPlayerCard({
             playerName={player.name}
             onOpen={open}
           />
-          <span className="shrink-0 font-medium text-slate-400">{teamAbbr}</span>
+          <span className="shrink-0 text-sm font-medium text-slate-400">{teamAbbr}</span>
         </p>
-        <p className="mt-0.5 max-w-full truncate text-[11px] font-medium leading-none text-slate-500">
-          {line2}
+        <p className="mt-1 flex max-w-full items-center justify-end gap-1.5 truncate text-xs font-medium leading-none text-slate-500">
+          {phase === "in" ? <LineupLockBadge /> : null}
+          <span className="truncate">{line2}</span>
         </p>
         {isFinal ? (
           line3Final ? (
-            <p className="mt-0.5 max-w-full truncate text-[11px] font-medium tabular-nums leading-none text-slate-500">
-              {line3Final}
+            <p className="mt-1 flex max-w-full items-center justify-end gap-1.5 truncate text-xs font-medium tabular-nums leading-none text-slate-500">
+              {isLocked ? <LineupLockBadge /> : null}
+              <span className="truncate">{line3Final}</span>
             </p>
+          ) : isLocked ? (
+            <span className="mt-1">
+              <LineupLockBadge />
+            </span>
           ) : null
         ) : (
           <SosStarRankLine
@@ -813,8 +1014,8 @@ function RightPlayerCard({
 }
 
 /**
- * ONE parent grid row per slot. Left card, center badge, and right card are
- * always direct horizontal children — never separate mapped lines.
+ * ONE parent grid row per slot. Left card and right card sit almost flush;
+ * the position badge overlaps the center seam.
  */
 function MatchupGridRow({
   slot,
@@ -871,7 +1072,7 @@ function MatchupGridRow({
     oppProj > mineProj;
 
   return (
-    <div className="mx-auto my-3 grid h-[88px] w-full max-w-7xl grid-cols-[1fr_64px_1fr] items-center">
+    <div className="relative mx-auto my-3 grid h-[96px] w-full max-w-7xl grid-cols-2 items-center gap-1.5">
       <div className="min-w-0">
         <LeftPlayerCard
           player={mine}
@@ -886,9 +1087,6 @@ function MatchupGridRow({
           {...(onOpenPlayer ? { onOpenPlayer } : {})}
         />
       </div>
-      <div className="flex h-full items-center justify-center">
-        <MatchupSlotBadge slot={slot} />
-      </div>
       <div className="min-w-0">
         <RightPlayerCard
           player={opp}
@@ -902,6 +1100,9 @@ function MatchupGridRow({
           showCheck={Boolean(oppWins)}
           {...(onOpenPlayer ? { onOpenPlayer } : {})}
         />
+      </div>
+      <div className="pointer-events-none absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2">
+        <MatchupSlotBadge slot={slot} />
       </div>
     </div>
   );
@@ -1016,7 +1217,7 @@ function PlaybookMatchupPage() {
   const players = playersPayload?.players ?? [];
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const { teams, myTeam, rosterPositions, loading: rostersLoading } = useLeagueRosters(players);
-  const { projectFor, loading: projectionsLoading } = useLeagueProjections();
+  const { standings } = useActiveStandings();
   const brain = usePlayerBrain();
   const [scheduleSosByTeam, setScheduleSosByTeam] = useState<Map<string, SosMatchup[]>>(
     () => new Map(),
@@ -1041,6 +1242,7 @@ function PlaybookMatchupPage() {
   const [myMode, setMyMode] = useState<LineMode>("current");
   const [oppMode, setOppMode] = useState<LineMode>("current");
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
+  const [viewMatchupId, setViewMatchupId] = useState<string | null>(null);
 
   const nflWeek = useQuery({
     queryKey: ["nfl-state-week"],
@@ -1061,8 +1263,75 @@ function PlaybookMatchupPage() {
   }, [nflWeek.data, activeLeagueId]);
 
   const activeWeek = selectedWeek ?? nflWeek.data ?? 1;
+  // Injury Out/Doubtful designations apply to the live week only — looking
+  // ahead (e.g. week 3) should still show that week's projected points.
+  const applyOutZero =
+    nflWeek.data != null && Number(activeWeek) === Number(nflWeek.data);
+  const { projectFor, loading: projectionsLoading } = useLeagueProjections(activeWeek);
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
+
+  // Reset viewed matchup when week or league changes.
+  useEffect(() => {
+    setViewMatchupId(null);
+    setMyMode("current");
+    setOppMode("current");
+  }, [activeWeek, activeLeagueId]);
+
+  const myRosterId = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
+
+  const matchupOptions = useMemo((): MatchupOption[] => {
+    const entries = matchups?.entries ?? [];
+    const byId = new Map<number, typeof entries>();
+    for (const entry of entries) {
+      if (entry.matchupId == null) continue;
+      const bucket = byId.get(entry.matchupId) ?? [];
+      bucket.push(entry);
+      byId.set(entry.matchupId, bucket);
+    }
+
+    const resolveName = (rosterId: number, fallback: string) =>
+      teams.find((t) => Number(t.slot) === Number(rosterId))?.team?.trim() || fallback;
+
+    const options: MatchupOption[] = [];
+    for (const [matchupId, pair] of byId) {
+      const sorted = [...pair].sort((a, b) => {
+        if (myRosterId != null && Number(a.rosterId) === Number(myRosterId)) return -1;
+        if (myRosterId != null && Number(b.rosterId) === Number(myRosterId)) return 1;
+        return Number(a.rosterId) - Number(b.rosterId);
+      });
+      const left = sorted[0];
+      if (!left) continue;
+      const right = sorted[1] ?? null;
+      const leftName = resolveName(left.rosterId, left.teamName);
+      const rightName = right ? resolveName(right.rosterId, right.teamName) : "Bye week";
+      const isMine =
+        myRosterId != null &&
+        (Number(left.rosterId) === Number(myRosterId) ||
+          (right != null && Number(right.rosterId) === Number(myRosterId)));
+      options.push({
+        id: String(matchupId),
+        matchupId,
+        leftRosterId: left.rosterId,
+        rightRosterId: right?.rosterId ?? null,
+        label: right ? `${leftName} vs ${rightName}` : `${leftName} (Bye)`,
+        isMine,
+      });
+    }
+
+    options.sort((a, b) => {
+      if (a.isMine !== b.isMine) return a.isMine ? -1 : 1;
+      return a.label.localeCompare(b.label);
+    });
+    return options;
+  }, [matchups, teams, myRosterId]);
+
+  useEffect(() => {
+    if (!matchupOptions.length) return;
+    if (viewMatchupId && matchupOptions.some((o) => o.id === viewMatchupId)) return;
+    const mine = matchupOptions.find((o) => o.isMine);
+    setViewMatchupId(mine?.id ?? matchupOptions[0]!.id);
+  }, [matchupOptions, viewMatchupId]);
 
   const loading =
     playersLoading ||
@@ -1073,6 +1342,7 @@ function PlaybookMatchupPage() {
 
   const weeklyPair = useMemo(() => {
     const empty = {
+      leftRosterId: null as number | null,
       oppRosterId: null as number | null,
       oppName: null as string | null,
       oppLogo: null as string | null,
@@ -1086,53 +1356,49 @@ function PlaybookMatchupPage() {
       oppBaseline: 0,
     };
     const entries = matchups?.entries ?? [];
-    if (!entries.length) return empty;
+    if (!entries.length || !viewMatchupId) return empty;
 
-    const norm = (value: string | null | undefined) =>
-      (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-
-    const myRosterId = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
-    const mine =
-      (myRosterId != null
-        ? entries.find((row) => Number(row.rosterId) === Number(myRosterId))
-        : null) ??
-      entries.find(
-        (row) =>
-          Boolean(activeLeague?.teamName) &&
-          norm(row.teamName) === norm(activeLeague?.teamName),
-      ) ??
-      entries.find((row) => Boolean(myTeam?.team) && norm(row.teamName) === norm(myTeam?.team)) ??
+    const selected =
+      matchupOptions.find((o) => o.id === viewMatchupId) ??
+      matchupOptions.find((o) => o.isMine) ??
+      matchupOptions[0] ??
       null;
+    if (!selected) return empty;
 
-    if (!mine) return empty;
+    const left =
+      entries.find((row) => Number(row.rosterId) === Number(selected.leftRosterId)) ?? null;
+    if (!left) return empty;
 
-    const rival =
-      mine.matchupId != null
-        ? entries.find(
-            (row) =>
-              row.matchupId != null &&
-              Number(row.matchupId) === Number(mine.matchupId) &&
-              Number(row.rosterId) !== Number(mine.rosterId),
-          ) ?? null
+    const right =
+      selected.rightRosterId != null
+        ? entries.find((row) => Number(row.rosterId) === Number(selected.rightRosterId)) ?? null
         : null;
 
-    const rivalFromRosters =
-      rival != null ? teams.find((t) => Number(t.slot) === Number(rival.rosterId)) ?? null : null;
+    const rightFromRosters =
+      right != null ? teams.find((t) => Number(t.slot) === Number(right.rosterId)) ?? null : null;
 
     return {
-      oppRosterId: rival?.rosterId ?? null,
-      oppName: rivalFromRosters?.team || rival?.teamName || null,
-      oppLogo: rivalFromRosters?.logo || rival?.logo || null,
-      myPoints: mine.points,
-      oppPoints: rival?.points ?? 0,
-      myStarterIds: mine.starters ?? [],
-      myPlayerPoints: mine.playerPoints ?? {},
-      oppStarterIds: rival?.starters ?? [],
-      oppPlayerPoints: rival?.playerPoints ?? {},
-      myBaseline: mine.projectedPoints,
-      oppBaseline: rival?.projectedPoints ?? 0,
+      leftRosterId: left.rosterId,
+      oppRosterId: right?.rosterId ?? null,
+      oppName: rightFromRosters?.team || right?.teamName || (right ? null : "Bye week"),
+      oppLogo: rightFromRosters?.logo || right?.logo || null,
+      myPoints: left.points,
+      oppPoints: right?.points ?? 0,
+      myStarterIds: left.starters ?? [],
+      myPlayerPoints: left.playerPoints ?? {},
+      oppStarterIds: right?.starters ?? [],
+      oppPlayerPoints: right?.playerPoints ?? {},
+      myBaseline: left.projectedPoints,
+      oppBaseline: right?.projectedPoints ?? 0,
     };
-  }, [matchups, myTeam, teams, activeLeague?.teamName]);
+  }, [matchups, matchupOptions, viewMatchupId, teams]);
+
+  const leftTeam = useMemo(() => {
+    if (weeklyPair.leftRosterId != null) {
+      return teams.find((t) => Number(t.slot) === Number(weeklyPair.leftRosterId)) ?? null;
+    }
+    return null;
+  }, [teams, weeklyPair.leftRosterId]);
 
   const oppTeam = useMemo(() => {
     if (weeklyPair.oppRosterId != null) {
@@ -1146,16 +1412,26 @@ function PlaybookMatchupPage() {
   const starterRows = useMemo(() => {
     const minePlayers =
       myMode === "optimal"
-        ? buildOptimalStarterRows(myTeam, slotLabels, projectFor)
+        ? buildOptimalStarterRows(leftTeam, slotLabels, projectFor, {
+            pointsMap: weeklyPair.myPlayerPoints,
+            progressByNflTeam,
+            activeWeek,
+            applyOutZero,
+          })
         : buildCurrentStarterRows(
-            myTeam,
+            leftTeam,
             slotLabels,
             weeklyPair.myStarterIds,
             playersById,
           );
     const oppPlayers =
       oppMode === "optimal"
-        ? buildOptimalStarterRows(oppTeam, slotLabels, projectFor)
+        ? buildOptimalStarterRows(oppTeam, slotLabels, projectFor, {
+            pointsMap: weeklyPair.oppPlayerPoints,
+            progressByNflTeam,
+            activeWeek,
+            applyOutZero,
+          })
         : buildCurrentStarterRows(
             oppTeam,
             slotLabels,
@@ -1171,13 +1447,18 @@ function PlaybookMatchupPage() {
   }, [
     myMode,
     oppMode,
-    myTeam,
+    leftTeam,
     oppTeam,
     slotLabels,
     projectFor,
     weeklyPair.myStarterIds,
     weeklyPair.oppStarterIds,
+    weeklyPair.myPlayerPoints,
+    weeklyPair.oppPlayerPoints,
     playersById,
+    progressByNflTeam,
+    activeWeek,
+    applyOutZero,
   ]);
 
   const starterIdSets = useMemo(() => {
@@ -1191,14 +1472,14 @@ function PlaybookMatchupPage() {
   }, [starterRows]);
 
   const benchRows = useMemo(() => {
-    let mineBench = (myTeam?.bench ?? []).filter((p) => !starterIdSets.mine.has(p.id));
+    let mineBench = (leftTeam?.bench ?? []).filter((p) => !starterIdSets.mine.has(p.id));
     let oppBench = (oppTeam?.bench ?? []).filter((p) => !starterIdSets.opp.has(p.id));
 
     if (myMode === "optimal") {
-      const mineExtra = (myTeam?.players ?? []).filter(
+      const mineExtra = (leftTeam?.players ?? []).filter(
         (p) =>
           !starterIdSets.mine.has(p.id) &&
-          !(myTeam?.ir ?? []).some((ir) => ir.id === p.id) &&
+          !(leftTeam?.ir ?? []).some((ir) => ir.id === p.id) &&
           !mineBench.some((b) => b.id === p.id),
       );
       mineBench = [...mineBench, ...mineExtra];
@@ -1214,11 +1495,11 @@ function PlaybookMatchupPage() {
     }
 
     return padPairRows(mineBench, oppBench, "BN");
-  }, [myTeam, oppTeam, starterIdSets, myMode, oppMode]);
+  }, [leftTeam, oppTeam, starterIdSets, myMode, oppMode]);
 
   const irRows = useMemo(() => {
-    return padPairRows(myTeam?.ir ?? [], oppTeam?.ir ?? [], "IR");
-  }, [myTeam, oppTeam]);
+    return padPairRows(leftTeam?.ir ?? [], oppTeam?.ir ?? [], "IR");
+  }, [leftTeam, oppTeam]);
 
   const livePtsFor = (
     player: Player | null,
@@ -1319,24 +1600,38 @@ function PlaybookMatchupPage() {
   const projPtsFor = (
     player: Player | null,
     pointsMap: Record<string, number>,
+    opts?: { slot?: string },
   ): number | null => {
     if (!player) return null;
 
-    // Match Sleeper: Out / IR / Doubtful / inactive → 0.00 projected.
-    if (sleeperZeroProjection(player)) {
+    // IR roster slot + hard inactive statuses never show weekly proj upside.
+    if (opts?.slot === "IR" || hardZeroProjection(player)) {
+      return 0;
+    }
+
+    const live = Number(pointsMap[player.id] ?? 0) || 0;
+    const progress = progressForNflTeam(player.team, progressByNflTeam);
+    const phase = progress?.phase ?? "pre";
+
+    // Out / Doubtful on the current week: stay at 0.00 unless they already
+    // scored (e.g. marked Out for next week after playing). Looking ahead
+    // keeps the future week's projected points (same as the player popup).
+    if (applyOutZero && sleeperZeroProjection(player) && live < 0.005) {
       return 0;
     }
 
     const baseline = projectFor(player.id) ?? weeklyFallback(player);
-    const progress = progressForNflTeam(player.team, progressByNflTeam);
 
     // Once the NFL game is final, lock the grey line to the original weekly
     // projection (not the live rolling figure that collapses to actuals).
-    if (progress?.phase === "post") {
+    if (phase === "post") {
       return Math.round(baseline * 100) / 100;
     }
 
-    const live = Number(pointsMap[player.id] ?? 0) || 0;
+    if (phase === "pre") {
+      return Math.round(baseline * 100) / 100;
+    }
+
     return (
       Math.round(
         playerLiveRollingProjection({
@@ -1356,13 +1651,21 @@ function PlaybookMatchupPage() {
       .map((r) => r.opp)
       .filter((p): p is Player => Boolean(p));
 
+    const sumMap = (players: Player[], map: Record<string, number>) =>
+      Math.round(
+        players.reduce((sum, p) => sum + (Number(map[p.id] ?? 0) || 0), 0) * 100,
+      ) / 100;
+
+    const myLive = sumMap(mineStarters, weeklyPair.myPlayerPoints);
+    const oppLive = sumMap(oppStarters, weeklyPair.oppPlayerPoints);
+
     const myProj = computeTeamDisplayProjection({
       starters: mineStarters,
       playerPoints: weeklyPair.myPlayerPoints,
       projectFor,
       weeklyFallback,
       progressByNflTeam,
-      teamLivePoints: weeklyPair.myPoints,
+      teamLivePoints: myLive,
       teamBaselineProj: weeklyPair.myBaseline,
     });
     const oppProj = computeTeamDisplayProjection({
@@ -1371,12 +1674,12 @@ function PlaybookMatchupPage() {
       projectFor,
       weeklyFallback,
       progressByNflTeam,
-      teamLivePoints: weeklyPair.oppPoints,
+      teamLivePoints: oppLive,
       teamBaselineProj: weeklyPair.oppBaseline,
     });
     const { pctA: finalWinPctA, pctB: finalWinPctB } = computeDynamicWinProbability({
-      scoreA: weeklyPair.myPoints,
-      scoreB: weeklyPair.oppPoints,
+      scoreA: myLive,
+      scoreB: oppLive,
       startersA: mineStarters,
       startersB: oppStarters,
       pointsMapA: weeklyPair.myPlayerPoints,
@@ -1397,81 +1700,267 @@ function PlaybookMatchupPage() {
     };
   }, [starterRows, weeklyPair, projectFor, progressByNflTeam, activeWeek]);
 
-  const myName = myTeam?.team || activeLeague?.teamName || "My Team";
+  const myName =
+    leftTeam?.team?.trim() ||
+    matchups?.entries?.find((e) => Number(e.rosterId) === Number(weeklyPair.leftRosterId))
+      ?.teamName ||
+    "Team";
   const oppName =
     weeklyPair.oppName ||
     oppTeam?.team ||
     (weeklyPair.oppRosterId == null && matchups?.entries?.length ? "Bye week" : "Opponent");
-  const mineLeadsProj = headerProjections.myProj >= headerProjections.oppProj;
-  const mineLeadsWin =
-    headerProjections.finalWinPctA >= headerProjections.finalWinPctB;
+
+  const recordFor = (rosterId: number | null | undefined, teamName: string): string | null => {
+    const rows = standings?.rows ?? [];
+    if (!rows.length) return null;
+    const byId =
+      rosterId != null
+        ? rows.find((r) => Number(r.rosterId) === Number(rosterId))
+        : undefined;
+    const byName = rows.find(
+      (r) => (r.team ?? "").trim().toLowerCase() === teamName.trim().toLowerCase(),
+    );
+    const row = byId ?? byName;
+    if (!row) return null;
+    const ties = Number(row.ties ?? 0) || 0;
+    return ties > 0 ? `${row.wins}-${row.losses}-${ties}` : `${row.wins}-${row.losses}`;
+  };
+
+  const myRecord = recordFor(weeklyPair.leftRosterId, myName);
+  const oppRecord = recordFor(weeklyPair.oppRosterId, oppName);
+
+  /** When Optimal is on, header live total follows the ideal lineup's actuals. */
+  const headerLivePoints = useMemo(() => {
+    const sumLive = (
+      rows: { mine: Player | null; opp: Player | null }[],
+      side: "mine" | "opp",
+      pointsMap: Record<string, number>,
+    ) => {
+      let total = 0;
+      for (const row of rows) {
+        const player = side === "mine" ? row.mine : row.opp;
+        if (!player) continue;
+        total += Number(pointsMap[player.id] ?? 0) || 0;
+      }
+      return Math.round(total * 100) / 100;
+    };
+    return {
+      mine:
+        myMode === "optimal"
+          ? sumLive(starterRows, "mine", weeklyPair.myPlayerPoints)
+          : weeklyPair.myPoints,
+      opp:
+        oppMode === "optimal"
+          ? sumLive(starterRows, "opp", weeklyPair.oppPlayerPoints)
+          : weeklyPair.oppPoints,
+    };
+  }, [
+    myMode,
+    oppMode,
+    starterRows,
+    weeklyPair.myPlayerPoints,
+    weeklyPair.oppPlayerPoints,
+    weeklyPair.myPoints,
+    weeklyPair.oppPoints,
+  ]);
+
+  /** Original weekly proj totals (not live-collapsed), for the header proj line. */
+  const teamOrigProj = useMemo(() => {
+    const sumBaselines = (
+      starters: (Player | null)[],
+      pointsMap: Record<string, number>,
+    ) => {
+      let total = 0;
+      for (const player of starters) {
+        if (!player) continue;
+        if (hardZeroProjection(player)) continue;
+        const live = Number(pointsMap[player.id] ?? 0) || 0;
+        // Out/Doubtful who never scored this week stay out of the team proj total.
+        if (applyOutZero && sleeperZeroProjection(player) && live < 0.005) continue;
+        total += projectFor(player.id) ?? weeklyFallback(player);
+      }
+      return Math.round(total * 100) / 100;
+    };
+    return {
+      mine: sumBaselines(
+        starterRows.map((r) => r.mine),
+        weeklyPair.myPlayerPoints,
+      ),
+      opp: sumBaselines(
+        starterRows.map((r) => r.opp),
+        weeklyPair.oppPlayerPoints,
+      ),
+    };
+  }, [
+    starterRows,
+    projectFor,
+    weeklyPair.myPlayerPoints,
+    weeklyPair.oppPlayerPoints,
+    applyOutZero,
+  ]);
+
+  const weekStarted = useMemo(() => {
+    if (headerLivePoints.mine > 0.005 || headerLivePoints.opp > 0.005) return true;
+    for (const row of starterRows) {
+      for (const player of [row.mine, row.opp]) {
+        if (!player) continue;
+        const phase = progressForNflTeam(player.team, progressByNflTeam)?.phase ?? "pre";
+        if (phase === "in" || phase === "post") return true;
+      }
+    }
+    return false;
+  }, [starterRows, progressByNflTeam, headerLivePoints.mine, headerLivePoints.opp]);
+
+  /** True when every starter's NFL game is final (or bye) — show WON / LOST. */
+  const matchupFinal = useMemo(() => {
+    const starters = starterRows
+      .flatMap((r) => [r.mine, r.opp])
+      .filter((p): p is Player => Boolean(p));
+    if (!starters.length) return false;
+    return starters.every((player) => {
+      if (player.bye != null && Number(player.bye) === Number(activeWeek)) return true;
+      const phase = progressForNflTeam(player.team, progressByNflTeam)?.phase;
+      return phase === "post";
+    });
+  }, [starterRows, progressByNflTeam, activeWeek]);
+
+  const mineWon = headerLivePoints.mine > headerLivePoints.opp + 0.005;
+  const oppWon = headerLivePoints.opp > headerLivePoints.mine + 0.005;
+  const matchupTied = matchupFinal && !mineWon && !oppWon;
+  const mineLeadsWin = matchupFinal
+    ? mineWon || (matchupTied && headerProjections.finalWinPctA >= headerProjections.finalWinPctB)
+    : headerProjections.finalWinPctA >= headerProjections.finalWinPctB;
+
+  const mineOutcomeLabel = matchupFinal
+    ? matchupTied
+      ? "TIE"
+      : mineWon
+        ? "WON"
+        : "LOST"
+    : `${headerProjections.finalWinPctA}%`;
+  const oppOutcomeLabel = matchupFinal
+    ? matchupTied
+      ? "TIE"
+      : oppWon
+        ? "WON"
+        : "LOST"
+    : `${headerProjections.finalWinPctB}%`;
+  const mineOutcomeClass = matchupFinal
+    ? matchupTied
+      ? "text-slate-500"
+      : mineWon
+        ? "text-emerald-600"
+        : "text-rose-600"
+    : mineLeadsWin
+      ? "text-emerald-600"
+      : "text-rose-600";
+  const oppOutcomeClass = matchupFinal
+    ? matchupTied
+      ? "text-slate-500"
+      : oppWon
+        ? "text-emerald-600"
+        : "text-rose-600"
+    : mineLeadsWin
+      ? "text-rose-600"
+      : "text-emerald-600";
 
   return (
     <section key={activeLeagueId ?? "none"} className={playbookCardClass}>
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
+      <header className="mb-4 flex flex-col gap-3 sm:relative sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 sm:max-w-[36%]">
           <h1 className="display-title text-lg uppercase tracking-wide">Matchup</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {activeLeague?.name?.trim() || "Active league"} weekly head-to-head board.
           </p>
         </div>
-        <WeekSelector week={activeWeek} onChange={setSelectedWeek} />
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:absolute sm:left-1/2 sm:top-0 sm:z-10 sm:-translate-x-1/2">
+          <MatchupPicker
+            options={matchupOptions}
+            value={viewMatchupId}
+            onChange={setViewMatchupId}
+          />
+        </div>
+        <div className="flex shrink-0 justify-start sm:justify-end">
+          <WeekSelector week={activeWeek} onChange={setSelectedWeek} />
+        </div>
       </header>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading matchup board…</p>
       ) : (
         <>
-          {/* Header replica of dashboard Matchup card */}
+          {/* FantasyPros-style header: avatars outward, scores tucked beside vs */}
           <div className="rounded-xl border border-border bg-card">
-            <div className="flex flex-col items-center justify-between gap-5 px-4 py-6 sm:flex-row sm:gap-3">
-              <div className="flex min-w-0 flex-1 items-center gap-3 sm:max-w-[42%]">
+            <div className="flex items-center gap-2 px-3 py-5 sm:gap-3 sm:px-4">
+              <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
                 <TeamLogoAvatar
                   name={myName}
-                  logo={myTeam?.logo ?? activeLeague?.avatar ?? null}
+                  logo={leftTeam?.logo ?? null}
                   platform={activeLeague?.platform ?? null}
-                  cacheKey={`${activeLeagueId ?? "none"}-mine`}
+                  cacheKey={`${activeLeagueId ?? "none"}-left-${weeklyPair.leftRosterId ?? "x"}`}
                 />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-800">{myName}</p>
-                  <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
-                    {weeklyPair.myPoints.toFixed(2)}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-bold leading-tight text-slate-900 sm:text-lg">
+                    {myName}
+                  </p>
+                  {myRecord ? (
+                    <p className="mt-0.5 text-xs font-medium tabular-nums text-slate-400">
+                      {myRecord}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-3xl">
+                    {headerLivePoints.mine.toFixed(2)}
                   </p>
                   <p
                     className={cn(
-                      "text-[11px] tabular-nums",
-                      mineLeadsProj
-                        ? "font-bold text-emerald-600"
-                        : "font-medium text-slate-400",
+                      "mt-1 text-xs font-medium tabular-nums",
+                      projVsLiveTone(
+                        headerLivePoints.mine,
+                        teamOrigProj.mine,
+                        weekStarted,
+                      ),
                     )}
                   >
-                    {headerProjections.myProj.toFixed(2)}
+                    {teamOrigProj.mine.toFixed(2)}
                   </p>
                 </div>
               </div>
 
-              <div className="flex shrink-0 flex-col items-center justify-center">
+              <div className="flex shrink-0 flex-col items-center justify-center px-0.5 sm:px-1">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[11px] font-extrabold uppercase text-white">
                   vs
                 </span>
               </div>
 
-              <div className="flex min-w-0 flex-1 items-center justify-end gap-3 sm:max-w-[42%]">
-                <div className="min-w-0 text-right">
-                  <p className="truncate text-sm font-semibold text-slate-800">{oppName}</p>
-                  <p className="mt-0.5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
-                    {weeklyPair.oppPoints.toFixed(2)}
+              <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
+                <div className="shrink-0 text-left">
+                  <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-3xl">
+                    {headerLivePoints.opp.toFixed(2)}
                   </p>
                   <p
                     className={cn(
-                      "text-[11px] tabular-nums",
-                      !mineLeadsProj
-                        ? "font-bold text-emerald-600"
-                        : "font-medium text-slate-400",
+                      "mt-1 text-xs font-medium tabular-nums",
+                      projVsLiveTone(
+                        headerLivePoints.opp,
+                        teamOrigProj.opp,
+                        weekStarted,
+                      ),
                     )}
                   >
-                    {headerProjections.oppProj.toFixed(2)}
+                    {teamOrigProj.opp.toFixed(2)}
                   </p>
+                </div>
+                <div className="min-w-0 flex-1 text-right">
+                  <p className="truncate text-base font-bold leading-tight text-slate-900 sm:text-lg">
+                    {oppName}
+                  </p>
+                  {oppRecord ? (
+                    <p className="mt-0.5 text-xs font-medium tabular-nums text-slate-400">
+                      {oppRecord}
+                    </p>
+                  ) : null}
                 </div>
                 <TeamLogoAvatar
                   name={oppName}
@@ -1484,44 +1973,76 @@ function PlaybookMatchupPage() {
 
             <div className="border-t border-border/60 px-4 pb-4 pt-3">
               <p className="mb-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                WIN %
+                {matchupFinal ? "RESULT" : "WIN %"}
               </p>
               <div className="flex w-full items-center gap-3 text-sm font-bold">
                 <span
                   className={cn(
-                    "w-12 shrink-0 tabular-nums",
-                    mineLeadsWin ? "text-emerald-600" : "text-rose-600",
+                    "w-14 shrink-0 uppercase tracking-wide tabular-nums",
+                    mineOutcomeClass,
                   )}
                 >
-                  {headerProjections.finalWinPctA}%
+                  {mineOutcomeLabel}
                 </span>
                 <div className="flex h-1.5 min-w-0 flex-1 items-center gap-1.5">
                   <div className="flex h-full min-w-0 flex-1 justify-end overflow-hidden rounded-full bg-slate-100">
                     <div
                       className={cn(
                         "h-full rounded-full transition-[width] duration-500",
-                        mineLeadsWin ? "bg-emerald-500" : "bg-rose-500",
+                        matchupFinal
+                          ? mineWon
+                            ? "bg-emerald-500"
+                            : "bg-transparent"
+                          : mineLeadsWin
+                            ? "bg-emerald-500"
+                            : "bg-rose-500",
                       )}
-                      style={{ width: `${headerProjections.finalWinPctA}%` }}
+                      style={{
+                        width: `${
+                          matchupFinal
+                            ? mineWon
+                              ? 100
+                              : matchupTied
+                                ? 50
+                                : 0
+                            : headerProjections.finalWinPctA
+                        }%`,
+                      }}
                     />
                   </div>
                   <div className="flex h-full min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className={cn(
                         "h-full rounded-full transition-[width] duration-500",
-                        mineLeadsWin ? "bg-rose-500" : "bg-emerald-500",
+                        matchupFinal
+                          ? oppWon
+                            ? "bg-emerald-500"
+                            : "bg-transparent"
+                          : mineLeadsWin
+                            ? "bg-rose-500"
+                            : "bg-emerald-500",
                       )}
-                      style={{ width: `${headerProjections.finalWinPctB}%` }}
+                      style={{
+                        width: `${
+                          matchupFinal
+                            ? oppWon
+                              ? 100
+                              : matchupTied
+                                ? 50
+                                : 0
+                            : headerProjections.finalWinPctB
+                        }%`,
+                      }}
                     />
                   </div>
                 </div>
                 <span
                   className={cn(
-                    "w-12 shrink-0 text-right tabular-nums",
-                    mineLeadsWin ? "text-rose-600" : "text-emerald-600",
+                    "w-14 shrink-0 text-right uppercase tracking-wide tabular-nums",
+                    oppOutcomeClass,
                   )}
                 >
-                  {headerProjections.finalWinPctB}%
+                  {oppOutcomeLabel}
                 </span>
               </div>
             </div>
@@ -1607,8 +2128,8 @@ function PlaybookMatchupPage() {
                       opp={row.opp}
                       mineLive={livePtsFor(row.mine, weeklyPair.myPlayerPoints)}
                       oppLive={livePtsFor(row.opp, weeklyPair.oppPlayerPoints)}
-                      mineProj={projPtsFor(row.mine, weeklyPair.myPlayerPoints)}
-                      oppProj={projPtsFor(row.opp, weeklyPair.oppPlayerPoints)}
+                      mineProj={projPtsFor(row.mine, weeklyPair.myPlayerPoints, { slot: "IR" })}
+                      oppProj={projPtsFor(row.opp, weeklyPair.oppPlayerPoints, { slot: "IR" })}
                       minePhase={phaseFor(row.mine)}
                       oppPhase={phaseFor(row.opp)}
                       mineSchedule={scheduleFor(row.mine)}
