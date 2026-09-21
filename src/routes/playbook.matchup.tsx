@@ -64,6 +64,30 @@ const weeklyFallback = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
 const SKIP_STARTER_SLOTS = new Set(["BN", "BENCH", "IR", "IL", "TAXI", "RESERVE"]);
 const FLEX_OK = new Set(["RB", "WR", "TE"]);
 
+/** Sleeper zeros weekly projections for these inactive designations. */
+const ZERO_PROJ_INJURY = new Set([
+  "OUT",
+  "O",
+  "DOUBTFUL",
+  "D",
+  "IR",
+  "INJURED RESERVE",
+  "PUP",
+  "SUSPENDED",
+  "NA",
+  "INACTIVE",
+  "EXEMPT",
+]);
+
+function sleeperZeroProjection(player: Player): boolean {
+  const raw = (player.injury || player.injury_status || player.injuryStatus || "")
+    .trim()
+    .toUpperCase();
+  if (!raw || /^(HEALTHY|ACTIVE|NONE|PROBABLE)$/.test(raw)) return false;
+  if (ZERO_PROJ_INJURY.has(raw)) return true;
+  return /\b(out|doubtful|injured reserve|\bir\b|pup|suspended|inactive)\b/i.test(raw);
+}
+
 type LineMode = "current" | "optimal";
 
 type SlotRow = {
@@ -132,10 +156,15 @@ function MatchupSlotBadge({ slot }: { slot: string }) {
       <span
         className={cn(
           pillBase,
-          "border-border bg-gradient-to-r from-rb/35 via-wr/35 to-te/35 text-slate-800",
+          "relative isolate overflow-hidden border-border text-slate-800",
         )}
       >
-        FLX
+        <span className="pointer-events-none absolute inset-0 flex" aria-hidden="true">
+          <span className="h-full w-1/3 bg-rb/35" />
+          <span className="h-full w-1/3 bg-wr/35" />
+          <span className="h-full w-1/3 bg-te/35" />
+        </span>
+        <span className="relative z-10">FLX</span>
       </span>
     );
   }
@@ -506,7 +535,7 @@ function MatchupPlayerThumb({
       onClick={onOpen}
       aria-label={`Open ${player.name} details`}
       className={cn(
-        "relative h-12 w-12 flex-shrink-0 cursor-pointer rounded-full transition-all hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "relative h-12 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-slate-200 bg-white shadow-sm transition-all hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         className,
       )}
     >
@@ -514,7 +543,7 @@ function MatchupPlayerThumb({
         src={playerImage(player.id, player.pos, player.team)}
         alt=""
         loading="lazy"
-        className="h-12 w-12 rounded-full object-cover"
+        className="h-full w-full rounded-full object-cover"
         onError={(e) => {
           e.currentTarget.style.visibility = "hidden";
         }}
@@ -524,7 +553,7 @@ function MatchupPlayerThumb({
           src={logo}
           alt=""
           loading="lazy"
-          className="absolute bottom-0 right-0 z-30 h-5 w-5 rounded-full border-2 border-white bg-white object-contain"
+          className="absolute -bottom-0.5 -right-0.5 z-30 h-5 w-5 rounded-full border-2 border-white bg-white object-contain shadow-sm"
           onError={(e) => {
             e.currentTarget.style.display = "none";
           }}
@@ -536,12 +565,16 @@ function MatchupPlayerThumb({
 
 function MatchupScoreColumn({
   liveLabel,
+  livePts,
   projPts,
+  phase = "pre",
   showCheck,
   checkSide,
 }: {
   liveLabel: string;
+  livePts: number | null;
   projPts: number | null;
+  phase?: NflGameProgress["phase"];
   showCheck: boolean;
   checkSide: "left" | "right";
 }) {
@@ -550,12 +583,32 @@ function MatchupScoreColumn({
       ✓
     </span>
   ) : null;
+
+  let projClass = "text-slate-400";
+  if (phase === "post" && projPts != null && livePts != null) {
+    const live = Number(livePts) || 0;
+    const proj = Number(projPts) || 0;
+    // 0.00 vs 0.00 (Out / IR / blank slate) stays the default grey.
+    if (Math.abs(live) < 0.005 && Math.abs(proj) < 0.005) {
+      projClass = "text-slate-400";
+    } else if (live > proj + 0.005) {
+      projClass = "text-emerald-600";
+    } else if (live < proj - 0.005) {
+      projClass = "text-rose-600";
+    }
+  }
+
   return (
     <div className="flex w-12 flex-shrink-0 flex-col items-center justify-center">
       <p className="text-center text-sm font-bold tabular-nums leading-none text-slate-900">
         {liveLabel}
       </p>
-      <p className="mt-1 flex items-center justify-center gap-0.5 text-[11px] font-medium tabular-nums leading-none text-slate-400">
+      <p
+        className={cn(
+          "mt-1 flex items-center justify-center gap-0.5 text-[11px] font-medium tabular-nums leading-none",
+          projClass,
+        )}
+      >
         {checkSide === "left" ? check : null}
         <span>{projPts != null ? projPts.toFixed(2) : "--"}</span>
         {checkSide === "right" ? check : null}
@@ -663,7 +716,9 @@ function LeftPlayerCard({
       </div>
       <MatchupScoreColumn
         liveLabel={liveScoreLabel(phase, livePts)}
+        livePts={livePts}
         projPts={projPts}
+        phase={phase}
         showCheck={showCheck}
         checkSide="left"
       />
@@ -712,7 +767,9 @@ function RightPlayerCard({
     <div className={shell}>
       <MatchupScoreColumn
         liveLabel={liveScoreLabel(phase, livePts)}
+        livePts={livePts}
         projPts={projPts}
+        phase={phase}
         showCheck={showCheck}
         checkSide="right"
       />
@@ -802,11 +859,13 @@ function MatchupGridRow({
 }) {
   const mineWins =
     showFavoriteCheck &&
+    minePhase === "pre" &&
     mineProj != null &&
     oppProj != null &&
     mineProj > oppProj;
   const oppWins =
     showFavoriteCheck &&
+    oppPhase === "pre" &&
     mineProj != null &&
     oppProj != null &&
     oppProj > mineProj;
@@ -1262,15 +1321,28 @@ function PlaybookMatchupPage() {
     pointsMap: Record<string, number>,
   ): number | null => {
     if (!player) return null;
-    const live = Number(pointsMap[player.id] ?? 0) || 0;
+
+    // Match Sleeper: Out / IR / Doubtful / inactive → 0.00 projected.
+    if (sleeperZeroProjection(player)) {
+      return 0;
+    }
+
     const baseline = projectFor(player.id) ?? weeklyFallback(player);
-    const nfl = (player.team || "").trim().toUpperCase();
+    const progress = progressForNflTeam(player.team, progressByNflTeam);
+
+    // Once the NFL game is final, lock the grey line to the original weekly
+    // projection (not the live rolling figure that collapses to actuals).
+    if (progress?.phase === "post") {
+      return Math.round(baseline * 100) / 100;
+    }
+
+    const live = Number(pointsMap[player.id] ?? 0) || 0;
     return (
       Math.round(
         playerLiveRollingProjection({
           livePoints: live,
           baselineProjection: baseline,
-          progress: progressByNflTeam.get(nfl),
+          progress,
         }) * 100,
       ) / 100
     );
