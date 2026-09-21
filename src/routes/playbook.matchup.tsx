@@ -1,12 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Lock } from "lucide-react";
+import { Lock, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { detailQuery } from "@/components/draft/PlayerDetail";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import {
+  MatchupReplayModal,
+  WatchReplayButton,
+} from "@/components/playbook/MatchupReplayModal";
 import { playbookCardClass, resolveAvatarUrl } from "@/components/playbook/panels";
+import type { MatchupReplayRequest } from "@/lib/matchup-replay";
 import {
   Select,
   SelectContent,
@@ -454,7 +459,7 @@ function optimalPlayerValue(
   const live = Math.max(0, Number(pointsMap[player.id] ?? 0) || 0);
   const baseline = projectFor(player.id) ?? weeklyFallback(player);
 
-  if (hardZeroProjection(player)) return 0;
+  if (applyOutZero && hardZeroProjection(player)) return 0;
   // Out/Doubtful with no points scored → not a start candidate (current week only).
   if (applyOutZero && sleeperZeroProjection(player) && live < 0.005) return 0;
 
@@ -827,6 +832,18 @@ function projVsLiveTone(livePts: number, projPts: number, weekStarted: boolean):
   return "text-slate-400";
 }
 
+/** Placeholder thumb matching MatchupPlayerThumb size for empty bench/IR slots. */
+function EmptySlotThumb() {
+  return (
+    <div
+      className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full border-2 border-dashed border-slate-200 bg-slate-50"
+      aria-hidden="true"
+    >
+      <User className="h-6 w-6 text-slate-300" strokeWidth={1.75} />
+    </div>
+  );
+}
+
 /**
  * LEFT card: avatar | left text stack | scores
  * One discrete bordered box — center badge overlaps the outer seam.
@@ -854,8 +871,13 @@ function LeftPlayerCard({
 
   if (!player) {
     return (
-      <div className="flex h-full w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-        <span className="w-full text-center text-xs font-medium text-slate-400">Empty</span>
+      <div className="flex h-full min-h-[5.5rem] w-full items-center justify-between rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-3.5">
+        <EmptySlotThumb />
+        <div className="flex min-w-0 flex-1 flex-col items-start justify-center pl-3.5 text-left">
+          <p className="text-[15px] font-medium leading-none text-slate-400">Empty</p>
+          <p className="mt-1 text-xs font-medium leading-none text-slate-300">No player</p>
+        </div>
+        <div className="w-14 flex-shrink-0" aria-hidden="true" />
       </div>
     );
   }
@@ -947,8 +969,13 @@ function RightPlayerCard({
 
   if (!player) {
     return (
-      <div className="flex h-full w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-        <span className="w-full text-center text-xs font-medium text-slate-400">Empty</span>
+      <div className="flex h-full min-h-[5.5rem] w-full items-center justify-between rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-3.5">
+        <div className="w-14 flex-shrink-0" aria-hidden="true" />
+        <div className="flex min-w-0 flex-1 flex-col items-end justify-center pr-3.5 text-right">
+          <p className="text-[15px] font-medium leading-none text-slate-400">Empty</p>
+          <p className="mt-1 text-xs font-medium leading-none text-slate-300">No player</p>
+        </div>
+        <EmptySlotThumb />
       </div>
     );
   }
@@ -1243,6 +1270,7 @@ function PlaybookMatchupPage() {
   const [oppMode, setOppMode] = useState<LineMode>("current");
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const [viewMatchupId, setViewMatchupId] = useState<string | null>(null);
+  const [replayOpen, setReplayOpen] = useState(false);
 
   const nflWeek = useQuery({
     queryKey: ["nfl-state-week"],
@@ -1263,11 +1291,11 @@ function PlaybookMatchupPage() {
   }, [nflWeek.data, activeLeagueId]);
 
   const activeWeek = selectedWeek ?? nflWeek.data ?? 1;
-  // Injury Out/Doubtful designations apply to the live week only — looking
-  // ahead (e.g. week 3) should still show that week's projected points.
-  const applyOutZero =
+  // Live injury designations (Out / IR / etc.) apply to the current NFL week
+  // only. Past weeks keep that week's projected points; looking ahead does too.
+  const applyLiveInjuryZero =
     nflWeek.data != null && Number(activeWeek) === Number(nflWeek.data);
-  const { projectFor, loading: projectionsLoading } = useLeagueProjections(activeWeek);
+  const { projectFor, scoringMap, loading: projectionsLoading } = useLeagueProjections(activeWeek);
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
 
@@ -1349,11 +1377,16 @@ function PlaybookMatchupPage() {
       myPoints: 0,
       oppPoints: 0,
       myStarterIds: [] as string[],
+      myPlayerIds: [] as string[],
+      myIrIds: [] as string[],
       myPlayerPoints: {} as Record<string, number>,
       oppStarterIds: [] as string[],
+      oppPlayerIds: [] as string[],
+      oppIrIds: [] as string[],
       oppPlayerPoints: {} as Record<string, number>,
       myBaseline: 0,
       oppBaseline: 0,
+      hasWeeklyRoster: false,
     };
     const entries = matchups?.entries ?? [];
     if (!entries.length || !viewMatchupId) return empty;
@@ -1377,6 +1410,10 @@ function PlaybookMatchupPage() {
     const rightFromRosters =
       right != null ? teams.find((t) => Number(t.slot) === Number(right.rosterId)) ?? null : null;
 
+    const myPlayerIds = left.playerIds ?? [];
+    const oppPlayerIds = right?.playerIds ?? [];
+    const hasWeeklyRoster = myPlayerIds.length > 0 || oppPlayerIds.length > 0;
+
     return {
       leftRosterId: left.rosterId,
       oppRosterId: right?.rosterId ?? null,
@@ -1385,11 +1422,16 @@ function PlaybookMatchupPage() {
       myPoints: left.points,
       oppPoints: right?.points ?? 0,
       myStarterIds: left.starters ?? [],
+      myPlayerIds,
+      myIrIds: left.irIds ?? [],
       myPlayerPoints: left.playerPoints ?? {},
       oppStarterIds: right?.starters ?? [],
+      oppPlayerIds,
+      oppIrIds: right?.irIds ?? [],
       oppPlayerPoints: right?.playerPoints ?? {},
       myBaseline: left.projectedPoints,
       oppBaseline: right?.projectedPoints ?? 0,
+      hasWeeklyRoster,
     };
   }, [matchups, matchupOptions, viewMatchupId, teams]);
 
@@ -1416,7 +1458,7 @@ function PlaybookMatchupPage() {
             pointsMap: weeklyPair.myPlayerPoints,
             progressByNflTeam,
             activeWeek,
-            applyOutZero,
+            applyOutZero: applyLiveInjuryZero,
           })
         : buildCurrentStarterRows(
             leftTeam,
@@ -1430,7 +1472,7 @@ function PlaybookMatchupPage() {
             pointsMap: weeklyPair.oppPlayerPoints,
             progressByNflTeam,
             activeWeek,
-            applyOutZero,
+            applyOutZero: applyLiveInjuryZero,
           })
         : buildCurrentStarterRows(
             oppTeam,
@@ -1458,7 +1500,7 @@ function PlaybookMatchupPage() {
     playersById,
     progressByNflTeam,
     activeWeek,
-    applyOutZero,
+    applyLiveInjuryZero,
   ]);
 
   const starterIdSets = useMemo(() => {
@@ -1471,35 +1513,97 @@ function PlaybookMatchupPage() {
     return { mine, opp };
   }, [starterRows]);
 
+  const resolvePlayersByIds = useCallback(
+    (ids: string[]): Player[] => {
+      const out: Player[] = [];
+      const seen = new Set<string>();
+      for (const id of ids) {
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const hit = playersById.get(id);
+        if (hit) out.push(hit);
+      }
+      return out;
+    },
+    [playersById],
+  );
+
   const benchRows = useMemo(() => {
-    let mineBench = (leftTeam?.bench ?? []).filter((p) => !starterIdSets.mine.has(p.id));
-    let oppBench = (oppTeam?.bench ?? []).filter((p) => !starterIdSets.opp.has(p.id));
+    const weekBench = (playerIds: string[], starterIds: Set<string>, irIds: string[]) => {
+      const irSet = new Set(irIds);
+      return resolvePlayersByIds(playerIds.filter((id) => !starterIds.has(id) && !irSet.has(id)));
+    };
+
+    let mineBench: Player[];
+    let oppBench: Player[];
+
+    if (weeklyPair.hasWeeklyRoster) {
+      mineBench = weekBench(weeklyPair.myPlayerIds, starterIdSets.mine, weeklyPair.myIrIds);
+      oppBench = weekBench(weeklyPair.oppPlayerIds, starterIdSets.opp, weeklyPair.oppIrIds);
+    } else {
+      mineBench = (leftTeam?.bench ?? []).filter((p) => !starterIdSets.mine.has(p.id));
+      oppBench = (oppTeam?.bench ?? []).filter((p) => !starterIdSets.opp.has(p.id));
+    }
 
     if (myMode === "optimal") {
-      const mineExtra = (leftTeam?.players ?? []).filter(
+      const pool = weeklyPair.hasWeeklyRoster
+        ? resolvePlayersByIds(weeklyPair.myPlayerIds)
+        : (leftTeam?.players ?? []);
+      const mineExtra = pool.filter(
         (p) =>
           !starterIdSets.mine.has(p.id) &&
-          !(leftTeam?.ir ?? []).some((ir) => ir.id === p.id) &&
+          !weeklyPair.myIrIds.includes(p.id) &&
           !mineBench.some((b) => b.id === p.id),
       );
       mineBench = [...mineBench, ...mineExtra];
     }
     if (oppMode === "optimal") {
-      const oppExtra = (oppTeam?.players ?? []).filter(
+      const pool = weeklyPair.hasWeeklyRoster
+        ? resolvePlayersByIds(weeklyPair.oppPlayerIds)
+        : (oppTeam?.players ?? []);
+      const oppExtra = pool.filter(
         (p) =>
           !starterIdSets.opp.has(p.id) &&
-          !(oppTeam?.ir ?? []).some((ir) => ir.id === p.id) &&
+          !weeklyPair.oppIrIds.includes(p.id) &&
           !oppBench.some((b) => b.id === p.id),
       );
       oppBench = [...oppBench, ...oppExtra];
     }
 
     return padPairRows(mineBench, oppBench, "BN");
-  }, [leftTeam, oppTeam, starterIdSets, myMode, oppMode]);
+  }, [
+    leftTeam,
+    oppTeam,
+    starterIdSets,
+    myMode,
+    oppMode,
+    weeklyPair.hasWeeklyRoster,
+    weeklyPair.myPlayerIds,
+    weeklyPair.oppPlayerIds,
+    weeklyPair.myIrIds,
+    weeklyPair.oppIrIds,
+    resolvePlayersByIds,
+  ]);
 
   const irRows = useMemo(() => {
+    // Prefer week-scoped IR ids. For past Sleeper weeks this is empty (host
+    // does not expose historical reserve), so we do not leak today's IR.
+    if (weeklyPair.hasWeeklyRoster) {
+      return padPairRows(
+        resolvePlayersByIds(weeklyPair.myIrIds),
+        resolvePlayersByIds(weeklyPair.oppIrIds),
+        "IR",
+      );
+    }
     return padPairRows(leftTeam?.ir ?? [], oppTeam?.ir ?? [], "IR");
-  }, [leftTeam, oppTeam]);
+  }, [
+    leftTeam,
+    oppTeam,
+    weeklyPair.hasWeeklyRoster,
+    weeklyPair.myIrIds,
+    weeklyPair.oppIrIds,
+    resolvePlayersByIds,
+  ]);
 
   const livePtsFor = (
     player: Player | null,
@@ -1604,8 +1708,9 @@ function PlaybookMatchupPage() {
   ): number | null => {
     if (!player) return null;
 
-    // IR roster slot + hard inactive statuses never show weekly proj upside.
-    if (opts?.slot === "IR" || hardZeroProjection(player)) {
+    // IR roster slot always stays at 0.00. Live IR/Out status only zeros on
+    // the current NFL week — past weeks keep that week's projected points.
+    if (opts?.slot === "IR" || (applyLiveInjuryZero && hardZeroProjection(player))) {
       return 0;
     }
 
@@ -1616,7 +1721,7 @@ function PlaybookMatchupPage() {
     // Out / Doubtful on the current week: stay at 0.00 unless they already
     // scored (e.g. marked Out for next week after playing). Looking ahead
     // keeps the future week's projected points (same as the player popup).
-    if (applyOutZero && sleeperZeroProjection(player) && live < 0.005) {
+    if (applyLiveInjuryZero && sleeperZeroProjection(player) && live < 0.005) {
       return 0;
     }
 
@@ -1773,10 +1878,10 @@ function PlaybookMatchupPage() {
       let total = 0;
       for (const player of starters) {
         if (!player) continue;
-        if (hardZeroProjection(player)) continue;
+        if (applyLiveInjuryZero && hardZeroProjection(player)) continue;
         const live = Number(pointsMap[player.id] ?? 0) || 0;
         // Out/Doubtful who never scored this week stay out of the team proj total.
-        if (applyOutZero && sleeperZeroProjection(player) && live < 0.005) continue;
+        if (applyLiveInjuryZero && sleeperZeroProjection(player) && live < 0.005) continue;
         total += projectFor(player.id) ?? weeklyFallback(player);
       }
       return Math.round(total * 100) / 100;
@@ -1796,7 +1901,7 @@ function PlaybookMatchupPage() {
     projectFor,
     weeklyPair.myPlayerPoints,
     weeklyPair.oppPlayerPoints,
-    applyOutZero,
+    applyLiveInjuryZero,
   ]);
 
   const weekStarted = useMemo(() => {
@@ -1863,6 +1968,59 @@ function PlaybookMatchupPage() {
     : mineLeadsWin
       ? "text-rose-600"
       : "text-emerald-600";
+
+  const replayRequest = useMemo((): MatchupReplayRequest | null => {
+    if (!matchupFinal) return null;
+    const toStarters = (side: "mine" | "opp") =>
+      starterRows
+        .map((row) => (side === "mine" ? row.mine : row.opp))
+        .filter((p): p is Player => Boolean(p))
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          pos: p.pos,
+          team: p.team,
+          projection: projectFor(p.id) ?? weeklyFallback(p),
+        }));
+    return {
+      season: currentSeason(),
+      week: activeWeek,
+      scoringMap,
+      left: {
+        name: myName,
+        record: myRecord,
+        logo: leftTeam?.logo ?? null,
+        finalScore: headerLivePoints.mine,
+        projectedScore: teamOrigProj.mine,
+        starters: toStarters("mine"),
+      },
+      right: {
+        name: oppName,
+        record: oppRecord,
+        logo: weeklyPair.oppLogo || oppTeam?.logo || null,
+        finalScore: headerLivePoints.opp,
+        projectedScore: teamOrigProj.opp,
+        starters: toStarters("opp"),
+      },
+    };
+  }, [
+    matchupFinal,
+    starterRows,
+    projectFor,
+    activeWeek,
+    scoringMap,
+    myName,
+    myRecord,
+    leftTeam?.logo,
+    headerLivePoints.mine,
+    headerLivePoints.opp,
+    teamOrigProj.mine,
+    teamOrigProj.opp,
+    oppName,
+    oppRecord,
+    weeklyPair.oppLogo,
+    oppTeam?.logo,
+  ]);
 
   return (
     <section key={activeLeagueId ?? "none"} className={playbookCardClass}>
@@ -2046,6 +2204,10 @@ function PlaybookMatchupPage() {
                 </span>
               </div>
             </div>
+
+            {matchupFinal ? (
+              <WatchReplayButton onClick={() => setReplayOpen(true)} />
+            ) : null}
           </div>
 
           {/* Side-by-side FantasyPros card rows */}
@@ -2151,6 +2313,11 @@ function PlaybookMatchupPage() {
       )}
 
       <PlayerModalHost ref={modalRef} />
+      <MatchupReplayModal
+        open={replayOpen}
+        onOpenChange={setReplayOpen}
+        request={replayRequest}
+      />
     </section>
   );
 }

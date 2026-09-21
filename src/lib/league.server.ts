@@ -921,6 +921,17 @@ export type WeeklyMatchupEntry = {
   logo: string | null;
   /** Host starter player ids for the week (Sleeper); empty when unavailable. */
   starters: string[];
+  /**
+   * Full week roster player ids from the host matchup payload (Sleeper `players`).
+   * Used to rebuild historical bench instead of the current roster.
+   */
+  playerIds: string[];
+  /**
+   * IR / reserve ids for this week when the host exposes them.
+   * Sleeper: live `reserve` for the current and future NFL weeks; empty for
+   * past weeks (no historical IR on matchup payloads).
+   */
+  irIds: string[];
   /** Per-player fantasy points scored so far this week. */
   playerPoints: Record<string, number>;
 };
@@ -1188,6 +1199,8 @@ export async function loadConnectionMatchups(
             owner: meta?.owner ?? "",
             logo: meta?.logo ?? null,
             starters: [],
+            playerIds: [],
+            irIds: [],
             playerPoints: {},
           });
         }
@@ -1203,9 +1216,15 @@ export async function loadConnectionMatchups(
   const leagueId = await resolveSleeperLeagueId(clean);
   if (!leagueId) return null;
 
-  const [rows, rosters, users] = await Promise.all([
+  const [rows, rosters, users, nflState] = await Promise.all([
     json<Record<string, unknown>[]>(`${BASE}/league/${leagueId}/matchups/${safeWeek}`),
-    json<{ roster_id: number; owner_id: string | null }[]>(`${BASE}/league/${leagueId}/rosters`),
+    json<
+      {
+        roster_id: number;
+        owner_id: string | null;
+        reserve?: string[] | null;
+      }[]
+    >(`${BASE}/league/${leagueId}/rosters`),
     json<
       {
         user_id: string;
@@ -1214,8 +1233,23 @@ export async function loadConnectionMatchups(
         metadata?: { team_name?: string; avatar?: string };
       }[]
     >(`${BASE}/league/${leagueId}/users`),
+    json<{ week?: number }>(`${BASE}/state/nfl`),
   ]);
   if (!rows?.length) return null;
+
+  const currentNflWeek = Math.max(1, Number(nflState?.week ?? 0) || 0);
+  // Past weeks: do not leak today's IR onto historical benches.
+  // Current + future weeks: Sleeper matchups reuse the live roster, so attach
+  // current reserve so IR players stay in the IR section.
+  const attachLiveReserve = currentNflWeek > 0 && Number(safeWeek) >= currentNflWeek;
+
+  const reserveByRoster = new Map<number, string[]>();
+  for (const r of rosters ?? []) {
+    reserveByRoster.set(
+      r.roster_id,
+      (r.reserve ?? []).map((p) => String(p)).filter(Boolean),
+    );
+  }
 
   const byUser = new Map((users ?? []).map((u) => [u.user_id, u]));
   const metaByRoster = new Map<number, { teamName: string; owner: string; logo: string | null }>();
@@ -1253,6 +1287,19 @@ export async function loadConnectionMatchups(
         .map((id) => (id && id !== "0" ? String(id) : ""))
         .filter(Boolean);
 
+      // Week roster from the matchup payload — historical source of truth for bench.
+      const fromPlayers = (
+        Array.isArray(row["players"]) ? (row["players"] as (string | null)[]) : []
+      )
+        .map((id) => (id && id !== "0" ? String(id) : ""))
+        .filter(Boolean);
+      const playerIdSet = new Set<string>([...fromPlayers, ...starters, ...Object.keys(playerPoints)]);
+      const playerIds = [...playerIdSet];
+
+      // Sleeper does not expose historical IR on matchup rows. Attach live
+      // reserve for the current and future weeks only.
+      const irIds = attachLiveReserve ? (reserveByRoster.get(rosterId) ?? []) : [];
+
       const nativeProjected = readNativeProjected(row);
       const nativeWin = readNativeWinPct(row);
 
@@ -1266,6 +1313,8 @@ export async function loadConnectionMatchups(
         owner: meta?.owner ?? "",
         logo: meta?.logo ?? null,
         starters,
+        playerIds,
+        irIds,
         playerPoints,
       };
     })

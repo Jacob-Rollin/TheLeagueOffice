@@ -102,6 +102,7 @@ export function useLeagueProjections(week?: number | null) {
   return {
     projectFor,
     statsFor,
+    scoringMap: map,
     loading: projections.isLoading || scoring.isLoading,
     format: scoring.data?.format ?? "half",
   };
