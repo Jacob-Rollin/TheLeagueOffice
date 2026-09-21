@@ -18,12 +18,14 @@ const LINKS: {
     | "/playbook/my-team"
     | "/standings"
     | "/playbook/matchup"
+    | "/playbook/press-room"
     | "/playbook/rosters"
     | "/playbook/transactions";
   label: string;
   search?: { tab?: "actual" | "all-play" | "power" };
 }[] = [
   { to: "/playbook", label: "Dashboard" },
+  { to: "/playbook/press-room", label: "Press Room" },
   { to: "/playbook/my-team", label: "My Team" },
   { to: "/standings", label: "Standings" },
   { to: "/playbook/matchup", label: "Matchup" },

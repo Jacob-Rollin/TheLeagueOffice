@@ -25,8 +25,8 @@ import { getConnectionMatchups } from "@/lib/league.functions";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import { buildTruePowerRankings, starterRequirements } from "@/lib/power-rankings";
 import {
+  computeDynamicWinProbability,
   computeTeamDisplayProjection,
-  winPctFromDisplayProjections,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
 import {
@@ -550,14 +550,14 @@ function MatchupPreviewCard({
   myLive: number;
   /** 3-tier live rolling projection (pre / in-progress / finished). */
   myProj: number;
-  /** Win probability from live rolling team totals (0–100). */
+  /** Dynamic live win probability — same engine as the Matchup page (0–100). */
   myWinPct: number;
   oppName: string;
   oppLogo?: string | null;
   oppLive: number;
   /** 3-tier live rolling projection (pre / in-progress / finished). */
   oppProj: number;
-  /** Win probability from live rolling team totals (0–100). */
+  /** Dynamic live win probability — same engine as the Matchup page (0–100). */
   oppWinPct: number;
 }) {
   const mineLeadsProj = myProj >= oppProj;
@@ -1053,7 +1053,7 @@ function PlaybookDashboardPage() {
     return null;
   }, [teams, weeklyPair.oppRosterId]);
 
-  /** 3-tier starter rolling totals + smoothed win% from those team sums. */
+  /** 3-tier starter rolling totals + dynamic live win% (same engine as Matchup). */
   const displayMatchup = useMemo(() => {
     const resolveStarters = (ids: string[], fallback: (Player | null)[]): Player[] => {
       if (ids.length) {
@@ -1086,15 +1086,26 @@ function PlaybookDashboardPage() {
       teamLivePoints: weeklyPair.oppPoints,
       teamBaselineProj: weeklyPair.oppBaseline,
     });
-    const myWinPct = winPctFromDisplayProjections(myProj, oppProj);
+    const { pctA: myWinPct, pctB: oppWinPct } = computeDynamicWinProbability({
+      scoreA: weeklyPair.myPoints,
+      scoreB: weeklyPair.oppPoints,
+      startersA: mineStarters,
+      startersB: oppStarters,
+      pointsMapA: weeklyPair.myPlayerPoints,
+      pointsMapB: weeklyPair.oppPlayerPoints,
+      projectFor,
+      weeklyFallback,
+      progressByNflTeam,
+      activeWeek: currentWeek ?? 1,
+    });
 
     return {
       myProj,
       oppProj,
       myWinPct,
-      oppWinPct: 100 - myWinPct,
+      oppWinPct,
     };
-  }, [weeklyPair, myTeam, oppTeam, playersById, projectFor, progressByNflTeam]);
+  }, [weeklyPair, myTeam, oppTeam, playersById, projectFor, progressByNflTeam, currentWeek]);
 
   const newsEvents = useMemo(() => events.slice(0, 5), [events]);
 

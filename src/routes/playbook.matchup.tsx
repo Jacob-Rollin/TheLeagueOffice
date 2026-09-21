@@ -16,11 +16,11 @@ import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/draft";
 import { starterRequirements } from "@/lib/power-rankings";
 import {
+  computeDynamicWinProbability,
   computeTeamDisplayProjection,
   formatNflGameStatusLabel,
   formatNflKickoffLabel,
   playerLiveRollingProjection,
-  winPctFromDisplayProjections,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
 import { sosStarsFromRank, weeklySosMatchupFor, type SosMatchup } from "@/lib/sos-presentation";
@@ -37,6 +37,20 @@ const TEAM_PROGRESS_ALIASES: Record<string, string[]> = {
   JAC: ["JAC", "JAX"],
   JAX: ["JAX", "JAC"],
 };
+
+function progressForNflTeam(
+  teamAbbr: string | null | undefined,
+  progressByNflTeam: Map<string, NflGameProgress>,
+): NflGameProgress | undefined {
+  const nfl = (teamAbbr || "").trim().toUpperCase();
+  if (!nfl) return undefined;
+  const keys = TEAM_PROGRESS_ALIASES[nfl] ?? [nfl];
+  for (const key of keys) {
+    const hit = progressByNflTeam.get(key);
+    if (hit) return hit;
+  }
+  return undefined;
+}
 
 export const Route = createFileRoute("/playbook/matchup")({
   ssr: false,
@@ -1288,9 +1302,28 @@ function PlaybookMatchupPage() {
       teamLivePoints: weeklyPair.oppPoints,
       teamBaselineProj: weeklyPair.oppBaseline,
     });
-    const myWinPct = winPctFromDisplayProjections(myProj, oppProj);
-    return { myProj, oppProj, myWinPct, oppWinPct: 100 - myWinPct };
-  }, [starterRows, weeklyPair, projectFor, progressByNflTeam]);
+    const { pctA: finalWinPctA, pctB: finalWinPctB } = computeDynamicWinProbability({
+      scoreA: weeklyPair.myPoints,
+      scoreB: weeklyPair.oppPoints,
+      startersA: mineStarters,
+      startersB: oppStarters,
+      pointsMapA: weeklyPair.myPlayerPoints,
+      pointsMapB: weeklyPair.oppPlayerPoints,
+      projectFor,
+      weeklyFallback,
+      progressByNflTeam,
+      activeWeek,
+    });
+
+    return {
+      myProj,
+      oppProj,
+      finalWinPctA,
+      finalWinPctB,
+      myWinPct: finalWinPctA,
+      oppWinPct: finalWinPctB,
+    };
+  }, [starterRows, weeklyPair, projectFor, progressByNflTeam, activeWeek]);
 
   const myName = myTeam?.team || activeLeague?.teamName || "My Team";
   const oppName =
@@ -1298,7 +1331,8 @@ function PlaybookMatchupPage() {
     oppTeam?.team ||
     (weeklyPair.oppRosterId == null && matchups?.entries?.length ? "Bye week" : "Opponent");
   const mineLeadsProj = headerProjections.myProj >= headerProjections.oppProj;
-  const mineLeadsWin = headerProjections.myWinPct >= headerProjections.oppWinPct;
+  const mineLeadsWin =
+    headerProjections.finalWinPctA >= headerProjections.finalWinPctB;
 
   return (
     <section key={activeLeagueId ?? "none"} className={playbookCardClass}>
@@ -1387,7 +1421,7 @@ function PlaybookMatchupPage() {
                     mineLeadsWin ? "text-emerald-600" : "text-rose-600",
                   )}
                 >
-                  {headerProjections.myWinPct}%
+                  {headerProjections.finalWinPctA}%
                 </span>
                 <div className="flex h-1.5 min-w-0 flex-1 items-center gap-1.5">
                   <div className="flex h-full min-w-0 flex-1 justify-end overflow-hidden rounded-full bg-slate-100">
@@ -1396,7 +1430,7 @@ function PlaybookMatchupPage() {
                         "h-full rounded-full transition-[width] duration-500",
                         mineLeadsWin ? "bg-emerald-500" : "bg-rose-500",
                       )}
-                      style={{ width: `${headerProjections.myWinPct}%` }}
+                      style={{ width: `${headerProjections.finalWinPctA}%` }}
                     />
                   </div>
                   <div className="flex h-full min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
@@ -1405,7 +1439,7 @@ function PlaybookMatchupPage() {
                         "h-full rounded-full transition-[width] duration-500",
                         mineLeadsWin ? "bg-rose-500" : "bg-emerald-500",
                       )}
-                      style={{ width: `${headerProjections.oppWinPct}%` }}
+                      style={{ width: `${headerProjections.finalWinPctB}%` }}
                     />
                   </div>
                 </div>
@@ -1415,7 +1449,7 @@ function PlaybookMatchupPage() {
                     mineLeadsWin ? "text-rose-600" : "text-emerald-600",
                   )}
                 >
-                  {headerProjections.oppWinPct}%
+                  {headerProjections.finalWinPctB}%
                 </span>
               </div>
             </div>

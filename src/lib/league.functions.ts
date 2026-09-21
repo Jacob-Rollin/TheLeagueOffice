@@ -146,3 +146,36 @@ export const getUnifiedLeague = createServerFn({ method: "GET" })
       accessToken: data.accessToken ?? null,
     });
   });
+
+/** Wipe stale league_transactions / weekly_matchups and re-ingest live host data. */
+export const forceClearAndReSyncLeague = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      connectionId: string;
+      leagueId: string;
+      platform?: string;
+      s2?: string;
+      swid?: string;
+      throughWeek?: number;
+    }) => ({
+      connectionId: String(input.connectionId ?? "").slice(0, 64),
+      leagueId: String(input.leagueId ?? "").slice(0, 64),
+      platform: String(input.platform ?? "espn").trim().toLowerCase().slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+      throughWeek: input.throughWeek
+        ? Math.max(1, Math.min(18, Math.floor(Number(input.throughWeek) || 18)))
+        : undefined,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { forceClearAndReSyncLeague: run } = await import("./league-resync.server");
+    return await run({
+      connectionId: data.connectionId,
+      leagueId: data.leagueId,
+      platform: data.platform,
+      s2: data.s2 ?? null,
+      swid: data.swid ?? null,
+      throughWeek: data.throughWeek,
+    });
+  });

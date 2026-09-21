@@ -13,6 +13,7 @@ const PAGES: { label: string; to: string; hint: string }[] = [
   { label: "Front Office", to: "/", hint: "Home" },
   { label: "Playbook", to: "/playbook", hint: "Active league dashboard" },
   { label: "Standings", to: "/standings", hint: "Actual, All Play, and Power Rankings" },
+  { label: "Press Room", to: "/playbook/press-room", hint: "Weekly recap, preview, and waiver notes" },
   { label: "Rosters", to: "/playbook/rosters", hint: "Roster matrix scouting" },
   { label: "Transactions", to: "/playbook/transactions", hint: "League activity" },
   { label: "War Room", to: "/draft", hint: "Draft board" },

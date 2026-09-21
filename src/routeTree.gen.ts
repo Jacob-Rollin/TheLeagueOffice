@@ -32,6 +32,7 @@ import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
 import { Route as PlaybookIndexRouteImport } from './routes/playbook.index'
 import { Route as PlaybookMatchupRouteImport } from './routes/playbook.matchup'
 import { Route as PlaybookMyTeamRouteImport } from './routes/playbook.my-team'
+import { Route as PlaybookPressRoomRouteImport } from './routes/playbook.press-room'
 import { Route as PlaybookRankingsRouteImport } from './routes/playbook.rankings'
 import { Route as PlaybookRostersRouteImport } from './routes/playbook.rosters'
 import { Route as PlaybookTransactionsRouteImport } from './routes/playbook.transactions'
@@ -158,6 +159,11 @@ const PlaybookMyTeamRoute = PlaybookMyTeamRouteImport.update({
   path: '/my-team',
   getParentRoute: () => PlaybookRoute,
 } as any)
+const PlaybookPressRoomRoute = PlaybookPressRoomRouteImport.update({
+  id: '/press-room',
+  path: '/press-room',
+  getParentRoute: () => PlaybookRoute,
+} as any)
 const PlaybookRankingsRoute = PlaybookRankingsRouteImport.update({
   id: '/rankings',
   path: '/rankings',
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/playbook/matchup': typeof PlaybookMatchupRoute
   '/playbook/my-team': typeof PlaybookMyTeamRoute
+  '/playbook/press-room': typeof PlaybookPressRoomRoute
   '/playbook/rankings': typeof PlaybookRankingsRoute
   '/playbook/rosters': typeof PlaybookRostersRoute
   '/playbook/transactions': typeof PlaybookTransactionsRoute
@@ -266,6 +273,7 @@ export interface FileRoutesByTo {
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/playbook/matchup': typeof PlaybookMatchupRoute
   '/playbook/my-team': typeof PlaybookMyTeamRoute
+  '/playbook/press-room': typeof PlaybookPressRoomRoute
   '/playbook/rankings': typeof PlaybookRankingsRoute
   '/playbook/rosters': typeof PlaybookRostersRoute
   '/playbook/transactions': typeof PlaybookTransactionsRoute
@@ -302,6 +310,7 @@ export interface FileRoutesById {
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/playbook/matchup': typeof PlaybookMatchupRoute
   '/playbook/my-team': typeof PlaybookMyTeamRoute
+  '/playbook/press-room': typeof PlaybookPressRoomRoute
   '/playbook/rankings': typeof PlaybookRankingsRoute
   '/playbook/rosters': typeof PlaybookRostersRoute
   '/playbook/transactions': typeof PlaybookTransactionsRoute
@@ -339,6 +348,7 @@ export interface FileRouteTypes {
     | '/nfl-team/$nflId'
     | '/playbook/matchup'
     | '/playbook/my-team'
+    | '/playbook/press-room'
     | '/playbook/rankings'
     | '/playbook/rosters'
     | '/playbook/transactions'
@@ -373,6 +383,7 @@ export interface FileRouteTypes {
     | '/nfl-team/$nflId'
     | '/playbook/matchup'
     | '/playbook/my-team'
+    | '/playbook/press-room'
     | '/playbook/rankings'
     | '/playbook/rosters'
     | '/playbook/transactions'
@@ -408,6 +419,7 @@ export interface FileRouteTypes {
     | '/nfl-team/$nflId'
     | '/playbook/matchup'
     | '/playbook/my-team'
+    | '/playbook/press-room'
     | '/playbook/rankings'
     | '/playbook/rosters'
     | '/playbook/transactions'
@@ -615,6 +627,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlaybookMyTeamRouteImport
       parentRoute: typeof PlaybookRoute
     }
+    '/playbook/press-room': {
+      id: '/playbook/press-room'
+      path: '/press-room'
+      fullPath: '/playbook/press-room'
+      preLoaderRoute: typeof PlaybookPressRoomRouteImport
+      parentRoute: typeof PlaybookRoute
+    }
     '/playbook/rankings': {
       id: '/playbook/rankings'
       path: '/rankings'
@@ -691,6 +710,7 @@ declare module '@tanstack/react-router' {
 interface PlaybookRouteChildren {
   PlaybookMatchupRoute: typeof PlaybookMatchupRoute
   PlaybookMyTeamRoute: typeof PlaybookMyTeamRoute
+  PlaybookPressRoomRoute: typeof PlaybookPressRoomRoute
   PlaybookRankingsRoute: typeof PlaybookRankingsRoute
   PlaybookRostersRoute: typeof PlaybookRostersRoute
   PlaybookTransactionsRoute: typeof PlaybookTransactionsRoute
@@ -700,6 +720,7 @@ interface PlaybookRouteChildren {
 const PlaybookRouteChildren: PlaybookRouteChildren = {
   PlaybookMatchupRoute: PlaybookMatchupRoute,
   PlaybookMyTeamRoute: PlaybookMyTeamRoute,
+  PlaybookPressRoomRoute: PlaybookPressRoomRoute,
   PlaybookRankingsRoute: PlaybookRankingsRoute,
   PlaybookRostersRoute: PlaybookRostersRoute,
   PlaybookTransactionsRoute: PlaybookTransactionsRoute,

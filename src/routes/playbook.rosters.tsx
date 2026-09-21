@@ -118,12 +118,83 @@ function ordinal(n: number): string {
 
 function RosterColumnHeader() {
   return (
-    <div className="mb-3 grid grid-cols-[48px_1fr_120px_60px] items-center rounded-lg border border-slate-100 bg-slate-50 px-4 py-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">
-      <span>Pos</span>
-      <span>Player</span>
-      <span className="pr-6 text-right">Value / Trend</span>
-      <span className="text-right">Proj</span>
+    <div className="flex w-full items-center justify-between border-b border-border bg-slate-50/60 px-3 py-3 text-xs font-black uppercase tracking-wider text-slate-900 select-none">
+      <div className="flex min-w-0 flex-1 items-center">
+        <span className="w-12 shrink-0">Pos</span>
+        <span>Player</span>
+      </div>
+      <div className="flex shrink-0 items-center space-x-12 pr-1">
+        <span className="w-28 text-right">Value / Trend</span>
+        <span className="w-12 text-right">Proj</span>
+      </div>
     </div>
+  );
+}
+
+type RosterSection = "starters" | "bench" | "ir";
+
+function badgeLabelForRow(row: MatrixRow, section: RosterSection): string {
+  if (section === "bench") return "BN";
+  if (section === "ir") return "IR";
+  return row.slot || row.player?.pos || "BN";
+}
+
+const rosterListShellClass =
+  "mb-6 select-none overflow-hidden rounded-lg border border-border bg-white";
+const rosterListBodyClass = "divide-y divide-slate-100";
+
+
+function RosterInjuryBadge({
+  player,
+  forceIr = false,
+}: {
+  player: Player;
+  forceIr?: boolean;
+}) {
+  if (forceIr) {
+    return (
+      <span className="shrink-0 rounded bg-red-700 px-1 py-0.5 text-[8px] font-black uppercase leading-none tracking-wider text-white">
+        IR
+      </span>
+    );
+  }
+
+  const raw = (player.injury || player.injury_status || player.injuryStatus || "")
+    .trim()
+    .toUpperCase();
+  if (!raw || /^(HEALTHY|ACTIVE|NONE)$/.test(raw)) return null;
+
+  let label: "Q" | "O" | "IR" | null = null;
+  let tone = "bg-amber-500";
+  if (raw === "IR" || raw === "INJURED RESERVE" || raw === "PUP") {
+    label = "IR";
+    tone = "bg-red-700";
+  } else if (raw === "Q" || raw === "QUESTIONABLE") {
+    label = "Q";
+    tone = "bg-amber-500";
+  } else if (
+    raw === "O" ||
+    raw === "OUT" ||
+    raw === "DOUBTFUL" ||
+    raw === "D" ||
+    raw === "SUSPENDED" ||
+    raw === "NA" ||
+    raw === "INACTIVE"
+  ) {
+    label = "O";
+    tone = "bg-rose-600";
+  }
+  if (!label) return null;
+
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded px-1 py-0.5 text-[8px] font-black uppercase leading-none tracking-wider text-white",
+        tone,
+      )}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -337,33 +408,39 @@ function PlaybookRostersPage() {
     return pts.toFixed(1);
   };
 
+  const managerSelect = (
+    <div className="mt-3 flex flex-col items-start sm:mt-0 sm:items-end">
+      <span className="mb-1.5 mr-1 block text-[10px] font-black uppercase tracking-widest text-slate-400 sm:text-right">
+        Manager Team
+      </span>
+      <select
+        value={selectedSlot}
+        onChange={(e) => selectManager(e.target.value)}
+        className="w-[260px] cursor-pointer select-none rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-700 shadow-2xs focus:outline-none"
+      >
+        {!teams.length ? <option value="">No teams available</option> : null}
+        {teams.map((team) => (
+          <option key={team.slot} value={String(team.slot)}>
+            {team.team}
+            {team.owner ? ` · ${team.owner}` : ""}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
   return (
     <div className="w-full">
-      <div className="mb-4 flex flex-col items-start justify-between border-b border-slate-100 pb-4 md:flex-row md:items-center">
-        <div>
-          <h2 className="text-lg font-black tracking-wide text-slate-900 uppercase">
+      <div className="mb-6 flex w-full flex-col border-b border-slate-100 pb-4 select-none sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col text-left">
+          <h1 className="text-xl font-black uppercase tracking-tight text-slate-900">
             Roster Matrix
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
+          </h1>
+          <p className="mt-1 text-xs font-bold text-slate-400">
             Scout any manager lineup, bench depth, and IR slots in the active league.
           </p>
         </div>
-        <label className="mt-3 flex min-w-[14rem] flex-col gap-1 text-xs font-semibold tracking-wide text-slate-500 uppercase md:mt-0">
-          Manager Team
-          <select
-            value={selectedSlot}
-            onChange={(e) => selectManager(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium tracking-normal text-slate-900 normal-case outline-none focus:border-blue-500"
-          >
-            {!teams.length ? <option value="">No teams available</option> : null}
-            {teams.map((team) => (
-              <option key={team.slot} value={String(team.slot)}>
-                {team.team}
-                {team.owner ? ` · ${team.owner}` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+        {managerSelect}
       </div>
 
       {loading && !selectedTeam ? (
@@ -374,147 +451,159 @@ function PlaybookRostersPage() {
         </p>
       ) : (
         <div className="mx-auto grid w-full max-w-7xl grid-cols-1 items-start gap-6 overflow-visible lg:grid-cols-[1fr_360px]">
-          <div className="flex flex-col space-y-6 rounded-xl border border-slate-200 bg-white p-6 text-left shadow-sm">
-            <section>
-              <h3 className="mb-3 text-xs font-black tracking-wider text-slate-900 uppercase">
-                STARTING LINEUP
+          <div className="flex flex-col text-left">
+            <section className="mb-2">
+              <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-slate-900">
+                Starters
               </h3>
-              <RosterColumnHeader />
-              <div className="overflow-hidden rounded-lg">
-                {starterRows.length === 0 ? (
-                  <p className="py-4 text-sm text-slate-400">No starting lineup slots available.</p>
-                ) : (
-                  starterRows.map((row, index) => (
-                    <RosterPlayerRow
-                      key={`${row.slot}-${row.player?.id ?? "empty"}-${index}`}
-                      row={row}
-                      index={index}
-                      valueTrend={valueTrend(row.player)}
-                      projPts={projPts(row.player)}
-                      onOpenPlayer={openPlayer}
-                    />
-                  ))
-                )}
+              <div className={rosterListShellClass}>
+                <RosterColumnHeader />
+                <div className={rosterListBodyClass}>
+                  {starterRows.length === 0 ? (
+                    <p className="px-4 py-4 text-sm text-slate-400">
+                      No starting lineup slots available.
+                    </p>
+                  ) : (
+                    starterRows.map((row, index) => (
+                      <RosterPlayerRow
+                        key={`${row.slot}-${row.player?.id ?? "empty"}-${index}`}
+                        row={row}
+                        section="starters"
+                        valueTrend={valueTrend(row.player)}
+                        projPts={projPts(row.player)}
+                        onOpenPlayer={openPlayer}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className="mb-2">
+              <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-slate-900">
+                Bench
+              </h3>
+              <div className={rosterListShellClass}>
+                <RosterColumnHeader />
+                <div className={rosterListBodyClass}>
+                  {benchRows.length === 0 ? (
+                    <p className="px-4 py-4 text-sm text-slate-400">No bench assets on this roster.</p>
+                  ) : (
+                    benchRows.map((row, index) => (
+                      <RosterPlayerRow
+                        key={`bn-${row.player?.id ?? "empty"}-${index}`}
+                        row={row}
+                        section="bench"
+                        valueTrend={valueTrend(row.player)}
+                        projPts={projPts(row.player)}
+                        onOpenPlayer={openPlayer}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
             </section>
 
             <section>
-              <h3 className="mb-3 text-xs font-black tracking-wider text-slate-900 uppercase">
-                BENCH DEPTH
-              </h3>
-              <RosterColumnHeader />
-              <div className="overflow-hidden rounded-lg">
-                {benchRows.length === 0 ? (
-                  <p className="py-4 text-sm text-slate-400">No bench assets on this roster.</p>
-                ) : (
-                  benchRows.map((row, index) => (
-                    <RosterPlayerRow
-                      key={`bn-${row.player?.id ?? "empty"}-${index}`}
-                      row={row}
-                      index={index}
-                      valueTrend={valueTrend(row.player)}
-                      projPts={projPts(row.player)}
-                      onOpenPlayer={openPlayer}
-                      condensed
-                    />
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section>
-              <h3 className="mb-3 text-xs font-black tracking-wider text-slate-900 uppercase">
-                INJURED RESERVE
+              <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-slate-900">
+                Injured Reserve
               </h3>
               {irRows.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-5 text-center text-sm text-slate-400">
+                <div className="mb-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-5 text-center text-sm text-slate-400">
                   IR slot empty.
                 </div>
               ) : (
-                <>
+                <div className={rosterListShellClass}>
                   <RosterColumnHeader />
-                  <div className="overflow-hidden rounded-lg">
+                  <div className={rosterListBodyClass}>
                     {irRows.map((row, index) => (
                       <RosterPlayerRow
                         key={`ir-${row.player?.id ?? "empty"}-${index}`}
                         row={row}
-                        index={index}
+                        section="ir"
                         valueTrend={valueTrend(row.player)}
                         projPts={projPts(row.player)}
                         onOpenPlayer={openPlayer}
                         showIrBadge
-                        condensed
                       />
                     ))}
                   </div>
-                </>
+                </div>
               )}
             </section>
           </div>
 
-          <div className="flex w-full flex-col space-y-6 text-left">
-            <section className="flex w-full flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm">
-              <h3 className="mb-3 border-b border-slate-100 pb-2 text-xs font-black tracking-wider text-slate-900 uppercase">
-                MANAGER PROFILE
-              </h3>
-              <dl className="space-y-3">
-                <IntelRow label="League Rank" value={managerIntel?.leagueRankLabel ?? "—"} />
-                <IntelRow label="Points For (PF)" value={managerIntel?.pointsForLabel ?? "—"} />
-                <IntelRow label="Roster Health" value={managerIntel?.healthLabel ?? "—"} />
-                <IntelRow label="Trade Urgency" value={managerIntel?.urgencyLabel ?? "—"} />
-              </dl>
-            </section>
+          <div className="flex w-full flex-col text-left pt-0">
+            {/* Match Starters section title height so Manager Profile aligns with grey table header */}
+            <div className="mb-3 hidden lg:block" aria-hidden="true">
+              <h3 className="invisible text-xs font-black uppercase tracking-wider">Starters</h3>
+            </div>
 
-            <section className="flex w-full flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm">
-              <h3 className="mb-3 border-b border-slate-100 pb-2 text-xs font-black tracking-wider text-slate-900 uppercase">
-                TOP TARGET ASSETS
-              </h3>
-              {selectedTeam.isMine || selectedTeam.slot === myTeam?.slot ? (
-                <p className="py-3 text-sm text-slate-400">
-                  Select a rival manager to surface high-probability trade targets.
-                </p>
-              ) : topTargets.length === 0 ? (
-                <p className="py-3 text-sm text-slate-400">No optimized trade fits found yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  {topTargets.map((player) => (
-                    <div
-                      key={player.id}
-                      className="flex items-center gap-2.5 rounded-lg border border-slate-100 bg-slate-50/40 px-2.5 py-2"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => openPlayer(player.id)}
-                        className="flex min-w-0 flex-1 items-center gap-2.5 text-left transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            <div className="flex w-full flex-col space-y-6">
+              <section className="flex w-full flex-col rounded-xl border border-slate-100 bg-white p-4 text-left shadow-xs">
+                <h3 className="mb-3 border-b border-slate-100 pb-2 text-xs font-black uppercase tracking-wider text-slate-900">
+                  Manager Profile
+                </h3>
+                <dl className="space-y-3">
+                  <IntelRow label="League Rank" value={managerIntel?.leagueRankLabel ?? "—"} />
+                  <IntelRow label="Points For (PF)" value={managerIntel?.pointsForLabel ?? "—"} />
+                  <IntelRow label="Roster Health" value={managerIntel?.healthLabel ?? "—"} />
+                  <IntelRow label="Trade Urgency" value={managerIntel?.urgencyLabel ?? "—"} />
+                </dl>
+              </section>
+
+              <section className="flex w-full flex-col rounded-xl border border-slate-100 bg-white p-4 text-left shadow-xs">
+                <h3 className="mb-3 border-b border-slate-100 pb-2 text-xs font-black uppercase tracking-wider text-slate-900">
+                  Top Target Assets
+                </h3>
+                {selectedTeam.isMine || selectedTeam.slot === myTeam?.slot ? (
+                  <p className="py-3 text-sm text-slate-400">
+                    Select a rival manager to surface high-probability trade targets.
+                  </p>
+                ) : topTargets.length === 0 ? (
+                  <p className="py-3 text-sm text-slate-400">No optimized trade fits found yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {topTargets.map((player) => (
+                      <div
+                        key={player.id}
+                        className="flex items-center gap-2.5 rounded-xl border border-slate-100/60 bg-white px-2.5 py-2 shadow-xs"
                       >
-                        <PlayerAvatar
-                          id={player.id}
-                          pos={player.pos}
-                          team={player.team}
-                          name={player.name}
-                          className="size-8 flex-shrink-0"
-                          logoClassName="size-2.5"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-xs font-black text-slate-900">
-                            {player.name}
+                        <button
+                          type="button"
+                          onClick={() => openPlayer(player.id)}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        >
+                          <PlayerAvatar
+                            id={player.id}
+                            pos={player.pos}
+                            team={player.team}
+                            name={player.name}
+                            className="size-8 flex-shrink-0"
+                            logoClassName="size-2.5"
+                          />
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-1.5 truncate text-sm font-black text-slate-900">
+                              <span className="truncate">{player.name}</span>
+                              <RosterInjuryBadge player={player} />
+                            </span>
+                            <span className="mt-0.5 inline-flex">
+                              <PositionBadge pos={player.pos} className="h-4 text-[9px]" />
+                            </span>
                           </span>
-                          <span className="mt-0.5 inline-flex">
-                            <PositionBadge pos={player.pos} className="h-4 text-[9px]" />
-                          </span>
-                        </span>
-                      </button>
-                      <Link
-                        to="/trade"
-                        className="ml-auto flex-shrink-0 text-[11px] font-black tracking-wide text-blue-600 uppercase transition-colors hover:text-blue-700"
-                      >
-                        Scout Trade
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+                        </button>
+                        <Link
+                          to="/trade"
+                          className="ml-auto flex-shrink-0 text-[11px] font-black uppercase tracking-wide text-blue-600 transition-colors hover:text-blue-700"
+                        >
+                          Scout Trade
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
           </div>
         </div>
       )}
@@ -535,79 +624,80 @@ function IntelRow({ label, value }: { label: string; value: string }) {
 
 function RosterPlayerRow({
   row,
-  index,
+  section,
   valueTrend,
   projPts,
   onOpenPlayer,
-  condensed = false,
   showIrBadge = false,
 }: {
   row: MatrixRow;
-  index: number;
+  section: RosterSection;
   valueTrend: string;
   projPts: string;
   onOpenPlayer: (id: string) => void;
-  condensed?: boolean;
   showIrBadge?: boolean;
 }) {
   const player = row.player;
-  const tone = index % 2 === 1 ? "bg-slate-50/40" : "bg-white";
+  const label = badgeLabelForRow(row, section);
 
   if (!player) {
     return (
-      <div
-        className={cn(
-          "grid grid-cols-[48px_1fr_120px_60px] items-center border-b border-slate-100 px-4 py-2.5 last:border-0",
-          tone,
-        )}
-      >
-        <PositionBadge pos={row.slot} className="h-5 text-[10px]" />
-        <span className="text-xs text-slate-400 italic">Empty slot</span>
-        <span className="pr-6 text-right text-[11px] text-slate-300">—</span>
-        <span className="text-right text-xs text-slate-300">—</span>
+      <div className="flex w-full cursor-default items-center justify-between px-3 py-3 text-left select-none">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="flex w-12 shrink-0 justify-start">
+            <PositionBadge pos={label} />
+          </span>
+          <span className="text-sm text-slate-400">Empty slot</span>
+        </div>
+        <div className="flex shrink-0 items-center space-x-12 pr-1 text-sm font-medium tabular-nums select-none">
+          <span className="w-28 text-right text-slate-300">—</span>
+          <span className="w-12 text-right text-slate-300">—</span>
+        </div>
       </div>
     );
   }
 
+  const byeLabel =
+    player.bye != null && player.bye > 0
+      ? `${player.team?.trim() || "FA"} · Bye ${player.bye}`
+      : player.team?.trim() || "FA";
+
   return (
-    <div
-      className={cn(
-        "grid grid-cols-[48px_1fr_120px_60px] items-center border-b border-slate-100 px-4 py-2.5 last:border-0",
-        tone,
-      )}
+    <button
+      type="button"
+      onClick={() => onOpenPlayer(player.id)}
+      className="flex w-full cursor-pointer items-center justify-between px-3 py-3 text-left transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 select-none"
     >
-      <PositionBadge pos={row.slot} className="h-5 text-[10px]" />
-      <button
-        type="button"
-        onClick={() => onOpenPlayer(player.id)}
-        className="flex min-w-0 items-center text-left transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-      >
-        <PlayerAvatar
-          id={player.id}
-          pos={player.pos}
-          team={player.team}
-          name={player.name}
-          className={cn("relative flex-shrink-0", condensed ? "size-8" : "size-9")}
-          logoClassName="size-3"
-        />
-        <span className="ml-3 min-w-0">
-          <span className="flex max-w-[140px] items-center gap-1.5 truncate text-xs font-black text-slate-900">
-            {player.name}
-            {showIrBadge ? (
-              <span className="rounded bg-red-500 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-white">
-                IR
-              </span>
-            ) : null}
-          </span>
-          <span className="mt-0.5 block text-[10px] font-bold tracking-wide text-slate-400 uppercase">
-            {player.team?.trim() || "FA"}
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <span className="flex w-12 shrink-0 justify-start">
+          <PositionBadge pos={label} />
+        </span>
+
+        <span className="flex min-w-0 items-center gap-3">
+          <PlayerAvatar
+            id={player.id}
+            pos={player.pos}
+            team={player.team}
+            name={player.name}
+            className="size-10 flex-shrink-0"
+            logoClassName="size-3.5"
+          />
+          <span className="min-w-0">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-semibold text-slate-900">{player.name}</span>
+              <RosterInjuryBadge player={player} forceIr={showIrBadge} />
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] font-medium uppercase text-slate-400">
+              {byeLabel}
+            </span>
           </span>
         </span>
-      </button>
-      <span className="pr-6 text-right text-[11px] font-semibold tabular-nums text-slate-500">
-        {valueTrend}
-      </span>
-      <span className="text-right text-xs font-black tabular-nums text-slate-900">{projPts}</span>
-    </div>
+      </div>
+
+      <div className="flex shrink-0 items-center space-x-12 pr-1 text-sm font-medium tabular-nums select-none">
+        <span className="w-28 whitespace-nowrap text-right text-slate-500">{valueTrend}</span>
+        <span className="w-12 text-right font-semibold text-slate-800">{projPts}</span>
+      </div>
+    </button>
   );
 }

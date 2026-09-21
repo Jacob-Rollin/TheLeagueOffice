@@ -1231,8 +1231,10 @@ export type WaiverDropAddSuggestion = {
 };
 
 /**
- * True when the player's NFL game has kicked off, is live, or is finished —
- * those players must never populate Market Radar waiver adds.
+ * True when the player's NFL game is currently live / in progress —
+ * those players must never populate Market Radar waiver adds (too late
+ * to roster them for this slate). Finished (`post`) and pre-kickoff
+ * players stay eligible for upcoming waiver periods.
  */
 export function isWaiverGameLocked(input: {
   gamePhase?: string | null;
@@ -1240,14 +1242,22 @@ export function isWaiverGameLocked(input: {
 }): boolean {
   const hay = `${input.gamePhase ?? ""} ${input.gameStatus ?? ""}`.toLowerCase().trim();
   if (!hay) return false;
+
+  // Finished / final games are eligible again for future weeks.
+  if (/\b(done|final|post|complete|completed|finalizing)\b/.test(hay)) {
+    return false;
+  }
+
   // Explicit unplayed / pre-kickoff tokens stay eligible.
   if (
     /\b(pre|scheduled|preview|not[_\s-]?started|upcoming)\b/.test(hay) &&
-    !/\b(in_progress|in-progress|live|playing|done|final|post|complete)\b/.test(hay)
+    !/\b(in_progress|in-progress|live|playing)\b/.test(hay)
   ) {
     return false;
   }
-  return /\b(in_progress|in-progress|live|playing|done|final|post|complete|in)\b/.test(hay);
+
+  // Lock only while the game is actively underway.
+  return /\b(in_progress|in-progress|live|playing)\b/.test(hay) || /\bin\b/.test(hay);
 }
 
 const WAIVER_INJURY_BLACKLIST = new Set([
@@ -1346,7 +1356,8 @@ export function isDropProtected(
  * - Never open starter vacancies under synced league slot settings.
  * - Free agents are ranked with FantasyCalc value/trend + optional Sleeper
  *   trending-add momentum before pairing drops.
- * - Game-lock: skip players whose NFL game is live / finished.
+ * - Game-lock: skip players whose NFL game is currently live / in progress
+ *   (finished games stay eligible for upcoming waiver periods).
  * - Injury blacklist: skip active injury designations.
  */
 export function suggestWaiverTransactions(input: {

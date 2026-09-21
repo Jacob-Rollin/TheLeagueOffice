@@ -269,6 +269,9 @@ function round2(n: number): number {
  * Win% from display projections:
  * raw = mine / (mine + opp), then amplify deviation from 50/50 so modest
  * projection gaps (e.g. 112.08 vs 120.82) read as board-style 42% / 58%.
+ *
+ * @deprecated Prefer {@link computeDynamicWinProbability} so Dashboard and
+ * Matchup share the same live trajectory engine.
  */
 export function winPctFromDisplayProjections(mine: number, opp: number): number {
   const a = Math.max(0, Number(mine) || 0);
@@ -280,6 +283,129 @@ export function winPctFromDisplayProjections(mine: number, opp: number): number 
   const SMOOTHING = 4.25;
   const adjusted = 0.5 + (raw - 0.5) * SMOOTHING;
   return Math.round(Math.min(99, Math.max(1, adjusted * 100)));
+}
+
+/** Sleeper ↔ ESPN abbreviation aliases for scoreboard lookups. */
+const TEAM_PROGRESS_ALIASES: Record<string, string[]> = {
+  WAS: ["WAS", "WSH"],
+  WSH: ["WSH", "WAS"],
+  LAR: ["LAR", "LA"],
+  LA: ["LA", "LAR"],
+  JAC: ["JAC", "JAX"],
+  JAX: ["JAX", "JAC"],
+};
+
+/** In-game volatility weight applied to remaining projection upside. */
+const LIVE_REMAINING_VOLATILITY = 1.05;
+
+function progressForNflTeam(
+  teamAbbr: string | null | undefined,
+  progressByNflTeam: Map<string, NflGameProgress>,
+): NflGameProgress | undefined {
+  const nfl = (teamAbbr || "").trim().toUpperCase();
+  if (!nfl) return undefined;
+  const keys = TEAM_PROGRESS_ALIASES[nfl] ?? [nfl];
+  for (const key of keys) {
+    const hit = progressByNflTeam.get(key);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** True when this starter's NFL game is not Final (still has trajectory left). */
+function starterGameStillActive(
+  player: Player,
+  progressByNflTeam: Map<string, NflGameProgress>,
+  activeWeek: number,
+): boolean {
+  if (player.bye != null && Number(player.bye) === Number(activeWeek)) return false;
+  const progress = progressForNflTeam(player.team, progressByNflTeam);
+  if (!progress) return true;
+  if (progress.phase === "post") return false;
+  if (Number(progress.minutesRemaining) > 0) return true;
+  return progress.phase === "pre" || progress.phase === "in";
+}
+
+/** Remaining projection points still on the board for one active starter. */
+function starterRemainingProjectedPoints(
+  player: Player,
+  livePoints: number,
+  baselineProjection: number,
+  progressByNflTeam: Map<string, NflGameProgress>,
+): number {
+  const progress = progressForNflTeam(player.team, progressByNflTeam);
+  const rolling = playerLiveRollingProjection({
+    livePoints,
+    baselineProjection,
+    progress,
+  });
+  return Math.max(0, rolling - Math.max(0, Number(livePoints) || 0));
+}
+
+/**
+ * Dynamic live in-game win probability:
+ * live score + volatility-weighted remaining projection for non-Final starters.
+ * Finished + trailing → hard lock at 1% / 99%.
+ * Shared by Matchup page and Dashboard matchup card.
+ */
+export function computeDynamicWinProbability(opts: {
+  scoreA: number;
+  scoreB: number;
+  startersA: Player[];
+  startersB: Player[];
+  pointsMapA: Record<string, number>;
+  pointsMapB: Record<string, number>;
+  projectFor: (id: string) => number | null;
+  weeklyFallback: (player: Player) => number;
+  progressByNflTeam: Map<string, NflGameProgress>;
+  activeWeek: number;
+}): { pctA: number; pctB: number } {
+  const scoreA = Number(opts.scoreA || 0);
+  const scoreB = Number(opts.scoreB || 0);
+
+  const activeStartersA = opts.startersA.filter((p) =>
+    starterGameStillActive(p, opts.progressByNflTeam, opts.activeWeek),
+  );
+  const activeStartersB = opts.startersB.filter((p) =>
+    starterGameStillActive(p, opts.progressByNflTeam, opts.activeWeek),
+  );
+
+  if (activeStartersA.length === 0 && scoreA < scoreB) {
+    return { pctA: 1, pctB: 99 };
+  }
+  if (activeStartersB.length === 0 && scoreB < scoreA) {
+    return { pctA: 99, pctB: 1 };
+  }
+
+  const sumRemaining = (
+    active: Player[],
+    pointsMap: Record<string, number>,
+  ): number => {
+    let total = 0;
+    for (const player of active) {
+      const live = Number(pointsMap[player.id] ?? 0) || 0;
+      const baseline = opts.projectFor(player.id) ?? opts.weeklyFallback(player);
+      total += starterRemainingProjectedPoints(
+        player,
+        live,
+        baseline,
+        opts.progressByNflTeam,
+      );
+    }
+    return total;
+  };
+
+  const projRemainingA = sumRemaining(activeStartersA, opts.pointsMapA);
+  const projRemainingB = sumRemaining(activeStartersB, opts.pointsMapB);
+
+  const liveTrajectoryA = scoreA + projRemainingA * LIVE_REMAINING_VOLATILITY;
+  const liveTrajectoryB = scoreB + projRemainingB * LIVE_REMAINING_VOLATILITY;
+  const totalTrajectory = liveTrajectoryA + liveTrajectoryB;
+  if (totalTrajectory <= 0) return { pctA: 50, pctB: 50 };
+
+  let pctA = Math.round((liveTrajectoryA / totalTrajectory) * 100);
+  pctA = Math.max(1, Math.min(99, pctA));
+  return { pctA, pctB: 100 - pctA };
 }
 
 /** Compact local kickoff label, e.g. "Sun 3:25PM". */
