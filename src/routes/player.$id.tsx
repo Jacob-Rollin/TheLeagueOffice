@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { PlayerDetail } from "@/components/draft/PlayerDetail";
+import { RosteredOnLabel } from "@/components/draft/RosteredOnLabel";
 import { usePlayerSos } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { Pos, Scoring } from "@/lib/draft";
@@ -685,6 +686,7 @@ function StandalonePlayerHeader({
       </div>
 
       <div className="z-20 mt-1 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pl-[164px] pr-10 text-left">
+        <RosteredOnLabel playerId={player.id} playerName={player.name} />
         <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-visible">
           <h1 className="truncate text-3xl font-black tracking-tight text-white">{player.name}</h1>
           {injuryDetails ? (

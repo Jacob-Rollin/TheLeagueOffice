@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Cloud, CloudRain, CloudSnow, Star, Sun } from "
 import { useEffect, useMemo, useRef, useState } from "react";
 import { playerImage, teamLogo } from "./PlayerAvatar";
 import { PositionBadge } from "./PositionBadge";
+import { RosteredOnLabel } from "./RosteredOnLabel";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useDraft } from "@/hooks/use-draft";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
@@ -394,6 +395,7 @@ export function PlayerDetail({
           </div>
 
           <div className="relative z-10 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pl-6 pr-12 text-left">
+            <RosteredOnLabel playerId={player.id} playerName={player.name} />
             <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-visible">
               <h1 className="truncate text-3xl font-black tracking-tight text-white">
                 {player.name}
