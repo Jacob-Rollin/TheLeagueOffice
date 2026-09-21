@@ -2,6 +2,7 @@ import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModal } from "@/components/draft/PlayerModal";
+import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
@@ -362,7 +363,11 @@ export const Route = createFileRoute("/waiver")({
 
 function WaiverRoute() {
   const { activeLeagueId } = useActiveLeague();
-  return <WaiverIntelligencePage key={activeLeagueId ?? "none"} />;
+  return (
+    <PlaybookShell>
+      <WaiverIntelligencePage key={activeLeagueId ?? "none"} />
+    </PlaybookShell>
+  );
 }
 
 function WaiverIntelligencePage() {
@@ -511,7 +516,7 @@ function WaiverIntelligencePage() {
   const locked = !authReady || !user || !activeLeague?.id;
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-3 pb-16 pt-6">
+    <div className="w-full pb-8">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="display-title text-3xl uppercase tracking-wide">THE WIRE</h1>
         <ActiveLeagueLabel />
@@ -884,6 +889,6 @@ function WaiverIntelligencePage() {
       )}
 
       <AuthDialog open={authOpen} mode="signin" onOpenChange={setAuthOpen} />
-    </main>
+    </div>
   );
 }

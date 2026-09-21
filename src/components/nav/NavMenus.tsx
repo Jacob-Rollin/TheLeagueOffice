@@ -34,13 +34,9 @@ const RESEARCH_LINKS: {
     | "/weekly-projections"
     | "/season-projections"
     | "/fantasy-points-allowed"
-    | "/red-zone-stats"
-    | "/trade-desk"
-    | "/the-wire";
+    | "/red-zone-stats";
   label: string;
 }[] = [
-  { to: "/trade-desk", label: "Trade Desk" },
-  { to: "/the-wire", label: "The Wire" },
   { to: "/weekly-projections", label: "Weekly Projections" },
   { to: "/season-projections", label: "Season Projections" },
   { to: "/fantasy-points-allowed", label: "Fantasy Points Allowed" },

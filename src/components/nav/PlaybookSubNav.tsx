@@ -20,7 +20,9 @@ const LINKS: {
     | "/playbook/matchup"
     | "/playbook/press-room"
     | "/playbook/rosters"
-    | "/playbook/transactions";
+    | "/playbook/transactions"
+    | "/trade"
+    | "/waiver";
   label: string;
   search?: { tab?: "actual" | "all-play" | "power" };
 }[] = [
@@ -31,6 +33,8 @@ const LINKS: {
   { to: "/playbook/matchup", label: "Matchup" },
   { to: "/playbook/rosters", label: "Rosters" },
   { to: "/playbook/transactions", label: "Transactions" },
+  { to: "/trade", label: "Trade Desk" },
+  { to: "/waiver", label: "The Wire" },
 ];
 
 function platformLabel(platform: string): string {
@@ -245,6 +249,12 @@ export function LeagueSwitcher() {
 function linkIsActive(pathname: string, to: string): boolean {
   if (to === "/playbook") {
     return pathname === "/playbook" || pathname === "/playbook/";
+  }
+  if (to === "/trade") {
+    return pathname === "/trade" || pathname === "/trade-desk" || pathname.startsWith("/trade/");
+  }
+  if (to === "/waiver") {
+    return pathname === "/waiver" || pathname === "/the-wire" || pathname.startsWith("/waiver/");
   }
   return pathname === to || pathname.startsWith(`${to}/`);
 }

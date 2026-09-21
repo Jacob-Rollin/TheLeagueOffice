@@ -1,6 +1,7 @@
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
 import { SyncLock } from "@/components/league/SyncLock";
 import { AuthDialog } from "@/components/auth/AuthDialog";
+import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { queryOptions, useQueries, useSuspenseQuery } from "@tanstack/react-query";
@@ -215,7 +216,11 @@ function SidebarLock({
 
 function TradeRoute() {
   const { activeLeagueId } = useActiveLeague();
-  return <TradePage key={activeLeagueId ?? "none"} />;
+  return (
+    <PlaybookShell wide>
+      <TradePage key={activeLeagueId ?? "none"} />
+    </PlaybookShell>
+  );
 }
 
 
@@ -591,7 +596,7 @@ function TradePage() {
 
 
   return (
-    <div className="mx-auto grid w-full max-w-[100rem] gap-4 px-3 pb-16 pt-6 xl:grid-cols-[16rem_minmax(0,1fr)_18rem]">
+    <div className="grid w-full gap-4 xl:grid-cols-[16rem_minmax(0,1fr)_18rem]">
       {locked ? (
         <SidebarLock authenticated={Boolean(user)} onSignIn={() => setAuthOpen(true)}>
           <RosterColumn

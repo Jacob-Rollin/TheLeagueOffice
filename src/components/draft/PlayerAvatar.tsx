@@ -37,6 +37,7 @@ export function PlayerAvatar({
           src={playerImage(id, pos, team)}
           alt={name}
           loading="lazy"
+          decoding="async"
           className="size-full object-cover object-center"
           onError={(e) => {
             e.currentTarget.style.visibility = "hidden";
@@ -49,6 +50,7 @@ export function PlayerAvatar({
           src={logo}
           alt={`${team} logo`}
           loading="lazy"
+          decoding="async"
           className={cn(
             "absolute -bottom-1 -right-1 size-6 rounded-full border border-border bg-background p-0.5",
             logoClassName,

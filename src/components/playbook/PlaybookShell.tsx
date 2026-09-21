@@ -10,15 +10,27 @@ import { cn } from "@/lib/utils";
 const blueButton =
   "rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-60";
 
-export function PlaybookShell({ children }: { children?: ReactNode }) {
+export function PlaybookShell({
+  children,
+  wide = false,
+}: {
+  children?: ReactNode;
+  /** Wider content column for tools like Trade Analyzer. */
+  wide?: boolean;
+}) {
   const { ready, user } = useAuth();
   const { activeLeague, leagues } = useActiveLeague();
+
+  const mainClass = cn(
+    "mx-auto w-full px-4 py-8 sm:px-6 lg:px-8",
+    wide ? "max-w-[100rem]" : "max-w-7xl",
+  );
 
   if (!ready) {
     return (
       <>
         <PlaybookSubNav />
-        <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <main className={mainClass}>
           <p className="text-sm text-muted-foreground">Loading league context…</p>
         </main>
       </>
@@ -29,7 +41,7 @@ export function PlaybookShell({ children }: { children?: ReactNode }) {
     return (
       <>
         <PlaybookSubNav />
-        <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <main className={mainClass}>
           <section className={playbookCardClass}>
             <h1 className="display-title text-3xl uppercase tracking-wide">Playbook</h1>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -45,7 +57,7 @@ export function PlaybookShell({ children }: { children?: ReactNode }) {
     return (
       <>
         <PlaybookSubNav />
-        <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <main className={mainClass}>
           <section className={playbookCardClass}>
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <h1 className="display-title text-3xl uppercase tracking-wide">Playbook</h1>
@@ -70,9 +82,7 @@ export function PlaybookShell({ children }: { children?: ReactNode }) {
   return (
     <>
       <PlaybookSubNav />
-      <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {children ?? <Outlet />}
-      </main>
+      <main className={mainClass}>{children ?? <Outlet />}</main>
     </>
   );
 }

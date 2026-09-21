@@ -21,13 +21,20 @@ async function fetchState(): Promise<WeekState> {
   };
 }
 
-/** Raw Sleeper projected stat lines for a given week, keyed by player id. */
-async function fetchWeeklyProjections(
-  weekOverride?: number | null,
+/** Shared NFL calendar state — one network hit across Weekly Projections + scoring. */
+export function useNflState() {
+  return useQuery({
+    queryKey: ["nfl-state"],
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+    queryFn: fetchState,
+  });
+}
+
+async function fetchWeeklyProjectionsFor(
+  season: string,
+  week: number,
 ): Promise<Map<string, Record<string, number>>> {
-  const { season, week: stateWeek } = await fetchState();
-  const week =
-    weekOverride != null && weekOverride > 0 ? Math.max(1, Math.floor(weekOverride)) : stateWeek;
   const url = `${SLEEPER_BASE}/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`;
   const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
   const rows = res && res.ok ? ((await res.json()) as unknown) : null;
@@ -53,6 +60,8 @@ export function useLeagueProjections(week?: number | null) {
   const platform = activeLeague?.platform ?? "sleeper";
   const safeWeek = week != null && week > 0 ? week : null;
 
+  const nflState = useNflState();
+
   const scoring = useQuery({
     queryKey: ["league-scoring", platform, identifier],
     enabled: Boolean(identifier),
@@ -69,11 +78,15 @@ export function useLeagueProjections(week?: number | null) {
       }),
   });
 
+  const resolvedWeek = safeWeek ?? nflState.data?.week ?? null;
+  const season = nflState.data?.season ?? null;
+
   const projections = useQuery({
-    queryKey: ["sleeper-weekly-projections", safeWeek ?? "auto"],
+    queryKey: ["sleeper-weekly-projections", season, resolvedWeek ?? "auto"],
+    enabled: Boolean(season && resolvedWeek),
     staleTime: 6 * HOUR,
     retry: false,
-    queryFn: () => fetchWeeklyProjections(safeWeek),
+    queryFn: () => fetchWeeklyProjectionsFor(season!, resolvedWeek!),
   });
 
   const map: ScoringMap = useMemo(
@@ -103,7 +116,8 @@ export function useLeagueProjections(week?: number | null) {
     projectFor,
     statsFor,
     scoringMap: map,
-    loading: projections.isLoading || scoring.isLoading,
+    loading: projections.isLoading || scoring.isLoading || nflState.isLoading,
     format: scoring.data?.format ?? "half",
+    nflWeek: nflState.data?.week ?? null,
   };
 }

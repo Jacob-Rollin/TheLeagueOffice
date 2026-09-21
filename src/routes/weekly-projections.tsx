@@ -1,10 +1,24 @@
-import { useQuery } from "@tanstack/react-query";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
+import {
+  ProjectionListRow,
+  PROJECTION_OWNERSHIP_META,
+  PROJECTION_ROW_HEIGHT,
+  type ProjectionOwnership,
+  type ProjectionRowData,
+} from "@/components/research/ProjectionListRow";
 import {
   Select,
   SelectContent,
@@ -13,11 +27,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
-import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player, Pos } from "@/lib/draft";
+import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { scaleValue } from "@/lib/trade-engine";
 import { cn } from "@/lib/utils";
 
@@ -37,35 +52,10 @@ export const Route = createFileRoute("/weekly-projections")({
 });
 
 type PosFilter = "ALL" | "QB" | "RB" | "WR" | "TE" | "FLEX" | "K" | "DEF";
-type Ownership = "roster" | "taken" | "available";
 
 const POS_FILTERS: PosFilter[] = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
 const FLEX_OK = new Set<Pos>(["RB", "WR", "TE"]);
 const weeklyFallback = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
-
-const OWNERSHIP_META: Record<
-  Ownership,
-  { label: string; swatch: string; row: string; chip: string }
-> = {
-  roster: {
-    label: "Roster",
-    swatch: "bg-sky-100 border-sky-300",
-    row: "bg-sky-50/90",
-    chip: "bg-sky-100 text-sky-800",
-  },
-  taken: {
-    label: "Taken",
-    swatch: "bg-white border-slate-300",
-    row: "bg-white",
-    chip: "bg-slate-100 text-slate-600",
-  },
-  available: {
-    label: "Available",
-    swatch: "bg-emerald-100 border-emerald-300",
-    row: "bg-emerald-50/80",
-    chip: "bg-emerald-100 text-emerald-800",
-  },
-};
 
 function WeeklyProjectionsRoute() {
   const { activeLeagueId } = useActiveLeague();
@@ -80,26 +70,16 @@ function WeeklyProjectionsPage() {
   const brain = usePlayerBrain();
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
 
-  const nflWeek = useQuery({
-    queryKey: ["nfl-state-week"],
-    staleTime: 30 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
-        headers: { accept: "application/json" },
-      }).catch(() => null);
-      const json = res && res.ok ? ((await res.json()) as Record<string, unknown>) : null;
-      return Math.max(1, Number(json?.["week"] ?? 1) || 1);
-    },
-  });
-
+  const nflState = useNflState();
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   useEffect(() => {
-    if (nflWeek.data != null) setSelectedWeek(nflWeek.data);
-  }, [nflWeek.data, activeLeague?.id]);
+    if (nflState.data?.week != null) setSelectedWeek(nflState.data.week);
+  }, [nflState.data?.week, activeLeague?.id]);
 
-  const activeWeek = selectedWeek ?? nflWeek.data ?? 1;
+  const activeWeek = selectedWeek ?? nflState.data?.week ?? 1;
   const { projectFor, loading: projectionsLoading } = useLeagueProjections(activeWeek);
 
   const [posFilter, setPosFilter] = useState<PosFilter>("ALL");
@@ -107,6 +87,7 @@ function WeeklyProjectionsPage() {
   const [showTaken, setShowTaken] = useState(true);
   const [showAvailable, setShowAvailable] = useState(true);
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
 
   const myOwnedIds = useMemo(() => {
     const ids = new Set<string>();
@@ -114,15 +95,15 @@ function WeeklyProjectionsPage() {
     return ids;
   }, [myTeam?.players]);
 
-  const ownershipOf = (id: string): Ownership => {
-    if (myOwnedIds.has(id)) return "roster";
-    if (rosteredIds.has(id)) return "taken";
-    return "available";
-  };
+  const rows = useMemo((): ProjectionRowData[] => {
+    const q = deferredQuery.trim().toLowerCase();
+    const ownershipOf = (id: string): ProjectionOwnership => {
+      if (myOwnedIds.has(id)) return "roster";
+      if (rosteredIds.has(id)) return "taken";
+      return "available";
+    };
 
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = players
+    return players
       .filter((p) => {
         if (posFilter === "ALL") return true;
         if (posFilter === "FLEX") return FLEX_OK.has(p.pos);
@@ -147,31 +128,55 @@ function WeeklyProjectionsPage() {
         const entry = brain?.[p.id];
         const value = scaleValue(entry?.value ?? 0);
         const trend = entry?.trend ?? 0;
+        const badge = injuryMicroBadge(resolveInjuryStatus(p, brain));
+        const posLabel = p.pos === "DEF" ? "DST" : p.pos;
+        const team = p.team?.trim() || "FA";
+        const metaLine =
+          p.bye != null && p.bye > 0
+            ? `${posLabel} · ${team} · Bye ${p.bye}`
+            : `${posLabel} · ${team}`;
         return {
           player: p,
           proj,
           ownership: ownershipOf(p.id),
           value,
           trend,
+          injuryLabel: badge?.label ?? null,
+          injuryClass: badge?.className ?? null,
+          metaLine,
         };
       })
       .sort((a, b) => b.proj - a.proj || a.player.name.localeCompare(b.player.name));
-
-    return list;
   }, [
     players,
     posFilter,
     showRoster,
     showTaken,
     showAvailable,
-    query,
+    deferredQuery,
     projectFor,
     brain,
     myOwnedIds,
     rosteredIds,
   ]);
 
-  const loading = playersLoading || rostersLoading || projectionsLoading || nflWeek.isLoading;
+  const loading = playersLoading || rostersLoading || projectionsLoading || nflState.isLoading;
+
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const update = () => setScrollMargin(el.getBoundingClientRect().top + window.scrollY);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [loading, rows.length]);
+
+  const virtualizer = useWindowVirtualizer({
+    count: loading ? 0 : rows.length,
+    estimateSize: () => PROJECTION_ROW_HEIGHT,
+    overscan: 12,
+    scrollMargin,
+  });
   const weekOptions = Array.from({ length: 18 }, (_, i) => i + 1);
   const hasLeague = Boolean(activeLeague?.id);
 
@@ -196,7 +201,9 @@ function WeeklyProjectionsPage() {
         <div className="w-full max-w-[11rem] shrink-0">
           <Select
             value={String(activeWeek)}
-            onValueChange={(value) => setSelectedWeek(Math.max(1, Number(value) || 1))}
+            onValueChange={(value) =>
+              startTransition(() => setSelectedWeek(Math.max(1, Number(value) || 1)))
+            }
           >
             <SelectTrigger className="h-9 border-slate-200 bg-white text-sm font-semibold text-slate-800">
               <SelectValue placeholder="Select week" />
@@ -219,7 +226,7 @@ function WeeklyProjectionsPage() {
             <button
               key={pos}
               type="button"
-              onClick={() => setPosFilter(pos)}
+              onClick={() => startTransition(() => setPosFilter(pos))}
               className={cn(
                 "rounded-md border px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wider transition-colors",
                 active
@@ -242,13 +249,13 @@ function WeeklyProjectionsPage() {
               ["available", showAvailable, setShowAvailable],
             ] as const
           ).map(([key, on, setOn]) => {
-            const meta = OWNERSHIP_META[key];
+            const meta = PROJECTION_OWNERSHIP_META[key];
             return (
               <button
                 key={key}
                 type="button"
                 aria-pressed={on}
-                onClick={() => setOn((v) => !v)}
+                onClick={() => startTransition(() => setOn((v) => !v))}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wider transition-colors",
                   on
@@ -293,80 +300,25 @@ function WeeklyProjectionsPage() {
             No players match the current filters.
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {rows.map(({ player, proj, ownership, value, trend }, index) => {
-              const meta = OWNERSHIP_META[ownership];
-              const posLabel = player.pos === "DEF" ? "DST" : player.pos;
-              const team = player.team?.trim() || "FA";
-              const metaLine =
-                player.bye != null && player.bye > 0
-                  ? `${posLabel} · ${team} · Bye ${player.bye}`
-                  : `${posLabel} · ${team}`;
-              const trendUp = trend > 0.05;
-              const trendDown = trend < -0.05;
-              return (
-                <li key={player.id} className={cn("select-none", meta.row)}>
-                  <button
-                    type="button"
-                    onClick={() => openPlayer(player.id)}
-                    className="grid w-full cursor-pointer grid-cols-[2.5rem_minmax(0,1.35fr)_minmax(5rem,0.7fr)_minmax(7.5rem,0.95fr)_3.5rem] items-center gap-x-2 px-3 py-2.5 text-left transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 sm:grid-cols-[2.75rem_minmax(12rem,1.45fr)_minmax(5.5rem,0.75fr)_minmax(8.5rem,1fr)_4rem] sm:gap-x-4 sm:px-4"
-                  >
-                    <span className="text-center text-sm tabular-nums text-slate-500">
-                      {index + 1}
-                    </span>
-                    <span className="flex min-w-0 items-center gap-2.5">
-                      <PlayerAvatar
-                        id={player.id}
-                        pos={player.pos}
-                        team={player.team}
-                        name={player.name}
-                        className="size-9 flex-shrink-0 rounded-full border-2 border-slate-200 bg-white"
-                        logoClassName="size-3"
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate font-semibold text-blue-700">
-                          {player.name}
-                        </span>
-                        <span className="mt-0.5 block truncate text-[11px] font-medium uppercase text-slate-400">
-                          {metaLine}
-                        </span>
-                      </span>
-                    </span>
-                    <span className="flex justify-center">
-                      <span
-                        className={cn(
-                          "inline-flex items-center justify-center rounded px-2 py-0.5 text-center text-[9px] font-black uppercase tracking-wider",
-                          meta.chip,
-                        )}
-                      >
-                        {meta.label}
-                      </span>
-                    </span>
-                    <span className="inline-flex items-center justify-center gap-1.5 text-sm tabular-nums text-slate-500">
-                      <span>{value.toFixed(1)}</span>
-                      <span className="text-slate-300">/</span>
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-0.5 font-semibold",
-                          trendUp
-                            ? "text-emerald-600"
-                            : trendDown
-                              ? "text-rose-600"
-                              : "text-slate-400",
-                        )}
-                      >
-                        <span aria-hidden="true">{trendUp ? "▲" : trendDown ? "▼" : "–"}</span>
-                        <span>{Math.abs(trend).toFixed(1)}</span>
-                      </span>
-                    </span>
-                    <span className="text-right text-sm font-semibold tabular-nums text-slate-900">
-                      {proj.toFixed(1)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <div ref={listRef}>
+            <ul className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+              {virtualizer.getVirtualItems().map((item) => {
+                const row = rows[item.index]!;
+                return (
+                  <ProjectionListRow
+                    key={row.player.id}
+                    row={row}
+                    rank={item.index + 1}
+                    onOpen={openPlayer}
+                    style={{
+                      height: item.size,
+                      transform: `translateY(${item.start - scrollMargin}px)`,
+                    }}
+                  />
+                );
+              })}
+            </ul>
+          </div>
         )}
       </div>
 
