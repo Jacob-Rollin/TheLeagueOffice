@@ -11,6 +11,7 @@ import {
   WatchReplayButton,
 } from "@/components/playbook/MatchupReplayModal";
 import { playbookCardClass, resolveAvatarUrl } from "@/components/playbook/panels";
+import { SosStars } from "@/components/sos/SosStars";
 import type { MatchupReplayRequest } from "@/lib/matchup-replay";
 import {
   Select,
@@ -26,6 +27,7 @@ import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/draft";
 import { starterRequirements } from "@/lib/power-rankings";
@@ -39,8 +41,8 @@ import {
 } from "@/lib/rolling-live-projection";
 import { sosStarsFromRank, weeklySosMatchupFor, type SosMatchup } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
-import { currentSeason, fetchSchedule, type PlayersPayload, type ScheduleGame } from "@/lib/players-build";
-import { getCached, readCache } from "@/lib/sleeper-cache";
+import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
+import { getCached } from "@/lib/sleeper-cache";
 
 /** Sleeper ↔ ESPN abbreviation aliases for scoreboard lookups. */
 const TEAM_PROGRESS_ALIASES: Record<string, string[]> = {
@@ -74,56 +76,10 @@ export const Route = createFileRoute("/playbook/matchup")({
   component: PlaybookMatchupPage,
 });
 
-const weeklyFallback = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
+/** Never invent a weekly proj from season averages — Sleeper shows "—" instead. */
+const weeklyFallback = (_p: Player) => 0;
 const SKIP_STARTER_SLOTS = new Set(["BN", "BENCH", "IR", "IL", "TAXI", "RESERVE"]);
 const FLEX_OK = new Set(["RB", "WR", "TE"]);
-
-/** Sleeper zeros weekly projections for these inactive designations. */
-const ZERO_PROJ_INJURY = new Set([
-  "OUT",
-  "O",
-  "DOUBTFUL",
-  "D",
-  "IR",
-  "INJURED RESERVE",
-  "PUP",
-  "SUSPENDED",
-  "NA",
-  "INACTIVE",
-  "EXEMPT",
-]);
-
-/** Always-zero designations (IR slot / long-term inactive) — never show weekly upside. */
-const HARD_ZERO_PROJ_INJURY = new Set([
-  "IR",
-  "INJURED RESERVE",
-  "PUP",
-  "SUSPENDED",
-  "NA",
-  "INACTIVE",
-  "EXEMPT",
-]);
-
-function injuryToken(player: Player): string {
-  return (player.injury || player.injury_status || player.injuryStatus || "")
-    .trim()
-    .toUpperCase();
-}
-
-function sleeperZeroProjection(player: Player): boolean {
-  const raw = injuryToken(player);
-  if (!raw || /^(HEALTHY|ACTIVE|NONE|PROBABLE)$/.test(raw)) return false;
-  if (ZERO_PROJ_INJURY.has(raw)) return true;
-  return /\b(out|doubtful|injured reserve|\bir\b|pup|suspended|inactive)\b/i.test(raw);
-}
-
-/** IR / PUP / suspended etc. — projections stay 0.00 even after games finish. */
-function hardZeroProjection(player: Player): boolean {
-  const raw = injuryToken(player);
-  if (!raw) return false;
-  if (HARD_ZERO_PROJ_INJURY.has(raw)) return true;
-  return /\b(injured reserve|\bir\b|pup|suspended|inactive|exempt)\b/i.test(raw);
-}
 
 type LineMode = "current" | "optimal";
 
@@ -420,11 +376,13 @@ function buildCurrentStarterRows(
   playersById: Map<string, Player>,
 ): (Player | null)[] {
   if (!team) return labels.map(() => null);
+  // Week-scoped starters (including "" empty slots) — never fall back to the
+  // live roster or past-week lineups will bleed into historical views.
   if (starterIds.length) {
     return labels.map((_, i) => {
       const id = starterIds[i];
-      if (!id) return team.starters[i] ?? null;
-      return playersById.get(id) ?? team.starters[i] ?? null;
+      if (!id) return null;
+      return playersById.get(id) ?? null;
     });
   }
   if (team.starters.length) {
@@ -441,7 +399,7 @@ function buildCurrentStarterRows(
  * Optimal lineup value for a player this week:
  * - Final games → actual fantasy points (retrospective ideal)
  * - In progress → live rolling projection
- * - Yet to play → weekly projection (0 if Out/IR/bye on the current week)
+ * - Yet to play → Sleeper weekly projection (bye weeks stay 0)
  */
 function optimalPlayerValue(
   player: Player,
@@ -449,8 +407,6 @@ function optimalPlayerValue(
   pointsMap: Record<string, number>,
   progressByNflTeam: Map<string, NflGameProgress>,
   activeWeek: number,
-  /** Only apply Out/Doubtful zeroing on the live NFL week — not when looking ahead. */
-  applyOutZero: boolean,
 ): number {
   if (player.bye != null && Number(player.bye) === Number(activeWeek)) return 0;
 
@@ -458,10 +414,6 @@ function optimalPlayerValue(
   const phase = progress?.phase ?? "pre";
   const live = Math.max(0, Number(pointsMap[player.id] ?? 0) || 0);
   const baseline = projectFor(player.id) ?? weeklyFallback(player);
-
-  if (applyOutZero && hardZeroProjection(player)) return 0;
-  // Out/Doubtful with no points scored → not a start candidate (current week only).
-  if (applyOutZero && sleeperZeroProjection(player) && live < 0.005) return 0;
 
   if (phase === "post") return live;
 
@@ -495,13 +447,18 @@ function buildOptimalStarterRows(
     pointsMap: Record<string, number>;
     progressByNflTeam: Map<string, NflGameProgress>;
     activeWeek: number;
-    applyOutZero?: boolean;
+    /** Week-scoped IR ids when browsing historical matchups. */
+    irIds?: string[];
+    /** Week-scoped roster pool; falls back to live team.players. */
+    playerPool?: Player[];
   },
 ): (Player | null)[] {
   if (!team) return labels.map(() => null);
-  const irIds = new Set((team.ir ?? []).map((p) => p.id));
-  const applyOutZero = opts.applyOutZero !== false;
-  const pool = team.players
+  const irIds = new Set(
+    (opts.irIds?.length ? opts.irIds : (team.ir ?? []).map((p) => p.id)).filter(Boolean),
+  );
+  const source = opts.playerPool?.length ? opts.playerPool : team.players;
+  const pool = source
     .filter((p) => !irIds.has(p.id))
     .map((p) => ({
       player: p,
@@ -511,7 +468,6 @@ function buildOptimalStarterRows(
         opts.pointsMap,
         opts.progressByNflTeam,
         opts.activeWeek,
-        applyOutZero,
       ),
     }))
     .sort((a, b) => b.value - a.value || a.player.name.localeCompare(b.player.name));
@@ -556,8 +512,14 @@ function padPairRows(
   return rows;
 }
 
-function posRankLabel(player: Player): string | null {
-  const rank = Number(player.posRank);
+function posRankLabel(
+  player: Player,
+  sleeperPosRank?: number | null,
+): string | null {
+  const rank =
+    sleeperPosRank != null && Number.isFinite(sleeperPosRank) && sleeperPosRank > 0
+      ? sleeperPosRank
+      : Number(player.posRank);
   if (!Number.isFinite(rank) || rank <= 0 || rank >= 999) return null;
   return `${player.pos}${Math.round(rank)}`;
 }
@@ -575,28 +537,6 @@ function formatWinnerFirstBoxScore(label: string): string {
   if (!Number.isFinite(aScore) || !Number.isFinite(bScore)) return raw;
   if (aScore >= bScore) return `${aTeam} ${aScore} - ${bTeam} ${bScore}`;
   return `${bTeam} ${bScore} - ${aTeam} ${aScore}`;
-}
-
-function SosStars({ stars }: { stars: number | null }) {
-  const filled =
-    stars != null && Number.isFinite(stars)
-      ? Math.max(0, Math.min(5, Math.round(stars)))
-      : 0;
-  return (
-    <span className="inline-flex shrink-0 items-center" aria-label={`${filled} of 5 matchup stars`}>
-      {Array.from({ length: 5 }, (_, i) => (
-        <span
-          key={`sos-star-${i}`}
-          className={cn(
-            i > 0 ? "ml-0.5" : undefined,
-            i < filled ? "font-bold text-amber-500" : "text-slate-200",
-          )}
-        >
-          {"\u2605"}
-        </span>
-      ))}
-    </span>
-  );
 }
 
 /**
@@ -791,7 +731,7 @@ function MatchupScoreColumn({
         )}
       >
         {checkSide === "left" ? check : null}
-        <span>{projPts != null ? projPts.toFixed(2) : "--"}</span>
+        <span>{projPts != null ? projPts.toFixed(2) : ""}</span>
         {checkSide === "right" ? check : null}
       </p>
     </div>
@@ -860,6 +800,7 @@ function LeftPlayerCard({
   showCheck = false,
   onOpenPlayer,
 }: SideCardProps) {
+  const { rankFor } = useLeagueProjections();
   const isFinal = phase === "post";
   const isLocked = phase === "post" || phase === "in";
   const shell = cn(
@@ -886,12 +827,13 @@ function LeftPlayerCard({
   const teamAbbr = (player.team || "FA").toUpperCase();
   const line2 = isFinal ? "Final" : scheduleLabel.trim() || "TBD";
   const line3Final = isFinal ? formatWinnerFirstBoxScore(boxScoreLabel) : "";
+  const sleeperPos = rankFor(player.id).pos;
 
   return (
     <div className={shell}>
       <MatchupPlayerThumb player={player} onOpen={open} />
       <div className="flex min-w-0 flex-1 flex-col items-start justify-center pl-3.5 text-left">
-        <p className="flex max-w-full items-center gap-1.5 truncate text-left text-[15px] leading-none">
+        <p className="flex max-w-full items-center gap-1.5 truncate text-left text-[15px] leading-snug">
           <button
             type="button"
             onClick={open}
@@ -925,7 +867,7 @@ function LeftPlayerCard({
           <SosStarRankLine
             stars={sosStars}
             opponent={sosOpponent}
-            posRank={posRankLabel(player)}
+            posRank={posRankLabel(player, sleeperPos)}
             align="left"
           />
         )}
@@ -958,6 +900,7 @@ function RightPlayerCard({
   showCheck = false,
   onOpenPlayer,
 }: SideCardProps) {
+  const { rankFor } = useLeagueProjections();
   const isFinal = phase === "post";
   const isLocked = phase === "post" || phase === "in";
   const shell = cn(
@@ -984,6 +927,7 @@ function RightPlayerCard({
   const teamAbbr = (player.team || "FA").toUpperCase();
   const line2 = isFinal ? "Final" : scheduleLabel.trim() || "TBD";
   const line3Final = isFinal ? formatWinnerFirstBoxScore(boxScoreLabel) : "";
+  const sleeperPos = rankFor(player.id).pos;
 
   return (
     <div className={shell}>
@@ -996,7 +940,7 @@ function RightPlayerCard({
         checkSide="right"
       />
       <div className="flex min-w-0 flex-1 flex-col items-end justify-center pr-3.5 text-right">
-        <p className="flex max-w-full items-center justify-end gap-1.5 truncate text-right text-[15px] leading-none">
+        <p className="flex max-w-full items-center justify-end gap-1.5 truncate text-right text-[15px] leading-snug">
           <button
             type="button"
             onClick={open}
@@ -1030,7 +974,7 @@ function RightPlayerCard({
           <SosStarRankLine
             stars={sosStars}
             opponent={sosOpponent}
-            posRank={posRankLabel(player)}
+            posRank={posRankLabel(player, sleeperPos)}
             align="right"
           />
         )}
@@ -1171,26 +1115,7 @@ function StartersSectionHeader({
 }
 
 const SCHEDULE_CACHE_KEY = "schedule-v1";
-const PLAYERS_CACHE_KEY = "players-v1";
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Same defensive-rank catalog used by player popup SoS fallback. */
-async function loadDefenseRanks(): Promise<Map<string, number>> {
-  const ranks = new Map<string, number>();
-  try {
-    const hit = await readCache<PlayersPayload>(PLAYERS_CACHE_KEY);
-    const defenses = (hit?.data?.players ?? []).filter((p) => p.pos === "DEF");
-    [...defenses]
-      .sort((a, b) => b.proj.half - a.proj.half)
-      .forEach((d, i) => {
-        const team = (d.team || "").toUpperCase();
-        if (team) ranks.set(team, i + 1);
-      });
-  } catch {
-    /* ignore */
-  }
-  return ranks;
-}
 
 async function loadScheduleGames(): Promise<ScheduleGame[]> {
   try {
@@ -1208,11 +1133,8 @@ async function loadScheduleGames(): Promise<ScheduleGame[]> {
   }
 }
 
-/** Build team → week-by-week SoS rows from the native NFL schedule catalog. */
-function buildScheduleSosByTeam(
-  games: ScheduleGame[],
-  ranks: Map<string, number>,
-): Map<string, SosMatchup[]> {
+/** Team → week-by-week opponents from the NFL schedule (no invented SOS ranks). */
+function buildScheduleOppByTeam(games: ScheduleGame[]): Map<string, SosMatchup[]> {
   const byTeam = new Map<string, SosMatchup[]>();
   for (const g of games) {
     const home = (g.home || "").toUpperCase();
@@ -1220,12 +1142,12 @@ function buildScheduleSosByTeam(
     if (!g.week || g.week > 18) continue;
     if (home) {
       const rows = byTeam.get(home) ?? [];
-      rows.push({ week: g.week, opp: away, rank: ranks.get(away) ?? null, pointsAllowed: null });
+      rows.push({ week: g.week, opp: away, rank: null, pointsAllowed: null });
       byTeam.set(home, rows);
     }
     if (away) {
       const rows = byTeam.get(away) ?? [];
-      rows.push({ week: g.week, opp: home, rank: ranks.get(home) ?? null, pointsAllowed: null });
+      rows.push({ week: g.week, opp: home, rank: null, pointsAllowed: null });
       byTeam.set(away, rows);
     }
   }
@@ -1246,6 +1168,7 @@ function PlaybookMatchupPage() {
   const { teams, myTeam, rosterPositions, loading: rostersLoading } = useLeagueRosters(players);
   const { standings } = useActiveStandings();
   const brain = usePlayerBrain();
+  const { rankFor: positionalDefenseRank } = usePositionalDefenseRanks();
   const [scheduleSosByTeam, setScheduleSosByTeam] = useState<Map<string, SosMatchup[]>>(
     () => new Map(),
   );
@@ -1253,9 +1176,9 @@ function PlaybookMatchupPage() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [games, ranks] = await Promise.all([loadScheduleGames(), loadDefenseRanks()]);
+      const games = await loadScheduleGames();
       if (!alive) return;
-      setScheduleSosByTeam(buildScheduleSosByTeam(games, ranks));
+      setScheduleSosByTeam(buildScheduleOppByTeam(games));
     })().catch(() => {
       /* silent */
     });
@@ -1273,7 +1196,7 @@ function PlaybookMatchupPage() {
   const [replayOpen, setReplayOpen] = useState(false);
 
   const nflWeek = useQuery({
-    queryKey: ["nfl-state-week"],
+    queryKey: ["nfl-state-week", "v3-week"],
     staleTime: 30 * 60 * 1000,
     retry: false,
     queryFn: async () => {
@@ -1291,10 +1214,6 @@ function PlaybookMatchupPage() {
   }, [nflWeek.data, activeLeagueId]);
 
   const activeWeek = selectedWeek ?? nflWeek.data ?? 1;
-  // Live injury designations (Out / IR / etc.) apply to the current NFL week
-  // only. Past weeks keep that week's projected points; looking ahead does too.
-  const applyLiveInjuryZero =
-    nflWeek.data != null && Number(activeWeek) === Number(nflWeek.data);
   const { projectFor, scoringMap, loading: projectionsLoading } = useLeagueProjections(activeWeek);
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
@@ -1451,14 +1370,36 @@ function PlaybookMatchupPage() {
 
   const slotLabels = useMemo(() => starterSlotLabels(rosterPositions), [rosterPositions]);
 
+  const resolvePlayersByIds = useCallback(
+    (ids: string[]): Player[] => {
+      const out: Player[] = [];
+      const seen = new Set<string>();
+      for (const id of ids) {
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const hit = playersById.get(id);
+        if (hit) out.push(hit);
+      }
+      return out;
+    },
+    [playersById],
+  );
+
   const starterRows = useMemo(() => {
+    const minePool = weeklyPair.hasWeeklyRoster
+      ? resolvePlayersByIds(weeklyPair.myPlayerIds)
+      : undefined;
+    const oppPool = weeklyPair.hasWeeklyRoster
+      ? resolvePlayersByIds(weeklyPair.oppPlayerIds)
+      : undefined;
     const minePlayers =
       myMode === "optimal"
         ? buildOptimalStarterRows(leftTeam, slotLabels, projectFor, {
             pointsMap: weeklyPair.myPlayerPoints,
             progressByNflTeam,
             activeWeek,
-            applyOutZero: applyLiveInjuryZero,
+            irIds: weeklyPair.myIrIds,
+            ...(minePool ? { playerPool: minePool } : {}),
           })
         : buildCurrentStarterRows(
             leftTeam,
@@ -1472,7 +1413,8 @@ function PlaybookMatchupPage() {
             pointsMap: weeklyPair.oppPlayerPoints,
             progressByNflTeam,
             activeWeek,
-            applyOutZero: applyLiveInjuryZero,
+            irIds: weeklyPair.oppIrIds,
+            ...(oppPool ? { playerPool: oppPool } : {}),
           })
         : buildCurrentStarterRows(
             oppTeam,
@@ -1497,10 +1439,15 @@ function PlaybookMatchupPage() {
     weeklyPair.oppStarterIds,
     weeklyPair.myPlayerPoints,
     weeklyPair.oppPlayerPoints,
+    weeklyPair.myPlayerIds,
+    weeklyPair.oppPlayerIds,
+    weeklyPair.myIrIds,
+    weeklyPair.oppIrIds,
+    weeklyPair.hasWeeklyRoster,
     playersById,
     progressByNflTeam,
     activeWeek,
-    applyLiveInjuryZero,
+    resolvePlayersByIds,
   ]);
 
   const starterIdSets = useMemo(() => {
@@ -1512,21 +1459,6 @@ function PlaybookMatchupPage() {
     );
     return { mine, opp };
   }, [starterRows]);
-
-  const resolvePlayersByIds = useCallback(
-    (ids: string[]): Player[] => {
-      const out: Player[] = [];
-      const seen = new Set<string>();
-      for (const id of ids) {
-        if (!id || seen.has(id)) continue;
-        seen.add(id);
-        const hit = playersById.get(id);
-        if (hit) out.push(hit);
-      }
-      return out;
-    },
-    [playersById],
-  );
 
   const benchRows = useMemo(() => {
     const weekBench = (playerIds: string[], starterIds: Set<string>, irIds: string[]) => {
@@ -1586,8 +1518,7 @@ function PlaybookMatchupPage() {
   ]);
 
   const irRows = useMemo(() => {
-    // Prefer week-scoped IR ids. For past Sleeper weeks this is empty (host
-    // does not expose historical reserve), so we do not leak today's IR.
+    // Week-scoped IR ids (live reserve for current week; reconstructed for past).
     if (weeklyPair.hasWeeklyRoster) {
       return padPairRows(
         resolvePlayersByIds(weeklyPair.myIrIds),
@@ -1665,36 +1596,49 @@ function PlaybookMatchupPage() {
   };
 
   /**
-   * True weekly SoS: player_brain positional matchup group first (same as
-   * player popup), then native schedule + defense-rank fallback.
+   * True weekly SoS: player_brain positional matchup group only
+   * (fantasy points allowed vs this player's position). Schedule catalog
+   * supplies opponent abbreviation when brain lacks a row — never DEF output ranks.
+   * Stars stay visible for finished weeks when browsing history.
    */
   const weeklySosHitFor = (
     player: Player | null,
   ): { stars: number | null; opp: string | null } => {
     if (!player) return { stars: null, opp: null };
-    if (phaseFor(player) === "post") return { stars: null, opp: null };
-
-    const brainHit = weeklySosMatchupFor(brain, player.id, activeWeek);
-    if (brainHit) {
-      return {
-        stars: sosStarsFromRank(brainHit.rank),
-        opp: (brainHit.opp ?? "").trim().toUpperCase() || null,
-      };
-    }
 
     const team = (player.team || "").trim().toUpperCase();
     const schedHit = team
       ? scheduleSosByTeam.get(team)?.find((m) => Number(m.week) === Number(activeWeek))
       : undefined;
-    if (schedHit) {
+    const progressOpp = (progressFor(player)?.opponentAbbr ?? "").trim().toUpperCase();
+
+    const brainHit = weeklySosMatchupFor(brain, player.id, activeWeek);
+    if (
+      brainHit &&
+      brainHit.rank != null &&
+      Number.isFinite(Number(brainHit.rank)) &&
+      Number(brainHit.rank) > 0
+    ) {
       return {
-        stars: sosStarsFromRank(schedHit.rank),
-        opp: (schedHit.opp ?? "").trim().toUpperCase() || null,
+        stars: sosStarsFromRank(brainHit.rank),
+        opp: (brainHit.opp ?? "").trim().toUpperCase() || progressOpp || null,
       };
     }
 
-    const progressOpp = (progressFor(player)?.opponentAbbr ?? "").trim().toUpperCase();
-    return { stars: null, opp: progressOpp || null };
+    const opp =
+      (brainHit?.opp ?? "").trim().toUpperCase() ||
+      (schedHit?.opp ?? "").trim().toUpperCase() ||
+      progressOpp ||
+      null;
+    const positionalRank =
+      schedHit?.rank != null && Number.isFinite(Number(schedHit.rank)) && Number(schedHit.rank) > 0
+        ? Number(schedHit.rank)
+        : positionalDefenseRank(player.pos, opp);
+
+    return {
+      stars: sosStarsFromRank(positionalRank),
+      opp,
+    };
   };
 
   const sosStarsFor = (player: Player | null): number | null => weeklySosHitFor(player).stars;
@@ -1704,28 +1648,22 @@ function PlaybookMatchupPage() {
   const projPtsFor = (
     player: Player | null,
     pointsMap: Record<string, number>,
-    opts?: { slot?: string },
+    _opts?: { slot?: string },
   ): number | null => {
     if (!player) return null;
 
-    // IR roster slot always stays at 0.00. Live IR/Out status only zeros on
-    // the current NFL week — past weeks keep that week's projected points.
-    if (opts?.slot === "IR" || (applyLiveInjuryZero && hardZeroProjection(player))) {
-      return 0;
-    }
+    // Bye / no Sleeper weekly line → "—" (not 0.00, not a season-avg guess).
+    if (player.bye != null && Number(player.bye) === Number(activeWeek)) return null;
+
+    // Trust Sleeper weekly projections even when the player still carries Out/IR
+    // tags — when Sleeper publishes a number we show it; when they publish "—"
+    // projectFor is null and we leave the dash.
+    const baseline = projectFor(player.id);
+    if (baseline == null) return null;
 
     const live = Number(pointsMap[player.id] ?? 0) || 0;
     const progress = progressForNflTeam(player.team, progressByNflTeam);
     const phase = progress?.phase ?? "pre";
-
-    // Out / Doubtful on the current week: stay at 0.00 unless they already
-    // scored (e.g. marked Out for next week after playing). Looking ahead
-    // keeps the future week's projected points (same as the player popup).
-    if (applyLiveInjuryZero && sleeperZeroProjection(player) && live < 0.005) {
-      return 0;
-    }
-
-    const baseline = projectFor(player.id) ?? weeklyFallback(player);
 
     // Once the NFL game is final, lock the grey line to the original weekly
     // projection (not the live rolling figure that collapses to actuals).
@@ -1871,39 +1809,20 @@ function PlaybookMatchupPage() {
 
   /** Original weekly proj totals (not live-collapsed), for the header proj line. */
   const teamOrigProj = useMemo(() => {
-    const sumBaselines = (
-      starters: (Player | null)[],
-      pointsMap: Record<string, number>,
-    ) => {
+    const sumBaselines = (starters: (Player | null)[]) => {
       let total = 0;
       for (const player of starters) {
         if (!player) continue;
-        if (applyLiveInjuryZero && hardZeroProjection(player)) continue;
-        const live = Number(pointsMap[player.id] ?? 0) || 0;
-        // Out/Doubtful who never scored this week stay out of the team proj total.
-        if (applyLiveInjuryZero && sleeperZeroProjection(player) && live < 0.005) continue;
+        if (player.bye != null && Number(player.bye) === Number(activeWeek)) continue;
         total += projectFor(player.id) ?? weeklyFallback(player);
       }
       return Math.round(total * 100) / 100;
     };
     return {
-      mine: sumBaselines(
-        starterRows.map((r) => r.mine),
-        weeklyPair.myPlayerPoints,
-      ),
-      opp: sumBaselines(
-        starterRows.map((r) => r.opp),
-        weeklyPair.oppPlayerPoints,
-      ),
+      mine: sumBaselines(starterRows.map((r) => r.mine)),
+      opp: sumBaselines(starterRows.map((r) => r.opp)),
     };
-  }, [
-    starterRows,
-    projectFor,
-    weeklyPair.myPlayerPoints,
-    weeklyPair.oppPlayerPoints,
-    applyLiveInjuryZero,
-  ]);
-
+  }, [starterRows, projectFor, activeWeek]);
   const weekStarted = useMemo(() => {
     if (headerLivePoints.mine > 0.005 || headerLivePoints.opp > 0.005) return true;
     for (const row of starterRows) {

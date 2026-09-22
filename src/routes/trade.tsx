@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
+import { PlayerModal } from "@/components/draft/PlayerModal";
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { grade } from "@/lib/evaluate";
@@ -246,6 +247,7 @@ function TradePage() {
   const [give, setGive] = useState<Player[]>([]);
   const [get, setGet] = useState<Player[]>([]);
   const [tab, setTab] = useState<"overview" | "stats">("overview");
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const scoring = draft.settings.scoring;
 
   const selected = useMemo(() => [...give, ...get], [give, get]);
@@ -605,6 +607,7 @@ function TradePage() {
             players={[]}
             selectedIds={new Set()}
             onPick={() => {}}
+            onOpenPlayer={() => {}}
           />
         </SidebarLock>
       ) : (
@@ -614,6 +617,7 @@ function TradePage() {
           players={userRoster}
           selectedIds={new Set(give.map((p) => p.id))}
           onPick={(p) => setGive((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+          onOpenPlayer={(id) => setSelectedPlayerId(id)}
           brain={brain}
         />
       )}
@@ -743,18 +747,24 @@ function TradePage() {
 
       {locked ? (
         <SidebarLock authenticated={Boolean(user)} onSignIn={() => setAuthOpen(true)}>
-          <OtherTeamsColumn teams={[]} selectedIds={new Set()} onPick={() => {}} />
+          <OtherTeamsColumn teams={[]} selectedIds={new Set()} onPick={() => {}} onOpenPlayer={() => {}} />
         </SidebarLock>
       ) : (
         <OtherTeamsColumn
           teams={leagueTeams.map((t) => ({ ...t, players: opponentRosters[t.key] ?? t.players }))}
           selectedIds={new Set(get.map((p) => p.id))}
           onPick={(p) => setGet((s) => (s.some((x) => x.id === p.id) ? s : [...s, p]))}
+          onOpenPlayer={(id) => setSelectedPlayerId(id)}
           brain={brain}
         />
       )}
 
       <AuthDialog open={authOpen} mode="signin" onOpenChange={setAuthOpen} />
+      <PlayerModal
+        id={selectedPlayerId}
+        onClose={() => setSelectedPlayerId(null)}
+        onSelectPlayer={setSelectedPlayerId}
+      />
     </div>
 
   );
@@ -879,11 +889,13 @@ function RosterRow({
   player,
   selected,
   onPick,
+  onOpenPlayer,
   brain,
 }: {
   player: Player;
   selected: boolean;
   onPick: (p: Player) => void;
+  onOpenPlayer: (id: string) => void;
   brain?: BrainMatrix | null | undefined;
 }) {
   const badge = injuryMicroBadge(resolveInjuryStatus(player, brain));
@@ -891,15 +903,21 @@ function RosterRow({
     Boolean,
   ) as string[];
   return (
-    <button
-      type="button"
-      disabled={selected}
-      onClick={() => onPick(player)}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpenPlayer(player.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenPlayer(player.id);
+        }
+      }}
       className={cn(
-        "group relative flex w-full items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors",
+        "group relative flex w-full cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left transition-colors",
         selected
-          ? "cursor-default opacity-50"
-          : "hover:border-border hover:bg-surface focus-visible:border-border",
+          ? "opacity-50"
+          : "hover:border-border hover:bg-surface focus-visible:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
       )}
     >
       <PlayerAvatar
@@ -928,18 +946,24 @@ function RosterRow({
           <span className="truncate">{meta.join(" · ")}</span>
         </span>
       </span>
-      <span
-        aria-hidden
+      <button
+        type="button"
+        disabled={selected}
+        aria-label={selected ? `${player.name} already in trade` : `Add ${player.name} to trade`}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!selected) onPick(player);
+        }}
         className={cn(
           "absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded border border-input bg-secondary/40 text-sm font-semibold transition-colors",
           selected
-            ? "bg-muted text-muted-foreground"
-            : "text-black group-hover:bg-primary group-hover:text-primary-foreground",
+            ? "cursor-default bg-muted text-muted-foreground"
+            : "text-black hover:bg-primary hover:text-primary-foreground group-hover:bg-primary group-hover:text-primary-foreground",
         )}
       >
         {selected ? "✓" : "+"}
-      </span>
-    </button>
+      </button>
+    </div>
   );
 }
 
@@ -949,6 +973,7 @@ function RosterColumn({
   players,
   selectedIds,
   onPick,
+  onOpenPlayer,
   brain,
 }: {
   title: string;
@@ -956,6 +981,7 @@ function RosterColumn({
   players: Player[];
   selectedIds: Set<string>;
   onPick: (p: Player) => void;
+  onOpenPlayer: (id: string) => void;
   brain?: BrainMatrix | null | undefined;
 }) {
   return (
@@ -963,7 +989,7 @@ function RosterColumn({
       <p className="eyebrow">{title}</p>
       <p className="truncate text-sm font-semibold">{subtitle}</p>
       <p className="mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-        Tap to add to “You give”
+        Tap player for details · + to add
       </p>
       {players.length === 0 ? (
         <p className="mt-3 text-xs text-muted-foreground">
@@ -972,7 +998,14 @@ function RosterColumn({
       ) : (
         <div className="mt-2 space-y-0.5">
           {players.map((p) => (
-            <RosterRow key={p.id} player={p} selected={selectedIds.has(p.id)} onPick={onPick} brain={brain} />
+            <RosterRow
+              key={p.id}
+              player={p}
+              selected={selectedIds.has(p.id)}
+              onPick={onPick}
+              onOpenPlayer={onOpenPlayer}
+              brain={brain}
+            />
           ))}
         </div>
       )}
@@ -984,11 +1017,13 @@ function OtherTeamsColumn({
   teams,
   selectedIds,
   onPick,
+  onOpenPlayer,
   brain,
 }: {
   teams: { key: string; name: string; owner: string; players: Player[] }[];
   selectedIds: Set<string>;
   onPick: (p: Player) => void;
+  onOpenPlayer: (id: string) => void;
   brain?: BrainMatrix | null | undefined;
 }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -1039,6 +1074,7 @@ function OtherTeamsColumn({
                   player={p}
                   selected={selectedIds.has(p.id)}
                   onPick={onPick}
+                  onOpenPlayer={onOpenPlayer}
                   brain={brain}
                 />
               ))
@@ -1049,7 +1085,7 @@ function OtherTeamsColumn({
         <>
           <p className="eyebrow">League rosters</p>
           <p className="mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-            Tap to add to “You receive”
+            Tap player for details · + to add
           </p>
           <div className="mt-2 space-y-1">
             {teams.length === 0 && (
@@ -1095,6 +1131,7 @@ function OtherTeamsColumn({
                           player={p}
                           selected={selectedIds.has(p.id)}
                           onPick={onPick}
+                          onOpenPlayer={onOpenPlayer}
                           brain={brain}
                         />
                       ))

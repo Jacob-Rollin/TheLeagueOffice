@@ -31,7 +31,7 @@ import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections"
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import type { Player, Pos } from "@/lib/draft";
+import type { Pos } from "@/lib/draft";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { scaleValue } from "@/lib/trade-engine";
 import { cn } from "@/lib/utils";
@@ -55,7 +55,6 @@ type PosFilter = "ALL" | "QB" | "RB" | "WR" | "TE" | "FLEX" | "K" | "DEF";
 
 const POS_FILTERS: PosFilter[] = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
 const FLEX_OK = new Set<Pos>(["RB", "WR", "TE"]);
-const weeklyFallback = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
 
 function WeeklyProjectionsRoute() {
   const { activeLeagueId } = useActiveLeague();
@@ -124,7 +123,8 @@ function WeeklyProjectionsPage() {
         );
       })
       .map((p) => {
-        const proj = projectFor(p.id) ?? weeklyFallback(p);
+        // Sleeper weekly line only — never invent season÷17 when Sleeper shows "—".
+        const proj = projectFor(p.id);
         const entry = brain?.[p.id];
         const value = scaleValue(entry?.value ?? 0);
         const trend = entry?.trend ?? 0;
@@ -146,7 +146,10 @@ function WeeklyProjectionsPage() {
           metaLine,
         };
       })
-      .sort((a, b) => b.proj - a.proj || a.player.name.localeCompare(b.player.name));
+      .sort(
+        (a, b) =>
+          (b.proj ?? -1) - (a.proj ?? -1) || a.player.name.localeCompare(b.player.name),
+      );
   }, [
     players,
     posFilter,

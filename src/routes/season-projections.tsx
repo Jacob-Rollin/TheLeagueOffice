@@ -41,11 +41,14 @@ type PosFilter = "ALL" | "QB" | "RB" | "WR" | "TE" | "FLEX" | "K" | "DEF";
 const POS_FILTERS: PosFilter[] = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
 const FLEX_OK = new Set<Pos>(["RB", "WR", "TE"]);
 
-function seasonProjFor(player: Player, format: Scoring): number {
+function seasonProjFor(player: Player, format: Scoring): number | null {
   const bucket = player.proj;
-  if (!bucket) return 0;
-  const raw = bucket[format] ?? bucket.half ?? bucket.ppr ?? bucket.std ?? 0;
-  return Math.max(0, Number(raw) || 0);
+  if (!bucket) return null;
+  const raw = bucket[format] ?? bucket.half ?? bucket.ppr ?? bucket.std;
+  const n = Number(raw);
+  // Catalog is built from Sleeper season pts_* — treat missing/zero as "—".
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
 }
 
 function SeasonProjectionsRoute() {
@@ -131,7 +134,10 @@ function SeasonProjectionsPage() {
           metaLine,
         };
       })
-      .sort((a, b) => b.proj - a.proj || a.player.name.localeCompare(b.player.name));
+      .sort(
+        (a, b) =>
+          (b.proj ?? -1) - (a.proj ?? -1) || a.player.name.localeCompare(b.player.name),
+      );
   }, [
     players,
     posFilter,

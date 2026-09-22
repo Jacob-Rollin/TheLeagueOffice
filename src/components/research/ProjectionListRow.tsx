@@ -8,7 +8,8 @@ export type ProjectionOwnership = "roster" | "taken" | "available";
 
 export type ProjectionRowData = {
   player: Player;
-  proj: number;
+  /** Null when Sleeper has no projection line ("—"). */
+  proj: number | null;
   ownership: ProjectionOwnership;
   value: number;
   trend: number;
@@ -119,7 +120,7 @@ export const ProjectionListRow = memo(function ProjectionListRow({
           </span>
         </span>
         <span className="text-right text-sm font-semibold tabular-nums text-slate-900">
-          {row.proj.toFixed(1)}
+          {row.proj != null && Number.isFinite(row.proj) ? row.proj.toFixed(2) : "—"}
         </span>
       </button>
     </li>

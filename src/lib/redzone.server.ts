@@ -297,7 +297,7 @@ function toRow(
     recTd: agg.recTd,
     fumLost: agg.fumLost,
   });
-  const fpts = Math.round(fptsRaw * 10) / 10;
+  const fpts = Math.round(fptsRaw * 100) / 100;
   return {
     id: sleeperId,
     name: agg.name,
@@ -307,7 +307,7 @@ function toRow(
     games,
     fumLost: agg.fumLost,
     fpts,
-    fptsPerGame: games > 0 ? Math.round((fptsRaw / games) * 10) / 10 : 0,
+    fptsPerGame: games > 0 ? Math.round((fptsRaw / games) * 100) / 100 : 0,
     passCmp: agg.passCmp,
     passAtt: agg.passAtt,
     passYds: Math.round(agg.passYds),

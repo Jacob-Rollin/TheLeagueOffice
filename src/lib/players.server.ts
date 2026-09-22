@@ -412,7 +412,7 @@ export async function loadFantasyPointsAllowed(
         if (team.startsWith("__")) continue;
         const cell = byPos.get(pos);
         if (cell && cell.games > 0) {
-          scores.set(team, Math.round((cell.pts / cell.games) * 10) / 10);
+          scores.set(team, Math.round((cell.pts / cell.games) * 100) / 100);
         }
       }
     }
@@ -457,7 +457,8 @@ function sosGrade(avgRank: number): string {
 }
 
 async function buildSosFor(team: string, pos: Pos, season: string) {
-  if (team === "FA" || pos === "DEF") return null;
+  if (team === "FA") return null;
+  // DEF uses the same board: fantasy points allowed to defenses by each offense.
   const prev = String(Number(season) - 1);
   const [activeAllowed, previousAllowed, schedule] = await Promise.all([
     defenseAllowed(season).catch(() => null),
@@ -468,19 +469,20 @@ async function buildSosFor(team: string, pos: Pos, season: string) {
   if (!allowed || allowed.size === 0) return null;
 
   const perGame = new Map<string, number>();
-  for (const [team, byPos] of allowed) {
+  for (const [defTeam, byPos] of allowed) {
     const cell = byPos.get(pos);
-    if (cell && cell.games > 0) perGame.set(team, cell.pts / cell.games);
+    if (cell && cell.games > 0) perGame.set(defTeam, cell.pts / cell.games);
   }
   if (perGame.size === 0) return null;
 
   // rank 1 = stingiest defense against this position (hardest matchup)
+  // For DEF: rank 1 = offense that yields the fewest fantasy points to defenses.
   const ranked = [...perGame.entries()].sort((a, b) => a[1] - b[1]);
-  const rankOf = new Map(ranked.map(([team], i) => [team, i + 1]));
+  const rankOf = new Map(ranked.map(([defTeam], i) => [defTeam, i + 1]));
 
   const opponents = schedule
     .filter((g) => g.home === team || g.away === team)
-    .filter((g) => g.week <= 17)
+    .filter((g) => g.week >= 1 && g.week <= 18)
     .sort((a, b) => a.week - b.week)
     .map((g) => {
       const opp = g.home === team ? g.away : g.home;
@@ -489,27 +491,46 @@ async function buildSosFor(team: string, pos: Pos, season: string) {
         week: g.week,
         opp,
         rank: rankOf.get(opp) ?? null,
-        pointsAllowed: pointsAllowed === undefined ? null : Math.round(pointsAllowed * 10) / 10,
+        pointsAllowed: pointsAllowed === undefined ? null : Math.round(pointsAllowed * 100) / 100,
       };
     });
 
   const ranks = opponents.map((o) => o.rank).filter((r): r is number => r !== null);
   const avg = ranks.length ? ranks.reduce((a, b) => a + b, 0) / ranks.length : null;
+  const schedulePa = opponents
+    .map((o) => o.pointsAllowed)
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  const avgPa =
+    schedulePa.length > 0
+      ? schedulePa.reduce((a, b) => a + b, 0) / schedulePa.length
+      : null;
 
   return {
     grade: avg === null ? "Unknown" : sosGrade(avg),
     rank: avg === null ? null : Math.round(avg),
-    pointsAllowedPerGame:
-      avg === null ? null : Math.round((perGame.get(team) ?? 0) * 10) / 10,
+    pointsAllowedPerGame: avgPa === null ? null : Math.round(avgPa * 100) / 100,
     opponents,
   };
 }
+
+export type SosMatrixEntry = NonNullable<PlayerDetail["sos"]>;
 
 async function buildSos(player: Player, season: string) {
   return buildSosFor(player.team, player.pos, season);
 }
 
-export type SosMatrixEntry = NonNullable<PlayerDetail["sos"]>;
+/** Public SOS builder for a team × position (positional FPA ranks). */
+export async function loadTeamPosSos(
+  team: string,
+  pos: string,
+  season = currentSeason(),
+): Promise<SosMatrixEntry | null> {
+  const upperTeam = (team || "").toUpperCase();
+  const upperPos = (pos || "").toUpperCase() as Pos;
+  if (!upperTeam || upperTeam === "FA") return null;
+  if (!POSITIONS.includes(upperPos)) return null;
+  return buildSosFor(upperTeam, upperPos, season);
+}
 
 /** One synchronized schedule entry per unique NFL team and fantasy position. */
 export async function loadSosMatrix(
@@ -520,7 +541,7 @@ export async function loadSosMatrix(
   for (const player of players) {
     const team = (player.team ?? "").toUpperCase();
     const pos = (player.position ?? "").toUpperCase() as Pos;
-    if (team && team !== "FA" && POSITIONS.includes(pos) && pos !== "DEF") keys.add(`${team}|${pos}`);
+    if (team && team !== "FA" && POSITIONS.includes(pos)) keys.add(`${team}|${pos}`);
   }
 
   const matrix = new Map<string, SosMatrixEntry>();
@@ -1088,7 +1109,16 @@ const LOG_KEYS = [
   "fgm",
   "fga",
   "fgmiss",
+  "fgm_0_19",
+  "fgm_20_29",
+  "fgm_30_39",
+  "fgm_40_49",
+  "fgm_50p",
+  "fgm_50_59",
+  "fgm_60p",
+  "xpa",
   "xpm",
+  "xpmiss",
   "sack",
   "int",
   "ff",
@@ -1096,6 +1126,30 @@ const LOG_KEYS = [
   "def_st_td",
   "pts_allow",
 ] as const;
+
+/** Fill derived kicker fields so UI columns match Sleeper (0 vs dash, distance buckets). */
+function normalizeKickerRaw(raw: Record<string, number>): Record<string, number> {
+  const out = { ...raw };
+  const fga = out.fga;
+  const fgmiss = out.fgmiss;
+  if (out.fgm == null && fga != null && Number.isFinite(fga)) {
+    const miss = fgmiss != null && Number.isFinite(fgmiss) ? fgmiss : 0;
+    out.fgm = Math.max(0, fga - miss);
+  }
+  if (out.fgmiss == null && fga != null && out.fgm != null) {
+    out.fgmiss = Math.max(0, fga - out.fgm);
+  }
+  // Collapse 50+ aliases for the display column.
+  if (out.fgm_50p == null) {
+    const from59 = out.fgm_50_59;
+    const from60 = out.fgm_60p;
+    if (from59 != null || from60 != null) {
+      out.fgm_50p = (from59 ?? 0) + (from60 ?? 0);
+    }
+  }
+  return out;
+}
+
 
 const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
   const res = await fetch(`${BASE}/players/nfl/${encodeURIComponent(id)}`, {
@@ -1149,7 +1203,10 @@ type WeekProjectionBundle = {
 };
 
 /** Weekly projected points + raw stats for one player across weeks 1–18. */
-const playerWeekProjections = memo<Map<number, WeekProjectionBundle>>(6 * HOUR, async (key) => {
+// 15m TTL: Out → projected mid-week; keep popup PROJ in sync with matchup board.
+const playerWeekProjections = memo<Map<number, WeekProjectionBundle>>(
+  15 * 60 * 1000,
+  async (key) => {
   const [id, season] = key.split("|") as [string, string];
   const out = new Map<number, WeekProjectionBundle>();
   await Promise.all(
@@ -1170,11 +1227,10 @@ const playerWeekProjections = memo<Map<number, WeekProjectionBundle>>(6 * HOUR, 
         const std = stats["pts_std"];
         const half = stats["pts_half_ppr"];
         const ppr = stats["pts_ppr"];
+        // Keep every numeric projected stat so league scoring can match matchup.
         const raw: Record<string, number> = {};
-        for (const k of LOG_KEYS) {
-          if (stats[k] != null && Number.isFinite(Number(stats[k]))) {
-            raw[k] = num(stats[k], 0);
-          }
+        for (const [k, v] of Object.entries(stats)) {
+          if (v != null && Number.isFinite(Number(v))) raw[k] = Number(v);
         }
         out.set(week, {
           std: std != null && Number.isFinite(Number(std)) ? Number(std) : null,
@@ -1235,6 +1291,8 @@ async function buildSeasonLogsForPlayer(
         rawStats[k] = num(stats[k], 0);
       }
     }
+    const normalizedRaw =
+      player.pos === "K" ? normalizeKickerRaw(rawStats) : rawStats;
     const bundle = projByWeek.get(week) ?? null;
     const proj = bundle
       ? { std: bundle.std, half: bundle.half, ppr: bundle.ppr }
@@ -1248,7 +1306,7 @@ async function buildSeasonLogsForPlayer(
         ppr: num(stats["pts_ppr"], 0),
       },
       line: statLine(player.pos, stats),
-      raw: rawStats,
+      raw: normalizedRaw,
       played: true,
       isBye: false,
       seasonYear: season,

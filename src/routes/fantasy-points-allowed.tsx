@@ -239,7 +239,7 @@ function FantasyPointsAllowedPage() {
                                 tone,
                               )}
                             >
-                              {cell?.pa != null ? cell.pa.toFixed(1) : "—"}
+                              {cell?.pa != null ? cell.pa.toFixed(2) : "—"}
                             </td>
                           </Fragment>
                         );

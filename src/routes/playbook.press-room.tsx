@@ -785,8 +785,13 @@ function PressRoomPage() {
     } | null = null;
 
     for (const entry of entries) {
+      // Only count waiver adds who actually started — bench explosions don't count.
+      const starterIds = new Set((entry.starters ?? []).map(String).filter(Boolean));
+      if (starterIds.size === 0) continue;
+
       for (const [playerId, pts] of Object.entries(entry.playerPoints ?? {})) {
         if (!waiverAddIds.has(playerId)) continue;
+        if (!starterIds.has(playerId)) continue;
         const player = playersById.get(playerId);
         if (!player) continue;
         const points = Number(pts) || 0;

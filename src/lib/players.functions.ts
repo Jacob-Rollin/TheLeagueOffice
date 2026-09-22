@@ -68,6 +68,18 @@ export const getFantasyPointsAllowed = createServerFn({ method: "GET" })
     return await loadFantasyPointsAllowed(data.season);
   });
 
+/** Positional strength-of-schedule for one NFL team × fantasy position. */
+export const getTeamPosSos = createServerFn({ method: "GET" })
+  .inputValidator((input: { team: string; pos: string; season?: string }) => ({
+    team: String(input.team).slice(0, 4),
+    pos: String(input.pos).slice(0, 4),
+    season: input.season != null ? String(input.season).slice(0, 16) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const { loadTeamPosSos } = await import("./players.server");
+    return await loadTeamPosSos(data.team, data.pos, data.season);
+  });
+
 export const getRedZoneStats = createServerFn({ method: "POST" })
   .inputValidator((input?: { season?: string; yardline?: number | string }) => {
     const yardlineRaw = input?.yardline != null ? Number(input.yardline) : 20;

@@ -2,69 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { Scoring } from "@/lib/draft";
 import type { BrainEntry, BrainMatrix } from "@/lib/playerBrainHydration";
-import { currentSeason, fetchSchedule, type PlayersPayload, type ScheduleGame } from "@/lib/players-build";
-import { getCached, readCache } from "@/lib/sleeper-cache";
+import { getTeamPosSos } from "@/lib/players.functions";
 import type { PlayerSos, SosMatchup } from "@/lib/sos-presentation";
-
-const SCHEDULE_KEY = "schedule-v1";
-const PLAYERS_KEY = "players-v1";
-const DAY = 24 * 60 * 60 * 1000;
-
-type LocalSchedule = { season: string; games: ScheduleGame[] };
-
-async function localSchedule(): Promise<ScheduleGame[]> {
-  try {
-    const payload = await getCached<LocalSchedule>(SCHEDULE_KEY, DAY, async () => {
-      const season = currentSeason();
-      return { season, games: await fetchSchedule(season) };
-    });
-    return payload?.games ?? [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Defensive strength ranks (1 = toughest) derived from the locally cached
- * Sleeper player catalog: team defenses ordered by projected fantasy output
- * for the active scoring format.
- */
-async function localDefenseRanks(scoring: Scoring = "half"): Promise<Map<string, number>> {
-  const ranks = new Map<string, number>();
-  try {
-    const hit = await readCache<PlayersPayload>(PLAYERS_KEY);
-    const defenses = (hit?.data?.players ?? []).filter((p) => p.pos === "DEF");
-    if (defenses.length === 0) return ranks;
-    [...defenses]
-      .sort((a, b) => (b.proj[scoring] ?? 0) - (a.proj[scoring] ?? 0))
-      .forEach((d, i) => {
-        const team = (d.team || "").toUpperCase();
-        if (team) ranks.set(team, i + 1);
-      });
-  } catch {
-    /* ignore */
-  }
-  return ranks;
-}
-
-function normalizeOpp(raw: string | null | undefined): string {
-  return (raw || "").replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase();
-}
-
-/** Build week-by-week matchups for a team from the native schedule catalog. */
-function scheduleMatchups(team: string, games: ScheduleGame[], ranks: Map<string, number>): SosMatchup[] {
-  const upper = team.toUpperCase();
-  const rows: SosMatchup[] = [];
-  for (const g of games) {
-    const home = (g.home || "").toUpperCase();
-    const away = (g.away || "").toUpperCase();
-    if (home !== upper && away !== upper) continue;
-    if (!g.week || g.week > 18) continue;
-    const opp = home === upper ? away : home;
-    rows.push({ week: g.week, opp, rank: ranks.get(opp) ?? null, pointsAllowed: null });
-  }
-  return rows.sort((a, b) => a.week - b.week);
-}
 
 function averageRank(matchups: SosMatchup[]): number | null {
   const values = matchups.map((m) => m.rank).filter((r): r is number => r !== null);
@@ -72,143 +11,166 @@ function averageRank(matchups: SosMatchup[]): number | null {
   return Math.round(values.reduce((sum, r) => sum + r, 0) / values.length);
 }
 
-/** Re-stamp weekly defensive ranks using the scoring-aware DEF ladder. */
-function restampRanks(matchups: SosMatchup[], ranks: Map<string, number>): SosMatchup[] {
-  return matchups.map((m) => {
-    const opp = normalizeOpp(m.opp);
-    const scored = opp ? ranks.get(opp) ?? null : null;
-    return { ...m, rank: scored ?? m.rank };
-  });
+/** True when at least one weekly matchup carries a usable defensive rank. */
+export function sosHasUsableRanks(sos: PlayerSos | null | undefined): boolean {
+  if (!sos?.matchups?.length) return false;
+  return sos.matchups.some(
+    (m) => m.rank != null && Number.isFinite(Number(m.rank)) && Number(m.rank) > 0,
+  );
+}
+
+function normalizeMatchup(m: SosMatchup): SosMatchup {
+  return {
+    week: Number(m.week),
+    opp: String(m.opp ?? ""),
+    rank: m.rank != null && Number.isFinite(Number(m.rank)) ? Number(m.rank) : null,
+    pointsAllowed:
+      m.pointsAllowed != null && Number.isFinite(Number(m.pointsAllowed))
+        ? Number(m.pointsAllowed)
+        : null,
+  };
+}
+
+function fromDetailOrMatrix(raw: {
+  rank: number | null;
+  opponents?: SosMatchup[];
+  matchups?: SosMatchup[];
+} | null | undefined): PlayerSos | null {
+  if (!raw) return null;
+  const matchups = (raw.matchups ?? raw.opponents ?? []).map(normalizeMatchup);
+  if (!matchups.length) return null;
+  return {
+    rank: raw.rank ?? averageRank(matchups),
+    matchups,
+  };
 }
 
 /**
- * Dual-layer resolver: the synchronized brain matrix wins for opponents, and
- * scoring-aware local defense ranks refresh weekly strength so STD / HALF / PPR
- * switches recalculate live. When brain SOS is empty, schedule + DEF ranks
- * supply the same shape.
+ * Prefer brain rows for a week; fill any missing weeks (e.g. week 18) from the
+ * positional FPA schedule so SOS never false-byes the final regular-season week.
+ */
+function mergeSosWeeks(
+  primary: PlayerSos | null,
+  fill: PlayerSos | null,
+): PlayerSos | null {
+  if (!primary && !fill) return null;
+  if (!fill?.matchups.length) return primary;
+  if (!primary?.matchups.length) return fill;
+
+  const byWeek = new Map<number, SosMatchup>();
+  for (const m of fill.matchups) byWeek.set(m.week, normalizeMatchup(m));
+  for (const m of primary.matchups) {
+    const week = Number(m.week);
+    const existing = byWeek.get(week);
+    const next = normalizeMatchup(m);
+    // Keep brain opp/rank when present; otherwise adopt schedule fill.
+    if (!existing) {
+      byWeek.set(week, next);
+      continue;
+    }
+    byWeek.set(week, {
+      week,
+      opp: next.opp || existing.opp,
+      rank: next.rank ?? existing.rank,
+      pointsAllowed: next.pointsAllowed ?? existing.pointsAllowed,
+    });
+  }
+
+  const matchups = [...byWeek.values()].sort((a, b) => a.week - b.week);
+  return {
+    rank: primary.rank ?? fill.rank ?? averageRank(matchups),
+    matchups,
+  };
+}
+
+/**
+ * Prefer synchronized brain SOS (positional fantasy points allowed vs opponent).
+ * Always merge the positional FPA schedule so weeks the brain omits (historically
+ * week 18) still get opponents and ranks — never leave them as 0 stars / BYE.
  */
 export function usePlayerSos(
   brainEntry: BrainEntry | null,
   team: string | null | undefined,
-  scoringFormat: Scoring = "half",
+  _scoringFormat: Scoring = "half",
+  position?: string | null,
 ): PlayerSos | null {
   const brainSos =
     brainEntry?.sos && brainEntry.sos.matchups && brainEntry.sos.matchups.length > 0
       ? brainEntry.sos
       : null;
-  const [resolved, setResolved] = useState<PlayerSos | null>(brainSos);
+
+  const fromBrain = useMemo(() => {
+    if (!sosHasUsableRanks(brainSos)) return null;
+    return {
+      rank: brainSos!.rank ?? averageRank(brainSos!.matchups),
+      matchups: brainSos!.matchups.map(normalizeMatchup),
+    };
+  }, [brainSos]);
+
+  const pos = (position || brainEntry?.position || "").toUpperCase();
+  const [scheduleSos, setScheduleSos] = useState<PlayerSos | null>(null);
 
   useEffect(() => {
     let alive = true;
+    const upperTeam = (team || "").toUpperCase();
+    if (!upperTeam || upperTeam === "FA" || !pos) {
+      setScheduleSos(null);
+      return () => {
+        alive = false;
+      };
+    }
+    const sosPos = pos === "DST" ? "DEF" : pos;
     (async () => {
-      const [games, ranks] = await Promise.all([
-        localSchedule(),
-        localDefenseRanks(scoringFormat),
-      ]);
+      const raw = await getTeamPosSos({ data: { team: upperTeam, pos: sosPos } });
       if (!alive) return;
-
-      if (brainSos?.matchups?.length) {
-        const matchups = restampRanks(brainSos.matchups, ranks);
-        setResolved({ rank: averageRank(matchups), matchups });
-        return;
-      }
-
-      if (!team) {
-        setResolved(null);
-        return;
-      }
-
-      const matchups = scheduleMatchups(team, games, ranks);
-      if (matchups.length === 0) {
-        setResolved(null);
-        return;
-      }
-      setResolved({ rank: averageRank(matchups), matchups });
+      const next = fromDetailOrMatrix(
+        raw
+          ? {
+              rank: raw.rank,
+              opponents: raw.opponents,
+            }
+          : null,
+      );
+      setScheduleSos(sosHasUsableRanks(next) ? next : null);
     })().catch(() => {
-      /* silent by design */
+      if (alive) setScheduleSos(null);
     });
     return () => {
       alive = false;
     };
-  }, [brainSos, team, scoringFormat]);
+  }, [team, pos]);
 
-  return resolved;
+  return useMemo(
+    () => mergeSosWeeks(fromBrain, scheduleSos),
+    [fromBrain, scheduleSos],
+  );
 }
 
 type SosPeer = { position: string; sos: PlayerSos | null };
 
 /**
- * Peer schedule matrix for the position-percentile engine. When the synced
- * brain matrix lacks per-player SOS rows, the native players-v1 catalog and
- * cached schedule supply every same-position player's burden score instead.
+ * Peer schedule matrix for the position-percentile engine.
+ * Prefers brain rows that already carry positional FPA ranks.
  */
 export function useSosPeerMatrix(
   position: string | null | undefined,
   brain: BrainMatrix | null | undefined,
 ): Record<string, SosPeer> | null {
-  const brainPeersReady = useMemo(() => {
-    if (!brain || !position) return false;
-    let count = 0;
-    for (const entry of Object.values(brain)) {
-      if (entry.position === position && entry.sos && entry.sos.matchups.length > 0) count += 1;
-      if (count >= 5) return true;
-    }
-    return false;
-  }, [brain, position]);
-
-  const [fallbackPeers, setFallbackPeers] = useState<Record<string, SosPeer> | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    if (brainPeersReady || !position) {
-      setFallbackPeers(null);
-      return () => {
-        alive = false;
-      };
-    }
-    (async () => {
-      const [games, ranks, hit] = await Promise.all([
-        localSchedule(),
-        localDefenseRanks("half"),
-        readCache<PlayersPayload>(PLAYERS_KEY),
-      ]);
-      if (!alive) return;
-      const players = (hit?.data?.players ?? []).filter(
-        (p) => p.pos === position && p.team && p.pos !== "DEF",
-      );
-      if (players.length < 5 || games.length === 0) return;
-      const byTeam = new Map<string, PlayerSos>();
-      const peers: Record<string, SosPeer> = {};
-      for (const p of players) {
-        const team = (p.team || "").toUpperCase();
-        if (!team) continue;
-        let sos = byTeam.get(team);
-        if (!sos) {
-          const matchups = scheduleMatchups(team, games, ranks);
-          if (matchups.length === 0) continue;
-          sos = { rank: averageRank(matchups), matchups };
-          byTeam.set(team, sos);
-        }
-        peers[p.id] = { position, sos };
-      }
-      if (Object.keys(peers).length >= 5) setFallbackPeers(peers);
-    })().catch(() => {
-      /* silent by design */
-    });
-    return () => {
-      alive = false;
-    };
-  }, [brainPeersReady, position]);
-
   return useMemo(() => {
-    if (brainPeersReady) return (brain as Record<string, SosPeer>) ?? null;
-    if (!fallbackPeers) return null;
-    const merged: Record<string, SosPeer> = { ...fallbackPeers };
-    for (const [id, entry] of Object.entries(brain ?? {})) {
-      if (entry.position === position && entry.sos && entry.sos.matchups.length > 0) {
-        merged[id] = { position: entry.position, sos: entry.sos };
-      }
+    if (!brain || !position) return null;
+    const normalize = (p: string) => {
+      const u = (p || "").toUpperCase();
+      return u === "DST" ? "DEF" : u;
+    };
+    const want = normalize(position);
+    const peers: Record<string, SosPeer> = {};
+    let count = 0;
+    for (const [id, entry] of Object.entries(brain)) {
+      if (normalize(entry.position) !== want) continue;
+      if (!sosHasUsableRanks(entry.sos)) continue;
+      peers[id] = { position: entry.position, sos: entry.sos };
+      count += 1;
     }
-    return merged;
-  }, [brainPeersReady, brain, fallbackPeers, position]);
+    return count >= 5 ? peers : null;
+  }, [brain, position]);
 }

@@ -6,12 +6,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { playerImage, teamLogo } from "./PlayerAvatar";
 import { PositionBadge } from "./PositionBadge";
 import { RosteredOnLabel } from "./RosteredOnLabel";
+import { SosStars } from "@/components/sos/SosStars";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useDraft } from "@/hooks/use-draft";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
-import { usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
+import { sosHasUsableRanks, usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Scoring } from "@/lib/draft";
@@ -28,13 +29,16 @@ import type { CareerSeasonRow, GameLog } from "@/lib/players.server";
 import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
 import { formatNflGameStatusLabel, formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { getLeagueScoring } from "@/lib/scoring.functions";
+import { projectionPoints, type ScoringMap } from "@/lib/scoring-map";
 import {
-  matchupGrade,
-  playoffWindow,
-  positionPercentile,
+  playoffWindowPresentation,
+  positionalSosStanding,
+  sosDifficultyChipClass,
+  sosDifficultyDisplayLabel,
+  sosDifficultyFromStars,
   sosStarsFromRank,
   type PlayerSos,
-  type SosGrade,
+  type SosDifficultyTone,
 } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
@@ -203,6 +207,7 @@ export function PlayerDetail({
   const draft = useDraft();
   const { activeLeague } = useActiveLeague();
   const brain = usePlayerBrain();
+  const { rankFor } = useLeagueProjections();
   const [tab, setTab] = useState<DetailTab>("logs");
   const [internalScoringFormat, setInternalScoringFormat] = useState<Scoring>(
     draft.settings.scoring,
@@ -213,11 +218,30 @@ export function PlayerDetail({
     if (scoringControlled) onScoringFormatChange?.(format);
     else setInternalScoringFormat(format);
   };
-  const playerSos = usePlayerSos(
+  const hookSos = usePlayerSos(
     (data ? brain?.[data.player.id] : null) ?? null,
     data?.player.team ?? null,
     scoringFormat,
+    data?.player.pos ?? null,
   );
+  const detailSos = useMemo((): PlayerSos | null => {
+    const raw = data?.sos;
+    if (!raw?.opponents?.length) return null;
+    return {
+      rank: raw.rank,
+      matchups: raw.opponents.map((o) => ({
+        week: o.week,
+        opp: o.opp,
+        rank: o.rank,
+        pointsAllowed: o.pointsAllowed,
+      })),
+    };
+  }, [data?.sos]);
+  const playerSos = sosHasUsableRanks(hookSos)
+    ? hookSos
+    : sosHasUsableRanks(detailSos)
+      ? detailSos
+      : hookSos;
   const [isScoringOpen, setIsScoringOpen] = useState(false);
   const scoringMenuRef = useRef<HTMLDivElement>(null);
 
@@ -334,8 +358,19 @@ export function PlayerDetail({
     (player as { overall_rank?: number | null }).overall_rank ??
     (typeof player.rank === "number" ? player.rank : null) ??
     player.rank[scoring];
-  const posRankLabel = positionRank < 900 ? positionRank : "—";
-  const overallRankLabel = overallRank < 900 ? overallRank : "—";
+  const sleeperRanks = rankFor(player.id, scoring);
+  const posRankLabel =
+    sleeperRanks.pos != null
+      ? sleeperRanks.pos
+      : positionRank != null && Number(positionRank) < 900
+        ? positionRank
+        : "—";
+  const overallRankLabel =
+    sleeperRanks.overall != null
+      ? sleeperRanks.overall
+      : overallRank != null && Number(overallRank) < 900
+        ? overallRank
+        : "—";
 
   return (
     <div className="overflow-visible pb-8">
@@ -361,7 +396,7 @@ export function PlayerDetail({
           ) : null}
 
           <div
-            className="relative z-20 mb-0 ml-0 mt-0 flex h-[160px] w-[140px] flex-shrink-0 items-end overflow-visible rounded-bl-none bg-transparent pl-0 select-none"
+            className="relative z-20 mb-0 ml-0 mt-0 flex w-[140px] min-h-[160px] flex-shrink-0 items-end self-stretch overflow-visible rounded-bl-none bg-transparent pl-0 select-none"
             style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
           >
             <div
@@ -394,10 +429,10 @@ export function PlayerDetail({
             </div>
           </div>
 
-          <div className="relative z-10 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pl-6 pr-12 text-left">
+          <div className="relative z-10 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pb-9 pl-6 pr-12 text-left">
             <RosteredOnLabel playerId={player.id} playerName={player.name} />
             <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-visible">
-              <h1 className="truncate text-3xl font-black tracking-tight text-white">
+              <h1 className="truncate text-3xl font-black leading-tight tracking-tight text-white">
                 {player.name}
               </h1>
               {injuryDetails ? (
@@ -450,13 +485,13 @@ export function PlayerDetail({
             </div>
 
             {isDefense ? (
-              <div className="mt-2 text-sm font-black uppercase tracking-wider text-white/70">
+              <div className="mt-2 text-sm font-black uppercase leading-snug tracking-wider text-white/70">
                 CONFERENCE <span className="font-black text-white">{conference}</span>
                 <span className="mx-3 text-white/20">|</span>
                 DIVISION <span className="font-black text-white">{division}</span>
               </div>
             ) : (
-              <div className="mt-2 flex flex-wrap items-center text-sm font-black uppercase tracking-wider text-white/70">
+              <div className="mt-2 flex flex-wrap items-center text-sm font-black uppercase leading-snug tracking-wider text-white/70">
                 <span>AGE {displayAge}</span>
                 <VitalsDivider />
                 <span>HEIGHT {height}</span>
@@ -609,9 +644,11 @@ export function PlayerDetail({
             playerId={player.id}
             team={player.team}
             posRankLabel={
-              typeof positionRank === "number" && positionRank < 900
-                ? `${player.pos}${positionRank}`
-                : `${player.pos}—`
+              sleeperRanks.pos != null
+                ? `${player.pos}${sleeperRanks.pos}`
+                : typeof positionRank === "number" && positionRank < 900
+                  ? `${player.pos}${positionRank}`
+                  : `${player.pos}—`
             }
             brainSos={playerSos}
             scoringFormat={scoringFormat}
@@ -713,16 +750,21 @@ function positionStatGroups(pos: string): StatGroup[] {
     case "K":
       return [
         {
-          label: "FIELD GOALS",
+          label: "EXTRA POINTS",
           cols: [
-            { kind: "stat", key: "fgm", label: "FGM" },
-            { kind: "stat", key: "fga", label: "FGA" },
-            { kind: "stat", key: "fgmiss", label: "MISS" },
+            { kind: "stat", key: "xpa", label: "ATT" },
+            { kind: "stat", key: "xpm", label: "MADE" },
           ],
         },
         {
-          label: "EXTRA POINTS",
-          cols: [{ kind: "stat", key: "xpm", label: "XPM" }],
+          label: "FIELD GOALS",
+          cols: [
+            { kind: "stat", key: "fga", label: "ATT" },
+            { kind: "stat", key: "fgm", label: "MADE" },
+            { kind: "stat", key: "fgm_30_39", label: "30-39" },
+            { kind: "stat", key: "fgm_40_49", label: "40-49" },
+            { kind: "stat", key: "fgm_50p", label: "50+" },
+          ],
         },
       ];
     case "DEF":
@@ -843,13 +885,59 @@ function projForFormat(
   return v != null && Number.isFinite(v) ? v : null;
 }
 
+/**
+ * Same projection number as the matchup board when a league is synced:
+ * live weekly Sleeper stats × league scoring map, then stored projRaw, then
+ * published pts_* for the UI scoring format.
+ */
+function resolveLogProjection(
+  g: GameLog,
+  playerId: string,
+  scoringFormat: Scoring,
+  opts: {
+    projectFor: (id: string) => number | null;
+    nflWeek: number | null;
+    /** Only overlay live proj when the viewed season matches the live NFL season. */
+    seasonYear?: string | null;
+    nflSeason?: string | null;
+    scoringMap: ScoringMap;
+    leagueFormat: Scoring;
+  },
+): number | null {
+  const { projectFor, nflWeek, seasonYear, nflSeason, scoringMap, leagueFormat } = opts;
+  const sameSeason =
+    !seasonYear || !nflSeason || String(seasonYear) === String(nflSeason);
+  if (
+    sameSeason &&
+    nflWeek != null &&
+    Number(g.week) === Number(nflWeek) &&
+    !g.isBye
+  ) {
+    const live = projectFor(playerId);
+    if (live != null && Number.isFinite(live)) return live;
+  }
+  if (g.projRaw && Object.keys(g.projRaw).length > 0) {
+    const scored = projectionPoints(g.projRaw, scoringMap, leagueFormat);
+    if (scored != null) return scored;
+  }
+  return projForFormat(g.proj, scoringFormat);
+}
+
+function fmtFantasyPts(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return value.toFixed(2);
+}
+
 function numOrDash(
   raw: Record<string, number> | undefined,
   key: string,
   played: boolean,
 ): string {
-  if (!played || !raw || raw[key] == null || !Number.isFinite(raw[key]!)) return "-";
-  const v = raw[key]!;
+  if (!played || !raw) return "-";
+  const v = raw[key];
+  if (v == null || !Number.isFinite(v)) return "-";
+  // Show zeros for counting stats (Sleeper shows 0 / blank-as-zero for made kicks).
+  if (v === 0) return "0";
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
@@ -864,11 +952,6 @@ function avgOrDash(
   const den = raw[denKey];
   if (num == null || den == null || den === 0) return "-";
   return (num / den).toFixed(1);
-}
-
-function fmtMetric(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "-";
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function renderStatCells(
@@ -925,10 +1008,18 @@ function GameLogsPanel({
   const formatTag = formatLabel(scoringFormat);
   const teamPrimary = getTeamPrimaryColor(team);
 
+  const {
+    projectFor,
+    scoringMap,
+    format: leagueFormat,
+    nflWeek,
+    nflSeason,
+  } = useLeagueProjections();
+
   const { data, isLoading } = useQuery({
     queryKey: ["player-logs", id, season],
     queryFn: () => getGameLogs({ data: { id, season } }),
-    staleTime: 1000 * 60 * 30,
+    staleTime: 1000 * 60 * 15,
   });
 
   const career = data?.career ?? [];
@@ -972,11 +1063,22 @@ function GameLogsPanel({
               <tbody>
                 {data.logs.map((g, index) => {
                   const played = g.played !== false && !g.isBye;
-                  const ptsVal = ptsForFormat(g.points, scoringFormat);
-                  const pts =
-                    played && ptsVal != null ? ptsVal.toFixed(1) : "-";
-                  const projVal = projForFormat(g.proj, scoringFormat);
-                  const hasProj = projVal != null;
+                  const leaguePts =
+                    played && g.raw && Object.keys(g.raw).length > 0
+                      ? projectionPoints(g.raw, scoringMap, leagueFormat)
+                      : null;
+                  const ptsVal =
+                    leaguePts ?? ptsForFormat(g.points, scoringFormat);
+                  const pts = played && ptsVal != null ? fmtFantasyPts(ptsVal) : "-";
+                  const projVal = resolveLogProjection(g, id, scoringFormat, {
+                    projectFor,
+                    nflWeek,
+                    seasonYear: season,
+                    nflSeason,
+                    scoringMap,
+                    leagueFormat,
+                  });
+                  const hasProj = !g.isBye && projVal != null;
                   const isBye = Boolean(g.isBye) || g.opp === "BYE";
 
                   return (
@@ -1011,7 +1113,7 @@ function GameLogsPanel({
                           hasProj ? "font-bold text-slate-900" : "text-slate-700",
                         )}
                       >
-                        {hasProj ? projVal.toFixed(1) : "-"}
+                        {hasProj ? fmtFantasyPts(projVal) : "-"}
                       </td>
                       <td className="px-3 py-2.5 text-center font-mono text-slate-800">{pts}</td>
                       {renderStatCells(g.raw, statCols, played)}
@@ -1058,7 +1160,7 @@ function GameLogsPanel({
                             {row.games > 0 ? String(row.games) : "-"}
                           </td>
                           <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-900">
-                            {fmtMetric(pts)}
+                            {fmtFantasyPts(pts)}
                           </td>
                           <td className="px-3 py-2.5 text-center font-mono text-slate-700">
                             {rank != null && rank > 0 ? String(rank) : "-"}
@@ -1089,11 +1191,18 @@ function ProjectionsPanel({
 }) {
   const statGroups = useMemo(() => positionStatGroups(pos), [pos]);
   const statCols = useMemo(() => positionStatCols(pos), [pos]);
+  const {
+    projectFor,
+    scoringMap,
+    format: leagueFormat,
+    nflWeek,
+    nflSeason,
+  } = useLeagueProjections();
 
   const { data, isLoading } = useQuery({
     queryKey: ["player-projections-weekly", id],
     queryFn: () => getGameLogs({ data: { id } }),
-    staleTime: 1000 * 60 * 30,
+    staleTime: 1000 * 60 * 15,
   });
 
   if (isLoading) {
@@ -1116,9 +1225,16 @@ function ProjectionsPanel({
         <tbody>
           {data.logs.map((g, index) => {
             const isBye = Boolean(g.isBye) || g.opp === "BYE";
-            const projVal = projForFormat(g.proj, scoringFormat);
+            const projVal = resolveLogProjection(g, id, scoringFormat, {
+              projectFor,
+              nflWeek,
+              seasonYear: data.season,
+              nflSeason,
+              scoringMap,
+              leagueFormat,
+            });
             const hasProj = !isBye && projVal != null;
-            const ptsDisplay = hasProj ? projVal.toFixed(1) : "-";
+            const ptsDisplay = hasProj ? fmtFantasyPts(projVal) : "-";
             const showStats = !isBye && Boolean(g.projRaw && Object.keys(g.projRaw).length);
 
             return (
@@ -1207,19 +1323,6 @@ const INDOOR_HOME_TEAMS = new Set([
   "NO",
 ]);
 
-type SosDifficultyTone = "elite" | "neutral" | "tough" | "bye";
-
-function sosDifficultyFromStars(stars: number | null): {
-  tone: SosDifficultyTone;
-  label: string | null;
-} {
-  if (stars == null) return { tone: "bye", label: null };
-  if (stars >= 5) return { tone: "elite", label: "Great" };
-  if (stars >= 3) return { tone: "neutral", label: "Neutral" };
-  return { tone: "tough", label: "Tough" };
-}
-
-/** Week/matchup payloads may use several backend rank key spellings. */
 type MatchupRankSource =
   | number
   | null
@@ -1253,12 +1356,13 @@ function resolveStarCount(w: MatchupRankSource): number {
     const fromRank = sosStarsFromRank(w);
     if (fromRank != null) return fromRank;
   }
-  return 3;
+  // No rank → empty row (never invent a "average" 3-star default).
+  return 0;
 }
 
 /**
  * Shared 1–5 gold star row for SOS + Outlook.
- * Consumes scoring-synchronized week ranks from usePlayerSos.
+ * Consumes positional FPA week ranks from usePlayerSos (vs the player's position).
  */
 function SosStarRow({
   matchup,
@@ -1270,44 +1374,7 @@ function SosStarRow({
   week?: number;
 }) {
   const filled = resolveStarCount(matchup !== undefined ? matchup : rank);
-
-  return (
-    <div
-      className="flex select-none items-center space-x-0.5"
-      aria-label={`${filled} of 5 stars`}
-    >
-      {Array.from({ length: 5 }).map((_, starIndex) => {
-        const isFilled = starIndex < filled;
-        return (
-          <Star
-            key={`sos-star-matrix-${week}-${starIndex}`}
-            className={cn(
-              "h-3 w-3 shrink-0 transition-all duration-200",
-              isFilled ? "text-amber-500" : "text-slate-200",
-            )}
-            fill={isFilled ? "currentColor" : "none"}
-            strokeWidth={2}
-            aria-hidden="true"
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-function sosOverviewBadge(grade: SosGrade): string {
-  if (grade === "CAKEWALK") return "ELITE";
-  if (grade === "ADVANTAGEOUS") return "SOFT";
-  if (grade === "CATASTROPHIC") return "HARD";
-  return "MID";
-}
-
-function compactPercentileLabel(raw: string | null): string {
-  if (!raw) return "Baseline";
-  const top = raw.match(/Top\s+(\d+)%/i);
-  if (top?.[1]) return `Top ${top[1]}%`;
-  if (raw.toLowerCase().includes("baseline")) return "Baseline";
-  return "Balanced";
+  return <SosStars key={`sos-row-${week}`} stars={filled} />;
 }
 
 function SosHeatmapPanel({
@@ -1332,22 +1399,14 @@ function SosHeatmapPanel({
     enabled: Boolean(upperTeam && upperTeam !== "FA"),
   });
 
-  const overallGrade = matchupGrade(brainSos?.rank ?? null);
-  const overallBadge = sosOverviewBadge(overallGrade);
-  const percentileRaw = positionPercentile(
-    playerId,
-    pos,
-    sosPeers ?? brain,
-    brainSos,
-  );
-  const percentileLabel = compactPercentileLabel(percentileRaw);
-  const percentileTone: "challenging" | "favorable" | "baseline" =
-    percentileRaw?.toLowerCase().includes("challenging")
-      ? "challenging"
-      : percentileRaw?.toLowerCase().includes("favorable")
-        ? "favorable"
-        : "baseline";
-  const playoffLabel = playoffWindow(brainSos);
+  const peerMatrix = sosPeers ?? brain;
+  const standing = positionalSosStanding(playerId, pos, peerMatrix, brainSos);
+  const overallGrade = standing.grade;
+  const overallGradeClass = standing.textClass;
+  const percentileLabel = standing.percentileLabel;
+  const percentileTone = standing.percentileTone;
+  const percentileCaption = standing.percentileCaption;
+  const playoff = playoffWindowPresentation(brainSos, pos, peerMatrix);
 
   const rows = useMemo(() => {
     const matchups = brainSos?.matchups ?? [];
@@ -1374,8 +1433,8 @@ function SosHeatmapPanel({
         return home === upperTeam || away === upperTeam;
       });
 
-      // Prefer live schedule for bye detection so Week 18 never false-byes
-      // when brain matchups omit the final week.
+      // Prefer live schedule for bye detection so weeks the brain omits
+      // (historically week 18) never false-bye when a game is scheduled.
       const dataSaysBye =
         !hit || !hit.opp || hit.opp.trim() === "" || hit.opp.toUpperCase() === "BYE";
       const isBye = games.length > 0 ? !game : dataSaysBye;
@@ -1411,7 +1470,7 @@ function SosHeatmapPanel({
       const { tone, label } =
         stars != null
           ? sosDifficultyFromStars(stars)
-          : { tone: "neutral" as const, label: "Neutral" };
+          : { tone: "bye" as const, label: null };
       const isHome = game ? (game.home || "").toUpperCase() === upperTeam : true;
       const isAway = Boolean(game) && !isHome;
       const venueTeam = isHome ? upperTeam : opp;
@@ -1450,14 +1509,14 @@ function SosHeatmapPanel({
         </span>
         <div className="grid w-full grid-cols-1 divide-y divide-slate-100 rounded-xl border border-slate-200/60 bg-white p-4 text-center shadow-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           <div className="flex flex-col items-center justify-center p-3 text-center sm:p-2">
-            <div className="flex items-center space-x-2.5">
-              <span className="text-xl font-black uppercase tracking-wide text-slate-900">
-                {overallGrade}
-              </span>
-              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-950 shadow-inner">
-                {overallBadge}
-              </span>
-            </div>
+            <span
+              className={cn(
+                "text-xl font-black uppercase tracking-wide",
+                overallGradeClass,
+              )}
+            >
+              {overallGrade}
+            </span>
             <span className="mt-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">
               Overall Matchup Rating
             </span>
@@ -1476,16 +1535,17 @@ function SosHeatmapPanel({
               {percentileLabel}
             </span>
             <span className="mt-1 max-w-[180px] text-[10px] font-black uppercase leading-tight tracking-widest text-slate-400">
-              {percentileTone === "challenging"
-                ? "Most Challenging Schedule"
-                : percentileTone === "favorable"
-                  ? "Most Favorable Schedule"
-                  : "Near Baseline Average"}
+              {percentileCaption}
             </span>
           </div>
           <div className="flex flex-col items-center justify-center p-3 text-center sm:p-2">
-            <span className="text-xl font-black uppercase tracking-tight text-slate-900">
-              {playoffLabel}
+            <span
+              className={cn(
+                "text-xl font-black uppercase tracking-tight transition-colors",
+                playoff.textClass,
+              )}
+            >
+              {playoff.label}
             </span>
             <span className="mt-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">
               Playoff Window Outlook
@@ -1537,17 +1597,14 @@ function SosHeatmapPanel({
                 <td className="px-3 py-2.5 text-left">
                   {row.isBye || !row.label ? (
                     <span className="text-xs font-extrabold tracking-wide text-slate-400">-</span>
-                  ) : row.tone === "elite" ? (
-                    <span className="ml-0 rounded-full bg-emerald-500 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
-                      Great
-                    </span>
-                  ) : row.tone === "neutral" ? (
-                    <span className="ml-0 rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-950 shadow-sm">
-                      Neutral
-                    </span>
                   ) : (
-                    <span className="ml-0 rounded-full bg-rose-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-sm">
-                      Tough
+                    <span
+                      className={cn(
+                        "ml-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-sm",
+                        sosDifficultyChipClass(row.tone),
+                      )}
+                    >
+                      {sosDifficultyDisplayLabel(row.label)}
                     </span>
                   )}
                 </td>
@@ -1600,7 +1657,7 @@ function OutlookPanel({
 
   const week = nextGame?.week ?? null;
   const { progressByNflTeam } = useNflGameProgress(week);
-  const { projectFor } = useLeagueProjections(week);
+  const { projectFor, scoringMap, format, nflSeason } = useLeagueProjections(week);
   const sleeperPlayers = useSleeperPlayers();
   const catalog = sleeperPlayers.data?.players ?? [];
   const { myTeam } = useLeagueRosters(catalog);
@@ -1608,7 +1665,7 @@ function OutlookPanel({
   const { data: logsBundle } = useQuery({
     queryKey: ["player-outlook-logs", playerId],
     queryFn: () => getGameLogs({ data: { id: playerId } }),
-    staleTime: 1000 * 60 * 30,
+    staleTime: 1000 * 60 * 15,
   });
 
   const currentMatchup = useMemo(() => {
@@ -1638,10 +1695,16 @@ function OutlookPanel({
   const weekLog =
     week != null ? logsBundle?.logs.find((g) => Number(g.week) === Number(week)) : null;
   const leagueProj = projectFor(playerId);
-  const logProj =
-    weekLog?.proj?.[scoringFormat] != null && Number.isFinite(weekLog.proj[scoringFormat]!)
-      ? weekLog.proj[scoringFormat]!
-      : null;
+  const logProj = weekLog
+    ? resolveLogProjection(weekLog, playerId, scoringFormat, {
+        projectFor,
+        nflWeek: week,
+        seasonYear: logsBundle?.season,
+        nflSeason,
+        scoringMap,
+        leagueFormat: format,
+      })
+    : null;
   const projection =
     leagueProj != null && Number.isFinite(leagueProj)
       ? leagueProj
@@ -1778,7 +1841,7 @@ function OutlookPanel({
         </div>
         <div className="px-2">
           <p className="text-xl font-black text-slate-900">
-            {projection != null ? projection.toFixed(1) : "—"}
+            {projection != null ? projection.toFixed(2) : "—"}
           </p>
           <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Projection
@@ -1943,7 +2006,7 @@ function DepthChartPanel({
             </span>
           ) : null}
           <div className="text-xs font-black tracking-wide text-slate-900 uppercase">
-            {Number.isFinite(d.proj) ? d.proj.toFixed(1) : "0.0"}
+            {Number.isFinite(d.proj) && d.proj > 0 ? d.proj.toFixed(2) : "—"}
             <span className="ml-0.5 text-[10px] font-bold normal-case text-slate-400">
               proj
             </span>

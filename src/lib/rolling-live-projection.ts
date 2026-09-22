@@ -266,23 +266,65 @@ function round2(n: number): number {
 }
 
 /**
- * Win% from display projections:
- * raw = mine / (mine + opp), then amplify deviation from 50/50 so modest
- * projection gaps (e.g. 112.08 vs 120.82) read as board-style 42% / 58%.
- *
- * @deprecated Prefer {@link computeDynamicWinProbability} so Dashboard and
- * Matchup share the same live trajectory engine.
+ * Full-slate team scoring SD used for matchup win%.
+ * Calibrated so a ~6.5 pt pre-game edge lands near Sleeper's ~56%
+ * (combined σ ≈ 20√2 ≈ 28 → logistic).
+ */
+export const MATCHUP_TEAM_FULL_SD = 20;
+
+/**
+ * Sleeper-style win probability from expected finals + remaining uncertainty.
+ * Margin is logistic-scaled by remaining-slate σ so the same point lead becomes
+ * more decisive as players finish (and locks when nobody is left).
+ */
+export function matchupWinPctFromExpected(opts: {
+  expectedA: number;
+  expectedB: number;
+  /** Projected points still on the board for A (0 when slate is done). */
+  remainingA: number;
+  remainingB: number;
+}): { pctA: number; pctB: number } {
+  const expectedA = Math.max(0, Number(opts.expectedA) || 0);
+  const expectedB = Math.max(0, Number(opts.expectedB) || 0);
+  const remainingA = Math.max(0, Number(opts.remainingA) || 0);
+  const remainingB = Math.max(0, Number(opts.remainingB) || 0);
+  const margin = expectedA - expectedB;
+
+  const fracFor = (remaining: number, expected: number): number => {
+    if (remaining <= 0.005) return 0;
+    const denom = Math.max(expected, remaining, 0.01);
+    return Math.min(1, remaining / denom);
+  };
+
+  const sigmaA = MATCHUP_TEAM_FULL_SD * Math.sqrt(fracFor(remainingA, expectedA));
+  const sigmaB = MATCHUP_TEAM_FULL_SD * Math.sqrt(fracFor(remainingB, expectedB));
+  const sigma = Math.sqrt(sigmaA * sigmaA + sigmaB * sigmaB);
+
+  if (sigma < 0.75) {
+    if (margin > 0.05) return { pctA: 99, pctB: 1 };
+    if (margin < -0.05) return { pctA: 1, pctB: 99 };
+    return { pctA: 50, pctB: 50 };
+  }
+
+  const p = 1 / (1 + Math.exp(-margin / sigma));
+  const pctA = Math.round(Math.min(99, Math.max(1, p * 100)));
+  return { pctA, pctB: 100 - pctA };
+}
+
+/**
+ * Win% from display projections (pre-game / replay).
+ * Same engine as live matchup odds — remaining = full expected totals.
  */
 export function winPctFromDisplayProjections(mine: number, opp: number): number {
   const a = Math.max(0, Number(mine) || 0);
   const b = Math.max(0, Number(opp) || 0);
-  const total = a + b;
-  if (total <= 0) return 50;
-
-  const raw = a / total;
-  const SMOOTHING = 4.25;
-  const adjusted = 0.5 + (raw - 0.5) * SMOOTHING;
-  return Math.round(Math.min(99, Math.max(1, adjusted * 100)));
+  if (a <= 0 && b <= 0) return 50;
+  return matchupWinPctFromExpected({
+    expectedA: a,
+    expectedB: b,
+    remainingA: a,
+    remainingB: b,
+  }).pctA;
 }
 
 /** Sleeper ↔ ESPN abbreviation aliases for scoreboard lookups. */
@@ -294,9 +336,6 @@ const TEAM_PROGRESS_ALIASES: Record<string, string[]> = {
   JAC: ["JAC", "JAX"],
   JAX: ["JAX", "JAC"],
 };
-
-/** In-game volatility weight applied to remaining projection upside. */
-const LIVE_REMAINING_VOLATILITY = 1.05;
 
 function progressForNflTeam(
   teamAbbr: string | null | undefined,
@@ -343,8 +382,9 @@ function starterRemainingProjectedPoints(
 }
 
 /**
- * Dynamic live in-game win probability:
- * live score + volatility-weighted remaining projection for non-Final starters.
+ * Dynamic live in-game win probability (Sleeper-style):
+ * expected final = live + remaining projection; uncertainty shrinks as the
+ * remaining slate shrinks so the same lead becomes more decisive mid-week.
  * Finished + trailing → hard lock at 1% / 99%.
  * Shared by Matchup page and Dashboard matchup card.
  */
@@ -397,15 +437,17 @@ export function computeDynamicWinProbability(opts: {
 
   const projRemainingA = sumRemaining(activeStartersA, opts.pointsMapA);
   const projRemainingB = sumRemaining(activeStartersB, opts.pointsMapB);
+  const expectedA = scoreA + projRemainingA;
+  const expectedB = scoreB + projRemainingB;
 
-  const liveTrajectoryA = scoreA + projRemainingA * LIVE_REMAINING_VOLATILITY;
-  const liveTrajectoryB = scoreB + projRemainingB * LIVE_REMAINING_VOLATILITY;
-  const totalTrajectory = liveTrajectoryA + liveTrajectoryB;
-  if (totalTrajectory <= 0) return { pctA: 50, pctB: 50 };
+  if (expectedA <= 0 && expectedB <= 0) return { pctA: 50, pctB: 50 };
 
-  let pctA = Math.round((liveTrajectoryA / totalTrajectory) * 100);
-  pctA = Math.max(1, Math.min(99, pctA));
-  return { pctA, pctB: 100 - pctA };
+  return matchupWinPctFromExpected({
+    expectedA,
+    expectedB,
+    remainingA: projRemainingA,
+    remainingB: projRemainingB,
+  });
 }
 
 /** Compact local kickoff label, e.g. "Sun 3:25PM". */

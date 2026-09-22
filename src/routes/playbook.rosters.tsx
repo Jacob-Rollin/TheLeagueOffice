@@ -405,7 +405,7 @@ function PlaybookRostersPage() {
   const projPts = (p: Player | null) => {
     if (!p) return "—";
     const pts = projectFor(p.id) ?? weeklyFallback(p);
-    return pts.toFixed(1);
+    return pts.toFixed(2);
   };
 
   const managerSelect = (

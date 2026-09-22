@@ -1,3 +1,5 @@
+import { winPctFromDisplayProjections } from "./rolling-live-projection";
+
 const BASE = "https://api.sleeper.app/v1";
 
 export type LeagueSummary = {
@@ -928,8 +930,8 @@ export type WeeklyMatchupEntry = {
   playerIds: string[];
   /**
    * IR / reserve ids for this week when the host exposes them.
-   * Sleeper: live `reserve` for the current and future NFL weeks; empty for
-   * past weeks (no historical IR on matchup payloads).
+   * Sleeper: live `reserve` for current/future weeks; reconstructed from
+   * IR slot transactions for past weeks (matchups omit historical reserve).
    */
   irIds: string[];
   /** Per-player fantasy points scored so far this week. */
@@ -949,10 +951,7 @@ function roundHundredths(n: number): number {
 
 /** Provider-style win% from projected finals when the host omits raw odds. */
 function hostWinPctFromProjected(mine: number, opp: number): number {
-  if (!Number.isFinite(mine) || !Number.isFinite(opp)) return 50;
-  if (mine <= 0 && opp <= 0) return 50;
-  const p = 1 / (1 + Math.exp(-(mine - opp) / 12));
-  return Math.round(Math.min(99, Math.max(1, p * 100)));
+  return winPctFromDisplayProjections(mine, opp);
 }
 
 /** Stamp complementary win% onto each H2H pair using host projected totals. */
@@ -1075,7 +1074,7 @@ async function enrichSleeperProjectedPoints(
   const season = String(state?.season ?? new Date().getUTCFullYear());
   const { positionsQuery } = await import("./players-build");
   const { loadLeagueScoring } = await import("./scoring.server");
-  const { scoreStats } = await import("./scoring-map");
+  const { projectionPoints } = await import("./scoring-map");
 
   const [scoring, projRows] = await Promise.all([
     loadLeagueScoring(leagueId, "sleeper"),
@@ -1093,11 +1092,97 @@ async function enrichSleeperProjectedPoints(
     if (entry.projectedPoints > 0) continue;
     let sum = 0;
     for (const starterId of entry.starters) {
-      const scored = scoreStats(projById.get(starterId), scoring.map);
+      const scored = projectionPoints(projById.get(starterId), scoring.map, scoring.format);
       if (scored != null) sum += scored;
     }
     entry.projectedPoints = roundHundredths(sum);
   }
+}
+
+/**
+ * Replay Sleeper IR slot moves through `throughWeek` so past matchups can
+ * place reserve players correctly (matchup payloads omit historical reserve).
+ */
+async function reconstructSleeperIrByRoster(
+  leagueId: string,
+  throughWeek: number,
+): Promise<Map<number, string[]>> {
+  const irByRoster = new Map<number, Set<string>>();
+  const end = Math.max(1, Math.min(18, Math.floor(throughWeek) || 1));
+  const weeks = Array.from({ length: end }, (_, i) => i + 1);
+
+  const lists = await Promise.all(
+    weeks.map((w) => json<SleeperTxn[]>(`${BASE}/league/${leagueId}/transactions/${w}`)),
+  );
+
+  const events: { at: number; rosterId: number; playerId: string; onIr: boolean }[] = [];
+  for (const list of lists) {
+    for (const txn of list ?? []) {
+      const status = String(txn.status ?? "").toLowerCase();
+      if (status && status !== "complete" && status !== "successful") continue;
+
+      const type = String(txn.type ?? "").toLowerCase();
+      const toSlot = String(txn.metadata?.to_slot ?? "").toUpperCase();
+      const fromSlot = String(txn.metadata?.from_slot ?? "").toUpperCase();
+      const isTrade = type === "trade";
+      const isWaiver = type === "waiver";
+      const isFreeAgent = type === "free_agent";
+      const isIrType = type === "injury" || type === "ir";
+      const placingOnIr =
+        isIrType || (!isWaiver && !isFreeAgent && !isTrade && toSlot === "IR");
+      const activatingOffIr = fromSlot === "IR" && toSlot !== "IR";
+
+      const at = Number(txn.status_updated ?? txn.created ?? 0) || 0;
+      const adds = Object.entries(txn.adds ?? {});
+      const drops = Object.entries(txn.drops ?? {});
+
+      if (placingOnIr) {
+        const players = adds.length ? adds : drops;
+        for (const [playerId, rosterRaw] of players) {
+          const rosterId = Number(rosterRaw ?? txn.roster_ids?.[0] ?? 0);
+          if (!playerId || !Number.isFinite(rosterId) || rosterId <= 0) continue;
+          events.push({ at, rosterId, playerId: String(playerId), onIr: true });
+        }
+        continue;
+      }
+
+      if (activatingOffIr) {
+        const players = adds.length ? adds : drops;
+        for (const [playerId, rosterRaw] of players) {
+          const rosterId = Number(rosterRaw ?? txn.roster_ids?.[0] ?? 0);
+          if (!playerId || !Number.isFinite(rosterId) || rosterId <= 0) continue;
+          events.push({ at, rosterId, playerId: String(playerId), onIr: false });
+        }
+      }
+
+      // Dropped / traded-away players leave IR with the roster.
+      if (isTrade || isWaiver || isFreeAgent) {
+        for (const [playerId, rosterRaw] of drops) {
+          const rosterId = Number(rosterRaw);
+          if (!playerId || !Number.isFinite(rosterId) || rosterId <= 0) continue;
+          // Same player in adds+drops on one roster is a slot shuffle, not a cut.
+          if (adds.some(([pid, rid]) => pid === playerId && Number(rid) === rosterId)) {
+            continue;
+          }
+          events.push({ at, rosterId, playerId: String(playerId), onIr: false });
+        }
+      }
+    }
+  }
+
+  events.sort((a, b) => a.at - b.at || a.playerId.localeCompare(b.playerId));
+  for (const event of events) {
+    const set = irByRoster.get(event.rosterId) ?? new Set<string>();
+    if (event.onIr) set.add(event.playerId);
+    else set.delete(event.playerId);
+    irByRoster.set(event.rosterId, set);
+  }
+
+  const out = new Map<number, string[]>();
+  for (const [rosterId, set] of irByRoster) {
+    out.set(rosterId, [...set]);
+  }
+  return out;
 }
 
 /** Load host-platform weekly matchup rows keyed by roster + matchup_id. */
@@ -1238,10 +1323,12 @@ export async function loadConnectionMatchups(
   if (!rows?.length) return null;
 
   const currentNflWeek = Math.max(1, Number(nflState?.week ?? 0) || 0);
-  // Past weeks: do not leak today's IR onto historical benches.
   // Current + future weeks: Sleeper matchups reuse the live roster, so attach
-  // current reserve so IR players stay in the IR section.
+  // current reserve. Past weeks: reconstruct IR from slot transactions.
   const attachLiveReserve = currentNflWeek > 0 && Number(safeWeek) >= currentNflWeek;
+  const historicalIrByRoster = attachLiveReserve
+    ? new Map<number, string[]>()
+    : await reconstructSleeperIrByRoster(leagueId, safeWeek);
 
   const reserveByRoster = new Map<number, string[]>();
   for (const r of rosters ?? []) {
@@ -1283,9 +1370,11 @@ export async function loadConnectionMatchups(
           playerPoints[String(pid)] = Number(pts) || 0;
         }
       }
-      const starters = (Array.isArray(row["starters"]) ? (row["starters"] as (string | null)[]) : [])
-        .map((id) => (id && id !== "0" ? String(id) : ""))
-        .filter(Boolean);
+      // Preserve empty starter slots ("0") so lineup positions stay aligned to
+      // roster_positions — never filter them out or later slots shift left.
+      const starters = (
+        Array.isArray(row["starters"]) ? (row["starters"] as (string | null)[]) : []
+      ).map((id) => (id && id !== "0" ? String(id) : ""));
 
       // Week roster from the matchup payload — historical source of truth for bench.
       const fromPlayers = (
@@ -1293,12 +1382,29 @@ export async function loadConnectionMatchups(
       )
         .map((id) => (id && id !== "0" ? String(id) : ""))
         .filter(Boolean);
-      const playerIdSet = new Set<string>([...fromPlayers, ...starters, ...Object.keys(playerPoints)]);
+      const playerIdSet = new Set<string>([
+        ...fromPlayers,
+        ...starters.filter(Boolean),
+        ...Object.keys(playerPoints),
+      ]);
       const playerIds = [...playerIdSet];
 
-      // Sleeper does not expose historical IR on matchup rows. Attach live
-      // reserve for the current and future weeks only.
-      const irIds = attachLiveReserve ? (reserveByRoster.get(rosterId) ?? []) : [];
+      let irIds = attachLiveReserve
+        ? (reserveByRoster.get(rosterId) ?? [])
+        : (historicalIrByRoster.get(rosterId) ?? []);
+      // Only keep IR players who were actually on this week's roster.
+      if (irIds.length && playerIds.length) {
+        const onRoster = new Set(playerIds);
+        irIds = irIds.filter((id) => onRoster.has(id));
+      }
+      // Soft fallback: live reserve players who were on this week's roster and
+      // not starting — covers IR moves that never emitted slot metadata.
+      if (!attachLiveReserve && irIds.length === 0) {
+        const liveReserve = reserveByRoster.get(rosterId) ?? [];
+        const starterSet = new Set(starters.filter(Boolean));
+        const onRoster = new Set(playerIds);
+        irIds = liveReserve.filter((id) => onRoster.has(id) && !starterSet.has(id));
+      }
 
       const nativeProjected = readNativeProjected(row);
       const nativeWin = readNativeWinPct(row);

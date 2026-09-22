@@ -3,12 +3,14 @@ import { detailQuery } from "@/components/draft/PlayerDetail";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { playbookCardClass } from "@/components/playbook/panels";
+import { SosStars } from "@/components/sos/SosStars";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player, Pos } from "@/lib/draft";
@@ -17,7 +19,6 @@ import { getTeamPrimaryColor } from "@/lib/nfl-teams";
 import {
   currentSeason,
   fetchSchedule,
-  type PlayersPayload,
   type ScheduleGame,
 } from "@/lib/players-build";
 import { starterRequirements } from "@/lib/power-rankings";
@@ -26,7 +27,7 @@ import {
   formatNflKickoffLabel,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
-import { getCached, readCache } from "@/lib/sleeper-cache";
+import { getCached } from "@/lib/sleeper-cache";
 import { sosStarsFromRank, weeklySosMatchupFor, type SosMatchup } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -52,7 +53,8 @@ const TABS: { id: TeamTab; label: string }[] = [
 
 const SKIP_STARTER_SLOTS = new Set(["BN", "BENCH", "IR", "IL", "TAXI", "RESERVE"]);
 const FLEX_OK = new Set(["RB", "WR", "TE"]);
-const weeklyFallback = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
+/** Never invent a weekly proj from season averages — Sleeper shows "—" instead. */
+const weeklyFallback = (_p: Player) => 0;
 
 /** Sleeper ↔ ESPN abbreviation aliases for scoreboard lookups. */
 const TEAM_PROGRESS_ALIASES: Record<string, string[]> = {
@@ -65,7 +67,6 @@ const TEAM_PROGRESS_ALIASES: Record<string, string[]> = {
 };
 
 const SCHEDULE_CACHE_KEY = "schedule-v1";
-const PLAYERS_CACHE_KEY = "players-v1";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type RosterRow = {
@@ -135,8 +136,11 @@ function buildStarterRows(
   });
 }
 
-function posRankLabel(player: Player): string {
-  const rank = Number(player.posRank);
+function posRankLabel(player: Player, sleeperPosRank?: number | null): string {
+  const rank =
+    sleeperPosRank != null && Number.isFinite(sleeperPosRank) && sleeperPosRank > 0
+      ? sleeperPosRank
+      : Number(player.posRank);
   if (!Number.isFinite(rank) || rank <= 0 || rank >= 999) return `${player.pos}-`;
   return `${player.pos}${Math.round(rank)}`;
 }
@@ -155,23 +159,6 @@ function progressForPlayer(
   return undefined;
 }
 
-async function loadDefenseRanks(): Promise<Map<string, number>> {
-  const ranks = new Map<string, number>();
-  try {
-    const hit = await readCache<PlayersPayload>(PLAYERS_CACHE_KEY);
-    const defenses = (hit?.data?.players ?? []).filter((p) => p.pos === "DEF");
-    [...defenses]
-      .sort((a, b) => b.proj.half - a.proj.half)
-      .forEach((d, i) => {
-        const team = (d.team || "").toUpperCase();
-        if (team) ranks.set(team, i + 1);
-      });
-  } catch {
-    /* ignore */
-  }
-  return ranks;
-}
-
 async function loadScheduleGames(): Promise<ScheduleGame[]> {
   try {
     const payload = await getCached<{ season: string; games: ScheduleGame[] }>(
@@ -188,10 +175,8 @@ async function loadScheduleGames(): Promise<ScheduleGame[]> {
   }
 }
 
-function buildScheduleSosByTeam(
-  games: ScheduleGame[],
-  ranks: Map<string, number>,
-): Map<string, ScheduleSosRow[]> {
+/** Opponents from the NFL schedule — ranks stay null (brain supplies positional SOS). */
+function buildScheduleOppByTeam(games: ScheduleGame[]): Map<string, ScheduleSosRow[]> {
   const byTeam = new Map<string, ScheduleSosRow[]>();
   for (const g of games) {
     const home = (g.home || "").toUpperCase();
@@ -202,7 +187,7 @@ function buildScheduleSosByTeam(
       rows.push({
         week: g.week,
         opp: away,
-        rank: ranks.get(away) ?? null,
+        rank: null,
         pointsAllowed: null,
         isAway: false,
       });
@@ -213,7 +198,7 @@ function buildScheduleSosByTeam(
       rows.push({
         week: g.week,
         opp: home,
-        rank: ranks.get(home) ?? null,
+        rank: null,
         pointsAllowed: null,
         isAway: true,
       });
@@ -227,28 +212,6 @@ function buildScheduleSosByTeam(
     );
   }
   return byTeam;
-}
-
-function SosStars({ stars }: { stars: number | null }) {
-  const filled =
-    stars != null && Number.isFinite(stars)
-      ? Math.max(0, Math.min(5, Math.round(stars)))
-      : 0;
-  return (
-    <span className="inline-flex shrink-0 items-center" aria-label={`${filled} of 5 matchup stars`}>
-      {Array.from({ length: 5 }, (_, i) => (
-        <span
-          key={`sos-star-${i}`}
-          className={cn(
-            i > 0 ? "ml-0.5" : undefined,
-            i < filled ? "font-bold text-amber-500" : "text-slate-200",
-          )}
-        >
-          {"\u2605"}
-        </span>
-      ))}
-    </span>
-  );
 }
 
 /**
@@ -1044,6 +1007,7 @@ function PlaybookMyTeamPage() {
   const players = playersPayload?.players ?? [];
   const { myTeam, rosterPositions, loading: rostersLoading } = useLeagueRosters(players);
   const brain = usePlayerBrain();
+  const { rankFor: positionalDefenseRank } = usePositionalDefenseRanks();
   const modalRef = useRef<PlayerModalHandle>(null);
   const [tab, setTab] = useState<TeamTab>(() => {
     if (typeof window === "undefined") return "overview";
@@ -1065,9 +1029,9 @@ function PlaybookMyTeamPage() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [games, ranks] = await Promise.all([loadScheduleGames(), loadDefenseRanks()]);
+      const games = await loadScheduleGames();
       if (!alive) return;
-      setScheduleSosByTeam(buildScheduleSosByTeam(games, ranks));
+      setScheduleSosByTeam(buildScheduleOppByTeam(games));
     })().catch(() => {
       /* silent */
     });
@@ -1077,7 +1041,7 @@ function PlaybookMyTeamPage() {
   }, []);
 
   const nflWeek = useQuery({
-    queryKey: ["nfl-state-week"],
+    queryKey: ["nfl-state-week", "v3-week"],
     staleTime: 30 * 60 * 1000,
     retry: false,
     queryFn: async () => {
@@ -1094,7 +1058,7 @@ function PlaybookMyTeamPage() {
   }, [nflWeek.data, activeLeagueId]);
 
   const activeWeek = selectedWeek ?? nflWeek.data ?? 1;
-  const { projectFor, statsFor, loading: projectionsLoading } = useLeagueProjections(activeWeek);
+  const { projectFor, statsFor, rankFor, loading: projectionsLoading } = useLeagueProjections(activeWeek);
   const { statsFor: actualStatsFor } = useWeeklyActualStats(activeWeek);
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
@@ -1418,47 +1382,44 @@ function PlaybookMyTeamPage() {
   const weeklySosHitFor = (
     player: Player,
   ): { stars: number | null; opp: string | null; isAway: boolean } => {
-    if (phaseFor(player) === "post") {
-      const progressOpp = (progressForPlayer(player, progressByNflTeam)?.opponentAbbr ?? "")
-        .trim()
-        .toUpperCase();
-      const team = (player.team || "").trim().toUpperCase();
-      const schedHit = team
-        ? scheduleSosByTeam.get(team)?.find((m) => Number(m.week) === Number(activeWeek))
-        : undefined;
-      return {
-        stars: null,
-        opp: progressOpp || (schedHit?.opp ?? null),
-        isAway: Boolean(schedHit?.isAway),
-      };
-    }
-
-    const brainHit = weeklySosMatchupFor(brain, player.id, activeWeek);
     const team = (player.team || "").trim().toUpperCase();
     const schedHit = team
       ? scheduleSosByTeam.get(team)?.find((m) => Number(m.week) === Number(activeWeek))
       : undefined;
+    const progressOpp = (progressForPlayer(player, progressByNflTeam)?.opponentAbbr ?? "")
+      .trim()
+      .toUpperCase();
 
-    if (brainHit) {
+    const brainHit = weeklySosMatchupFor(brain, player.id, activeWeek);
+    // Only trust brain rows with a real positional rank — null ranks rendered as 0 stars.
+    if (
+      brainHit &&
+      brainHit.rank != null &&
+      Number.isFinite(Number(brainHit.rank)) &&
+      Number(brainHit.rank) > 0
+    ) {
       return {
         stars: sosStarsFromRank(brainHit.rank),
-        opp: (brainHit.opp ?? "").trim().toUpperCase() || null,
+        opp: (brainHit.opp ?? "").trim().toUpperCase() || progressOpp || null,
         isAway: Boolean(schedHit?.isAway),
       };
     }
 
-    if (schedHit) {
-      return {
-        stars: sosStarsFromRank(schedHit.rank),
-        opp: (schedHit.opp ?? "").trim().toUpperCase() || null,
-        isAway: Boolean(schedHit.isAway),
-      };
-    }
+    const opp =
+      (brainHit?.opp ?? "").trim().toUpperCase() ||
+      (schedHit?.opp ?? "").trim().toUpperCase() ||
+      progressOpp ||
+      null;
+    const positionalRank =
+      schedHit?.rank != null && Number.isFinite(Number(schedHit.rank)) && Number(schedHit.rank) > 0
+        ? Number(schedHit.rank)
+        : positionalDefenseRank(player.pos, opp);
 
-    const progressOpp = (progressForPlayer(player, progressByNflTeam)?.opponentAbbr ?? "")
-      .trim()
-      .toUpperCase();
-    return { stars: null, opp: progressOpp || null, isAway: false };
+    return {
+      stars: sosStarsFromRank(positionalRank),
+      opp,
+      isAway: Boolean(schedHit?.isAway),
+    };
   };
 
   const opponentLabelFor = (player: Player): string => {
@@ -1473,10 +1434,11 @@ function PlaybookMyTeamPage() {
     const progress = progressForPlayer(player, progressByNflTeam);
     const phase = progress?.phase ?? "pre";
     const showLive = phase !== "pre" || live > 0;
-    const proj = projectFor(player.id) ?? weeklyFallback(player);
+    const bye = player.bye != null && player.bye === activeWeek;
+    const proj = bye ? null : projectFor(player.id);
     return {
       liveLabel: showLive ? live.toFixed(1) : "-",
-      projLabel: `${proj.toFixed(1)} Proj`,
+      projLabel: proj != null ? `${proj.toFixed(1)} Proj` : "- Proj",
     };
   };
 
@@ -1611,7 +1573,7 @@ function PlaybookMyTeamPage() {
                       </button>
                     </td>
                     <td className="px-3 py-3 align-middle text-sm font-medium tabular-nums text-slate-500">
-                      {posRankLabel(player)}
+                      {posRankLabel(player, rankFor(player.id).pos)}
                     </td>
                     <td className="px-3 py-3 align-middle">
                       <div className="flex flex-col">
@@ -1683,7 +1645,8 @@ function PlaybookMyTeamPage() {
                     offensiveProjRows.map((row, index) => {
                       const player = row.player!;
                       const stats = statsFor(player.id);
-                      const weekly = projectFor(player.id) ?? weeklyFallback(player);
+                      const bye = player.bye != null && player.bye === activeWeek;
+                      const weekly = bye ? null : projectFor(player.id);
                       const rowTone = index % 2 === 1 ? "bg-slate-50/50" : "bg-white";
                       return (
                         <tr
@@ -1707,7 +1670,7 @@ function PlaybookMyTeamPage() {
                             </div>
                           </td>
                           <td className="px-3 py-3 align-middle text-right font-semibold tabular-nums text-slate-900">
-                            {weekly.toFixed(1)}
+                            {weekly != null ? weekly.toFixed(1) : "-"}
                           </td>
                           <td className="px-3 py-3 align-middle text-right tabular-nums text-slate-700">
                             {fmtProjStat(stats, "pass_yd")}
@@ -1772,7 +1735,8 @@ function PlaybookMyTeamPage() {
                     kickerProjRows.map((row, index) => {
                       const player = row.player!;
                       const stats = statsFor(player.id);
-                      const weekly = projectFor(player.id) ?? weeklyFallback(player);
+                      const bye = player.bye != null && player.bye === activeWeek;
+                      const weekly = bye ? null : projectFor(player.id);
                       const rowTone = index % 2 === 1 ? "bg-slate-50/50" : "bg-white";
                       return (
                         <tr
@@ -1796,7 +1760,7 @@ function PlaybookMyTeamPage() {
                             </div>
                           </td>
                           <td className="px-3 py-3 align-middle text-right font-semibold tabular-nums text-slate-900">
-                            {weekly.toFixed(1)}
+                            {weekly != null ? weekly.toFixed(1) : "-"}
                           </td>
                           <td className="px-3 py-3 align-middle text-right tabular-nums text-slate-700">
                             {fmtProjStat(stats, "fgm", 1)}
@@ -1846,7 +1810,8 @@ function PlaybookMyTeamPage() {
                     defensiveProjRows.map((row, index) => {
                       const player = row.player!;
                       const stats = statsFor(player.id);
-                      const weekly = projectFor(player.id) ?? weeklyFallback(player);
+                      const bye = player.bye != null && player.bye === activeWeek;
+                      const weekly = bye ? null : projectFor(player.id);
                       const rowTone = index % 2 === 1 ? "bg-slate-50/50" : "bg-white";
                       const defTd =
                         stats?.["def_td"] != null
@@ -1876,7 +1841,7 @@ function PlaybookMyTeamPage() {
                             </div>
                           </td>
                           <td className="px-3 py-3 align-middle text-right font-semibold tabular-nums text-slate-900">
-                            {weekly.toFixed(1)}
+                            {weekly != null ? weekly.toFixed(1) : "-"}
                           </td>
                           <td className="px-3 py-3 align-middle text-right tabular-nums text-slate-700">
                             {fmtProjStat(stats, "sack", 1)}

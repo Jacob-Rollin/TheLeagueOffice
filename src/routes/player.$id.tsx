@@ -6,16 +6,21 @@ import { useEffect, useRef, useState } from "react";
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { PlayerDetail } from "@/components/draft/PlayerDetail";
 import { RosteredOnLabel } from "@/components/draft/RosteredOnLabel";
-import { usePlayerSos } from "@/hooks/usePlayerSos";
+import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
+import { sosHasUsableRanks, usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { Pos, Scoring } from "@/lib/draft";
 import { getTeamPrimaryColor, NFL_TEAMS, teamById } from "@/lib/nfl-teams";
 import { getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
 import {
-  matchupGrade,
-  playoffWindow,
+  playoffWindowPresentation,
+  positionalSosStanding,
+  sosDifficultyChipClass,
+  sosDifficultyFromStars,
+  sosStarsFromRank,
   strategicOutlook,
   weekSlots,
+  type PlayerSos,
 } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
@@ -205,11 +210,35 @@ function PlayerHubPage() {
   const brain = usePlayerBrain();
   const [activeTab, setActiveTab] = useState<DetailTabKey>("logs");
   const [scoringFormat, setScoringFormat] = useState<Scoring>("half");
-  const playerSos = usePlayerSos(
+  const hookSos = usePlayerSos(
     (data ? brain?.[data.player.id] : null) ?? null,
     data?.player.team ?? null,
     scoringFormat,
+    data?.player.pos ?? null,
   );
+  const detailSos = (() => {
+    const raw = data?.sos;
+    if (!raw?.opponents?.length) return null;
+    const next: PlayerSos = {
+      rank: raw.rank,
+      matchups: raw.opponents.map((o) => ({
+        week: o.week,
+        opp: o.opp,
+        rank: o.rank,
+        pointsAllowed: o.pointsAllowed,
+      })),
+    };
+    return next;
+  })();
+  const playerSos = sosHasUsableRanks(hookSos)
+    ? hookSos
+    : sosHasUsableRanks(detailSos)
+      ? detailSos
+      : hookSos;
+  const sosPeers = useSosPeerMatrix(data?.player.pos, brain);
+  const { data: nflState } = useNflState();
+  const currentNflWeek = nflState?.week ?? null;
+  // While NFL state loads, highlight nothing — never default to week 1.
   const detailHostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -235,8 +264,13 @@ function PlayerHubPage() {
   const brainEntry = brain?.[player.id] ?? null;
   const brainSos = playerSos;
   const tier = riskTier(injuryRisk.score);
-  const playoff = brainSos ? playoffWindow(brainSos) : null;
-  const playoffChallenging = playoff === "Challenging";
+  const peerMatrix = sosPeers ?? brain;
+  const standing = positionalSosStanding(player.id, player.pos, peerMatrix, brainSos);
+  const overallMatchup = {
+    grade: standing.grade,
+    textClass: standing.textClass,
+  };
+  const playoff = playoffWindowPresentation(brainSos, player.pos, peerMatrix);
   const outlookLower = brainSos ? strategicOutlook(brainSos).toLowerCase() : "";
   const trendLabel = /favor|friendly|steady/.test(outlookLower)
     ? "FAVORABLE"
@@ -354,16 +388,21 @@ function PlayerHubPage() {
               </Widget>
             )}
 
-            {player.pos !== "DEF" && (
-              <Widget title={`Strength of schedule vs ${player.pos}`}>
+            {(player.pos !== "DEF" || brainSos) && (
+              <Widget title={`Strength of schedule vs ${player.pos === "DEF" ? "DEF" : player.pos}`}>
                 {!brainSos ? (
                   <p className="text-xs text-zinc-500">Schedule data unavailable.</p>
                 ) : (
                   <>
                     <div className="flex w-full select-none flex-col gap-2 border-b border-slate-100 pb-4">
                       <div className="flex h-[64px] w-full flex-col items-center justify-center rounded-xl border border-slate-100/80 bg-slate-50/50 p-3 text-center shadow-sm">
-                        <span className="text-sm font-black uppercase tracking-tight text-slate-900">
-                          {matchupGrade(brainSos.rank) || "NEUTRAL"}
+                        <span
+                          className={cn(
+                            "text-sm font-black uppercase tracking-tight",
+                            overallMatchup.textClass,
+                          )}
+                        >
+                          {overallMatchup.grade}
                         </span>
                         <span className="mt-1.5 text-[9px] font-black uppercase leading-none tracking-widest text-slate-400">
                           Overall Matchup Rating
@@ -374,10 +413,10 @@ function PlayerHubPage() {
                           <span
                             className={cn(
                               "text-xs font-black uppercase leading-none tracking-tight",
-                              playoffChallenging ? "text-rose-600" : "text-emerald-600",
+                              playoff.textClass,
                             )}
                           >
-                            {playoffChallenging ? "CHALLENGING" : "FAVORABLE"}
+                            {playoff.label}
                           </span>
                           <span className="mt-1.5 text-[8px] font-black uppercase leading-none tracking-widest text-slate-400">
                             Playoff Window
@@ -397,29 +436,17 @@ function PlayerHubPage() {
                       {weekSlots(brainSos.matchups).map((slot) => {
                         const isBye = !slot.matchup;
                         const rank = slot.matchup?.rank ?? null;
-                        const difficulty = isBye
-                          ? "bye"
-                          : rank == null
-                            ? "neutral"
-                            : rank >= 25
-                              ? "great"
-                              : rank >= 18
-                                ? "good"
-                                : rank >= 11
-                                  ? "neutral"
-                                  : rank >= 6
-                                    ? "tough"
-                                    : "bad";
+                        const stars = isBye ? null : sosStarsFromRank(rank);
+                        const { tone, label } = isBye
+                          ? { tone: "bye" as const, label: "BYE" }
+                          : sosDifficultyFromStars(stars);
                         const opp = isBye
                           ? "BYE"
                           : (slot.matchup?.opp ?? "—").replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ||
                             "—";
-                        const isCurrentWeek = slot.week === 1;
-                        const difficultyLabel = isBye
-                          ? "BYE"
-                          : difficulty === "neutral"
-                            ? "MID"
-                            : difficulty.toUpperCase();
+                        const isCurrentWeek =
+                          currentNflWeek != null && slot.week === currentNflWeek;
+                        const difficultyLabel = label ?? "NEUTRAL";
                         return (
                           <div
                             key={slot.week}
@@ -437,13 +464,8 @@ function PlayerHubPage() {
                             </span>
                             <span
                               className={cn(
-                                "w-full max-w-[46px] select-none rounded-md py-0.5 text-center text-[8px] font-black uppercase tracking-wider text-white transition-colors",
-                                difficulty === "great" && "bg-emerald-600",
-                                difficulty === "good" && "bg-emerald-500",
-                                difficulty === "neutral" && "bg-slate-400",
-                                difficulty === "tough" && "bg-rose-400",
-                                difficulty === "bad" && "bg-rose-600",
-                                isBye && "bg-slate-200 font-extrabold text-slate-500",
+                                "w-full max-w-[52px] select-none rounded-md py-0.5 text-center text-[8px] font-black uppercase tracking-wider transition-colors",
+                                sosDifficultyChipClass(tone),
                               )}
                             >
                               {difficultyLabel}
@@ -533,7 +555,9 @@ function PlayerHubPage() {
                             </div>
                           </div>
                           <div className="flex flex-row items-baseline space-x-0.5 pr-1 text-right text-xs font-black tracking-wide text-slate-900">
-                            <span>{Number.isFinite(d.proj) ? d.proj.toFixed(1) : "0.0"}</span>
+                            <span>
+                              {Number.isFinite(d.proj) && d.proj > 0 ? d.proj.toFixed(2) : "—"}
+                            </span>
                             <span className="select-none text-[9px] font-bold lowercase text-slate-400">
                               proj
                             </span>
@@ -577,6 +601,7 @@ function StandalonePlayerHeader({
   scoringFormat: Scoring;
   onScoringFormatChange: (format: Scoring) => void;
 }) {
+  const { rankFor } = useLeagueProjections();
   const teamMeta = teamById(player.team);
   const teamNickname = (teamMeta?.name ?? player.team ?? "FA").toUpperCase();
   const jerseyNumber = bio?.number != null ? String(bio.number) : null;
@@ -634,8 +659,19 @@ function StandalonePlayerHeader({
     (typeof player.rank === "object" && player.rank
       ? player.rank[scoringFormat] ?? player.rank.half ?? 999
       : 999);
-  const posRankLabel = Number(positionRank) < 900 ? positionRank : "—";
-  const overallRankLabel = Number(overallRaw) < 900 ? overallRaw : "—";
+  const sleeperRanks = rankFor(player.id, scoringFormat);
+  const posRankLabel =
+    sleeperRanks.pos != null
+      ? sleeperRanks.pos
+      : Number(positionRank) < 900
+        ? positionRank
+        : "—";
+  const overallRankLabel =
+    sleeperRanks.overall != null
+      ? sleeperRanks.overall
+      : Number(overallRaw) < 900
+        ? overallRaw
+        : "—";
 
   const [isScoringOpen, setIsScoringOpen] = useState(false);
   const scoringMenuRef = useRef<HTMLDivElement>(null);
@@ -654,7 +690,7 @@ function StandalonePlayerHeader({
   return (
     <div
       className={cn(
-        "relative z-40 flex h-[160px] min-h-[160px] w-full flex-row items-center overflow-visible rounded-t-xl rounded-b-none border-x border-t border-slate-100 pt-0 pr-6 pb-0 text-white shadow-sm",
+        "relative z-40 flex min-h-[160px] w-full flex-row items-stretch overflow-visible rounded-t-xl rounded-b-none border-x border-t border-slate-100 pt-0 pr-6 pb-0 text-white shadow-sm",
       )}
       style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
     >
@@ -671,7 +707,7 @@ function StandalonePlayerHeader({
         />
       ) : null}
 
-      <div className="absolute bottom-0 left-0 z-20 mb-0 ml-0 mt-0 flex h-[160px] w-[140px] items-end overflow-visible bg-transparent pl-0 select-none">
+      <div className="relative z-20 mb-0 ml-0 mt-0 flex w-[140px] min-h-[160px] flex-shrink-0 items-end self-stretch overflow-visible bg-transparent pl-0 select-none">
         <div className="absolute inset-0 overflow-hidden bg-transparent">
           <img
             src={playerImage(player.id, player.pos as Pos, player.team)}
@@ -683,12 +719,28 @@ function StandalonePlayerHeader({
             }}
           />
         </div>
+        <div className="absolute bottom-0 left-0 z-50 flex select-none flex-row items-center whitespace-nowrap bg-transparent pl-0 text-center uppercase">
+          <span
+            className={cn(
+              "flex shrink-0 items-center justify-center px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
+              POS_STRIP_BG[player.pos] ?? "bg-slate-700",
+            )}
+          >
+            {player.pos}
+          </span>
+          <span className="flex flex-row items-center justify-center space-x-1.5 rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
+            <span>{teamNickname}</span>
+            {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
+          </span>
+        </div>
       </div>
 
-      <div className="z-20 mt-1 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pl-[164px] pr-10 text-left">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pb-9 pl-6 pr-10 text-left">
         <RosteredOnLabel playerId={player.id} playerName={player.name} />
         <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-visible">
-          <h1 className="truncate text-3xl font-black tracking-tight text-white">{player.name}</h1>
+          <h1 className="truncate text-3xl font-black leading-tight tracking-tight text-white">
+            {player.name}
+          </h1>
           {injuryDetails ? (
             <span
               className={cn(
@@ -702,13 +754,13 @@ function StandalonePlayerHeader({
         </div>
 
         {isDefense ? (
-          <div className="mt-2 text-sm font-black uppercase tracking-wider text-white/70">
+          <div className="mt-2 text-sm font-black uppercase leading-snug tracking-wider text-white/70">
             CONFERENCE <span className="font-black text-white">{conference}</span>
             <span className="mx-3 text-white/20">|</span>
             DIVISION <span className="font-black text-white">{division}</span>
           </div>
         ) : (
-          <div className="mt-2 flex flex-wrap items-center text-sm font-black uppercase tracking-wider text-white/70">
+          <div className="mt-2 flex flex-wrap items-center text-sm font-black uppercase leading-snug tracking-wider text-white/70">
             <span>AGE {displayAge}</span>
             <HeaderVitalsDivider />
             <span>HEIGHT {height}</span>
@@ -798,21 +850,6 @@ function StandalonePlayerHeader({
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="pointer-events-none absolute bottom-0 left-0 z-50 flex select-none flex-row items-center whitespace-nowrap bg-transparent pl-0 text-center uppercase">
-        <span
-          className={cn(
-            "flex shrink-0 items-center justify-center px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
-            POS_STRIP_BG[player.pos] ?? "bg-slate-700",
-          )}
-        >
-          {player.pos}
-        </span>
-        <span className="flex flex-row items-center justify-center space-x-1.5 rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
-          <span>{teamNickname}</span>
-          {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
-        </span>
       </div>
     </div>
   );

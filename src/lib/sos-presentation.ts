@@ -29,7 +29,7 @@ function averageRank(matchups: SosMatchup[], from: number, to: number): number |
 }
 
 export function strategicOutlook(sos: PlayerSos): string {
-  const playoffRank = averageRank(sos.matchups, 15, 17);
+  const playoffRank = averageRank(sos.matchups, 14, 17);
   const earlyRank = averageRank(sos.matchups, 1, 6);
   const scheduledWeeks = new Set(sos.matchups.map((matchup) => matchup.week));
   const byeWeek = Array.from({ length: 14 }, (_, index) => index + 5).find(
@@ -71,17 +71,117 @@ export function matchupTone(rank: number | null): string {
   }
   return "bg-transparent border-border/60 text-foreground";
 }
-/** Season-long burden score: higher = more favorable schedule. */
+/** Season-long burden score: higher = more favorable schedule (softer defenses). */
 export function scheduleBurden(sos: PlayerSos | null | undefined): number | null {
   if (!sos || sos.matchups.length === 0) return null;
-  const pts = sos.matchups.map((m) => m.pointsAllowed).filter((v): v is number => v !== null);
-  if (pts.length > 0) return pts.reduce((sum, v) => sum + v, 0) / pts.length;
+  // Prefer average weekly positional FPA rank (1 = toughest, 32 = softest) so
+  // Overall, percentile, and stars share one positional scale.
   const ranks = sos.matchups.map((m) => m.rank).filter((v): v is number => v !== null);
-  if (ranks.length === 0) return null;
-  return ranks.reduce((sum, v) => sum + v, 0) / ranks.length;
+  if (ranks.length > 0) return ranks.reduce((sum, v) => sum + v, 0) / ranks.length;
+  const pts = sos.matchups.map((m) => m.pointsAllowed).filter((v): v is number => v !== null);
+  if (pts.length === 0) return null;
+  return pts.reduce((sum, v) => sum + v, 0) / pts.length;
 }
 
 type SosPeer = { position: string; sos: PlayerSos | null };
+
+function normalizePos(position: string | null | undefined): string {
+  const p = (position || "").toUpperCase();
+  return p === "DST" ? "DEF" : p;
+}
+
+/** Collect same-position schedule burdens from the peer matrix. */
+function samePositionBurdens(
+  position: string,
+  matrix: Record<string, SosPeer> | null | undefined,
+): number[] {
+  const pos = normalizePos(position);
+  const peers: number[] = [];
+  for (const entry of Object.values(matrix ?? {})) {
+    if (normalizePos(entry.position) !== pos) continue;
+    const score = scheduleBurden(entry.sos);
+    if (score !== null) peers.push(score);
+  }
+  return peers;
+}
+
+export type PositionalSosStanding = {
+  /** Overall grade vs same-position peers (not absolute 1–32 cutoffs). */
+  grade: SosGrade;
+  textClass: string;
+  /** Compact middle-card label, e.g. "TOP 7%". */
+  percentileLabel: string;
+  percentileTone: "challenging" | "favorable" | "baseline";
+  /** Caption under the percentile, e.g. "Most Challenging Schedule". */
+  percentileCaption: string;
+  topFavorablePct: number | null;
+  topChallengingPct: number | null;
+};
+
+/**
+ * Full positional SOS standing: overall grade + percentile share one same-position
+ * peer comparison (fantasy points allowed / ranks vs that position only).
+ */
+export function positionalSosStanding(
+  playerId: string,
+  position: string,
+  matrix: Record<string, SosPeer> | null | undefined,
+  fallbackSos?: PlayerSos | null,
+): PositionalSosStanding {
+  const ownSos = matrix?.[playerId]?.sos ?? fallbackSos ?? null;
+  const own = scheduleBurden(ownSos);
+  const peers = samePositionBurdens(position, matrix);
+
+  // Not enough same-position peers → fall back to absolute positional-rank grade.
+  if (own === null || peers.length < 5) {
+    const grade = matchupGrade(ownSos?.rank ?? (own != null ? Math.round(own) : null));
+    return {
+      grade,
+      textClass: overallMatchupGradeClass(grade),
+      percentileLabel: "BASELINE",
+      percentileTone: "baseline",
+      percentileCaption: "Near Baseline Average",
+      topFavorablePct: null,
+      topChallengingPct: null,
+    };
+  }
+
+  const easier = peers.filter((p) => p > own).length;
+  const harder = peers.filter((p) => p < own).length;
+  const topFavorable = Math.max(1, Math.round(((easier + 1) / peers.length) * 100));
+  const topChallenging = Math.max(1, Math.round(((harder + 1) / peers.length) * 100));
+
+  // Grade from same-position standing so Overall never says NEUTRAL while
+  // the percentile reads Top N% most challenging (or favorable).
+  let grade: SosGrade;
+  if (topFavorable <= 20) grade = "CAKEWALK";
+  else if (topFavorable <= 40) grade = "ADVANTAGEOUS";
+  else if (topChallenging <= 25) grade = "CATASTROPHIC";
+  else grade = "NEUTRAL";
+
+  let percentileTone: PositionalSosStanding["percentileTone"] = "baseline";
+  let percentileLabel = "BASELINE";
+  let percentileCaption = "Near Baseline Average";
+  if (topFavorable <= 33) {
+    percentileTone = "favorable";
+    percentileLabel = `TOP ${topFavorable}%`;
+    percentileCaption = "Most Favorable Schedule";
+  } else if (topChallenging <= 33) {
+    percentileTone = "challenging";
+    percentileLabel = `TOP ${topChallenging}%`;
+    percentileCaption = "Most Challenging Schedule";
+  }
+
+  return {
+    grade,
+    textClass: overallMatchupGradeClass(grade),
+    percentileLabel,
+    percentileTone,
+    percentileCaption,
+    topFavorablePct: topFavorable,
+    topChallengingPct: topChallenging,
+  };
+}
 
 /**
  * Slide-scale placement of one player's full-schedule burden against every
@@ -93,36 +193,64 @@ export function positionPercentile(
   matrix: Record<string, SosPeer> | null | undefined,
   fallbackSos?: PlayerSos | null,
 ): string | null {
-  const own = scheduleBurden(matrix?.[playerId]?.sos ?? fallbackSos ?? null);
-  if (own === null) return null;
-  const peers: number[] = [];
-  for (const entry of Object.values(matrix ?? {})) {
-    if (entry.position !== position) continue;
-    const score = scheduleBurden(entry.sos);
-    if (score !== null) peers.push(score);
+  const standing = positionalSosStanding(playerId, position, matrix, fallbackSos);
+  if (standing.topFavorablePct == null && standing.topChallengingPct == null) {
+    // Absolute fallback path — still emit a readable line when peers are thin.
+    if (standing.percentileTone === "baseline" && !matrix) return null;
   }
-  if (peers.length < 5) return null;
-  const easier = peers.filter((p) => p > own).length;
-  const topFavorable = Math.max(1, Math.round(((easier + 1) / peers.length) * 100));
-  const harder = peers.filter((p) => p < own).length;
-  const topChallenging = Math.max(1, Math.round(((harder + 1) / peers.length) * 100));
-  if (topFavorable <= 33) return `Position percentile: Top ${topFavorable}% most favorable schedules`;
-  if (topChallenging <= 33) return `Position percentile: Top ${topChallenging}% most challenging schedules`;
+  if (standing.percentileTone === "favorable" && standing.topFavorablePct != null) {
+    return `Position percentile: Top ${standing.topFavorablePct}% most favorable schedules`;
+  }
+  if (standing.percentileTone === "challenging" && standing.topChallengingPct != null) {
+    return `Position percentile: Top ${standing.topChallengingPct}% most challenging schedules`;
+  }
   return "Position percentile: Near baseline position average";
 }
 
-/** Weeks 14-17 look-ahead label. */
-export function playoffWindow(sos: PlayerSos | null | undefined): "Elite" | "Balanced" | "Challenging" {
-  const ranks = (sos?.matchups ?? [])
+/**
+ * Playoff-window label from weeks 14–17 positional ranks.
+ * When peers are supplied, grades relative to same-position playoff windows.
+ */
+export function playoffWindow(
+  sos: PlayerSos | null | undefined,
+  position?: string | null,
+  matrix?: Record<string, SosPeer> | null,
+): "Elite" | "Balanced" | "Challenging" {
+  const ownRanks = (sos?.matchups ?? [])
     .filter((m) => m.week >= 14 && m.week <= 17)
     .map((m) => m.rank)
     .filter((r): r is number => r !== null);
-  if (ranks.length === 0) return "Balanced";
-  const avg = ranks.reduce((sum, r) => sum + r, 0) / ranks.length;
-  if (avg >= 21) return "Elite";
-  if (avg <= 11) return "Challenging";
+  if (ownRanks.length === 0) return "Balanced";
+  const ownAvg = ownRanks.reduce((sum, r) => sum + r, 0) / ownRanks.length;
+
+  const pos = normalizePos(position);
+  if (pos && matrix) {
+    const peerAvgs: number[] = [];
+    for (const entry of Object.values(matrix)) {
+      if (normalizePos(entry.position) !== pos) continue;
+      const ranks = (entry.sos?.matchups ?? [])
+        .filter((m) => m.week >= 14 && m.week <= 17)
+        .map((m) => m.rank)
+        .filter((r): r is number => r !== null);
+      if (ranks.length === 0) continue;
+      peerAvgs.push(ranks.reduce((sum, r) => sum + r, 0) / ranks.length);
+    }
+    if (peerAvgs.length >= 5) {
+      const easier = peerAvgs.filter((p) => p > ownAvg).length;
+      const harder = peerAvgs.filter((p) => p < ownAvg).length;
+      const topFavorable = Math.max(1, Math.round(((easier + 1) / peerAvgs.length) * 100));
+      const topChallenging = Math.max(1, Math.round(((harder + 1) / peerAvgs.length) * 100));
+      if (topFavorable <= 33) return "Elite";
+      if (topChallenging <= 33) return "Challenging";
+      return "Balanced";
+    }
+  }
+
+  if (ownAvg >= 21) return "Elite";
+  if (ownAvg <= 11) return "Challenging";
   return "Balanced";
 }
+
 
 /**
  * Compact weekly SoS label from a single-week defensive rank
@@ -149,6 +277,92 @@ export function sosStarsFromRank(rank: number | null | undefined): number | null
   if (rank >= 11) return 3;
   if (rank >= 5) return 2;
   return 1;
+}
+
+export type SosDifficultyTone = "elite" | "good" | "neutral" | "bad" | "tough" | "bye";
+
+/**
+ * Shared difficulty chip for SOS table, Outlook, matchup stars, and sidebar.
+ * Stars come from {@link sosStarsFromRank} (positional FPA ranks).
+ * 5★ GREAT · 4★ GOOD · 3★ NEUTRAL · 2★ BAD · 1★ TOUGH
+ */
+export function sosDifficultyFromStars(stars: number | null | undefined): {
+  tone: SosDifficultyTone;
+  label: string | null;
+} {
+  if (stars == null || !Number.isFinite(stars)) return { tone: "bye", label: null };
+  const n = Math.round(Number(stars));
+  if (n >= 5) return { tone: "elite", label: "GREAT" };
+  if (n >= 4) return { tone: "good", label: "GOOD" };
+  if (n >= 3) return { tone: "neutral", label: "NEUTRAL" };
+  if (n >= 2) return { tone: "bad", label: "BAD" };
+  return { tone: "tough", label: "TOUGH" };
+}
+
+/** Chip background — each star tier gets its own distinct color. */
+export function sosDifficultyChipClass(tone: SosDifficultyTone): string {
+  if (tone === "elite") return "bg-emerald-600 text-white";
+  if (tone === "good") return "bg-emerald-400 text-emerald-950";
+  if (tone === "neutral") return "bg-amber-500 text-slate-950";
+  if (tone === "bad") return "bg-rose-400 text-rose-950";
+  if (tone === "tough") return "bg-rose-600 text-white";
+  return "bg-slate-200 font-extrabold text-slate-500";
+}
+
+/** Title-case difficulty label for the SOS table Difficulty column. */
+export function sosDifficultyDisplayLabel(label: string | null | undefined): string {
+  if (!label) return "—";
+  const upper = label.toUpperCase();
+  if (upper === "GREAT") return "Great";
+  if (upper === "GOOD") return "Good";
+  if (upper === "NEUTRAL") return "Neutral";
+  if (upper === "BAD") return "Bad";
+  if (upper === "TOUGH") return "Tough";
+  if (upper === "BYE") return "Bye";
+  return label;
+}
+
+/** Text color for the season-long overall matchup grade (no pill). */
+export function overallMatchupGradeClass(grade: SosGrade): string {
+  if (grade === "CAKEWALK") return "text-emerald-600";
+  if (grade === "ADVANTAGEOUS") return "text-emerald-500";
+  if (grade === "CATASTROPHIC") return "text-rose-600";
+  return "text-amber-500";
+}
+
+/** @deprecated Prefer {@link overallMatchupGradeClass} — pill badges removed from UI. */
+export function overallMatchupBadge(grade: SosGrade): string {
+  if (grade === "CAKEWALK") return "ELITE";
+  if (grade === "ADVANTAGEOUS") return "SOFT";
+  if (grade === "CATASTROPHIC") return "HARD";
+  return "MID";
+}
+
+export function overallMatchupPresentation(rank: number | null | undefined): {
+  grade: SosGrade;
+  textClass: string;
+  /** @deprecated Kept for callers still reading `.badge`; prefer `textClass`. */
+  badge: string;
+} {
+  const grade = matchupGrade(rank ?? null);
+  return {
+    grade,
+    textClass: overallMatchupGradeClass(grade),
+    badge: overallMatchupBadge(grade),
+  };
+}
+
+export type PlayoffWindowLabel = "Elite" | "Balanced" | "Challenging";
+
+export function playoffWindowPresentation(
+  sos: PlayerSos | null | undefined,
+  position?: string | null,
+  matrix?: Record<string, SosPeer> | null,
+): { label: PlayoffWindowLabel; textClass: string } {
+  const label = playoffWindow(sos, position, matrix);
+  if (label === "Elite") return { label, textClass: "text-emerald-600" };
+  if (label === "Challenging") return { label, textClass: "text-rose-600" };
+  return { label, textClass: "text-amber-600" };
 }
 
 /** Look up the weekly SoS rank for a player from the brain matrix. */

@@ -380,10 +380,10 @@ function MiscCells({
       </td>
       <td className="px-1.5 py-2.5 text-center tabular-nums">{row.games}</td>
       <td className="px-1.5 py-2.5 text-center font-semibold tabular-nums text-slate-900">
-        {row.fpts.toFixed(1)}
+        {row.fpts.toFixed(2)}
       </td>
       <td className="px-1.5 py-2.5 text-center tabular-nums text-slate-600">
-        {row.fptsPerGame.toFixed(1)}
+        {row.fptsPerGame.toFixed(2)}
       </td>
       <td className="px-1.5 py-2.5 text-center tabular-nums text-slate-500">
         {rostPct != null ? `${Math.round(rostPct)}%` : "—"}

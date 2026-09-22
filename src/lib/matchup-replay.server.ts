@@ -5,6 +5,7 @@
  */
 
 import { currentSeason, HOUR } from "./players-build";
+import { winPctFromDisplayProjections } from "./rolling-live-projection";
 import { scoreStats, type ScoringMap } from "./scoring-map";
 import type {
   MatchupReplayPayload,
@@ -370,15 +371,7 @@ function cloneLive(m: Map<string, number>): Map<string, number> {
 }
 
 function continuousWinPct(mine: number, opp: number): number {
-  const a = Math.max(0, mine);
-  const b = Math.max(0, opp);
-  const total = a + b;
-  if (total <= 0) return 50;
-  const raw = a / total;
-  // Milder than board-live amplification so replay curves ease like FantasyPros
-  // instead of snapping on every small display-total change.
-  const SMOOTHING = 2.65;
-  return Math.min(99, Math.max(1, (0.5 + (raw - 0.5) * SMOOTHING) * 100));
+  return winPctFromDisplayProjections(mine, opp);
 }
 
 function playWallClock(play: RawPlay, kickoffs: Map<string, number>): number {

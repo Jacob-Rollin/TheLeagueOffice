@@ -119,7 +119,8 @@
   font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  line-height: 0.95;
+  /* Keep room for descenders (g/q/p/y) — 0.95 was clipping names. */
+  line-height: 1.15;
 }
 
 @utility tabnum {

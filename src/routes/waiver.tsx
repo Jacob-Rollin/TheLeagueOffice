@@ -3,11 +3,13 @@ import { AuthDialog } from "@/components/auth/AuthDialog";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModal } from "@/components/draft/PlayerModal";
 import { PlaybookShell } from "@/components/playbook/PlaybookShell";
+import { SosStars } from "@/components/sos/SosStars";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -65,63 +67,45 @@ function formatOppLabel(raw: string | null | undefined, isAway?: boolean | null)
   return cleaned;
 }
 
-function buildDefenseRanks(players: Player[]): Map<string, number> {
-  const ranks = new Map<string, number>();
-  [...players]
-    .filter((p) => p.pos === "DEF")
-    .sort((a, b) => (b.proj?.half ?? 0) - (a.proj?.half ?? 0))
-    .forEach((d, i) => {
-      const team = (d.team || "").toUpperCase();
-      if (team) ranks.set(team, i + 1);
-    });
-  return ranks;
-}
-
+/** NFL schedule opponents only — ranks come from positional FPA, never DEF projections. */
 function buildScheduleByTeam(
   games: ScheduleGame[],
-  ranks: Map<string, number>,
-): Map<string, { week: number; opp: string; rank: number | null; isAway: boolean }[]> {
-  const byTeam = new Map<
-    string,
-    { week: number; opp: string; rank: number | null; isAway: boolean }[]
-  >();
+): Map<string, { week: number; opp: string; isAway: boolean }[]> {
+  const byTeam = new Map<string, { week: number; opp: string; isAway: boolean }[]>();
   for (const g of games) {
     const home = (g.home || "").toUpperCase();
     const away = (g.away || "").toUpperCase();
     if (!g.week || g.week > 18) continue;
     if (home) {
       const rows = byTeam.get(home) ?? [];
-      rows.push({
-        week: g.week,
-        opp: away,
-        rank: ranks.get(away) ?? null,
-        isAway: false,
-      });
+      rows.push({ week: g.week, opp: away, isAway: false });
       byTeam.set(home, rows);
     }
     if (away) {
       const rows = byTeam.get(away) ?? [];
-      rows.push({
-        week: g.week,
-        opp: home,
-        rank: ranks.get(home) ?? null,
-        isAway: true,
-      });
+      rows.push({ week: g.week, opp: home, isAway: true });
       byTeam.set(away, rows);
     }
   }
   return byTeam;
 }
 
-/** Current-week opp + matchup strength — same SOS matrix the player popup SOS tab uses. */
+/** Canonical SOS position key (warehouse / FPA board use DEF, not DST). */
+function sosPosKey(pos: string | null | undefined): string {
+  const p = (pos || "").toUpperCase();
+  return p === "DST" ? "DEF" : p;
+}
+
+/**
+ * Current-week opp + matchup strength — same positional FPA path as Matchup / My Team.
+ * Never invents ranks; never uses DEF projection ladders.
+ */
 function weeklyWireMatchup(
   player: Player,
   brain: BrainMatrix | null,
   week: number | null,
-  scheduleByTeam: Map<
-    string,
-    { week: number; opp: string; rank: number | null; isAway: boolean }[]
-  > | null,
+  scheduleByTeam: Map<string, { week: number; opp: string; isAway: boolean }[]> | null,
+  positionalRankFor: (pos: string | null | undefined, opp: string | null | undefined) => number | null,
 ): { opp: string; stars: number | null } {
   if (week == null || week <= 0) return { opp: "—", stars: null };
 
@@ -132,11 +116,11 @@ function weeklyWireMatchup(
       ? scheduleByTeam.get(team)?.find((m) => Number(m.week) === Number(week))
       : undefined;
 
-  // DEF units: try DST-tagged brain rows for the same team when player SOS is empty.
+  // DEF units: brain rows are tagged DEF — find any same-team DEF SOS week row.
   let defBrainHit: SosMatchup | null = null;
-  if (!brainHit && (player.pos === "DEF" || displayPosForSos(player.pos) === "DST") && brain && team) {
+  if (!brainHit && sosPosKey(player.pos) === "DEF" && brain && team) {
     for (const [id, entry] of Object.entries(brain)) {
-      if (displayPosForSos(entry.position || "") !== "DST") continue;
+      if (sosPosKey(entry.position) !== "DEF") continue;
       if ((entry.team || "").trim().toUpperCase() !== team) continue;
       defBrainHit = weeklySosMatchupFor(brain, id, week);
       if (defBrainHit) break;
@@ -152,75 +136,93 @@ function weeklyWireMatchup(
         stars: null,
       };
     }
+    const rank =
+      hit.rank != null && Number.isFinite(Number(hit.rank))
+        ? Number(hit.rank)
+        : positionalRankFor(player.pos, oppRaw);
     return {
       opp: formatOppLabel(oppRaw, schedHit?.isAway ?? null),
-      stars: sosStarsFromRank(hit.rank),
+      stars: sosStarsFromRank(rank),
     };
   }
 
   if (schedHit) {
+    const rank = positionalRankFor(player.pos, schedHit.opp);
     return {
       opp: formatOppLabel(schedHit.opp, schedHit.isAway),
-      stars: sosStarsFromRank(
-        schedHit.rank ??
-          (player.pos === "DEF" || displayPosForSos(player.pos) === "DST" ? 14 : 16),
-      ),
+      stars: sosStarsFromRank(rank),
     };
   }
 
   return { opp: "—", stars: null };
 }
 
-/** Map DEF → DST so season SOS star lookups resolve against defense spreads. */
-function displayPosForSos(pos: string): string {
-  return pos === "DEF" ? "DST" : pos;
-}
+function seasonSosRank(
+  player: Player,
+  brain: BrainMatrix | null,
+  scheduleByTeam: Map<string, { week: number; opp: string; isAway: boolean }[]> | null,
+  positionalRankFor: (
+    pos: string | null | undefined,
+    opp: string | null | undefined,
+  ) => number | null,
+): number | null {
+  const collectRanks = (sos: NonNullable<BrainMatrix[string]["sos"]> | null | undefined) =>
+    (sos?.matchups ?? [])
+      .map((m) => m.rank)
+      .filter((r): r is number => r != null && Number.isFinite(r) && r > 0);
 
-function seasonSosRank(player: Player, brain: BrainMatrix | null): number | null {
   const entry = brain?.[player.id];
-  if (entry?.sos?.rank != null && Number.isFinite(entry.sos.rank)) return entry.sos.rank;
-  const ranks = (entry?.sos?.matchups ?? [])
-    .map((m) => m.rank)
-    .filter((r): r is number => r != null && Number.isFinite(r));
-  if (ranks.length) return Math.round(ranks.reduce((sum, r) => sum + r, 0) / ranks.length);
-  return null;
-}
+  let ranks = collectRanks(entry?.sos);
+  if (entry?.sos?.rank != null && Number.isFinite(entry.sos.rank) && entry.sos.rank > 0) {
+    // Prefer full weekly series when present; otherwise use season avg stamp.
+    if (!ranks.length) ranks = [entry.sos.rank];
+  }
 
-function seasonSosStars(player: Player, brain: BrainMatrix | null): number | null {
-  const displayPos = displayPosForSos(player.pos);
-  let rank = seasonSosRank(player, brain);
-
-  // Defense spreads often live under DST-tagged brain rows — fall back by team.
-  if (rank == null && displayPos === "DST" && brain) {
+  // DEF units: warehouse SOS is keyed DEF — fall back to any same-team DEF row.
+  if (!ranks.length && sosPosKey(player.pos) === "DEF" && brain) {
     const team = (player.team || "").trim().toUpperCase();
     if (team) {
-      for (const entry of Object.values(brain)) {
-        const entryPos = displayPosForSos(entry.position || "");
-        if (entryPos !== "DST") continue;
-        if ((entry.team || "").trim().toUpperCase() !== team) continue;
-        if (entry.sos?.rank != null && Number.isFinite(entry.sos.rank)) {
-          rank = entry.sos.rank;
-          break;
+      for (const peer of Object.values(brain)) {
+        if (sosPosKey(peer.position) !== "DEF") continue;
+        if ((peer.team || "").trim().toUpperCase() !== team) continue;
+        ranks = collectRanks(peer.sos);
+        if (peer.sos?.rank != null && Number.isFinite(peer.sos.rank) && peer.sos.rank > 0 && !ranks.length) {
+          ranks = [peer.sos.rank];
         }
-        const ranks = (entry.sos?.matchups ?? [])
-          .map((m) => m.rank)
-          .filter((r): r is number => r != null && Number.isFinite(r));
-        if (ranks.length) {
-          rank = Math.round(ranks.reduce((sum, r) => sum + r, 0) / ranks.length);
-          break;
-        }
+        if (ranks.length) break;
       }
     }
   }
 
-  // Guarantee defense cards light amber stars when SOS matrix rows are sparse.
-  if (rank == null) {
-    rank = player.pos === "DEF" || displayPos === "DST" ? 14 : 16;
+  // Schedule × positional FPA fallback (same board as Matchup / My Team).
+  if (!ranks.length && scheduleByTeam) {
+    const team = (player.team || "").trim().toUpperCase();
+    const weeks = team ? scheduleByTeam.get(team) ?? [] : [];
+    for (const week of weeks) {
+      const r = positionalRankFor(player.pos, week.opp);
+      if (r != null && Number.isFinite(r) && r > 0) ranks.push(r);
+    }
   }
 
-  return typeof sosStarsFromRank === "function"
-    ? sosStarsFromRank(rank)
-    : 3;
+  if (!ranks.length) return null;
+  return ranks.reduce((sum, r) => sum + r, 0) / ranks.length;
+}
+
+/**
+ * Season SOS stars = average weekly positional SOS rank → 1–5 stars.
+ * Uses the same FPA-vs-position ladder as the player SOS tab (never invents ranks).
+ */
+function seasonSosStars(
+  player: Player,
+  brain: BrainMatrix | null,
+  scheduleByTeam: Map<string, { week: number; opp: string; isAway: boolean }[]> | null,
+  positionalRankFor: (
+    pos: string | null | undefined,
+    opp: string | null | undefined,
+  ) => number | null,
+): number | null {
+  const avgRank = seasonSosRank(player, brain, scheduleByTeam, positionalRankFor);
+  return sosStarsFromRank(avgRank);
 }
 
 function InjuryStatusBadge({ injury }: { injury: string | null | undefined }) {
@@ -256,13 +258,14 @@ function sortWirePool(
   pool: Player[],
   brain: BrainMatrix | null,
   weeklyOf: (p: Player) => number,
+  posRankFor: (playerId: string) => number | null,
 ): Player[] {
   return [...pool].sort((a, b) => {
-    const aRank = Number(a.posRank);
-    const bRank = Number(b.posRank);
-    const aHas = Number.isFinite(aRank) && aRank > 0 && aRank < 999;
-    const bHas = Number.isFinite(bRank) && bRank > 0 && bRank < 999;
-    if (aHas && bHas && aRank !== bRank) return aRank - bRank;
+    const aRank = posRankFor(a.id);
+    const bRank = posRankFor(b.id);
+    const aHas = aRank != null && Number.isFinite(aRank) && aRank > 0;
+    const bHas = bRank != null && Number.isFinite(bRank) && bRank > 0;
+    if (aHas && bHas && aRank !== bRank) return aRank! - bRank!;
     if (aHas !== bHas) return aHas ? -1 : 1;
     const aVal = Number(brain?.[a.id]?.value ?? 0);
     const bVal = Number(brain?.[b.id]?.value ?? 0);
@@ -271,37 +274,61 @@ function sortWirePool(
   });
 }
 
-function SosStars({
-  stars,
-  size = "sm",
-}: {
-  stars: number | null;
-  size?: "sm" | "md";
-}) {
-  const filled =
-    stars != null && Number.isFinite(stars)
-      ? Math.max(0, Math.min(5, Math.round(stars)))
-      : 0;
-  return (
-    <span
-      className="inline-flex shrink-0 items-center"
-      aria-label={`${filled} of 5 season matchup stars`}
-    >
-      {Array.from({ length: 5 }, (_, i) => (
-        <span
-          key={`sos-star-${i}`}
-          className={cn(
-            "leading-none",
-            size === "md" ? "text-[13px]" : "text-[10px]",
-            i > 0 ? "ml-0.5" : undefined,
-            i < filled ? "font-bold text-amber-500" : "text-slate-200",
-          )}
-        >
-          {"\u2605"}
-        </span>
-      ))}
-    </span>
+/** Skill-first weekly advantage score for OVERALL top targets. */
+function wireAdvantageScore(
+  player: Player,
+  brain: BrainMatrix | null,
+  weeklyOf: (p: Player) => number,
+): number {
+  const weekly = Math.max(0, weeklyOf(player));
+  const value = Math.max(0, Number(brain?.[player.id]?.value ?? 0));
+  const trend = Number(brain?.[player.id]?.trend ?? 0);
+  const pos = sosPosKey(player.pos);
+  // Keep K/DEF available but don't let them crowd out skill advantages on OVERALL.
+  const posWeight = pos === "K" || pos === "DEF" ? 0.45 : 1;
+  return (weekly * 12 + value * 0.35 + Math.max(0, trend) * 0.15) * posWeight;
+}
+
+/**
+ * OVERALL top targets: highest weekly/value advantages, diversified so the
+ * board isn't four kickers/defenses when skill free agents are available.
+ */
+function pickOverallTopTargets(
+  pool: Player[],
+  brain: BrainMatrix | null,
+  weeklyOf: (p: Player) => number,
+  limit = 4,
+): Player[] {
+  const ranked = [...pool].sort(
+    (a, b) =>
+      wireAdvantageScore(b, brain, weeklyOf) - wireAdvantageScore(a, brain, weeklyOf) ||
+      a.name.localeCompare(b.name),
   );
+
+  const out: Player[] = [];
+  const seenPos = new Set<string>();
+  const skillPass = ranked.filter((p) => {
+    const pos = sosPosKey(p.pos);
+    return pos !== "K" && pos !== "DEF";
+  });
+
+  // Pass 1 — best unique skill positions (RB/WR/TE/QB…).
+  for (const p of skillPass) {
+    if (out.length >= limit) break;
+    const pos = sosPosKey(p.pos);
+    if (seenPos.has(pos)) continue;
+    out.push(p);
+    seenPos.add(pos);
+  }
+
+  // Pass 2 — fill remaining slots with next-best advantages (any position).
+  for (const p of ranked) {
+    if (out.length >= limit) break;
+    if (out.some((x) => x.id === p.id)) continue;
+    out.push(p);
+  }
+
+  return out;
 }
 
 function PosFilterToolbar<T extends string>({
@@ -375,7 +402,8 @@ function WaiverIntelligencePage() {
   const players = data.players;
   const league = useLeagueRosters(players);
   const brain = usePlayerBrain();
-  const { projectFor } = useLeagueProjections();
+  const { projectFor, rankFor: sleeperRankFor } = useLeagueProjections();
+  const { rankFor: positionalDefenseRank } = usePositionalDefenseRanks();
   const { user, ready: authReady } = useAuth();
   const { activeLeague } = useActiveLeague();
   const navigate = useNavigate();
@@ -405,6 +433,12 @@ function WaiverIntelligencePage() {
     [projectFor],
   );
 
+  /** Sleeper YTD fantasy-points pos rank — same source as the player header. */
+  const posRankFor = useMemo(
+    () => (playerId: string): number | null => sleeperRankFor(playerId).pos,
+    [sleeperRankFor],
+  );
+
   const nflWeek = useQuery({
     queryKey: ["nfl-state-week"],
     staleTime: 30 * 60 * 1000,
@@ -420,14 +454,12 @@ function WaiverIntelligencePage() {
   const currentWeek = nflWeek.data ?? null;
 
   const scheduleByTeam = useQuery({
-    queryKey: ["wire-schedule-sos", currentSeason(), players.length],
+    queryKey: ["wire-schedule-sos", "v2-no-def-proj", currentSeason()],
     staleTime: 12 * 60 * 60 * 1000,
     retry: false,
-    enabled: players.length > 0,
     queryFn: async () => {
       const games = await fetchSchedule(currentSeason());
-      const ranks = buildDefenseRanks(players);
-      return buildScheduleByTeam(games, ranks);
+      return buildScheduleByTeam(games);
     },
   });
 
@@ -448,16 +480,26 @@ function WaiverIntelligencePage() {
   const tableRows = useMemo(() => {
     const pos = filterPos(listPosFilter);
     const pool = wireEligible.filter((p) => !pos || p.pos === pos);
-    return sortWirePool(pool, brain, weeklyOf).slice(0, 8);
-  }, [wireEligible, listPosFilter, brain, weeklyOf]);
+    return sortWirePool(pool, brain, weeklyOf, posRankFor).slice(0, 10);
+  }, [wireEligible, listPosFilter, brain, weeklyOf, posRankFor]);
 
   const topTargets = useMemo(() => {
     const pos = filterPos(targetsPosFilter);
     const pool = wireEligible.filter(
       (p) => !myOwnedIds.has(p.id) && (!pos || p.pos === pos),
     );
-    return sortWirePool(pool, brain, weeklyOf).slice(0, 4);
-  }, [wireEligible, targetsPosFilter, myOwnedIds, brain, weeklyOf]);
+    if (targetsPosFilter === "OVERALL") {
+      return pickOverallTopTargets(pool, brain, weeklyOf, 4);
+    }
+    return sortWirePool(pool, brain, weeklyOf, posRankFor).slice(0, 4);
+  }, [
+    wireEligible,
+    targetsPosFilter,
+    myOwnedIds,
+    brain,
+    weeklyOf,
+    posRankFor,
+  ]);
 
   const suggestions = useMemo(() => {
     const myTeam = league?.myTeam;
@@ -658,16 +700,17 @@ function WaiverIntelligencePage() {
             tableRows.map((player) => {
               const isRostered = myOwnedIds.has(player.id);
               const proj = weeklyOf(player);
-              const rankRaw = Number(player.posRank);
+              const sleeperPos = posRankFor(player.id);
               const rankLabel =
-                Number.isFinite(rankRaw) && rankRaw > 0 && rankRaw < 999
-                  ? Math.round(rankRaw)
+                sleeperPos != null && Number.isFinite(sleeperPos) && sleeperPos > 0
+                  ? Math.round(sleeperPos)
                   : "—";
               const wireMatchup = weeklyWireMatchup(
                 player,
                 brain,
                 currentWeek,
                 scheduleByTeam.data ?? null,
+                positionalDefenseRank,
               );
               return (
                 <div
@@ -705,7 +748,7 @@ function WaiverIntelligencePage() {
                         logoClassName="size-4"
                       />
                       <div className="flex min-w-0 flex-col text-left">
-                        <span className="mb-1 truncate text-sm font-black leading-none text-slate-900">
+                        <span className="mb-1 truncate text-sm font-black leading-snug text-slate-900">
                           {player.name}
                         </span>
                         <div className="flex items-center space-x-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
@@ -757,7 +800,12 @@ function WaiverIntelligencePage() {
             </p>
           ) : (
             topTargets.map((player) => {
-              const stars = seasonSosStars(player, brain);
+              const stars = seasonSosStars(
+                player,
+                brain,
+                scheduleByTeam.data ?? null,
+                positionalDefenseRank,
+              );
               return (
                 <button
                   key={player.id}
@@ -774,7 +822,7 @@ function WaiverIntelligencePage() {
                     logoClassName="size-5"
                   />
                   <div className="min-w-0 flex-1">
-                    <span className="mb-1 block truncate text-xs font-black leading-none text-slate-900">
+                    <span className="mb-1 block truncate text-xs font-black leading-snug text-slate-900">
                       {player.name}
                     </span>
                     <div className="flex items-center space-x-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
