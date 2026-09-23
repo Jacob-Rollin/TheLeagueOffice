@@ -3,17 +3,13 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { forceClearAndReSyncLeague } from "@/lib/league.functions";
+import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
 
 /** Versioned key — bump to force every client through a fresh wipe pass. */
 const SESSION_KEY_PREFIX = "tlo.league-auto-resync.v3:";
 /** Skip re-purging the same connection within this window (ms). */
 const RESYNC_COOLDOWN_MS = 90 * 1000;
 
-/**
- * Automatically purge stale league_transactions / weekly_matchups and re-ingest
- * live host data whenever the active synced league loads or changes.
- * No UI button — runs on mount / league switch only.
- */
 export function useLeagueSync() {
   const { activeLeague, sandboxMode } = useActiveLeague();
   const queryClient = useQueryClient();
@@ -26,7 +22,6 @@ export function useLeagueSync() {
     const platform = (activeLeague?.platform ?? "sleeper").trim().toLowerCase();
     if (!connectionId || !leagueId) return;
 
-    // Cooldown so rapid remounts / route hops do not thrash the host API.
     try {
       const last = Number(sessionStorage.getItem(`${SESSION_KEY_PREFIX}${connectionId}`) ?? 0);
       if (last && Date.now() - last < RESYNC_COOLDOWN_MS) return;
@@ -58,7 +53,7 @@ export function useLeagueSync() {
         }
 
         if (result.ok) {
-          // Hard-drop stale React Query payloads so the next read hits rewritten rows.
+          await touchLeagueSyncTimestamp(connectionId, queryClient, null);
           queryClient.removeQueries({ queryKey: ["league-activity"] });
           queryClient.removeQueries({ queryKey: ["active-matchups"] });
           queryClient.removeQueries({ queryKey: ["active-standings"] });
@@ -68,6 +63,7 @@ export function useLeagueSync() {
             queryClient.invalidateQueries({ queryKey: ["active-matchups"] }),
             queryClient.invalidateQueries({ queryKey: ["active-standings"] }),
             queryClient.invalidateQueries({ queryKey: ["league-rosters"] }),
+            queryClient.invalidateQueries({ queryKey: ["league-connections"] }),
           ]);
         }
       } catch (err) {
@@ -91,7 +87,6 @@ export function useLeagueSync() {
   ]);
 }
 
-/** Drop-in bridge for the root provider tree. */
 export function LeagueSyncBootstrap() {
   useLeagueSync();
   return null;
