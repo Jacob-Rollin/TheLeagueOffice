@@ -1,12 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { AccountShell } from "@/components/account/AccountShell";
 import { LeagueAvatar } from "@/components/league/LeagueAvatar";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { getConnectionMeta } from "@/lib/league.functions";
+import { getConnectionMeta, getConnectionRosters } from "@/lib/league.functions";
+import { markRevalidated, writeRosterCache } from "@/lib/roster-cache";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,10 +55,13 @@ const PLATFORM_LABEL: Record<string, string> = {
 
 function LeaguesPage() {
   const { user } = useAuth();
+  const { setActiveLeagueId } = useActiveLeague();
+  const navigate = useNavigate();
   const userId = user?.id ?? null;
   const queryClient = useQueryClient();
 
   const [status, setStatus] = useState<string | null>(null);
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
   const { data: connections } = useQuery({
     queryKey: ["league-connections", userId],
@@ -77,14 +82,47 @@ function LeaguesPage() {
     if (!window.confirm("Delete this synced league? This cannot be undone.")) return;
     const { error } = await supabase.from("synced_leagues").delete().eq("id", id);
     if (error) setStatus(error.message);
-    // Flush all league list caches — including the global navbar/context cache —
-    // so the deleted league (and its avatar) disappears everywhere instantly.
     queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
     queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
   };
 
-  const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
+  const refreshRoster = async (row: ConnectionRow) => {
+    const identifier = row.league_id?.trim() ?? "";
+    if (!identifier || refreshingId) return;
 
+    setRefreshingId(row.id);
+    setStatus(null);
+    try {
+      const rosterData = await getConnectionRosters({
+        data: {
+          identifier,
+          platform: row.platform,
+          ...(row.espn_s2 ? { s2: row.espn_s2 } : {}),
+          ...(row.swid ? { swid: row.swid } : {}),
+        },
+      });
+
+      if (!rosterData) throw new Error("The roster could not be loaded from the league provider.");
+
+      const cacheKey = `${row.id}:all`;
+      queryClient.setQueryData(["league-rosters", row.id], rosterData);
+      queryClient.invalidateQueries({ queryKey: ["league-rosters", row.id] });
+      markRevalidated(cacheKey);
+      await writeRosterCache(cacheKey, rosterData);
+      setStatus("Roster refreshed.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Unable to refresh the roster.");
+    } finally {
+      setRefreshingId(null);
+    }
+  };
+
+  const viewPlaybook = (id: string) => {
+    setActiveLeagueId(id);
+    void navigate({ to: "/playbook" });
+  };
+
+  const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
 
   return (
     <AccountShell
@@ -107,7 +145,14 @@ function LeaguesPage() {
       ) : (
         <ul className="space-y-3">
           {rows.map((row) => (
-            <LeagueRow key={row?.id} row={row} onDelete={remove} />
+            <LeagueRow
+              key={row.id}
+              row={row}
+              isRefreshing={refreshingId === row.id}
+              onDelete={remove}
+              onRefresh={refreshRoster}
+              onViewPlaybook={viewPlaybook}
+            />
           ))}
         </ul>
       )}
@@ -117,18 +162,24 @@ function LeaguesPage() {
 
 function LeagueRow({
   row,
+  isRefreshing,
   onDelete,
+  onRefresh,
+  onViewPlaybook,
 }: {
   row: ConnectionRow;
+  isRefreshing: boolean;
   onDelete: (id: string) => void;
+  onRefresh: (row: ConnectionRow) => void;
+  onViewPlaybook: (id: string) => void;
 }) {
-  const label = (row?.metadata as Record<string, unknown> | null)?.["label"] as string | undefined;
-  const identifier = row?.league_id ?? label ?? "";
-  const platformKey = row?.platform ?? "sleeper";
+  const label = (row.metadata as Record<string, unknown> | null)?.["label"] as string | undefined;
+  const identifier = row.league_id ?? label ?? "";
+  const platformKey = row.platform ?? "sleeper";
   const platform = PLATFORM_LABEL[platformKey] ?? platformKey;
 
   const { data: meta } = useQuery({
-    queryKey: ["connection-meta", row?.id, platformKey, identifier],
+    queryKey: ["connection-meta", row.id, platformKey, identifier],
     enabled: (platformKey === "sleeper" || platformKey === "espn") && identifier.length > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
@@ -137,15 +188,14 @@ function LeagueRow({
         data: {
           identifier,
           platform: platformKey,
-          ...(row?.espn_s2 ? { s2: row.espn_s2 } : {}),
-          ...(row?.swid ? { swid: row.swid } : {}),
+          ...(row.espn_s2 ? { s2: row.espn_s2 } : {}),
+          ...(row.swid ? { swid: row.swid } : {}),
         },
       }),
   });
 
   const avatar = meta?.avatar ?? null;
   const leagueName = meta?.leagueName ?? label ?? "League";
-
   const teamName = meta?.teamName ?? null;
   const subtitle = teamName ? `${teamName} - ${platform}` : platform;
 
@@ -159,7 +209,6 @@ function LeagueRow({
       </span>
 
       <LeagueAvatar platform={platformKey} src={avatar} alt={`${leagueName} team avatar`} />
-
 
       <div className="min-w-[10rem] flex-1">
         <p className="text-base font-semibold leading-tight text-black">{leagueName}</p>
@@ -175,7 +224,7 @@ function LeagueRow({
       <div className="ml-auto flex items-center gap-2">
         <Link
           to="/account/leagues/$connectionId"
-          params={{ connectionId: row?.id }}
+          params={{ connectionId: row.id }}
           className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
         >
           Settings
@@ -187,13 +236,23 @@ function LeagueRow({
           >
             ⋮
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem asChild className="font-medium">
-              <Link to="/account/leagues/$connectionId" params={{ connectionId: row?.id }}>
+              <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }}>
                 League Settings
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem className="font-medium" onSelect={() => onDelete(row?.id)}>
+            <DropdownMenuItem className="font-medium" onSelect={() => onViewPlaybook(row.id)}>
+              View Playbook
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="font-medium"
+              disabled={isRefreshing || !row.league_id}
+              onSelect={() => void onRefresh(row)}
+            >
+              {isRefreshing ? "Refreshing Roster…" : "Refresh Roster"}
+            </DropdownMenuItem>
+            <DropdownMenuItem className="font-medium" onSelect={() => onDelete(row.id)}>
               Delete League
             </DropdownMenuItem>
           </DropdownMenuContent>
