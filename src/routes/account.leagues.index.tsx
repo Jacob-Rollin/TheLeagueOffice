@@ -45,6 +45,7 @@ export type ConnectionRow = {
   espn_s2: string | null;
   swid: string | null;
   metadata: Record<string, unknown> | null;
+  updated_at: string;
 };
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -53,6 +54,23 @@ const PLATFORM_LABEL: Record<string, string> = {
   yahoo: "Yahoo",
 };
 
+function formatRelativeTime(value: string): string {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return "recently";
+
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w ago`;
+  return new Date(timestamp).toLocaleDateString();
+}
+
 function LeaguesPage() {
   const { user } = useAuth();
   const { setActiveLeagueId } = useActiveLeague();
@@ -60,7 +78,6 @@ function LeaguesPage() {
   const userId = user?.id ?? null;
   const queryClient = useQueryClient();
 
-  const [status, setStatus] = useState<string | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
   const { data: connections } = useQuery({
@@ -70,7 +87,7 @@ function LeaguesPage() {
     queryFn: async (): Promise<ConnectionRow[]> => {
       const { data, error } = await supabase
         .from("synced_leagues")
-        .select("id, platform, league_id, espn_s2, swid, metadata")
+        .select("id, platform, league_id, espn_s2, swid, metadata, updated_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ConnectionRow[];
@@ -80,8 +97,7 @@ function LeaguesPage() {
   const remove = async (id: string) => {
     if (!id) return;
     if (!window.confirm("Delete this synced league? This cannot be undone.")) return;
-    const { error } = await supabase.from("synced_leagues").delete().eq("id", id);
-    if (error) setStatus(error.message);
+    await supabase.from("synced_leagues").delete().eq("id", id);
     queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
     queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
   };
@@ -91,7 +107,6 @@ function LeaguesPage() {
     if (!identifier || refreshingId) return;
 
     setRefreshingId(row.id);
-    setStatus(null);
     try {
       const rosterData = await getConnectionRosters({
         data: {
@@ -109,9 +124,21 @@ function LeaguesPage() {
       queryClient.invalidateQueries({ queryKey: ["league-rosters", row.id] });
       markRevalidated(cacheKey);
       await writeRosterCache(cacheKey, rosterData);
-      setStatus("Roster refreshed.");
+
+      const syncedAt = new Date().toISOString();
+      const { error } = await supabase
+        .from("synced_leagues")
+        .update({ updated_at: syncedAt })
+        .eq("id", row.id);
+      if (error) throw error;
+
+      queryClient.setQueryData<ConnectionRow[]>(["league-connections", userId], (current) =>
+        current?.map((connection) =>
+          connection.id === row.id ? { ...connection, updated_at: syncedAt } : connection,
+        ),
+      );
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to refresh the roster.");
+      console.warn("[account/leagues] roster refresh failed:", error);
     } finally {
       setRefreshingId(null);
     }
@@ -134,8 +161,6 @@ function LeaguesPage() {
         </Link>
       }
     >
-      {status && <p className="mb-4 text-sm text-muted-foreground">{status}</p>}
-
       {rows.length === 0 ? (
         <div className="flex items-center justify-center rounded-xl border border-border bg-card px-4 py-16">
           <p className="font-display text-sm font-semibold uppercase tracking-widest text-black">
@@ -216,6 +241,9 @@ function LeagueRow({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="mr-2 whitespace-nowrap text-center normal-case tracking-normal">
+          Synced {formatRelativeTime(row.updated_at)}
+        </span>
         <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? "Scoring"}</span>
         <span className="rounded-md border border-border px-2 py-1">Redraft</span>
         <span className="rounded-md border border-border px-2 py-1">{meta?.teams ? `${meta.teams} Team` : "Teams"}</span>
