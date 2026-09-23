@@ -10,12 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getConnectionMeta, getConnectionRosters } from "@/lib/league.functions";
 import { markRevalidated, writeRosterCache } from "@/lib/roster-cache";
 import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/account/leagues/")({
   ssr: false,
@@ -53,6 +48,15 @@ function formatRelativeTime(value: string): string {
   return new Date(timestamp).toLocaleDateString();
 }
 
+function hostLeagueUrl(platform: string, leagueId: string | null): string | null {
+  const id = leagueId?.trim();
+  if (!id) return null;
+  if (platform === "sleeper") return `https://sleeper.com/leagues/${encodeURIComponent(id)}/home`;
+  if (platform === "espn") return `https://fantasy.espn.com/football/league?leagueId=${encodeURIComponent(id)}`;
+  if (platform === "yahoo") return `https://football.fantasysports.yahoo.com/f1/${encodeURIComponent(id)}`;
+  return null;
+}
+
 function LeaguesPage() {
   const { user } = useAuth();
   const { setActiveLeagueId } = useActiveLeague();
@@ -72,10 +76,7 @@ function LeaguesPage() {
     enabled: Boolean(userId),
     retry: false,
     queryFn: async (): Promise<ConnectionRow[]> => {
-      const { data, error } = await supabase
-        .from("synced_leagues")
-        .select("id, platform, league_id, espn_s2, swid, metadata, updated_at")
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("synced_leagues").select("id, platform, league_id, espn_s2, swid, metadata, updated_at").order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ConnectionRow[];
     },
@@ -93,14 +94,7 @@ function LeaguesPage() {
     if (!identifier || refreshingId) return;
     setRefreshingId(row.id);
     try {
-      const rosterData = await getConnectionRosters({
-        data: {
-          identifier,
-          platform: row.platform,
-          ...(row.espn_s2 ? { s2: row.espn_s2 } : {}),
-          ...(row.swid ? { swid: row.swid } : {}),
-        },
-      });
+      const rosterData = await getConnectionRosters({ data: { identifier, platform: row.platform, ...(row.espn_s2 ? { s2: row.espn_s2 } : {}), ...(row.swid ? { swid: row.swid } : {}) } });
       if (!rosterData) throw new Error("The roster could not be loaded from the league provider.");
       const cacheKey = `${row.id}:all`;
       queryClient.setQueryData(["league-rosters", row.id], rosterData);
@@ -119,21 +113,14 @@ function LeaguesPage() {
     setActiveLeagueId(id);
     void navigate({ to: "/playbook" });
   };
-
   const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
 
   return (
     <AccountShell title="My Leagues" active="leagues" action={<Link to="/leaguesync" className={buttonClass}>Sync New League</Link>}>
       {rows.length === 0 ? (
-        <div className="flex items-center justify-center rounded-xl border border-border bg-card px-4 py-16">
-          <p className="font-display text-sm font-semibold uppercase tracking-widest text-black">No Active Leagues</p>
-        </div>
+        <div className="flex items-center justify-center rounded-xl border border-border bg-card px-4 py-16"><p className="font-display text-sm font-semibold uppercase tracking-widest text-black">No Active Leagues</p></div>
       ) : (
-        <ul className="space-y-3">
-          {rows.map((row) => (
-            <LeagueRow key={row.id} row={row} isRefreshing={refreshingId === row.id} onDelete={remove} onRefresh={refreshRoster} onViewPlaybook={viewPlaybook} />
-          ))}
-        </ul>
+        <ul className="space-y-3">{rows.map((row) => <LeagueRow key={row.id} row={row} isRefreshing={refreshingId === row.id} onDelete={remove} onRefresh={refreshRoster} onViewPlaybook={viewPlaybook} />)}</ul>
       )}
     </AccountShell>
   );
@@ -144,6 +131,7 @@ function LeagueRow({ row, isRefreshing, onDelete, onRefresh, onViewPlaybook }: {
   const identifier = row.league_id ?? label ?? "";
   const platformKey = row.platform ?? "sleeper";
   const platform = PLATFORM_LABEL[platformKey] ?? platformKey;
+  const hostUrl = hostLeagueUrl(platformKey, row.league_id);
   const { data: meta } = useQuery({
     queryKey: ["connection-meta", row.id, platformKey, identifier],
     enabled: (platformKey === "sleeper" || platformKey === "espn") && identifier.length > 0,
@@ -153,21 +141,24 @@ function LeagueRow({ row, isRefreshing, onDelete, onRefresh, onViewPlaybook }: {
   });
   const leagueName = meta?.leagueName ?? label ?? "League";
   const teamName = meta?.teamName ?? null;
-  const subtitle = teamName ? `${teamName} - ${platform}` : platform;
 
   return (
     <li className="grid items-center gap-x-4 gap-y-3 rounded-xl border border-border bg-card px-4 py-4 md:grid-cols-[auto_auto_minmax(10rem,1fr)_minmax(0,auto)_auto]">
       <span aria-label="Synced" className="flex size-6 shrink-0 items-center justify-center rounded-full border border-emerald-500 text-xs font-bold text-emerald-600">✓</span>
       <LeagueAvatar platform={platformKey} src={meta?.avatar ?? null} alt={`${leagueName} team avatar`} />
-      <div className="min-w-0"><p className="text-base font-semibold leading-tight text-black">{leagueName}</p><p className="text-sm font-medium leading-tight text-black">{subtitle}</p></div>
-
+      <div className="min-w-0">
+        <p className="text-base font-semibold leading-tight text-black">{leagueName}</p>
+        <p className="text-sm font-medium leading-tight text-black">
+          {teamName ? `${teamName} — ` : ""}
+          {hostUrl ? <a href={hostUrl} target="_blank" rel="noreferrer" className="underline decoration-black/40 underline-offset-2 transition-colors hover:text-primary hover:decoration-primary">{platform}</a> : platform}
+        </p>
+      </div>
       <div className="grid shrink-0 grid-cols-[9rem_auto_auto_auto] items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         <span className="w-36 whitespace-nowrap text-left text-sm font-medium normal-case tracking-normal text-foreground">Synced {formatRelativeTime(row.updated_at)}</span>
         <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? "Scoring"}</span>
         <span className="rounded-md border border-border px-2 py-1">Redraft</span>
         <span className="rounded-md border border-border px-2 py-1">{meta?.teams ? `${meta.teams} Team` : "Teams"}</span>
       </div>
-
       <div className="flex items-center gap-2 md:justify-self-end">
         <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground">Settings</Link>
         <DropdownMenu>
