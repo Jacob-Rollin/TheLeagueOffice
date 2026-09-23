@@ -119,14 +119,21 @@ function LeaguesPage() {
     setActiveLeagueId(id);
     void navigate({ to: "/playbook" });
   };
+
   const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
 
   return (
     <AccountShell title="My Leagues" active="leagues" action={<Link to="/leaguesync" className={buttonClass}>Sync New League</Link>}>
       {rows.length === 0 ? (
-        <div className="flex items-center justify-center rounded-xl border border-border bg-card px-4 py-16"><p className="font-display text-sm font-semibold uppercase tracking-widest text-black">No Active Leagues</p></div>
+        <div className="flex items-center justify-center rounded-xl border border-border bg-card px-4 py-16">
+          <p className="font-display text-sm font-semibold uppercase tracking-widest text-black">No Active Leagues</p>
+        </div>
       ) : (
-        <ul className="space-y-3">{rows.map((row) => <LeagueRow key={row.id} row={row} isRefreshing={refreshingId === row.id} onDelete={remove} onRefresh={refreshRoster} onViewPlaybook={viewPlaybook} />)}</ul>
+        <ul className="space-y-3">
+          {rows.map((row) => (
+            <LeagueRow key={row.id} row={row} isRefreshing={refreshingId === row.id} onDelete={remove} onRefresh={refreshRoster} onViewPlaybook={viewPlaybook} />
+          ))}
+        </ul>
       )}
     </AccountShell>
   );
@@ -149,17 +156,19 @@ function LeagueRow({ row, isRefreshing, onDelete, onRefresh, onViewPlaybook }: {
   const subtitle = teamName ? `${teamName} - ${platform}` : platform;
 
   return (
-    <li className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card px-4 py-4">
+    <li className="grid items-center gap-x-4 gap-y-3 rounded-xl border border-border bg-card px-4 py-4 md:grid-cols-[auto_auto_minmax(10rem,1fr)_minmax(0,auto)_auto]">
       <span aria-label="Synced" className="flex size-6 shrink-0 items-center justify-center rounded-full border border-emerald-500 text-xs font-bold text-emerald-600">✓</span>
       <LeagueAvatar platform={platformKey} src={meta?.avatar ?? null} alt={`${leagueName} team avatar`} />
-      <div className="min-w-[10rem] flex-1"><p className="text-base font-semibold leading-tight text-black">{leagueName}</p><p className="text-sm font-medium leading-tight text-black">{subtitle}</p></div>
-      <div className="flex shrink-0 items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        <span className="-ml-2 w-36 shrink-0 whitespace-nowrap text-left text-sm font-medium normal-case tracking-normal text-foreground">Synced {formatRelativeTime(row.updated_at)}</span>
+      <div className="min-w-0"><p className="text-base font-semibold leading-tight text-black">{leagueName}</p><p className="text-sm font-medium leading-tight text-black">{subtitle}</p></div>
+
+      <div className="grid shrink-0 grid-cols-[9rem_auto_auto_auto] items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="w-36 whitespace-nowrap text-left text-sm font-medium normal-case tracking-normal text-foreground">Synced {formatRelativeTime(row.updated_at)}</span>
         <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? "Scoring"}</span>
         <span className="rounded-md border border-border px-2 py-1">Redraft</span>
         <span className="rounded-md border border-border px-2 py-1">{meta?.teams ? `${meta.teams} Team` : "Teams"}</span>
       </div>
-      <div className="ml-auto flex items-center gap-2">
+
+      <div className="flex items-center gap-2 md:justify-self-end">
         <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground">Settings</Link>
         <DropdownMenu>
           <DropdownMenuTrigger aria-label="League options" className="rounded-md border border-border px-2 py-1.5 text-xs leading-none text-foreground">⋮</DropdownMenuTrigger>
