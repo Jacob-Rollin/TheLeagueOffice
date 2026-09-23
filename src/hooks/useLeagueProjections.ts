@@ -47,6 +47,41 @@ export function useNflState() {
   });
 }
 
+/** League scoring format + map only (no weekly projection download). */
+export function useLeagueScoringMeta() {
+  const { activeLeague } = useActiveLeague();
+  const identifier = activeLeague?.leagueId ?? "";
+  const platform = activeLeague?.platform ?? "sleeper";
+
+  const scoring = useQuery({
+    queryKey: ["league-scoring", "v5", platform, identifier],
+    enabled: Boolean(identifier),
+    staleTime: 12 * HOUR,
+    retry: false,
+    queryFn: () =>
+      getLeagueScoring({
+        data: {
+          identifier,
+          platform,
+          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+        },
+      }),
+  });
+
+  const map: ScoringMap = useMemo(
+    () => scoring.data?.map ?? defaultScoringMap("half"),
+    [scoring.data],
+  );
+  const format = scoring.data?.format ?? "half";
+
+  return {
+    format: format as ScoringFormat,
+    scoringMap: map,
+    loading: scoring.isLoading,
+  };
+}
+
 async function fetchWeeklyProjectionsFor(
   season: string,
   week: number,
@@ -303,5 +338,105 @@ export function useLeagueProjections(week?: number | null) {
     format,
     nflWeek: nflState.data?.week ?? null,
     nflSeason: nflState.data?.season ?? null,
+  };
+}
+
+/**
+ * Full-season Sleeper projected counting stats (page-scoped).
+ * Same endpoint the catalog already uses — fetched only when a research
+ * surface needs raw season lines, cached in React Query (not Supabase).
+ */
+async function fetchSeasonProjectionsFor(
+  season: string,
+): Promise<Map<string, WeeklyProjRow>> {
+  const q = `season_type=regular&${positionsQuery()}&order_by=adp_half_ppr`;
+  const trySeason = async (yr: string) => {
+    const url = `${SLEEPER_BASE}/projections/nfl/${yr}?${q}`;
+    const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
+    const rows = res && res.ok ? ((await res.json()) as unknown) : null;
+    return Array.isArray(rows) ? rows : [];
+  };
+
+  let rows = await trySeason(season);
+  if (!rows.some((r) => hasScorableProjectionStats((r as { stats?: Record<string, number> }).stats))) {
+    rows = await trySeason(String(Number(season) - 1));
+  }
+
+  const map = new Map<string, WeeklyProjRow>();
+  for (const row of rows as {
+    player_id?: string;
+    stats?: Record<string, number>;
+    player?: { position?: string; fantasy_positions?: string[] };
+  }[]) {
+    if (!row?.player_id || !hasScorableProjectionStats(row.stats)) continue;
+    const pos = String(
+      row.player?.position || row.player?.fantasy_positions?.[0] || "",
+    ).toUpperCase();
+    map.set(String(row.player_id), { stats: row.stats!, pos });
+  }
+  return map;
+}
+
+/** Season projected counting stats + league-scored fantasy points. */
+export function useSeasonProjectionStats() {
+  const { activeLeague } = useActiveLeague();
+  const identifier = activeLeague?.leagueId ?? "";
+  const platform = activeLeague?.platform ?? "sleeper";
+  const nflState = useNflState();
+  const season = nflState.data?.season ?? null;
+
+  const scoring = useQuery({
+    queryKey: ["league-scoring", "v5", platform, identifier],
+    enabled: Boolean(identifier),
+    staleTime: 12 * HOUR,
+    retry: false,
+    queryFn: () =>
+      getLeagueScoring({
+        data: {
+          identifier,
+          platform,
+          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+        },
+      }),
+  });
+
+  const projections = useQuery({
+    queryKey: ["sleeper-season-projections", "v1", season],
+    enabled: Boolean(season),
+    staleTime: 6 * HOUR,
+    refetchOnWindowFocus: false,
+    retry: false,
+    queryFn: () => fetchSeasonProjectionsFor(season!),
+  });
+
+  const map: ScoringMap = useMemo(
+    () => scoring.data?.map ?? defaultScoringMap("half"),
+    [scoring.data],
+  );
+  const format = scoring.data?.format ?? "half";
+
+  const statsFor = useCallback(
+    (playerId: string): Record<string, number> | null => {
+      return projections.data?.get(playerId)?.stats ?? null;
+    },
+    [projections.data],
+  );
+
+  const projectFor = useCallback(
+    (playerId: string): number | null => {
+      const stats = projections.data?.get(playerId)?.stats;
+      return projectionPoints(stats, map, format);
+    },
+    [projections.data, map, format],
+  );
+
+  return {
+    statsFor,
+    projectFor,
+    format,
+    season,
+    scoringMap: map,
+    loading: projections.isLoading || scoring.isLoading || nflState.isLoading,
   };
 }

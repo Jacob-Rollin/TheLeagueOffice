@@ -49,7 +49,11 @@ export function resolveAvatarUrl(raw?: string | null): string | null {
   if (/\/(?:0|default)(?:\.[a-z0-9]+)?(?:[?#]|$)/i.test(value)) {
     return null;
   }
-  return value;
+  // Full URLs / site paths pass through; bare Sleeper avatar ids become CDN thumbs.
+  if (/^https?:\/\//i.test(value) || value.startsWith("/") || value.startsWith("data:")) {
+    return value;
+  }
+  return `https://sleepercdn.com/avatars/thumbs/${value}`;
 }
 
 const POWER_RANK_BASELINE_KEY = "tlo.power-rank-baseline";
@@ -202,6 +206,35 @@ export function TeamAvatarBadge({
         className="mr-3 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/80 bg-white p-0.5"
       >
         <img src="/espn.png" alt="ESPN" className="h-5 w-5 object-contain" aria-hidden="true" />
+      </span>
+    );
+  }
+
+  if (plat === "yahoo") {
+    return (
+      <span
+        key={remountKey}
+        className="mr-3 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/80 bg-white p-0.5"
+      >
+        <img src="/yahoo.png" alt="Yahoo" className="h-5 w-5 object-contain" aria-hidden="true" />
+      </span>
+    );
+  }
+
+  if (plat === "sleeper") {
+    return (
+      <span
+        key={remountKey}
+        className="mr-3 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/80 bg-white p-1"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          className="h-5 w-5 text-neutral-400"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5Z" />
+        </svg>
       </span>
     );
   }

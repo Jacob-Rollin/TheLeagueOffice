@@ -1,6 +1,8 @@
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { createFileRoute } from "@tanstack/react-router";
+import { ChevronDown } from "lucide-react";
 import {
+  memo,
   startTransition,
   useDeferredValue,
   useEffect,
@@ -10,15 +12,42 @@ import {
   useState,
 } from "react";
 
+import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
 import {
-  ProjectionListRow,
   PROJECTION_OWNERSHIP_META,
   PROJECTION_ROW_HEIGHT,
   type ProjectionOwnership,
   type ProjectionRowData,
 } from "@/components/research/ProjectionListRow";
+import {
+  flattenProjectionGroups,
+  formatProjectionStat,
+  PROJECTION_FLEX_OK,
+  PROJECTION_POS_FILTERS,
+  projectionGroupsForPos,
+  projectionStatNumber,
+  type FlatProjectionStatCol,
+  type ProjectionPosFilter,
+  type ProjectionStatSortKey,
+} from "@/components/research/projectionStatColumns";
+import {
+  scoreResearchProjection,
+  ScoringFormatSelect,
+  useResearchScoringFormat,
+} from "@/components/research/ScoringFormatSelect";
+import {
+  nextSortState,
+  SortHeaderButton,
+  type SortDir,
+} from "@/components/research/SortHeader";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -31,7 +60,6 @@ import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections"
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import type { Pos } from "@/lib/draft";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { scaleValue } from "@/lib/trade-engine";
 import { cn } from "@/lib/utils";
@@ -51,10 +79,11 @@ export const Route = createFileRoute("/weekly-projections")({
   component: WeeklyProjectionsRoute,
 });
 
-type PosFilter = "ALL" | "QB" | "RB" | "WR" | "TE" | "FLEX" | "K" | "DEF";
+type SortKey = "player" | "value" | "proj" | ProjectionStatSortKey;
 
-const POS_FILTERS: PosFilter[] = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
-const FLEX_OK = new Set<Pos>(["RB", "WR", "TE"]);
+type EnrichedWeeklyRow = ProjectionRowData & {
+  stats: Record<string, number> | null;
+};
 
 function WeeklyProjectionsRoute() {
   const { activeLeagueId } = useActiveLeague();
@@ -79,14 +108,38 @@ function WeeklyProjectionsPage() {
   }, [nflState.data?.week, activeLeague?.id]);
 
   const activeWeek = selectedWeek ?? nflState.data?.week ?? 1;
-  const { projectFor, loading: projectionsLoading } = useLeagueProjections(activeWeek);
+  const {
+    statsFor,
+    format: leagueFormat,
+    scoringMap,
+    loading: projectionsLoading,
+  } = useLeagueProjections(activeWeek);
+  const { format: scoringFormat, override: scoringOverride, setFormat: setScoringFormat } =
+    useResearchScoringFormat(leagueFormat);
 
-  const [posFilter, setPosFilter] = useState<PosFilter>("ALL");
+  const [posFilter, setPosFilter] = useState<ProjectionPosFilter>("QB");
   const [showRoster, setShowRoster] = useState(true);
   const [showTaken, setShowTaken] = useState(true);
   const [showAvailable, setShowAvailable] = useState(true);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
+  const [sortKey, setSortKey] = useState<SortKey>("proj");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const statGroups = useMemo(() => projectionGroupsForPos(posFilter), [posFilter]);
+  const statCols = useMemo(() => flattenProjectionGroups(statGroups), [statGroups]);
+
+  const toggleSort = (key: SortKey) => {
+    const next = nextSortState(sortKey, sortDir, key, key === "player" ? "asc" : "desc");
+    setSortKey(next.key);
+    setSortDir(next.dir);
+  };
+
+  const setPos = (pos: ProjectionPosFilter) => {
+    setPosFilter(pos);
+    setSortKey("proj");
+    setSortDir("desc");
+  };
 
   const myOwnedIds = useMemo(() => {
     const ids = new Set<string>();
@@ -94,18 +147,21 @@ function WeeklyProjectionsPage() {
     return ids;
   }, [myTeam?.players]);
 
-  const rows = useMemo((): ProjectionRowData[] => {
+  const rows = useMemo((): EnrichedWeeklyRow[] => {
     const q = deferredQuery.trim().toLowerCase();
     const ownershipOf = (id: string): ProjectionOwnership => {
       if (myOwnedIds.has(id)) return "roster";
       if (rosteredIds.has(id)) return "taken";
       return "available";
     };
+    const activeStatCol =
+      sortKey !== "player" && sortKey !== "value" && sortKey !== "proj"
+        ? statCols.find((c) => c.key === sortKey) ?? null
+        : null;
 
     return players
       .filter((p) => {
-        if (posFilter === "ALL") return true;
-        if (posFilter === "FLEX") return FLEX_OK.has(p.pos);
+        if (posFilter === "FLEX") return PROJECTION_FLEX_OK.has(p.pos);
         return p.pos === posFilter;
       })
       .filter((p) => {
@@ -123,8 +179,11 @@ function WeeklyProjectionsPage() {
         );
       })
       .map((p) => {
-        // Sleeper weekly line only — never invent season÷17 when Sleeper shows "—".
-        const proj = projectFor(p.id);
+        const bye = p.bye != null && p.bye === activeWeek;
+        const stats = bye ? null : statsFor(p.id);
+        const proj = bye
+          ? null
+          : scoreResearchProjection(stats, scoringFormat, scoringOverride, scoringMap);
         const entry = brain?.[p.id];
         const value = scaleValue(entry?.value ?? 0);
         const trend = entry?.trend ?? 0;
@@ -144,12 +203,25 @@ function WeeklyProjectionsPage() {
           injuryLabel: badge?.label ?? null,
           injuryClass: badge?.className ?? null,
           metaLine,
+          stats,
         };
       })
-      .sort(
-        (a, b) =>
-          (b.proj ?? -1) - (a.proj ?? -1) || a.player.name.localeCompare(b.player.name),
-      );
+      .sort((a, b) => {
+        let cmp = 0;
+        if (sortKey === "player") {
+          cmp = a.player.name.localeCompare(b.player.name);
+        } else if (sortKey === "value") {
+          cmp = a.value - b.value || a.trend - b.trend;
+        } else if (sortKey === "proj") {
+          cmp = (a.proj ?? -1) - (b.proj ?? -1);
+        } else if (activeStatCol) {
+          cmp =
+            (projectionStatNumber(a.stats, activeStatCol) ?? -1) -
+            (projectionStatNumber(b.stats, activeStatCol) ?? -1);
+        }
+        if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
+        return a.player.name.localeCompare(b.player.name);
+      });
   }, [
     players,
     posFilter,
@@ -157,13 +229,22 @@ function WeeklyProjectionsPage() {
     showTaken,
     showAvailable,
     deferredQuery,
-    projectFor,
+    statsFor,
+    scoringFormat,
+    scoringOverride,
+    scoringMap,
     brain,
     myOwnedIds,
     rosteredIds,
+    sortKey,
+    sortDir,
+    activeWeek,
+    statCols,
   ]);
 
   const loading = playersLoading || rostersLoading || projectionsLoading || nflState.isLoading;
+  const ready = !loading && rows.length > 0;
+  const colSpan = 4 + statCols.length;
 
   useLayoutEffect(() => {
     const el = listRef.current;
@@ -172,19 +253,32 @@ function WeeklyProjectionsPage() {
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, [loading, rows.length]);
+  }, [ready, rows.length, posFilter]);
 
   const virtualizer = useWindowVirtualizer({
-    count: loading ? 0 : rows.length,
+    count: ready ? rows.length : 0,
     estimateSize: () => PROJECTION_ROW_HEIGHT,
     overscan: 12,
     scrollMargin,
   });
+  const items = virtualizer.getVirtualItems();
+  const paddingTop = items.length > 0 ? Math.max(0, items[0]!.start - scrollMargin) : 0;
+  const paddingBottom =
+    items.length > 0
+      ? Math.max(0, virtualizer.getTotalSize() - (items[items.length - 1]!.end - scrollMargin))
+      : 0;
+
   const weekOptions = Array.from({ length: 18 }, (_, i) => i + 1);
   const hasLeague = Boolean(activeLeague?.id);
+  const minWidth =
+    posFilter === "K"
+      ? "min-w-[720px]"
+      : posFilter === "DEF"
+        ? "min-w-[900px]"
+        : "min-w-[980px]";
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-3 pb-16 pt-6">
+    <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -194,10 +288,10 @@ function WeeklyProjectionsPage() {
             <ActiveLeagueLabel />
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            Ranked by projected points for Week {activeWeek}
+            Sleeper week {activeWeek} projections
             {hasLeague
-              ? ` in ${activeLeague?.name?.trim() || "your synced league"}`
-              : " — sync a league to color-code roster ownership"}
+              ? `, scored for ${activeLeague?.name?.trim() || "your synced league"}`
+              : ""}
             .
           </p>
         </div>
@@ -223,18 +317,18 @@ function WeeklyProjectionsPage() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
-        {POS_FILTERS.map((pos) => {
+        {PROJECTION_POS_FILTERS.map((pos) => {
           const active = posFilter === pos;
           return (
             <button
               key={pos}
               type="button"
-              onClick={() => startTransition(() => setPosFilter(pos))}
+              onClick={() => startTransition(() => setPos(pos))}
               className={cn(
                 "rounded-md border px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wider transition-colors",
                 active
                   ? "border-blue-600 bg-blue-600 text-white"
-                  : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800",
+                  : "border-slate-200 bg-white text-blue-700 hover:border-blue-300",
               )}
             >
               {pos === "DEF" ? "DST" : pos}
@@ -243,91 +337,174 @@ function WeeklyProjectionsPage() {
         })}
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          {(
-            [
-              ["roster", showRoster, setShowRoster],
-              ["taken", showTaken, setShowTaken],
-              ["available", showAvailable, setShowAvailable],
-            ] as const
-          ).map(([key, on, setOn]) => {
-            const meta = PROJECTION_OWNERSHIP_META[key];
-            return (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={on}
-                onClick={() => startTransition(() => setOn((v) => !v))}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wider transition-colors",
-                  on
-                    ? cn(meta.swatch, "text-slate-800")
-                    : "border-slate-200 bg-slate-50 text-slate-400 opacity-70",
-                )}
-              >
-                <span
-                  className={cn(
-                    "inline-block size-2.5 rounded-sm border",
-                    on ? meta.swatch : "border-slate-300 bg-slate-200",
-                  )}
-                  aria-hidden="true"
-                />
-                {meta.label}
-              </button>
-            );
-          })}
+      <div className="mb-4 flex flex-wrap items-center gap-2 sm:justify-between">
+        <div className="flex flex-nowrap items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="inline-flex h-9 min-w-[8.5rem] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-primary/30">
+              Availability
+              <ChevronDown className="size-4 opacity-50" aria-hidden="true" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48 p-1">
+              {(
+                [
+                  ["roster", showRoster, setShowRoster],
+                  ["taken", showTaken, setShowTaken],
+                  ["available", showAvailable, setShowAvailable],
+                ] as const
+              ).map(([key, on, setOn]) => {
+                const meta = PROJECTION_OWNERSHIP_META[key];
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={key}
+                    checked={on}
+                    onCheckedChange={(checked) =>
+                      startTransition(() => setOn(Boolean(checked)))
+                    }
+                    onSelect={(e) => e.preventDefault()}
+                    className={cn("rounded-sm", on ? meta.row : undefined)}
+                  >
+                    {meta.label}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <ScoringFormatSelect
+            value={scoringFormat}
+            onChange={(next) => startTransition(() => setScoringFormat(next))}
+          />
         </div>
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search players"
-          className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2"
+          className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
         />
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid w-full grid-cols-[2.5rem_minmax(0,1.35fr)_minmax(5rem,0.7fr)_minmax(7.5rem,0.95fr)_3.5rem] items-center gap-x-2 border-b border-slate-200/80 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-700 select-none sm:grid-cols-[2.75rem_minmax(12rem,1.45fr)_minmax(5.5rem,0.75fr)_minmax(8.5rem,1fr)_4rem] sm:gap-x-4 sm:px-4">
-          <span className="text-center">Rk</span>
-          <span>Player</span>
-          <span className="text-center">Status</span>
-          <span className="text-center">Value / Trend</span>
-          <span className="text-right">Proj</span>
-        </div>
-
-        {loading ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-400">Loading weekly projections…</p>
-        ) : rows.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-400">
-            No players match the current filters.
-          </p>
-        ) : (
-          <div ref={listRef}>
-            <ul className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-              {virtualizer.getVirtualItems().map((item) => {
-                const row = rows[item.index]!;
-                return (
-                  <ProjectionListRow
-                    key={row.player.id}
-                    row={row}
-                    rank={item.index + 1}
-                    onOpen={openPlayer}
-                    style={{
-                      height: item.size,
-                      transform: `translateY(${item.start - scrollMargin}px)`,
-                    }}
+        <div ref={listRef} className="overflow-x-auto">
+          <table className={cn("w-full border-collapse text-sm", minWidth)}>
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                <th colSpan={2} className="px-3 py-2 text-left">
+                  Players
+                </th>
+                {statGroups.map((group) => (
+                  <th
+                    key={group.label}
+                    colSpan={group.cols.length}
+                    className="border-l border-slate-200 px-2 py-2 text-center text-slate-700"
+                  >
+                    {group.label}
+                  </th>
+                ))}
+                <th
+                  colSpan={2}
+                  className="border-l border-slate-200 px-2 py-2 text-center text-slate-700"
+                >
+                  Misc
+                </th>
+              </tr>
+              <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                <th className="w-10 px-2 py-1.5 text-center">Rk</th>
+                <th className="px-2 py-1.5 text-left">
+                  <SortHeaderButton
+                    label="Player"
+                    active={sortKey === "player"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("player")}
+                    align="left"
                   />
-                );
-              })}
-            </ul>
-          </div>
-        )}
+                </th>
+                {statCols.map((col) => (
+                  <th
+                    key={col.key}
+                    className={cn(
+                      "px-1.5 py-1.5 text-center",
+                      col.groupStart ? "border-l border-slate-100" : "",
+                    )}
+                  >
+                    <SortHeaderButton
+                      label={col.label}
+                      active={sortKey === col.key}
+                      dir={sortDir}
+                      onClick={() => toggleSort(col.key)}
+                    />
+                  </th>
+                ))}
+                <th className="border-l border-slate-100 px-2 py-1.5 text-center">
+                  <SortHeaderButton
+                    label="Value / Trend"
+                    active={sortKey === "value"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("value")}
+                  />
+                </th>
+                <th className="px-2 py-1.5 text-center">
+                  <SortHeaderButton
+                    label="Proj"
+                    active={sortKey === "proj"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("proj")}
+                  />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={colSpan} className="px-4 py-10 text-center text-slate-400">
+                    Loading weekly projections…
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={colSpan} className="px-4 py-10 text-center text-slate-400">
+                    No players match the current filters.
+                  </td>
+                </tr>
+              ) : (
+                <>
+                  {paddingTop > 0 ? (
+                    <tr aria-hidden="true">
+                      <td
+                        colSpan={colSpan}
+                        style={{ height: paddingTop, padding: 0, border: 0 }}
+                      />
+                    </tr>
+                  ) : null}
+                  {items.map((item) => {
+                    const row = rows[item.index]!;
+                    return (
+                      <WeeklyProjRow
+                        key={row.player.id}
+                        row={row}
+                        rank={item.index + 1}
+                        statCols={statCols}
+                        onOpen={openPlayer}
+                      />
+                    );
+                  })}
+                  {paddingBottom > 0 ? (
+                    <tr aria-hidden="true">
+                      <td
+                        colSpan={colSpan}
+                        style={{ height: paddingBottom, padding: 0, border: 0 }}
+                      />
+                    </tr>
+                  ) : null}
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {!hasLeague ? (
         <p className="mt-3 text-xs text-slate-400">
-          Sync a league to classify players as Roster, Taken, or Available against your active
+          Sync a league to classify players as Rostered, Taken, or Available against your active
           rosters.
         </p>
       ) : teams.length === 0 && !rostersLoading ? (
@@ -340,3 +517,91 @@ function WeeklyProjectionsPage() {
     </main>
   );
 }
+
+const WeeklyProjRow = memo(function WeeklyProjRow({
+  row,
+  rank,
+  statCols,
+  onOpen,
+}: {
+  row: EnrichedWeeklyRow;
+  rank: number;
+  statCols: FlatProjectionStatCol[];
+  onOpen: (id: string) => void;
+}) {
+  const meta = PROJECTION_OWNERSHIP_META[row.ownership];
+  const trendUp = row.trend > 0.05;
+  const trendDown = row.trend < -0.05;
+  const { player } = row;
+
+  return (
+    <tr className={cn("border-b border-slate-100", meta.row)}>
+      <td className="w-10 px-2 py-2.5 text-center text-sm tabular-nums text-slate-500">
+        {rank}
+      </td>
+      <td className="px-3 py-2.5">
+        <button
+          type="button"
+          onClick={() => onOpen(player.id)}
+          className="flex min-w-0 items-center gap-2.5 text-left transition-opacity hover:opacity-85"
+        >
+          <PlayerAvatar
+            id={player.id}
+            pos={player.pos}
+            team={player.team}
+            name={player.name}
+            className="size-9 flex-shrink-0 rounded-full border-2 border-slate-200 bg-white"
+            logoClassName="size-3"
+          />
+          <span className="min-w-0">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-semibold text-blue-700">{player.name}</span>
+              {row.injuryLabel && row.injuryClass ? (
+                <span
+                  className={cn(
+                    "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[2px] px-0.5 text-[9px] font-bold text-white",
+                    row.injuryClass,
+                  )}
+                >
+                  {row.injuryLabel}
+                </span>
+              ) : null}
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] font-medium uppercase text-slate-400">
+              {row.metaLine}
+            </span>
+          </span>
+        </button>
+      </td>
+      {statCols.map((col) => (
+        <td
+          key={col.key}
+          className={cn(
+            "px-1.5 py-2.5 text-center tabular-nums text-slate-700",
+            col.groupStart ? "border-l border-slate-100" : "",
+          )}
+        >
+          {formatProjectionStat(row.stats, col)}
+        </td>
+      ))}
+      <td className="border-l border-slate-100 px-2 py-2.5 text-center tabular-nums text-slate-500">
+        <span className="inline-flex items-center justify-center gap-1.5">
+          <span>{row.value.toFixed(1)}</span>
+          <span className="text-slate-300">/</span>
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 font-semibold",
+              trendUp ? "text-emerald-600" : trendDown ? "text-rose-600" : "text-slate-400",
+            )}
+          >
+            <span aria-hidden="true">{trendUp ? "▲" : trendDown ? "▼" : "–"}</span>
+            <span>{Math.abs(row.trend).toFixed(1)}</span>
+          </span>
+        </span>
+      </td>
+      <td className="px-2 py-2.5 text-center font-semibold tabular-nums text-slate-900">
+        {row.proj != null && Number.isFinite(row.proj) ? row.proj.toFixed(2) : "—"}
+      </td>
+    </tr>
+  );
+});

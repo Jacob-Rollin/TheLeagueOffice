@@ -792,7 +792,7 @@ function MyTeamNewsPanel({
   };
 
   return (
-    <div className="mx-auto mt-4 grid w-full max-w-7xl grid-cols-1 items-start gap-6 overflow-visible lg:grid-cols-[1fr_320px]">
+    <div className="mx-auto mt-4 grid w-full max-w-shell grid-cols-1 items-start gap-6 overflow-visible lg:grid-cols-[1fr_320px]">
       {/* LEFT COLUMN — featured roster news */}
       <section className="min-w-0 w-full" aria-label="Team news feed">
         {featuredLoading && featuredCards.length === 0 ? (

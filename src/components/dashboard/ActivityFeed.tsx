@@ -29,9 +29,19 @@ function sanitizeActivityPlayerName(value: string): string {
     .trim();
 }
 
+/** Same defense reduction used by roster name → Sleeper cache matching. */
+function activityDefenseKey(raw: string): string {
+  const cleaned = raw
+    .toLowerCase()
+    .replace(/d\s*\/?\s*st|dst|defense|special teams/g, " ")
+    .trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  return parts.length ? sanitizeActivityPlayerName(parts[parts.length - 1]!) : "";
+}
+
 /**
- * Remap activity moves onto catalog players so ESPN name-matched rows render
- * real headshots / names instead of "Player 4685702" ghosts.
+ * Remap activity moves onto the Sleeper player cache so ESPN ids/names
+ * render real headshots instead of "Player 4685702" ghosts.
  */
 export function hydrateActivityMove(
   move: LeagueActivityMove,
@@ -49,10 +59,26 @@ export function hydrateActivityMove(
     };
   }
 
-  const ghost = /^Player\s+\d+$/i.test(move.name.trim());
-  if (ghost) return move;
+  // Team abbr DEF ids ("TB") travel through as playerId on resolved rows.
+  if (move.pos === "DEF" || move.pos === "DST") {
+    const byTeam = playersById.get(move.team) ?? playersById.get(move.playerId);
+    if (byTeam && (byTeam.pos === "DEF" || byTeam.pos === "DST")) {
+      return {
+        ...move,
+        playerId: byTeam.id,
+        name: byTeam.name,
+        pos: byTeam.pos,
+        team: byTeam.team || move.team,
+      };
+    }
+  }
 
-  const byName = playersByName.get(sanitizeActivityPlayerName(move.name));
+  const ghost = /^Player\s+\d+$/i.test(move.name.trim());
+  const nameKey = sanitizeActivityPlayerName(move.name);
+  const defKey = activityDefenseKey(move.name);
+  const byName =
+    (!ghost && nameKey ? playersByName.get(nameKey) : undefined) ??
+    (defKey ? playersByName.get(defKey) : undefined);
   if (!byName) return move;
 
   return {
@@ -264,6 +290,12 @@ export function ActivityFeed({
     for (const p of players ?? []) {
       const key = sanitizeActivityPlayerName(p.name);
       if (key && !map.has(key)) map.set(key, p);
+      if (p.pos === "DEF" || p.pos === "DST") {
+        const defKey = activityDefenseKey(p.name);
+        if (defKey && !map.has(defKey)) map.set(defKey, p);
+        const teamKey = sanitizeActivityPlayerName(p.team);
+        if (teamKey && !map.has(teamKey)) map.set(teamKey, p);
+      }
     }
     return map;
   }, [players]);

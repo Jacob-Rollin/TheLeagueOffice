@@ -50,6 +50,18 @@ export async function latestPublishedArticle(): Promise<ArticleRow | null> {
   return (data as ArticleRow | null) ?? null;
 }
 
+/** Recent published briefings for the Front Office feed (excludes optional slug). */
+export async function listPublishedArticles(limit = 6): Promise<ArticleRow[]> {
+  const { data, error } = await supabase
+    .from("articles")
+    .select(COLUMNS)
+    .eq("published", true)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ArticleRow[];
+}
+
 export async function getArticleBySlug(slug: string): Promise<ArticleRow | null> {
   const { data, error } = await supabase
     .from("articles")

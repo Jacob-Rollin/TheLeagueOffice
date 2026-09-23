@@ -18,6 +18,9 @@
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
 
+  /* Site content shell — slightly wider than Tailwind 7xl (80rem). */
+  --max-width-shell: 90rem;
+
   --font-display: "Barlow Condensed", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
 

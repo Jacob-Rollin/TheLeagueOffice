@@ -10,7 +10,7 @@ import { ActiveLeagueProvider } from "@/context/ActiveLeagueContext";
 
 import {
   DraftMenu,
-  PlaybookNavLink,
+  LockedToolsNav,
   ProfileMenu,
   ResearchMenu,
   navLinkClass,
@@ -122,7 +122,7 @@ function RootShell({ children }: { children: ReactNode }) {
 function SiteNav() {
   return (
     <header className="border-b-4 border-accent bg-primary text-primary-foreground">
-      <nav className="mx-auto flex w-full max-w-6xl items-center gap-2 px-3 py-1.5">
+      <nav className="mx-auto flex w-full max-w-shell items-center gap-2 px-3 py-1.5">
         <Link to="/" className="display-title mr-2 whitespace-nowrap text-lg">
           THE LEAGUE <span className="text-accent-foreground/90 rounded bg-accent px-1.5">OFFICE</span>
         </Link>
@@ -132,7 +132,7 @@ function SiteNav() {
           <Link to="/" activeOptions={{ exact: true }} className={navLinkClass}>
             Front Office
           </Link>
-          <PlaybookNavLink />
+          <LockedToolsNav />
           <DraftMenu />
           <ResearchMenu />
           <Link to="/hof" className={navLinkClass}>

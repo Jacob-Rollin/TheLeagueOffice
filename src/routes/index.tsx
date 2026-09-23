@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { StandingsPanel } from "@/components/league/StandingsPanel";
-import { latestPublishedArticle } from "@/lib/articles";
+import { listPublishedArticles, type ArticleRow } from "@/lib/articles";
+import { cn } from "@/lib/utils";
 
 
 const relativeTime = (iso?: string) => {
@@ -17,7 +18,7 @@ const relativeTime = (iso?: string) => {
       : mins < 60 * 24
         ? `${Math.round(mins / 60)} hour${Math.round(mins / 60) === 1 ? "" : "s"} ago`
         : `${Math.round(mins / 1440)} day${Math.round(mins / 1440) === 1 ? "" : "s"} ago`;
-  return `Published ${label} • Fantasy Insight Feed`;
+  return `Published ${label}`;
 };
 
 
@@ -62,11 +63,13 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const { data: featured } = useQuery({
-    queryKey: ["latest-article"],
+  const { data: briefings = [] } = useQuery({
+    queryKey: ["published-articles", 6],
     retry: false,
-    queryFn: () => latestPublishedArticle(),
+    queryFn: () => listPublishedArticles(6),
   });
+  const featured = briefings[0] ?? null;
+  const moreBriefings = briefings.slice(1, 3);
 
   const [news, setNews] = useState<NewsItem[]>([]);
   const [visibleNews, setVisibleNews] = useState(6);
@@ -105,205 +108,324 @@ function Home() {
     }
   };
 
+  const wireItems = news.filter((n) => Boolean(articleUrl(n))).slice(0, visibleNews);
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 pb-16 md:px-8">
-      <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <div className="min-w-0 lg:col-span-2">
-          <div className="mb-6">
-            <h1 className="text-4xl font-black tracking-tight text-zinc-950 drop-shadow-[0_4px_10px_rgba(0,0,0,0.15)] md:text-5xl">
-              Welcome To{" "}
-              <span className="text-blue-600">The League</span>
+    <main className="mx-auto w-full max-w-shell px-4 pb-16 md:px-8">
+      <section className="relative mt-6 overflow-hidden rounded-xl border border-border/60 bg-[#f8fafc] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] md:px-8 md:py-6">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-gradient-to-r from-slate-100/90 via-white to-blue-50/70"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-10 -top-16 h-40 w-56 rounded-full bg-blue-500/[0.08] blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-20 left-1/4 h-36 w-72 rounded-full bg-slate-400/[0.07] blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-[0.4]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.045) 1px, transparent 0)",
+            backgroundSize: "18px 18px",
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-3 left-0 w-1 rounded-r-full bg-gradient-to-b from-blue-500/80 via-blue-600/50 to-blue-400/20"
+        />
+
+        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 pl-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+              Front Office
+            </p>
+            <h1 className="mt-1 font-display text-3xl font-black uppercase leading-none tracking-wide text-zinc-950 md:text-4xl">
+              Your league,{" "}
+              <span className="text-blue-600">managed with an edge</span>
             </h1>
-            <p className="mt-2 mb-6 font-mono text-xs font-bold uppercase tracking-widest text-zinc-500">
-              FRONT OFFICE INTERFACE // DRAFT & OPERATION ANALYTICS
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-600 md:text-[15px]">
+              Sync your roster, grade trades, and track the week with tools built for serious managers.
             </p>
           </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+            <Link
+              to="/account/leagues"
+              className="inline-flex items-center gap-2 rounded-md border border-blue-600 bg-blue-600 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+            >
+              Manage Your League
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            <Link
+              to="/playbook"
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-white/90 px-3.5 py-2 text-sm font-medium text-zinc-700 transition-colors hover:border-blue-600/40 hover:text-blue-600"
+            >
+              Open Playbook
+            </Link>
+          </div>
+        </div>
+      </section>
 
-          <section className="grid gap-3 sm:grid-cols-3">
-            <HomeCard
-              to="/draft"
-              title="War Room"
-              action="Open War Room"
-              desc="Live draft engine, ADP tracking, and advanced player data metrics."
-              icon={<Grid3X3 className="h-6 w-6 text-primary" aria-hidden="true" />}
-            />
-            <HomeCard
-              to="/trade"
-              title="Trade Desk"
-              action="Launch Trade Desk"
-              desc="Instant asset evaluation, roster impact modeling, and value tracking."
-              icon={<ArrowLeftRight className="h-6 w-6 text-primary" aria-hidden="true" />}
-            />
-            <HomeCard
-              to="/waiver"
-              title="The Wire"
-              action="Access The Wire"
-              desc="Free agency priority tools, trend monitoring, and waiver budget analysis."
-              icon={<Radar className="h-6 w-6 text-primary" aria-hidden="true" />}
-            />
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
+        {/* Left: featured briefing + latest wire */}
+        <div className="min-w-0 space-y-8 lg:col-span-2">
+          <section>
+            <div className="mb-4">
+              <h2 className="display-title text-3xl uppercase tracking-wide text-zinc-950">
+                Around The League
+              </h2>
+            </div>
+
+            {featured ? (
+              <FeaturedBriefing article={featured} />
+            ) : (
+              <div className="rounded-xl border border-border bg-card p-5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-600">
+                  League Office
+                </p>
+                <h3 className="mt-1 text-lg font-semibold text-zinc-900">Briefings coming soon</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  League Office articles will appear here when published.
+                </p>
+              </div>
+            )}
+
+            {moreBriefings.length > 0 ? (
+              <div className="mt-4 flex flex-col gap-3">
+                {moreBriefings.map((article) => (
+                  <BriefingRow key={article.id} article={article} />
+                ))}
+              </div>
+            ) : null}
           </section>
 
-          <section className="mt-10">
-            <div className="mb-3 flex items-end justify-between">
-              <div>
-                <p className="eyebrow">Intelligence Briefings</p>
-                <h2 className="display-title text-3xl">Around The League</h2>
+          <section>
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+              <h2 className="display-title text-2xl uppercase tracking-wide text-zinc-950">
+                Latest Articles
+              </h2>
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Fantasy Wire
+              </span>
+            </div>
+
+            {wireItems.length > 0 ? (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {wireItems.map((n, i) => (
+                  <WireCard key={`${n.headline}-${i}`} item={n} />
+                ))}
               </div>
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Updated on load</span>
-            </div>
-            <div className="flex flex-col gap-4">
-              {featured && (
-                <Link
-                  to="/articles/$slug"
-                  params={{ slug: featured.slug }}
-                  className="group overflow-hidden rounded-xl border border-primary/40 bg-card hover:border-primary"
-                >
-                  {featured.image_url ? (
-                    <div className="relative">
-                      <img
-                        src={featured.image_url}
-                        alt={featured.title}
-                        loading="lazy"
-                        className="h-auto w-full object-contain"
-                      />
-                      <div className="absolute bottom-4 left-4 right-4 rounded-xl border border-white/10 bg-background/65 p-4 shadow-lg backdrop-blur-md">
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">
-                          League Office • {featured.category}
-                        </p>
-                        <h3 className="mt-1 text-lg font-bold leading-snug tracking-tight group-hover:text-primary">
-                          {featured.title}
-                        </h3>
-                        <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                          By {featured.author_name}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-4">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">
-                        League Office • {featured.category}
-                      </p>
-                      <h3 className="mt-1 text-lg font-bold leading-snug tracking-tight group-hover:text-primary">
-                        {featured.title}
-                      </h3>
-                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{featured.summary}</p>
-                    </div>
-                  )}
-                </Link>
-              )}
+            ) : (
+              <div className="rounded-xl border border-border/70 bg-card p-5">
+                <p className="text-sm text-muted-foreground">
+                  Fantasy wire headlines will appear here when the news feed is available.
+                </p>
+              </div>
+            )}
 
-              {news.length
-                ? news
-                    .filter((n) => Boolean(articleUrl(n)))
-                    .slice(0, visibleNews)
-                    .map((n, i) => (
-                      <a
-                        key={`${n.headline}-${i}`}
-                        href={articleUrl(n)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="group overflow-hidden rounded-xl border border-border bg-card hover:border-primary"
-                      >
-                        {n.images?.[0]?.url ? (
-                          <div className="relative">
-                            <img
-                              src={n.images[0].url}
-                              alt={n.images[0].alt ?? "Fantasy football news"}
-                              loading="lazy"
-                              className="h-auto w-full object-contain"
-                            />
-                            <div className="absolute bottom-4 left-4 right-4 rounded-xl border border-white/10 bg-background/65 p-4 shadow-lg backdrop-blur-md">
-                              <h3 className="text-lg font-bold leading-snug tracking-tight group-hover:text-primary">
-                                {n.headline}
-                              </h3>
-                              <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                                {relativeTime(n.published)}
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="p-4">
-                            <h3 className="text-lg font-bold leading-snug tracking-tight group-hover:text-primary">
-                              {n.headline}
-                            </h3>
-                            <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                              {relativeTime(n.published)}
-                            </p>
-                            {n.description && (
-                              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{n.description}</p>
-                            )}
-                          </div>
-                        )}
-
-                      </a>
-                    ))
-                : ["Fantasy draft targets to watch", "Fantasy sleepers and busts", "Fantasy players trending up"].map(
-                    (x) => (
-                      <div key={x} className="rounded-xl border border-border bg-card p-4">
-                        <p className="text-[10px] uppercase tracking-widest text-primary">Fantasy</p>
-                        <h3 className="mt-1 text-lg font-semibold">{x}</h3>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          Live fantasy football headlines will appear here when the news feed is available.
-                        </p>
-                      </div>
-                    ),
-                  )}
-
-              {news.length > 0 && (visibleNews < news.length || newsLimit < 200) && (
-                <button
-                  type="button"
-                  onClick={loadMoreNews}
-                  disabled={loadingMore}
-                  className="rounded-xl border border-border bg-card px-4 py-3 font-display text-xs uppercase tracking-widest text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
-                >
-                  {loadingMore ? "Loading…" : "[ Load more ]"}
-                </button>
-              )}
-            </div>
-
+            {news.length > 0 && (visibleNews < news.length || newsLimit < 200) ? (
+              <button
+                type="button"
+                onClick={loadMoreNews}
+                disabled={loadingMore}
+                className={cn(
+                  "mt-5 w-full rounded-md border border-blue-600 bg-transparent px-4 py-2.5",
+                  "text-sm font-medium text-blue-600 transition-colors",
+                  "hover:bg-blue-600 hover:text-white disabled:opacity-60",
+                )}
+              >
+                {loadingMore ? "Loading…" : "Load more"}
+              </button>
+            ) : null}
           </section>
         </div>
 
-        <aside className="min-w-0 space-y-0 lg:col-span-1">
+        {/* Right: standings + tools */}
+        <aside className="min-w-0 space-y-5 lg:col-span-1">
           <StandingsPanel />
+          <section className="rounded-xl border border-border/80 bg-card p-3">
+            <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              Tools
+            </p>
+            <div className="flex flex-col gap-2">
+              <ToolShortcut
+                to="/draft"
+                title="War Room"
+                status="Draft ready"
+                icon={<Grid3X3 className="h-4 w-4" aria-hidden="true" />}
+              />
+              <ToolShortcut
+                to="/trade"
+                title="Trade Desk"
+                status="Value grading"
+                icon={<ArrowLeftRight className="h-4 w-4" aria-hidden="true" />}
+              />
+              <ToolShortcut
+                to="/waiver"
+                title="The Wire"
+                status="Waiver board"
+                icon={<Radar className="h-4 w-4" aria-hidden="true" />}
+              />
+            </div>
+          </section>
         </aside>
-
       </div>
     </main>
   );
 }
 
-function HomeCard({
+function FeaturedBriefing({ article }: { article: ArticleRow }) {
+  return (
+    <Link
+      to="/articles/$slug"
+      params={{ slug: article.slug }}
+      className="group block overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-blue-600/50"
+    >
+      {article.image_url ? (
+        <div className="relative w-full overflow-hidden bg-slate-100">
+          <img
+            src={article.image_url}
+            alt={article.title}
+            loading="lazy"
+            className="h-auto w-full object-cover transition-transform duration-500 group-hover:scale-[1.01]"
+          />
+          <span className="absolute right-3 top-3 rounded-md bg-blue-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+            Featured
+          </span>
+        </div>
+      ) : null}
+      <div className="border-t border-border p-5">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-600">
+          League Office · {article.category}
+        </p>
+        <h3 className="mt-2 text-2xl font-black leading-snug tracking-tight text-zinc-950 transition-colors group-hover:text-blue-600 md:text-3xl">
+          {article.title}
+        </h3>
+        {article.summary ? (
+          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+            {article.summary}
+          </p>
+        ) : null}
+        <p className="mt-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          By {article.author_name}
+          {article.created_at
+            ? ` · ${new Date(article.created_at).toLocaleDateString()}`
+            : ""}
+          <span className="ml-2 text-blue-600 group-hover:underline">Read more</span>
+        </p>
+      </div>
+    </Link>
+  );
+}
+
+function BriefingRow({ article }: { article: ArticleRow }) {
+  return (
+    <Link
+      to="/articles/$slug"
+      params={{ slug: article.slug }}
+      className="group flex gap-4 overflow-hidden rounded-xl border border-border/80 bg-card p-3 transition-colors hover:border-blue-600/40 sm:p-4"
+    >
+      {article.image_url ? (
+        <div className="h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-slate-100 sm:h-24 sm:w-36">
+          <img
+            src={article.image_url}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          />
+        </div>
+      ) : null}
+      <div className="min-w-0 flex-1 py-0.5">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-600">
+          League Office · {article.category}
+        </p>
+        <h3 className="mt-1 text-base font-bold leading-snug tracking-tight text-zinc-950 transition-colors group-hover:text-blue-600 sm:text-lg">
+          {article.title}
+        </h3>
+        {article.summary ? (
+          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{article.summary}</p>
+        ) : null}
+      </div>
+    </Link>
+  );
+}
+
+function WireCard({ item }: { item: NewsItem }) {
+  const image = item.images?.[0];
+  return (
+    <a
+      href={articleUrl(item)}
+      target="_blank"
+      rel="noreferrer"
+      className="group flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card transition-colors hover:border-blue-600/40"
+    >
+      <div className="aspect-[16/10] w-full overflow-hidden bg-slate-100">
+        {image?.url ? (
+          <img
+            src={image.url}
+            alt={image.alt ?? ""}
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          />
+        ) : null}
+      </div>
+      <div className="flex flex-1 flex-col p-3.5">
+        <h3 className="text-sm font-bold leading-snug text-zinc-950 transition-colors group-hover:text-blue-600">
+          {item.headline}
+        </h3>
+        {item.description ? (
+          <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+            {item.description}
+          </p>
+        ) : null}
+        <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+          <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-blue-600">
+            NFL
+          </span>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            {relativeTime(item.published)}
+          </span>
+        </div>
+      </div>
+    </a>
+  );
+}
+
+function ToolShortcut({
   to,
   title,
-  action,
-  desc,
+  status,
   icon,
 }: {
   to: string;
   title: string;
-  action: string;
-  desc: string;
+  status: string;
   icon: React.ReactNode;
 }) {
   return (
     <Link
       to={to}
-      className="group flex h-full flex-col rounded-xl border border-border bg-card p-5 transition-colors hover:border-zinc-700"
+      className="group flex items-center gap-3 rounded-lg border border-border/70 bg-white px-3 py-2.5 transition-colors hover:border-blue-600/40"
     >
-      <div className="mb-3 flex w-full items-center justify-between">
-        <div className="font-display text-xl uppercase tracking-wide">{title}</div>
-        <div className="inline-flex rounded-lg bg-primary/10 p-2.5 text-primary">{icon}</div>
-      </div>
-      <p className="text-xs leading-5 text-muted-foreground">{desc}</p>
-      <div className="mt-auto inline-flex w-fit items-center gap-2 rounded-lg border border-border bg-zinc-900/40 px-4 py-2 text-sm font-medium text-white transition-colors group-hover:border-zinc-600 group-hover:bg-zinc-800/60">
-        <span>{action}</span>
-        <ArrowRight
-          className="h-4 w-4 transition-transform group-hover:translate-x-1"
-          aria-hidden="true"
-        />
-      </div>
+      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-display text-sm font-bold uppercase tracking-wide text-zinc-950 group-hover:text-blue-600">
+          {title}
+        </span>
+        <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          {status}
+        </span>
+      </span>
+      <ArrowRight
+        className="h-4 w-4 shrink-0 text-blue-600 transition-transform group-hover:translate-x-0.5"
+        aria-hidden="true"
+      />
     </Link>
   );
 }

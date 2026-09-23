@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import { hydrateActivityMove } from "@/components/dashboard/ActivityFeed";
 import {
   playbookCardClass,
   resolveAvatarUrl,
@@ -614,6 +615,34 @@ function PressRoomPage() {
   const { data: playersPayload } = useSleeperPlayers();
   const players = playersPayload?.players ?? [];
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
+  const playersByName = useMemo(() => {
+    const map = new Map<string, Player>();
+    const sanitize = (value: string) =>
+      value
+        .toLowerCase()
+        .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .trim();
+    const defenseKey = (raw: string) => {
+      const cleaned = raw
+        .toLowerCase()
+        .replace(/d\s*\/?\s*st|dst|defense|special teams/g, " ")
+        .trim();
+      const parts = cleaned.split(/\s+/).filter(Boolean);
+      return parts.length ? sanitize(parts[parts.length - 1]!) : "";
+    };
+    for (const p of players) {
+      const key = sanitize(p.name);
+      if (key && !map.has(key)) map.set(key, p);
+      if (p.pos === "DEF") {
+        const defKey = defenseKey(p.name);
+        if (defKey && !map.has(defKey)) map.set(defKey, p);
+        const teamKey = sanitize(p.team);
+        if (teamKey && !map.has(teamKey)) map.set(teamKey, p);
+      }
+    }
+    return map;
+  }, [players]);
   const { teams, rosterPositions } = useLeagueRosters(players);
   const { events } = useLeagueActivity();
   const modalRef = useRef<PlayerModalHandle>(null);
@@ -772,7 +801,21 @@ function PressRoomPage() {
     for (const event of events) {
       if (event.kind !== "waiver" && event.kind !== "free_agent") continue;
       for (const move of event.moves ?? []) {
-        if (move.action === "add" && move.playerId) waiverAddIds.add(String(move.playerId));
+        if (move.action !== "add" || !move.playerId) continue;
+        // Map ESPN ids / ghost labels onto the Sleeper catalog before matching
+        // boxscore playerPoints (which now use Sleeper anchors).
+        const hydrated = hydrateActivityMove(move, playersById, playersByName);
+        waiverAddIds.add(String(hydrated.playerId));
+        if (hydrated.name) {
+          const byName = playersByName.get(
+            hydrated.name
+              .toLowerCase()
+              .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "")
+              .replace(/[^a-z0-9]/g, "")
+              .trim(),
+          );
+          if (byName) waiverAddIds.add(byName.id);
+        }
       }
     }
 
@@ -785,13 +828,20 @@ function PressRoomPage() {
     } | null = null;
 
     for (const entry of entries) {
-      // Only count waiver adds who actually started — bench explosions don't count.
+      // Prefer started adds; when ESPN lineup slots are missing, fall back to
+      // any scored rostered waiver add so the article still features a real gem.
       const starterIds = new Set((entry.starters ?? []).map(String).filter(Boolean));
-      if (starterIds.size === 0) continue;
+      const rosteredIds = new Set<string>([
+        ...starterIds,
+        ...(entry.playerIds ?? []).map(String).filter(Boolean),
+        ...Object.keys(entry.playerPoints ?? {}),
+      ]);
+      if (rosteredIds.size === 0) continue;
 
       for (const [playerId, pts] of Object.entries(entry.playerPoints ?? {})) {
         if (!waiverAddIds.has(playerId)) continue;
-        if (!starterIds.has(playerId)) continue;
+        if (starterIds.size > 0 && !starterIds.has(playerId)) continue;
+        if (starterIds.size === 0 && !rosteredIds.has(playerId)) continue;
         const player = playersById.get(playerId);
         if (!player) continue;
         const points = Number(pts) || 0;
@@ -804,6 +854,24 @@ function PressRoomPage() {
             logo: entry.logo ?? logoBySlot.get(entry.rosterId) ?? null,
           };
         }
+      }
+    }
+
+    // Last resort: activity add currently on a league roster (no week points yet).
+    if (!waiverGem && waiverAddIds.size && teams.length) {
+      for (const team of teams) {
+        for (const player of team.players ?? []) {
+          if (!waiverAddIds.has(player.id)) continue;
+          waiverGem = {
+            player,
+            points: 0,
+            teamName: team.team,
+            owner: team.owner,
+            logo: team.logo ?? logoBySlot.get(team.slot) ?? null,
+          };
+          break;
+        }
+        if (waiverGem) break;
       }
     }
 
@@ -1159,6 +1227,7 @@ function PressRoomPage() {
     matchups,
     previewMatchups,
     playersById,
+    playersByName,
     rosterPositions,
     events,
     logoBySlot,

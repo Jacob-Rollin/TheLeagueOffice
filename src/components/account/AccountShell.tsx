@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
+import { AccessGate } from "@/components/league/AccessGate";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/utils";
@@ -29,17 +30,19 @@ export function AccountShell({
 
   if (ready && !user) {
     return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-16">
-        <h1 className="display-title text-3xl">Account</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Sign in from the profile menu to manage your account.
-        </p>
+      <main className="mx-auto w-full max-w-shell pb-8 pt-4">
+        <AccessGate
+          kind="guest"
+          product="Account"
+          headline="Manage leagues from your account"
+          description="Create an account to sync Sleeper or ESPN leagues, switch active rosters, and unlock Front Office tools."
+        />
       </main>
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-10">
+    <main className="mx-auto w-full max-w-shell px-4 py-10">
       <div className="grid gap-6 md:grid-cols-4">
         <nav aria-label="Account sections" className="md:col-span-1">
           <div className="rounded-xl border border-border bg-card p-2">
@@ -71,7 +74,6 @@ export function AccountShell({
             >
               Sign Out
             </button>
-
           </div>
         </nav>
 

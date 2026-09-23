@@ -7,6 +7,16 @@ import { toast } from "sonner";
 import { AccountShell } from "@/components/account/AccountShell";
 import { ArticleEditor } from "@/components/account/ArticleEditor";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -169,6 +179,8 @@ function UsersManager({
   const { data: isAdmin, isFetched, isError } = useIsAdmin(currentUserId);
   const queryClient = useQueryClient();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<ProfileAdminRow | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   const authorized = isFetched && !isError && isAdmin === true && Boolean(currentUserEmail);
 
@@ -218,22 +230,28 @@ function UsersManager({
     }
   };
 
-  const removeAccount = async (row: ProfileAdminRow) => {
+  const requestRemoveAccount = (row: ProfileAdminRow) => {
     if (row.id === currentUserId) {
       toast.error("You cannot remove your own account from this list.");
       return;
     }
-    if (!window.confirm("Are you sure you want to remove this user account?")) return;
+    setPendingRemove(row);
+  };
+
+  const removeAccount = async (row: ProfileAdminRow) => {
+    setRemoving(true);
     setBusyId(row.id);
     try {
       const { error: deleteError } = await supabase.from("profiles").delete().eq("id", row.id);
       if (deleteError) throw new Error(deleteError.message);
       toast.success("User account removed.");
+      setPendingRemove(null);
       refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not remove user account.");
     } finally {
       setBusyId(null);
+      setRemoving(false);
     }
   };
 
@@ -356,7 +374,7 @@ function UsersManager({
                           <DropdownMenuItem
                             className="font-medium text-red-600 focus:text-red-700"
                             onSelect={() => {
-                              void removeAccount(row);
+                              requestRemoveAccount(row);
                             }}
                           >
                             Remove Account
@@ -371,6 +389,37 @@ function UsersManager({
           </tbody>
         </table>
       </div>
+
+      <AlertDialog
+        open={pendingRemove != null}
+        onOpenChange={(open) => {
+          if (!open && !removing) setPendingRemove(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRemove
+                ? `Are you sure you want to remove "${pendingRemove.full_name?.trim() || pendingRemove.email}"? This cannot be undone.`
+                : "Are you sure you want to remove this user account? This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={removing || !pendingRemove}
+              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
+              onClick={(event) => {
+                event.preventDefault();
+                if (pendingRemove) void removeAccount(pendingRemove);
+              }}
+            >
+              {removing ? "Removing…" : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }
@@ -385,6 +434,8 @@ function ArticlesManager({
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<ArticleRow | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<ArticleRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [autoOpened, setAutoOpened] = useState(false);
 
@@ -426,12 +477,16 @@ function ArticlesManager({
   };
 
   const remove = async (row: ArticleRow) => {
+    setDeleting(true);
     try {
       await deleteArticle(row.id);
       toast.success("Article deleted.");
+      setPendingDelete(null);
       refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not delete the article.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -497,7 +552,7 @@ function ArticlesManager({
                 type="button"
                 aria-label={`Delete ${row.title}`}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-red-600 hover:bg-red-50"
-                onClick={() => remove(row)}
+                onClick={() => setPendingDelete(row)}
               >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -505,6 +560,37 @@ function ArticlesManager({
           ))
         )}
       </div>
+
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this article?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `Are you sure you want to delete "${pendingDelete.title}"? This cannot be undone.`
+                : "Are you sure you want to delete this article? This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting || !pendingDelete}
+              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
+              onClick={(event) => {
+                event.preventDefault();
+                if (pendingDelete) void remove(pendingDelete);
+              }}
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {editorOpen && (
         <ArticleEditor

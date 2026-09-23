@@ -40,9 +40,10 @@ export function sanitizePlayerSearchName(value: string): string {
 }
 
 /**
- * Strip accidental negative signs / non-digit artifacts from transaction player
- * ids (ESPN D/ST overflow keys, scraper index corruption, etc.).
- * `-16001` and `"espn:-16001"` both become `"16001"`.
+ * Strip accidental non-digit artifacts from transaction player ids.
+ * ESPN team defenses use negative ids (-16001..-16034). Those MUST keep
+ * their sign — abs()-ing them collides with athlete espn_ids
+ * (e.g. -16027 Buccaneers D/ST → 16027 Jeremy Harris).
  */
 export function sanitizeTransactionPlayerId(
   rawId: string | number | null | undefined,
@@ -53,10 +54,15 @@ export function sanitizeTransactionPlayerId(
 
   const asNum = Number(asText);
   if (Number.isFinite(asNum) && /^-?\d+(\.\d+)?$/.test(asText)) {
-    return String(Math.abs(asNum));
+    const truncated = Math.trunc(asNum);
+    const abs = Math.abs(truncated);
+    if (truncated < 0 && abs >= 16001 && abs <= 16034) {
+      return String(truncated);
+    }
+    return String(abs);
   }
 
-  return asText.replace(/[^0-9]/g, "").trim();
+  return asText.replace(/[^0-9-]/g, "").trim();
 }
 
 function entryDisplayName(entry: TransactionPlayerCacheEntry): string {
@@ -178,15 +184,14 @@ function findByPlayerName(
 
 /**
  * Fixed local ESPN fantasy id → display name dictionary.
- * Rescues transaction ghosts when `player_warehouse` has no espn_id column.
+ * Prefer live athlete lookups; keep only verified non-D/ST anchors here.
+ * Never put D/ST team ids here — negatives collide with athlete espn_ids.
  */
 export const espnIdNameMap: Record<
   string,
   { name: string; team: string; pos: string }
 > = {
   "4426338": { name: "Bo Nix", team: "DEN", pos: "QB" },
-  "4871023": { name: "Jeremy Harris", team: "FA", pos: "CB" },
-  "16007": { name: "Kemal Ishmael", team: "FA", pos: "SS" },
 };
 
 /**

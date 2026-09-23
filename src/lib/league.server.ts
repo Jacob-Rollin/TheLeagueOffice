@@ -95,9 +95,14 @@ export async function loadStandings(leagueId: string): Promise<Standings | null>
         settings?: Record<string, number | string | undefined>;
       }[]
     >(`${BASE}/league/${id}/rosters`),
-    json<{ user_id: string; display_name: string; avatar: string | null; metadata?: { team_name?: string } }[]>(
-      `${BASE}/league/${id}/users`,
-    ),
+    json<
+      {
+        user_id: string;
+        display_name: string;
+        avatar: string | null;
+        metadata?: { team_name?: string; avatar?: string };
+      }[]
+    >(`${BASE}/league/${id}/users`),
   ]);
 
   if (!league || !rosters) return null;
@@ -108,11 +113,16 @@ export async function loadStandings(leagueId: string): Promise<Standings | null>
     const u = r.owner_id ? byUser.get(r.owner_id) : undefined;
     const pf = Number(s["fpts"] ?? 0) + Number(s["fpts_decimal"] ?? 0) / 100;
     const pa = Number(s["fpts_against"] ?? 0) + Number(s["fpts_against_decimal"] ?? 0) / 100;
+    const metaAvatar = u?.metadata?.avatar?.trim() || null;
+    const avatar =
+      (metaAvatar && (metaAvatar.startsWith("http") ? metaAvatar : sleeperAvatar(metaAvatar))) ||
+      sleeperAvatar(u?.avatar) ||
+      null;
     return {
       rosterId: r.roster_id,
       team: u?.metadata?.team_name?.trim() || u?.display_name || `Team ${r.roster_id}`,
       owner: u?.display_name ?? "Unclaimed",
-      avatar: u?.avatar ?? null,
+      avatar,
       wins: Number(s["wins"] ?? 0),
       losses: Number(s["losses"] ?? 0),
       ties: Number(s["ties"] ?? 0),
@@ -700,7 +710,7 @@ export type LeagueRosterTeam = {
 export type LeagueRosters = {
   myTeamName: string | null;
   teams: LeagueRosterTeam[];
-  /** Normalized starting-slot template (QB/RB/WR/TE/FLEX/K/DEF), in host order. */
+  /** Normalized starting-slot template (QB/RB/WR/TE/FLEX/K/DEF), display order. */
   rosterPositions: string[];
 };
 
@@ -740,12 +750,59 @@ export function normalizeSlotToken(raw: string): string {
 const ESPN_SLOT_TOKEN: Record<number, string> = {
   0: "QB",
   2: "RB",
+  3: "FLEX", // RB/WR
   4: "WR",
+  5: "FLEX", // WR/TE
   6: "TE",
+  7: "FLEX", // OP / offensive player — treat as flex for display
   16: "DEF",
   17: "K",
   23: "FLEX",
 };
+
+/**
+ * Canonical starter-slot display order (matches Sleeper). ESPN's native slot
+ * ids put DEF/K before FLEX (16/17/23); we remap so UI rows stay FLX → K → DEF.
+ */
+const STARTER_SLOT_DISPLAY_ORDER = ["QB", "RB", "WR", "TE", "FLEX", "K", "DEF"] as const;
+
+function starterSlotDisplayRank(token: string): number {
+  const i = (STARTER_SLOT_DISPLAY_ORDER as readonly string[]).indexOf(token);
+  return i === -1 ? STARTER_SLOT_DISPLAY_ORDER.length : i;
+}
+
+type EspnBoxscoreRosterEntry = {
+  playerId?: number;
+  lineupSlotId?: number;
+  playerPoolEntry?: {
+    appliedStatTotal?: number;
+    player?: {
+      fullName?: string;
+      stats?: {
+        scoringPeriodId?: number;
+        statSourceId?: number;
+        appliedTotal?: number;
+      }[];
+    };
+  };
+};
+
+/**
+ * Week-scoped ACTUAL fantasy points only (statSourceId 0).
+ * Never use appliedStatTotal or projected stats here — before kickoff ESPN
+ * often fills those with projections, which the matchup UI treats as live
+ * scores and collapses win% to 99/1.
+ */
+function espnBoxEntryPoints(entry: EspnBoxscoreRosterEntry, week: number): number {
+  for (const stat of entry.playerPoolEntry?.player?.stats ?? []) {
+    if (Number(stat.scoringPeriodId) !== Number(week)) continue;
+    if (Number(stat.statSourceId) === 0) {
+      const actual = Number(stat.appliedTotal);
+      return Number.isFinite(actual) ? actual : 0;
+    }
+  }
+  return 0;
+}
 
 
 /** Every team in the active league with its current roster. */
@@ -790,11 +847,19 @@ export async function loadConnectionRosters(
           playerIds: [],
           playerNames: entries.map(nameOf).filter(Boolean),
           starterIds: [],
+          // Keep one name per starter slot (including "") so index alignment with
+          // rosterPositions never shifts when a name is missing.
           starterNames: entries
             .filter((e) => ESPN_SLOT_TOKEN[e.lineupSlotId ?? -1] !== undefined)
-            .sort((a, b) => (a.lineupSlotId ?? 0) - (b.lineupSlotId ?? 0))
-            .map(nameOf)
-            .filter(Boolean),
+            .sort((a, b) => {
+              const ta = ESPN_SLOT_TOKEN[a.lineupSlotId ?? -1] ?? "";
+              const tb = ESPN_SLOT_TOKEN[b.lineupSlotId ?? -1] ?? "";
+              return (
+                starterSlotDisplayRank(ta) - starterSlotDisplayRank(tb) ||
+                (a.lineupSlotId ?? 0) - (b.lineupSlotId ?? 0)
+              );
+            })
+            .map((e) => nameOf(e) || ""),
           irIds: [],
           irNames: entries
             .filter((e) => e.lineupSlotId === 21)
@@ -802,7 +867,9 @@ export async function loadConnectionRosters(
             .filter(Boolean),
         };
       });
-      // Build the starting-slot template from ESPN's lineup slot counts.
+      // Build the starting-slot template from ESPN's lineup slot counts,
+      // then normalize to Sleeper-style display order (FLEX before K/DEF).
+      // Collapse RB/WR + WR/TE + OP counts into FLEX for the template.
       const counts = league?.settings?.rosterSettings?.lineupSlotCounts ?? {};
       const rosterPositions: string[] = [];
       for (const [raw, count] of Object.entries(counts)) {
@@ -810,6 +877,9 @@ export async function loadConnectionRosters(
         if (!token) continue;
         for (let k = 0; k < (Number(count) || 0); k++) rosterPositions.push(token);
       }
+      rosterPositions.sort(
+        (a, b) => starterSlotDisplayRank(a) - starterSlotDisplayRank(b),
+      );
       return {
         myTeamName: teams.find((t) => t.isMine)?.team ?? null,
         teams,
@@ -1207,7 +1277,11 @@ export async function loadConnectionMatchups(
   if (plat === "espn") {
     if (!/^\d+$/.test(clean)) return null;
     const season = new Date().getFullYear();
+    const index = await loadIdentityIndex();
     for (const year of [season, season - 1]) {
+      // mBoxscore carries per-player appliedStatTotal + lineup slots for the week.
+      // Without it ESPN matchups ship empty starters/playerPoints and Press Room
+      // waiver copy collapses to "a featured playmaker" / 0.00pts.
       const league = await espnJson<{
         teams?: EspnTeam[];
         schedule?: {
@@ -1219,6 +1293,12 @@ export async function loadConnectionMatchups(
             totalPointsLive?: number;
             totalProjectedPoints?: number;
             totalProjectedPointsLive?: number;
+            rosterForCurrentScoringPeriod?: {
+              entries?: EspnBoxscoreRosterEntry[];
+            };
+            rosterForMatchupPeriod?: {
+              entries?: EspnBoxscoreRosterEntry[];
+            };
           };
           away?: {
             teamId?: number;
@@ -1226,10 +1306,16 @@ export async function loadConnectionMatchups(
             totalPointsLive?: number;
             totalProjectedPoints?: number;
             totalProjectedPointsLive?: number;
+            rosterForCurrentScoringPeriod?: {
+              entries?: EspnBoxscoreRosterEntry[];
+            };
+            rosterForMatchupPeriod?: {
+              entries?: EspnBoxscoreRosterEntry[];
+            };
           };
         }[];
       }>(
-        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mMatchupScore&view=mScoreboard&view=mTeam&scoringPeriodId=${safeWeek}`,
+        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mBoxscore&view=mMatchupScore&view=mScoreboard&view=mTeam&scoringPeriodId=${safeWeek}`,
         s2,
         swid,
       );
@@ -1252,6 +1338,108 @@ export async function loadConnectionMatchups(
       }
       if (!schedule.length) continue;
 
+      // Batch-resolve ESPN ids that omit fullName onto the Sleeper catalog.
+      const rawEspnIds: string[] = [];
+      for (const row of schedule) {
+        for (const side of [row.home, row.away]) {
+          const boxEntries =
+            side?.rosterForCurrentScoringPeriod?.entries ??
+            side?.rosterForMatchupPeriod?.entries ??
+            [];
+          for (const e of boxEntries) {
+            if (e.playerId != null) rawEspnIds.push(String(e.playerId));
+          }
+        }
+      }
+      const needMeta = [...new Set(rawEspnIds)].filter((id) => {
+        const n = Number(id);
+        if (Number.isFinite(n) && n < 0) return true;
+        return !index.byEspn.has(id);
+      });
+      const espnMeta = needMeta.length ? await loadEspnPlayerMetaByIds(needMeta) : new Map();
+
+      const resolveEspnBoxPlayer = (entry: EspnBoxscoreRosterEntry): string | null => {
+        const espnId = entry.playerId;
+        const name =
+          entry.playerPoolEntry?.player?.fullName?.trim() ||
+          (espnId != null ? espnMeta.get(String(espnId))?.name : undefined) ||
+          "";
+        const hit = resolvePlayerFromTransaction(index, espnId, {
+          isEspnLeague: true,
+          ...(name ? { playerNameText: name } : {}),
+        });
+        if (hit?.id) return hit.id;
+        if (espnId != null) {
+          const meta = espnMeta.get(String(espnId));
+          if (meta?.team && (meta.pos === "DEF" || /d\/?\s*st/i.test(meta.name))) {
+            const def = index.bySleeper.get(meta.team);
+            if (def) return def.id;
+          }
+        }
+        // Always try the display name — ESPN box scores usually include fullName
+        // even when espn_id is missing from Sleeper's dump.
+        if (name) {
+          const byName = findIdentityBySanitizedName(index, name);
+          if (byName) return byName.id;
+        }
+        return null;
+      };
+
+      const parseEspnSideRoster = (
+        side:
+          | {
+              rosterForCurrentScoringPeriod?: { entries?: EspnBoxscoreRosterEntry[] };
+              rosterForMatchupPeriod?: { entries?: EspnBoxscoreRosterEntry[] };
+            }
+          | undefined,
+      ): { starters: string[]; playerIds: string[]; irIds: string[]; playerPoints: Record<string, number> } => {
+        const boxEntries =
+          side?.rosterForCurrentScoringPeriod?.entries ??
+          side?.rosterForMatchupPeriod?.entries ??
+          [];
+        const starterRows: { rank: number; id: string; order: number }[] = [];
+        const playerIds: string[] = [];
+        const irIds: string[] = [];
+        const playerPoints: Record<string, number> = {};
+        const seen = new Set<string>();
+
+        for (const entry of boxEntries) {
+          const sleeperId = resolveEspnBoxPlayer(entry);
+          const slot = entry.lineupSlotId ?? -1;
+          const pts = sleeperId ? espnBoxEntryPoints(entry, safeWeek) : 0;
+
+          if (sleeperId) {
+            playerPoints[sleeperId] = roundHundredths(pts);
+            if (!seen.has(sleeperId)) {
+              seen.add(sleeperId);
+              playerIds.push(sleeperId);
+            }
+          }
+
+          if (slot === 21) {
+            if (sleeperId) irIds.push(sleeperId);
+            continue;
+          }
+          const token = ESPN_SLOT_TOKEN[slot];
+          if (!token) continue;
+          // Keep an empty starter slot when identity resolution misses so
+          // index alignment with rosterPositions (FLX/K/DEF) stays intact.
+          starterRows.push({
+            rank: starterSlotDisplayRank(token),
+            id: sleeperId ?? "",
+            order: starterRows.length,
+          });
+        }
+
+        starterRows.sort((a, b) => a.rank - b.rank || a.order - b.order);
+        return {
+          starters: starterRows.map((r) => r.id),
+          playerIds,
+          irIds,
+          playerPoints,
+        };
+      };
+
       const entries: WeeklyMatchupEntry[] = [];
       for (const row of schedule) {
         const matchupId = Number(row.id ?? 0) || null;
@@ -1262,6 +1450,7 @@ export async function loadConnectionMatchups(
             projected: Number(
               row.home?.totalProjectedPointsLive ?? row.home?.totalProjectedPoints ?? 0,
             ),
+            roster: row.home,
           },
           {
             rosterId: Number(row.away?.teamId ?? 0),
@@ -1269,11 +1458,13 @@ export async function loadConnectionMatchups(
             projected: Number(
               row.away?.totalProjectedPointsLive ?? row.away?.totalProjectedPoints ?? 0,
             ),
+            roster: row.away,
           },
         ];
         for (const side of sides) {
           if (!side.rosterId) continue;
           const meta = byId.get(side.rosterId);
+          const lineup = parseEspnSideRoster(side.roster);
           entries.push({
             rosterId: side.rosterId,
             matchupId,
@@ -1283,10 +1474,10 @@ export async function loadConnectionMatchups(
             teamName: meta?.teamName ?? `Team ${side.rosterId}`,
             owner: meta?.owner ?? "",
             logo: meta?.logo ?? null,
-            starters: [],
-            playerIds: [],
-            irIds: [],
-            playerPoints: {},
+            starters: lineup.starters,
+            playerIds: lineup.playerIds,
+            irIds: lineup.irIds,
+            playerPoints: lineup.playerPoints,
           });
         }
       }
@@ -1495,8 +1686,17 @@ function sanitizePlayerSearchName(value: string): string {
 
 /**
  * Linear name scan across the identity catalog when keyed lookups miss
- * (incomplete espn_id coverage on Sleeper's NFL dump).
+ * (Sleeper's NFL dump often omits espn_id — name matching is the bridge).
  */
+function defenseIdentityKey(raw: string): string {
+  const cleaned = raw
+    .toLowerCase()
+    .replace(/d\s*\/?\s*st|dst|defense|special teams/g, " ")
+    .trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  return parts.length ? sanitizePlayerSearchName(parts[parts.length - 1]!) : "";
+}
+
 function findIdentityBySanitizedName(
   index: IdentityIndex,
   playerNameText: string,
@@ -1506,6 +1706,16 @@ function findIdentityBySanitizedName(
 
   const keyed = index.byName.get(normalizeName(playerNameText));
   if (keyed) return keyed;
+
+  const defKey = defenseIdentityKey(playerNameText);
+  if (defKey) {
+    for (const p of index.bySleeper.values()) {
+      if ((p.pos ?? "").toUpperCase() !== "DEF") continue;
+      if (sanitizePlayerSearchName(p.name) === defKey) return p;
+      if (p.team && sanitizePlayerSearchName(p.team) === defKey) return p;
+      if (sanitizePlayerSearchName(p.id) === defKey) return p;
+    }
+  }
 
   for (const p of index.bySleeper.values()) {
     if (sanitizePlayerSearchName(p.name) === cleanSearchName) return p;
@@ -1526,6 +1736,7 @@ function resolvePlayerFromTransaction(
   const cleanId = rawId != null ? String(rawId).trim() : "";
   const isEspnLeague = Boolean(opts?.isEspnLeague);
   const playerNameText = opts?.playerNameText?.trim() || "";
+  const asNum = cleanId ? Number(cleanId) : NaN;
 
   // PASS 1: Sleeper leagues resolve directly against the Sleeper id map.
   if (!isEspnLeague && cleanId) {
@@ -1533,9 +1744,25 @@ function resolvePlayerFromTransaction(
     if (sleeperHit) return sleeperHit;
   }
 
-  // PASS 2: ESPN leagues resolve only through the espn_id map — never bySleeper
-  // with the raw ESPN numeric key (that produces "Player 4242355" ghosts).
   if (isEspnLeague && cleanId) {
+    // PASS 2a: ESPN team defenses are NEGATIVE ids (-(16000 + proTeamId)).
+    // Resolve these BEFORE any espn_id lookup — abs(-16027) is Jeremy Harris's
+    // athlete espn_id, which must never win over Buccaneers D/ST.
+    if (Number.isFinite(asNum) && asNum < 0) {
+      const abbr = espnProTeamAbbr(Math.abs(asNum) - 16000);
+      if (abbr) {
+        const defHit = index.bySleeper.get(abbr);
+        if (defHit && (defHit.pos ?? "").toUpperCase() === "DEF") return defHit;
+      }
+      // Name fallback for defenses when team map misses.
+      if (playerNameText) {
+        const nameHit = findIdentityBySanitizedName(index, playerNameText);
+        if (nameHit && (nameHit.pos ?? "").toUpperCase() === "DEF") return nameHit;
+      }
+      return null;
+    }
+
+    // PASS 2b: Exact espn_id match only — never abs()/sign-flip athlete ids.
     const espnHit = index.byEspn.get(cleanId);
     if (espnHit) return espnHit;
   }
@@ -1549,46 +1776,108 @@ function resolvePlayerFromTransaction(
   return null;
 }
 
+/** ESPN NFL pro-team id → abbreviation (used for D/ST playerIds). */
+const ESPN_PRO_TEAM_ABBR: Record<number, string> = {
+  1: "ATL",
+  2: "BUF",
+  3: "CHI",
+  4: "CIN",
+  5: "CLE",
+  6: "DAL",
+  7: "DEN",
+  8: "DET",
+  9: "GB",
+  10: "TEN",
+  11: "IND",
+  12: "KC",
+  13: "LV",
+  14: "LAR",
+  15: "MIA",
+  16: "MIN",
+  17: "NE",
+  18: "NO",
+  19: "NYG",
+  20: "NYJ",
+  21: "PHI",
+  22: "ARI",
+  23: "PIT",
+  24: "LAC",
+  25: "SF",
+  26: "SEA",
+  27: "TB",
+  28: "WAS",
+  29: "CAR",
+  30: "JAX",
+  33: "BAL",
+  34: "HOU",
+};
+
+function espnProTeamAbbr(proTeamId: number): string | null {
+  return ESPN_PRO_TEAM_ABBR[proTeamId] ?? null;
+}
+
+type EspnPlayerMeta = { name: string; pos?: string; team?: string };
+
 /**
- * Resolve ESPN playerIds → display names for transaction items that omit
- * fullName (typical for mTransactions2 payloads).
+ * Resolve ESPN playerIds → display meta, then match into the Sleeper catalog.
+ * Fantasy mTransactions2 items usually omit fullName; the public athlete API
+ * fills the gap when Sleeper's espn_id field is null/missing.
  */
-async function loadEspnPlayerNamesByIds(
-  year: number,
+async function loadEspnPlayerMetaByIds(
   playerIds: string[],
-  s2?: string | null,
-  swid?: string | null,
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+): Promise<Map<string, EspnPlayerMeta>> {
+  const out = new Map<string, EspnPlayerMeta>();
   const ids = [...new Set(playerIds.map((id) => String(id).trim()).filter(Boolean))];
   if (!ids.length) return out;
 
-  const chunkSize = 40;
-  for (let i = 0; i < ids.length; i += chunkSize) {
-    const chunk = ids
-      .slice(i, i + chunkSize)
-      .map((id) => Number(id))
-      .filter((n) => Number.isFinite(n));
-    if (!chunk.length) continue;
-
-    const filter = JSON.stringify({ players: { filterIds: { value: chunk } } });
-    const data = await espnJson<{
-      players?: {
-        id?: number;
-        player?: { id?: number; fullName?: string };
-      }[];
-    }>(
-      `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/players?scoringPeriodId=0&view=players_wl`,
-      s2,
-      swid,
-      { "X-Fantasy-Filter": filter },
-    );
-
-    for (const row of data?.players ?? []) {
-      const id = String(row.id ?? row.player?.id ?? "").trim();
-      const name = row.player?.fullName?.trim();
-      if (id && name) out.set(id, name);
+  const fetchOne = async (id: string) => {
+    const asNum = Number(id);
+    // Team defenses: ESPN uses negative ids; athlete card 404s — map by team.
+    if (Number.isFinite(asNum) && asNum < 0) {
+      const abbr = espnProTeamAbbr(Math.abs(asNum) - 16000);
+      if (abbr) {
+        out.set(id, { name: `${abbr} D/ST`, pos: "DEF", team: abbr });
+        out.set(String(asNum), { name: `${abbr} D/ST`, pos: "DEF", team: abbr });
+      }
+      return;
     }
+
+    try {
+      const res = await fetch(
+        `https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${encodeURIComponent(id)}`,
+        { headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" } },
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        athlete?: {
+          id?: string | number;
+          displayName?: string;
+          fullName?: string;
+          position?: { abbreviation?: string };
+          team?: { abbreviation?: string };
+        };
+      };
+      const athlete = data.athlete;
+      const name = (athlete?.displayName ?? athlete?.fullName)?.trim();
+      if (!name) return;
+      const meta: EspnPlayerMeta = {
+        name,
+        ...(athlete?.position?.abbreviation
+          ? { pos: athlete.position.abbreviation }
+          : {}),
+        ...(athlete?.team?.abbreviation ? { team: athlete.team.abbreviation } : {}),
+      };
+      out.set(id, meta);
+      if (athlete?.id != null) out.set(String(athlete.id), meta);
+    } catch {
+      // Ignore individual athlete lookup failures.
+    }
+  };
+
+  // Bound concurrency so a large waiver week doesn't stampede ESPN.
+  const concurrency = 8;
+  for (let i = 0; i < ids.length; i += concurrency) {
+    await Promise.all(ids.slice(i, i + concurrency).map(fetchOne));
   }
 
   return out;
@@ -1950,6 +2239,59 @@ async function resolveSleeperLeagueId(clean: string): Promise<string | null> {
   return leagues[0]?.id ?? null;
 }
 
+/** ESPN mTransactions2 only returns rows when scoringPeriodId + filterType are set. */
+const ESPN_ACTIVITY_TXN_TYPES = [
+  "FREEAGENT",
+  "WAIVER",
+  "TRADE_ACCEPT",
+  "TRADE_UPHOLD",
+] as const;
+
+type EspnActivityTxn = {
+  id?: number | string;
+  proposedDate?: number;
+  processDate?: number;
+  type?: string;
+  status?: string;
+  /** Acting fantasy team for waiver / FA / roster moves. */
+  teamId?: number;
+  executionType?: string;
+  execution_type?: string;
+  scoringPeriodId?: number;
+  scoring_period?: number;
+  action_type?: string;
+  members?: unknown[];
+  items?: {
+    type?: string;
+    playerId?: number;
+    playerName?: string;
+    fromTeamId?: number;
+    toTeamId?: number;
+    player?: { fullName?: string };
+    playerPoolEntry?: { player?: { fullName?: string } };
+  }[];
+};
+
+/** Pull FA / waiver / trade rows for one ESPN scoring period. */
+async function loadEspnTransactionsForPeriod(
+  leagueId: string,
+  year: number,
+  scoringPeriodId: number,
+  s2?: string | null,
+  swid?: string | null,
+): Promise<EspnActivityTxn[]> {
+  const filter = JSON.stringify({
+    transactions: { filterType: { value: [...ESPN_ACTIVITY_TXN_TYPES] } },
+  });
+  const data = await espnJson<{ transactions?: EspnActivityTxn[] }>(
+    `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(leagueId)}?view=mTransactions2&scoringPeriodId=${scoringPeriodId}`,
+    s2,
+    swid,
+    { "X-Fantasy-Filter": filter },
+  );
+  return data?.transactions ?? [];
+}
+
 /** Recent waiver, free-agent, trade, and IR activity for a synced league. */
 export async function loadConnectionTransactions(
   identifier: string,
@@ -1965,7 +2307,14 @@ export async function loadConnectionTransactions(
     const season = new Date().getFullYear();
     const index = await loadIdentityIndex();
     for (const year of [season, season - 1]) {
+      // Teams + status first — mTransactions2 needs scoringPeriodId or it
+      // returns no `transactions` key at all (empty League Activity feed).
       const league = await espnJson<{
+        status?: {
+          latestScoringPeriod?: number;
+          currentMatchupPeriod?: number;
+          scoringPeriodId?: number;
+        };
         teams?: {
           id?: number;
           abbrev?: string;
@@ -1979,69 +2328,88 @@ export async function loadConnectionTransactions(
             }[];
           };
         }[];
-        transactions?: {
-          id?: number | string;
-          proposedDate?: number;
-          processDate?: number;
-          type?: string;
-          status?: string;
-          /** Acting fantasy team for waiver / FA / roster moves. */
-          teamId?: number;
-          executionType?: string;
-          execution_type?: string;
-          scoringPeriodId?: number;
-          scoring_period?: number;
-          action_type?: string;
-          members?: unknown[];
-          items?: {
-            type?: string;
-            playerId?: number;
-            playerName?: string;
-            fromTeamId?: number;
-            toTeamId?: number;
-            player?: { fullName?: string };
-            playerPoolEntry?: { player?: { fullName?: string } };
-          }[];
-        }[];
       }>(
-        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mTeam&view=mTransactions2&view=mRoster`,
+        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mTeam&view=mRoster&view=mStatus`,
         s2,
         swid,
       );
       const teams = league?.teams ?? [];
-      if (!teams.length && !league?.transactions?.length) continue;
+      if (!teams.length) continue;
       const teamMap = new Map<number, string>();
       for (const t of teams) {
         if (!isEspnFantasyTeamId(t.id)) continue;
         teamMap.set(t.id, espnTeamName(t as never) ?? t.abbrev ?? `Team ${t.id}`);
       }
 
+      const latestPeriod = Math.max(
+        1,
+        Number(
+          league?.status?.latestScoringPeriod ??
+            league?.status?.scoringPeriodId ??
+            league?.status?.currentMatchupPeriod ??
+            1,
+        ) || 1,
+      );
+      // Mirror Sleeper: recent weeks only (current + prior 3).
+      const periods = Array.from({ length: Math.min(latestPeriod, 4) }, (_, i) => latestPeriod - i).filter(
+        (w) => w >= 1,
+      );
+      const weekLists = await Promise.all(
+        periods.map((period) => loadEspnTransactionsForPeriod(clean, year, period, s2, swid)),
+      );
+      const rawTxns: EspnActivityTxn[] = [];
+      const seenTxnIds = new Set<string>();
+      for (const list of weekLists) {
+        for (const txn of list) {
+          const key = String(txn.id ?? `${txn.processDate ?? txn.proposedDate ?? ""}-${txn.type ?? ""}`);
+          if (seenTxnIds.has(key)) continue;
+          seenTxnIds.add(key);
+          rawTxns.push(txn);
+        }
+      }
+
       // ESPN transaction items usually omit fullName — seed names from live
-      // rosters, then fetch any remaining ids from the ESPN players catalog.
-      const espnNameById = new Map<string, string>();
+      // rosters, then resolve remaining ESPN ids via the public athlete API
+      // and map them onto the Sleeper identity catalog (same pool as the UI cache).
+      const espnMetaById = new Map<string, EspnPlayerMeta>();
       for (const t of teams) {
         for (const e of t.roster?.entries ?? []) {
           const pid = e.playerId ?? e.playerPoolEntry?.id;
           const name = e.playerPoolEntry?.player?.fullName?.trim();
-          if (pid != null && name) espnNameById.set(String(pid), name);
+          if (pid != null && name) espnMetaById.set(String(pid), { name });
         }
       }
 
       const txnPlayerIds: string[] = [];
-      for (const txn of league?.transactions ?? []) {
+      for (const txn of rawTxns) {
         for (const item of txn.items ?? []) {
           if (item.playerId != null) txnPlayerIds.push(String(item.playerId));
           const inline = espnItemPlayerName(item);
           if (item.playerId != null && inline) {
-            espnNameById.set(String(item.playerId), inline);
+            espnMetaById.set(String(item.playerId), {
+              name: inline,
+              ...(espnMetaById.get(String(item.playerId)) ?? {}),
+            });
           }
         }
       }
 
-      const missingNames = [...new Set(txnPlayerIds)].filter((id) => !espnNameById.has(id));
-      if (missingNames.length) {
-        const fetched = await loadEspnPlayerNamesByIds(year, missingNames, s2, swid);
-        for (const [id, name] of fetched) espnNameById.set(id, name);
+      const missingMeta = [...new Set(txnPlayerIds)].filter((id) => {
+        if (!espnMetaById.get(id)?.name) return true;
+        // D/ST negative ids need the team-abbr bridge even when a label exists.
+        const n = Number(id);
+        return Number.isFinite(n) && n < 0;
+      });
+      if (missingMeta.length) {
+        const fetched = await loadEspnPlayerMetaByIds(missingMeta);
+        for (const [id, meta] of fetched) {
+          const prev = espnMetaById.get(id);
+          espnMetaById.set(id, {
+            name: meta.name || prev?.name || "",
+            pos: meta.pos ?? prev?.pos,
+            team: meta.team ?? prev?.team,
+          });
+        }
       }
 
       const nameForEspnItem = (item: {
@@ -2051,10 +2419,10 @@ export async function loadConnectionTransactions(
         playerPoolEntry?: { player?: { fullName?: string } };
       }): string | undefined =>
         espnItemPlayerName(item) ??
-        (item.playerId != null ? espnNameById.get(String(item.playerId)) : undefined);
+        (item.playerId != null ? espnMetaById.get(String(item.playerId))?.name : undefined);
 
       const events: LeagueActivityEvent[] = [];
-      for (const txn of league?.transactions ?? []) {
+      for (const txn of rawTxns) {
         // Forceful exclusion: draft-board records never enter the activity feed.
         if (isDraftActivityTransaction(txn)) continue;
 
@@ -2337,8 +2705,10 @@ type IdentityIndex = {
   bySleeper: Map<string, { id: string; name: string; pos: string | null; team: string | null }>;
 };
 
-let identityCache: { at: number; index: IdentityIndex } | null = null;
+let identityCache: { at: number; index: IdentityIndex; version: number } | null = null;
 const IDENTITY_TTL = 12 * 60 * 60 * 1000;
+/** Bump when espn_id indexing rules change so hot servers drop poisoned maps. */
+const IDENTITY_INDEX_VERSION = 2;
 
 const normalizeName = (s: string) =>
   s
@@ -2348,7 +2718,13 @@ const normalizeName = (s: string) =>
 
 async function loadIdentityIndex(): Promise<IdentityIndex> {
   const now = Date.now();
-  if (identityCache && now - identityCache.at < IDENTITY_TTL) return identityCache.index;
+  if (
+    identityCache &&
+    identityCache.version === IDENTITY_INDEX_VERSION &&
+    now - identityCache.at < IDENTITY_TTL
+  ) {
+    return identityCache.index;
+  }
 
   const index: IdentityIndex = {
     byEspn: new Map(),
@@ -2383,13 +2759,27 @@ async function loadIdentityIndex(): Promise<IdentityIndex> {
       team: p?.team ?? null,
     };
     index.bySleeper.set(entry.id, entry);
-    if (p?.espn_id) index.byEspn.set(String(p.espn_id), entry);
+    // Exact espn_id key only. Never register abs()/negated variants — ESPN
+    // D/ST ids are negative and collide with athlete espn_ids
+    // (-16027 Buccaneers vs 16027 Jeremy Harris).
+    if (p?.espn_id != null && String(p.espn_id).trim() !== "") {
+      index.byEspn.set(String(p.espn_id).trim(), entry);
+    }
     if (p?.yahoo_id) index.byYahoo.set(String(p.yahoo_id), entry);
     const nk = normalizeName(name);
     if (nk && !index.byName.has(nk)) index.byName.set(nk, entry);
+    // Defense nickname / team-abbr aliases for ESPN "Buccaneers D/ST" labels.
+    if ((entry.pos ?? "").toUpperCase() === "DEF") {
+      const defKey = defenseIdentityKey(name);
+      if (defKey && !index.byName.has(defKey)) index.byName.set(defKey, entry);
+      if (entry.team) {
+        const teamKey = normalizeName(entry.team);
+        if (teamKey && !index.byName.has(teamKey)) index.byName.set(teamKey, entry);
+      }
+    }
   }
 
-  identityCache = { at: now, index };
+  identityCache = { at: now, index, version: IDENTITY_INDEX_VERSION };
   return index;
 }
 

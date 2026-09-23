@@ -177,7 +177,7 @@ function TeamRosterPage() {
 
   if (!activeLeague) {
     return (
-      <main className="mx-auto w-full max-w-6xl px-4 py-16 md:px-8">
+      <main className="mx-auto w-full max-w-shell px-4 py-16 md:px-8">
         <h1 className="display-title text-2xl">No league connected</h1>
         <p className="mt-2 text-sm text-muted-foreground">Sync a league to browse rival rosters.</p>
         <Link to="/account/leagues" className="mt-6 inline-flex rounded-lg border border-border px-4 py-2 text-sm">
@@ -188,7 +188,7 @@ function TeamRosterPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 pb-16 pt-6 md:px-8">
+    <main className="mx-auto w-full max-w-shell px-4 pb-16 pt-6 md:px-8">
       {refreshing && (
         <div
           role="status"

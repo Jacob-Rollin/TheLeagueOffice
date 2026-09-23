@@ -240,6 +240,31 @@ function powerRankTrend(delta: number | null): { label: string; className: strin
   };
 }
 
+/** FantasyPros-style WoW % chip (hidden when null — e.g. before week 2). */
+function MetricDeltaPct({ deltaPct }: { deltaPct: number | null }) {
+  if (deltaPct == null || !Number.isFinite(deltaPct)) return null;
+  const flat = Math.abs(deltaPct) < 0.05;
+  if (flat) {
+    return (
+      <span className="text-[11px] font-bold tabular-nums text-slate-400 leading-none">
+        0.0%
+      </span>
+    );
+  }
+  const up = deltaPct > 0;
+  return (
+    <span
+      className={cn(
+        "text-[11px] font-bold tabular-nums leading-none",
+        up ? "text-emerald-600" : "text-rose-500",
+      )}
+    >
+      {up ? "▲" : "▼"} {up ? "+" : ""}
+      {deltaPct.toFixed(1)}%
+    </span>
+  );
+}
+
 type InsightActionTo =
   | "/playbook/rankings"
   | "/playbook/matchup"
@@ -894,6 +919,8 @@ function PlaybookDashboardPage() {
       record: "0-1",
       avgPoints: "120.4",
       efficiency: "88.0%",
+      avgPointsDeltaPct: null as number | null,
+      efficiencyDeltaPct: null as number | null,
     };
     if (!weeklyMatchups || weeklyMatchups.length === 0) return defaults;
 
@@ -902,6 +929,8 @@ function PlaybookDashboardPage() {
     let completedWeeksCount = 0;
     let finalPosition = defaults.position;
     let finalRecord = defaults.record;
+    /** Per completed week: scored points + optimal ceiling (for WoW deltas). */
+    const completedWeekStats: { scored: number; optimal: number }[] = [];
 
     const req = starterRequirements(rosterPositions);
     const qbSlots = Math.max(1, req["QB"] ?? 1);
@@ -919,7 +948,8 @@ function PlaybookDashboardPage() {
       }
 
       completedWeeksCount += 1;
-      totalUserScored += weekData.userPointsScored || 0;
+      const scored = weekData.userPointsScored || 0;
+      totalUserScored += scored;
 
       if (weekData.standingsPosition) finalPosition = weekData.standingsPosition;
       if (weekData.standingsRecord) finalRecord = weekData.standingsRecord;
@@ -956,21 +986,47 @@ function PlaybookDashboardPage() {
       if (weeklyMaxOptimalCeiling > 0) {
         totalMaxPossible += weeklyMaxOptimalCeiling;
       }
+      completedWeekStats.push({
+        scored,
+        optimal: weeklyMaxOptimalCeiling > 0 ? weeklyMaxOptimalCeiling : 0,
+      });
     });
 
     if (completedWeeksCount === 0) return defaults;
 
-    const calculatedAvgPoints = (totalUserScored / completedWeeksCount).toFixed(1);
+    const calculatedAvgPoints = totalUserScored / completedWeeksCount;
     const calculatedEfficiency =
       totalMaxPossible > 0
-        ? Math.min(100, (totalUserScored / totalMaxPossible) * 100).toFixed(1)
-        : "88.0";
+        ? Math.min(100, (totalUserScored / totalMaxPossible) * 100)
+        : 88.0;
+
+    // FantasyPros-style WoW % — hidden until at least two completed weeks
+    // (nothing after week 1 of the season).
+    let avgPointsDeltaPct: number | null = null;
+    let efficiencyDeltaPct: number | null = null;
+    if (completedWeeksCount >= 2) {
+      const prior = completedWeekStats.slice(0, -1);
+      const priorScored = prior.reduce((sum, w) => sum + w.scored, 0);
+      const priorOptimal = prior.reduce((sum, w) => sum + w.optimal, 0);
+      const priorAvg = priorScored / prior.length;
+      const priorEff =
+        priorOptimal > 0 ? Math.min(100, (priorScored / priorOptimal) * 100) : null;
+
+      if (priorAvg > 0.05) {
+        avgPointsDeltaPct = ((calculatedAvgPoints - priorAvg) / priorAvg) * 100;
+      }
+      if (priorEff != null && priorEff > 0.05) {
+        efficiencyDeltaPct = ((calculatedEfficiency - priorEff) / priorEff) * 100;
+      }
+    }
 
     return {
       position: finalPosition,
       record: finalRecord,
-      avgPoints: calculatedAvgPoints,
-      efficiency: `${calculatedEfficiency}%`,
+      avgPoints: calculatedAvgPoints.toFixed(1),
+      efficiency: `${calculatedEfficiency.toFixed(1)}%`,
+      avgPointsDeltaPct,
+      efficiencyDeltaPct,
     };
   }, [weeklyMatchups, rosterPositions]);
 
@@ -1520,9 +1576,12 @@ function PlaybookDashboardPage() {
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   Avg. Points
                 </span>
-                <span className="text-lg font-black text-slate-900 mt-0.5 font-mono leading-none">
-                  {synchronizedWeeklyMetrics.avgPoints}
-                </span>
+                <div className="mt-0.5 flex items-baseline gap-1.5">
+                  <span className="text-lg font-black text-slate-900 font-mono leading-none">
+                    {synchronizedWeeklyMetrics.avgPoints}
+                  </span>
+                  <MetricDeltaPct deltaPct={synchronizedWeeklyMetrics.avgPointsDeltaPct} />
+                </div>
               </div>
             </div>
 
@@ -1534,9 +1593,12 @@ function PlaybookDashboardPage() {
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block whitespace-nowrap">
                   Coaching Efficiency
                 </span>
-                <span className="text-lg font-black text-slate-900 mt-0.5 font-mono leading-none">
-                  {synchronizedWeeklyMetrics.efficiency}
-                </span>
+                <div className="mt-0.5 flex items-baseline gap-1.5">
+                  <span className="text-lg font-black text-slate-900 font-mono leading-none">
+                    {synchronizedWeeklyMetrics.efficiency}
+                  </span>
+                  <MetricDeltaPct deltaPct={synchronizedWeeklyMetrics.efficiencyDeltaPct} />
+                </div>
               </div>
             </div>
           </div>

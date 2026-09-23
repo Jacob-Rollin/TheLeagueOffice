@@ -300,7 +300,7 @@ function PlayerHubPage() {
 
   return (
     <main className="w-full min-h-screen bg-slate-50 text-slate-900 overflow-y-auto">
-      <div className="mx-auto mt-0 w-full max-w-7xl overflow-visible px-4 pt-0 lg:px-6">
+      <div className="mx-auto mt-0 w-full max-w-shell overflow-visible px-4 pt-0 lg:px-6">
         <div className="grid w-full grid-cols-1 items-start gap-8 overflow-visible pt-0 lg:grid-cols-[1fr_360px] lg:pt-6">
           {/* Left column — isolated page header + docked subtabs + shared body */}
           <div className="relative z-10 flex w-full flex-col items-stretch overflow-visible border-0 bg-transparent p-0 shadow-none">

@@ -157,7 +157,10 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
       // Native starters, aligned index-for-index with the slot template.
       const starterSource = (t?.starterIds ?? []).length
         ? (t?.starterIds ?? []).map((id) => (id && id !== "0" ? byId.get(id) ?? null : null))
-        : (t?.starterNames ?? []).map((n) => lookup(n) ?? null);
+        : (t?.starterNames ?? []).map((n) => {
+            const name = String(n ?? "").trim();
+            return name ? lookup(name) ?? null : null;
+          });
       const starters = starterSource.map((p) => p ?? null);
 
       const irSource = (t?.irIds ?? []).length

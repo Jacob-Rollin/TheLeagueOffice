@@ -374,19 +374,57 @@ function buildCurrentStarterRows(
   labels: string[],
   starterIds: string[],
   playersById: Map<string, Player>,
+  opts?: { fillEmptyFromLive?: boolean },
 ): (Player | null)[] {
   if (!team) return labels.map(() => null);
-  // Week-scoped starters (including "" empty slots) — never fall back to the
-  // live roster or past-week lineups will bleed into historical views.
+
+  const used = new Set<string>();
+  const takeLiveForSlot = (slot: string, index: number): Player | null => {
+    // 1) Index-aligned live starter (host order matches labels).
+    const atIndex = team.starters[index] ?? null;
+    if (atIndex && !used.has(atIndex.id) && playerFitsSlot(atIndex, slot)) {
+      used.add(atIndex.id);
+      return atIndex;
+    }
+    // 2) Any unused live starter that legally fills this slot (covers FLEX holes
+    // when boxscore id resolution / client cache misses the player).
+    for (const candidate of team.starters) {
+      if (!candidate || used.has(candidate.id)) continue;
+      if (!playerFitsSlot(candidate, slot)) continue;
+      used.add(candidate.id);
+      return candidate;
+    }
+    return null;
+  };
+
+  // Week-scoped starters (including "" empty slots).
   if (starterIds.length) {
-    return labels.map((_, i) => {
+    return labels.map((slot, i) => {
       const id = starterIds[i];
-      if (!id) return null;
-      return playersById.get(id) ?? null;
+      if (id) {
+        const hit = playersById.get(id) ?? null;
+        if (hit) {
+          used.add(hit.id);
+          return hit;
+        }
+        // Id resolved on the server but missing from the client Sleeper cache —
+        // fall back to the live host lineup for this slot.
+        if (opts?.fillEmptyFromLive) return takeLiveForSlot(slot, i);
+        return null;
+      }
+      if (opts?.fillEmptyFromLive) return takeLiveForSlot(slot, i);
+      return null;
     });
   }
   if (team.starters.length) {
-    return labels.map((_, i) => team.starters[i] ?? null);
+    return labels.map((slot, i) => {
+      const atIndex = team.starters[i] ?? null;
+      if (atIndex) {
+        used.add(atIndex.id);
+        return atIndex;
+      }
+      return takeLiveForSlot(slot, i);
+    });
   }
   return buildOptimalStarterRows(team, labels, (id) => null, {
     pointsMap: {},
@@ -1043,7 +1081,7 @@ function MatchupGridRow({
     oppProj > mineProj;
 
   return (
-    <div className="relative mx-auto my-3 grid h-[96px] w-full max-w-7xl grid-cols-2 items-center gap-1.5">
+    <div className="relative mx-auto my-3 grid h-[96px] w-full max-w-shell grid-cols-2 items-center gap-1.5">
       <div className="min-w-0">
         <LeftPlayerCard
           player={mine}
@@ -1081,7 +1119,7 @@ function MatchupGridRow({
 
 function SectionHeader({ label }: { label: string }) {
   return (
-    <p className="mx-auto mb-1 mt-6 block w-full max-w-7xl border-b border-slate-200 py-2 text-center text-sm font-black uppercase tracking-widest text-slate-900 first:mt-2">
+    <p className="mx-auto mb-1 mt-6 block w-full max-w-shell border-b border-slate-200 py-2 text-center text-sm font-black uppercase tracking-widest text-slate-900 first:mt-2">
       {label}
     </p>
   );
@@ -1100,7 +1138,7 @@ function StartersSectionHeader({
   onOppMode: (next: LineMode) => void;
 }) {
   return (
-    <div className="mx-auto mb-1 mt-4 grid w-full max-w-7xl grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-slate-200 py-2">
+    <div className="mx-auto mb-1 mt-4 grid w-full max-w-shell grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-slate-200 py-2">
       <div className="flex justify-start">
         <LineModeToggle mode={myMode} onChange={onMyMode} align="left" />
       </div>
@@ -1392,6 +1430,9 @@ function PlaybookMatchupPage() {
     const oppPool = weeklyPair.hasWeeklyRoster
       ? resolvePlayersByIds(weeklyPair.oppPlayerIds)
       : undefined;
+    const fillEmptyFromLive =
+      // Current NFL week, or week still loading (ESPN boxscore holes need live fill).
+      nflWeek.data == null || Number(activeWeek) === Number(nflWeek.data);
     const minePlayers =
       myMode === "optimal"
         ? buildOptimalStarterRows(leftTeam, slotLabels, projectFor, {
@@ -1406,6 +1447,7 @@ function PlaybookMatchupPage() {
             slotLabels,
             weeklyPair.myStarterIds,
             playersById,
+            { fillEmptyFromLive },
           );
     const oppPlayers =
       oppMode === "optimal"
@@ -1421,6 +1463,7 @@ function PlaybookMatchupPage() {
             slotLabels,
             weeklyPair.oppStarterIds,
             playersById,
+            { fillEmptyFromLive },
           );
 
     return slotLabels.map((slot, i) => ({
@@ -1447,6 +1490,7 @@ function PlaybookMatchupPage() {
     playersById,
     progressByNflTeam,
     activeWeek,
+    nflWeek.data,
     resolvePlayersByIds,
   ]);
 
@@ -2191,7 +2235,7 @@ function PlaybookMatchupPage() {
                   />
                 ))
               ) : (
-                <p className="mx-auto max-w-7xl px-3 py-4 text-center text-sm text-muted-foreground">
+                <p className="mx-auto max-w-shell px-3 py-4 text-center text-sm text-muted-foreground">
                   No bench players listed for this matchup.
                 </p>
               )}

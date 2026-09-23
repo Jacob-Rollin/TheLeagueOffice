@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { User as UserIcon } from "lucide-react";
+import { Lock, User as UserIcon } from "lucide-react";
 
 import { LeagueAvatar } from "@/components/league/LeagueAvatar";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
@@ -24,6 +24,21 @@ const triggerClass =
 export const navLinkClass =
   "rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[status=active]:border-accent data-[status=active]:text-primary-foreground";
 
+/** Small blue lock badge for guest-locked nav destinations. */
+export function NavLockBadge({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex size-4 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white",
+        className,
+      )}
+      aria-hidden="true"
+    >
+      <Lock className="size-2.5" strokeWidth={2.75} />
+    </span>
+  );
+}
+
 const DRAFT_LINKS: { to: "/war-room" | "/mock-draft/setup"; label: string }[] = [
   { to: "/war-room", label: "War Room" },
   { to: "/mock-draft/setup", label: "Mock Draft Simulator" },
@@ -45,15 +60,36 @@ const RESEARCH_LINKS: {
   { to: "/most-targeted-players", label: "Most Targeted Players" },
 ];
 
-/** Logged-in gateway into the centralized league dashboard. */
-export function PlaybookNavLink() {
+const LOCKED_TOP_LINKS: {
+  to: "/playbook";
+  label: string;
+}[] = [{ to: "/playbook", label: "Playbook" }];
+
+/** Playbook — always visible; locked badge for guests. */
+export function LockedToolsNav() {
   const { user, ready } = useAuth();
-  if (!ready || !user) return null;
+  const locked = ready && !user;
+
   return (
-    <Link to="/playbook" className={navLinkClass}>
-      Playbook
-    </Link>
+    <>
+      {LOCKED_TOP_LINKS.map((item) => (
+        <Link
+          key={item.to}
+          to={item.to}
+          className={cn(navLinkClass, "inline-flex items-center gap-1.5")}
+          aria-label={locked ? `${item.label} (account required)` : item.label}
+        >
+          <span>{item.label}</span>
+          {locked ? <NavLockBadge /> : null}
+        </Link>
+      ))}
+    </>
   );
+}
+
+/** Playbook top-nav link — locked for guests. */
+export function PlaybookNavLink() {
+  return <LockedToolsNav />;
 }
 
 export function DraftMenu() {
@@ -98,15 +134,14 @@ export function ProfileMenu() {
   const [open, setOpen] = useState(false);
   const { data: profile } = useProfile(user?.id ?? null);
   const { data: isAdmin } = useIsAdmin(user?.id ?? null);
-  const { leagues, activeLeagueId, setActiveLeagueId, sandboxMode, toggleSandbox } = useActiveLeague();
+  const { leagues, activeLeagueId, setActiveLeagueId, sandboxMode, toggleSandbox } =
+    useActiveLeague();
 
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
     setAuthOpen(true);
   };
 
-  // Subscribe to the global active league: the moment the last league is deleted,
-  // activeLeague flushes to null and the navbar icon resets to the default silhouette.
   const activeLeague = leagues?.find((l) => l?.id === activeLeagueId) ?? null;
   const navPlatform = activeLeague?.platform ?? null;
   const navAvatar = activeLeague?.avatar ?? (navPlatform ? null : (profile?.avatar_url ?? null));
@@ -118,15 +153,10 @@ export function ProfileMenu() {
           <DropdownMenuTrigger
             aria-label="Profile and settings"
             className={cn(
-              "flex items-center justify-center w-8 h-8 max-w-8 max-h-8 rounded-full p-0 overflow-hidden border border-neutral-200 bg-white shrink-0",
+              "flex h-8 w-8 max-h-8 max-w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-200 bg-white p-0",
             )}
           >
-            <LeagueAvatar
-              platform={navPlatform}
-              src={navAvatar}
-              alt=""
-              className="size-8"
-            />
+            <LeagueAvatar platform={navPlatform} src={navAvatar} alt="" className="size-8" />
           </DropdownMenuTrigger>
         ) : (
           <DropdownMenuTrigger
@@ -142,7 +172,6 @@ export function ProfileMenu() {
         <DropdownMenuContent align="end" className={ready && user ? "w-[26rem] p-0" : "w-56"}>
           {ready && user ? (
             <div className="flex">
-              {/* Left pane — synced leagues */}
               <div className="flex w-[60%] flex-col border-r border-border p-2">
                 <p className="px-2 py-1 font-display text-[11px] font-semibold uppercase tracking-widest text-foreground">
                   Active Leagues
@@ -205,7 +234,6 @@ export function ProfileMenu() {
                 </button>
               </div>
 
-              {/* Right pane — account navigation */}
               <div className="flex w-[40%] flex-col p-2">
                 <DropdownMenuLabel className="truncate px-2 text-xs font-normal text-muted-foreground">
                   {user.email}

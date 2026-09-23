@@ -1,14 +1,11 @@
-import { Link, Outlet } from "@tanstack/react-router";
+import { Outlet } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { LeagueSwitcher, PlaybookSubNav } from "@/components/nav/PlaybookSubNav";
-import { playbookCardClass } from "@/components/playbook/panels";
+import { AccessGate } from "@/components/league/AccessGate";
+import { PlaybookSubNav } from "@/components/nav/PlaybookSubNav";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
-
-const blueButton =
-  "rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-60";
 
 export function PlaybookShell({
   children,
@@ -23,7 +20,7 @@ export function PlaybookShell({
 
   const mainClass = cn(
     "mx-auto w-full px-4 py-8 sm:px-6 lg:px-8",
-    wide ? "max-w-[100rem]" : "max-w-7xl",
+    wide ? "max-w-[100rem]" : "max-w-shell",
   );
 
   if (!ready) {
@@ -39,43 +36,37 @@ export function PlaybookShell({
 
   if (!user) {
     return (
-      <>
-        <PlaybookSubNav />
-        <main className={mainClass}>
-          <section className={playbookCardClass}>
-            <h1 className="display-title text-3xl uppercase tracking-wide">Playbook</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Sign in and sync a league to open your personalized Playbook dashboard.
-            </p>
-          </section>
-        </main>
-      </>
+      <main className={cn(mainClass, "px-0 sm:px-0 lg:px-0")}>
+        <AccessGate
+          kind="guest"
+          product="Playbook"
+          headline="Instantly run your league like a front office"
+          description="Sign up to open matchups, standings, Press Room, Trade Desk, and The Wire against your live synced league."
+        />
+      </main>
     );
   }
 
   if (!activeLeague) {
     return (
-      <>
-        <PlaybookSubNav />
-        <main className={mainClass}>
-          <section className={playbookCardClass}>
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-              <h1 className="display-title text-3xl uppercase tracking-wide">Playbook</h1>
-              <LeagueSwitcher />
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {leagues.length === 0
-                ? "No synced leagues yet. Sync a league to load rankings, rosters, and activity."
-                : "Select a synced league to load this dashboard."}
-            </p>
-            {leagues.length === 0 ? (
-              <Link to="/account/leagues" className={cn(blueButton, "mt-5 inline-flex")}>
-                + Sync New League
-              </Link>
-            ) : null}
-          </section>
-        </main>
-      </>
+      <main className={cn(mainClass, "px-0 sm:px-0 lg:px-0")}>
+        <AccessGate
+          kind="sync"
+          product="Playbook"
+          headline={
+            leagues.length === 0
+              ? "Sync a league to open your Playbook"
+              : "Select a synced league to continue"
+          }
+          description={
+            leagues.length === 0
+              ? "Connect Sleeper or ESPN so rankings, rosters, matchups, and activity load for your team."
+              : "Choose an active league from the switcher above to load your personalized Playbook dashboard."
+          }
+          syncTo={leagues.length === 0 ? "/leaguesync" : "/account/leagues"}
+          syncLabel={leagues.length === 0 ? "Sync Your League" : "Manage My Leagues"}
+        />
+      </main>
     );
   }
 

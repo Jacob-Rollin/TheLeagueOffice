@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown } from "lucide-react";
 import {
@@ -15,6 +15,11 @@ import {
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import {
+  nextSortState,
+  SortHeaderButton,
+  type SortDir,
+} from "@/components/research/SortHeader";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -54,17 +59,18 @@ export const Route = createFileRoute("/most-targeted-players")({
 
 type PosFilter = "ALL" | TargetPos;
 type Ownership = "roster" | "taken" | "available";
-type SortKey = "week" | "total" | "avg";
+type SortKey = "player" | "week" | "total" | "avg";
 
 type EnrichedRow = TargetedPlayerRow & {
   ownership: Ownership;
   injuryLabel: string | null;
   injuryClass: string | null;
   weekTargets: number;
+  metaLine: string;
 };
 
 const POS_TABS: PosFilter[] = ["ALL", "RB", "WR", "TE"];
-const ROW_HEIGHT = 52;
+const ROW_HEIGHT = 58;
 
 const OWNERSHIP_META: Record<
   Ownership,
@@ -109,7 +115,7 @@ function MostTargetedPage() {
   const [showTaken, setShowTaken] = useState(true);
   const [showAvailable, setShowAvailable] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("avg");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -180,20 +186,32 @@ function MostTargetedPage() {
         );
         const weekTargets =
           activeWeek > 0 && activeWeek < r.byWeek.length ? (r.byWeek[activeWeek] ?? 0) : 0;
+        const sleeper = playerById.get(r.id);
+        const team = (sleeper?.team ?? r.team)?.trim() || "FA";
+        const bye = sleeper?.bye;
+        const metaLine =
+          bye != null && bye > 0 ? `${r.pos} · ${team} · Bye ${bye}` : `${r.pos} · ${team}`;
         return {
           ...r,
+          team,
           ownership,
           injuryLabel: badge?.label ?? null,
           injuryClass: badge?.className ?? null,
           weekTargets,
+          metaLine,
         };
       })
       .sort((a, b) => {
-        const av =
-          sortKey === "week" ? a.weekTargets : sortKey === "total" ? a.total : a.avg;
-        const bv =
-          sortKey === "week" ? b.weekTargets : sortKey === "total" ? b.total : b.avg;
-        const cmp = av - bv;
+        let cmp = 0;
+        if (sortKey === "player") {
+          cmp = a.name.localeCompare(b.name);
+        } else if (sortKey === "week") {
+          cmp = a.weekTargets - b.weekTargets;
+        } else if (sortKey === "total") {
+          cmp = a.total - b.total;
+        } else {
+          cmp = a.avg - b.avg;
+        }
         if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
         return a.name.localeCompare(b.name);
       });
@@ -214,12 +232,9 @@ function MostTargetedPage() {
   ]);
 
   const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir("desc");
+    const next = nextSortState(sortKey, sortDir, key, key === "player" ? "asc" : "desc");
+    setSortKey(next.key);
+    setSortDir(next.dir);
   };
   const ready = !query.isLoading && !query.isError && rows.length > 0;
 
@@ -259,10 +274,10 @@ function MostTargetedPage() {
     "inline-flex h-9 min-w-[8.5rem] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-primary/30";
 
   const weekOptions = maxWeek > 0 ? Array.from({ length: maxWeek }, (_, i) => i + 1) : [];
-  const colSpan = 6;
+  const colSpan = 5;
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-3 pb-16 pt-6">
+    <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
       <div className="mb-5">
         <h1 className="display-title text-2xl uppercase tracking-wide text-slate-900 sm:text-3xl">
           Most Targeted Players
@@ -379,9 +394,16 @@ function MostTargetedPage() {
           <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                <th className="px-3 py-2.5 text-left">Player</th>
-                <th className="px-2 py-2.5 text-center">Pos</th>
-                <th className="px-2 py-2.5 text-center">Team</th>
+                <th className="w-10 px-2 py-2.5 text-center">Rk</th>
+                <th className="px-3 py-2.5 text-left">
+                  <SortHeaderButton
+                    label="Player"
+                    active={sortKey === "player"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("player")}
+                    align="left"
+                  />
+                </th>
                 {(
                   [
                     ["week", activeWeek > 0 ? `Week ${activeWeek}` : "Week"],
@@ -390,21 +412,12 @@ function MostTargetedPage() {
                   ] as const
                 ).map(([key, label]) => (
                   <th key={key} className="px-2 py-2.5 text-center">
-                    <button
-                      type="button"
+                    <SortHeaderButton
+                      label={label}
+                      active={sortKey === key}
+                      dir={sortDir}
                       onClick={() => toggleSort(key)}
-                      className={cn(
-                        "inline-flex items-center gap-0.5 uppercase tracking-widest hover:text-slate-900",
-                        sortKey === key ? "text-slate-700" : "",
-                      )}
-                    >
-                      {label}
-                      {sortKey === key ? (
-                        <span aria-hidden="true" className="text-[9px]">
-                          {sortDir === "asc" ? "▲" : "▼"}
-                        </span>
-                      ) : null}
-                    </button>
+                    />
                   </th>
                 ))}
               </tr>
@@ -444,6 +457,7 @@ function MostTargetedPage() {
                       <TargetRow
                         key={row.id}
                         row={row}
+                        rank={item.index + 1}
                         zebra={item.index % 2 === 1}
                         onOpen={openPlayer}
                       />
@@ -471,10 +485,12 @@ function MostTargetedPage() {
 
 const TargetRow = memo(function TargetRow({
   row,
+  rank,
   zebra,
   onOpen,
 }: {
   row: EnrichedRow;
+  rank: number;
   zebra: boolean;
   onOpen: (id: string) => void;
 }) {
@@ -483,6 +499,9 @@ const TargetRow = memo(function TargetRow({
 
   return (
     <tr className={cn("border-b border-slate-100", tone)}>
+      <td className="w-10 px-2 py-2.5 text-center text-sm tabular-nums text-slate-500">
+        {rank}
+      </td>
       <td className="px-3 py-2.5">
         <button
           type="button"
@@ -497,36 +516,25 @@ const TargetRow = memo(function TargetRow({
             className="size-9 flex-shrink-0 rounded-full border-2 border-slate-200 bg-white"
             logoClassName="size-3"
           />
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate font-semibold text-blue-700">{row.name}</span>
-            {row.injuryLabel && row.injuryClass ? (
-              <span
-                className={cn(
-                  "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[2px] px-0.5 text-[9px] font-bold text-white",
-                  row.injuryClass,
-                )}
-              >
-                {row.injuryLabel}
-              </span>
-            ) : null}
+          <span className="min-w-0">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-semibold text-blue-700">{row.name}</span>
+              {row.injuryLabel && row.injuryClass ? (
+                <span
+                  className={cn(
+                    "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[2px] px-0.5 text-[9px] font-bold text-white",
+                    row.injuryClass,
+                  )}
+                >
+                  {row.injuryLabel}
+                </span>
+              ) : null}
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] font-medium uppercase text-slate-400">
+              {row.metaLine}
+            </span>
           </span>
         </button>
-      </td>
-      <td className="px-2 py-2.5 text-center text-xs font-semibold uppercase text-slate-500">
-        {row.pos}
-      </td>
-      <td className="px-2 py-2.5 text-center">
-        {row.team ? (
-          <Link
-            to="/nfl-team/$nflId"
-            params={{ nflId: row.team }}
-            className="font-semibold text-blue-700 transition-opacity hover:opacity-85"
-          >
-            {row.team}
-          </Link>
-        ) : (
-          <span className="text-slate-400">FA</span>
-        )}
       </td>
       <td className="px-2 py-2.5 text-center tabular-nums text-slate-800">{row.weekTargets}</td>
       <td className="px-2 py-2.5 text-center font-semibold tabular-nums text-slate-900">

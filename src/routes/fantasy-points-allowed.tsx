@@ -3,6 +3,11 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { Fragment, useMemo, useState } from "react";
 
 import { teamLogo } from "@/components/draft/PlayerAvatar";
+import {
+  nextSortState,
+  SortHeaderButton,
+  type SortDir,
+} from "@/components/research/SortHeader";
 import { getFantasyPointsAllowed } from "@/lib/players.functions";
 import type { FantasyPointsAllowedPos } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
@@ -42,7 +47,7 @@ function matchupTone(rank: number | null): string {
 
 function FantasyPointsAllowedPage() {
   const [sortKey, setSortKey] = useState<SortKey>("team");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const query = useQuery({
     queryKey: ["fantasy-points-allowed"],
@@ -70,12 +75,9 @@ function FantasyPointsAllowedPage() {
   }, [payload?.rows, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir(key === "team" ? "asc" : "desc");
+    const next = nextSortState(sortKey, sortDir, key, key === "team" ? "asc" : "desc");
+    setSortKey(next.key);
+    setSortDir(next.dir);
   };
 
   const weekLabel =
@@ -86,7 +88,7 @@ function FantasyPointsAllowedPage() {
         : "Loading defense matchup board…";
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-3 pb-16 pt-6">
+    <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
       <div className="mb-5">
         <h1 className="display-title text-2xl uppercase tracking-wide text-slate-900 sm:text-3xl">
           Fantasy Points Allowed
@@ -123,16 +125,13 @@ function FantasyPointsAllowedPage() {
                   rowSpan={2}
                   className="sticky left-0 z-10 border-r border-slate-200 bg-slate-50 px-3 py-2.5 text-left align-bottom"
                 >
-                  <button
-                    type="button"
+                  <SortHeaderButton
+                    label="Team"
+                    active={sortKey === "team"}
+                    dir={sortDir}
                     onClick={() => toggleSort("team")}
-                    className="inline-flex items-center gap-1 uppercase tracking-widest hover:text-slate-900"
-                  >
-                    Team
-                    {sortKey === "team" ? (
-                      <span aria-hidden="true">{sortDir === "asc" ? "▲" : "▼"}</span>
-                    ) : null}
-                  </button>
+                    align="left"
+                  />
                 </th>
                 {POS_COLS.map((pos) => (
                   <th
@@ -140,16 +139,12 @@ function FantasyPointsAllowedPage() {
                     colSpan={2}
                     className="border-l border-slate-200 px-2 py-2 text-center"
                   >
-                    <button
-                      type="button"
+                    <SortHeaderButton
+                      label={pos.label}
+                      active={sortKey === pos.key}
+                      dir={sortDir}
                       onClick={() => toggleSort(pos.key)}
-                      className="inline-flex items-center gap-1 uppercase tracking-widest hover:text-slate-900"
-                    >
-                      {pos.label}
-                      {sortKey === pos.key ? (
-                        <span aria-hidden="true">{sortDir === "asc" ? "▲" : "▼"}</span>
-                      ) : null}
-                    </button>
+                    />
                   </th>
                 ))}
               </tr>

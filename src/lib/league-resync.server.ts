@@ -35,7 +35,11 @@ function sanitizeStoredPlayerId(raw: string | number | null | undefined): string
   if (asText.startsWith("n:")) return asText;
   const asNum = Number(asText);
   if (Number.isFinite(asNum) && /^-?\d+(\.\d+)?$/.test(asText)) {
-    return String(Math.abs(asNum));
+    const truncated = Math.trunc(asNum);
+    const abs = Math.abs(truncated);
+    // Keep ESPN D/ST negatives so they don't collide with athlete espn_ids.
+    if (truncated < 0 && abs >= 16001 && abs <= 16034) return String(truncated);
+    return String(abs);
   }
   return asText;
 }

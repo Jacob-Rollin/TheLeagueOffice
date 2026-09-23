@@ -450,7 +450,7 @@ function PlaybookRostersPage() {
           No roster data available for this league yet.
         </p>
       ) : (
-        <div className="mx-auto grid w-full max-w-7xl grid-cols-1 items-start gap-6 overflow-visible lg:grid-cols-[1fr_360px]">
+        <div className="mx-auto grid w-full max-w-shell grid-cols-1 items-start gap-6 overflow-visible lg:grid-cols-[1fr_360px]">
           <div className="flex flex-col text-left">
             <section className="mb-2">
               <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-slate-900">

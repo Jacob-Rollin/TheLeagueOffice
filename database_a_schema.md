@@ -2,12 +2,6 @@ table_name,column_name,data_type
 
 waiver_claims,created_at,timestamp with time zone
 
-user_roles,user_id,uuid
-
-user_roles,role,USER-DEFINED
-
-user_roles,created_at,timestamp with time zone
-
 league_scoring_settings,rush_2pt,numeric
 
 league_scoring_settings,rec_points,numeric
@@ -97,8 +91,6 @@ waiver_claims,id,uuid
 waiver_claims,league_id,uuid
 
 waiver_claims,user_id,uuid
-
-user_roles,id,uuid
 
 invite_codes,created_by,uuid
 

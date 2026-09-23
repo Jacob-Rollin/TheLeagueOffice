@@ -16,6 +16,17 @@ import {
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
+  nextSortState,
+  SortHeaderButton,
+  type SortDir,
+} from "@/components/research/SortHeader";
+import {
+  redZoneFantasyPoints,
+  ScoringFormatSelect,
+  scoringFormatLabel,
+  useResearchScoringFormat,
+} from "@/components/research/ScoringFormatSelect";
+import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -29,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
@@ -53,17 +65,10 @@ export const Route = createFileRoute("/red-zone-stats")({
 });
 
 const POS_TABS: RedZonePos[] = ["QB", "RB", "WR", "TE"];
-const MISC_HEADERS = ["Fl", "G", "Fpts", "Fpts/G", "Rost %"] as const;
 const YARDLINE_OPTS = [5, 10, 15, 20] as const;
 type YardlineOpt = (typeof YARDLINE_OPTS)[number];
 
-const REDZONE_ROW_HEIGHT = 52;
-
-function seasonOptions(): string[] {
-  const current =
-    new Date().getUTCMonth() >= 2 ? new Date().getUTCFullYear() : new Date().getUTCFullYear() - 1;
-  return Array.from({ length: 5 }, (_, i) => String(current - i));
-}
+const REDZONE_ROW_HEIGHT = 58;
 
 type Ownership = "roster" | "taken" | "available";
 
@@ -71,7 +76,99 @@ type EnrichedRedZoneRow = RedZonePlayerRow & {
   ownership: Ownership;
   injuryLabel: string | null;
   injuryClass: string | null;
+  metaLine: string;
 };
+
+type RedZoneSortKey =
+  | "rank"
+  | "player"
+  | "passCmp"
+  | "passAtt"
+  | "passPct"
+  | "passYds"
+  | "passYa"
+  | "passTd"
+  | "passInt"
+  | "passSack"
+  | "rushAtt"
+  | "rushYds"
+  | "rushYa"
+  | "rushTd"
+  | "rushPct"
+  | "rec"
+  | "recTgt"
+  | "recYds"
+  | "recYr"
+  | "recTd"
+  | "tgtPct"
+  | "fumLost"
+  | "games"
+  | "fpts"
+  | "fptsPerGame"
+  | "rostPct";
+
+function sortValue(row: EnrichedRedZoneRow, key: RedZoneSortKey): number | string {
+  switch (key) {
+    case "rank":
+      return row.rank;
+    case "player":
+      return row.name;
+    case "passCmp":
+      return row.passCmp;
+    case "passAtt":
+      return row.passAtt;
+    case "passPct":
+      return row.passAtt > 0 ? row.passCmp / row.passAtt : -1;
+    case "passYds":
+      return row.passYds;
+    case "passYa":
+      return row.passAtt > 0 ? row.passYds / row.passAtt : -1;
+    case "passTd":
+      return row.passTd;
+    case "passInt":
+      return row.passInt;
+    case "passSack":
+      return row.passSack;
+    case "rushAtt":
+      return row.rushAtt;
+    case "rushYds":
+      return row.rushYds;
+    case "rushYa":
+      return row.rushAtt > 0 ? row.rushYds / row.rushAtt : -1;
+    case "rushTd":
+      return row.rushTd;
+    case "rushPct":
+      return row.rushPct;
+    case "rec":
+      return row.rec;
+    case "recTgt":
+      return row.recTgt;
+    case "recYds":
+      return row.recYds;
+    case "recYr":
+      return row.rec > 0 ? row.recYds / row.rec : -1;
+    case "recTd":
+      return row.recTd;
+    case "tgtPct":
+      return row.tgtPct;
+    case "fumLost":
+      return row.fumLost;
+    case "games":
+      return row.games;
+    case "fpts":
+      return row.fpts;
+    case "fptsPerGame":
+      return row.fptsPerGame;
+    case "rostPct":
+      return row.rostPct ?? -1;
+  }
+}
+
+function seasonOptions(): string[] {
+  const current =
+    new Date().getUTCMonth() >= 2 ? new Date().getUTCFullYear() : new Date().getUTCFullYear() - 1;
+  return Array.from({ length: 5 }, (_, i) => String(current - i));
+}
 
 const OWNERSHIP_META: Record<
   Ownership,
@@ -122,8 +219,25 @@ function RedZoneStatsPage() {
   const [showRoster, setShowRoster] = useState(true);
   const [showTaken, setShowTaken] = useState(true);
   const [showAvailable, setShowAvailable] = useState(true);
+  const [sortKey, setSortKey] = useState<RedZoneSortKey>("fpts");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
+
+  const { format: leagueFormat } = useLeagueScoringMeta();
+  const { format: scoringFormat, setFormat: setScoringFormat } =
+    useResearchScoringFormat(leagueFormat);
+
+  const toggleSort = (key: RedZoneSortKey) => {
+    const next = nextSortState(
+      sortKey,
+      sortDir,
+      key,
+      key === "player" || key === "rank" ? "asc" : "desc",
+    );
+    setSortKey(next.key);
+    setSortDir(next.dir);
+  };
 
   const { data: playersPayload } = useSleeperPlayers();
   const players = playersPayload?.players ?? [];
@@ -172,12 +286,35 @@ function RedZoneStatsPage() {
             ? "taken"
             : "available";
         const badge = injuryMicroBadge(resolveInjuryStatus(playerById.get(r.id) ?? { id: r.id }, brain));
+        const sleeper = playerById.get(r.id);
+        const team = (sleeper?.team ?? r.team)?.trim() || "FA";
+        const bye = sleeper?.bye;
+        const posLabel = r.pos === "DEF" ? "DST" : r.pos;
+        const metaLine =
+          bye != null && bye > 0 ? `${posLabel} · ${team} · Bye ${bye}` : `${posLabel} · ${team}`;
+        const scored = redZoneFantasyPoints(r, scoringFormat);
         return {
           ...r,
+          team,
+          fpts: scored.fpts,
+          fptsPerGame: scored.fptsPerGame,
           ownership,
           injuryLabel: badge?.label ?? null,
           injuryClass: badge?.className ?? null,
+          metaLine,
         };
+      })
+      .sort((a, b) => {
+        const av = sortValue(a, sortKey);
+        const bv = sortValue(b, sortKey);
+        let cmp = 0;
+        if (typeof av === "string" && typeof bv === "string") {
+          cmp = av.localeCompare(bv);
+        } else {
+          cmp = Number(av) - Number(bv);
+        }
+        if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
+        return a.name.localeCompare(b.name);
       });
   }, [
     payload?.rowsByPos,
@@ -190,6 +327,9 @@ function RedZoneStatsPage() {
     rosteredIds,
     playerById,
     brain,
+    sortKey,
+    sortDir,
+    scoringFormat,
   ]);
 
   const weekLabel =
@@ -203,7 +343,7 @@ function RedZoneStatsPage() {
     "inline-flex h-9 min-w-[8.5rem] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-primary/30";
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-3 pb-16 pt-6">
+    <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
       <div className="mb-5">
         <h1 className="display-title text-2xl uppercase tracking-wide text-slate-900 sm:text-3xl">
           Red Zone Stats
@@ -215,8 +355,8 @@ function RedZoneStatsPage() {
         <p className="font-semibold text-slate-800">What is the Red Zone?</p>
         <p className="mt-1 leading-relaxed">
           Only plays that start inside the selected yard line ({`Inside ${yardline}`}) are counted —
-          nothing farther upfield is included. Fantasy points use half-PPR scoring on that
-          production only.
+          nothing farther upfield is included. Fantasy points use{" "}
+          {scoringFormatLabel(scoringFormat)} scoring on that production only.
         </p>
       </div>
 
@@ -225,7 +365,13 @@ function RedZoneStatsPage() {
           <button
             key={tab}
             type="button"
-            onClick={() => startTransition(() => setPos(tab))}
+            onClick={() =>
+              startTransition(() => {
+                setPos(tab);
+                setSortKey("fpts");
+                setSortDir("desc");
+              })
+            }
             className={cn(
               "rounded-md border px-3 py-1.5 text-[11px] font-black uppercase tracking-wider transition-colors",
               pos === tab
@@ -238,8 +384,8 @@ function RedZoneStatsPage() {
         ))}
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2 sm:justify-between">
+        <div className="flex flex-nowrap items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger className={filterTriggerClass}>
               Availability
@@ -271,11 +417,16 @@ function RedZoneStatsPage() {
             </DropdownMenuContent>
           </DropdownMenu>
 
+          <ScoringFormatSelect
+            value={scoringFormat}
+            onChange={(next) => startTransition(() => setScoringFormat(next))}
+          />
+
           <Select
             value={season}
             onValueChange={(v) => startTransition(() => setSeason(v))}
           >
-            <SelectTrigger className="h-9 w-[7.5rem] border-slate-200 bg-white shadow-none">
+            <SelectTrigger className="h-9 w-[7.5rem] shrink-0 border-slate-200 bg-white shadow-none">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -293,7 +444,7 @@ function RedZoneStatsPage() {
               startTransition(() => setYardline(Number(v) as YardlineOpt))
             }
           >
-            <SelectTrigger className="h-9 w-[8.5rem] border-slate-200 bg-white shadow-none">
+            <SelectTrigger className="h-9 w-[8.5rem] shrink-0 border-slate-200 bg-white shadow-none">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -310,7 +461,7 @@ function RedZoneStatsPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search players"
-          className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2"
+          className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
         />
       </div>
 
@@ -321,6 +472,9 @@ function RedZoneStatsPage() {
             loading={query.isLoading}
             error={query.isError}
             onOpen={openPlayer}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={toggleSort}
           />
         ) : (
           <SkillTable
@@ -329,6 +483,9 @@ function RedZoneStatsPage() {
             error={query.isError}
             onOpen={openPlayer}
             receivingFirst={pos === "WR" || pos === "TE"}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={toggleSort}
           />
         )}
       </div>
@@ -338,28 +495,39 @@ function RedZoneStatsPage() {
   );
 }
 
-function MiscHeaders() {
+function MiscHeaders({
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  sortKey: RedZoneSortKey;
+  sortDir: SortDir;
+  onSort: (key: RedZoneSortKey) => void;
+}) {
+  const cols: { key: RedZoneSortKey; label: string }[] = [
+    { key: "fumLost", label: "Fl" },
+    { key: "games", label: "G" },
+    { key: "fpts", label: "Fpts" },
+    { key: "fptsPerGame", label: "Fpts/G" },
+    { key: "rostPct", label: "Rost %" },
+  ];
   return (
     <>
-      {MISC_HEADERS.map((h, i) => (
+      {cols.map((col, i) => (
         <th
-          key={h}
+          key={col.key}
           className={cn(
             "px-1.5 py-1.5 text-center",
             i === 0 ? "border-l border-slate-100" : "",
-            h === "Fpts" ? "text-slate-700" : "",
+            col.key === "fpts" ? "text-slate-700" : "",
           )}
         >
-          {h === "Fpts" ? (
-            <span className="inline-flex items-center gap-0.5">
-              Fpts
-              <span aria-hidden="true" className="text-[9px]">
-                ▼
-              </span>
-            </span>
-          ) : (
-            h
-          )}
+          <SortHeaderButton
+            label={col.label}
+            active={sortKey === col.key}
+            dir={sortDir}
+            onClick={() => onSort(col.key)}
+          />
         </th>
       ))}
     </>
@@ -428,7 +596,7 @@ const RedZonePlayerCell = memo(function RedZonePlayerCell({
           ) : null}
         </span>
         <span className="mt-0.5 block truncate text-[11px] font-medium uppercase text-slate-400">
-          {row.team || "FA"}
+          {row.metaLine}
         </span>
       </span>
     </button>
@@ -451,7 +619,7 @@ function VirtualizedRedZoneTable({
   rows: EnrichedRedZoneRow[];
   loading: boolean;
   error: boolean;
-  renderRow: (row: EnrichedRedZoneRow) => ReactNode;
+  renderRow: (row: EnrichedRedZoneRow, displayRank: number) => ReactNode;
 }) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
@@ -523,7 +691,7 @@ function VirtualizedRedZoneTable({
                       OWNERSHIP_META[row.ownership].row,
                     )}
                   >
-                    {renderRow(row)}
+                    {renderRow(row, item.index + 1)}
                   </tr>
                 );
               })}
@@ -543,18 +711,70 @@ function VirtualizedRedZoneTable({
   );
 }
 
+function SortTh({
+  label,
+  sortKey,
+  activeKey,
+  sortDir,
+  onSort,
+  className,
+  align = "center",
+}: {
+  label: string;
+  sortKey: RedZoneSortKey;
+  activeKey: RedZoneSortKey;
+  sortDir: SortDir;
+  onSort: (key: RedZoneSortKey) => void;
+  className?: string;
+  align?: "left" | "center";
+}) {
+  return (
+    <th className={className}>
+      <SortHeaderButton
+        label={label}
+        active={activeKey === sortKey}
+        dir={sortDir}
+        onClick={() => onSort(sortKey)}
+        align={align}
+      />
+    </th>
+  );
+}
+
 function QbTable({
   rows,
   loading,
   error,
   onOpen,
+  sortKey,
+  sortDir,
+  onSort,
 }: {
   rows: EnrichedRedZoneRow[];
   loading: boolean;
   error: boolean;
   onOpen: (id: string) => void;
+  sortKey: RedZoneSortKey;
+  sortDir: SortDir;
+  onSort: (key: RedZoneSortKey) => void;
 }) {
   const colSpan = 19;
+  const passCols: { key: RedZoneSortKey; label: string }[] = [
+    { key: "passCmp", label: "Comp" },
+    { key: "passAtt", label: "Att" },
+    { key: "passPct", label: "Pct" },
+    { key: "passYds", label: "Yds" },
+    { key: "passYa", label: "Y/A" },
+    { key: "passTd", label: "Td" },
+    { key: "passInt", label: "Int" },
+    { key: "passSack", label: "Sk" },
+  ];
+  const rushCols: { key: RedZoneSortKey; label: string }[] = [
+    { key: "rushAtt", label: "Att" },
+    { key: "rushYds", label: "Yds" },
+    { key: "rushTd", label: "Td" },
+    { key: "rushPct", label: "Pct" },
+  ];
   const header = (
     <>
       <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -572,19 +792,52 @@ function QbTable({
         </th>
       </tr>
       <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
-        <th className="px-2 py-1.5 text-center">Rk</th>
-        <th className="px-2 py-1.5 text-left">Player</th>
-        {["Comp", "Att", "Pct", "Yds", "Y/A", "Td", "Int", "Sk"].map((h) => (
-          <th key={h} className="border-l border-slate-100 px-1.5 py-1.5 text-center">
-            {h}
-          </th>
+        <SortTh
+          label="Rk"
+          sortKey="rank"
+          activeKey={sortKey}
+          sortDir={sortDir}
+          onSort={onSort}
+          className="px-2 py-1.5 text-center"
+        />
+        <SortTh
+          label="Player"
+          sortKey="player"
+          activeKey={sortKey}
+          sortDir={sortDir}
+          onSort={onSort}
+          className="px-2 py-1.5 text-left"
+          align="left"
+        />
+        {passCols.map((col, i) => (
+          <SortTh
+            key={col.key}
+            label={col.label}
+            sortKey={col.key}
+            activeKey={sortKey}
+            sortDir={sortDir}
+            onSort={onSort}
+            className={cn(
+              "px-1.5 py-1.5 text-center",
+              i === 0 ? "border-l border-slate-100" : "",
+            )}
+          />
         ))}
-        {["Att", "Yds", "Td", "Pct"].map((h) => (
-          <th key={`r-${h}`} className="border-l border-slate-100 px-1.5 py-1.5 text-center">
-            {h}
-          </th>
+        {rushCols.map((col, i) => (
+          <SortTh
+            key={col.key}
+            label={col.label}
+            sortKey={col.key}
+            activeKey={sortKey}
+            sortDir={sortDir}
+            onSort={onSort}
+            className={cn(
+              "px-1.5 py-1.5 text-center",
+              i === 0 ? "border-l border-slate-100" : "",
+            )}
+          />
         ))}
-        <MiscHeaders />
+        <MiscHeaders sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
       </tr>
     </>
   );
@@ -597,8 +850,8 @@ function QbTable({
       rows={rows}
       loading={loading}
       error={error}
-      renderRow={(row) => (
-        <QbRowCells row={row} onOpen={onOpen} />
+      renderRow={(row, displayRank) => (
+        <QbRowCells row={row} displayRank={displayRank} onOpen={onOpen} />
       )}
     />
   );
@@ -606,14 +859,16 @@ function QbTable({
 
 const QbRowCells = memo(function QbRowCells({
   row,
+  displayRank,
   onOpen,
 }: {
   row: EnrichedRedZoneRow;
+  displayRank: number;
   onOpen: (id: string) => void;
 }) {
   return (
     <>
-      <td className="px-2 py-2.5 text-center tabular-nums text-slate-500">{row.rank}</td>
+      <td className="px-2 py-2.5 text-center tabular-nums text-slate-500">{displayRank}</td>
       <td className="px-2 py-2.5">
         <RedZonePlayerCell row={row} onOpen={onOpen} />
       </td>
@@ -650,12 +905,18 @@ function SkillTable({
   error,
   onOpen,
   receivingFirst,
+  sortKey,
+  sortDir,
+  onSort,
 }: {
   rows: EnrichedRedZoneRow[];
   loading: boolean;
   error: boolean;
   onOpen: (id: string) => void;
   receivingFirst: boolean;
+  sortKey: RedZoneSortKey;
+  sortDir: SortDir;
+  onSort: (key: RedZoneSortKey) => void;
 }) {
   const colSpan = 18;
 
@@ -669,15 +930,42 @@ function SkillTable({
       Receiving
     </th>
   );
-  const rushSubHeaders = ["Att", "Yds", "Y/A", "Td", "Pct"].map((h) => (
-    <th key={`rush-${h}`} className="border-l border-slate-100 px-1.5 py-1.5 text-center">
-      {h}
-    </th>
+  const rushCols: { key: RedZoneSortKey; label: string }[] = [
+    { key: "rushAtt", label: "Att" },
+    { key: "rushYds", label: "Yds" },
+    { key: "rushYa", label: "Y/A" },
+    { key: "rushTd", label: "Td" },
+    { key: "rushPct", label: "Pct" },
+  ];
+  const recCols: { key: RedZoneSortKey; label: string }[] = [
+    { key: "rec", label: "Rec" },
+    { key: "recTgt", label: "Tgt" },
+    { key: "recYds", label: "Yds" },
+    { key: "recYr", label: "Y/R" },
+    { key: "recTd", label: "Td" },
+    { key: "tgtPct", label: "Tgt%" },
+  ];
+  const rushSubHeaders = rushCols.map((col, i) => (
+    <SortTh
+      key={col.key}
+      label={col.label}
+      sortKey={col.key}
+      activeKey={sortKey}
+      sortDir={sortDir}
+      onSort={onSort}
+      className={cn("px-1.5 py-1.5 text-center", i === 0 ? "border-l border-slate-100" : "")}
+    />
   ));
-  const recSubHeaders = ["Rec", "Tgt", "Yds", "Y/R", "Td", "Tgt%"].map((h) => (
-    <th key={`rec-${h}`} className="border-l border-slate-100 px-1.5 py-1.5 text-center">
-      {h}
-    </th>
+  const recSubHeaders = recCols.map((col, i) => (
+    <SortTh
+      key={col.key}
+      label={col.label}
+      sortKey={col.key}
+      activeKey={sortKey}
+      sortDir={sortDir}
+      onSort={onSort}
+      className={cn("px-1.5 py-1.5 text-center", i === 0 ? "border-l border-slate-100" : "")}
+    />
   ));
 
   const header = (
@@ -702,8 +990,23 @@ function SkillTable({
         </th>
       </tr>
       <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
-        <th className="px-2 py-1.5 text-center">Rk</th>
-        <th className="px-2 py-1.5 text-left">Player</th>
+        <SortTh
+          label="Rk"
+          sortKey="rank"
+          activeKey={sortKey}
+          sortDir={sortDir}
+          onSort={onSort}
+          className="px-2 py-1.5 text-center"
+        />
+        <SortTh
+          label="Player"
+          sortKey="player"
+          activeKey={sortKey}
+          sortDir={sortDir}
+          onSort={onSort}
+          className="px-2 py-1.5 text-left"
+          align="left"
+        />
         {receivingFirst ? (
           <>
             {recSubHeaders}
@@ -715,7 +1018,7 @@ function SkillTable({
             {recSubHeaders}
           </>
         )}
-        <MiscHeaders />
+        <MiscHeaders sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
       </tr>
     </>
   );
@@ -728,8 +1031,13 @@ function SkillTable({
       rows={rows}
       loading={loading}
       error={error}
-      renderRow={(row) => (
-        <SkillRowCells row={row} onOpen={onOpen} receivingFirst={receivingFirst} />
+      renderRow={(row, displayRank) => (
+        <SkillRowCells
+          row={row}
+          displayRank={displayRank}
+          onOpen={onOpen}
+          receivingFirst={receivingFirst}
+        />
       )}
     />
   );
@@ -737,10 +1045,12 @@ function SkillTable({
 
 const SkillRowCells = memo(function SkillRowCells({
   row,
+  displayRank,
   onOpen,
   receivingFirst,
 }: {
   row: EnrichedRedZoneRow;
+  displayRank: number;
   onOpen: (id: string) => void;
   receivingFirst: boolean;
 }) {
@@ -778,7 +1088,7 @@ const SkillRowCells = memo(function SkillRowCells({
 
   return (
     <>
-      <td className="px-2 py-2.5 text-center tabular-nums text-slate-500">{row.rank}</td>
+      <td className="px-2 py-2.5 text-center tabular-nums text-slate-500">{displayRank}</td>
       <td className="px-2 py-2.5">
         <RedZonePlayerCell row={row} onOpen={onOpen} />
       </td>

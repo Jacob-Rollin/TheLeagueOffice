@@ -8,8 +8,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { navLinkClass } from "@/components/nav/NavMenus";
+import { NavLockBadge, navLinkClass } from "@/components/nav/NavMenus";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 const LINKS: {
@@ -265,11 +266,13 @@ function linkIsActive(pathname: string, to: string): boolean {
  */
 export function PlaybookSubNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { user, ready } = useAuth();
+  const locked = ready && !user;
 
   return (
     <div className="flex h-12 w-full items-center justify-between border-b border-border/50 bg-slate-50/90 px-6">
       {/* Same max-w + column geometry as SiteNav (px-3) so Dashboard sits under Playbook */}
-      <div className="mx-auto flex h-12 w-full max-w-6xl items-center gap-2 px-3">
+      <div className="mx-auto flex h-12 w-full max-w-shell items-center gap-2 px-3">
         <div className="relative mr-2 shrink-0">
           <span className="display-title invisible whitespace-nowrap text-lg" aria-hidden="true">
             THE LEAGUE <span className="rounded px-1.5">OFFICE</span>
@@ -286,7 +289,7 @@ export function PlaybookSubNav() {
           >
             Front Office
           </span>
-          <nav className="flex items-center space-x-6 text-xs font-semibold text-slate-500">
+          <nav className="flex items-center space-x-5 text-xs font-semibold text-slate-500">
             {LINKS.map((item) => {
               const active = linkIsActive(pathname, item.to);
               return (
@@ -295,11 +298,13 @@ export function PlaybookSubNav() {
                   to={item.to}
                   {...(item.search ? { search: item.search } : {})}
                   className={cn(
-                    "whitespace-nowrap transition-colors",
+                    "inline-flex items-center gap-1.5 whitespace-nowrap transition-colors",
                     active ? "border-b-2 border-blue-600 text-blue-600" : "hover:text-slate-900",
                   )}
+                  aria-label={locked ? `${item.label} (account required)` : item.label}
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {locked ? <NavLockBadge className="bg-blue-600" /> : null}
                 </Link>
               );
             })}

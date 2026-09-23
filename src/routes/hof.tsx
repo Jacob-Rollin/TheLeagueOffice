@@ -78,7 +78,7 @@ function HofPage() {
       {years.length === 0 ? (
         <p className="mt-16 text-center text-sm text-zinc-500">No records have been added yet.</p>
       ) : (
-        <div className="relative mx-auto mt-16 max-w-6xl before:absolute before:bottom-0 before:left-4 before:top-0 before:w-1 before:bg-gradient-to-b before:from-amber-500 before:to-amber-600/30 md:before:left-1/2 md:before:-translate-x-1/2">
+        <div className="relative mx-auto mt-16 max-w-shell before:absolute before:bottom-0 before:left-4 before:top-0 before:w-1 before:bg-gradient-to-b before:from-amber-500 before:to-amber-600/30 md:before:left-1/2 md:before:-translate-x-1/2">
           <div className="space-y-16 md:space-y-24">
             {years.map((entry) => (
               <YearNode key={entry.year} entry={entry} />
