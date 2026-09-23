@@ -241,7 +241,7 @@ function LeagueRow({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        <span className="mr-2 whitespace-nowrap text-center normal-case tracking-normal">
+        <span className="-ml-1 w-32 shrink-0 whitespace-nowrap text-left text-sm font-medium normal-case tracking-normal text-foreground">
           Synced {formatRelativeTime(row.updated_at)}
         </span>
         <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? "Scoring"}</span>
