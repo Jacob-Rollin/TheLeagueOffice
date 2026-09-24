@@ -85,9 +85,9 @@ export function StandingsPanel() {
           </header>
 
           <div className="overflow-hidden rounded-lg border border-border/70">
-            <div className="grid grid-cols-[1.75rem_1fr_3.25rem_1rem] items-center gap-1 bg-slate-50/80 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              <span>RANK</span>
-              <span>Team</span>
+          <div className="grid grid-cols-[2.25rem_1fr_3.25rem_1rem] items-center gap-1 bg-slate-50/80 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            <span className="text-center">RANK</span>
+            <span>Team</span>
               <span className="text-right">W-L</span>
               <span />
             </div>
