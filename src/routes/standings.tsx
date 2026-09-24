@@ -118,7 +118,7 @@ function StandingsTable({
       <div className="min-w-[640px]">
         <div className="flex items-center justify-between border-b border-border bg-slate-50/50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 select-none">
           <div className="flex min-w-0 flex-1 items-center">
-            <span className="w-8 text-left">RANK</span>
+            <span className="w-8 text-left">RK</span>
             <span className="w-12 pl-2 text-center">TREND</span>
             <span className="pl-6">TEAM</span>
           </div>
