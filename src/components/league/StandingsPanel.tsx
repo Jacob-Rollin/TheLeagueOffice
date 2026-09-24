@@ -99,17 +99,17 @@ export function StandingsPanel() {
                   key={r.rosterId}
                   to="/team/$teamId"
                   params={{ teamId: String(r.rosterId) }}
-                  className={cn(
-                    "grid grid-cols-[1.75rem_1fr_3.25rem_1rem] items-center gap-1 border-t border-border/70 px-2 py-1.5 text-xs transition-colors hover:bg-blue-50/60",
-                    mine && "bg-blue-50/80",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "tabnum",
-                      mine ? "font-bold text-blue-600" : "text-muted-foreground",
-                    )}
-                  >
+              className={cn(
+                "grid grid-cols-[2.25rem_1fr_3.25rem_1rem] items-center gap-1 border-t border-border/70 px-2 py-1.5 text-xs transition-colors hover:bg-blue-50/60",
+                 mine && "bg-blue-50/80",
+)}
+>
+<span
+  className={cn(
+    "tabnum text-center",
+    mine ? "font-bold text-blue-600" : "text-muted-foreground",
+  )}
+>
                     {i + 1}
                   </span>
                   <span className="flex min-w-0 items-center">
