@@ -7,6 +7,7 @@ import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { ActiveLeagueProvider } from "@/context/ActiveLeagueContext";
+import { LeagueSyncBootstrap } from "@/hooks/useLeagueSync";
 
 import {
   DraftMenu,
@@ -162,6 +163,7 @@ function RootComponent() {
 
     <QueryClientProvider client={queryClient}>
       <ActiveLeagueProvider>
+        <LeagueSyncBootstrap />
         <ScoreTicker />
         <SiteNav />
         <Outlet />

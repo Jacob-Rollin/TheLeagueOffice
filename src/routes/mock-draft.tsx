@@ -522,7 +522,16 @@ function MockDraftPage() {
         )}
       </div>
 
-      <PlayerModalHost ref={modalRef} showDraftActions />
+      <PlayerModalHost
+        ref={modalRef}
+        showDraftActions
+        resolveDraftRosterLabel={(playerId) => {
+          const pick = picks.find((p) => p.playerId === playerId);
+          return pick ? teamName(settings, pick.team) : null;
+        }}
+        isSessionDrafted={(playerId) => draftedIds.has(playerId)}
+        onSessionDraft={draftForUser}
+      />
     </main>
   );
 }

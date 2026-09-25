@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -6,6 +6,7 @@ import {
   ActivityFeed,
   LeagueActivityTimeline,
 } from "@/components/dashboard/ActivityFeed";
+import { ValueTrendCell } from "@/components/research/ValueTrendCell";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useLeagueActivity } from "@/hooks/useLeagueActivity";
@@ -21,6 +22,10 @@ import { cn } from "@/lib/utils";
 export { ActivityFeed, LeagueActivityTimeline };
 
 export const playbookCardClass = "rounded-xl border border-border bg-card p-6";
+
+/** In-box section headers — matches dashboard Team Insights. Not for page titles. */
+export const playbookPanelTitleClass =
+  "text-sm font-bold uppercase tracking-wide text-slate-900";
 
 function teamInitials(name: string): string {
   const cleaned = name.trim();
@@ -256,16 +261,13 @@ export function LeagueActivityWirePanel() {
 
   return (
     <section className={playbookCardClass}>
-      <div className="mb-4">
-        <h2 className="display-title text-lg font-bold uppercase tracking-wide text-slate-900">
-          League Activity
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Live waiver, free agent, trade, and IR moves from the active host league.
-        </p>
-      </div>
-
-      <ActivityFeed events={events} players={players} loading={loading} error={error} />
+      <ActivityFeed
+        events={events}
+        players={players}
+        loading={loading}
+        error={error}
+        className="rounded-none border-0 bg-transparent p-0"
+      />
     </section>
   );
 }
@@ -328,29 +330,31 @@ export function TruePowerRankingsPanel() {
   const headerCell =
     "border-0 px-3 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50/50";
   const headerCellRank =
-    "border-0 pl-4 pr-3 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50/50";
+    "border-0 pl-4 pr-3 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50/50";
+  const headerCellCenter =
+    "border-0 px-3 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50/50";
   const headerCellRight =
     "border-0 px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50/50";
   const headerCellScout =
-    "border-0 px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50/50";
+    "border-0 px-3 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-50/50";
 
   const rankBadgeClass = (rank: number): string => {
     if (rank === 1) {
-      return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-amber-200 bg-amber-100/80 px-2 py-0.5 text-center text-xs font-extrabold text-amber-900 shadow-sm";
+      return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-amber-300 bg-amber-200/90 px-2 py-0.5 text-center text-sm font-bold text-amber-950 shadow-sm";
     }
     if (rank === 2) {
-      return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-center text-xs font-extrabold text-slate-900 shadow-sm";
+      return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-slate-300 bg-slate-200 px-2 py-0.5 text-center text-sm font-bold text-slate-900 shadow-sm";
     }
     if (rank === 3) {
-      return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-orange-200/40 bg-orange-100/60 px-2 py-0.5 text-center text-xs font-extrabold text-orange-800 shadow-sm";
+      return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-orange-300 bg-orange-200/80 px-2 py-0.5 text-center text-sm font-bold text-orange-950 shadow-sm";
     }
-    return "inline-flex min-w-[2rem] items-center justify-center px-2 py-0.5 text-center text-xs font-semibold tabular-nums text-slate-500";
+    return "inline-flex min-w-[2rem] items-center justify-center px-2 py-0.5 text-center text-sm font-semibold tabular-nums text-slate-500";
   };
 
   return (
     <section key={activeLeagueId ?? leagueKey} className={playbookCardClass}>
       <div className="mb-4">
-        <h2 className="display-title text-lg font-bold uppercase tracking-wide text-slate-900">
+        <h2 className={playbookPanelTitleClass}>
           True Power Rankings
         </h2>
       </div>
@@ -360,7 +364,7 @@ export function TruePowerRankingsPanel() {
           <thead>
             <tr className="border-b border-border">
               <th className={headerCellRank}>Rank</th>
-              <th className={headerCell}>Trend</th>
+              <th className={headerCellCenter}>Trend</th>
               <th className={headerCell}>Team</th>
               <th className={headerCellRight}>True Power Index</th>
               <th className={headerCellRight}>Roster Market Value</th>
@@ -399,23 +403,27 @@ export function TruePowerRankingsPanel() {
                       : "text-xs font-semibold tabular-nums text-rose-600";
                 const podiumClass =
                   row.rank === 1
-                    ? "bg-amber-500/[0.01] border-l-2 border-l-amber-500"
+                    ? "bg-amber-50 border-l-4 border-l-amber-400"
                     : row.rank === 2
-                      ? "bg-slate-400/[0.005] border-l-2 border-l-slate-400"
+                      ? "bg-slate-100/90 border-l-4 border-l-slate-400"
                       : row.rank === 3
-                        ? "bg-orange-600/[0.005] border-l-2 border-l-amber-700/60"
+                        ? "bg-orange-50 border-l-4 border-l-orange-400"
                         : "";
 
                 return (
                   <tr key={row.slot} className={cn("border-t border-border", podiumClass)}>
-                    <td className="pl-4 pr-3 py-2.5 align-middle">
-                      <span className={rankBadgeClass(row.rank)}>#{row.rank}</span>
+                    <td className="pl-4 pr-3 py-2.5 align-middle text-center">
+                      <span className={rankBadgeClass(row.rank)}>{row.rank}</span>
                     </td>
-                    <td className={cn("px-3 py-2.5 align-middle tabular-nums", trendClass)}>
+                    <td className={cn("px-3 py-2.5 align-middle text-center tabular-nums", trendClass)}>
                       {trendLabel}
                     </td>
                     <td className="px-3 py-2.5 align-middle">
-                      <div className="flex min-w-0 items-center">
+                      <Link
+                        to="/playbook/rosters"
+                        search={{ scout: String(row.slot) }}
+                        className="flex min-w-0 items-center transition-opacity hover:opacity-85"
+                      >
                         <TeamAvatarBadge
                           key={`${activeLeagueId ?? leagueKey}-${row.slot}-${resolveAvatarUrl(logoBySlot.get(row.slot) ?? null) ?? "fallback"}`}
                           name={row.team}
@@ -431,18 +439,18 @@ export function TruePowerRankingsPanel() {
                             {row.owner || "Owner"}
                           </span>
                         </span>
-                      </div>
+                      </Link>
                     </td>
                     <td className="px-3 py-2.5 align-middle text-right tabular-nums font-semibold text-foreground">
                       {row.powerIndex.toFixed(1)}
                     </td>
-                    <td className="px-3 py-2.5 align-middle text-right tabular-nums text-foreground">
+                    <td className="px-3 py-2.5 align-middle text-right tabular-nums font-semibold text-foreground">
                       {row.marketValue.toFixed(1)}
                     </td>
-                    <td className="px-3 py-2.5 align-middle text-right tabular-nums text-foreground">
+                    <td className="px-3 py-2.5 align-middle text-right tabular-nums font-semibold text-foreground">
                       {row.weeklyProjection.toFixed(1)}
                     </td>
-                    <td className="px-3 py-2.5 align-middle text-right tabular-nums text-muted-foreground">
+                    <td className="px-3 py-2.5 align-middle text-right tabular-nums font-semibold text-foreground">
                       {row.recordLabel}
                     </td>
                     <td className="px-3 py-2.5 align-middle text-right">
@@ -606,13 +614,13 @@ export function RosterMatrixPanel({
 
   const loading = playersLoading || rostersLoading || projectionsLoading;
 
-  const valueTrend = (p: Player | null) => {
-    if (!p) return "—";
+  const marketOf = (p: Player | null) => {
+    if (!p) return null;
     const entry = brain?.[p.id];
-    const value = scaleValue(entry?.value ?? 0);
-    const trend = entry?.trend ?? 0;
-    const trendText = `${trend >= 0 ? "+" : ""}${trend.toFixed(1)}`;
-    return `${value.toFixed(1)} / ${trendText}`;
+    return {
+      value: scaleValue(entry?.value ?? 0),
+      trend: entry?.trend ?? 0,
+    };
   };
 
   const projPts = (p: Player | null) => {
@@ -631,7 +639,7 @@ export function RosterMatrixPanel({
     <section className={playbookCardClass}>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="display-title text-lg uppercase tracking-wide">
+          <h2 className={playbookPanelTitleClass}>
             {lockToPreferred ? "My Team" : "Roster Matrix"}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -669,7 +677,7 @@ export function RosterMatrixPanel({
           <RosterColumn
             title="Starting Lineup"
             rows={starterRows}
-            valueTrend={valueTrend}
+            marketOf={marketOf}
             projPts={projPts}
             playerLabel={playerLabel}
           />
@@ -677,7 +685,7 @@ export function RosterMatrixPanel({
             <RosterColumn
               title="Bench Depth"
               rows={benchRows}
-              valueTrend={valueTrend}
+              marketOf={marketOf}
               projPts={projPts}
               playerLabel={playerLabel}
               empty="No bench assets on this roster."
@@ -685,7 +693,7 @@ export function RosterMatrixPanel({
             <RosterColumn
               title="Injured Reserve"
               rows={irRows}
-              valueTrend={valueTrend}
+              marketOf={marketOf}
               projPts={projPts}
               playerLabel={playerLabel}
               empty="IR slot empty."
@@ -700,14 +708,14 @@ export function RosterMatrixPanel({
 function RosterColumn({
   title,
   rows,
-  valueTrend,
+  marketOf,
   projPts,
   playerLabel,
   empty,
 }: {
   title: string;
   rows: MatrixRow[];
-  valueTrend: (p: Player | null) => string;
+  marketOf: (p: Player | null) => { value: number; trend: number } | null;
   projPts: (p: Player | null) => string;
   playerLabel: (p: Player | null) => string;
   empty?: string;
@@ -728,7 +736,7 @@ function RosterColumn({
                 Player
               </th>
               <th className="px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Value/Trend
+                Value / Trend
               </th>
               <th className="px-2 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Proj
@@ -743,32 +751,43 @@ function RosterColumn({
                 </td>
               </tr>
             ) : (
-              rows.map((row, index) => (
-                <tr
-                  key={`${row.slot}-${row.player?.id ?? "empty"}-${index}`}
-                  className="border-t border-border"
-                >
-                  <td className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {row.slot}
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <span
-                      className={cn(
-                        "block truncate text-sm",
-                        row.player ? "font-medium text-foreground" : "italic text-muted-foreground",
+              rows.map((row, index) => {
+                const market = marketOf(row.player);
+                return (
+                  <tr
+                    key={`${row.slot}-${row.player?.id ?? "empty"}-${index}`}
+                    className="border-t border-border"
+                  >
+                    <td className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {row.slot}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <span
+                        className={cn(
+                          "block truncate text-sm",
+                          row.player ? "font-medium text-foreground" : "italic text-muted-foreground",
+                        )}
+                      >
+                        {playerLabel(row.player)}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-foreground">
+                      {market ? (
+                        <ValueTrendCell
+                          value={market.value}
+                          trend={market.trend}
+                          className="justify-end"
+                        />
+                      ) : (
+                        "—"
                       )}
-                    >
-                      {playerLabel(row.player)}
-                    </span>
-                  </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums text-foreground">
-                    {valueTrend(row.player)}
-                  </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums font-medium text-foreground">
-                    {projPts(row.player)}
-                  </td>
-                </tr>
-              ))
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums font-medium text-foreground">
+                      {projPts(row.player)}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

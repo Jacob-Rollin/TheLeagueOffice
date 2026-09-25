@@ -46,6 +46,7 @@ export function MyTeamColumn({
   showProj,
   showHeader,
   fit,
+  injuryBesideName,
 }: {
   settings: Settings;
   players: Player[];
@@ -55,6 +56,8 @@ export function MyTeamColumn({
   showHeader?: boolean;
   /** Distribute rows evenly across the available height instead of scrolling. */
   fit?: boolean;
+  /** Place the injury chip beside the name (My Team tab). Leave off for the Available Players sidebar. */
+  injuryBesideName?: boolean;
 }) {
   const slots = fillRoster(players, settings.roster);
   const brain = usePlayerBrain();
@@ -86,7 +89,22 @@ export function MyTeamColumn({
           fit ? "flex min-h-0 flex-1 flex-col gap-[2px]" : "space-y-1",
         )}
       >
-        {slots.map((s, i) => (
+        {slots.map((s, i) => {
+          const badge = s.player
+            ? injuryMicroBadge(resolveInjuryStatus(s.player, brain))
+            : null;
+          const badgeEl = badge ? (
+            <span
+              className={cn(
+                "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-[2px] px-1 text-[10px] font-bold leading-none text-white",
+                badge.className,
+              )}
+            >
+              {badge.label}
+            </span>
+          ) : null;
+
+          return (
           <li key={i} className={cn("flex items-center gap-1", fit && "min-h-0 flex-1")}>
             {s.player ? (
               <button
@@ -109,28 +127,18 @@ export function MyTeamColumn({
                   {...(fit ? { style: { width: avatarSize, height: avatarSize } } : {})}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-semibold" style={{ fontSize: nameSize }}>
-                    {s.player.name}
+                  <div
+                    className="flex min-w-0 items-center gap-1 truncate text-xs font-semibold"
+                    style={{ fontSize: nameSize }}
+                  >
+                    <span className="truncate">{s.player.name}</span>
+                    {injuryBesideName ? badgeEl : null}
                   </div>
                   <div
                     className="flex items-center gap-1 truncate text-[10px] text-muted-foreground"
                     style={{ fontSize: metaSize }}
                   >
-                    {(() => {
-                      const badge = injuryMicroBadge(
-                        resolveInjuryStatus(s.player!, brain),
-                      );
-                      return badge ? (
-                        <span
-                          className={cn(
-                            "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-[2px] px-1 text-[10px] font-bold leading-none text-white",
-                            badge.className,
-                          )}
-                        >
-                          {badge.label}
-                        </span>
-                      ) : null;
-                    })()}
+                    {!injuryBesideName ? badgeEl : null}
                     <span
                       className="inline-block size-1.5 shrink-0 rounded-full"
                       style={{ backgroundColor: `var(--pos-${s.player.pos.toLowerCase()})` }}
@@ -177,7 +185,8 @@ export function MyTeamColumn({
               </div>
             )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

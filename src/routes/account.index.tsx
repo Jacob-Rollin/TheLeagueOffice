@@ -228,7 +228,7 @@ function PasswordCard() {
 
   return (
     <section className={cardClass}>
-      <h2 className="display-title text-lg uppercase tracking-wide">Password</h2>
+      <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Password</h2>
       <form onSubmit={submit} className="mt-4 max-w-sm space-y-3">
         <label className={labelClass}>
           Current Password

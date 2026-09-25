@@ -96,22 +96,25 @@ function PlaybookTransactionsPage() {
   const normalized = events.map(normalizeTransactionEvent);
 
   return (
-    <section className={playbookCardClass}>
-      <div className="mb-4">
-        <h2 className="display-title text-lg font-bold uppercase tracking-wide text-slate-900">
-          League Activity
-        </h2>
+    <div>
+      <header className="mb-4">
+        <h1 className="display-title text-3xl">
+          League <span className="text-primary">Activity</span>
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Live waiver, free agent, trade, and IR moves from the active host league.
         </p>
-      </div>
+      </header>
 
-      <ActivityFeed
-        events={normalized}
-        players={players}
-        loading={loading}
-        error={error}
-      />
-    </section>
+      <section className={playbookCardClass}>
+        <ActivityFeed
+          events={normalized}
+          players={players}
+          loading={loading}
+          error={error}
+          className="rounded-none border-0 bg-transparent p-0"
+        />
+      </section>
+    </div>
   );
 }

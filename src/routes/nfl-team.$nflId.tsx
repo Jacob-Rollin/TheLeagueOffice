@@ -12,11 +12,12 @@ import { cn } from "@/lib/utils";
 
 type TeamTabKey = "logs" | "projections" | "sos" | "outlook" | "depth" | "news";
 
-function injuryLetter(injury: string | null | undefined): "Q" | "O" | "IR" | "NA" | null {
+function injuryLetter(injury: string | null | undefined): "Q" | "O" | "D" | "IR" | "NA" | null {
   const raw = injury?.toUpperCase()?.trim() ?? "";
   if (!raw || raw === "HEALTHY" || raw === "ACTIVE" || raw === "NONE") return null;
   if (raw === "QUESTIONABLE" || raw === "Q") return "Q";
-  if (raw === "OUT" || raw === "DOUBTFUL" || raw === "O" || raw === "D") return "O";
+  if (raw === "DOUBTFUL" || raw === "D") return "D";
+  if (raw === "OUT" || raw === "O") return "O";
   if (raw === "IR" || raw === "INJURED RESERVE" || raw === "INJURED_RESERVE") return "IR";
   if (raw === "NA" || raw === "INACTIVE" || raw === "NOT ACTIVE" || raw === "NOT_ACTIVE") return "NA";
   return null;
@@ -224,11 +225,11 @@ function NflTeamHub() {
                     <span>#{overallRankLabel} OVERALL</span>
                     <span className="mx-3 text-white/20">|</span>
                     <span>
-                      {rosteredPct != null ? `${Math.round(Number(rosteredPct))}%` : "—"} ROSTERED
+                      {`${Math.round(Number(rosteredPct ?? 0))}%`} ROSTERED
                     </span>
                     <span className="mx-3 text-white/20">|</span>
                     <span>
-                      {startedPct != null ? `${Math.round(Number(startedPct))}%` : "—"} STARTED
+                      {`${Math.round(Number(startedPct ?? 0))}%`} STARTED
                     </span>
                     <span className="mx-3 text-white/20">|</span>
 
@@ -354,7 +355,10 @@ function NflTeamHub() {
             <div className="mt-2">
               {injured.map((p) => {
                 const letter = injuryLetter(p.injury);
-                const badge = letter === "Q" || letter === "O" || letter === "IR" ? letter : "IR";
+                const badge =
+                  letter === "Q" || letter === "O" || letter === "D" || letter === "IR"
+                    ? letter
+                    : "IR";
                 const headshot = playerImage(p.id, p.pos as Pos, p.team || team.id);
                 const fallbackLogo =
                   teamLogo(team.id) ??
@@ -378,6 +382,7 @@ function NflTeamHub() {
                             "absolute -left-1 -top-1 z-30 flex h-4 w-4 select-none items-center justify-center rounded-full border text-[8px] font-black uppercase leading-none tracking-wide text-white shadow-sm",
                             badge === "IR" && "border-red-800 bg-red-700",
                             badge === "O" && "border-rose-700 bg-rose-600",
+                            badge === "D" && "border-rose-700 bg-rose-600",
                             badge === "Q" && "border-amber-600 bg-amber-500",
                           )}
                         >

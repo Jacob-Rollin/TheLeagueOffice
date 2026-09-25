@@ -8,12 +8,19 @@ export function PlayerModal({
   onClose,
   onSelectPlayer,
   showDraftActions = false,
+  draftRosterLabel,
+  sessionDrafted,
+  onSessionDraft,
 }: {
   id: string | null;
   onClose: () => void;
   onSelectPlayer: (id: string) => void;
   /** When true, render Draft action controls (War Room / Mock Draft only). */
   showDraftActions?: boolean;
+  /** Mock Draft owner label; War Room leaves null to hide synced-league ownership. */
+  draftRosterLabel?: string | null;
+  sessionDrafted?: boolean;
+  onSessionDraft?: (playerId: string) => void;
 }) {
   useEffect(() => {
     if (!id) return;
@@ -86,6 +93,9 @@ export function PlayerModal({
           onSelectPlayer={onSelectPlayer}
           onClose={onClose}
           showDraftActions={showDraftActions}
+          draftRosterLabel={showDraftActions ? (draftRosterLabel ?? null) : undefined}
+          sessionDrafted={sessionDrafted}
+          onSessionDraft={onSessionDraft}
         />
       </div>
     </div>

@@ -96,7 +96,9 @@ function LeagueSyncPage() {
 
   return (
     <main className="mx-auto w-full max-w-4xl px-4 pb-20 pt-10">
-      <h1 className="display-title text-3xl text-foreground">Sync A League</h1>
+      <h1 className="display-title text-3xl">
+        Sync A <span className="text-primary">League</span>
+      </h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Pick the platform that hosts your league to start the import.
       </p>

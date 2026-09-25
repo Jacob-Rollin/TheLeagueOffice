@@ -17,9 +17,11 @@ import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
   nextSortState,
+  PLAYER_LIST_HEADER_ROW,
   SortHeaderButton,
   type SortDir,
 } from "@/components/research/SortHeader";
+import { competitionRanksByMetric } from "@/components/research/statRanks";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -67,6 +69,8 @@ type EnrichedRow = TargetedPlayerRow & {
   injuryClass: string | null;
   weekTargets: number;
   metaLine: string;
+  /** Competition rank for the active / page-default target metric. */
+  statRank: number;
 };
 
 const POS_TABS: PosFilter[] = ["ALL", "RB", "WR", "TE"];
@@ -114,7 +118,7 @@ function MostTargetedPage() {
   const [showRoster, setShowRoster] = useState(true);
   const [showTaken, setShowTaken] = useState(true);
   const [showAvailable, setShowAvailable] = useState(true);
-  const [sortKey, setSortKey] = useState<SortKey>("avg");
+  const [sortKey, setSortKey] = useState<SortKey | null>("avg");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
@@ -157,8 +161,12 @@ function MostTargetedPage() {
   const rows = useMemo((): EnrichedRow[] => {
     const list = payload?.rows ?? [];
     const needle = deferredQ.trim().toLowerCase();
-    return list
+    const effectiveKey = sortKey ?? "avg";
+    const effectiveDir = sortKey == null ? "desc" : sortDir;
+
+    const enriched = list
       .filter((r) => (pos === "ALL" ? true : r.pos === pos))
+      .filter((r) => r.total > 0)
       .filter((r) => {
         const own: Ownership = myOwnedIds.has(r.id)
           ? "roster"
@@ -199,20 +207,32 @@ function MostTargetedPage() {
           injuryClass: badge?.className ?? null,
           weekTargets,
           metaLine,
+          statRank: 0,
         };
-      })
+      });
+
+    const rankMetric = (row: EnrichedRow): number => {
+      if (effectiveKey === "week") return row.weekTargets;
+      if (effectiveKey === "total") return row.total;
+      // avg (default) and player-name sort fall back to avg targets.
+      return row.avg;
+    };
+    const ranks = competitionRanksByMetric(enriched, rankMetric, (row) => row.id);
+
+    return enriched
+      .map((row) => ({ ...row, statRank: ranks.get(row.id) ?? 0 }))
       .sort((a, b) => {
         let cmp = 0;
-        if (sortKey === "player") {
+        if (effectiveKey === "player") {
           cmp = a.name.localeCompare(b.name);
-        } else if (sortKey === "week") {
+        } else if (effectiveKey === "week") {
           cmp = a.weekTargets - b.weekTargets;
-        } else if (sortKey === "total") {
+        } else if (effectiveKey === "total") {
           cmp = a.total - b.total;
         } else {
           cmp = a.avg - b.avg;
         }
-        if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
+        if (cmp !== 0) return effectiveDir === "asc" ? cmp : -cmp;
         return a.name.localeCompare(b.name);
       });
   }, [
@@ -279,8 +299,8 @@ function MostTargetedPage() {
   return (
     <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
       <div className="mb-5">
-        <h1 className="display-title text-2xl uppercase tracking-wide text-slate-900 sm:text-3xl">
-          Most Targeted Players
+        <h1 className="display-title text-3xl text-slate-900">
+          Most Targeted <span className="text-primary">Players</span>
         </h1>
         <p className="mt-1 text-sm text-slate-500">{weekLabel}</p>
       </div>
@@ -393,9 +413,16 @@ function MostTargetedPage() {
         <div ref={listRef} className="overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead className="sticky top-0 z-10">
-              <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                <th className="w-10 px-2 py-2.5 text-center">Rk</th>
-                <th className="px-3 py-2.5 text-left">
+              <tr className={PLAYER_LIST_HEADER_ROW}>
+                <th className="w-10 px-2 py-1.5 text-center">
+                  <SortHeaderButton
+                    label="Rk"
+                    active={sortKey === "avg"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("avg")}
+                  />
+                </th>
+                <th className="px-3 py-1.5 text-left">
                   <SortHeaderButton
                     label="Player"
                     active={sortKey === "player"}
@@ -411,7 +438,7 @@ function MostTargetedPage() {
                     ["avg", "Avg"],
                   ] as const
                 ).map(([key, label]) => (
-                  <th key={key} className="px-2 py-2.5 text-center">
+                  <th key={key} className="px-2 py-1.5 text-center">
                     <SortHeaderButton
                       label={label}
                       active={sortKey === key}
@@ -457,7 +484,7 @@ function MostTargetedPage() {
                       <TargetRow
                         key={row.id}
                         row={row}
-                        rank={item.index + 1}
+                        rank={row.statRank}
                         zebra={item.index % 2 === 1}
                         onOpen={openPlayer}
                       />

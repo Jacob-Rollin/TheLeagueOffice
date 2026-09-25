@@ -76,9 +76,10 @@ type RosterRow = {
 
 type ScheduleSosRow = SosMatchup & { isAway: boolean };
 
-const thClass = "px-3 text-left text-xs font-black uppercase tracking-wider text-slate-900 py-3";
+const thClass =
+  "px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-wider text-slate-500";
 const thRightClass =
-  "px-3 text-right text-xs font-black uppercase tracking-wider text-slate-900 py-3";
+  "px-3 py-1.5 text-right text-[10px] font-black uppercase tracking-wider text-slate-500";
 
 function starterSlotLabels(rosterPositions: string[]): string[] {
   const labels = rosterPositions
@@ -237,9 +238,10 @@ function RowInjuryBadge({
     return null;
   }
 
-  let label: "Q" | "O" | "IR" | "NA" | null = null;
+  let label: "Q" | "O" | "D" | "IR" | "NA" | null = null;
   if (injury === "Questionable") label = "Q";
-  else if (injury === "Out" || injury === "Doubtful") label = "O";
+  else if (injury === "Doubtful") label = "D";
+  else if (injury === "Out") label = "O";
   else if (injury === "IR") label = "IR";
   else if (injury === "NA") label = "NA";
   else return null;
@@ -254,7 +256,9 @@ function RowInjuryBadge({
       aria-label={`${playerName} injury status ${label}`}
       className={cn(
         "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[2px] px-1 text-[9px] font-bold text-white transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-        label === "Q" ? "bg-amber-500/80" : "bg-rose-600/80",
+        label === "Q"
+          ? "bg-amber-500/80"
+          : "bg-rose-600/80",
       )}
     >
       {label}
@@ -916,8 +920,8 @@ function MyTeamNewsPanel({
         aria-label="Player injury news"
       >
         <div className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm">
-          <h2 className="mb-3 border-b border-slate-100 pb-2.5 text-xs font-black uppercase tracking-wider text-slate-900">
-            PLAYER INJURY NEWS
+          <h2 className="mb-3 border-b border-slate-100 pb-2.5 text-sm font-bold uppercase tracking-wide text-slate-900">
+            Player Injury News
           </h2>
           <div className="w-full">
             {sidebarLoading && sidebarTrack.length === 0
@@ -1456,11 +1460,11 @@ function PlaybookMyTeamPage() {
   };
 
   return (
-    <section className={playbookCardClass}>
-      <div className="mb-6 flex w-full items-start justify-between">
+    <div>
+      <div className="mb-4 flex w-full items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="display-title text-2xl font-bold uppercase tracking-wide text-slate-900">
-            My Team
+          <h1 className="display-title text-3xl">
+            My <span className="text-primary">Team</span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {activeLeague?.name?.trim() || "Active league"} roster command center.
@@ -1469,7 +1473,7 @@ function PlaybookMyTeamPage() {
         <WeekSelector week={activeWeek} onChange={setSelectedWeek} />
       </div>
 
-      <div className="mb-5 flex flex-wrap gap-1 border-b border-border pb-px">
+      <div className="mb-4 flex flex-wrap gap-1 border-b border-border pb-px">
         {TABS.map((item) => (
           <button
             key={item.id}
@@ -1487,6 +1491,7 @@ function PlaybookMyTeamPage() {
         ))}
       </div>
 
+      <section className={playbookCardClass}>
       {loading && !myTeam ? (
         <p className="text-sm text-muted-foreground">Loading your roster…</p>
       ) : !myTeam ? (
@@ -1500,7 +1505,7 @@ function PlaybookMyTeamPage() {
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full min-w-[1080px] border-collapse text-sm">
             <thead>
-              <tr className="border-b border-border bg-slate-50/60">
+              <tr className="border-b border-slate-200 bg-slate-50/80">
                 <th className={thClass}>Pos</th>
                 <th className={thClass}>Player</th>
                 <th className={thClass}>POS RANK</th>
@@ -1618,7 +1623,7 @@ function PlaybookMyTeamPage() {
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full min-w-[1100px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-white">
+                  <tr className="border-b border-slate-200 bg-slate-50/80">
                     <th className={thClass}>POS</th>
                     <th className={thClass}>PLAYER</th>
                     <th className={thClass}>OPP</th>
@@ -1714,7 +1719,7 @@ function PlaybookMyTeamPage() {
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full min-w-[640px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-white">
+                  <tr className="border-b border-slate-200 bg-slate-50/80">
                     <th className={thClass}>POS</th>
                     <th className={thClass}>PLAYER</th>
                     <th className={thClass}>OPP</th>
@@ -1786,7 +1791,7 @@ function PlaybookMyTeamPage() {
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full min-w-[900px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-white">
+                  <tr className="border-b border-slate-200 bg-slate-50/80">
                     <th className={thClass}>POS</th>
                     <th className={thClass}>PLAYER</th>
                     <th className={thClass}>OPP</th>
@@ -1878,7 +1883,7 @@ function PlaybookMyTeamPage() {
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full min-w-[1100px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-white">
+                  <tr className="border-b border-slate-200 bg-slate-50/80">
                     <th className={thClass}>POS</th>
                     <th className={thClass}>PLAYER</th>
                     <th className={thClass}>OPP</th>
@@ -1973,7 +1978,7 @@ function PlaybookMyTeamPage() {
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full min-w-[640px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-white">
+                  <tr className="border-b border-slate-200 bg-slate-50/80">
                     <th className={thClass}>POS</th>
                     <th className={thClass}>PLAYER</th>
                     <th className={thClass}>OPP</th>
@@ -2044,7 +2049,7 @@ function PlaybookMyTeamPage() {
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full min-w-[900px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-white">
+                  <tr className="border-b border-slate-200 bg-slate-50/80">
                     <th className={thClass}>POS</th>
                     <th className={thClass}>PLAYER</th>
                     <th className={thClass}>OPP</th>
@@ -2140,6 +2145,7 @@ function PlaybookMyTeamPage() {
       ) : null}
 
       <PlayerModalHost ref={modalRef} />
-    </section>
+      </section>
+    </div>
   );
 }

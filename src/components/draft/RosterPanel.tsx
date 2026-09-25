@@ -45,23 +45,23 @@ export function RosterPanel({
             {s.player ? (
               <>
                 <PositionBadge pos={s.player.pos} className="h-5 text-[10px]" />
-                {(() => {
-                  const badge = injuryMicroBadge(
-                    resolveInjuryStatus(s.player, brain),
-                  );
-                  return badge ? (
-                    <span
-                      className={cn(
-                        "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-[2px] px-1 text-[10px] font-bold leading-none text-white",
-                        badge.className,
-                      )}
-                    >
-                      {badge.label}
-                    </span>
-                  ) : null;
-                })()}
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                  {s.player.name}
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
+                  <span className="truncate text-sm font-semibold">{s.player.name}</span>
+                  {(() => {
+                    const badge = injuryMicroBadge(
+                      resolveInjuryStatus(s.player, brain),
+                    );
+                    return badge ? (
+                      <span
+                        className={cn(
+                          "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-[2px] px-1 text-[10px] font-bold leading-none text-white",
+                          badge.className,
+                        )}
+                      >
+                        {badge.label}
+                      </span>
+                    ) : null;
+                  })()}
                 </span>
                 <span className="tabnum text-xs text-muted-foreground">
                   {value(s.player, settings.scoring).proj.toFixed(1)}

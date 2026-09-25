@@ -301,6 +301,8 @@ export type ConnectionMeta = {
   avatar: string | null;
   scoring: string | null;
   teams: number | null;
+  /** Resolved host league id for deep-links (Sleeper username → numeric league id). */
+  hostLeagueId: string | null;
 };
 
 function sleeperAvatar(id: string | null | undefined) {
@@ -382,7 +384,14 @@ export async function loadEspnConnectionMeta(
   s2?: string | null,
   swid?: string | null,
 ): Promise<ConnectionMeta> {
-  const empty: ConnectionMeta = { leagueName: null, teamName: null, avatar: null, scoring: null, teams: null };
+  const empty: ConnectionMeta = {
+    leagueName: null,
+    teamName: null,
+    avatar: null,
+    scoring: null,
+    teams: null,
+    hostLeagueId: null,
+  };
   const id = leagueId.trim();
   if (!/^\d+$/.test(id)) return empty;
   const season = new Date().getFullYear();
@@ -416,6 +425,7 @@ export async function loadEspnConnectionMeta(
       avatar: mine?.logo ?? null,
       scoring: rec == null ? null : rec >= 1 ? "Full PPR" : rec > 0 ? "Half PPR" : "Standard",
       teams: league.settings?.size ?? teams.length,
+      hostLeagueId: id,
     };
   }
   return empty;
@@ -429,6 +439,7 @@ export async function loadConnectionMeta(identifier: string): Promise<Connection
     avatar: null,
     scoring: null,
     teams: null,
+    hostLeagueId: null,
   };
   if (!clean) return empty;
 
@@ -436,7 +447,24 @@ export async function loadConnectionMeta(identifier: string): Promise<Connection
   let userId: string | null = null;
 
   if (/^\d{6,}$/.test(clean)) {
-    leagueId = clean;
+    // May be a Sleeper league id or a numeric user id — prefer the league
+    // endpoint, then fall back to the user's NFL leagues for the season.
+    const direct = await json<{ league_id?: string }>(`${BASE}/league/${clean}`);
+    if (direct?.league_id) {
+      leagueId = clean;
+    } else {
+      userId = clean;
+      const leagues = await json<{ league_id: string }[]>(
+        `${BASE}/user/${clean}/leagues/nfl/${new Date().getFullYear()}`,
+      );
+      leagueId = leagues?.[0]?.league_id ?? null;
+      if (!leagueId) {
+        const prev = await json<{ league_id: string }[]>(
+          `${BASE}/user/${clean}/leagues/nfl/${new Date().getFullYear() - 1}`,
+        );
+        leagueId = prev?.[0]?.league_id ?? null;
+      }
+    }
   } else {
     const user = await json<{ user_id?: string; avatar?: string | null }>(
       `${BASE}/user/${encodeURIComponent(clean)}`,
@@ -447,6 +475,8 @@ export async function loadConnectionMeta(identifier: string): Promise<Connection
     leagueId = leagues[0]?.id ?? null;
     if (!leagueId) return { ...empty, avatar: sleeperAvatar(user.avatar) };
   }
+
+  if (!leagueId) return empty;
 
   const [league, users] = await Promise.all([
     json<{
@@ -472,6 +502,7 @@ export async function loadConnectionMeta(identifier: string): Promise<Connection
       null,
     scoring: league ? scoringLabel(league.scoring_settings) : null,
     teams: league?.total_rosters ?? null,
+    hostLeagueId: leagueId,
   };
 }
 

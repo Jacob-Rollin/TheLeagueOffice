@@ -626,7 +626,7 @@ function TradePage() {
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="display-title text-4xl">
+          <h1 className="display-title text-3xl">
             Trade <span className="text-primary">Analyzer</span>
           </h1>
           <ActiveLeagueLabel className="mt-2 inline-block" />

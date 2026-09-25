@@ -2,10 +2,20 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { deleteAccount } from "@/lib/account.functions";
 import { supabase } from "@/integrations/supabase/client";
 
-/** Bright red destructive link + confirmation modal for permanent account deletion. */
+/** Destructive link + Are-you-sure confirmation for permanent account deletion. */
 export function DeleteAccountLink() {
   const navigate = useNavigate();
   const run = useServerFn(deleteAccount);
@@ -30,46 +40,48 @@ export function DeleteAccountLink() {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
         className="mt-8 block text-sm font-semibold text-red-600 underline-offset-4 hover:underline"
       >
         Delete Account
       </button>
 
-      {open && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Confirm account deletion"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
-        >
-          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6">
-            <h3 className="display-title text-lg uppercase tracking-wide">Delete Account</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
-              This permanently removes your profile, synced leagues and login. This cannot be undone.
-            </p>
-            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setOpen(false)}
-                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={confirm}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {busy ? "Deleting…" : "Delete Account"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AlertDialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!next && !busy) {
+            setOpen(false);
+            setError(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete your account? This permanently removes your
+              profile, synced leagues, and login. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={busy}
+              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
+              onClick={(event) => {
+                event.preventDefault();
+                void confirm();
+              }}
+            >
+              {busy ? "Deleting…" : "Delete Account"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

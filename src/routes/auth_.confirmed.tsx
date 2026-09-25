@@ -4,6 +4,7 @@ import { CheckCircle2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { AuthDialog } from "@/components/auth/AuthDialog";
+import { PageTitle } from "@/components/PageTitle";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -83,7 +84,7 @@ function ConfirmedPage() {
   return (
     <main className="mx-auto flex w-full max-w-lg flex-col items-center px-4 py-20 text-center">
       <CheckCircle2 className="size-16 text-emerald-500" aria-hidden />
-      <h1 className="display-title mt-6 text-3xl uppercase tracking-wide">Email Successfully Confirmed</h1>
+      <PageTitle className="mt-6">Email Successfully Confirmed</PageTitle>
       <p className="mt-2 text-sm text-muted-foreground">Your roster handle is now active.</p>
       {syncNote && <p className="mt-2 text-sm text-black">{syncNote}</p>}
 

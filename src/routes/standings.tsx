@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import {
   playbookCardClass,
+  playbookPanelTitleClass,
   powerRankMovementDelta,
   resolvePowerRankDisplayBaseline,
   TeamAvatarBadge,
@@ -116,15 +117,15 @@ function StandingsTable({
   return (
     <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
       <div className="min-w-[640px]">
-        <div className="flex items-center justify-between border-b border-border bg-slate-50/50 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 select-none">
+        <div className="flex items-center justify-between border-b border-border bg-slate-50/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 select-none">
           <div className="flex min-w-0 flex-1 items-center">
-            <span className="w-8 text-left">RK</span>
-            <span className="w-12 pl-2 text-center">TREND</span>
-            <span className="pl-6">TEAM</span>
+            <span className="w-12 text-center">Rank</span>
+            <span className="w-12 pl-2 text-center">Trend</span>
+            <span className="pl-6">Team</span>
           </div>
           <div className="flex shrink-0 items-center space-x-16 pr-2">
-            <span className="w-20 text-left">RECORD</span>
-            <span className="w-16 text-right">WIN %</span>
+            <span className="w-20 text-center">Record</span>
+            <span className="w-16 text-right">Win %</span>
           </div>
         </div>
 
@@ -155,8 +156,8 @@ function StandingsTable({
                     <div className="flex min-w-0 flex-1 items-center">
                       <span
                         className={cn(
-                          "w-8 text-left text-sm tabular-nums",
-                          row.isMine ? "font-black text-white" : "font-semibold text-slate-500",
+                          "w-12 text-center text-sm font-semibold tabular-nums",
+                          row.isMine ? "text-white" : "text-slate-500",
                         )}
                       >
                         {rank}
@@ -169,7 +170,14 @@ function StandingsTable({
                       >
                         {trend.label}
                       </span>
-                      <div className="flex min-w-0 flex-1 items-center pl-6">
+                      <Link
+                        to="/playbook/rosters"
+                        search={{ scout: String(row.rosterId) }}
+                        className={cn(
+                          "flex min-w-0 flex-1 items-center pl-6 transition-opacity hover:opacity-85",
+                          row.isMine ? "text-white" : "text-foreground",
+                        )}
+                      >
                         <TeamAvatarBadge
                           key={`${leagueKey}-${row.rosterId}-${row.logo ?? "fallback"}`}
                           name={row.team}
@@ -183,7 +191,7 @@ function StandingsTable({
                               "block truncate text-sm",
                               row.isMine
                                 ? "font-black text-white"
-                                : "font-semibold text-slate-900",
+                                : "font-medium text-foreground",
                             )}
                           >
                             {row.team}
@@ -191,31 +199,24 @@ function StandingsTable({
                           <span
                             className={cn(
                               "block truncate text-xs",
-                              row.isMine ? "font-bold text-white/80" : "text-slate-500",
+                              row.isMine ? "font-bold text-white/80" : "text-muted-foreground",
                             )}
                           >
                             {row.owner || "Owner"}
                           </span>
                         </span>
-                      </div>
+                      </Link>
                     </div>
                     <div
                       className={cn(
-                        "flex shrink-0 items-center space-x-16 pr-2 select-none font-mono text-sm",
-                        row.isMine ? "font-black text-white" : "font-black text-slate-700",
+                        "flex shrink-0 items-center space-x-16 pr-2 select-none text-sm tabular-nums",
+                        row.isMine ? "font-semibold text-white" : "font-semibold text-foreground",
                       )}
                     >
-                      <span className="w-20 text-left tabular-nums">
+                      <span className="w-20 text-center">
                         {formatRecord(row.wins, row.losses, row.ties)}
                       </span>
-                      <span
-                        className={cn(
-                          "w-16 text-right tabular-nums",
-                          row.isMine ? "text-white" : "text-slate-900",
-                        )}
-                      >
-                        {pctLabel}
-                      </span>
+                      <span className="w-16 text-right">{pctLabel}</span>
                     </div>
                   </div>
                 </li>
@@ -472,7 +473,7 @@ function StandingsHub() {
 
   const tabBar = (
     <div className="mb-6 flex w-full flex-row flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-2 select-none">
-      <h1 className="display-title text-lg font-bold uppercase tracking-wide text-slate-900">
+      <h1 className="display-title text-3xl">
         Standings
       </h1>
       <div className="flex flex-wrap items-center gap-2">
@@ -509,7 +510,7 @@ function StandingsHub() {
       ) : (
         <section className={playbookCardClass}>
           <div className="mb-4">
-            <h2 className="display-title text-lg font-bold uppercase tracking-wide text-slate-900">
+            <h2 className={playbookPanelTitleClass}>
               {panelTitle}
             </h2>
           </div>

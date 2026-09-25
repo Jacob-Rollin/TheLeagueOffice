@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { useAuth } from "@/hooks/useAuth";
 import { getConnectionRosters } from "@/lib/league.functions";
 import type { Player } from "@/lib/draft";
+import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
 import {
   markRevalidated,
   readRosterCache,
@@ -59,11 +61,14 @@ const defenseKey = (raw: string) => {
  */
 export function useLeagueRosters(players: Player[], options?: { cacheKey?: string }) {
   const { activeLeague } = useActiveLeague();
+  const { user } = useAuth();
   const identifier = activeLeague?.leagueId ?? "";
   const platform = activeLeague?.platform ?? "sleeper";
   const queryClient = useQueryClient();
+  const userId = user?.id ?? null;
+  const connectionId = activeLeague?.id ?? null;
 
-  const leagueKey = activeLeague?.id ?? "none";
+  const leagueKey = connectionId ?? "none";
   const queryKey = useMemo(() => ["league-rosters", leagueKey] as const, [leagueKey]);
   const storeKey = `${leagueKey}:${options?.cacheKey ?? "all"}`;
 
@@ -97,16 +102,21 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
     refetchOnMount: barrierOpen ? "always" : false,
     refetchOnWindowFocus: false,
     retry: false,
-    queryFn: () =>
-      getConnectionRosters({
+    queryFn: async () => {
+      const data = await getConnectionRosters({
         data: {
           identifier,
           platform,
           ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
           ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
         },
-      }),
-
+      });
+      // Network roster pulls (not IndexedDB hydrate) update My Leagues "Synced".
+      if (connectionId && data) {
+        void touchLeagueSyncTimestamp(connectionId, queryClient, userId);
+      }
+      return data;
+    },
   });
 
   // Persist every successful sync and stamp the barrier.

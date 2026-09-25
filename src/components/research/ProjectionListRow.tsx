@@ -1,6 +1,7 @@
 import { memo, type CSSProperties } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
+import { ValueTrendCell } from "@/components/research/ValueTrendCell";
 import type { Player } from "@/lib/draft";
 import { cn } from "@/lib/utils";
 
@@ -53,8 +54,6 @@ export const ProjectionListRow = memo(function ProjectionListRow({
   style?: CSSProperties;
 }) {
   const meta = PROJECTION_OWNERSHIP_META[row.ownership];
-  const trendUp = row.trend > 0.05;
-  const trendDown = row.trend < -0.05;
   const { player } = row;
 
   return (
@@ -93,19 +92,7 @@ export const ProjectionListRow = memo(function ProjectionListRow({
             </span>
           </span>
         </span>
-        <span className="inline-flex items-center justify-center gap-1.5 text-sm tabular-nums text-slate-500">
-          <span>{row.value.toFixed(1)}</span>
-          <span className="text-slate-300">/</span>
-          <span
-            className={cn(
-              "inline-flex items-center gap-0.5 font-semibold",
-              trendUp ? "text-emerald-600" : trendDown ? "text-rose-600" : "text-slate-400",
-            )}
-          >
-            <span aria-hidden="true">{trendUp ? "▲" : trendDown ? "▼" : "–"}</span>
-            <span>{Math.abs(row.trend).toFixed(1)}</span>
-          </span>
-        </span>
+        <ValueTrendCell value={row.value} trend={row.trend} className="text-sm" />
         <span className="text-right text-sm font-semibold tabular-nums text-slate-900">
           {row.proj != null && Number.isFinite(row.proj) ? row.proj.toFixed(2) : "—"}
         </span>

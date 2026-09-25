@@ -17,9 +17,13 @@ import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
   nextSortState,
+  PLAYER_LIST_COL_HEADER_ROW,
+  PLAYER_LIST_GROUP_HEADER_ROW,
+  PLAYER_LIST_GROUP_TH,
   SortHeaderButton,
   type SortDir,
 } from "@/components/research/SortHeader";
+import { competitionRanksByMetric } from "@/components/research/statRanks";
 import {
   redZoneFantasyPoints,
   ScoringFormatSelect,
@@ -77,6 +81,8 @@ type EnrichedRedZoneRow = RedZonePlayerRow & {
   injuryLabel: string | null;
   injuryClass: string | null;
   metaLine: string;
+  /** Competition rank for the active / page-default red-zone metric. */
+  statRank: number;
 };
 
 type RedZoneSortKey =
@@ -219,7 +225,7 @@ function RedZoneStatsPage() {
   const [showRoster, setShowRoster] = useState(true);
   const [showTaken, setShowTaken] = useState(true);
   const [showAvailable, setShowAvailable] = useState(true);
-  const [sortKey, setSortKey] = useState<RedZoneSortKey>("fpts");
+  const [sortKey, setSortKey] = useState<RedZoneSortKey | null>("fpts");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
@@ -266,8 +272,15 @@ function RedZoneStatsPage() {
   const rows = useMemo((): EnrichedRedZoneRow[] => {
     const list = payload?.rowsByPos?.[pos] ?? [];
     const needle = deferredQ.trim().toLowerCase();
-    return list
+    const effectiveKey = sortKey ?? "fpts";
+    const effectiveDir = sortKey == null ? "desc" : sortDir;
+
+    const enriched = list
       .filter((r) => {
+        // Drop empty production rows that somehow slip past the server gate.
+        if (!(r.games > 0 || r.passAtt > 0 || r.rushAtt > 0 || r.recTgt > 0 || r.passTd > 0 || r.rushTd > 0 || r.recTd > 0)) {
+          return false;
+        }
         const own: Ownership = myOwnedIds.has(r.id)
           ? "roster"
           : rosteredIds.has(r.id)
@@ -302,18 +315,29 @@ function RedZoneStatsPage() {
           injuryLabel: badge?.label ?? null,
           injuryClass: badge?.className ?? null,
           metaLine,
+          statRank: 0,
         };
-      })
+      });
+
+    const rankMetric = (row: EnrichedRedZoneRow): number | null => {
+      if (effectiveKey === "player" || effectiveKey === "rank") return row.fpts;
+      const value = sortValue(row, effectiveKey);
+      return typeof value === "number" && Number.isFinite(value) ? value : null;
+    };
+    const ranks = competitionRanksByMetric(enriched, rankMetric, (row) => row.id);
+
+    return enriched
+      .map((row) => ({ ...row, statRank: ranks.get(row.id) ?? 0 }))
       .sort((a, b) => {
-        const av = sortValue(a, sortKey);
-        const bv = sortValue(b, sortKey);
+        const av = sortValue(a, effectiveKey);
+        const bv = sortValue(b, effectiveKey);
         let cmp = 0;
         if (typeof av === "string" && typeof bv === "string") {
           cmp = av.localeCompare(bv);
         } else {
           cmp = Number(av) - Number(bv);
         }
-        if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
+        if (cmp !== 0) return effectiveDir === "asc" ? cmp : -cmp;
         return a.name.localeCompare(b.name);
       });
   }, [
@@ -345,8 +369,8 @@ function RedZoneStatsPage() {
   return (
     <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
       <div className="mb-5">
-        <h1 className="display-title text-2xl uppercase tracking-wide text-slate-900 sm:text-3xl">
-          Red Zone Stats
+        <h1 className="display-title text-3xl text-slate-900">
+          Red Zone <span className="text-primary">Stats</span>
         </h1>
         <p className="mt-1 text-sm text-slate-500">{weekLabel}</p>
       </div>
@@ -500,7 +524,7 @@ function MiscHeaders({
   sortDir,
   onSort,
 }: {
-  sortKey: RedZoneSortKey;
+  sortKey: RedZoneSortKey | null;
   sortDir: SortDir;
   onSort: (key: RedZoneSortKey) => void;
 }) {
@@ -691,7 +715,7 @@ function VirtualizedRedZoneTable({
                       OWNERSHIP_META[row.ownership].row,
                     )}
                   >
-                    {renderRow(row, item.index + 1)}
+                    {renderRow(row, row.statRank)}
                   </tr>
                 );
               })}
@@ -722,7 +746,7 @@ function SortTh({
 }: {
   label: string;
   sortKey: RedZoneSortKey;
-  activeKey: RedZoneSortKey;
+  activeKey: RedZoneSortKey | null;
   sortDir: SortDir;
   onSort: (key: RedZoneSortKey) => void;
   className?: string;
@@ -754,7 +778,7 @@ function QbTable({
   loading: boolean;
   error: boolean;
   onOpen: (id: string) => void;
-  sortKey: RedZoneSortKey;
+  sortKey: RedZoneSortKey | null;
   sortDir: SortDir;
   onSort: (key: RedZoneSortKey) => void;
 }) {
@@ -777,21 +801,19 @@ function QbTable({
   ];
   const header = (
     <>
-      <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
-        <th colSpan={2} className="px-3 py-2 text-left">
-          Players
-        </th>
-        <th colSpan={8} className="border-l border-slate-200 px-2 py-2 text-center text-slate-700">
+      <tr className={PLAYER_LIST_GROUP_HEADER_ROW}>
+        <th colSpan={2} className="px-3 py-2" aria-hidden="true" />
+        <th colSpan={8} className={PLAYER_LIST_GROUP_TH}>
           Passing
         </th>
-        <th colSpan={4} className="border-l border-slate-200 px-2 py-2 text-center text-slate-700">
+        <th colSpan={4} className={PLAYER_LIST_GROUP_TH}>
           Rushing
         </th>
-        <th colSpan={5} className="border-l border-slate-200 px-2 py-2 text-center text-slate-700">
+        <th colSpan={5} className={PLAYER_LIST_GROUP_TH}>
           Misc
         </th>
       </tr>
-      <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
+      <tr className={PLAYER_LIST_COL_HEADER_ROW}>
         <SortTh
           label="Rk"
           sortKey="rank"
@@ -914,19 +936,19 @@ function SkillTable({
   error: boolean;
   onOpen: (id: string) => void;
   receivingFirst: boolean;
-  sortKey: RedZoneSortKey;
+  sortKey: RedZoneSortKey | null;
   sortDir: SortDir;
   onSort: (key: RedZoneSortKey) => void;
 }) {
   const colSpan = 18;
 
   const rushGroupHeader = (
-    <th colSpan={5} className="border-l border-slate-200 px-2 py-2 text-center text-slate-700">
+    <th colSpan={5} className={PLAYER_LIST_GROUP_TH}>
       Rushing
     </th>
   );
   const recGroupHeader = (
-    <th colSpan={6} className="border-l border-slate-200 px-2 py-2 text-center text-slate-700">
+    <th colSpan={6} className={PLAYER_LIST_GROUP_TH}>
       Receiving
     </th>
   );
@@ -970,10 +992,8 @@ function SkillTable({
 
   const header = (
     <>
-      <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
-        <th colSpan={2} className="px-3 py-2 text-left">
-          Players
-        </th>
+      <tr className={PLAYER_LIST_GROUP_HEADER_ROW}>
+        <th colSpan={2} className="px-3 py-2" aria-hidden="true" />
         {receivingFirst ? (
           <>
             {recGroupHeader}
@@ -985,11 +1005,11 @@ function SkillTable({
             {recGroupHeader}
           </>
         )}
-        <th colSpan={5} className="border-l border-slate-200 px-2 py-2 text-center text-slate-700">
+        <th colSpan={5} className={PLAYER_LIST_GROUP_TH}>
           Misc
         </th>
       </tr>
-      <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
+      <tr className={PLAYER_LIST_COL_HEADER_ROW}>
         <SortTh
           label="Rk"
           sortKey="rank"

@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { Gauge, Target } from "lucide-react";
+import { ChevronLeft, ChevronRight, Gauge, Target } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
@@ -10,13 +10,14 @@ import {
   ActivityFeed,
   resolvePowerRankDisplayBaseline,
   powerRankMovementDelta,
+  playbookPanelTitleClass,
 } from "@/components/playbook/panels";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useLeagueActivity } from "@/hooks/useLeagueActivity";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
-import { useLeagueRosters } from "@/hooks/useLeagueRosters";
+import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
@@ -84,15 +85,98 @@ export const Route = createFileRoute("/playbook/")({
 });
 
 const panelClass = "rounded-xl border border-border bg-card p-4 sm:p-5";
-const panelTitleClass = "text-xs font-bold uppercase tracking-wider text-slate-500";
+/** Season/17 invent for trade/insights only — matchup preview must not use this. */
 const weeklyFallback = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
+/** Match Matchup page: never invent a weekly proj when Sleeper has none. */
+const matchupWeeklyFallback = (_p: Player) => 0;
+
+const SKIP_STARTER_SLOTS = new Set(["BN", "BENCH", "IR", "IL", "TAXI", "RESERVE"]);
+const FLEX_OK = new Set(["RB", "WR", "TE"]);
+
+function normalizeStarterSlot(pos: string): string {
+  const value = pos.trim().toUpperCase();
+  if (value === "SUPER_FLEX" || value === "SUPERFLEX" || value === "Q/W/R/T") return "FLEX";
+  if (value === "W/R/T" || value === "WRRBTE") return "FLEX";
+  return value;
+}
+
+function starterSlotLabels(rosterPositions: string[]): string[] {
+  const labels = rosterPositions
+    .map((pos) => normalizeStarterSlot(String(pos ?? "")))
+    .filter((pos) => pos && !SKIP_STARTER_SLOTS.has(pos));
+  if (labels.length) return labels;
+  const req = starterRequirements([]);
+  const out: string[] = [];
+  for (const pos of ["QB", "RB", "WR", "TE", "FLEX", "K", "DEF"]) {
+    for (let i = 0; i < (req[pos] ?? 0); i += 1) out.push(pos);
+  }
+  return out;
+}
+
+function playerFitsSlot(player: Player, slot: string): boolean {
+  if (slot === "FLEX" || slot === "FLX") return FLEX_OK.has(player.pos);
+  if (slot === "DEF" || slot === "DST") return player.pos === "DEF";
+  return player.pos === slot;
+}
+
+/**
+ * Same slot-aligned starter resolution as the Matchup page (fills ESPN empty /
+ * unresolved boxscore slots from the live host lineup).
+ */
+function resolveMatchupStarters(
+  team: ResolvedRosterTeam | null,
+  labels: string[],
+  starterIds: string[],
+  playersById: Map<string, Player>,
+): Player[] {
+  if (!team) return [];
+
+  const used = new Set<string>();
+  const takeLiveForSlot = (slot: string, index: number): Player | null => {
+    const atIndex = team.starters[index] ?? null;
+    if (atIndex && !used.has(atIndex.id) && playerFitsSlot(atIndex, slot)) {
+      used.add(atIndex.id);
+      return atIndex;
+    }
+    for (const candidate of team.starters) {
+      if (!candidate || used.has(candidate.id)) continue;
+      if (!playerFitsSlot(candidate, slot)) continue;
+      used.add(candidate.id);
+      return candidate;
+    }
+    return null;
+  };
+
+  const rows: (Player | null)[] = starterIds.length
+    ? labels.map((slot, i) => {
+        const id = starterIds[i];
+        if (id) {
+          const hit = playersById.get(id) ?? null;
+          if (hit) {
+            used.add(hit.id);
+            return hit;
+          }
+          return takeLiveForSlot(slot, i);
+        }
+        return takeLiveForSlot(slot, i);
+      })
+    : labels.map((slot, i) => {
+        const atIndex = team.starters[i] ?? null;
+        if (atIndex) {
+          used.add(atIndex.id);
+          return atIndex;
+        }
+        return takeLiveForSlot(slot, i);
+      });
+
+  return rows.filter((p): p is Player => Boolean(p));
+}
 
 function Panel({
   title,
   action,
   children,
   className,
-  titleClassName,
 }: {
   title: string;
   action?: {
@@ -108,12 +192,11 @@ function Panel({
   };
   children: ReactNode;
   className?: string;
-  titleClassName?: string;
 }) {
   return (
     <section className={cn(panelClass, className)}>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className={cn(panelTitleClass, titleClassName)}>{title}</h2>
+      <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <h2 className={playbookPanelTitleClass}>{title}</h2>
         {action ? (
           <Link
             to={action.to}
@@ -213,15 +296,22 @@ function MatchupTeamAvatar({
 
 function powerRankBadgeClass(rank: number): string {
   if (rank === 1) {
-    return "rounded-md border border-amber-200/50 bg-amber-100/70 px-2 py-0.5 text-xs font-bold text-amber-800";
+    return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-amber-300 bg-amber-200/90 px-2 py-0.5 text-center text-sm font-bold text-amber-950 shadow-sm";
   }
   if (rank === 2) {
-    return "rounded-md border border-slate-200/60 bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-800";
+    return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-slate-300 bg-slate-200 px-2 py-0.5 text-center text-sm font-bold text-slate-900 shadow-sm";
   }
   if (rank === 3) {
-    return "rounded-md border border-orange-200/40 bg-orange-100/60 px-2 py-0.5 text-xs font-black text-orange-800";
+    return "inline-flex min-w-[2rem] items-center justify-center rounded-md border border-orange-300 bg-orange-200/80 px-2 py-0.5 text-center text-sm font-bold text-orange-950 shadow-sm";
   }
-  return "rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-500";
+  return "inline-flex min-w-[2rem] items-center justify-center px-2 py-0.5 text-center text-sm font-semibold tabular-nums text-slate-500";
+}
+
+function powerRankPodiumRowClass(rank: number): string {
+  if (rank === 1) return "border-l-4 border-l-amber-400 bg-amber-50";
+  if (rank === 2) return "border-l-4 border-l-slate-400 bg-slate-100/90";
+  if (rank === 3) return "border-l-4 border-l-orange-400 bg-orange-50";
+  return "";
 }
 
 function powerRankTrend(delta: number | null): { label: string; className: string } {
@@ -263,6 +353,19 @@ function MetricDeltaPct({ deltaPct }: { deltaPct: number | null }) {
       {deltaPct.toFixed(1)}%
     </span>
   );
+}
+
+/** Dashboard standings chip: green when above .500, red below, grey when even. */
+function recordToneClass(record: string): string {
+  const parts = record.trim().split("-").map((part) => Number(part));
+  const wins = parts[0];
+  const losses = parts[1];
+  if (wins == null || losses == null || !Number.isFinite(wins) || !Number.isFinite(losses)) {
+    return "text-slate-400";
+  }
+  if (wins > losses) return "text-emerald-600";
+  if (wins < losses) return "text-rose-500";
+  return "text-slate-400";
 }
 
 type InsightActionTo =
@@ -367,21 +470,20 @@ function buildTeamInsightSlides(opts: {
     const windowTitle = nightWindowTitle(kickIso);
     const tonightCount = new Set(tonightAll.map((p) => p.id)).size;
 
-    slides.push({
-      id: "watch-tonight",
-      tag: "What to Watch Tonight",
-      headline:
-        tonightCount > 0
-          ? `${tonightCount} Player${tonightCount === 1 ? "" : "s"} on ${windowTitle}`
-          : `No ${windowTitle} Assets Locked In`,
-      body: featuredTonight
-        ? mineTonight.some((p) => p.id === featuredTonight.id)
+    // Hide the slide entirely when no starters are in tonight's window —
+    // avoids the empty "No … Assets Locked In" card.
+    if (tonightCount > 0 && featuredTonight) {
+      slides.push({
+        id: "watch-tonight",
+        tag: "What to Watch Tonight",
+        headline: `${tonightCount} Player${tonightCount === 1 ? "" : "s"} on ${windowTitle}`,
+        body: mineTonight.some((p) => p.id === featuredTonight.id)
           ? `You have ${featuredTonight.name} kicking off tonight.`
-          : `Your opponent has ${featuredTonight.name} playing tonight.`
-        : "No starters are scheduled in tonight's window yet. Check back as the slate firms up.",
-      player: featuredTonight,
-      action: { to: "/playbook/matchup", label: "See Full Matchup" },
-    });
+          : `Your opponent has ${featuredTonight.name} playing tonight.`,
+        player: featuredTonight,
+        action: { to: "/playbook/matchup", label: "See Full Matchup" },
+      });
+    }
   }
 
   const injured = myTeamPlayers.filter(isActiveInjury);
@@ -460,19 +562,19 @@ function TeamInsightsCarousel({
 
   return (
     <section className={panelClass}>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Team Insights</h2>
-        <div className="flex items-center gap-2">
+      <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <h2 className={playbookPanelTitleClass}>Team Insights</h2>
+        <div className="flex items-center gap-3">
           <button
             type="button"
             aria-label="Previous insight"
-            className="px-1 text-sm font-semibold text-slate-400 transition-colors hover:text-blue-600 disabled:opacity-40"
+            className="flex size-8 items-center justify-center text-slate-400 transition-colors hover:text-slate-700 disabled:opacity-35"
             disabled={count <= 1}
             onClick={() => go(safeIndex - 1)}
           >
-            &lt;
+            <ChevronLeft className="size-5 stroke-[2.5]" aria-hidden="true" />
           </button>
-          <div className="flex items-center gap-1.5" aria-label="Insight slide indicators">
+          <div className="flex items-center gap-2.5" aria-label="Insight slide indicators">
             {slides.map((item, i) => (
               <button
                 key={item.id}
@@ -480,23 +582,23 @@ function TeamInsightsCarousel({
                 aria-label={`Go to slide ${i + 1}`}
                 aria-current={i === safeIndex ? "true" : undefined}
                 className={cn(
-                  "text-[10px] leading-none transition-colors",
-                  i === safeIndex ? "text-blue-600" : "text-slate-300 hover:text-slate-400",
+                  "size-2.5 rounded-full transition-colors",
+                  i === safeIndex
+                    ? "bg-blue-600"
+                    : "bg-slate-300/80 hover:bg-slate-400",
                 )}
                 onClick={() => go(i)}
-              >
-                {i === safeIndex ? "●" : "○"}
-              </button>
+              />
             ))}
           </div>
           <button
             type="button"
             aria-label="Next insight"
-            className="px-1 text-sm font-semibold text-slate-400 transition-colors hover:text-blue-600 disabled:opacity-40"
+            className="flex size-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-700 disabled:opacity-35"
             disabled={count <= 1}
             onClick={() => go(safeIndex + 1)}
           >
-            &gt;
+            <ChevronRight className="size-5 stroke-[2.5]" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -925,6 +1027,8 @@ function PlaybookDashboardPage() {
     if (!weeklyMatchups || weeklyMatchups.length === 0) return defaults;
 
     let totalUserScored = 0;
+    /** Scored points only from weeks with a computable optimal ceiling (efficiency). */
+    let scoredForEfficiency = 0;
     let totalMaxPossible = 0;
     let completedWeeksCount = 0;
     let finalPosition = defaults.position;
@@ -932,14 +1036,43 @@ function PlaybookDashboardPage() {
     /** Per completed week: scored points + optimal ceiling (for WoW deltas). */
     const completedWeekStats: { scored: number; optimal: number }[] = [];
 
-    const req = starterRequirements(rosterPositions);
-    const qbSlots = Math.max(1, req["QB"] ?? 1);
-    const rbSlots = Math.max(1, req["RB"] ?? 2);
-    const wrSlots = Math.max(1, req["WR"] ?? 2);
-    const teSlots = Math.max(1, req["TE"] ?? 1);
-    const flexSlots = Math.max(0, req["FLEX"] ?? 1);
-    const defSlots = Math.max(1, req["DEF"] ?? 1);
-    const kSlots = Math.max(1, req["K"] ?? 1);
+    // Count FLEX vs SUPERFLEX separately — collapsing SUPERFLEX into FLEX undercounts
+    // optimal (QBs can't fill W/R/T), which inflates coaching efficiency vs FantasyPros.
+    let qbSlots = 0;
+    let rbSlots = 0;
+    let wrSlots = 0;
+    let teSlots = 0;
+    let flexSlots = 0;
+    let superFlexSlots = 0;
+    let defSlots = 0;
+    let kSlots = 0;
+    for (const raw of rosterPositions) {
+      const pos = String(raw ?? "").trim().toUpperCase();
+      if (!pos || SKIP_STARTER_SLOTS.has(pos)) continue;
+      if (pos === "SUPER_FLEX" || pos === "SUPERFLEX" || pos === "Q/W/R/T") {
+        superFlexSlots += 1;
+      } else if (pos === "W/R/T" || pos === "WRRBTE" || pos === "FLEX") {
+        flexSlots += 1;
+      } else if (pos === "QB") qbSlots += 1;
+      else if (pos === "RB") rbSlots += 1;
+      else if (pos === "WR") wrSlots += 1;
+      else if (pos === "TE") teSlots += 1;
+      else if (pos === "DEF" || pos === "DST" || pos === "D/ST") defSlots += 1;
+      else if (pos === "K") kSlots += 1;
+    }
+    if (
+      qbSlots + rbSlots + wrSlots + teSlots + flexSlots + superFlexSlots + defSlots + kSlots ===
+      0
+    ) {
+      const req = starterRequirements([]);
+      qbSlots = req["QB"] ?? 1;
+      rbSlots = req["RB"] ?? 2;
+      wrSlots = req["WR"] ?? 2;
+      teSlots = req["TE"] ?? 1;
+      flexSlots = req["FLEX"] ?? 1;
+      defSlots = req["DEF"] ?? 1;
+      kSlots = req["K"] ?? 1;
+    }
 
     weeklyMatchups.forEach((weekData) => {
       // CRITICAL GUARD RAIL: Ignore live, open, or in-progress weeks entirely.
@@ -974,6 +1107,7 @@ function PlaybookDashboardPage() {
       const topDef = takeTopPoints(defs, defSlots);
       const topK = takeTopPoints(ks, kSlots);
 
+      // Standard flex: RB/WR/TE leftovers only.
       const remainingFlexEligible = [
         ...rbs.slice(rbSlots),
         ...wrs.slice(wrSlots),
@@ -981,10 +1115,18 @@ function PlaybookDashboardPage() {
       ].sort((a, b) => b.points - a.points);
       const topFlex = takeTopPoints(remainingFlexEligible, flexSlots);
 
+      // Superflex: leftover QBs + leftover flex-eligible after standard flex is filled.
+      const remainingSuperFlexEligible = [
+        ...qbs.slice(qbSlots),
+        ...remainingFlexEligible.slice(flexSlots),
+      ].sort((a, b) => b.points - a.points);
+      const topSuperFlex = takeTopPoints(remainingSuperFlexEligible, superFlexSlots);
+
       const weeklyMaxOptimalCeiling =
-        topQb + topRb + topWr + topTe + topFlex + topDef + topK;
+        topQb + topRb + topWr + topTe + topFlex + topSuperFlex + topDef + topK;
       if (weeklyMaxOptimalCeiling > 0) {
         totalMaxPossible += weeklyMaxOptimalCeiling;
+        scoredForEfficiency += scored;
       }
       completedWeekStats.push({
         scored,
@@ -997,26 +1139,35 @@ function PlaybookDashboardPage() {
     const calculatedAvgPoints = totalUserScored / completedWeeksCount;
     const calculatedEfficiency =
       totalMaxPossible > 0
-        ? Math.min(100, (totalUserScored / totalMaxPossible) * 100)
+        ? Math.min(100, (scoredForEfficiency / totalMaxPossible) * 100)
         : 88.0;
 
     // FantasyPros-style WoW % — hidden until at least two completed weeks
     // (nothing after week 1 of the season).
+    // Avg Points: ((curr − prior) / curr) × 100 — FP uses the current avg as the base.
+    // Coaching Efficiency: FP's "−X% since last wk" is last week's weekly efficiency
+    // minus prior-season efficiency (not the small move in the cumulative rate).
+    // Example: cumulative may only drop −0.7pp while last week vs prior pace is −1.8pp.
     let avgPointsDeltaPct: number | null = null;
     let efficiencyDeltaPct: number | null = null;
     if (completedWeeksCount >= 2) {
       const prior = completedWeekStats.slice(0, -1);
+      const lastWeek = completedWeekStats[completedWeekStats.length - 1];
       const priorScored = prior.reduce((sum, w) => sum + w.scored, 0);
-      const priorOptimal = prior.reduce((sum, w) => sum + w.optimal, 0);
       const priorAvg = priorScored / prior.length;
+      const priorEffWeeks = prior.filter((w) => w.optimal > 0);
+      const priorScoredEff = priorEffWeeks.reduce((sum, w) => sum + w.scored, 0);
+      const priorOptimal = priorEffWeeks.reduce((sum, w) => sum + w.optimal, 0);
       const priorEff =
-        priorOptimal > 0 ? Math.min(100, (priorScored / priorOptimal) * 100) : null;
+        priorOptimal > 0 ? Math.min(100, (priorScoredEff / priorOptimal) * 100) : null;
 
-      if (priorAvg > 0.05) {
-        avgPointsDeltaPct = ((calculatedAvgPoints - priorAvg) / priorAvg) * 100;
+      if (calculatedAvgPoints > 0.05) {
+        avgPointsDeltaPct =
+          ((calculatedAvgPoints - priorAvg) / calculatedAvgPoints) * 100;
       }
-      if (priorEff != null && priorEff > 0.05) {
-        efficiencyDeltaPct = ((calculatedEfficiency - priorEff) / priorEff) * 100;
+      if (priorEff != null && lastWeek && lastWeek.optimal > 0) {
+        const lastWeekEff = Math.min(100, (lastWeek.scored / lastWeek.optimal) * 100);
+        efficiencyDeltaPct = lastWeekEff - priorEff;
       }
     }
 
@@ -1178,25 +1329,31 @@ function PlaybookDashboardPage() {
     return null;
   }, [teams, weeklyPair.oppRosterId]);
 
-  /** 3-tier starter rolling totals + dynamic live win% (same engine as Matchup). */
+  /** Matchup preview totals + win% — same Sleeper starter math as /playbook/matchup. */
   const displayMatchup = useMemo(() => {
-    const resolveStarters = (ids: string[], fallback: (Player | null)[]): Player[] => {
-      if (ids.length) {
-        const resolved = ids
-          .map((id) => playersById.get(id))
-          .filter((p): p is Player => Boolean(p));
-        if (resolved.length) return resolved;
+    const labels = starterSlotLabels(rosterPositions);
+    const mineStarters = resolveMatchupStarters(
+      myTeam,
+      labels,
+      weeklyPair.myStarterIds,
+      playersById,
+    );
+    const oppStarters = resolveMatchupStarters(
+      oppTeam,
+      labels,
+      weeklyPair.oppStarterIds,
+      playersById,
+    );
+
+    const activeWeek = currentWeek ?? 1;
+    const sumOrigProj = (starters: Player[]) => {
+      let total = 0;
+      for (const player of starters) {
+        if (player.bye != null && Number(player.bye) === Number(activeWeek)) continue;
+        total += projectFor(player.id) ?? matchupWeeklyFallback(player);
       }
-      return fallback.filter((p): p is Player => Boolean(p));
+      return Math.round(total * 100) / 100;
     };
-
-    const mineStarters = resolveStarters(weeklyPair.myStarterIds, myTeam?.starters ?? []);
-    const oppStarters = resolveStarters(weeklyPair.oppStarterIds, oppTeam?.starters ?? []);
-
-    const sumOrigProj = (starters: Player[]) =>
-      Math.round(
-        starters.reduce((sum, p) => sum + (projectFor(p.id) ?? weeklyFallback(p)), 0) * 100,
-      ) / 100;
 
     const myOrigProj = sumOrigProj(mineStarters);
     const oppOrigProj = sumOrigProj(oppStarters);
@@ -1209,9 +1366,9 @@ function PlaybookDashboardPage() {
       pointsMapA: weeklyPair.myPlayerPoints,
       pointsMapB: weeklyPair.oppPlayerPoints,
       projectFor,
-      weeklyFallback,
+      weeklyFallback: matchupWeeklyFallback,
       progressByNflTeam,
-      activeWeek: currentWeek ?? 1,
+      activeWeek,
     });
 
     let weekStarted =
@@ -1237,7 +1394,6 @@ function PlaybookDashboardPage() {
       }
     }
 
-    const activeWeek = currentWeek ?? 1;
     const starterDone = (player: Player) => {
       if (player.bye != null && Number(player.bye) === Number(activeWeek)) return true;
       const nfl = (player.team || "").trim().toUpperCase();
@@ -1263,7 +1419,16 @@ function PlaybookDashboardPage() {
       weekStarted,
       matchupFinal,
     };
-  }, [weeklyPair, myTeam, oppTeam, playersById, projectFor, progressByNflTeam, currentWeek]);
+  }, [
+    weeklyPair,
+    myTeam,
+    oppTeam,
+    playersById,
+    projectFor,
+    progressByNflTeam,
+    currentWeek,
+    rosterPositions,
+  ]);
 
   const matchupRecordFor = (
     rosterId: number | null | undefined,
@@ -1327,13 +1492,19 @@ function PlaybookDashboardPage() {
       bench,
       weeklyFor: (id) => {
         const hit = [...starters, ...bench].find((p) => p.id === id);
-        if (!hit) return 0;
-        return projectFor(id) ?? weeklyFallback(hit);
+        if (
+          hit?.bye != null &&
+          currentWeek != null &&
+          Number(hit.bye) === Number(currentWeek)
+        ) {
+          return null;
+        }
+        return projectFor(id);
       },
       minEdge: 0.8,
       limit: 4,
     });
-  }, [myTeam, projectFor]);
+  }, [myTeam, projectFor, currentWeek]);
 
   const marketRadar = useMemo(() => {
     const toFit = (p: Player): FitPlayer => ({
@@ -1527,7 +1698,7 @@ function PlaybookDashboardPage() {
   return (
     <div>
       <header className="mb-1">
-        <h1 className="display-title text-3xl uppercase tracking-wide">Dashboard</h1>
+        <h1 className="display-title text-3xl">Dashboard</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {activeLeague?.name?.trim() || "Active league"} weekly command view.
         </p>
@@ -1561,7 +1732,12 @@ function PlaybookDashboardPage() {
                   <span className="text-lg font-black text-slate-900 leading-none">
                     {synchronizedWeeklyMetrics.position}
                   </span>
-                  <span className="text-xs font-black text-rose-500 font-mono leading-none">
+                  <span
+                    className={cn(
+                      "text-xs font-black font-mono leading-none",
+                      recordToneClass(synchronizedWeeklyMetrics.record),
+                    )}
+                  >
                     {synchronizedWeeklyMetrics.record}
                   </span>
                 </div>
@@ -1605,7 +1781,6 @@ function PlaybookDashboardPage() {
 
           <Panel
             title="League Activity"
-            titleClassName="text-sm font-bold uppercase tracking-wide text-slate-900"
             action={{ to: "/playbook/transactions", label: "Open Transactions" }}
           >
             {activityLoading ? (
@@ -1622,7 +1797,6 @@ function PlaybookDashboardPage() {
 
           <Panel
             title="Matchup"
-            titleClassName="text-sm font-bold normal-case tracking-normal text-slate-800"
             action={{ to: "/playbook/matchup", label: "View Matchup" }}
           >
             <MatchupPreviewCard
@@ -1653,7 +1827,6 @@ function PlaybookDashboardPage() {
         <div className="space-y-6 lg:col-span-1">
           <Panel
             title="Power Rankings"
-            titleClassName="text-sm font-bold uppercase tracking-wide text-slate-900"
             action={{ to: "/standings", search: { tab: "power" }, label: "Full Rankings" }}
           >
             {loading && !leaderboard.length ? (
@@ -1661,58 +1834,61 @@ function PlaybookDashboardPage() {
             ) : !leaderboard.length ? (
               <p className="text-sm text-muted-foreground">No rankings available yet.</p>
             ) : (
-              <div className="w-full">
-                <div className="flex w-full items-center space-x-3.5 pb-1">
-                  <span className="invisible shrink-0 rounded-md px-2 py-0.5 text-xs font-bold" aria-hidden="true">
-                    #1
+              <div className="w-full min-w-0">
+                <div className="grid w-full grid-cols-[2.75rem_2.75rem_minmax(0,1fr)_4rem] items-center gap-x-2 pb-1">
+                  <span className="text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Rank
                   </span>
-                  <span className="w-10 shrink-0 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <span className="text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">
                     Trend
                   </span>
-                  <span className="h-8 w-8 shrink-0" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <span className="text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
                     Team
                   </span>
-                  <span className="w-16 shrink-0 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <span className="text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
                     Power Index
                   </span>
                 </div>
-                <ol className="w-full">
+                <ol className="w-full min-w-0">
                   {leaderboard.map((row) => {
                     const delta = powerRankMovementDelta(rankBaseline, row.slot, row.rank);
                     const trend = powerRankTrend(delta);
+                    const podiumRow = powerRankPodiumRowClass(row.rank);
+                    const isMine = Boolean(myTeam && row.slot === myTeam.slot);
                     return (
                       <li
                         key={`${leagueCacheKey}-${row.slot}`}
                         className={cn(
-                          "flex w-full items-center space-x-3.5 py-2.5",
-                          myTeam && row.slot === myTeam.slot
-                            ? "rounded-md bg-blue-50/80 px-1.5"
-                            : undefined,
+                          "grid w-full min-w-0 grid-cols-[2.75rem_2.75rem_minmax(0,1fr)_4rem] items-center gap-x-2 py-2.5",
+                          podiumRow || (isMine ? "rounded-md bg-blue-50/80" : undefined),
                         )}
                       >
-                        <span className={cn("shrink-0", powerRankBadgeClass(row.rank))}>
-                          #{row.rank}
+                        <span className="flex justify-center">
+                          <span className={powerRankBadgeClass(row.rank)}>{row.rank}</span>
                         </span>
-                        <span className={cn("w-10 shrink-0 text-center", trend.className)}>
-                          {trend.label}
-                        </span>
-                        <MatchupTeamAvatar
-                          name={row.team}
-                          logo={logoBySlot.get(row.slot) ?? null}
-                          platform={activeLeague?.platform ?? null}
-                          cacheKey={`${leagueCacheKey}-rank-${row.slot}`}
-                          size="sm"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-slate-800">
-                            {row.team}
+                        <span className={cn("text-center", trend.className)}>{trend.label}</span>
+                        <Link
+                          to="/playbook/rosters"
+                          search={{ scout: String(row.slot) }}
+                          className="flex min-w-0 items-center gap-2 overflow-hidden transition-opacity hover:opacity-85"
+                        >
+                          <MatchupTeamAvatar
+                            name={row.team}
+                            logo={logoBySlot.get(row.slot) ?? null}
+                            platform={activeLeague?.platform ?? null}
+                            cacheKey={`${leagueCacheKey}-rank-${row.slot}`}
+                            size="sm"
+                          />
+                          <span className="min-w-0 flex-1 overflow-hidden">
+                            <span className="block truncate text-sm font-medium text-foreground">
+                              {row.team}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {row.owner || "Owner"}
+                            </span>
                           </span>
-                          <span className="block truncate text-[11px] text-slate-500">
-                            {row.owner || "Owner"}
-                          </span>
-                        </span>
-                        <span className="w-16 shrink-0 text-right text-sm font-semibold tabular-nums text-slate-700">
+                        </Link>
+                        <span className="text-right text-sm font-semibold tabular-nums text-foreground">
                           {row.powerIndex.toFixed(1)}
                         </span>
                       </li>
@@ -1725,7 +1901,6 @@ function PlaybookDashboardPage() {
 
           <Panel
             title="Start/Sit Advice"
-            titleClassName="text-sm font-bold uppercase tracking-wide text-slate-900"
             action={{ to: "/playbook/my-team", label: "Review Lineup" }}
           >
             {!startSitAlerts.length ? (
@@ -1819,7 +1994,6 @@ function PlaybookDashboardPage() {
 
           <Panel
             title="Market Radar"
-            titleClassName="text-sm font-bold uppercase tracking-wide text-slate-900"
             action={{ to: "/playbook/rosters", label: "Scout Rosters" }}
           >
             <div className="space-y-4">

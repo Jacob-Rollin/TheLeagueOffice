@@ -39,9 +39,14 @@ import {
 } from "@/components/research/ScoringFormatSelect";
 import {
   nextSortState,
+  PLAYER_LIST_COL_HEADER_ROW,
+  PLAYER_LIST_GROUP_HEADER_ROW,
+  PLAYER_LIST_GROUP_TH,
   SortHeaderButton,
   type SortDir,
 } from "@/components/research/SortHeader";
+import { ValueTrendCell } from "@/components/research/ValueTrendCell";
+import { competitionRanksByMetric } from "@/components/research/statRanks";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -61,6 +66,7 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
+import { hasDisplayableProjection } from "@/lib/scoring-map";
 import { scaleValue } from "@/lib/trade-engine";
 import { cn } from "@/lib/utils";
 
@@ -83,6 +89,8 @@ type SortKey = "player" | "value" | "proj" | ProjectionStatSortKey;
 
 type EnrichedWeeklyRow = ProjectionRowData & {
   stats: Record<string, number> | null;
+  /** Competition rank by this page's primary metric (projected fantasy points). */
+  statRank: number;
 };
 
 function WeeklyProjectionsRoute() {
@@ -93,8 +101,7 @@ function WeeklyProjectionsRoute() {
 function WeeklyProjectionsPage() {
   const { activeLeague } = useActiveLeague();
   const { data: playersPayload, loading: playersLoading } = useSleeperPlayers();
-  const players = playersPayload?.players ?? [];
-  const { teams, myTeam, rosteredIds, loading: rostersLoading } = useLeagueRosters(players);
+  const catalogPlayers = playersPayload?.players ?? [];
   const brain = usePlayerBrain();
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
@@ -114,6 +121,10 @@ function WeeklyProjectionsPage() {
     scoringMap,
     loading: projectionsLoading,
   } = useLeagueProjections(activeWeek);
+  // Catalog only — same player universe as PlayerDetail / getPlayerDetail.
+  // Projection-only stubs opened "Player not found" in the shared popup.
+  const players = catalogPlayers;
+  const { teams, myTeam, rosteredIds, loading: rostersLoading } = useLeagueRosters(players);
   const { format: scoringFormat, override: scoringOverride, setFormat: setScoringFormat } =
     useResearchScoringFormat(leagueFormat);
 
@@ -123,7 +134,7 @@ function WeeklyProjectionsPage() {
   const [showAvailable, setShowAvailable] = useState(true);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
-  const [sortKey, setSortKey] = useState<SortKey>("proj");
+  const [sortKey, setSortKey] = useState<SortKey | null>("proj");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const statGroups = useMemo(() => projectionGroupsForPos(posFilter), [posFilter]);
@@ -154,12 +165,14 @@ function WeeklyProjectionsPage() {
       if (rosteredIds.has(id)) return "taken";
       return "available";
     };
+    const effectiveKey = sortKey ?? "proj";
+    const effectiveDir = sortKey == null ? "desc" : sortDir;
     const activeStatCol =
-      sortKey !== "player" && sortKey !== "value" && sortKey !== "proj"
-        ? statCols.find((c) => c.key === sortKey) ?? null
+      effectiveKey !== "player" && effectiveKey !== "value" && effectiveKey !== "proj"
+        ? statCols.find((c) => c.key === effectiveKey) ?? null
         : null;
 
-    return players
+    const enriched = players
       .filter((p) => {
         if (posFilter === "FLEX") return PROJECTION_FLEX_OK.has(p.pos);
         return p.pos === posFilter;
@@ -204,22 +217,41 @@ function WeeklyProjectionsPage() {
           injuryClass: badge?.className ?? null,
           metaLine,
           stats,
+          statRank: 0,
         };
       })
+      // Hide bye / unprojected clutter — same gate as popup depth "—" (proj > 0).
+      .filter((row) => row.stats != null && hasDisplayableProjection(row.proj));
+
+    // Rk = competition rank for the active numeric column (Proj by default).
+    const rankMetric = (row: (typeof enriched)[number]): number | null => {
+      if (effectiveKey === "value") return row.value;
+      if (effectiveKey === "proj" || effectiveKey === "player") return row.proj;
+      if (activeStatCol) return projectionStatNumber(row.stats, activeStatCol);
+      return row.proj;
+    };
+    const ranks = competitionRanksByMetric(
+      enriched,
+      rankMetric,
+      (row) => row.player.id,
+    );
+
+    return enriched
+      .map((row) => ({ ...row, statRank: ranks.get(row.player.id) ?? 0 }))
       .sort((a, b) => {
         let cmp = 0;
-        if (sortKey === "player") {
+        if (effectiveKey === "player") {
           cmp = a.player.name.localeCompare(b.player.name);
-        } else if (sortKey === "value") {
+        } else if (effectiveKey === "value") {
           cmp = a.value - b.value || a.trend - b.trend;
-        } else if (sortKey === "proj") {
+        } else if (effectiveKey === "proj") {
           cmp = (a.proj ?? -1) - (b.proj ?? -1);
         } else if (activeStatCol) {
           cmp =
             (projectionStatNumber(a.stats, activeStatCol) ?? -1) -
             (projectionStatNumber(b.stats, activeStatCol) ?? -1);
         }
-        if (cmp !== 0) return sortDir === "asc" ? cmp : -cmp;
+        if (cmp !== 0) return effectiveDir === "asc" ? cmp : -cmp;
         return a.player.name.localeCompare(b.player.name);
       });
   }, [
@@ -282,8 +314,8 @@ function WeeklyProjectionsPage() {
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="display-title text-2xl uppercase tracking-wide text-slate-900 sm:text-3xl">
-              Weekly Projections
+            <h1 className="display-title text-3xl text-slate-900">
+              Weekly <span className="text-primary">Projections</span>
             </h1>
             <ActiveLeagueLabel />
           </div>
@@ -387,28 +419,30 @@ function WeeklyProjectionsPage() {
         <div ref={listRef} className="overflow-x-auto">
           <table className={cn("w-full border-collapse text-sm", minWidth)}>
             <thead className="sticky top-0 z-10">
-              <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                <th colSpan={2} className="px-3 py-2 text-left">
-                  Players
-                </th>
+              <tr className={PLAYER_LIST_GROUP_HEADER_ROW}>
+                <th colSpan={2} className="px-3 py-2" aria-hidden="true" />
                 {statGroups.map((group) => (
                   <th
                     key={group.label}
                     colSpan={group.cols.length}
-                    className="border-l border-slate-200 px-2 py-2 text-center text-slate-700"
+                    className={PLAYER_LIST_GROUP_TH}
                   >
                     {group.label}
                   </th>
                 ))}
-                <th
-                  colSpan={2}
-                  className="border-l border-slate-200 px-2 py-2 text-center text-slate-700"
-                >
+                <th colSpan={2} className={PLAYER_LIST_GROUP_TH}>
                   Misc
                 </th>
               </tr>
-              <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                <th className="w-10 px-2 py-1.5 text-center">Rk</th>
+              <tr className={PLAYER_LIST_COL_HEADER_ROW}>
+                <th className="w-10 px-2 py-1.5 text-center">
+                  <SortHeaderButton
+                    label="Rk"
+                    active={sortKey === "proj"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("proj")}
+                  />
+                </th>
                 <th className="px-2 py-1.5 text-left">
                   <SortHeaderButton
                     label="Player"
@@ -481,7 +515,7 @@ function WeeklyProjectionsPage() {
                       <WeeklyProjRow
                         key={row.player.id}
                         row={row}
-                        rank={item.index + 1}
+                        rank={row.statRank}
                         statCols={statCols}
                         onOpen={openPlayer}
                       />
@@ -530,8 +564,6 @@ const WeeklyProjRow = memo(function WeeklyProjRow({
   onOpen: (id: string) => void;
 }) {
   const meta = PROJECTION_OWNERSHIP_META[row.ownership];
-  const trendUp = row.trend > 0.05;
-  const trendDown = row.trend < -0.05;
   const { player } = row;
 
   return (
@@ -584,20 +616,8 @@ const WeeklyProjRow = memo(function WeeklyProjRow({
           {formatProjectionStat(row.stats, col)}
         </td>
       ))}
-      <td className="border-l border-slate-100 px-2 py-2.5 text-center tabular-nums text-slate-500">
-        <span className="inline-flex items-center justify-center gap-1.5">
-          <span>{row.value.toFixed(1)}</span>
-          <span className="text-slate-300">/</span>
-          <span
-            className={cn(
-              "inline-flex items-center gap-0.5 font-semibold",
-              trendUp ? "text-emerald-600" : trendDown ? "text-rose-600" : "text-slate-400",
-            )}
-          >
-            <span aria-hidden="true">{trendUp ? "▲" : trendDown ? "▼" : "–"}</span>
-            <span>{Math.abs(row.trend).toFixed(1)}</span>
-          </span>
-        </span>
+      <td className="border-l border-slate-100 px-2 py-2.5 text-center">
+        <ValueTrendCell value={row.value} trend={row.trend} />
       </td>
       <td className="px-2 py-2.5 text-center font-semibold tabular-nums text-slate-900">
         {row.proj != null && Number.isFinite(row.proj) ? row.proj.toFixed(2) : "—"}

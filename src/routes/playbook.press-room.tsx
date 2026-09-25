@@ -7,6 +7,7 @@ import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/Play
 import { hydrateActivityMove } from "@/components/dashboard/ActivityFeed";
 import {
   playbookCardClass,
+  playbookPanelTitleClass,
   resolveAvatarUrl,
 } from "@/components/playbook/panels";
 import {
@@ -1287,8 +1288,8 @@ function PressRoomPage() {
     <div className="w-full">
       <div className="mb-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="display-title text-lg font-bold uppercase tracking-wide text-slate-900">
-            Press Room
+          <h1 className="display-title text-3xl">
+            Press <span className="text-primary">Room</span>
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Weekly league journalism, awards, and headline performances.
@@ -1381,7 +1382,7 @@ function PressRoomPage() {
         </div>
 
         <div className="flex flex-col space-y-3 lg:col-span-1">
-          <h2 className="display-title text-sm font-bold uppercase tracking-wide text-slate-900">
+          <h2 className={playbookPanelTitleClass}>
             Weekly Awards
           </h2>
           {matchupsLoading && weekReport.awards.length === 0 ? (

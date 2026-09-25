@@ -17,6 +17,7 @@ import {
   type Stats,
 } from "./players-build";
 import { NFL_TEAMS, teamFullName } from "./nfl-teams";
+import { hasScorableProjectionStats } from "./scoring-map";
 
 export type { Player, PlayersPayload, Pos };
 
@@ -238,7 +239,7 @@ const buildPlayers = memo<Built>(6 * HOUR, async () => {
 });
 
 export async function loadPlayers(): Promise<PlayersPayload> {
-  return (await buildPlayers("v1")).payload;
+  return (await buildPlayers("v2")).payload;
 }
 
 /* ---------- player detail ---------- */
@@ -597,7 +598,7 @@ function injuryRisk(player: Player, history: SeasonLine[]) {
 }
 
 export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null> {
-  const built = await buildPlayers("v1");
+  const built = await buildPlayers("v2");
   const player = built.all.find((p) => p.id === id);
   if (!player) return null;
 
@@ -643,11 +644,13 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
         );
 
   const sos = await buildSos(player, season).catch(() => null);
-  const ownership = (await loadSleeperOwnershipMap().catch(() => null))?.get(id) ?? null;
+  const ownershipMap = await loadSleeperOwnershipMap().catch(() => null);
+  const ownership = ownershipMap?.get(id);
+  // Sleeper omits 0% players from research — treat missing as 0 when the map loaded.
   const enrichedPlayer = {
     ...player,
-    rostered_pct: ownership?.owned ?? null,
-    started_pct: ownership?.started ?? null,
+    rostered_pct: ownershipMap ? (ownership?.owned ?? 0) : null,
+    started_pct: ownershipMap ? (ownership?.started ?? 0) : null,
   } as Player & { rostered_pct: number | null; started_pct: number | null };
 
   return {
@@ -768,7 +771,7 @@ function stripTags(html: string): string {
 }
 
 export async function loadPlayerNews(id: string): Promise<PlayerNews | null> {
-  const built = await buildPlayers("v1");
+  const built = await buildPlayers("v2");
   const player = built.all.find((p) => p.id === id);
   if (!player) return null;
 
@@ -931,10 +934,11 @@ function isInjuryCopy(text: string): boolean {
   return INJURY_COPY_RE.test(text);
 }
 
-function injuryLabelFromStatus(status: string | null | undefined): "Q" | "O" | "IR" | "NA" | null {
+function injuryLabelFromStatus(status: string | null | undefined): "Q" | "O" | "D" | "IR" | "NA" | null {
   if (!status || status === "Healthy" || status === "Active" || status === "None") return null;
   if (status === "Questionable") return "Q";
-  if (status === "Out" || status === "Doubtful") return "O";
+  if (status === "Doubtful") return "D";
+  if (status === "Out") return "O";
   if (status === "IR") return "IR";
   if (status === "NA") return "NA";
   return null;
@@ -945,7 +949,7 @@ function injuryLabelFromStatus(status: string | null | undefined): "Q" | "O" | "
  * Filters out general recaps / draft chatter; dedupes by player.
  */
 export async function loadLeagueWidePlayerNews(limit = 10): Promise<LeagueWideNewsRow[]> {
-  const built = await buildPlayers("v1");
+  const built = await buildPlayers("v2");
   const byLower = new Map(built.all.map((p) => [p.name.toLowerCase(), p]));
   const bySanitized = new Map(
     built.all.map((p) => [sanitizePlayerName(p.name), p] as const).filter(([k]) => Boolean(k)),
@@ -1224,6 +1228,8 @@ const playerWeekProjections = memo<Map<number, WeekProjectionBundle>>(
         const hit = rows.find((r) => String(r.player_id) === id);
         const stats = hit?.stats;
         if (!stats) return;
+        // Skip ADP-only / all-zero lines so popup PROJ matches research "—".
+        if (!hasScorableProjectionStats(stats)) return;
         const std = stats["pts_std"];
         const half = stats["pts_half_ppr"];
         const ppr = stats["pts_ppr"];
@@ -1233,9 +1239,9 @@ const playerWeekProjections = memo<Map<number, WeekProjectionBundle>>(
           if (v != null && Number.isFinite(Number(v))) raw[k] = Number(v);
         }
         out.set(week, {
-          std: std != null && Number.isFinite(Number(std)) ? Number(std) : null,
-          half: half != null && Number.isFinite(Number(half)) ? Number(half) : null,
-          ppr: ppr != null && Number.isFinite(Number(ppr)) ? Number(ppr) : null,
+          std: std != null && Number.isFinite(Number(std)) && Number(std) > 0 ? Number(std) : null,
+          half: half != null && Number.isFinite(Number(half)) && Number(half) > 0 ? Number(half) : null,
+          ppr: ppr != null && Number.isFinite(Number(ppr)) && Number(ppr) > 0 ? Number(ppr) : null,
           raw,
         });
       } catch {
@@ -1423,7 +1429,7 @@ export async function loadGameLogs(
   id: string,
   seasonRequest?: string | null,
 ): Promise<{ season: string; logs: GameLog[]; career: CareerSeasonRow[] } | null> {
-  const built = await buildPlayers("v1");
+  const built = await buildPlayers("v2");
   const player = built.all.find((p) => p.id === id);
   if (!player) return null;
 

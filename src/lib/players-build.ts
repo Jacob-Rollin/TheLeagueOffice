@@ -5,6 +5,8 @@
  * `useSleeperPlayers` cache, so both produce an identical `PlayersPayload`.
  */
 
+import { hasScorableProjectionStats } from "./scoring-map";
+
 export type Pos = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
 
 export type Player = {
@@ -167,7 +169,9 @@ export function buildPlayersFromRows(input: {
     const ppr = adpPick(s["adp_ppr"], s["adp_half_ppr"], s["adp_std"]);
     const std = adpPick(s["adp_std"], s["adp_half_ppr"], s["adp_ppr"]);
     const projHalf = num(s["pts_half_ppr"], 0);
-    if (half >= 999 && projHalf <= 0) continue;
+    // Keep ADP-ranked players, anyone with published fantasy pts, and mid-season
+    // fill-ins that only have a counting-stat projection line (e.g. Drew Lock).
+    if (half >= 999 && projHalf <= 0 && !hasScorableProjectionStats(s)) continue;
 
     const name = `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || row.team || "";
     if (!name) continue;

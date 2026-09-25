@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { useAuth } from "@/hooks/useAuth";
 import { forceClearAndReSyncLeague } from "@/lib/league.functions";
 import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
 
@@ -12,8 +13,10 @@ const RESYNC_COOLDOWN_MS = 90 * 1000;
 
 export function useLeagueSync() {
   const { activeLeague, sandboxMode } = useActiveLeague();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const inFlightRef = useRef<string | null>(null);
+  const userId = user?.id ?? null;
 
   useEffect(() => {
     if (sandboxMode) return;
@@ -53,7 +56,7 @@ export function useLeagueSync() {
         }
 
         if (result.ok) {
-          await touchLeagueSyncTimestamp(connectionId, queryClient, null);
+          await touchLeagueSyncTimestamp(connectionId, queryClient, userId);
           queryClient.removeQueries({ queryKey: ["league-activity"] });
           queryClient.removeQueries({ queryKey: ["active-matchups"] });
           queryClient.removeQueries({ queryKey: ["active-standings"] });
@@ -84,6 +87,7 @@ export function useLeagueSync() {
     activeLeague?.swid,
     sandboxMode,
     queryClient,
+    userId,
   ]);
 }
 

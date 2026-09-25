@@ -277,7 +277,7 @@ function UsersManager({
     <section className={cardClass}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="display-title text-lg uppercase tracking-wide">Users</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Users</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Review registered profiles, toggle admin access, and remove accounts when needed.
           </p>
@@ -494,7 +494,7 @@ function ArticlesManager({
     <section className={cardClass}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="display-title text-lg uppercase tracking-wide">Articles</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Articles</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Write and manage League Office editorials featured on the homepage news feed.
           </p>
@@ -666,7 +666,7 @@ function InviteCodeGenerator({ userId }: { userId: string | null }) {
     <section className={cardClass}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="display-title text-lg uppercase tracking-wide">Invite Code Generator</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Invite Code Generator</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Generate and manage single-use invitation codes for new user registration; active codes
             are automatically redeemed and removed upon signup.

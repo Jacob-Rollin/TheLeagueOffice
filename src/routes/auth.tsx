@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { PageTitle } from "@/components/PageTitle";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/auth")({
@@ -61,7 +62,7 @@ function AuthPage() {
 
   return (
     <main className="mx-auto w-full max-w-md px-4 py-16">
-      <h1 className="display-title text-3xl">{isSignup ? "Create Account" : "Sign In"}</h1>
+      <PageTitle>{isSignup ? "Create Account" : "Sign In"}</PageTitle>
       <p className="mt-1 text-sm text-muted-foreground">
         {isSignup ? "Register to run your leagues." : "Welcome back to the front office."}
       </p>

@@ -543,9 +543,11 @@ function sameFitPlayer(a: FitPlayer, b: FitPlayer): boolean {
 /** Hard cap on rostered quarterbacks for Market Radar / fit evaluations. */
 export const MAX_QB_ROSTER_CAPACITY = 2;
 
-const SKILL_DEPTH_POSITIONS = new Set(["RB", "WR"]);
-/** Single-starter (or low-starter) positions that must not bleed RB/WR depth. */
+const SKILL_DEPTH_POSITIONS = new Set(["RB", "WR", "TE"]);
+/** Single-starter (or low-starter) positions that must not bleed RB/WR/TE depth. */
 const SINGLE_STARTER_BENCH_POSITIONS = new Set(["QB", "TE", "K", "DEF"]);
+/** Stream-only slots — waiver adds here may only replace the same position. */
+const STREAM_ONLY_POSITIONS = new Set(["K", "DEF"]);
 
 function fitPos(p: FitPlayer): string {
   return String(p.pos ?? "").toUpperCase();
@@ -576,13 +578,23 @@ export function exceedsQbRosterCapacity(
 }
 
 /**
- * Depth-bleed clause: never surrender RB/WR depth to acquire a QB/TE/K/DEF
- * bench asset in either trade or waiver evaluations.
+ * Depth-bleed clause: never surrender RB/WR/TE depth to acquire a QB/TE/K/DEF
+ * bench asset, and never drop any non-streamer (QB/RB/WR/TE) to stream a K/DEF.
  */
 export function isDepthBleedExchange(give: FitPlayer[], get: FitPlayer[]): boolean {
   const givesSkill = give.some((p) => SKILL_DEPTH_POSITIONS.has(fitPos(p)));
   const getsSingle = get.some((p) => SINGLE_STARTER_BENCH_POSITIONS.has(fitPos(p)));
-  return givesSkill && getsSingle;
+  if (givesSkill && getsSingle) return true;
+
+  // K/DEF streamer adds must never eat QB/RB/WR/TE (starter or bench depth).
+  const getsStreamer = get.some((p) => STREAM_ONLY_POSITIONS.has(fitPos(p)));
+  if (
+    getsStreamer &&
+    give.some((p) => !STREAM_ONLY_POSITIONS.has(fitPos(p)))
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -1138,7 +1150,8 @@ function isActiveStarterSlot(
 export function buildStartSitAdvice<T extends StartSitCandidate>(input: {
   starters: (T | null | undefined)[];
   bench: T[];
-  weeklyFor: (id: string) => number;
+  /** Weekly projection; return null when Sleeper has no line (matchup "—"). */
+  weeklyFor: (id: string) => number | null;
   /** Minimum projection edge required to recommend a swap. */
   minEdge?: number;
   limit?: number;
@@ -1152,19 +1165,23 @@ export function buildStartSitAdvice<T extends StartSitCandidate>(input: {
   const bench = input.bench.filter((p) => Boolean(p?.id) && !starterIds.has(p.id));
   const benchIds = new Set(bench.map((p) => p.id));
 
-  const weekly = (p: T): number => {
+  const weeklyOrNull = (p: T): number | null => {
     const w = input.weeklyFor(p.id);
-    return Number.isFinite(w) ? Number(w) : 0;
+    if (w == null || !Number.isFinite(w)) return null;
+    return Number(w);
   };
 
   const alerts: StartSitAdvicePair<T>[] = [];
 
   for (const benchPlayer of bench) {
-    const benchPts = weekly(benchPlayer);
+    const benchPts = weeklyOrNull(benchPlayer);
+    // Never recommend starting someone with no weekly projection ("—").
+    if (benchPts == null) continue;
+
     const samePosStarters = starters.filter((s) => s.pos === benchPlayer.pos);
     const pool = samePosStarters.length > 0 ? samePosStarters : starters;
     const weakest = [...pool]
-      .map((s) => ({ player: s, pts: weekly(s) }))
+      .map((s) => ({ player: s, pts: weeklyOrNull(s) ?? 0 }))
       .sort((a, b) => a.pts - b.pts)[0];
 
     if (!weakest || !(benchPts > weakest.pts + minEdge)) continue;
@@ -1352,7 +1369,9 @@ export function isDropProtected(
  * Hard rules:
  * - Net Value = add proj − drop proj must be positive.
  * - Never exceed MAX_QB_ROSTER_CAPACITY (2) after the swap.
- * - Never drop RB/WR depth to add QB/TE/K/DEF (depth-bleed clause).
+ * - Never drop RB/WR/TE depth to add QB/TE/K/DEF (depth-bleed clause).
+ * - K/DEF adds may only replace the same position (stream the weaker unit,
+ *   never a skill starter / bench piece like TE for a defense).
  * - Never open starter vacancies under synced league slot settings.
  * - Free agents are ranked with FantasyCalc value/trend + optional Sleeper
  *   trending-add momentum before pairing drops.
@@ -1438,22 +1457,50 @@ export function suggestWaiverTransactions(input: {
     if (usedAdds.has(addKey)) continue;
 
     const addPos = fitPos(add);
+    const streamerAdd = STREAM_ONLY_POSITIONS.has(addPos);
+
+    // For K/DEF, only consider same-pos roster mates (replace the weaker unit).
+    // Fall back to full drop pool for skill adds.
+    const posDropPool = streamerAdd
+      ? dropPool.filter((p) => fitPos(p) === addPos)
+      : dropPool;
+    // Also allow same-pos drops from the full roster when bench omits the
+    // current DEF/K (some hosts keep streamers in a starter slot).
+    const streamerRosterDrops = streamerAdd
+      ? roster.filter(
+          (p) =>
+            fitPos(p) === addPos &&
+            !posDropPool.some((d) => sameFitPlayer(d, p)),
+        )
+      : [];
+    const candidateDrops = streamerAdd
+      ? [...posDropPool, ...streamerRosterDrops]
+      : dropPool;
+
+    if (streamerAdd && candidateDrops.length === 0) continue;
 
     let best: WaiverDropAddSuggestion | null = null;
-    const rankedDrops = [...dropPool].sort((a, b) => a.weekly - b.weekly);
+    const rankedDrops = [...candidateDrops].sort((a, b) => a.weekly - b.weekly);
 
     for (const drop of rankedDrops) {
       const dKey = dropKey(drop);
       if (usedDrops.has(dKey)) continue;
       if (sameFitPlayer(add, drop)) continue;
 
-      // Depth-bleed: never drop RB/WR for QB/TE/K/DEF.
+      // Depth-bleed: never drop RB/WR/TE (or any non-streamer) for QB/TE/K/DEF.
       if (isDepthBleedExchange([drop], [add])) continue;
+
+      // Streamer swap: K↔K / DEF↔DEF only (defense never eats a TE/RB/WR/QB).
+      if (streamerAdd && fitPos(drop) !== addPos) continue;
 
       // QB capacity: projected roster QBs must stay ≤ 2.
       if (exceedsQbRosterCapacity(roster, [drop], [add])) continue;
 
-      if (isDropProtected(drop, roster, req, null)) continue;
+      // Same-pos upgrades (DEF→DEF, K→K, TE→TE) replace the slot — do not
+      // treat the sole unit as glued when the add covers the same requirement.
+      // Vacancy is still validated on the full swap below.
+      const replacingSamePos = fitPos(drop) === addPos;
+      if (!replacingSamePos && isDropProtected(drop, roster, req, null)) continue;
 
       const netValue = add.weekly - drop.weekly;
       if (!(netValue > 0)) continue;
@@ -1466,7 +1513,7 @@ export function suggestWaiverTransactions(input: {
       if (after.points + 0.01 < before.points) continue;
 
       // Incoming add should crack the lineup OR be a clear same-pos upgrade
-      // over the drop (e.g. QB→QB, WR→WR), not a pure bench clog.
+      // over the drop (e.g. QB→QB, WR→WR, DEF→DEF), not a pure bench clog.
       const withoutAdd = afterRoster.filter((p) => !sameFitPlayer(p, add));
       const withoutPts = optimizeLineup(withoutAdd, req).points;
       const cracksLineup = after.points - withoutPts > 0.05;

@@ -22,6 +22,7 @@ import {
   weekSlots,
   type PlayerSos,
 } from "@/lib/sos-presentation";
+import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 
 const SCORING_OPTIONS: { value: Scoring; label: string }[] = [
@@ -158,11 +159,12 @@ function HeaderVitalsDivider() {
   return <span className="mx-3 text-white/20">|</span>;
 }
 
-function injuryLetter(injury: string | null | undefined): "Q" | "O" | "IR" | "NA" | null {
+function injuryLetter(injury: string | null | undefined): "Q" | "O" | "D" | "IR" | "NA" | null {
   const raw = injury?.toUpperCase()?.trim() ?? "";
   if (!raw || raw === "HEALTHY" || raw === "ACTIVE" || raw === "NONE") return null;
   if (raw === "QUESTIONABLE" || raw === "Q") return "Q";
-  if (raw === "OUT" || raw === "DOUBTFUL" || raw === "O" || raw === "D") return "O";
+  if (raw === "DOUBTFUL" || raw === "D") return "D";
+  if (raw === "OUT" || raw === "O") return "O";
   if (raw === "IR" || raw === "INJURED RESERVE" || raw === "INJURED_RESERVE") return "IR";
   if (raw === "NA" || raw === "INACTIVE" || raw === "NOT ACTIVE" || raw === "NOT_ACTIVE") return "NA";
   return null;
@@ -296,7 +298,8 @@ function PlayerHubPage() {
     (player.injury && brainEntry?.injuryType
       ? brainEntry.injuryType
       : "No significant historical flags");
-  const injuryDesignation = player.injury ?? "Healthy — no designation";
+  const injuryDesignation =
+    resolveInjuryStatus(player, brain) ?? "Healthy — no designation";
 
   return (
     <main className="w-full min-h-screen bg-slate-50 text-slate-900 overflow-y-auto">
@@ -307,6 +310,7 @@ function PlayerHubPage() {
             <StandalonePlayerHeader
               player={player}
               bio={bio ?? null}
+              brain={brain}
               scoringFormat={scoringFormat}
               onScoringFormatChange={setScoringFormat}
             />
@@ -538,9 +542,13 @@ function PlayerHubPage() {
                                 </span>
                               ) : null}
                               {d.injury &&
-                              (injuryLetter(d.injury) === "O" ||
-                                d.injury === "Out" ||
-                                d.injury === "Doubtful") ? (
+                              (injuryLetter(d.injury) === "D" || d.injury === "Doubtful") ? (
+                                <span className="flex shrink-0 select-none items-center justify-center rounded bg-rose-600 px-1 py-0.5 text-[9px] font-black uppercase leading-none tracking-wider text-white">
+                                  D
+                                </span>
+                              ) : null}
+                              {d.injury &&
+                              (injuryLetter(d.injury) === "O" || d.injury === "Out") ? (
                                 <span className="flex shrink-0 select-none items-center justify-center rounded bg-rose-600 px-1 py-0.5 text-[9px] font-black uppercase leading-none tracking-wider text-white">
                                   O
                                 </span>
@@ -580,6 +588,7 @@ function PlayerHubPage() {
 function StandalonePlayerHeader({
   player,
   bio,
+  brain,
   scoringFormat,
   onScoringFormatChange,
 }: {
@@ -598,6 +607,7 @@ function StandalonePlayerHeader({
     [key: string]: unknown;
   };
   bio: { number?: number | null; height?: string | null; weight?: string | null; college?: string | null; birthDate?: string | null } | null;
+  brain: ReturnType<typeof usePlayerBrain>;
   scoringFormat: Scoring;
   onScoringFormatChange: (format: Scoring) => void;
 }) {
@@ -629,12 +639,7 @@ function StandalonePlayerHeader({
         ? (player as { years_exp?: number | null }).years_exp
         : "—";
 
-  const injuryStatusRaw =
-    player.injury_status ||
-    player.injuryStatus ||
-    player.injury ||
-    (player as { status?: string | null }).status ||
-    null;
+  const injuryStatusRaw = resolveInjuryStatus(player, brain) ?? null;
   const injuryDetails = getFullInjuryBadgeDetails(
     typeof injuryStatusRaw === "string" ? injuryStatusRaw : null,
   );
@@ -787,11 +792,11 @@ function StandalonePlayerHeader({
             <span>#{overallRankLabel} OVERALL</span>
             <span className="mx-3 text-white/20">|</span>
             <span>
-              {rosteredPct != null ? `${Math.round(Number(rosteredPct))}%` : "—"} ROSTERED
+              {`${Math.round(Number(rosteredPct ?? 0))}%`} ROSTERED
             </span>
             <span className="mx-3 text-white/20">|</span>
             <span>
-              {startedPct != null ? `${Math.round(Number(startedPct))}%` : "—"} STARTED
+              {`${Math.round(Number(startedPct ?? 0))}%`} STARTED
             </span>
             <span className="mx-3 text-white/20">|</span>
 

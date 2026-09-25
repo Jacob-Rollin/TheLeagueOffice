@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
 
 import { StandingsPanel } from "@/components/league/StandingsPanel";
 import { useAuth } from "@/hooks/useAuth";
@@ -44,14 +43,6 @@ function ArticlePage() {
     <main className="mx-auto w-full max-w-shell px-4 pb-16 md:px-8">
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
-          <Link
-            to="/"
-            className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-blue-600 transition-colors hover:text-blue-700"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-            Back to Around the League
-          </Link>
-
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Loading article…</p>
           ) : error ? (

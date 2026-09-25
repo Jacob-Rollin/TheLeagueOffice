@@ -17,7 +17,9 @@ import {
   type Pos,
   type Settings,
 } from "@/lib/draft";
+import { ValueTrendCell } from "@/components/research/ValueTrendCell";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
+import { scaleValue } from "@/lib/trade-engine";
 
 const SEASON = new Date().getFullYear();
 
@@ -45,9 +47,11 @@ function PlayerListRowInjuryBadge({
   } else if (upper === "IR" || upper === "INJURED RESERVE") {
     label = "IR";
     colorClass = "bg-rose-600";
+  } else if (upper === "DOUBTFUL" || upper === "D") {
+    label = "D";
+    colorClass = "bg-rose-600";
   } else if (
     upper === "OUT" ||
-    upper === "DOUBTFUL" ||
     upper === "O" ||
     upper === "NA" ||
     upper === "INACTIVE" ||
@@ -77,14 +81,46 @@ function PlayerListRowInjuryBadge({
   );
 }
 
-type SortKey = "rank" | "adp" | "ecr" | "sd" | "trend" | "projPts" | "projAvg" | "prevPts" | "prevAvg";
+type SortKey =
+  | "rank"
+  | "player"
+  | "adp"
+  | "ecr"
+  | "sd"
+  | "value"
+  | "projPts"
+  | "projAvg"
+  | "prevPts"
+  | "prevAvg";
 /** null = default baseline order (overall rank). */
 type Sort = SortKey | null;
+type SortDir = "asc" | "desc";
 
 /** Continuous vertical rule that separates stat column groups. */
 const DIVIDER = "border-l border-border";
 /** Muted wash applied down an actively sorted column. */
 const ACTIVE_COL = "bg-muted/40";
+
+function sortArrow(dir: SortDir) {
+  return (
+    <span aria-hidden="true" className="ml-0.5 text-[9px] leading-none">
+      {dir === "asc" ? "▲" : "▼"}
+    </span>
+  );
+}
+
+/** Three-click: activate desc → flip asc → clear. Name columns default to asc. */
+function nextDraftSort(
+  current: Sort,
+  currentDir: SortDir,
+  key: SortKey,
+): { sort: Sort; dir: SortDir } {
+  const defaultDir: SortDir = key === "player" ? "asc" : "desc";
+  if (current !== key) return { sort: key, dir: defaultDir };
+  const flipped: SortDir = defaultDir === "desc" ? "asc" : "desc";
+  if (currentDir === defaultDir) return { sort: key, dir: flipped };
+  return { sort: null, dir: defaultDir };
+}
 
 function PlayerListImpl({
   players,
@@ -126,6 +162,7 @@ function PlayerListImpl({
   const [query, setQuery] = useState("");
   const [pos, setPos] = useState<string>("ALL");
   const [sort, setSort] = useState<Sort>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [custom, setCustom] = useState(false);
   const [suggested, setSuggested] = useState(false);
   const [showDrafted, setShowDrafted] = useState(false);
@@ -158,14 +195,14 @@ function PlayerListImpl({
     },
     [brain],
   );
-  const trendOf = useCallback(
+  /** Display-scaled FantasyCalc value + raw trend (Weekly Projections presentation). */
+  const marketOf = useCallback(
     (player: Player) => {
-      const delta = brain?.[player.id]?.trend ?? 0;
-      const baseline = brain?.[player.id]?.value ?? 0;
-      if (!Number.isFinite(delta) || !Number.isFinite(baseline) || baseline === 0 || delta === 0)
-        return null;
-      // True value-weighted percentage change relative to the player's market baseline.
-      return (delta / baseline) * 100;
+      const entry = brain?.[player.id];
+      return {
+        value: scaleValue(entry?.value ?? 0),
+        trend: entry?.trend ?? 0,
+      };
     },
     [brain],
   );
@@ -199,11 +236,17 @@ function PlayerListImpl({
   }, [players, brain]);
 
 
-  /** Click once to sort high-to-low, click again to clear back to baseline. */
-  const toggleSort = useCallback((key: SortKey) => {
-    setCustom(false);
-    setSort((prev) => (prev === key ? null : key));
-  }, []);
+  /** 1st click sorts, 2nd flips direction, 3rd clears back to baseline. */
+  const toggleSort = useCallback(
+    (key: SortKey) => {
+      setCustom(false);
+      setSuggested(false);
+      const next = nextDraftSort(sort, sortDir, key);
+      setSort(next.sort);
+      setSortDir(next.dir);
+    },
+    [sort, sortDir],
+  );
 
   const orderIndex = useMemo(() => {
     const m = new Map<string, number>();
@@ -274,16 +317,23 @@ function PlayerListImpl({
         return av.rank - bv.rank;
       }
       if (!sort) return av.rank - bv.rank;
-      // Every metric column sorts strictly high-to-low.
+      // Value / Trend: same order as Weekly Projections (value, then trend).
+      if (sort === "value") {
+        const ma = marketOf(a);
+        const mb = marketOf(b);
+        let diff = ma.value - mb.value || ma.trend - mb.trend;
+        if (diff !== 0) return sortDir === "asc" ? diff : -diff;
+        return av.rank - bv.rank;
+      }
       let diff = 0;
-      if (sort === "rank") diff = bv.rank - av.rank;
-      else if (sort === "adp") diff = bv.adp - av.adp;
+      if (sort === "player") diff = a.name.localeCompare(b.name);
+      else if (sort === "rank") diff = av.rank - bv.rank;
+      else if (sort === "adp") diff = av.adp - bv.adp;
       else if (sort === "ecr") diff = (ecrOf(a) ?? 9999) - (ecrOf(b) ?? 9999);
-      else if (sort === "sd") diff = (sdOf(b) ?? -1) - (sdOf(a) ?? -1);
-      else if (sort === "trend") diff = (trendOf(b) ?? -Infinity) - (trendOf(a) ?? -Infinity);
-      else if (sort === "projPts" || sort === "projAvg") diff = bv.proj - av.proj;
-      else if (sort === "prevPts" || sort === "prevAvg") diff = (bv.prev ?? -1) - (av.prev ?? -1);
-      if (diff !== 0) return diff;
+      else if (sort === "sd") diff = (sdOf(a) ?? -1) - (sdOf(b) ?? -1);
+      else if (sort === "projPts" || sort === "projAvg") diff = av.proj - bv.proj;
+      else if (sort === "prevPts" || sort === "prevAvg") diff = (av.prev ?? -1) - (bv.prev ?? -1);
+      if (diff !== 0) return sortDir === "asc" ? diff : -diff;
       return av.rank - bv.rank;
     });
   }, [
@@ -291,6 +341,7 @@ function PlayerListImpl({
     query,
     pos,
     sort,
+    sortDir,
     custom,
     showDrafted,
     watchOnly,
@@ -304,7 +355,7 @@ function PlayerListImpl({
     currentOverall,
     ecrOf,
     sdOf,
-    trendOf,
+    marketOf,
   ]);
 
   // Render in chunks so a full-league player pool never blocks scrolling.
@@ -486,35 +537,48 @@ function PlayerListImpl({
             Drag the handle to build your own board order. It saves automatically.
           </p>
         )}
-        <div className="-mx-3 -mb-3 hidden items-stretch gap-2 border-t border-border px-2 pt-1.5 text-[10px] uppercase tracking-widest text-muted-foreground sm:flex">
+        <div className="-mx-3 -mb-3 hidden items-stretch gap-2 border-t border-border px-2 pt-1.5 text-[10px] font-black uppercase tracking-wider text-slate-500 sm:flex">
           {custom && <div className="w-6 shrink-0" />}
           <div className="w-[62px] shrink-0" />
           <button
             onClick={() => toggleSort("rank")}
             className={cn(
-              "flex w-8 shrink-0 items-end justify-center self-stretch pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
+              "flex w-8 shrink-0 items-end justify-center self-stretch pb-1 uppercase tracking-wider transition-colors hover:text-foreground",
               sort === "rank" && `${ACTIVE_COL} text-foreground`,
             )}
           >
             RK
+            {sort === "rank" ? sortArrow(sortDir) : null}
           </button>
-          <div className="flex w-[460px] shrink-0 items-end pb-1">Player</div>
+          <button
+            type="button"
+            onClick={() => toggleSort("player")}
+            className={cn(
+              "flex w-[460px] shrink-0 items-end pb-1 text-left uppercase tracking-wider transition-colors hover:text-foreground",
+              sort === "player" && `${ACTIVE_COL} text-foreground`,
+            )}
+          >
+            Player
+            {sort === "player" ? sortArrow(sortDir) : null}
+          </button>
           <div className="flex min-w-0 flex-1 items-stretch">
             <button
               onClick={() => toggleSort("adp")}
               className={cn(
-                "flex w-14 shrink-0 items-end justify-center self-stretch px-1 pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
+                "flex w-14 shrink-0 items-end justify-center self-stretch px-1 pb-1 uppercase tracking-wider transition-colors hover:text-foreground",
                 DIVIDER,
                 sort === "adp" && `${ACTIVE_COL} text-foreground`,
               )}
             >
               ADP
+              {sort === "adp" ? sortArrow(sortDir) : null}
             </button>
             <MetricHeader
-              label="Trend"
-              metricKey="trend"
-              width="w-16"
+              label="Value / Trend"
+              metricKey="value"
+              width="w-32"
               sort={sort}
+              sortDir={sortDir}
               onSort={toggleSort}
             />
             <StatGroupHeader
@@ -522,6 +586,7 @@ function PlayerListImpl({
               totalKey="projPts"
               avgKey="projAvg"
               sort={sort}
+              sortDir={sortDir}
               onSort={toggleSort}
             />
             <StatGroupHeader
@@ -529,6 +594,7 @@ function PlayerListImpl({
               totalKey="prevPts"
               avgKey="prevAvg"
               sort={sort}
+              sortDir={sortDir}
               onSort={toggleSort}
               flushRight
             />
@@ -570,17 +636,17 @@ function PlayerListImpl({
                   logoClassName="size-4"
                 />
                 <div className="flex-1">
-                  <div className="font-semibold whitespace-nowrap">{p.name}</div>
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
+                  <div className="flex items-center gap-1.5 whitespace-nowrap">
+                    <span className="font-semibold text-blue-700">{p.name}</span>
                     <PlayerListRowInjuryBadge
                       injuryStatus={injuryStatus}
                       onOpen={() => onOpenPlayer?.(p.id)}
                     />
-                    <span>
-                      {`${p.pos}${posRanks.get(p.id) ?? ""}`}
-                      {p.team ? ` · ${p.team}` : ""}
-                      {p.bye ? ` · BYE ${p.bye}` : ""}
-                    </span>
+                  </div>
+                  <div className="text-[11px] font-medium uppercase text-muted-foreground whitespace-nowrap">
+                    {`${p.pos}${posRanks.get(p.id) ?? ""}`}
+                    {p.team ? ` · ${p.team}` : ""}
+                    {p.bye ? ` · BYE ${p.bye}` : ""}
                   </div>
                 </div>
               </>
@@ -674,21 +740,18 @@ function PlayerListImpl({
                       sort === "adp" && ACTIVE_COL,
                     )}
                   />
-                  <StatCell
-                    value={
-                      (() => {
-                        const n = trendOf(p);
-                        if (n === null) return "—";
-                        return `${n > 0 ? "▲" : "▼"} ${Math.abs(n).toFixed(1)}%`;
-                      })()
-                    }
+                  <div
                     className={cn(
-                      "w-16 shrink-0 justify-center px-1",
+                      "tabnum flex w-32 shrink-0 items-center justify-center whitespace-nowrap px-1 text-xs font-semibold",
                       DIVIDER,
-                      sort === "trend" && ACTIVE_COL,
-                      trendOf(p) !== null && trendOf(p)! > 0 ? "text-black" : "",
+                      sort === "value" && ACTIVE_COL,
                     )}
-                  />
+                  >
+                    {(() => {
+                      const m = marketOf(p);
+                      return <ValueTrendCell value={m.value} trend={m.trend} />;
+                    })()}
+                  </div>
                   <StatGroup
                     total={v.proj.toFixed(0)}
                     avg={(v.proj / 18).toFixed(1)}
@@ -722,31 +785,34 @@ function PlayerListImpl({
 
 export const PlayerList = memo(PlayerListImpl);
 
-/** Single sortable metric column header (ECR / SD / TREND). */
+/** Single sortable metric column header (ECR / SD / Value / Trend). */
 function MetricHeader({
   label,
   metricKey,
   width,
   sort,
+  sortDir,
   onSort,
 }: {
   label: string;
   metricKey: SortKey;
   width: string;
   sort: Sort;
+  sortDir: SortDir;
   onSort: (key: SortKey) => void;
 }) {
   return (
     <button
       onClick={() => onSort(metricKey)}
       className={cn(
-        "flex shrink-0 items-end justify-center self-stretch px-1 pb-1 uppercase tracking-widest transition-colors hover:text-foreground",
+        "flex shrink-0 items-end justify-center self-stretch px-1 pb-1 uppercase tracking-wider transition-colors hover:text-foreground",
         width,
         DIVIDER,
         sort === metricKey && `${ACTIVE_COL} text-foreground`,
       )}
     >
       {label}
+      {sort === metricKey ? sortArrow(sortDir) : null}
     </button>
   );
 }
@@ -799,6 +865,7 @@ function StatGroupHeader({
   totalKey,
   avgKey,
   sort,
+  sortDir,
   onSort,
   flushRight,
 }: {
@@ -808,6 +875,7 @@ function StatGroupHeader({
   totalKey: SortKey;
   avgKey: SortKey;
   sort: Sort;
+  sortDir: SortDir;
   onSort: (key: SortKey) => void;
   flushRight?: boolean;
 }) {
@@ -818,21 +886,23 @@ function StatGroupHeader({
         <button
           onClick={() => onSort(totalKey)}
           className={cn(
-            "pl-3 text-left uppercase tracking-widest transition-colors hover:text-foreground",
+            "inline-flex items-center justify-start gap-0.5 pl-3 text-left uppercase tracking-wider transition-colors hover:text-foreground",
             sort === totalKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
           {totalLabel}
+          {sort === totalKey ? sortArrow(sortDir) : null}
         </button>
         <button
           onClick={() => onSort(avgKey)}
           className={cn(
-            "text-right uppercase tracking-widest transition-colors hover:text-foreground",
+            "inline-flex items-center justify-end gap-0.5 text-right uppercase tracking-wider transition-colors hover:text-foreground",
             flushRight ? "pr-0" : "pr-3",
             sort === avgKey && `${ACTIVE_COL} text-foreground`,
           )}
         >
           {avgLabel}
+          {sort === avgKey ? sortArrow(sortDir) : null}
         </button>
       </div>
     </div>

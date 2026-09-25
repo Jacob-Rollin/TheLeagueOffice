@@ -11,15 +11,66 @@ import {
   type ScoringFormat,
   type ScoringMap,
 } from "@/lib/scoring-map";
+import type { Player, Pos } from "@/lib/players-build";
+import { POSITIONS } from "@/lib/players-build";
 
 const HOUR = 1000 * 60 * 60;
 
 type WeekState = { season: string; week: number };
 
-type WeeklyProjRow = {
+export type WeeklyProjRow = {
   stats: Record<string, number>;
   pos: string;
+  name: string;
+  team: string;
+  injury: string | null;
 };
+
+/** Minimal Player stub for projected assets missing from the day-cached catalog. */
+export function stubPlayerFromProjection(id: string, row: WeeklyProjRow): Player {
+  const pos = (POSITIONS.includes(row.pos as Pos) ? row.pos : "QB") as Pos;
+  return {
+    id,
+    name: row.name || "Unknown",
+    team: row.team || "FA",
+    pos,
+    age: null,
+    exp: null,
+    injury_status: row.injury,
+    injury: row.injury,
+    bye: null,
+    adp: { std: 999, half: 999, ppr: 999 },
+    adpRange: { min: 999, max: 999 },
+    rank: { std: 999, half: 999, ppr: 999 },
+    posRank: 999,
+    proj: { std: 0, half: 0, ppr: 0 },
+    prev: null,
+  };
+}
+
+/**
+ * Catalog ∪ projection-only players (e.g. mid-week fill-ins like Drew Lock).
+ * Projection rows without a fantasy position are skipped.
+ *
+ * Research boards should prefer the catalog alone — popup `getPlayerDetail`
+ * only resolves catalog ids. Use this only when a surface can render stubs
+ * without opening the shared player modal.
+ */
+export function mergeProjectedPlayers(
+  catalog: Player[],
+  projections: Map<string, WeeklyProjRow> | undefined,
+): Player[] {
+  if (!projections?.size) return catalog;
+  const seen = new Set(catalog.map((p) => p.id));
+  const extras: Player[] = [];
+  for (const [id, row] of projections) {
+    if (seen.has(id)) continue;
+    if (!POSITIONS.includes(row.pos as Pos)) continue;
+    extras.push(stubPlayerFromProjection(id, row));
+    seen.add(id);
+  }
+  return extras.length ? [...catalog, ...extras] : catalog;
+}
 
 export type SleeperWeeklyRanks = {
   overall: number | null;
@@ -93,8 +144,16 @@ async function fetchWeeklyProjectionsFor(
   if (Array.isArray(rows)) {
     for (const row of rows as {
       player_id?: string;
+      team?: string | null;
       stats?: Record<string, number>;
-      player?: { position?: string; fantasy_positions?: string[] };
+      player?: {
+        first_name?: string;
+        last_name?: string;
+        position?: string;
+        fantasy_positions?: string[];
+        team?: string | null;
+        injury_status?: string | null;
+      };
     }[]) {
       // Skip ADP-only / empty rows — Sleeper's "—" (no weekly projection).
       if (!row?.player_id || !hasScorableProjectionStats(row.stats)) continue;
@@ -103,7 +162,18 @@ async function fetchWeeklyProjectionsFor(
           row.player?.fantasy_positions?.[0] ||
           "",
       ).toUpperCase();
-      map.set(String(row.player_id), { stats: row.stats!, pos });
+      const name =
+        `${row.player?.first_name ?? ""} ${row.player?.last_name ?? ""}`.trim() ||
+        row.team ||
+        row.player?.team ||
+        row.player_id;
+      map.set(String(row.player_id), {
+        stats: row.stats!,
+        pos,
+        name,
+        team: row.team ?? row.player?.team ?? "FA",
+        injury: row.player?.injury_status ?? null,
+      });
     }
   }
   return map;
@@ -128,11 +198,16 @@ async function fetchSeasonStatRows(
   const map = new Map<string, WeeklyProjRow>();
   for (const row of rows as {
     player_id?: string;
+    team?: string | null;
     stats?: Record<string, number>;
     player?: {
       position?: string;
       fantasy_positions?: string[];
       active?: boolean;
+      first_name?: string;
+      last_name?: string;
+      team?: string | null;
+      injury_status?: string | null;
     };
   }[]) {
     if (!row?.player_id || !row.stats) continue;
@@ -141,7 +216,18 @@ async function fetchSeasonStatRows(
     ).toUpperCase();
     if (pos !== "DEF" && row.player?.active === false) continue;
     if (!pos) continue;
-    map.set(String(row.player_id), { stats: row.stats, pos });
+    const name =
+      `${row.player?.first_name ?? ""} ${row.player?.last_name ?? ""}`.trim() ||
+      row.team ||
+      row.player?.team ||
+      row.player_id;
+    map.set(String(row.player_id), {
+      stats: row.stats,
+      pos,
+      name,
+      team: row.team ?? row.player?.team ?? "FA",
+      injury: row.player?.injury_status ?? null,
+    });
   }
   return map;
 }
@@ -260,7 +346,8 @@ export function useLeagueProjections(week?: number | null) {
   const season = nflState.data?.season ?? null;
 
   const projections = useQuery({
-    queryKey: ["sleeper-weekly-projections", "v3", season, resolvedWeek ?? "auto"],
+    // v5: drop all-zero / ADP-only Sleeper rows (hasScorableProjectionStats).
+    queryKey: ["sleeper-weekly-projections", "v5", season, resolvedWeek ?? "auto"],
     enabled: Boolean(season && resolvedWeek),
     // Sleeper updates Out → projected mid-week; refresh often enough to track them.
     staleTime: 15 * 60 * 1000,
@@ -329,6 +416,7 @@ export function useLeagueProjections(week?: number | null) {
     projectFor,
     statsFor,
     rankFor,
+    projections: projections.data,
     scoringMap: map,
     loading:
       projections.isLoading ||
@@ -365,14 +453,33 @@ async function fetchSeasonProjectionsFor(
   const map = new Map<string, WeeklyProjRow>();
   for (const row of rows as {
     player_id?: string;
+    team?: string | null;
     stats?: Record<string, number>;
-    player?: { position?: string; fantasy_positions?: string[] };
+    player?: {
+      position?: string;
+      fantasy_positions?: string[];
+      first_name?: string;
+      last_name?: string;
+      team?: string | null;
+      injury_status?: string | null;
+    };
   }[]) {
     if (!row?.player_id || !hasScorableProjectionStats(row.stats)) continue;
     const pos = String(
       row.player?.position || row.player?.fantasy_positions?.[0] || "",
     ).toUpperCase();
-    map.set(String(row.player_id), { stats: row.stats!, pos });
+    const name =
+      `${row.player?.first_name ?? ""} ${row.player?.last_name ?? ""}`.trim() ||
+      row.team ||
+      row.player?.team ||
+      row.player_id;
+    map.set(String(row.player_id), {
+      stats: row.stats!,
+      pos,
+      name,
+      team: row.team ?? row.player?.team ?? "FA",
+      injury: row.player?.injury_status ?? null,
+    });
   }
   return map;
 }
@@ -402,10 +509,12 @@ export function useSeasonProjectionStats() {
   });
 
   const projections = useQuery({
-    queryKey: ["sleeper-season-projections", "v1", season],
+    // v3: drop all-zero / ADP-only Sleeper rows (hasScorableProjectionStats).
+    queryKey: ["sleeper-season-projections", "v3", season],
     enabled: Boolean(season),
-    staleTime: 6 * HOUR,
-    refetchOnWindowFocus: false,
+    // Mid-season role changes land on Sleeper season lines — keep fresher than a day.
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: true,
     retry: false,
     queryFn: () => fetchSeasonProjectionsFor(season!),
   });
@@ -434,6 +543,7 @@ export function useSeasonProjectionStats() {
   return {
     statsFor,
     projectFor,
+    projections: projections.data,
     format,
     season,
     scoringMap: map,

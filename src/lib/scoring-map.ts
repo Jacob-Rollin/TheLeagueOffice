@@ -274,8 +274,11 @@ export function publishedProjectionPts(
 
 /**
  * True when a Sleeper projection row has real weekly counting stats (or a
- * published pts_* total). ADP-only / empty rows are how Sleeper represents
- * "—" (no projection) for bye, inactive, or unprojected players.
+ * published pts_* total). ADP-only / empty / all-zero rows are how Sleeper
+ * represents "—" (no projection) for bye, inactive, FA, or unprojected players.
+ *
+ * Zero-filled counting keys must NOT count — otherwise research boards list
+ * practice-squad FAs with 0.0 Proj while player popups correctly show "—".
  */
 export function hasScorableProjectionStats(
   stats: Record<string, number> | null | undefined,
@@ -284,13 +287,21 @@ export function hasScorableProjectionStats(
   for (const [key, raw] of Object.entries(stats)) {
     if (isNonScoringProjectionKey(key)) continue;
     if (key === "gp" || key === "cmp_pct") continue;
-    if (Number.isFinite(Number(raw))) return true;
+    const n = Number(raw);
+    // Require a non-zero counting stat (matches popup "—" for empty lines).
+    if (Number.isFinite(n) && n !== 0) return true;
   }
-  return (
-    Number.isFinite(Number(stats.pts_ppr)) ||
-    Number.isFinite(Number(stats.pts_half_ppr)) ||
-    Number.isFinite(Number(stats.pts_std))
-  );
+  const published = [stats.pts_ppr, stats.pts_half_ppr, stats.pts_std]
+    .map((v) => Number(v))
+    .find((n) => Number.isFinite(n) && n > 0);
+  return published != null;
+}
+
+/** Research / popup display gate: real fantasy points, not a 0.0 placeholder. */
+export function hasDisplayableProjection(
+  proj: number | null | undefined,
+): proj is number {
+  return proj != null && Number.isFinite(proj) && proj > 0;
 }
 
 /**
@@ -331,8 +342,15 @@ export function projectionPoints(
 ): number | null {
   if (!stats || !hasScorableProjectionStats(stats)) return null;
   const scored = scoreStats(stats, map);
-  if (scored != null) return Math.round(scored * 100) / 100;
+  if (scored != null) {
+    const rounded = Math.round(scored * 100) / 100;
+    // Treat a pure-zero line as no projection (popup depth / research parity).
+    if (rounded === 0) return null;
+    return rounded;
+  }
   const published = publishedProjectionPts(stats, format);
-  if (published != null) return Math.round(published * 100) / 100;
+  if (published != null && published > 0) {
+    return Math.round(published * 100) / 100;
+  }
   return null;
 }

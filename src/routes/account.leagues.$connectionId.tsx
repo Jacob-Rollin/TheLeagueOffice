@@ -1,7 +1,18 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { AccountShell } from "@/components/account/AccountShell";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/account/leagues/$connectionId")({
@@ -58,6 +69,9 @@ function LeagueSettingsPage() {
   const { connectionId } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: row, isLoading } = useQuery({
     queryKey: ["league-connection", connectionId],
@@ -73,15 +87,29 @@ function LeagueSettingsPage() {
     },
   });
 
-  const removeLink = async () => {
-    if (!window.confirm("Remove this synced league link? This cannot be undone.")) return;
-    await supabase.from("synced_leagues").delete().eq("id", connectionId);
-    queryClient.invalidateQueries({ queryKey: ["league-connections"] });
-    // Flush the global navbar/context cache so the deleted league's avatar resets instantly.
-    queryClient.invalidateQueries({ queryKey: ["active-league-connections"] });
-    navigate({ to: "/account/leagues" });
-  };
+  const leagueLabel =
+    ((row?.metadata as Record<string, unknown> | null)?.["label"] as string | undefined) ??
+    row?.league_id ??
+    null;
 
+  const confirmDelete = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { error: deleteError } = await supabase
+        .from("synced_leagues")
+        .delete()
+        .eq("id", connectionId);
+      if (deleteError) throw deleteError;
+      queryClient.invalidateQueries({ queryKey: ["league-connections"] });
+      // Flush the global navbar/context cache so the deleted league's avatar resets instantly.
+      queryClient.invalidateQueries({ queryKey: ["active-league-connections"] });
+      navigate({ to: "/account/leagues" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete this league.");
+      setBusy(false);
+    }
+  };
 
   return (
     <AccountShell title="League Settings" active="leagues">
@@ -94,12 +122,7 @@ function LeagueSettingsPage() {
               <p className="font-display text-[11px] uppercase tracking-widest text-muted-foreground">
                 {row.platform}
               </p>
-              <p className="mt-1 text-lg font-semibold text-foreground">
-                {((row?.metadata as Record<string, unknown> | null)?.["label"] as string | undefined) ??
-                  row?.league_id ??
-                  "—"}
-              </p>
-
+              <p className="mt-1 text-lg font-semibold text-foreground">{leagueLabel ?? "—"}</p>
             </>
           ) : (
             <p className="text-sm text-muted-foreground">This synced league no longer exists.</p>
@@ -107,7 +130,7 @@ function LeagueSettingsPage() {
         </section>
 
         <section className="rounded-xl border border-border bg-card p-6">
-          <h2 className="display-title text-lg uppercase tracking-wide">Point Settings</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Point Settings</h2>
           <dl className="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-2">
             {POINT_SETTINGS.map(([label, value]) => (
               <div key={label} className="flex items-center justify-between border-b border-border py-1 text-sm">
@@ -119,7 +142,7 @@ function LeagueSettingsPage() {
         </section>
 
         <section className="rounded-xl border border-border bg-card p-6">
-          <h2 className="display-title text-lg uppercase tracking-wide">Roster Requirements</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Roster Requirements</h2>
           <dl className="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-2">
             {ROSTER_SLOTS.map(([label, value]) => (
               <div key={label} className="flex items-center justify-between border-b border-border py-1 text-sm">
@@ -131,19 +154,57 @@ function LeagueSettingsPage() {
         </section>
 
         <section className="rounded-xl border border-destructive/40 bg-card p-6">
-          <h2 className="display-title text-lg uppercase tracking-wide">Remove Link</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Remove Link</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Deletes this platform league mapping from your account. No other data is affected.
           </p>
           <button
             type="button"
-            onClick={removeLink}
+            onClick={() => {
+              setError(null);
+              setConfirmOpen(true);
+            }}
             className="mt-4 rounded-md bg-destructive px-4 py-2 font-display text-sm uppercase tracking-wide text-destructive-foreground"
           >
             Delete League
           </button>
         </section>
       </div>
+
+      <AlertDialog
+        open={confirmOpen}
+        onOpenChange={(next) => {
+          if (!next && !busy) {
+            setConfirmOpen(false);
+            setError(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this league?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {leagueLabel
+                ? `Are you sure you want to delete "${leagueLabel}"? This removes the synced league link from your account and cannot be undone.`
+                : "Are you sure you want to delete this synced league? This removes the link from your account and cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={busy}
+              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDelete();
+              }}
+            >
+              {busy ? "Deleting…" : "Delete League"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AccountShell>
   );
 }

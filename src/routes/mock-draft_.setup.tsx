@@ -136,7 +136,7 @@ function MockDraftSetupPage() {
     <main className="min-h-screen bg-[hsl(0_0%_98%)]">
       <div className="mx-auto w-full max-w-[1200px] px-4 py-8">
         <header className="mb-6">
-          <h1 className="display-title text-4xl">
+          <h1 className="display-title text-3xl">
             Mock Draft <span className="text-primary">Setup</span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

@@ -24,6 +24,9 @@ import {
   weeklySosMatchupFor,
   type SosMatchup,
 } from "@/lib/sos-presentation";
+import { PROJECTION_OWNERSHIP_META } from "@/components/research/ProjectionListRow";
+import { PLAYER_LIST_HEADER_ROW } from "@/components/research/SortHeader";
+import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import {
   suggestWaiverTransactions,
   type FitPlayer,
@@ -225,33 +228,12 @@ function seasonSosStars(
   return sosStarsFromRank(avgRank);
 }
 
-function InjuryStatusBadge({ injury }: { injury: string | null | undefined }) {
-  if (!injury) return null;
-  const token = injury.trim();
-  if (!token || token === "Healthy" || token === "Active" || token === "None") return null;
-
-  if (token === "Q" || token === "Questionable") {
-    return (
-      <span className="flex shrink-0 select-none items-center justify-center rounded bg-amber-500 px-1 py-0.5 text-[8px] font-black leading-none text-white uppercase tracking-wider">
-        Q
-      </span>
-    );
-  }
-  if (token === "O" || token === "Out" || token === "Doubtful") {
-    return (
-      <span className="flex shrink-0 select-none items-center justify-center rounded bg-rose-600 px-1 py-0.5 text-[8px] font-black leading-none text-white uppercase tracking-wider">
-        O
-      </span>
-    );
-  }
-  if (token === "IR" || token === "Injured Reserve") {
-    return (
-      <span className="flex shrink-0 select-none items-center justify-center rounded bg-red-700 px-1 py-0.5 text-[8px] font-black leading-none text-white uppercase tracking-wider">
-        IR
-      </span>
-    );
-  }
-  return null;
+function wirePlayerMetaLine(player: Player): string {
+  const posLabel = player.pos === "DEF" ? "DST" : player.pos;
+  const team = player.team?.trim() || "FA";
+  return player.bye != null && player.bye > 0
+    ? `${posLabel} · ${team} · Bye ${player.bye}`
+    : `${posLabel} · ${team}`;
 }
 
 function sortWirePool(
@@ -560,7 +542,9 @@ function WaiverIntelligencePage() {
   return (
     <div className="w-full pb-8">
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="display-title text-3xl uppercase tracking-wide">THE WIRE</h1>
+        <h1 className="display-title text-3xl">
+          THE <span className="text-primary">WIRE</span>
+        </h1>
         <ActiveLeagueLabel />
       </div>
 
@@ -637,9 +621,9 @@ function WaiverIntelligencePage() {
       ) : (
         <>
       {/* Master free-agent ranks table */}
-      <section className="mt-4 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-        <div className="mb-4 mt-2 flex w-full select-none flex-row items-center justify-between px-1">
-          <div className="flex items-center space-x-2">
+      <section className="mt-4">
+        <div className="mb-3 flex w-full select-none flex-row flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
             {LIST_POS_FILTERS.map((pos) => {
               const isActive = listPosFilter === pos;
               return (
@@ -649,8 +633,8 @@ function WaiverIntelligencePage() {
                   onClick={() => setListPosFilter(pos)}
                   className={
                     isActive
-                      ? "cursor-pointer select-none rounded-lg bg-blue-600 px-4 py-1 text-xs font-black uppercase tracking-wide text-white shadow-sm"
-                      : "cursor-pointer select-none rounded-lg border border-slate-200/60 bg-white px-4 py-1 text-xs font-bold uppercase tracking-wide text-slate-400 shadow-sm transition-colors hover:bg-slate-50"
+                      ? "cursor-pointer select-none rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white"
+                      : "cursor-pointer select-none rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 transition-colors hover:bg-slate-50"
                   }
                 >
                   {pos}
@@ -659,129 +643,148 @@ function WaiverIntelligencePage() {
             })}
           </div>
 
-          <div className="flex shrink-0 items-center space-x-4 text-[11px] font-black uppercase tracking-wider">
-            <div className="flex items-center space-x-1.5">
+          <div className="flex shrink-0 items-center gap-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <div className="flex items-center gap-1.5">
               <div
-                className="h-3 w-3 rounded border border-emerald-200 bg-emerald-50"
+                className={cn(
+                  "h-3 w-3 rounded border",
+                  PROJECTION_OWNERSHIP_META.available.swatch,
+                )}
                 aria-hidden="true"
               />
-              <span className="text-slate-500">Available</span>
+              <span>Available</span>
             </div>
-            <div className="flex items-center space-x-1.5">
+            <div className="flex items-center gap-1.5">
               <div
-                className="h-3 w-3 rounded border border-blue-200 bg-blue-50"
+                className={cn(
+                  "h-3 w-3 rounded border",
+                  PROJECTION_OWNERSHIP_META.roster.swatch,
+                )}
                 aria-hidden="true"
               />
-              <span className="text-slate-500">Rostered</span>
+              <span>Rostered</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between px-4 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400 select-none">
-          <div className="flex min-w-0 flex-1 items-center">
-            <span className="w-8 text-left">RK</span>
-            <span className="pl-6">Player</span>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className={PLAYER_LIST_HEADER_ROW}>
+                  <th className="w-10 px-2 py-1.5 text-center">Rk</th>
+                  <th className="px-3 py-1.5 text-left">Player</th>
+                  <th className="w-20 px-2 py-1.5 text-left">Opp</th>
+                  <th className="w-28 px-2 py-1.5 text-center">Matchup</th>
+                  <th className="w-20 px-2 py-1.5 text-right">Proj</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tableRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
+                      {locked
+                        ? "Connect a league to load available free agents."
+                        : "No available free agents match this position filter."}
+                    </td>
+                  </tr>
+                ) : (
+                  tableRows.map((player) => {
+                    const isRostered = myOwnedIds.has(player.id);
+                    const ownership = isRostered ? "roster" : "available";
+                    const rowTone = PROJECTION_OWNERSHIP_META[ownership].row;
+                    const proj = weeklyOf(player);
+                    const sleeperPos = posRankFor(player.id);
+                    const rankLabel =
+                      sleeperPos != null && Number.isFinite(sleeperPos) && sleeperPos > 0
+                        ? Math.round(sleeperPos)
+                        : "—";
+                    const wireMatchup = weeklyWireMatchup(
+                      player,
+                      brain,
+                      currentWeek,
+                      scheduleByTeam.data ?? null,
+                      positionalDefenseRank,
+                    );
+                    const badge = injuryMicroBadge(
+                      resolveInjuryStatus(player, brain),
+                    );
+                    return (
+                      <tr
+                        key={player.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedPlayerId(player.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedPlayerId(player.id);
+                          }
+                        }}
+                        className={cn(
+                          "cursor-pointer border-b border-slate-100 transition-opacity hover:opacity-90",
+                          rowTone,
+                        )}
+                      >
+                        <td className="w-10 px-2 py-2.5 text-center text-sm tabular-nums text-slate-500">
+                          {rankLabel}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <PlayerAvatar
+                              id={player.id}
+                              pos={player.pos}
+                              team={player.team}
+                              name={player.name}
+                              className="size-9 flex-shrink-0 rounded-full border-2 border-slate-200 bg-white"
+                              logoClassName="size-3"
+                            />
+                            <span className="min-w-0">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate font-semibold text-blue-700">
+                                  {player.name}
+                                </span>
+                                {badge ? (
+                                  <span
+                                    className={cn(
+                                      "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[2px] px-0.5 text-[9px] font-bold text-white",
+                                      badge.className,
+                                    )}
+                                  >
+                                    {badge.label}
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span className="mt-0.5 block truncate text-[11px] font-medium uppercase text-slate-400">
+                                {wirePlayerMetaLine(player)}
+                              </span>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-2.5 text-left text-sm font-semibold uppercase tabular-nums text-slate-800">
+                          {wireMatchup.opp || "BYE"}
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <div className="flex items-center justify-center">
+                            <SosStars stars={wireMatchup.stars} size="md" />
+                          </div>
+                        </td>
+                        <td className="px-2 py-2.5 text-right text-sm font-semibold tabular-nums text-slate-900">
+                          {proj.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-          <div className="flex items-center space-x-12 pr-2">
-            <span className="w-16 text-left">Opp</span>
-            <span className="w-24 text-center">Matchup</span>
-            <span className="w-12 text-right">Proj</span>
-          </div>
-        </div>
-
-        <div className="space-y-0">
-          {tableRows.length === 0 ? (
-            <p className="px-4 py-8 text-sm text-muted-foreground">
-              {locked
-                ? "Connect a league to load available free agents."
-                : "No available free agents match this position filter."}
-            </p>
-          ) : (
-            tableRows.map((player) => {
-              const isRostered = myOwnedIds.has(player.id);
-              const proj = weeklyOf(player);
-              const sleeperPos = posRankFor(player.id);
-              const rankLabel =
-                sleeperPos != null && Number.isFinite(sleeperPos) && sleeperPos > 0
-                  ? Math.round(sleeperPos)
-                  : "—";
-              const wireMatchup = weeklyWireMatchup(
-                player,
-                brain,
-                currentWeek,
-                scheduleByTeam.data ?? null,
-                positionalDefenseRank,
-              );
-              return (
-                <div
-                  key={player.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedPlayerId(player.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setSelectedPlayerId(player.id);
-                    }
-                  }}
-                  className={cn(
-                    "relative mb-2 flex w-full cursor-pointer items-center justify-between rounded-xl border border-slate-100 p-3.5 text-left shadow-sm transition-all",
-                    isRostered
-                      ? "border-l-4 border-l-blue-500 bg-blue-50/20 pl-3 hover:bg-blue-100/30"
-                      : "border-l-4 border-l-emerald-500 bg-emerald-50/20 pl-3 hover:bg-emerald-100/30",
-                  )}
-                >
-                  <div className="flex min-w-0 flex-1 items-center space-x-4">
-                    <div className="flex w-8 justify-start">
-                      <span className="flex h-5 w-5 select-none items-center justify-center rounded-full border border-slate-200/60 bg-slate-50 font-mono text-[10px] font-black text-slate-500 shadow-sm">
-                        {rankLabel}
-                      </span>
-                    </div>
-
-                    <div className="flex min-w-0 items-center space-x-3.5">
-                      <PlayerAvatar
-                        id={player.id}
-                        pos={player.pos}
-                        team={player.team}
-                        name={player.name}
-                        className="size-9"
-                        logoClassName="size-4"
-                      />
-                      <div className="flex min-w-0 flex-col text-left">
-                        <span className="mb-1 truncate text-sm font-black leading-snug text-slate-900">
-                          {player.name}
-                        </span>
-                        <div className="flex items-center space-x-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                          <span>{player.team || "FA"}</span>
-                          <InjuryStatusBadge injury={player.injury} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex shrink-0 select-none items-center space-x-12 pr-2">
-                    <span className="w-16 text-left font-mono text-sm font-black uppercase text-slate-700">
-                      {wireMatchup.opp || "BYE"}
-                    </span>
-
-                    <div className="flex w-24 items-center justify-center">
-                      <SosStars stars={wireMatchup.stars} size="md" />
-                    </div>
-
-                    <span className="w-12 text-right font-mono text-sm font-black tabular-nums text-slate-900">
-                      {proj.toFixed(1)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })
-          )}
         </div>
       </section>
 
       {/* Top Waiver Targets — below main list, with OVERALL + position filters */}
       <section className="mt-6 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <h2 className="text-xs font-black uppercase tracking-widest text-slate-500">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">
           Top Waiver Targets
         </h2>
         <div className="mt-3">
@@ -806,6 +809,7 @@ function WaiverIntelligencePage() {
                 scheduleByTeam.data ?? null,
                 positionalDefenseRank,
               );
+              const badge = injuryMicroBadge(resolveInjuryStatus(player, brain));
               return (
                 <button
                   key={player.id}
@@ -818,17 +822,28 @@ function WaiverIntelligencePage() {
                     pos={player.pos}
                     team={player.team}
                     name={player.name}
-                    className="size-12"
-                    logoClassName="size-5"
+                    className="size-12 flex-shrink-0 rounded-full border-2 border-slate-200 bg-white"
+                    logoClassName="size-4"
                   />
                   <div className="min-w-0 flex-1">
-                    <span className="mb-1 block truncate text-xs font-black leading-snug text-slate-900">
-                      {player.name}
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-xs font-semibold text-blue-700">
+                        {player.name}
+                      </span>
+                      {badge ? (
+                        <span
+                          className={cn(
+                            "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[2px] px-0.5 text-[9px] font-bold text-white",
+                            badge.className,
+                          )}
+                        >
+                          {badge.label}
+                        </span>
+                      ) : null}
                     </span>
-                    <div className="flex items-center space-x-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                      <span>{player.team || "FA"}</span>
-                      <InjuryStatusBadge injury={player.injury} />
-                    </div>
+                    <span className="mt-0.5 block truncate text-[11px] font-medium uppercase text-slate-400">
+                      {wirePlayerMetaLine(player)}
+                    </span>
                     <div className="mt-1.5 flex items-center gap-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         SOS Season
@@ -845,7 +860,7 @@ function WaiverIntelligencePage() {
 
       {/* Waiver Suggestions */}
       <section className="mt-6">
-        <h2 className="text-xs font-black uppercase tracking-widest text-slate-500">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">
           Waiver Suggestions
         </h2>
         <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">

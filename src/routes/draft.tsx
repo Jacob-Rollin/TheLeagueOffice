@@ -280,6 +280,7 @@ function DraftRoom() {
                   onOpen={setOpenId}
                   showProj
                   showHeader
+                  injuryBesideName
                 />
               </div>
             </div>
@@ -326,6 +327,7 @@ function DraftRoom() {
         onClose={() => setOpenId(null)}
         onSelectPlayer={setOpenId}
         showDraftActions
+        draftRosterLabel={null}
       />
     </main>
   );

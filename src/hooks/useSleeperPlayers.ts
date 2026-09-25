@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { buildPlayersPayload, type PlayersPayload } from "@/lib/players-build";
 import { clearCache, getCached, readCache } from "@/lib/sleeper-cache";
 
-const CACHE_KEY = "players-v1";
+// v3: catalog drops all-zero projection stubs (hasScorableProjectionStats).
+const CACHE_KEY = "players-v3";
 const DAY = 1000 * 60 * 60 * 24;
 
 export type SleeperPlayersState = {

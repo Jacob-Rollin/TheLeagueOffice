@@ -1,10 +1,9 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, ChevronUp, Cloud, CloudRain, CloudSnow, Star, Sun } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronUp, Cloud, CloudRain, CloudSnow, Star, Sun } from "lucide-react";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { playerImage, teamLogo } from "./PlayerAvatar";
-import { PositionBadge } from "./PositionBadge";
 import { RosteredOnLabel } from "./RosteredOnLabel";
 import { SosStars } from "@/components/sos/SosStars";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
@@ -40,6 +39,7 @@ import {
   type PlayerSos,
   type SosDifficultyTone,
 } from "@/lib/sos-presentation";
+import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 
 /**
@@ -60,11 +60,12 @@ function isRaidersTeam(teamCode: string | null | undefined): boolean {
 }
 
 /** Compact Sleeper-style injury letter for depth-chart sidebar chips. */
-function injuryLetter(injury: string | null | undefined): "Q" | "O" | "IR" | "NA" | null {
+function injuryLetter(injury: string | null | undefined): "Q" | "O" | "D" | "IR" | "NA" | null {
   const raw = (injury ?? "").trim().toUpperCase();
   if (!raw || raw === "HEALTHY" || raw === "ACTIVE" || raw === "NONE") return null;
   if (raw === "QUESTIONABLE" || raw === "Q") return "Q";
-  if (raw === "OUT" || raw === "DOUBTFUL" || raw === "O" || raw === "D") return "O";
+  if (raw === "DOUBTFUL" || raw === "D") return "D";
+  if (raw === "OUT" || raw === "O") return "O";
   if (raw === "IR" || raw === "INJURED RESERVE") return "IR";
   if (raw === "NA" || raw === "INACTIVE") return "NA";
   return null;
@@ -182,6 +183,9 @@ export function PlayerDetail({
   onSelectPlayer,
   onClose,
   showDraftActions = false,
+  draftRosterLabel,
+  sessionDrafted,
+  onSessionDraft,
   showFullProfileLink = true,
   scoringFormat: scoringFormatProp,
   onScoringFormatChange,
@@ -192,6 +196,16 @@ export function PlayerDetail({
   onClose?: () => void;
   /** When true, render Draft action controls (War Room / Mock Draft only). */
   showDraftActions?: boolean;
+  /**
+   * Draft-session owner label (Mock Draft). When `showDraftActions` is true,
+   * synced-league ownership is hidden; pass a team name here to show "→ Team".
+   * War Room leaves this unset/null so nothing appears above the name.
+   */
+  draftRosterLabel?: string | null;
+  /** Override drafted state for mock-draft sessions (War Room uses useDraft). */
+  sessionDrafted?: boolean;
+  /** Override draft action for mock-draft sessions. */
+  onSessionDraft?: (playerId: string) => void;
   /** When false, hide the Full Profile utility (standalone profile page). */
   showFullProfileLink?: boolean;
   /** Optional controlled scoring format from a standalone page header. */
@@ -288,7 +302,8 @@ export function PlayerDetail({
 
   const { player, depthChart } = data;
   const scoring = scoringFormat;
-  const drafted = draft.draftedIds.has(player.id);
+  const drafted =
+    sessionDrafted !== undefined ? sessionDrafted : draft.draftedIds.has(player.id);
   const watched = draft.watchIds.has(player.id);
   const watermarkLogo = getWatermarkLogoUrl(player.team);
   const raidersWatermark = isRaidersTeam(player.team);
@@ -314,12 +329,7 @@ export function PlayerDetail({
       ? Math.floor((Date.now() - new Date(birthDate).getTime()) / 31557600000)
       : "—");
 
-  const injuryStatusRaw =
-    player.injury_status ||
-    player.injuryStatus ||
-    player.injury ||
-    (player as { status?: string | null }).status ||
-    null;
+  const injuryStatusRaw = resolveInjuryStatus(player, brain) ?? null;
   const injuryDetails = getFullInjuryBadgeDetails(injuryStatusRaw);
   const injuryBodyPart =
     player.injury_body_part?.trim() ||
@@ -430,7 +440,20 @@ export function PlayerDetail({
           </div>
 
           <div className="relative z-10 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pb-9 pl-6 pr-12 text-left">
-            <RosteredOnLabel playerId={player.id} playerName={player.name} />
+            {showDraftActions ? (
+              draftRosterLabel ? (
+                <div className="mb-0.5 flex min-w-0 max-w-full items-center gap-1 text-[11px] font-semibold leading-snug text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.55)]">
+                  <ArrowRight
+                    className="size-3 shrink-0 drop-shadow-sm"
+                    strokeWidth={2.5}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{draftRosterLabel}</span>
+                </div>
+              ) : null
+            ) : (
+              <RosteredOnLabel playerId={player.id} playerName={player.name} />
+            )}
             <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-visible">
               <h1 className="truncate text-3xl font-black leading-tight tracking-tight text-white">
                 {player.name}
@@ -469,7 +492,9 @@ export function PlayerDetail({
                     type="button"
                     disabled={drafted}
                     onClick={() => {
-                      if (!drafted) draft.draftPlayer(player.id);
+                      if (drafted) return;
+                      if (onSessionDraft) onSessionDraft(player.id);
+                      else draft.draftPlayer(player.id);
                     }}
                     className={cn(
                       "relative z-30 inline-flex min-w-[76px] items-center justify-center rounded-full px-4 py-1.5 text-xs font-black tracking-wide uppercase whitespace-nowrap shadow-sm transition-all duration-200",
@@ -518,11 +543,11 @@ export function PlayerDetail({
                 <span>#{overallRankLabel} OVERALL</span>
                 <VitalsDivider />
                 <span>
-                  {rosteredPct != null ? `${Math.round(Number(rosteredPct))}%` : "—"} ROSTERED
+                  {`${Math.round(Number(rosteredPct ?? 0))}%`} ROSTERED
                 </span>
                 <VitalsDivider />
                 <span>
-                  {startedPct != null ? `${Math.round(Number(startedPct))}%` : "—"} STARTED
+                  {`${Math.round(Number(startedPct ?? 0))}%`} STARTED
                 </span>
                 <div ref={scoringMenuRef} className="relative z-50 ml-6 inline-block text-left">
                   <button
@@ -1984,7 +2009,6 @@ function DepthChartPanel({
             {index + 1}
           </span>
           <DepthChartAvatar id={d.id} pos={d.pos} team={team} name={d.name} />
-          <PositionBadge pos={d.pos} className="h-5 text-[10px]" />
           <span
             className={cn(
               "max-w-[120px] truncate text-xs font-black",
@@ -1993,18 +2017,22 @@ function DepthChartPanel({
           >
             {d.name}
           </span>
-        </div>
-        <div className="ml-auto flex flex-shrink-0 items-center space-x-2">
           {badge ? (
             <span
               className={cn(
-                "rounded px-1.5 py-0.5 text-[10px] font-black tracking-wider text-white",
-                badge === "Q" ? "bg-amber-500" : "bg-red-500",
+                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black tracking-wider text-white",
+                badge === "Q"
+                  ? "bg-amber-500"
+                  : badge === "D"
+                    ? "bg-rose-600"
+                    : "bg-red-500",
               )}
             >
               {badge}
             </span>
           ) : null}
+        </div>
+        <div className="ml-auto flex flex-shrink-0 items-center">
           <div className="text-xs font-black tracking-wide text-slate-900 uppercase">
             {Number.isFinite(d.proj) && d.proj > 0 ? d.proj.toFixed(2) : "—"}
             <span className="ml-0.5 text-[10px] font-bold normal-case text-slate-400">

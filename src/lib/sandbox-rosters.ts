@@ -19,7 +19,7 @@ export function injuryMicroBadge(
   if (currentStatus === "ir" || currentStatus === "injured reserve")
     return { label: "IR", className: "bg-rose-600" };
   if (currentStatus === "questionable") return { label: "Q", className: "bg-amber-500" };
-  if (currentStatus === "doubtful") return { label: "D", className: "bg-orange-600" };
+  if (currentStatus === "doubtful") return { label: "D", className: "bg-rose-600" };
   if (currentStatus === "na" || currentStatus === "not active" || currentStatus === "suspended") return { label: "NA", className: "bg-red-500" };
   return null;
 }
@@ -34,46 +34,46 @@ type InjuryCarrier = {
 };
 
 /**
- * Dynamically resolve a player's injury designation so badges render
- * regardless of whether the row came from live draft state, mock rosters,
- * or the global catalog — no hardcoded player names or overrides:
+ * Resolve a player's injury designation from the Sleeper catalog fields only.
+ * Matches Sleeper / player popup — do not use LeagueLogs brain status here;
+ * that feed can lag or disagree and caused false Out chips on research lists.
  *
- *  a. Direct properties: injury_status / injuryStatus / status on the object.
- *  b. Cached brain matrix (IndexedDB) by ID: injuryStatus / injury_status.
- *  c. Sleeper's raw catalog injury string embedded on the record.
+ * The optional `brain` argument is ignored (kept for call-site compatibility).
  *
  * Returns undefined for healthy/empty so no badge or spacing renders.
  */
 export function resolveInjuryStatus(
   player: InjuryCarrier,
-  brain?: Record<
+  _brain?: Record<
     string,
     { injuryStatus?: string | null; injury_status?: string | null } | undefined
   > | null,
 ): string | undefined {
-  // a. Direct properties (draft state / mock rosters / catalog rows).
-  const direct = player.injury_status ?? player.injuryStatus ?? player.status;
-  if (direct && direct.trim() && direct.trim().toLowerCase() !== "healthy") {
-    const dLower = direct.trim().toLowerCase();
-    if (dLower === "na" || dLower === "suspended") return "NA";
-    return direct;
-  }
-  // b. Brain matrix by ID.
-  const entry = brain?.[player.id];
-  const matrix = entry?.injuryStatus ?? entry?.injury_status;
-  if (matrix && matrix.trim() && matrix.trim().toLowerCase() !== "healthy") {
-    const mLower = matrix.trim().toLowerCase();
-    if (mLower === "na" || mLower === "suspended") return "NA";
-    return matrix;
-  }
-  // c. Sleeper raw catalog fallback.
-  const raw = player.injury;
-  if (raw && raw.trim() && raw.trim().toLowerCase() !== "healthy") {
-    const rLower = raw.trim().toLowerCase();
-    if (rLower === "na" || rLower === "suspended" || rLower.includes("suspended")) return "NA";
-    return raw;
-  }
-  return undefined;
+  const normalize = (value: string | null | undefined): string | undefined => {
+    if (!value?.trim()) return undefined;
+    const trimmed = value.trim();
+    const lower = trimmed.toLowerCase();
+    if (
+      lower === "healthy" ||
+      lower === "active" ||
+      lower === "none" ||
+      lower === "available"
+    ) {
+      return undefined;
+    }
+    if (lower === "na" || lower === "suspended" || lower.includes("suspended")) {
+      return "NA";
+    }
+    return trimmed;
+  };
+
+  // Prefer explicit injury fields over generic roster `status` (Active/Inactive).
+  return (
+    normalize(player.injury_status) ??
+    normalize(player.injuryStatus) ??
+    normalize(player.injury) ??
+    normalize(player.status)
+  );
 }
 
 type SandboxSpec = { id: string; name: string; pos: Pos; team: string };

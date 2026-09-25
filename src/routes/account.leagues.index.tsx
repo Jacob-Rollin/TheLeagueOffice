@@ -4,13 +4,23 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { AccountShell } from "@/components/account/AccountShell";
 import { LeagueAvatar } from "@/components/league/LeagueAvatar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { getConnectionMeta, getConnectionRosters } from "@/lib/league.functions";
 import { markRevalidated, writeRosterCache } from "@/lib/roster-cache";
 import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/account/leagues/")({
   ssr: false,
@@ -51,7 +61,7 @@ function formatRelativeTime(value: string): string {
 function hostLeagueUrl(platform: string, leagueId: string | null): string | null {
   const id = leagueId?.trim();
   if (!id) return null;
-  if (platform === "sleeper") return `https://sleeper.com/leagues/${encodeURIComponent(id)}/home`;
+  if (platform === "sleeper") return `https://sleeper.com/leagues/${encodeURIComponent(id)}`;
   if (platform === "espn") return `https://fantasy.espn.com/football/league?leagueId=${encodeURIComponent(id)}`;
   if (platform === "yahoo") return `https://football.fantasysports.yahoo.com/f1/${encodeURIComponent(id)}`;
   return null;
@@ -64,6 +74,9 @@ function LeaguesPage() {
   const userId = user?.id ?? null;
   const queryClient = useQueryClient();
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [, setClock] = useState(0);
 
   useEffect(() => {
@@ -82,11 +95,26 @@ function LeaguesPage() {
     },
   });
 
-  const remove = async (id: string) => {
-    if (!id || !window.confirm("Delete this synced league? This cannot be undone.")) return;
-    await supabase.from("synced_leagues").delete().eq("id", id);
-    queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
-    queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
+  const requestDelete = (id: string, label: string) => {
+    setDeleteError(null);
+    setPendingDelete({ id, label });
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete?.id) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const { error } = await supabase.from("synced_leagues").delete().eq("id", pendingDelete.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
+      queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
+      setPendingDelete(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not delete this league.");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const refreshRoster = async (row: ConnectionRow) => {
@@ -120,18 +148,75 @@ function LeaguesPage() {
       {rows.length === 0 ? (
         <div className="flex items-center justify-center rounded-xl border border-border bg-card px-4 py-16"><p className="font-display text-sm font-semibold uppercase tracking-widest text-black">No Active Leagues</p></div>
       ) : (
-        <ul className="space-y-3">{rows.map((row) => <LeagueRow key={row.id} row={row} isRefreshing={refreshingId === row.id} onDelete={remove} onRefresh={refreshRoster} onViewPlaybook={viewPlaybook} />)}</ul>
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-[auto_auto_minmax(10rem,1fr)_10rem_auto_auto]">
+          {rows.map((row) => (
+            <LeagueRow
+              key={row.id}
+              row={row}
+              isRefreshing={refreshingId === row.id}
+              onDelete={requestDelete}
+              onRefresh={refreshRoster}
+              onViewPlaybook={viewPlaybook}
+            />
+          ))}
+        </ul>
       )}
+
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(next) => {
+          if (!next && !deleting) {
+            setPendingDelete(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this league?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete?.label
+                ? `Are you sure you want to delete "${pendingDelete.label}"? This removes the synced league link from your account and cannot be undone.`
+                : "Are you sure you want to delete this synced league? This removes the link from your account and cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError ? <p className="text-sm text-red-600">{deleteError}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDelete();
+              }}
+            >
+              {deleting ? "Deleting…" : "Delete League"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AccountShell>
   );
 }
 
-function LeagueRow({ row, isRefreshing, onDelete, onRefresh, onViewPlaybook }: { row: ConnectionRow; isRefreshing: boolean; onDelete: (id: string) => void; onRefresh: (row: ConnectionRow) => void; onViewPlaybook: (id: string) => void }) {
+function LeagueRow({
+  row,
+  isRefreshing,
+  onDelete,
+  onRefresh,
+  onViewPlaybook,
+}: {
+  row: ConnectionRow;
+  isRefreshing: boolean;
+  onDelete: (id: string, label: string) => void;
+  onRefresh: (row: ConnectionRow) => void;
+  onViewPlaybook: (id: string) => void;
+}) {
   const label = (row.metadata as Record<string, unknown> | null)?.label as string | undefined;
   const identifier = row.league_id ?? label ?? "";
   const platformKey = row.platform ?? "sleeper";
   const platform = PLATFORM_LABEL[platformKey] ?? platformKey;
-  const hostUrl = hostLeagueUrl(platformKey, row.league_id);
   const { data: meta } = useQuery({
     queryKey: ["connection-meta", row.id, platformKey, identifier],
     enabled: (platformKey === "sleeper" || platformKey === "espn") && identifier.length > 0,
@@ -141,20 +226,45 @@ function LeagueRow({ row, isRefreshing, onDelete, onRefresh, onViewPlaybook }: {
   });
   const leagueName = meta?.leagueName ?? label ?? "League";
   const teamName = meta?.teamName ?? null;
+  // Sleeper connections store a username in league_id — deep-link with the
+  // resolved numeric hostLeagueId from connection meta when available.
+  const linkId =
+    platformKey === "sleeper"
+      ? (meta?.hostLeagueId ?? (/^\d{6,}$/.test(identifier) ? identifier : null))
+      : row.league_id;
+  const hostUrl = hostLeagueUrl(platformKey, linkId);
 
   return (
-    <li className="grid items-center gap-x-4 gap-y-3 rounded-xl border border-border bg-card px-4 py-4 md:grid-cols-[auto_auto_minmax(10rem,1fr)_minmax(0,auto)_auto]">
+    <li className="col-span-full grid grid-cols-1 items-center gap-x-4 gap-y-3 rounded-xl border border-border bg-card px-4 py-4 md:grid-cols-subgrid">
       <span aria-label="Synced" className="flex size-6 shrink-0 items-center justify-center rounded-full border border-emerald-500 text-xs font-bold text-emerald-600">✓</span>
       <LeagueAvatar platform={platformKey} src={meta?.avatar ?? null} alt={`${leagueName} team avatar`} />
       <div className="min-w-0">
         <p className="text-base font-semibold leading-tight text-black">{leagueName}</p>
         <p className="text-sm font-medium leading-tight text-black">
-          {teamName ? `${teamName} — ` : ""}
-          {hostUrl ? <a href={hostUrl} target="_blank" rel="noreferrer" className="underline decoration-black/40 underline-offset-2 transition-colors hover:text-primary hover:decoration-primary">{platform}</a> : platform}
+          {teamName ? (
+            <>
+              {teamName}
+              <span className="mx-1 font-normal text-black/70">-</span>
+            </>
+          ) : null}
+          {hostUrl ? (
+            <a
+              href={hostUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="underline decoration-black/40 underline-offset-2 transition-colors hover:text-primary hover:decoration-primary"
+            >
+              {platform}
+            </a>
+          ) : (
+            platform
+          )}
         </p>
       </div>
-      <div className="grid shrink-0 grid-cols-[9rem_auto_auto_auto] items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        <span className="w-36 whitespace-nowrap text-left text-sm font-medium normal-case tracking-normal text-foreground">Synced {formatRelativeTime(row.updated_at)}</span>
+      <span className="whitespace-nowrap text-sm font-medium text-foreground md:justify-self-start">
+        Synced {formatRelativeTime(row.updated_at)}
+      </span>
+      <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? "Scoring"}</span>
         <span className="rounded-md border border-border px-2 py-1">Redraft</span>
         <span className="rounded-md border border-border px-2 py-1">{meta?.teams ? `${meta.teams} Team` : "Teams"}</span>
@@ -167,7 +277,12 @@ function LeagueRow({ row, isRefreshing, onDelete, onRefresh, onViewPlaybook }: {
             <DropdownMenuItem asChild className="font-medium"><Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }}>League Settings</Link></DropdownMenuItem>
             <DropdownMenuItem className="font-medium" onSelect={() => onViewPlaybook(row.id)}>View Playbook</DropdownMenuItem>
             <DropdownMenuItem className="font-medium" disabled={isRefreshing || !row.league_id} onSelect={() => void onRefresh(row)}>{isRefreshing ? "Refreshing Roster…" : "Refresh Roster"}</DropdownMenuItem>
-            <DropdownMenuItem className="font-medium" onSelect={() => onDelete(row.id)}>Delete League</DropdownMenuItem>
+            <DropdownMenuItem
+              className="font-medium"
+              onSelect={() => onDelete(row.id, leagueName)}
+            >
+              Delete League
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

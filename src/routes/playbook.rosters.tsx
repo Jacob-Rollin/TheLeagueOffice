@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { PositionBadge } from "@/components/draft/PositionBadge";
+import { ValueTrendCell } from "@/components/research/ValueTrendCell";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRosters";
@@ -124,7 +125,7 @@ function RosterColumnHeader() {
         <span>Player</span>
       </div>
       <div className="flex shrink-0 items-center space-x-12 pr-1">
-        <span className="w-28 text-right">Value / Trend</span>
+        <span className="w-32 text-right">Value / Trend</span>
         <span className="w-12 text-right">Proj</span>
       </div>
     </div>
@@ -164,7 +165,7 @@ function RosterInjuryBadge({
     .toUpperCase();
   if (!raw || /^(HEALTHY|ACTIVE|NONE)$/.test(raw)) return null;
 
-  let label: "Q" | "O" | "IR" | null = null;
+  let label: "Q" | "O" | "D" | "IR" | null = null;
   let tone = "bg-amber-500";
   if (raw === "IR" || raw === "INJURED RESERVE" || raw === "PUP") {
     label = "IR";
@@ -172,11 +173,12 @@ function RosterInjuryBadge({
   } else if (raw === "Q" || raw === "QUESTIONABLE") {
     label = "Q";
     tone = "bg-amber-500";
+  } else if (raw === "D" || raw === "DOUBTFUL") {
+    label = "D";
+    tone = "bg-rose-600";
   } else if (
     raw === "O" ||
     raw === "OUT" ||
-    raw === "DOUBTFUL" ||
-    raw === "D" ||
     raw === "SUSPENDED" ||
     raw === "NA" ||
     raw === "INACTIVE"
@@ -393,13 +395,13 @@ function PlaybookRostersPage() {
   const loading =
     playersLoading || rostersLoading || projectionsLoading || standingsLoading;
 
-  const valueTrend = (p: Player | null) => {
-    if (!p) return "—";
+  const marketOf = (p: Player | null) => {
+    if (!p) return null;
     const entry = brain?.[p.id];
-    const value = scaleValue(entry?.value ?? 0);
-    const trend = entry?.trend ?? 0;
-    const trendText = `${trend >= 0 ? "+" : ""}${trend.toFixed(1)}`;
-    return `${value.toFixed(1)} / ${trendText}`;
+    return {
+      value: scaleValue(entry?.value ?? 0),
+      trend: entry?.trend ?? 0,
+    };
   };
 
   const projPts = (p: Player | null) => {
@@ -433,8 +435,8 @@ function PlaybookRostersPage() {
     <div className="w-full">
       <div className="mb-6 flex w-full flex-col border-b border-slate-100 pb-4 select-none sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col text-left">
-          <h1 className="text-xl font-black uppercase tracking-tight text-slate-900">
-            Roster Matrix
+          <h1 className="display-title text-3xl">
+            Roster <span className="text-primary">Matrix</span>
           </h1>
           <p className="mt-1 text-xs font-bold text-slate-400">
             Scout any manager lineup, bench depth, and IR slots in the active league.
@@ -469,7 +471,7 @@ function PlaybookRostersPage() {
                         key={`${row.slot}-${row.player?.id ?? "empty"}-${index}`}
                         row={row}
                         section="starters"
-                        valueTrend={valueTrend(row.player)}
+                        market={marketOf(row.player)}
                         projPts={projPts(row.player)}
                         onOpenPlayer={openPlayer}
                       />
@@ -494,7 +496,7 @@ function PlaybookRostersPage() {
                         key={`bn-${row.player?.id ?? "empty"}-${index}`}
                         row={row}
                         section="bench"
-                        valueTrend={valueTrend(row.player)}
+                        market={marketOf(row.player)}
                         projPts={projPts(row.player)}
                         onOpenPlayer={openPlayer}
                       />
@@ -521,7 +523,7 @@ function PlaybookRostersPage() {
                         key={`ir-${row.player?.id ?? "empty"}-${index}`}
                         row={row}
                         section="ir"
-                        valueTrend={valueTrend(row.player)}
+                        market={marketOf(row.player)}
                         projPts={projPts(row.player)}
                         onOpenPlayer={openPlayer}
                         showIrBadge
@@ -625,14 +627,14 @@ function IntelRow({ label, value }: { label: string; value: string }) {
 function RosterPlayerRow({
   row,
   section,
-  valueTrend,
+  market,
   projPts,
   onOpenPlayer,
   showIrBadge = false,
 }: {
   row: MatrixRow;
   section: RosterSection;
-  valueTrend: string;
+  market: { value: number; trend: number } | null;
   projPts: string;
   onOpenPlayer: (id: string) => void;
   showIrBadge?: boolean;
@@ -650,7 +652,7 @@ function RosterPlayerRow({
           <span className="text-sm text-slate-400">Empty slot</span>
         </div>
         <div className="flex shrink-0 items-center space-x-12 pr-1 text-sm font-medium tabular-nums select-none">
-          <span className="w-28 text-right text-slate-300">—</span>
+          <span className="w-32 text-right text-slate-300">—</span>
           <span className="w-12 text-right text-slate-300">—</span>
         </div>
       </div>
@@ -695,7 +697,13 @@ function RosterPlayerRow({
       </div>
 
       <div className="flex shrink-0 items-center space-x-12 pr-1 text-sm font-medium tabular-nums select-none">
-        <span className="w-28 whitespace-nowrap text-right text-slate-500">{valueTrend}</span>
+        <span className="flex w-32 justify-end">
+          {market ? (
+            <ValueTrendCell value={market.value} trend={market.trend} />
+          ) : (
+            <span className="text-slate-300">—</span>
+          )}
+        </span>
         <span className="w-12 text-right font-semibold text-slate-800">{projPts}</span>
       </div>
     </button>

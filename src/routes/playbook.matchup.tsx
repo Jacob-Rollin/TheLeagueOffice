@@ -656,9 +656,10 @@ function MatchupInjuryBadge({
     return null;
   }
 
-  let label: "Q" | "O" | "IR" | "NA" | null = null;
+  let label: "Q" | "O" | "D" | "IR" | "NA" | null = null;
   if (injury === "Questionable") label = "Q";
-  else if (injury === "Out" || injury === "Doubtful") label = "O";
+  else if (injury === "Doubtful") label = "D";
+  else if (injury === "Out") label = "O";
   else if (injury === "IR") label = "IR";
   else if (injury === "NA") label = "NA";
 
@@ -670,7 +671,10 @@ function MatchupInjuryBadge({
       onClick={onOpen}
       aria-label={`${playerName} injury status ${label}`}
       className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white transition-all hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-      style={{ backgroundColor: label === "Q" ? "#f59e0b" : "#e11d48" }}
+      style={{
+        backgroundColor:
+          label === "Q" ? "#f59e0b" : "#e11d48",
+      }}
     >
       {label}
     </button>
@@ -1986,10 +1990,10 @@ function PlaybookMatchupPage() {
   ]);
 
   return (
-    <section key={activeLeagueId ?? "none"} className={playbookCardClass}>
+    <div key={activeLeagueId ?? "none"}>
       <header className="mb-4 flex flex-col gap-3 sm:relative sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 sm:max-w-[36%]">
-          <h1 className="display-title text-lg uppercase tracking-wide">Matchup</h1>
+          <h1 className="display-title text-3xl">Matchup</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {activeLeague?.name?.trim() || "Active league"} weekly head-to-head board.
           </p>
@@ -2006,13 +2010,14 @@ function PlaybookMatchupPage() {
         </div>
       </header>
 
+      <section className={playbookCardClass}>
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading matchup board…</p>
       ) : (
         <>
           {/* FantasyPros-style header: avatars outward, scores tucked beside vs */}
-          <div className="rounded-xl border border-border bg-card">
-            <div className="flex items-center gap-2 px-3 py-5 sm:gap-3 sm:px-4">
+          <div className="border-b border-border pb-5">
+            <div className="flex items-center gap-2 sm:gap-3">
               <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
                 <TeamLogoAvatar
                   name={myName}
@@ -2281,6 +2286,7 @@ function PlaybookMatchupPage() {
         onOpenChange={setReplayOpen}
         request={replayRequest}
       />
-    </section>
+      </section>
+    </div>
   );
 }

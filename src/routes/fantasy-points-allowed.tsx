@@ -5,6 +5,8 @@ import { Fragment, useMemo, useState } from "react";
 import { teamLogo } from "@/components/draft/PlayerAvatar";
 import {
   nextSortState,
+  PLAYER_LIST_COL_HEADER_ROW,
+  PLAYER_LIST_GROUP_HEADER_ROW,
   SortHeaderButton,
   type SortDir,
 } from "@/components/research/SortHeader";
@@ -46,7 +48,7 @@ function matchupTone(rank: number | null): string {
 }
 
 function FantasyPointsAllowedPage() {
-  const [sortKey, setSortKey] = useState<SortKey>("team");
+  const [sortKey, setSortKey] = useState<SortKey | null>("team");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const query = useQuery({
@@ -59,17 +61,19 @@ function FantasyPointsAllowedPage() {
   const payload = query.data;
   const rows = useMemo(() => {
     const list = [...(payload?.rows ?? [])];
+    const effectiveKey = sortKey ?? "team";
+    const effectiveDir = sortKey == null ? "asc" : sortDir;
     list.sort((a, b) => {
-      if (sortKey === "team") {
+      if (effectiveKey === "team") {
         const cmp = a.teamName.localeCompare(b.teamName);
-        return sortDir === "asc" ? cmp : -cmp;
+        return effectiveDir === "asc" ? cmp : -cmp;
       }
-      const aPa = a.cells[sortKey]?.pa;
-      const bPa = b.cells[sortKey]?.pa;
+      const aPa = a.cells[effectiveKey]?.pa;
+      const bPa = b.cells[effectiveKey]?.pa;
       const av = aPa == null ? -999 : aPa;
       const bv = bPa == null ? -999 : bPa;
       const cmp = av - bv;
-      return sortDir === "asc" ? cmp : -cmp;
+      return effectiveDir === "asc" ? cmp : -cmp;
     });
     return list;
   }, [payload?.rows, sortKey, sortDir]);
@@ -90,8 +94,8 @@ function FantasyPointsAllowedPage() {
   return (
     <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
       <div className="mb-5">
-        <h1 className="display-title text-2xl uppercase tracking-wide text-slate-900 sm:text-3xl">
-          Fantasy Points Allowed
+        <h1 className="display-title text-3xl text-slate-900">
+          Fantasy Points <span className="text-primary">Allowed</span>
         </h1>
         <p className="mt-1 text-sm text-slate-500">{weekLabel}</p>
       </div>
@@ -120,7 +124,7 @@ function FantasyPointsAllowedPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse text-sm">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-700">
+              <tr className={cn(PLAYER_LIST_GROUP_HEADER_ROW, "text-slate-700")}>
                 <th
                   rowSpan={2}
                   className="sticky left-0 z-10 border-r border-slate-200 bg-slate-50 px-3 py-2.5 text-left align-bottom"
@@ -148,7 +152,7 @@ function FantasyPointsAllowedPage() {
                   </th>
                 ))}
               </tr>
-              <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <tr className={PLAYER_LIST_COL_HEADER_ROW}>
                 {POS_COLS.map((pos) => (
                   <Fragment key={pos.key}>
                     <th className="border-l border-slate-200 px-1.5 py-1.5 text-center font-bold">

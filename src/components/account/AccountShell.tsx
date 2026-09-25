@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { AccessGate } from "@/components/league/AccessGate";
+import { PageTitle } from "@/components/PageTitle";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/utils";
@@ -80,7 +81,7 @@ export function AccountShell({
         <section className="md:col-span-3">
           <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="display-title text-3xl uppercase tracking-wide">{title}</h1>
+              <PageTitle>{title}</PageTitle>
               <p className="mt-1 text-sm text-muted-foreground">{user?.email}</p>
             </div>
             {action}
