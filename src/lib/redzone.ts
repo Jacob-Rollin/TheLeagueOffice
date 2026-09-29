@@ -39,6 +39,8 @@ export type RedZoneStatsPayload = {
   season: string;
   weeksFrom: number;
   weeksTo: number;
+  /** Last regular-season week with play-by-play data (upper bound for the week filter). */
+  maxWeek: number;
   yardline: number;
   rowsByPos: Record<RedZonePos, RedZonePlayerRow[]>;
 };

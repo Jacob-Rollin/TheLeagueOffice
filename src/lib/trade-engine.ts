@@ -1155,9 +1155,12 @@ export function buildStartSitAdvice<T extends StartSitCandidate>(input: {
   /** Minimum projection edge required to recommend a swap. */
   minEdge?: number;
   limit?: number;
+  /** True once a player's NFL game has kicked off; locked players can't be moved in or out. */
+  isLocked?: (id: string) => boolean;
 }): StartSitAdvicePair<T>[] {
   const minEdge = input.minEdge ?? 0.8;
   const limit = input.limit ?? 4;
+  const isLocked = input.isLocked ?? (() => false);
 
   const starters = input.starters.filter((p): p is T => Boolean(p?.id));
   const starterIds = new Set(starters.map((p) => p.id));
@@ -1177,9 +1180,12 @@ export function buildStartSitAdvice<T extends StartSitCandidate>(input: {
     const benchPts = weeklyOrNull(benchPlayer);
     // Never recommend starting someone with no weekly projection ("—").
     if (benchPts == null) continue;
+    if (isLocked(benchPlayer.id)) continue;
 
     const samePosStarters = starters.filter((s) => s.pos === benchPlayer.pos);
-    const pool = samePosStarters.length > 0 ? samePosStarters : starters;
+    const pool = (samePosStarters.length > 0 ? samePosStarters : starters).filter(
+      (s) => !isLocked(s.id),
+    );
     const weakest = [...pool]
       .map((s) => ({ player: s, pts: weeklyOrNull(s) ?? 0 }))
       .sort((a, b) => a.pts - b.pts)[0];

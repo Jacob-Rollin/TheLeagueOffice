@@ -1,13 +1,28 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PositionBadge } from "@/components/draft/PositionBadge";
-import { teamLogo } from "@/components/draft/PlayerAvatar";
+import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
+import { resolveAvatarUrl } from "@/components/playbook/panels";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { getConnectionRosters } from "@/lib/league.functions";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { getPlayers } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
+
+type LeagueTeamHit = {
+  key: string;
+  connectionId: string;
+  leagueName: string;
+  platform: string;
+  slot: number;
+  team: string;
+  owner: string;
+  logo: string | null;
+  isMine: boolean;
+};
 
 const PAGES: { label: string; to: string; hint: string }[] = [
   { label: "Front Office", to: "/", hint: "Home" },
@@ -40,6 +55,51 @@ export function GlobalSearch() {
     staleTime: 1000 * 60 * 30,
     enabled: open,
   });
+
+  const { leagues, activeLeagueId, setActiveLeagueId } = useActiveLeague();
+  /** Same cache key as useLeagueRosters, so the active league is usually already loaded. */
+  const rosterQueries = useQueries({
+    queries: leagues.map((league) => ({
+      queryKey: ["league-rosters", league.id] as const,
+      enabled: open && Boolean(league.leagueId),
+      staleTime: 5 * 60 * 1000,
+      refetchOnWindowFocus: false,
+      retry: false,
+      queryFn: async () =>
+        await getConnectionRosters({
+          data: {
+            identifier: league.leagueId,
+            platform: league.platform,
+            ...(league.s2 ? { s2: league.s2 } : {}),
+            ...(league.swid ? { swid: league.swid } : {}),
+          },
+        }),
+    })),
+  });
+  const rosterStamp = rosterQueries.map((q) => q.dataUpdatedAt).join("|");
+
+  const allLeagueTeams = useMemo((): LeagueTeamHit[] => {
+    const out: LeagueTeamHit[] = [];
+    leagues.forEach((league, i) => {
+      for (const t of rosterQueries[i]?.data?.teams ?? []) {
+        if (!t) continue;
+        out.push({
+          key: `${league.id}:${t.slot}`,
+          connectionId: league.id,
+          leagueName: league.name,
+          platform: league.platform,
+          slot: Number(t.slot) || 0,
+          team: t.team?.trim() || "Team",
+          owner: t.owner?.trim() || "",
+          logo: t.logo?.trim() || null,
+          isMine: Boolean(t.isMine),
+        });
+      }
+    });
+    return out;
+    // rosterStamp tracks query data changes; the queries array itself is new every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leagues, rosterStamp]);
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -94,11 +154,30 @@ export function GlobalSearch() {
     return (data?.players ?? []).filter((p) => p.name.toLowerCase().includes(term)).slice(0, 8);
   }, [term, data]);
 
-  const empty = active && !pages.length && !teams.length && !players.length;
+  const leagueTeams = useMemo(() => {
+    if (!active) return [];
+    return allLeagueTeams
+      .filter((t) => `${t.team} ${t.owner}`.toLowerCase().includes(term))
+      .sort(
+        (a, b) =>
+          Number(b.connectionId === activeLeagueId) - Number(a.connectionId === activeLeagueId) ||
+          a.team.localeCompare(b.team),
+      )
+      .slice(0, 8);
+  }, [allLeagueTeams, term, active, activeLeagueId]);
+
+  const empty =
+    active && !pages.length && !leagueTeams.length && !teams.length && !players.length;
 
   const go = (to: string, params?: Record<string, string>) => {
     collapse();
     navigate({ to, params } as never);
+  };
+
+  const openLeagueTeam = (hit: LeagueTeamHit) => {
+    collapse();
+    if (hit.connectionId !== activeLeagueId) setActiveLeagueId(hit.connectionId);
+    void navigate({ to: "/playbook/rosters", search: { scout: String(hit.slot) } });
   };
 
   return (
@@ -159,6 +238,29 @@ export function GlobalSearch() {
               </Section>
             )}
 
+            {!!leagueTeams.length && (
+              <Section title="League Teams">
+                {leagueTeams.map((t) => (
+                  <Row key={t.key} onClick={() => openLeagueTeam(t)}>
+                    <LeagueTeamAvatar name={t.team} logo={t.logo} platform={t.platform} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{t.team}</span>
+                      {t.owner || leagues.length > 1 ? (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {[t.owner, leagues.length > 1 ? t.leagueName : null]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      ) : null}
+                    </span>
+                    {t.isMine ? (
+                      <span className="text-xs font-semibold text-primary">My Team</span>
+                    ) : null}
+                  </Row>
+                ))}
+              </Section>
+            )}
+
             {!!teams.length && (
               <Section title="NFL Teams">
                 {teams.map((t) => (
@@ -177,6 +279,14 @@ export function GlobalSearch() {
               <Section title="NFL Players">
                 {players.map((p) => (
                   <Row key={p.id} onClick={() => go("/player/$id", { id: p.id })}>
+                    <PlayerAvatar
+                      id={p.id}
+                      pos={p.pos}
+                      team={p.team}
+                      name={p.name}
+                      className="size-8"
+                      logoClassName="size-3.5 -bottom-0.5 -right-0.5"
+                    />
                     <PositionBadge pos={p.pos} />
                     <span className="flex-1 truncate font-medium">{p.name}</span>
                     <span className="text-xs text-muted-foreground">{p.team}</span>
@@ -198,6 +308,45 @@ export function GlobalSearch() {
         </div>
       )}
     </div>
+  );
+}
+
+function LeagueTeamAvatar({
+  name,
+  logo,
+  platform,
+}: {
+  name: string;
+  logo: string | null;
+  platform: string;
+}) {
+  const src = resolveAvatarUrl(logo);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const shell =
+    "flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted";
+  if (src && failedSrc !== src) {
+    return (
+      <span className={shell}>
+        <img
+          src={src}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setFailedSrc(src)}
+        />
+      </span>
+    );
+  }
+  if (platform.trim().toLowerCase() === "espn") {
+    return (
+      <span className={shell}>
+        <img src="/espn.png" alt="" className="size-5 object-contain" aria-hidden="true" />
+      </span>
+    );
+  }
+  const letters = name.replace(/[^a-zA-Z0-9]/g, "").slice(0, 2).toUpperCase() || "TM";
+  return (
+    <span className={cn(shell, "text-[10px] font-bold text-muted-foreground")}>{letters}</span>
   );
 }
 

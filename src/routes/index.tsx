@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
 import { StandingsPanel } from "@/components/league/StandingsPanel";
+import { InjuryWire } from "@/components/news/InjuryWire";
 import { listPublishedArticles, type ArticleRow } from "@/lib/articles";
 import { cn } from "@/lib/utils";
 
@@ -272,6 +273,7 @@ function Home() {
               />
             </div>
           </section>
+          <InjuryWire limit={5} />
         </aside>
       </div>
     </main>

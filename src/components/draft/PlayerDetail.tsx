@@ -1737,7 +1737,7 @@ function OutlookPanel({
         ? logProj
         : null;
 
-  const lineupWeight = useMemo(() => {
+  const lineupWeightDetail = useMemo(() => {
     const starters = (myTeam?.starters ?? []).filter((p): p is NonNullable<typeof p> => Boolean(p));
     if (!starters.length) return null;
     let total = 0;
@@ -1751,8 +1751,14 @@ function OutlookPanel({
         ? leagueProj
         : projectFor(playerId) ?? logProj;
     if (mine == null || !Number.isFinite(mine) || mine <= 0) return null;
-    return (mine / total) * 100;
+    return {
+      pct: (mine / total) * 100,
+      mine,
+      total,
+      isStarter: starters.some((s) => s.id === playerId),
+    };
   }, [myTeam, projectFor, playerId, leagueProj, logProj]);
+  const lineupWeight = lineupWeightDetail?.pct ?? null;
 
   if (isLoading) {
     return <p className="py-8 text-center text-sm text-slate-400">Loading matchup outlook…</p>;
@@ -1888,6 +1894,32 @@ function OutlookPanel({
             Lineup Weight
           </p>
         </div>
+      </div>
+
+      <div className="mt-3 w-full rounded-xl border border-slate-100 bg-slate-50/50 px-4 py-3 text-left">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+          What is Lineup Weight?
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-slate-600">
+          The share of your starting lineup&apos;s projected points this player accounts for this
+          week: their projection divided by the combined projection of your current starters. A
+          higher number means more of your weekly outcome rides on this player.
+        </p>
+        {lineupWeightDetail ? (
+          <p className="mt-1.5 text-xs font-semibold leading-relaxed text-slate-700">
+            {lineupWeightDetail.mine.toFixed(1)} of your starters&apos;{" "}
+            {lineupWeightDetail.total.toFixed(1)} projected points ={" "}
+            {lineupWeightDetail.pct.toFixed(1)}%
+            {lineupWeightDetail.isStarter
+              ? "."
+              : ". Not in your starting lineup, so this shows how they would compare against it."}
+          </p>
+        ) : (
+          <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+            Shown when you have an active league with a starting lineup and a projection for this
+            player.
+          </p>
+        )}
       </div>
     </div>
   );

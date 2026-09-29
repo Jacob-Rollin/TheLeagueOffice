@@ -12,6 +12,59 @@ export const getPlayerDetail = createServerFn({ method: "GET" })
     return await loadPlayerDetail(data.id);
   });
 
+/** In-season valuation inputs (season to date, last season, rest-of-season projections). */
+export const getTradeValueBasis = createServerFn({ method: "GET" }).handler(async () => {
+  const { loadTradeValueBasis } = await import("./players.server");
+  return await loadTradeValueBasis();
+});
+
+/** Injury designations, official report lines and latest news for a synced roster. */
+export const getRosterNews = createServerFn({ method: "POST" })
+  .inputValidator((input: { ids: string[] }) => ({
+    ids: Array.from(new Set((Array.isArray(input?.ids) ? input.ids : []).map((id) => String(id).slice(0, 32))))
+      .filter(Boolean)
+      .slice(0, 30),
+  }))
+  .handler(async ({ data }) => {
+    const { loadRosterNews } = await import("./players.server");
+    return await loadRosterNews(data.ids);
+  });
+
+export const getPickupResults = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      identifier: string;
+      platform?: string;
+      s2?: string;
+      swid?: string;
+      requests: { key: string; playerId: string; fromWeek: number; toWeek: number }[];
+    }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+      requests: (Array.isArray(input.requests) ? input.requests : []).slice(0, 400).map((r) => ({
+        key: String(r.key).slice(0, 120),
+        playerId: String(r.playerId).slice(0, 32),
+        fromWeek: Math.max(1, Math.min(18, Math.floor(Number(r.fromWeek) || 1))),
+        toWeek: Math.max(1, Math.min(18, Math.floor(Number(r.toWeek) || 1))),
+      })),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { loadPickupResults } = await import("./players.server");
+    return await loadPickupResults(data.requests, data.identifier, data.platform, data.s2, data.swid);
+  });
+
+export const getInjuryWire = createServerFn({ method: "GET" })
+  .inputValidator((input: { limit?: number } | undefined) => ({
+    limit: Math.min(Math.max(Number(input?.limit) || 5, 1), 10),
+  }))
+  .handler(async ({ data }) => {
+    const { loadInjuryWire } = await import("./players.server");
+    return await loadInjuryWire(data.limit);
+  });
+
 export const getPlayerNews = createServerFn({ method: "GET" })
   .inputValidator((input: { id: string }) => ({ id: String(input.id).slice(0, 32) }))
   .handler(async ({ data }) => {
@@ -81,20 +134,33 @@ export const getTeamPosSos = createServerFn({ method: "GET" })
   });
 
 export const getRedZoneStats = createServerFn({ method: "POST" })
-  .inputValidator((input?: { season?: string; yardline?: number | string }) => {
-    const yardlineRaw = input?.yardline != null ? Number(input.yardline) : 20;
-    const yardline =
-      yardlineRaw === 5 || yardlineRaw === 10 || yardlineRaw === 15 || yardlineRaw === 20
-        ? yardlineRaw
-        : 20;
-    return {
-      season: input?.season != null ? String(input.season).slice(0, 16) : undefined,
-      yardline,
-    };
-  })
+  .inputValidator(
+    (input?: {
+      season?: string;
+      yardline?: number | string;
+      weekFrom?: number | null;
+      weekTo?: number | null;
+    }) => {
+      const yardlineRaw = input?.yardline != null ? Number(input.yardline) : 20;
+      const yardline =
+        yardlineRaw === 5 || yardlineRaw === 10 || yardlineRaw === 15 || yardlineRaw === 20
+          ? yardlineRaw
+          : 20;
+      const week = (raw: unknown) => {
+        const n = Math.round(Number(raw));
+        return raw != null && Number.isFinite(n) && n >= 1 && n <= 22 ? n : null;
+      };
+      return {
+        season: input?.season != null ? String(input.season).slice(0, 16) : undefined,
+        yardline,
+        weekFrom: week(input?.weekFrom),
+        weekTo: week(input?.weekTo),
+      };
+    },
+  )
   .handler(async ({ data }) => {
     const { loadRedZoneStats } = await import("./redzone.server");
-    return await loadRedZoneStats(data.season, data.yardline);
+    return await loadRedZoneStats(data.season, data.yardline, data.weekFrom, data.weekTo);
   });
 
 export const getMostTargetedPlayers = createServerFn({ method: "POST" })

@@ -4,9 +4,9 @@ import { AuthDialog } from "@/components/auth/AuthDialog";
 import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
-import { queryOptions, useQueries, useSuspenseQuery } from "@tanstack/react-query";
+import { queryOptions, useQueries, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
@@ -37,7 +37,8 @@ import {
   type RosterConstraint,
 } from "@/lib/trade-engine";
 
-import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
+import { getPlayerDetail, getPlayers, getTradeValueBasis } from "@/lib/players.functions";
+import { inSeasonWeeklyValue, type InSeasonValue } from "@/lib/trade-value";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
 import { useDraft } from "@/hooks/use-draft";
@@ -91,21 +92,28 @@ type Metrics = {
   prevTotal: number;
   prevGames: number;
   prevPerGame: number;
-  posRank: number | null;
-  prevSeason: string | null;
-  line: { label: string; value: string }[];
+  seasonTotal: number;
+  seasonGames: number;
+  seasonPerGame: number;
+  rosTotal: number;
+  rosPerGame: number;
+  currentStats: StatLine | null;
+  prevStats: StatLine | null;
   weekly: number;
 };
 
-/** Lineup-simulation shape for a player, keyed by id so league scoring can apply. */
-function fitOf(p: Player, scoring: Scoring) {
-  return { id: p.id, pos: p.pos, weekly: (p.proj?.[scoring] ?? 0) / WEEKS };
-}
+type StatLine = { season: string; posRank: number | null; line: { label: string; value: string }[] };
 
 const LOWER_IS_BETTER = new Set(["Pts allowed"]);
 
-function metricsFor(player: Player, detail: PlayerDetail | undefined, scoring: Scoring): Metrics {
+function metricsFor(
+  player: Player,
+  detail: PlayerDetail | undefined,
+  scoring: Scoring,
+  value: InSeasonValue,
+): Metrics {
   const prevLine = detail?.history?.[0] ?? null;
+  const currentLine = detail?.seasonToDate ?? null;
   const projTotal = detail?.projection?.points?.[scoring] ?? player.proj?.[scoring] ?? 0;
   const prevTotal = prevLine?.points?.[scoring] ?? player.prev?.[scoring] ?? 0;
   const prevGames = prevLine?.games ?? 0;
@@ -118,10 +126,18 @@ function metricsFor(player: Player, detail: PlayerDetail | undefined, scoring: S
     prevTotal,
     prevGames,
     prevPerGame,
-    posRank: prevLine?.posRank ?? null,
-    prevSeason: prevLine?.season ?? null,
-    line: prevLine?.line ?? [],
-    weekly: projPerWk * 0.65 + prevPerGame * 0.35,
+    seasonTotal: value.seasonTotal,
+    seasonGames: value.seasonGames,
+    seasonPerGame: value.seasonPerGame ?? 0,
+    rosTotal: value.rosTotal ?? 0,
+    rosPerGame: value.rosPerGame ?? 0,
+    currentStats: currentLine
+      ? { season: currentLine.season, posRank: currentLine.posRank ?? null, line: currentLine.line }
+      : null,
+    prevStats: prevLine
+      ? { season: prevLine.season, posRank: prevLine.posRank ?? null, line: prevLine.line }
+      : null,
+    weekly: value.weekly,
   };
 }
 
@@ -263,15 +279,6 @@ function TradePage() {
     },
   });
 
-  const giveRows = useMemo(
-    () => give.map((p) => metricsFor(p, details.map.get(p.id), scoring)),
-    [give, details.map, scoring],
-  );
-  const getRows = useMemo(
-    () => get.map((p) => metricsFor(p, details.map.get(p.id), scoring)),
-    [get, details.map, scoring],
-  );
-
   /**
    * Sidebars unlock for sandbox mode so mock rosters render freely, but stay
    * locked behind the sync overlay for unsigned-out / unlinked live users.
@@ -286,11 +293,46 @@ function TradePage() {
    * simulation with the host league's own scoring multipliers. Sandbox and
    * unsynced desks pass no context and keep the generic projection fallback.
    */
-  const { projectFor } = useLeagueProjections();
-  const leagueScoring = useMemo(
-    () => (league?.synced ? { weeklyFor: projectFor } : null),
-    [league?.synced, projectFor],
+  const { format: leagueFormat } = useLeagueProjections();
+  /** Synced desks value players in the host league's format; others use the draft setting. */
+  const valueScoring: Scoring = league?.synced ? (leagueFormat as Scoring) : scoring;
+
+  /**
+   * In-season value basis: this season's production, last season and
+   * rest-of-season projections, so trade math follows the year as it unfolds
+   * instead of freezing on preseason projections.
+   */
+  const { data: valueBasis } = useQuery({
+    queryKey: ["trade-value-basis"],
+    queryFn: () => getTradeValueBasis(),
+    staleTime: 30 * 60 * 1000,
+  });
+  const valueOf = useCallback(
+    (p: Player): InSeasonValue =>
+      inSeasonWeeklyValue(
+        valueBasis?.players[p.id],
+        valueBasis ?? null,
+        p.proj?.[valueScoring] ?? 0,
+        valueScoring,
+      ),
+    [valueBasis, valueScoring],
   );
+  /** Lineup-simulation shape for a player using the in-season weekly value. */
+  const fitOf = useCallback(
+    (p: Player, _scoring?: Scoring) => ({ id: p.id, pos: p.pos, weekly: valueOf(p).weekly }),
+    [valueOf],
+  );
+  const leagueScoring = null;
+
+  const giveRows = useMemo(
+    () => give.map((p) => metricsFor(p, details.map.get(p.id), valueScoring, valueOf(p))),
+    [give, details.map, valueScoring, valueOf],
+  );
+  const getRows = useMemo(
+    () => get.map((p) => metricsFor(p, details.map.get(p.id), valueScoring, valueOf(p))),
+    [get, details.map, valueScoring, valueOf],
+  );
+  const inSeason = (valueBasis?.week ?? 1) > 1 || [...giveRows, ...getRows].some((r) => r.seasonGames > 0);
   const rostersByTeam = useMemo(() => {
     const map = new Map<number, Player[]>();
     for (let t = 1; t <= draft.settings.teams; t++) map.set(t, []);
@@ -397,7 +439,7 @@ function TradePage() {
         starters: draft.settings.roster as unknown as Record<string, number>,
         scoring: leagueScoring,
       }),
-    [userRoster, give, get, scoring, draft.settings.roster, leagueScoring],
+    [userRoster, give, get, fitOf, scoring, draft.settings.roster, leagueScoring],
   );
   const needDelta = fit.pct;
 
@@ -407,11 +449,11 @@ function TradePage() {
    * discount, so a 2-for-1 must clear a higher bar than a straight swap.
    */
   const giveWeekly = packageScore(
-    giveRows.map((r) => leagueWeekly(fitOf(r.player, scoring), leagueScoring) || r.weekly),
+    giveRows.map((r) => r.weekly),
     getRows.length,
   );
   const rawGetWeekly = packageScore(
-    getRows.map((r) => leagueWeekly(fitOf(r.player, scoring), leagueScoring) || r.weekly),
+    getRows.map((r) => r.weekly),
     giveRows.length,
   );
 
@@ -425,9 +467,9 @@ function TradePage() {
         .map((p) => ({
           name: p.name,
           pos: p.pos,
-          weekly: leagueWeekly(fitOf(p, scoring), leagueScoring),
+          weekly: valueOf(p).weekly,
         })),
-    [userRoster, give, get, scoring, leagueScoring],
+    [userRoster, give, get, valueOf],
   );
   const constraint = rosterConstraint({
     rosterCount: userRoster.length,
@@ -465,7 +507,7 @@ function TradePage() {
       starters: draft.settings.roster as unknown as Record<string, number>,
       scoring: leagueScoring,
     });
-  }, [rivalRoster, give, get, scoring, draft.settings.roster, leagueScoring]);
+  }, [rivalRoster, give, get, fitOf, scoring, draft.settings.roster, leagueScoring]);
   /**
    * Marginal lineup reality overrules package-size dilution: a real upgrade to
    * the optimized starting lineup cannot be graded below the deal's true
@@ -518,32 +560,55 @@ function TradePage() {
   const sum = (rows: Metrics[], key: keyof Metrics) =>
     rows.reduce((s, r) => s + (typeof r[key] === "number" ? (r[key] as number) : 0), 0);
 
-  const statsSeason =
-    giveRows.find((r) => r.prevSeason)?.prevSeason ??
-    getRows.find((r) => r.prevSeason)?.prevSeason ??
-    "Last";
+  const currentSeason = valueBasis?.season ?? null;
+  const prevSeasonLabel = currentSeason ? String(Number(currentSeason) - 1) : "Last Season";
+  const showRos = Boolean(inSeason && valueBasis?.rosAvailable);
+  /** Stats tab: this season once anyone in the deal has played, otherwise last season. */
+  const statsIsCurrent = [...giveRows, ...getRows].some((r) => r.currentStats);
+  const statsOf = (r: Metrics) => (statsIsCurrent ? r.currentStats : r.prevStats);
+  const statsSeason = statsIsCurrent
+    ? (currentSeason ?? giveRows.concat(getRows).find((r) => r.currentStats)?.currentStats?.season ?? "Current")
+    : (giveRows.concat(getRows).find((r) => r.prevStats)?.prevStats?.season ?? "Last");
 
   const overviewRows: CompareRow[] = [
-    buildRow("Season Total (proj)", sum(giveRows, "projTotal"), sum(getRows, "projTotal")),
-    buildRow("Season Avg. (proj)", sum(giveRows, "projPerWk"), sum(getRows, "projPerWk")),
-    buildRow(`${statsSeason} Total`, sum(giveRows, "prevTotal"), sum(getRows, "prevTotal")),
-    buildRow(`${statsSeason} Avg.`, sum(giveRows, "prevPerGame"), sum(getRows, "prevPerGame")),
-    buildRow("Games Played", sum(giveRows, "prevGames"), sum(getRows, "prevGames"), { digits: 0 }),
+    ...(inSeason && currentSeason
+      ? [
+          buildRow(`${currentSeason} Total`, sum(giveRows, "seasonTotal"), sum(getRows, "seasonTotal")),
+          buildRow(`${currentSeason} Avg.`, sum(giveRows, "seasonPerGame"), sum(getRows, "seasonPerGame")),
+          buildRow(`${currentSeason} Games`, sum(giveRows, "seasonGames"), sum(getRows, "seasonGames"), {
+            digits: 0,
+          }),
+        ]
+      : []),
+    ...(showRos
+      ? [
+          buildRow("Rest of Season (proj)", sum(giveRows, "rosTotal"), sum(getRows, "rosTotal")),
+          buildRow("ROS Avg. (proj)", sum(giveRows, "rosPerGame"), sum(getRows, "rosPerGame")),
+        ]
+      : [
+          buildRow("Season Total (proj)", sum(giveRows, "projTotal"), sum(getRows, "projTotal")),
+          buildRow("Season Avg. (proj)", sum(giveRows, "projPerWk"), sum(getRows, "projPerWk")),
+        ]),
+    buildRow(`${prevSeasonLabel} Total`, sum(giveRows, "prevTotal"), sum(getRows, "prevTotal")),
+    buildRow(`${prevSeasonLabel} Avg.`, sum(giveRows, "prevPerGame"), sum(getRows, "prevPerGame")),
+    buildRow(`${prevSeasonLabel} Games`, sum(giveRows, "prevGames"), sum(getRows, "prevGames"), {
+      digits: 0,
+    }),
   ];
 
   const bestRank = (rows: Metrics[]) => {
-    const ranks = rows.map((r) => r.posRank).filter((n): n is number => Boolean(n));
+    const ranks = rows.map((r) => statsOf(r)?.posRank).filter((n): n is number => Boolean(n));
     return ranks.length ? Math.min(...ranks) : null;
   };
   const lineTotal = (rows: Metrics[], label: string) => {
     const vals = rows
-      .flatMap((r) => r.line.filter((l) => l.label === label).map((l) => Number(l.value)))
+      .flatMap((r) => (statsOf(r)?.line ?? []).filter((l) => l.label === label).map((l) => Number(l.value)))
       .filter((n) => Number.isFinite(n));
     return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
   };
   const labels: string[] = [];
   for (const r of [...giveRows, ...getRows])
-    for (const l of r.line) if (!labels.includes(l.label)) labels.push(l.label);
+    for (const l of statsOf(r)?.line ?? []) if (!labels.includes(l.label)) labels.push(l.label);
 
   const statRows: CompareRow[] = [
     buildRow("Position Rank", bestRank(giveRows), bestRank(getRows), {
@@ -551,8 +616,12 @@ function TradePage() {
       digits: 0,
       prefix: "#",
     }),
-    buildRow("Fantasy Pts", sum(giveRows, "prevTotal"), sum(getRows, "prevTotal")),
-    buildRow("Fantasy Pts / Game", sum(giveRows, "prevPerGame"), sum(getRows, "prevPerGame")),
+    statsIsCurrent
+      ? buildRow("Fantasy Pts", sum(giveRows, "seasonTotal"), sum(getRows, "seasonTotal"))
+      : buildRow("Fantasy Pts", sum(giveRows, "prevTotal"), sum(getRows, "prevTotal")),
+    statsIsCurrent
+      ? buildRow("Fantasy Pts / Game", sum(giveRows, "seasonPerGame"), sum(getRows, "seasonPerGame"))
+      : buildRow("Fantasy Pts / Game", sum(giveRows, "prevPerGame"), sum(getRows, "prevPerGame")),
     ...labels.map((label) =>
       buildRow(label, lineTotal(giveRows, label), lineTotal(getRows, label), {
         lowerBetter: LOWER_IS_BETTER.has(label),
@@ -568,7 +637,7 @@ function TradePage() {
     value: Math.max(0, brain?.[p.id]?.value ?? 0),
     trend: brain?.[p.id]?.trend ?? 0,
     injuryStatus: resolveInjuryStatus(p, brain) ?? "Healthy",
-    weekly: leagueWeekly(fitOf(p, scoring), leagueScoring),
+    weekly: valueOf(p).weekly,
   });
 
   const giveAssets = give.map(toAsset);

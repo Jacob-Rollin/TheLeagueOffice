@@ -16,8 +16,15 @@ import {
   type SleeperRow,
   type Stats,
 } from "./players-build";
+import {
+  isPracticeSquad,
+  loadNflInjuryReport,
+  loadNflRosterIndex,
+  loadPracticeSquadIndex,
+  type NflInjuryReportEntry,
+} from "./nfl-roster-status.server";
 import { NFL_TEAMS, teamFullName } from "./nfl-teams";
-import { hasScorableProjectionStats } from "./scoring-map";
+import { hasScorableProjectionStats, scoreStats } from "./scoring-map";
 
 export type { Player, PlayersPayload, Pos };
 
@@ -44,6 +51,8 @@ export type PlayerDetail = {
   season: string;
   player: Player;
   history: SeasonLine[];
+  /** Current season to date; null before the player has played a game this year. */
+  seasonToDate: SeasonLine | null;
   projection: SeasonLine;
   depthChart: DepthEntry[];
   sos: {
@@ -132,6 +141,135 @@ export async function loadSleeperOwnershipMap(): Promise<Map<string, SleeperOwne
 
 /** Season-long stats for every player, keyed by player id. */
 const seasonStats = memo<Map<string, Stats>>(6 * HOUR, (season) => fetchSeasonStats(season));
+
+/** In-progress season totals move every week, so refresh them more often. */
+const seasonToDateStats = memo<Map<string, Stats>>(HOUR, (season) => fetchSeasonStats(season));
+
+/* ---------- in-season trade value basis ---------- */
+
+/** Fantasy regular season + playoffs run through week 17. */
+const FANTASY_LAST_WEEK = 17;
+
+type PtsTriple = [number, number, number];
+
+/** One week's projected points [std, half, ppr] for every player with a real line. */
+const weekProjectionPoints = memo<Map<string, PtsTriple>>(30 * 60 * 1000, async (key) => {
+  const [season, week] = key.split("|") as [string, string];
+  const rows = await fetchRows(
+    `${BASE}/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`,
+  ).catch(() => []);
+  const map = new Map<string, PtsTriple>();
+  for (const row of rows) {
+    const stats = row.stats;
+    if (!row.player_id || !stats || !hasScorableProjectionStats(stats)) continue;
+    map.set(row.player_id, [
+      Math.max(0, num(stats["pts_std"], 0)),
+      Math.max(0, num(stats["pts_half_ppr"], 0)),
+      Math.max(0, num(stats["pts_ppr"], 0)),
+    ]);
+  }
+  return map;
+});
+
+const nflState = memo<{ season: string; week: number; seasonType: string }>(
+  10 * 60 * 1000,
+  async () => {
+    const res = await fetch(`${BASE}/v1/state/nfl`, { headers: { accept: "application/json" } }).catch(
+      () => null,
+    );
+    const state = res?.ok
+      ? ((await res.json().catch(() => null)) as { season?: string; week?: number; season_type?: string } | null)
+      : null;
+    return {
+      season: String(state?.season ?? currentSeason()),
+      week: Math.max(1, Number(state?.week) || 1),
+      seasonType: String(state?.season_type ?? "regular"),
+    };
+  },
+);
+
+export type TradeValueBasisEntry = {
+  /** Current season to date: games played and points [std, half, ppr]. */
+  gp: number;
+  pts: PtsTriple;
+  /** Previous season: games played and points [std, half, ppr]. */
+  prevGp: number;
+  prevPts: PtsTriple;
+  /** Remaining weeks with a projection, and their summed points [std, half, ppr]. */
+  rosGames: number;
+  rosPts: PtsTriple;
+};
+
+export type TradeValueBasis = {
+  season: string;
+  /** First week counted as remaining (the current NFL week). */
+  week: number;
+  /** Weeks left through the fantasy season, byes included. */
+  remainingWeeks: number;
+  /** False when remaining-week projections failed to load (callers fall back to season projections). */
+  rosAvailable: boolean;
+  players: Record<string, TradeValueBasisEntry>;
+};
+
+const tradeValueBasis = memo<TradeValueBasis>(30 * 60 * 1000, async () => {
+  const [built, state] = await Promise.all([buildPlayers("v2"), nflState("state")]);
+  const season = built.payload.season;
+  const inSeason = state.seasonType === "regular" && state.season === season;
+  const startWeek = inSeason ? state.week : 1;
+  const weeks = Array.from(
+    { length: Math.max(0, FANTASY_LAST_WEEK - startWeek + 1) },
+    (_, i) => startWeek + i,
+  );
+
+  const [current, prev, weekMaps] = await Promise.all([
+    inSeason ? seasonToDateStats(season).catch(() => new Map<string, Stats>()) : new Map<string, Stats>(),
+    seasonStats(String(Number(season) - 1)).catch(() => new Map<string, Stats>()),
+    Promise.all(weeks.map((w) => weekProjectionPoints(`${season}|${w}`).catch(() => new Map()))),
+  ]);
+
+  const triple = (stats: Stats | undefined): PtsTriple => [
+    num(stats?.["pts_std"], 0),
+    num(stats?.["pts_half_ppr"], 0),
+    num(stats?.["pts_ppr"], 0),
+  ];
+
+  const players: Record<string, TradeValueBasisEntry> = {};
+  for (const p of built.all) {
+    const cur = current.get(p.id);
+    const last = prev.get(p.id);
+    const rosPts: PtsTriple = [0, 0, 0];
+    let rosGames = 0;
+    for (const map of weekMaps) {
+      const hit = map.get(p.id);
+      if (!hit) continue;
+      rosGames += 1;
+      rosPts[0] += hit[0];
+      rosPts[1] += hit[1];
+      rosPts[2] += hit[2];
+    }
+    players[p.id] = {
+      gp: num(cur?.["gp"], 0),
+      pts: triple(cur),
+      prevGp: num(last?.["gp"], 0),
+      prevPts: triple(last),
+      rosGames,
+      rosPts: rosPts.map((v) => Math.round(v * 100) / 100) as PtsTriple,
+    };
+  }
+
+  return {
+    season,
+    week: startWeek,
+    remainingWeeks: weeks.length,
+    rosAvailable: weekMaps.some((m) => m.size > 0),
+    players,
+  };
+});
+
+/** Season-to-date stats, last season and rest-of-season projections for trade valuation. */
+export function loadTradeValueBasis(): Promise<TradeValueBasis> {
+  return tradeValueBasis("basis");
+}
 
 type ScheduleGame = {
   week: number;
@@ -623,14 +761,26 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
   });
 
   const projection = toSeasonLine(season, player.pos, built.rawProj.get(id) ?? {});
+  const currentStats = (
+    await seasonToDateStats(season).catch(() => new Map<string, Stats>())
+  ).get(id);
+  const currentLine = currentStats ? toSeasonLine(season, player.pos, currentStats) : null;
+  const seasonToDate = currentLine && currentLine.games > 0 ? currentLine : null;
 
   const fantasyDepthPositions: Pos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
+  const practiceSquad =
+    player.team === "FA" ? null : await loadPracticeSquadIndex(season).catch(() => null);
   const depthChart: DepthEntry[] =
     player.team === "FA"
       ? []
       : fantasyDepthPositions.flatMap((slot) =>
           built.all
-            .filter((p) => p.team === player.team && p.pos === slot)
+            .filter(
+              (p) =>
+                p.team === player.team &&
+                p.pos === slot &&
+                !isPracticeSquad(practiceSquad, p),
+            )
             .sort((a, b) => b.proj.half - a.proj.half)
             .slice(0, 12)
             .map((p) => ({
@@ -657,6 +807,7 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
     season,
     player: enrichedPlayer,
     history,
+    seasonToDate,
     projection,
     depthChart,
     sos,
@@ -744,6 +895,8 @@ const espnAthleteId = memo<string | null>(24 * HOUR, async (name) => {
 
 type EspnFeedItem = {
   id?: number | string;
+  /** "Rotowire" for player blurbs; "Story" for league-wide columns. */
+  type?: string;
   headline?: string;
   description?: string;
   story?: string;
@@ -1051,6 +1204,370 @@ export async function loadLeagueWidePlayerNews(limit = 10): Promise<LeagueWideNe
   }
 
   return rows.slice(0, limit);
+}
+
+/* ---------- synced roster news (dashboard Team Insights) ---------- */
+
+export type RosterNewsItem = {
+  id: string;
+  /** Sleeper designation (Questionable, Out, IR, …). */
+  status: string | null;
+  bodyPart: string | null;
+  /** On an NFL reserve list (IR, PUP, NFI, suspended) per the nflverse roster. */
+  reserve: boolean;
+  /** Official injury report row from this week or last week only. */
+  report: NflInjuryReportEntry | null;
+  /** Most recent fantasy news blurb from the last two weeks. */
+  news: {
+    headline: string;
+    analysis: string;
+    published: string;
+    link: string | null;
+    injury: boolean;
+  } | null;
+};
+
+export type RosterNews = { season: string; week: number; players: RosterNewsItem[] };
+
+const ROSTER_NEWS_WINDOW_MS = 14 * 24 * HOUR;
+
+/** Injury-specific wording (stricter than INJURY_COPY_RE, which also matches recaps). */
+const ROSTER_INJURY_RE =
+  /\binjur(?:y|ed|ies)\b|\bquestionable\b|\bdoubtful\b|\bruled out\b|\bwon't play\b|\bwill not play\b|\binactive\b|\binjured reserve\b|\bIR\b|\bsurgery\b|\bfracture|\bsprain|\bstrain|\btorn\b|\btear\b|\bconcussion|\bhamstring|\bankle\b|\bknee\b|\bgroin\b|\bcalf\b|\bshoulder\b|\bthumb\b|\bwrist\b|\bfoot\b|\btoe\b|\bhip\b|\bribs?\b|\billness\b|did not practice|\bDNP\b|limited (?:in )?practice|full practice|week-to-week|day-to-day|\bPUP\b|\bNFI\b|\bsuspen/i;
+
+/** Latest injury designations, official report lines and news for a synced roster. */
+export async function loadRosterNews(ids: string[]): Promise<RosterNews> {
+  const [built, state] = await Promise.all([buildPlayers("v2"), nflState("state")]);
+  const season = built.payload.season;
+  const [rosterIndex, report] = await Promise.all([
+    loadNflRosterIndex(season).catch(() => null),
+    loadNflInjuryReport(season).catch(() => null),
+  ]);
+  const byId = new Map(built.all.map((p) => [p.id, p]));
+  const minReportWeek = state.season === season ? state.week - 1 : Number.POSITIVE_INFINITY;
+  const now = Date.now();
+
+  const players = await Promise.all(
+    ids.map(async (id): Promise<RosterNewsItem> => {
+      const player = byId.get(id);
+      const nfl = rosterIndex?.bySleeper.get(id) ?? null;
+      const reportRow = nfl?.gsisId ? (report?.get(nfl.gsisId) ?? null) : null;
+
+      let news: RosterNewsItem["news"] = null;
+      if (player && player.pos !== "DEF") {
+        const rosterEspnId = nfl?.espnId ?? null;
+        const athleteId = rosterEspnId ?? (await espnAthleteId(player.name).catch(() => null));
+        const feed = athleteId
+          ? await espnPlayerFeed(athleteId).catch(() => [] as EspnFeedItem[])
+          : [];
+        const lastName = player.name.split(" ").filter(Boolean).slice(-1)[0]?.toLowerCase() ?? "";
+        let bestAt = 0;
+        for (const f of feed) {
+          const headline = (f.headline ?? "").trim();
+          if (!headline || (f.type && f.type !== "Rotowire")) continue;
+          const published = f.published ?? f.lastModified ?? "";
+          const at = Date.parse(published);
+          if (!Number.isFinite(at) || now - at > ROSTER_NEWS_WINDOW_MS || at <= bestAt) continue;
+          const analysis = stripTags(f.story ?? f.description ?? "");
+          // Name-search ids can resolve to the wrong athlete; nflverse ids are exact.
+          if (!rosterEspnId && lastName && !`${headline} ${analysis}`.toLowerCase().includes(lastName)) {
+            continue;
+          }
+          bestAt = at;
+          news = {
+            headline,
+            analysis,
+            published,
+            link: f.links?.web?.href ?? null,
+            injury: ROSTER_INJURY_RE.test(headline),
+          };
+        }
+      }
+
+      return {
+        id,
+        status: player?.injury ?? null,
+        bodyPart: player?.injury_body_part ?? null,
+        reserve: nfl?.status === "RES",
+        report: reportRow && reportRow.week >= minReportWeek ? reportRow : null,
+        news,
+      };
+    }),
+  );
+
+  return { season, week: state.week, players };
+}
+
+/* ---------- homepage injury wire ---------- */
+
+export type InjuryWireItem = {
+  id: string;
+  playerName: string;
+  sleeperId: string | null;
+  pos: string;
+  team: string | null;
+  headshot: string | null;
+  /** ESPN designation, e.g. "Injured Reserve", "Out", "Questionable". */
+  status: string;
+  /** Compact chip label: IR, OUT, D, Q, PUP, SUSP. */
+  statusShort: string;
+  headline: string;
+  body: string;
+  published: string;
+  returnDate: string | null;
+  source: "ESPN" | "RotoWire";
+  link: string | null;
+};
+
+type EspnInjuryRow = {
+  id?: string;
+  status?: string;
+  date?: string;
+  longComment?: string;
+  athlete?: {
+    displayName?: string;
+    lastName?: string;
+    headshot?: { href?: string };
+    position?: { abbreviation?: string };
+    team?: { abbreviation?: string };
+    links?: { rel?: string[]; href?: string }[];
+  };
+  details?: { type?: string; detail?: string; side?: string; returnDate?: string };
+};
+
+const espnInjuryFeed = memo<EspnInjuryRow[]>(1000 * 60 * 10, async () => {
+  const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries", {
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) return [];
+  const json = (await res.json()) as { injuries?: { injuries?: EspnInjuryRow[] }[] };
+  return (json.injuries ?? []).flatMap((t) => t.injuries ?? []);
+});
+
+const WIRE_POSITIONS: Record<string, string> = { QB: "QB", RB: "RB", WR: "WR", TE: "TE", PK: "K", K: "K" };
+const ESPN_TEAM_FIX: Record<string, string> = { WSH: "WAS" };
+const WIRE_BLURB_WINDOW_MS = 7 * 24 * HOUR;
+
+function wireStatusShort(status: string): string {
+  const s = status.toLowerCase();
+  if (s.includes("reserve")) return "IR";
+  if (s === "out") return "OUT";
+  if (s === "doubtful") return "D";
+  if (s === "questionable") return "Q";
+  if (s.includes("physically unable") || s.includes("pup")) return "PUP";
+  if (s.includes("suspen")) return "SUSP";
+  return status.toUpperCase().slice(0, 4);
+}
+
+/** "Knee - MCL" -> "MCL", "Hamstring" -> "hamstring" (short acronyms keep their case). */
+function wireInjuryType(raw: string): string {
+  return (raw.split(" - ").pop() ?? raw)
+    .trim()
+    .split(/\s+/)
+    .map((w) => (w.length <= 4 && w === w.toUpperCase() && /[A-Z]/.test(w) ? w : w.toLowerCase()))
+    .join(" ");
+}
+
+function wireInjuryPhrase(details: EspnInjuryRow["details"]): { text: string; surgery: boolean } | null {
+  const type = details?.type?.trim();
+  if (!type || /undisclosed|not specified|^other$/i.test(type)) return null;
+  const side = /^(left|right)$/i.test(details?.side ?? "") ? `${details!.side!.toLowerCase()} ` : "";
+  const detail = details?.detail && !/not specified/i.test(details.detail) ? details.detail.toLowerCase() : null;
+  if (/personal/i.test(type)) return { text: "personal matter", surgery: false };
+  return { text: `${side}${wireInjuryType(type)} ${detail ?? "injury"}`, surgery: detail === "surgery" };
+}
+
+function wireHeadline(tag: string, short: string, status: string, details: EspnInjuryRow["details"]): string {
+  const type = details?.type?.trim();
+  const detail = details?.detail && !/not specified/i.test(details.detail) ? details.detail.toLowerCase() : null;
+  const injury =
+    type && !/undisclosed|not specified|^other$/i.test(type)
+      ? /personal/i.test(type)
+        ? " for personal reasons"
+        : detail === "surgery"
+          ? ` after ${wireInjuryType(type)} surgery`
+          : ` with ${wireInjuryType(type)} ${detail ?? "injury"}`
+      : "";
+  switch (short) {
+    case "IR":
+      return `${tag} placed on IR${injury}`;
+    case "OUT":
+      return `${tag} ruled out${injury}`;
+    case "D":
+      return `${tag} doubtful${injury}`;
+    case "Q":
+      return `${tag} questionable${injury}`;
+    case "PUP":
+      return `${tag} placed on PUP list${injury}`;
+    case "SUSP":
+      return `${tag} suspended`;
+    default:
+      return `${tag} listed as ${status.toLowerCase()}${injury}`;
+  }
+}
+
+/** Most recent fantasy-relevant NFL injury designations, enriched with RotoWire blurbs. */
+export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
+  const [rows, built] = await Promise.all([espnInjuryFeed("all"), buildPlayers("v2")]);
+  const rosterIndex = await loadNflRosterIndex(built.payload.season).catch(() => null);
+  const sleeperByEspn = new Map<string, string>();
+  for (const [sleeperId, entry] of rosterIndex?.bySleeper ?? []) {
+    if (entry.espnId) sleeperByEspn.set(entry.espnId, sleeperId);
+  }
+  const byId = new Map(built.all.map((p) => [p.id, p]));
+
+  const candidates = rows
+    .map((r) => {
+      const pos = WIRE_POSITIONS[r.athlete?.position?.abbreviation ?? ""];
+      const at = Date.parse(r.date ?? "");
+      const status = (r.status ?? "").trim();
+      const espnId = /\/(\d+)\.png/.exec(r.athlete?.headshot?.href ?? "")?.[1] ?? null;
+      const sleeperId = espnId ? (sleeperByEspn.get(espnId) ?? null) : null;
+      const player = sleeperId ? byId.get(sleeperId) : undefined;
+      return { r, pos, at, status, espnId, sleeperId, player };
+    })
+    .filter((c) => c.pos && Number.isFinite(c.at) && c.status && !/^active$/i.test(c.status) && c.r.athlete?.displayName)
+    // ESPN refreshes many designations in one batch, so ties go to the more fantasy-relevant player.
+    .sort((a, b) => b.at - a.at || (a.player?.rank.half ?? 999) - (b.player?.rank.half ?? 999));
+
+  const picked: typeof candidates = [];
+  const seen = new Set<string>();
+  for (const c of candidates) {
+    const key = c.espnId ?? c.r.athlete!.displayName!;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    picked.push(c);
+    if (picked.length >= limit) break;
+  }
+
+  const now = Date.now();
+  return Promise.all(
+    picked.map(async (c): Promise<InjuryWireItem> => {
+      const name = c.player?.name ?? c.r.athlete!.displayName!;
+      const lastName = c.r.athlete?.lastName ?? name.split(" ").slice(-1)[0] ?? name;
+      const espnTeam = c.r.athlete?.team?.abbreviation ?? null;
+      const team = c.player?.team || (espnTeam ? (ESPN_TEAM_FIX[espnTeam] ?? espnTeam) : null);
+      const short = wireStatusShort(c.status);
+      const tag = `${name} (${c.pos}-${team ?? "FA"})`;
+      const espnNewsLink =
+        c.r.athlete?.links?.find((l) => l.rel?.includes("news") && l.href?.startsWith("http"))?.href ?? null;
+
+      let body = stripTags(c.r.longComment ?? "");
+      let source: InjuryWireItem["source"] = "ESPN";
+      let link = espnNewsLink;
+
+      if (body.length < 40) {
+        body = "";
+        const feed = c.espnId ? await espnPlayerFeed(c.espnId).catch(() => [] as EspnFeedItem[]) : [];
+        for (const f of feed) {
+          const headline = (f.headline ?? "").trim();
+          if (!headline || (f.type && f.type !== "Rotowire")) continue;
+          const at = Date.parse(f.published ?? f.lastModified ?? "");
+          if (!Number.isFinite(at) || now - at > WIRE_BLURB_WINDOW_MS) continue;
+          const story = stripTags(f.story ?? f.description ?? "");
+          if (!ROSTER_INJURY_RE.test(`${headline} ${story}`)) continue;
+          body = story ? `${headline} ${story}` : headline;
+          source = "RotoWire";
+          link = f.links?.web?.href ?? link;
+          break;
+        }
+      }
+
+      const returnDate = c.r.details?.returnDate ?? null;
+      if (!body) {
+        const phrase = wireInjuryPhrase(c.r.details);
+        const parts: string[] = [];
+        if (phrase) {
+          parts.push(
+            phrase.surgery
+              ? `${lastName} is recovering from ${phrase.text}.`
+              : `${lastName} is dealing with a ${phrase.text}.`,
+          );
+        } else {
+          parts.push(`${lastName} carries a ${c.status.toLowerCase()} designation.`);
+        }
+        const ret = returnDate ? Date.parse(returnDate) : NaN;
+        if ((short === "IR" || short === "OUT" || short === "PUP") && Number.isFinite(ret) && ret > now) {
+          const label = new Date(ret).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+          parts.push(`ESPN lists an estimated return of ${label}.`);
+        }
+        body = parts.join(" ");
+      }
+
+      return {
+        id: String(c.r.id ?? `${name}-${c.at}`),
+        playerName: name,
+        sleeperId: c.sleeperId,
+        pos: c.pos!,
+        team,
+        headshot: c.r.athlete?.headshot?.href ?? null,
+        status: c.status,
+        statusShort: short,
+        headline: wireHeadline(tag, short, c.status, c.r.details),
+        body,
+        published: new Date(c.at).toISOString(),
+        returnDate,
+        source,
+        link,
+      };
+    }),
+  );
+}
+
+/* ---------- transaction pickup results ---------- */
+
+export type PickupRequest = { key: string; playerId: string; fromWeek: number; toWeek: number };
+export type PickupResult = { pts: number; games: number };
+
+const weeklyStatLines = memo<Map<string, Stats>>(10 * 60 * 1000, async (key) => {
+  const [season, week] = key.split("|");
+  const rows = await fetchRows(`${BASE}/stats/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`).catch(
+    () => [] as SleeperRow[],
+  );
+  const map = new Map<string, Stats>();
+  for (const row of rows) {
+    if (row.player_id && row.stats) map.set(String(row.player_id), row.stats);
+  }
+  return map;
+});
+
+/** League-scored fantasy points each picked-up player has produced over a week range. */
+export async function loadPickupResults(
+  requests: PickupRequest[],
+  identifier: string,
+  platform: string,
+  s2?: string | null,
+  swid?: string | null,
+): Promise<Record<string, PickupResult>> {
+  const { loadLeagueScoring } = await import("./scoring.server");
+  const [state, scoring] = await Promise.all([nflState("state"), loadLeagueScoring(identifier, platform, s2, swid)]);
+  const lastWeek = Math.min(18, state.week);
+  const weeks = new Set<number>();
+  for (const r of requests) {
+    for (let w = Math.max(1, r.fromWeek); w <= Math.min(lastWeek, r.toWeek); w++) weeks.add(w);
+  }
+  const lines = new Map<number, Map<string, Stats>>();
+  await Promise.all(
+    [...weeks].map(async (w) => {
+      lines.set(w, await weeklyStatLines(`${state.season}|${w}`).catch(() => new Map<string, Stats>()));
+    }),
+  );
+
+  const out: Record<string, PickupResult> = {};
+  for (const r of requests) {
+    let pts = 0;
+    let games = 0;
+    for (let w = Math.max(1, r.fromWeek); w <= Math.min(lastWeek, r.toWeek); w++) {
+      const stats = lines.get(w)?.get(r.playerId);
+      if (!stats) continue;
+      const scored = scoreStats(stats, scoring.map);
+      if (scored == null) continue;
+      pts += scored;
+      games += 1;
+    }
+    out[r.key] = { pts: Math.round(pts * 10) / 10, games };
+  }
+  return out;
 }
 
 /* ---------- player bio + game logs (ESPN-style profile page) ---------- */

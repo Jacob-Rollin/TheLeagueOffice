@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+import { useNflState } from "@/hooks/useLeagueProjections";
+import { liveRefreshMs, useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
 
 /** Raw Sleeper live / final weekly box-score stats keyed by player id. */
@@ -34,11 +36,15 @@ async function fetchWeeklyActualStats(
  */
 export function useWeeklyActualStats(week?: number | null) {
   const safeWeek = week != null && week > 0 ? week : null;
+  const nflState = useNflState();
+  const pollWeek = safeWeek ?? nflState.data?.week ?? null;
+  // Shares the scoreboard query, so pacing adds no extra requests.
+  const { progressByNflTeam, currentWeek } = useNflGameProgress(pollWeek);
 
   const query = useQuery({
     queryKey: ["sleeper-weekly-actual-stats", safeWeek ?? "auto"],
-    staleTime: 45 * 1000,
-    refetchInterval: 60 * 1000,
+    staleTime: 8 * 1000,
+    refetchInterval: liveRefreshMs(pollWeek, currentWeek, progressByNflTeam),
     retry: false,
     queryFn: () => fetchWeeklyActualStats(safeWeek),
   });

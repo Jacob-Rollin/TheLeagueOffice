@@ -5,7 +5,7 @@
  */
 
 import { currentSeason, HOUR } from "./players-build";
-import { winPctFromDisplayProjections } from "./rolling-live-projection";
+import { matchupWinPctFromExpected } from "./rolling-live-projection";
 import { scoreStats, type ScoringMap } from "./scoring-map";
 import type {
   MatchupReplayPayload,
@@ -370,8 +370,28 @@ function cloneLive(m: Map<string, number>): Map<string, number> {
   return new Map(m);
 }
 
-function continuousWinPct(mine: number, opp: number): number {
-  return winPctFromDisplayProjections(mine, opp);
+/** Projection-weighted share of a lineup's game clock still to play at `wallMs` (0–1). */
+function replayTimeLeftFraction(
+  live: Map<string, number>,
+  starters: MatchupReplayStarter[],
+  teamKickoff: Map<string, number>,
+  wallMs: number,
+): number {
+  let weighted = 0;
+  let total = 0;
+  for (const s of starters) {
+    const weight = Math.max(1, Number(s.projection) || 0);
+    const kick = teamKickoff.get(normalizeTeam(s.team));
+    const timeLeft =
+      kick == null || !Number.isFinite(kick)
+        ? (live.get(s.id) ?? 0) > 0.05
+          ? 0
+          : 1
+        : Math.min(1, Math.max(0, 1 - (wallMs - kick) / GAME_DURATION_MS));
+    weighted += weight * timeLeft;
+    total += weight;
+  }
+  return total > 0 ? weighted / total : 0;
 }
 
 function playWallClock(play: RawPlay, kickoffs: Map<string, number>): number {
@@ -776,7 +796,24 @@ export async function loadMatchupReplay(
         row.wallMs,
         scaleRight,
       );
-      winPctLeft = continuousWinPct(dispLeft, dispRight);
+      winPctLeft = matchupWinPctFromExpected({
+        expectedA: dispLeft,
+        expectedB: dispRight,
+        remainingA: dispLeft,
+        remainingB: dispRight,
+        timeLeftFracA: replayTimeLeftFraction(
+          row.liveLeft,
+          input.left.starters,
+          teamKickoff,
+          row.wallMs,
+        ),
+        timeLeftFracB: replayTimeLeftFraction(
+          row.liveRight,
+          input.right.starters,
+          teamKickoff,
+          row.wallMs,
+        ),
+      }).pctA;
       winPctRight = Math.max(1, Math.min(99, 100 - winPctLeft));
     }
 

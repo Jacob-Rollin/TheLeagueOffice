@@ -1,31 +1,73 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
+import { ArticleShare } from "@/components/articles/ArticleShare";
 import { StandingsPanel } from "@/components/league/StandingsPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { getArticleBySlug } from "@/lib/articles";
+import { getArticleShareMeta } from "@/lib/articles.functions";
 import { cn } from "@/lib/utils";
 
 
+const DEFAULT_META = [
+  { title: "League Office Briefing — The League Office" },
+  {
+    name: "description",
+    content: "Read the latest front-office briefing written by The League Office desk.",
+  },
+  { property: "og:title", content: "League Office Briefing — The League Office" },
+  {
+    property: "og:description",
+    content: "Front-office analysis, editorials and league intelligence briefings.",
+  },
+  { property: "og:type", content: "article" },
+  { property: "og:site_name", content: "The League Office" },
+  { name: "twitter:card", content: "summary" },
+];
+
 export const Route = createFileRoute("/articles/$slug")({
-  ssr: false,
-  head: () => ({
-    meta: [
-      { title: "League Office Briefing — The League Office" },
-      {
-        name: "description",
-        content: "Read the latest front-office briefing written by The League Office desk.",
-      },
-      { property: "og:title", content: "League Office Briefing — The League Office" },
-      {
-        property: "og:description",
-        content: "Front-office analysis, editorials and league intelligence briefings.",
-      },
-      { property: "og:type", content: "article" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
+  // Loader and head run on the server so link-preview bots see real article tags;
+  // the page itself still renders client-side.
+  ssr: "data-only",
+  loader: async ({ params }) => {
+    try {
+      return await getArticleShareMeta({ data: { slug: params.slug } });
+    } catch {
+      return null;
+    }
+  },
+  staleTime: 5 * 60 * 1000,
+  head: ({ loaderData }) => {
+    const meta = loaderData;
+    if (!meta) return { meta: DEFAULT_META };
+    const title = `${meta.title} — The League Office`;
+    return {
+      meta: [
+        { title },
+        { name: "description", content: meta.description },
+        { property: "og:site_name", content: "The League Office" },
+        { property: "og:type", content: "article" },
+        { property: "og:title", content: meta.title },
+        { property: "og:description", content: meta.description },
+        ...(meta.url ? [{ property: "og:url", content: meta.url }] : []),
+        ...(meta.image
+          ? [
+              { property: "og:image", content: meta.image },
+              { property: "og:image:alt", content: meta.title },
+              { name: "twitter:image", content: meta.image },
+            ]
+          : []),
+        { name: "twitter:card", content: meta.imageIsCover ? "summary_large_image" : "summary" },
+        { name: "twitter:title", content: meta.title },
+        { name: "twitter:description", content: meta.description },
+        ...(meta.publishedAt ? [{ property: "article:published_time", content: meta.publishedAt }] : []),
+        ...(meta.category ? [{ property: "article:section", content: meta.category }] : []),
+        ...(meta.author ? [{ property: "article:author", content: meta.author }] : []),
+      ],
+      links: meta.url ? [{ rel: "canonical", href: meta.url }] : [],
+    };
+  },
   component: ArticlePage,
 });
 
@@ -85,6 +127,7 @@ function ArticlePage() {
                   // Content is authored by league admins only.
                   dangerouslySetInnerHTML={{ __html: article.content }}
                 />
+                <ArticleShare slug={article.slug} title={article.title} summary={article.summary} />
               </div>
             </article>
           )}

@@ -32,6 +32,7 @@ import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as AccountAdminRouteImport } from './routes/account.admin'
 import { Route as ArticlesSlugRouteImport } from './routes/articles.$slug'
 import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
+import { Route as AuthResetPasswordRouteImport } from './routes/auth_.reset-password'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
 import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
 import { Route as PlaybookIndexRouteImport } from './routes/playbook.index'
@@ -164,6 +165,11 @@ const AuthConfirmedRoute = AuthConfirmedRouteImport.update({
   path: '/auth/confirmed',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
+  id: '/auth_/reset-password',
+  path: '/auth/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MockDraftSetupRoute = MockDraftSetupRouteImport.update({
   id: '/mock-draft_/setup',
   path: '/mock-draft/setup',
@@ -269,6 +275,7 @@ export interface FileRoutesByFullPath {
   '/account/admin': typeof AccountAdminRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/playbook/matchup': typeof PlaybookMatchupRoute
@@ -309,6 +316,7 @@ export interface FileRoutesByTo {
   '/account/admin': typeof AccountAdminRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/playbook/matchup': typeof PlaybookMatchupRoute
@@ -351,6 +359,7 @@ export interface FileRoutesById {
   '/account/admin': typeof AccountAdminRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth_/confirmed': typeof AuthConfirmedRoute
+  '/auth_/reset-password': typeof AuthResetPasswordRoute
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/playbook/matchup': typeof PlaybookMatchupRoute
@@ -394,6 +403,7 @@ export interface FileRouteTypes {
     | '/account/admin'
     | '/articles/$slug'
     | '/auth/confirmed'
+    | '/auth/reset-password'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
     | '/playbook/matchup'
@@ -434,6 +444,7 @@ export interface FileRouteTypes {
     | '/account/admin'
     | '/articles/$slug'
     | '/auth/confirmed'
+    | '/auth/reset-password'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
     | '/playbook/matchup'
@@ -475,6 +486,7 @@ export interface FileRouteTypes {
     | '/account/admin'
     | '/articles/$slug'
     | '/auth_/confirmed'
+    | '/auth_/reset-password'
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
     | '/playbook/matchup'
@@ -517,6 +529,7 @@ export interface RootRouteChildren {
   AccountAdminRoute: typeof AccountAdminRoute
   ArticlesSlugRoute: typeof ArticlesSlugRoute
   AuthConfirmedRoute: typeof AuthConfirmedRoute
+  AuthResetPasswordRoute: typeof AuthResetPasswordRoute
   MockDraftSetupRoute: typeof MockDraftSetupRoute
   NflTeamNflIdRoute: typeof NflTeamNflIdRoute
   PlayerIdRoute: typeof PlayerIdRoute
@@ -692,6 +705,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthConfirmedRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth_/reset-password': {
+      id: '/auth_/reset-password'
+      path: '/auth/reset-password'
+      fullPath: '/auth/reset-password'
+      preLoaderRoute: typeof AuthResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mock-draft_/setup': {
       id: '/mock-draft_/setup'
       path: '/mock-draft/setup'
@@ -854,6 +874,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccountAdminRoute: AccountAdminRoute,
   ArticlesSlugRoute: ArticlesSlugRoute,
   AuthConfirmedRoute: AuthConfirmedRoute,
+  AuthResetPasswordRoute: AuthResetPasswordRoute,
   MockDraftSetupRoute: MockDraftSetupRoute,
   NflTeamNflIdRoute: NflTeamNflIdRoute,
   PlayerIdRoute: PlayerIdRoute,

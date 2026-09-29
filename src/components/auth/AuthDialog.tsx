@@ -13,7 +13,7 @@ const labelClass = "block text-xs font-semibold uppercase tracking-wide text-mut
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
 const INVALID_CODE = "Invalid or expired invite code.";
 
-function passwordProblems(pw: string): string[] {
+export function passwordProblems(pw: string): string[] {
   const missing: string[] = [];
   if (pw.length < 8) missing.push("at least 8 characters");
   if (!/[A-Z]/.test(pw)) missing.push("one uppercase letter");
@@ -60,6 +60,7 @@ export function AuthDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [isSignup, setIsSignup] = useState(mode === "signup");
+  const [isForgot, setIsForgot] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -72,6 +73,7 @@ export function AuthDialog({
   useEffect(() => {
     if (open) {
       setIsSignup(mode === "signup");
+      setIsForgot(false);
       setError(null);
       setNotice(null);
     }
@@ -86,6 +88,23 @@ export function AuthDialog({
     setError(null);
     setNotice(null);
     try {
+      if (isForgot) {
+        const cleanEmail = email.trim();
+        if (!EMAIL_RE.test(cleanEmail)) {
+          setError("Please enter a valid email address.");
+          return;
+        }
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: `${window.location.origin}/auth/reset-password`,
+        });
+        if (resetError) {
+          setError(resetError.message);
+          return;
+        }
+        // Same message whether or not the account exists, so emails can't be probed.
+        setNotice("If an account exists for that email, a password reset link is on its way.");
+        return;
+      }
       if (isSignup) {
         const cleanName = name.trim();
         if (!cleanName) {
@@ -165,11 +184,15 @@ export function AuthDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="display-title text-2xl">{isSignup ? "Create Account" : "Sign In"}</DialogTitle>
+          <DialogTitle className="display-title text-2xl">
+            {isForgot ? "Reset Password" : isSignup ? "Create Account" : "Sign In"}
+          </DialogTitle>
           <DialogDescription>
-            {isSignup
-              ? "Registration is invite only. Enter your league invite code below."
-              : "Access your league operations."}
+            {isForgot
+              ? "Enter your account email and we will send you a link to set a new password."
+              : isSignup
+                ? "Registration is invite only. Enter your league invite code below."
+                : "Access your league operations."}
           </DialogDescription>
         </DialogHeader>
 
@@ -199,17 +222,35 @@ export function AuthDialog({
             />
           </label>
 
-          <label className={labelClass}>
-            Password
-            <input
-              type="password"
-              required
-              minLength={isSignup ? 8 : 6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={fieldClass}
-            />
-          </label>
+          {!isForgot && (
+            <label className={labelClass}>
+              Password
+              <input
+                type="password"
+                required
+                minLength={isSignup ? 8 : 6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={fieldClass}
+              />
+            </label>
+          )}
+
+          {!isSignup && !isForgot && (
+            <div className="-mt-1 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsForgot(true);
+                  setError(null);
+                  setNotice(null);
+                }}
+                className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                Forgot Password?
+              </button>
+            </div>
+          )}
 
           {/* 🌟 MOVED THE LEGEND TEXT DIRECTLY HERE UNDER THE PASSWORD FIELD */}
           {isSignup && (
@@ -287,20 +328,34 @@ export function AuthDialog({
             disabled={busy}
             className="w-full rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60"
           >
-            {busy ? "Working…" : isSignup ? "Create Account" : "Sign In"}
+            {busy ? "Working…" : isForgot ? "Send Reset Link" : isSignup ? "Create Account" : "Sign In"}
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setIsSignup((v) => !v);
-              setError(null);
-              setNotice(null);
-            }}
-            className="w-full text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
-          >
-            {isSignup ? "Already have an account? Sign In" : "Need an account? Create Account"}
-          </button>
+          {isForgot ? (
+            <button
+              type="button"
+              onClick={() => {
+                setIsForgot(false);
+                setError(null);
+                setNotice(null);
+              }}
+              className="w-full text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
+            >
+              Back to Sign In
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignup((v) => !v);
+                setError(null);
+                setNotice(null);
+              }}
+              className="w-full text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
+            >
+              {isSignup ? "Already have an account? Sign In" : "Need an account? Create Account"}
+            </button>
+          )}
         </form>
       </DialogContent>
     </Dialog>

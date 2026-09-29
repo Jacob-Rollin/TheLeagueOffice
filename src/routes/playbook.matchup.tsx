@@ -369,12 +369,23 @@ function TeamLogoAvatar({
   );
 }
 
+function playerNameKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
 function buildCurrentStarterRows(
   team: ResolvedRosterTeam | null,
   labels: string[],
   starterIds: string[],
   playersById: Map<string, Player>,
-  opts?: { fillEmptyFromLive?: boolean },
+  opts?: {
+    fillEmptyFromLive?: boolean;
+    /** ESPN names aligned with `starterIds`; a name on a "" id is an unmatched player. */
+    starterNames?: string[];
+  },
 ): (Player | null)[] {
   if (!team) return labels.map(() => null);
 
@@ -397,34 +408,38 @@ function buildCurrentStarterRows(
     return null;
   };
 
-  // Week-scoped starters (including "" empty slots).
+  // Week-scoped starters. "" is a slot the manager left empty: it renders as
+  // Empty and their benched players stay on the bench, never back-filled.
   if (starterIds.length) {
+    // Claim every resolvable starter first so a fallback can never pull a
+    // player out of a later slot (which showed him twice).
+    for (const id of starterIds) {
+      const hit = id ? playersById.get(id) : undefined;
+      if (hit) used.add(hit.id);
+    }
     return labels.map((slot, i) => {
       const id = starterIds[i];
       if (id) {
-        const hit = playersById.get(id) ?? null;
-        if (hit) {
-          used.add(hit.id);
-          return hit;
-        }
-        // Id resolved on the server but missing from the client Sleeper cache —
-        // fall back to the live host lineup for this slot.
-        if (opts?.fillEmptyFromLive) return takeLiveForSlot(slot, i);
-        return null;
+        const hit = playersById.get(id);
+        if (hit) return hit;
+        // Id resolved on the server but missing from the client catalog cache.
+        return opts?.fillEmptyFromLive ? takeLiveForSlot(slot, i) : null;
       }
-      if (opts?.fillEmptyFromLive) return takeLiveForSlot(slot, i);
-      return null;
+      const unmatchedName = opts?.starterNames?.[i]?.trim();
+      if (!unmatchedName) return null;
+      const key = playerNameKey(unmatchedName);
+      const byName =
+        team.players.find((p) => !used.has(p.id) && playerNameKey(p.name) === key) ?? null;
+      if (byName) {
+        used.add(byName.id);
+        return byName;
+      }
+      return opts?.fillEmptyFromLive ? takeLiveForSlot(slot, i) : null;
     });
   }
   if (team.starters.length) {
-    return labels.map((slot, i) => {
-      const atIndex = team.starters[i] ?? null;
-      if (atIndex) {
-        used.add(atIndex.id);
-        return atIndex;
-      }
-      return takeLiveForSlot(slot, i);
-    });
+    // Live host lineup is index-aligned with the slot template; null = empty slot.
+    return labels.map((_, i) => team.starters[i] ?? null);
   }
   return buildOptimalStarterRows(team, labels, (id) => null, {
     pointsMap: {},
@@ -1338,10 +1353,12 @@ function PlaybookMatchupPage() {
       myPoints: 0,
       oppPoints: 0,
       myStarterIds: [] as string[],
+      myStarterNames: [] as string[],
       myPlayerIds: [] as string[],
       myIrIds: [] as string[],
       myPlayerPoints: {} as Record<string, number>,
       oppStarterIds: [] as string[],
+      oppStarterNames: [] as string[],
       oppPlayerIds: [] as string[],
       oppIrIds: [] as string[],
       oppPlayerPoints: {} as Record<string, number>,
@@ -1383,10 +1400,12 @@ function PlaybookMatchupPage() {
       myPoints: left.points,
       oppPoints: right?.points ?? 0,
       myStarterIds: left.starters ?? [],
+      myStarterNames: left.starterNames ?? [],
       myPlayerIds,
       myIrIds: left.irIds ?? [],
       myPlayerPoints: left.playerPoints ?? {},
       oppStarterIds: right?.starters ?? [],
+      oppStarterNames: right?.starterNames ?? [],
       oppPlayerIds,
       oppIrIds: right?.irIds ?? [],
       oppPlayerPoints: right?.playerPoints ?? {},
@@ -1451,7 +1470,7 @@ function PlaybookMatchupPage() {
             slotLabels,
             weeklyPair.myStarterIds,
             playersById,
-            { fillEmptyFromLive },
+            { fillEmptyFromLive, starterNames: weeklyPair.myStarterNames },
           );
     const oppPlayers =
       oppMode === "optimal"
@@ -1467,7 +1486,7 @@ function PlaybookMatchupPage() {
             slotLabels,
             weeklyPair.oppStarterIds,
             playersById,
-            { fillEmptyFromLive },
+            { fillEmptyFromLive, starterNames: weeklyPair.oppStarterNames },
           );
 
     return slotLabels.map((slot, i) => ({
@@ -1484,6 +1503,8 @@ function PlaybookMatchupPage() {
     projectFor,
     weeklyPair.myStarterIds,
     weeklyPair.oppStarterIds,
+    weeklyPair.myStarterNames,
+    weeklyPair.oppStarterNames,
     weeklyPair.myPlayerPoints,
     weeklyPair.oppPlayerPoints,
     weeklyPair.myPlayerIds,

@@ -22,8 +22,10 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/draft";
-import { getConnectionMatchups } from "@/lib/league.functions";
+import { getConnectionMatchups, getConnectionSettings } from "@/lib/league.functions";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
+import { getRosterNews } from "@/lib/players.functions";
+import type { RosterNews, RosterNewsItem } from "@/lib/players.server";
 import { buildTruePowerRankings, starterRequirements } from "@/lib/power-rankings";
 import {
   computeDynamicWinProbability,
@@ -38,6 +40,13 @@ import {
   type FitPlayer,
 } from "@/lib/trade-engine";
 import { cn } from "@/lib/utils";
+import {
+  awardsForTeam,
+  buildPlayersByName,
+  buildWeekReport,
+  plainSentence,
+  type AwardRow,
+} from "@/lib/weekly-awards";
 
 type CoachingRosterPlayer = { pos: string; points: number };
 type CoachingWeekData = {
@@ -119,15 +128,23 @@ function playerFitsSlot(player: Player, slot: string): boolean {
   return player.pos === slot;
 }
 
+function playerNameKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
 /**
- * Same slot-aligned starter resolution as the Matchup page (fills ESPN empty /
- * unresolved boxscore slots from the live host lineup).
+ * Same slot-aligned starter resolution as the Matchup page. Slots the manager
+ * left empty stay empty (never back-filled from the bench or other slots).
  */
 function resolveMatchupStarters(
   team: ResolvedRosterTeam | null,
   labels: string[],
   starterIds: string[],
   playersById: Map<string, Player>,
+  starterNames: string[] = [],
 ): Player[] {
   if (!team) return [];
 
@@ -147,38 +164,42 @@ function resolveMatchupStarters(
     return null;
   };
 
-  const rows: (Player | null)[] = starterIds.length
-    ? labels.map((slot, i) => {
-        const id = starterIds[i];
-        if (id) {
-          const hit = playersById.get(id) ?? null;
-          if (hit) {
-            used.add(hit.id);
-            return hit;
-          }
-          return takeLiveForSlot(slot, i);
-        }
-        return takeLiveForSlot(slot, i);
-      })
-    : labels.map((slot, i) => {
-        const atIndex = team.starters[i] ?? null;
-        if (atIndex) {
-          used.add(atIndex.id);
-          return atIndex;
-        }
-        return takeLiveForSlot(slot, i);
-      });
+  if (!starterIds.length) {
+    return team.starters.filter((p): p is Player => Boolean(p));
+  }
+
+  // Claim every resolvable starter first so a fallback never duplicates one.
+  for (const id of starterIds) {
+    const hit = id ? playersById.get(id) : undefined;
+    if (hit) used.add(hit.id);
+  }
+  const rows = labels.map((slot, i): Player | null => {
+    const id = starterIds[i];
+    if (id) return playersById.get(id) ?? takeLiveForSlot(slot, i);
+    const unmatchedName = starterNames[i]?.trim();
+    if (!unmatchedName) return null;
+    const key = playerNameKey(unmatchedName);
+    const byName =
+      team.players.find((p) => !used.has(p.id) && playerNameKey(p.name) === key) ?? null;
+    if (byName) {
+      used.add(byName.id);
+      return byName;
+    }
+    return takeLiveForSlot(slot, i);
+  });
 
   return rows.filter((p): p is Player => Boolean(p));
 }
 
 function Panel({
   title,
+  badge,
   action,
   children,
   className,
 }: {
   title: string;
+  badge?: ReactNode;
   action?: {
     to:
       | "/standings"
@@ -195,13 +216,19 @@ function Panel({
 }) {
   return (
     <section className={cn(panelClass, className)}>
-      <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+      <div
+        className={cn(
+          "mb-3 items-center gap-3 border-b border-slate-200 pb-3",
+          badge ? "grid grid-cols-[1fr_auto_1fr]" : "flex justify-between",
+        )}
+      >
         <h2 className={playbookPanelTitleClass}>{title}</h2>
+        {badge}
         {action ? (
           <Link
             to={action.to}
             {...(action.search ? { search: action.search } : {})}
-            className="text-xs font-semibold text-primary hover:underline"
+            className="justify-self-end text-xs font-semibold text-primary hover:underline"
           >
             {action.label}
           </Link>
@@ -373,14 +400,20 @@ type InsightActionTo =
   | "/playbook/matchup"
   | "/playbook/transactions"
   | "/playbook/my-team"
-  | "/playbook/rosters";
+  | "/playbook/rosters"
+  | "/playbook/press-room"
+  | "/waiver";
 
 type InsightSlide = {
   id: string;
   tag: string;
   headline: string;
   body: string;
+  /** Small supporting line under the body (report status, news timestamp). */
+  meta?: string | undefined;
   player: Player | null;
+  /** Fantasy team avatar for team-level slides (weekly awards). */
+  team?: { name: string; logo: string | null } | undefined;
   action: { to: InsightActionTo; label: string };
 };
 
@@ -398,6 +431,68 @@ const INJURY_TAGS = new Set([
 function isActiveInjury(player: Player): boolean {
   const raw = player.injury || player.injury_status;
   return Boolean(raw && INJURY_TAGS.has(raw));
+}
+
+const DESIGNATION_RANK: Record<string, number> = {
+  IR: 5,
+  Out: 4,
+  O: 4,
+  Doubtful: 3,
+  D: 3,
+  Questionable: 2,
+  Q: 2,
+  NA: 1,
+};
+
+/**
+ * Current designation, preferring the freshest source: NFL reserve list, then
+ * this week's official report, then the server-side Sleeper status, then the
+ * locally cached catalog.
+ */
+function designationFor(
+  player: Player,
+  news: RosterNewsItem | undefined,
+  nflWeek: number | null,
+): string | null {
+  const sleeper = (news?.status ?? player.injury ?? player.injury_status ?? "").trim();
+  if (news?.reserve || sleeper === "IR" || sleeper === "Injured Reserve") return "IR";
+  if (news?.report?.status && nflWeek != null && news.report.week >= nflWeek) {
+    return news.report.status;
+  }
+  return sleeper && INJURY_TAGS.has(sleeper) ? sleeper : null;
+}
+
+function practiceShort(practice: string | null | undefined): string | null {
+  const text = (practice ?? "").toLowerCase();
+  if (!text) return null;
+  if (text.includes("did not")) return "Did not practice";
+  if (text.includes("limited")) return "Limited in practice";
+  if (text.includes("full")) return "Full practice";
+  return practice ?? null;
+}
+
+function newsAge(published: string, nowMs: number): string | null {
+  const at = Date.parse(published);
+  if (!Number.isFinite(at)) return null;
+  const mins = Math.max(0, Math.round((nowMs - at) / 60000));
+  if (mins < 60) return `Updated ${Math.max(1, mins)}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `Updated ${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `Updated ${days}d ago`;
+}
+
+function clipText(text: string, max = 260): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), max - 20)).trim()}…`;
+}
+
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
 }
 
 function isTonightKickoff(iso?: string | null, phase?: NflGameProgress["phase"]): boolean {
@@ -436,6 +531,33 @@ function progressForTeam(
   return progressByNflTeam.get(abbr);
 }
 
+const NFL_TEAM_ALIASES: Record<string, string[]> = {
+  WAS: ["WAS", "WSH"],
+  WSH: ["WAS", "WSH"],
+  LAR: ["LAR", "LA"],
+  LA: ["LAR", "LA"],
+  JAC: ["JAC", "JAX"],
+  JAX: ["JAC", "JAX"],
+};
+
+/** True once the team's game is live/final, or its kickoff time has passed. */
+function nflGameLocked(
+  progressByNflTeam: Map<string, NflGameProgress>,
+  team: string | null | undefined,
+  nowMs: number,
+): boolean {
+  const abbr = (team ?? "").trim().toUpperCase();
+  if (!abbr || abbr === "FA") return false;
+  for (const key of NFL_TEAM_ALIASES[abbr] ?? [abbr]) {
+    const progress = progressByNflTeam.get(key);
+    if (!progress) continue;
+    if (progress.phase !== "pre") return true;
+    const kickoff = progress.kickoffIso ? Date.parse(progress.kickoffIso) : NaN;
+    if (Number.isFinite(kickoff) && kickoff <= nowMs) return true;
+  }
+  return false;
+}
+
 function buildTeamInsightSlides(opts: {
   myTeamPlayers: Player[];
   oppTeamPlayers: Player[];
@@ -443,8 +565,13 @@ function buildTeamInsightSlides(opts: {
   oppStarters: Player[];
   progressByNflTeam: Map<string, NflGameProgress>;
   brain: BrainMatrix | null;
+  nflWeek: number | null;
+  rosterNews: RosterNews | null;
+  /** Press Room awards this team earned in the last completed week. */
+  awards: AwardRow[];
 }): InsightSlide[] {
-  const { myTeamPlayers, myStarters, oppStarters, progressByNflTeam, brain } = opts;
+  const { myTeamPlayers, myStarters, oppStarters, progressByNflTeam, brain, nflWeek, rosterNews } =
+    opts;
   const slides: InsightSlide[] = [];
   const currentDayIndex = new Date().getDay(); // 0 = Sunday
 
@@ -486,63 +613,217 @@ function buildTeamInsightSlides(opts: {
     }
   }
 
-  const injured = myTeamPlayers.filter(isActiveInjury);
-  const newsPlayer =
-    injured.find((p) => Boolean(brain?.[p.id]?.injuryNotes?.trim())) ?? injured[0] ?? null;
-  const injuryLabel = newsPlayer
-    ? (newsPlayer.injury || newsPlayer.injury_status || "Injury").trim()
-    : "";
-  const injuryType = newsPlayer ? (brain?.[newsPlayer.id]?.injuryType ?? "").trim() : "";
-  const injuryNotes = newsPlayer ? (brain?.[newsPlayer.id]?.injuryNotes ?? "").trim() : "";
+  const nowMs = Date.now();
+  const newsById = new Map((rosterNews?.players ?? []).map((n) => [n.id, n]));
+  const starterIds = new Set(myStarters.map((p) => p.id));
+  const newsAt = (p: Player) => {
+    const at = Date.parse(newsById.get(p.id)?.news?.published ?? "");
+    return Number.isFinite(at) ? at : 0;
+  };
+  const RECENT_INJURY_NEWS_MS = 7 * 24 * 60 * 60 * 1000;
 
-  slides.push({
-    id: "player-news",
-    tag: "Player News",
-    headline: newsPlayer
-      ? `${newsPlayer.name} (${injuryLabel})${injuryType ? ` — ${injuryType}` : ""}`
-      : "Roster Clear on Injury Desk",
-    body: newsPlayer
-      ? injuryNotes ||
-        `${newsPlayer.name} is currently listed ${injuryLabel}. Monitor practice reports before lock.`
-      : "No active O, IR, Q, or NA designations on your roster right now.",
-    player: newsPlayer,
-    action: { to: "/playbook/my-team", label: "View All Team News" },
-  });
+  /*
+   * Injury desk: anyone with a live designation, plus players whose latest
+   * news is injury-related from the past week (catches new injuries before
+   * the designation propagates). Newest injury news leads; ties go to
+   * starters, then severity.
+   */
+  const injuryCandidates = myTeamPlayers
+    .map((p) => {
+      const news = newsById.get(p.id);
+      const label = designationFor(p, news, nflWeek);
+      const injuryNewsAt =
+        news?.news?.injury && nowMs - newsAt(p) <= RECENT_INJURY_NEWS_MS ? newsAt(p) : 0;
+      return { player: p, news, label, injuryNewsAt };
+    })
+    .filter((c) => c.label != null || c.injuryNewsAt > 0 || (!rosterNews && isActiveInjury(c.player)))
+    .sort(
+      (a, b) =>
+        b.injuryNewsAt - a.injuryNewsAt ||
+        Number(starterIds.has(b.player.id)) - Number(starterIds.has(a.player.id)) ||
+        (DESIGNATION_RANK[b.label ?? ""] ?? 0) - (DESIGNATION_RANK[a.label ?? ""] ?? 0),
+    );
+  const lead = injuryCandidates[0] ?? null;
 
-  const notePlayer =
-    myTeamPlayers.find((p) => Boolean(brain?.[p.id]?.injuryNotes?.trim())) ??
-    [...myTeamPlayers].sort(
-      (a, b) => (brain?.[b.id]?.value ?? 0) - (brain?.[a.id]?.value ?? 0),
-    )[0] ??
-    null;
-  const noteEntry = notePlayer ? brain?.[notePlayer.id] : null;
-  const noteTrend = noteEntry?.trend ?? 0;
-  const noteValue = scaleValue(noteEntry?.value ?? 0);
-  const noteBody = notePlayer
-    ? noteEntry?.injuryNotes?.trim() ||
-      `${notePlayer.name} holds a Value/Trend of ${noteValue.toFixed(1)} with ${
-        noteTrend > 0.2 ? "rising" : noteTrend < -0.2 ? "cooling" : "stable"
-      } market movement across the latest projection window.`
-    : "Sync a roster to unlock long-form player notes and projection context.";
+  if (lead) {
+    const p = lead.player;
+    const bodyPart = (
+      lead.news?.report?.injury ||
+      lead.news?.bodyPart ||
+      p.injury_body_part ||
+      brain?.[p.id]?.injuryType ||
+      ""
+    ).trim();
+    const report = lead.news?.report ?? null;
+    const reportLine = report
+      ? [
+          `Week ${report.week} injury report: ${report.status ?? "No game designation"}`,
+          practiceShort(report.practice),
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : null;
+    const fallbackNotes = (p.injury_notes || brain?.[p.id]?.injuryNotes || "").trim();
+    const body = lead.news?.news?.headline
+      ? clipText(lead.news.news.headline)
+      : fallbackNotes && fallbackNotes.length > 20
+        ? clipText(fallbackNotes)
+        : `${p.name} is listed ${lead.label ?? "on the injury report"}${bodyPart ? ` with a ${bodyPart.toLowerCase()} injury` : ""}. Monitor practice reports before lock.`;
+    const age = lead.news?.news ? newsAge(lead.news.news.published, nowMs) : null;
 
-  slides.push({
-    id: "player-notes",
-    tag: "Player Notes",
-    headline: notePlayer ? notePlayer.name : "Team Notes Queue",
-    body: noteBody,
-    player: notePlayer,
-    action: { to: "/playbook/my-team", label: "View All Team Notes" },
-  });
+    slides.push({
+      id: "player-news",
+      tag: "Player News",
+      headline: `${p.name}${lead.label ? ` (${lead.label})` : ""}${bodyPart ? ` — ${bodyPart}` : ""}`,
+      body,
+      meta: [reportLine, age].filter(Boolean).join(" · ") || undefined,
+      player: p,
+      action: { to: "/playbook/my-team", label: "View All Team News" },
+    });
+  } else {
+    slides.push({
+      id: "player-news",
+      tag: "Player News",
+      headline: "Roster Clear on Injury Desk",
+      body: "No active O, IR, Q, or NA designations on your roster right now.",
+      player: null,
+      action: { to: "/playbook/my-team", label: "View All Team News" },
+    });
+  }
+
+  // Plan ahead: rostered players (not on IR) whose bye is next week.
+  const nextWeek = nflWeek != null ? nflWeek + 1 : null;
+  if (nextWeek != null && nextWeek <= 18) {
+    const onBye = myTeamPlayers
+      .filter((p) => Number(p.bye) === nextWeek)
+      .filter((p) => designationFor(p, newsById.get(p.id), nflWeek) !== "IR")
+      .sort(
+        (a, b) =>
+          Number(starterIds.has(b.id)) - Number(starterIds.has(a.id)) ||
+          (brain?.[b.id]?.value ?? 0) - (brain?.[a.id]?.value ?? 0),
+      );
+    if (onBye.length > 0) {
+      const names = onBye.map((p) => p.name);
+      const startersOut = onBye.filter((p) => starterIds.has(p.id)).length;
+      slides.push({
+        id: "plan-ahead",
+        tag: "Plan Ahead",
+        headline:
+          onBye.length === 1
+            ? `${names[0]} is on bye next week`
+            : `${onBye.length} of your players are on bye next week`,
+        body:
+          onBye.length === 1
+            ? `${names[0]} is on bye in Week ${nextWeek}. Plan ahead on who you might need to pick up.`
+            : `${joinNames(names.slice(0, 4))}${names.length > 4 ? ` and ${names.length - 4} more` : ""} are on bye in Week ${nextWeek}${startersOut > 0 ? `, including ${startersOut} current starter${startersOut === 1 ? "" : "s"}` : ""}. Plan ahead on who you might need to pick up.`,
+        player: onBye[0] ?? null,
+        action: { to: "/waiver", label: "View The Wire" },
+      });
+    }
+  }
+
+  for (const award of opts.awards) {
+    slides.push({
+      id: `award-${award.id}`,
+      tag: "Press Room",
+      headline: award.title,
+      body: `${award.leadName} ${plainSentence(award.sentence)}`.trim(),
+      player: award.player ?? null,
+      team: award.player ? undefined : { name: award.teamName, logo: award.logo },
+      action: { to: "/playbook/press-room", label: "View Press Room" },
+    });
+  }
+
+  // Player notes: latest news on anyone other than the injury-desk lead.
+  const noteCandidate = myTeamPlayers
+    .filter((p) => p.id !== lead?.player.id && newsById.get(p.id)?.news)
+    .sort(
+      (a, b) =>
+        newsAt(b) - newsAt(a) ||
+        Number(starterIds.has(b.id)) - Number(starterIds.has(a.id)),
+    )[0];
+
+  if (noteCandidate) {
+    const note = newsById.get(noteCandidate.id)!.news!;
+    slides.push({
+      id: "player-notes",
+      tag: "Player Notes",
+      headline: noteCandidate.name,
+      body: clipText(note.analysis || note.headline),
+      meta: newsAge(note.published, nowMs) ?? undefined,
+      player: noteCandidate,
+      action: { to: "/playbook/my-team", label: "View All Team Notes" },
+    });
+  } else {
+    const notePlayer =
+      [...myTeamPlayers]
+        .filter((p) => p.id !== lead?.player.id)
+        .sort((a, b) => (brain?.[b.id]?.value ?? 0) - (brain?.[a.id]?.value ?? 0))[0] ?? null;
+    const noteEntry = notePlayer ? brain?.[notePlayer.id] : null;
+    const noteTrend = noteEntry?.trend ?? 0;
+    const noteValue = scaleValue(noteEntry?.value ?? 0);
+    slides.push({
+      id: "player-notes",
+      tag: "Player Notes",
+      headline: notePlayer ? notePlayer.name : "Team Notes Queue",
+      body: notePlayer
+        ? `${notePlayer.name} holds a Value/Trend of ${noteValue.toFixed(1)} with ${
+            noteTrend > 0.2 ? "rising" : noteTrend < -0.2 ? "cooling" : "stable"
+          } market movement across the latest projection window.`
+        : "Sync a roster to unlock long-form player notes and projection context.",
+      player: notePlayer,
+      action: { to: "/playbook/my-team", label: "View All Team Notes" },
+    });
+  }
 
   return slides;
+}
+
+function InsightTeamAvatar({
+  name,
+  logo,
+  platform,
+}: {
+  name: string;
+  logo: string | null;
+  platform: string | null;
+}) {
+  const src = resolveAvatarUrl(logo);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const shell =
+    "flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-100 bg-slate-50";
+  if (src && failedSrc !== src) {
+    return (
+      <span className={shell}>
+        <img
+          src={src}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setFailedSrc(src)}
+        />
+      </span>
+    );
+  }
+  if ((platform ?? "").trim().toLowerCase() === "espn") {
+    return (
+      <span className={shell}>
+        <img src="/espn.png" alt="ESPN" className="h-10 w-10 object-contain" aria-hidden="true" />
+      </span>
+    );
+  }
+  const letters = name.replace(/[^a-zA-Z0-9]/g, "").slice(0, 2).toUpperCase() || "TM";
+  return <span className={cn(shell, "text-sm font-bold text-slate-500")}>{letters}</span>;
 }
 
 function TeamInsightsCarousel({
   slides,
   resetKey,
+  platform,
 }: {
   slides: InsightSlide[];
   resetKey: string;
+  platform: string | null;
 }) {
   const [index, setIndex] = useState(0);
   const modalRef = useRef<PlayerModalHandle>(null);
@@ -621,6 +902,8 @@ function TeamInsightsCarousel({
                 logoClassName="size-5"
               />
             </button>
+          ) : slide.team ? (
+            <InsightTeamAvatar name={slide.team.name} logo={slide.team.logo} platform={platform} />
           ) : (
             <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-full border border-slate-100 bg-slate-50 text-xs font-bold text-slate-400">
               TLO
@@ -632,6 +915,9 @@ function TeamInsightsCarousel({
             </p>
             <p className="mb-2 text-base font-black text-slate-900">{slide.headline}</p>
             <p className="text-xs leading-relaxed text-slate-600">{slide.body}</p>
+            {slide.meta ? (
+              <p className="mt-1.5 text-[11px] font-medium text-slate-400">{slide.meta}</p>
+            ) : null}
             <Link
               to={slide.action.to}
               className="mt-3 inline-block text-xs font-semibold text-primary hover:underline"
@@ -652,7 +938,6 @@ function TeamInsightsCarousel({
 }
 
 function MatchupPreviewCard({
-  week,
   loading,
   leagueId,
   platform,
@@ -671,7 +956,6 @@ function MatchupPreviewCard({
   weekStarted = false,
   matchupFinal = false,
 }: {
-  week: number;
   loading: boolean;
   leagueId?: string | null;
   platform?: string | null;
@@ -765,7 +1049,7 @@ function MatchupPreviewCard({
   }
 
   return (
-    <div key={avatarLeagueKey}>
+    <div key={avatarLeagueKey} className="rounded-xl border border-blue-100 bg-blue-50/40 pb-4">
       <div className="flex items-center gap-2 px-3 py-5 sm:gap-3 sm:px-4">
         <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
           <MatchupTeamAvatar
@@ -793,9 +1077,6 @@ function MatchupPreviewCard({
         </div>
 
         <div className="flex shrink-0 flex-col items-center gap-1.5 px-0.5 sm:px-1">
-          <span className="rounded-lg border border-border bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
-            Week {week}
-          </span>
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[11px] font-extrabold uppercase text-white">
             vs
           </span>
@@ -846,6 +1127,158 @@ function MatchupPreviewCard({
         <span className={cn("w-12 shrink-0 text-right", oppPctClass)}>{oppLabel}</span>
       </div>
     </div>
+  );
+}
+
+type StandingRowLike = { wins: number; losses: number };
+
+type LeagueMatchupSide = {
+  rosterId: number;
+  name: string;
+  logo: string | null;
+  live: number;
+  proj: number;
+  winPct: number;
+};
+
+type LeagueMatchupPair = {
+  id: number;
+  a: LeagueMatchupSide;
+  b: LeagueMatchupSide;
+  started: boolean;
+  final: boolean;
+};
+
+function nflTeamPhase(
+  progressByNflTeam: Map<string, NflGameProgress>,
+  team: string | null | undefined,
+): NflGameProgress["phase"] | null {
+  const nfl = (team || "").trim().toUpperCase();
+  if (!nfl) return null;
+  const aliases =
+    nfl === "WAS" || nfl === "WSH"
+      ? ["WAS", "WSH"]
+      : nfl === "LAR" || nfl === "LA"
+        ? ["LAR", "LA"]
+        : nfl === "JAC" || nfl === "JAX"
+          ? ["JAC", "JAX"]
+          : [nfl];
+  for (const key of aliases) {
+    const phase = progressByNflTeam.get(key)?.phase;
+    if (phase) return phase;
+  }
+  return null;
+}
+
+function LeagueMatchupRow({
+  pair,
+  platform,
+  cacheKey,
+  recordFor,
+}: {
+  pair: LeagueMatchupPair;
+  platform?: string | null;
+  cacheKey: string;
+  recordFor: (rosterId: number, name: string) => string | null;
+}) {
+  const { a, b, started, final } = pair;
+  const aWon = final && a.live > b.live + 0.005;
+  const bWon = final && b.live > a.live + 0.005;
+  const tied = final && !aWon && !bWon;
+  const aLeads = final ? aWon : a.winPct >= b.winPct;
+
+  const projTone = (live: number, proj: number) => {
+    if (!started || Math.abs(live - proj) < 0.005) return "text-slate-400";
+    return live > proj ? "text-emerald-600" : "text-rose-600";
+  };
+  const scoreTone = (won: boolean) =>
+    final && !won && !tied ? "text-slate-400" : "text-slate-900";
+  const barWidth = (side: LeagueMatchupSide, won: boolean) =>
+    final ? (won ? 100 : tied ? 50 : 0) : side.winPct;
+  const pctLabel = (side: LeagueMatchupSide, won: boolean) =>
+    final ? (tied ? "TIE" : won ? "WON" : "LOST") : `${side.winPct}%`;
+  const pctTone = (leads: boolean) =>
+    final && tied ? "text-slate-500" : leads ? "text-emerald-600" : "text-rose-600";
+
+  const team = (side: LeagueMatchupSide, mirrored: boolean) => {
+    const record = recordFor(side.rosterId, side.name);
+    return (
+      <Link
+        to="/playbook/rosters"
+        search={{ scout: String(side.rosterId) }}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2.5 transition-opacity hover:opacity-85",
+          mirrored && "flex-row-reverse text-right",
+        )}
+      >
+        <MatchupTeamAvatar
+          name={side.name}
+          logo={side.logo}
+          platform={platform ?? null}
+          cacheKey={`${cacheKey}-${side.rosterId}`}
+          size="sm"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold leading-tight text-slate-900">
+            {side.name}
+          </span>
+          {record ? (
+            <span className="mt-0.5 block text-[11px] font-medium tabular-nums text-slate-400">
+              {record}
+            </span>
+          ) : null}
+        </span>
+      </Link>
+    );
+  };
+
+  const score = (side: LeagueMatchupSide, won: boolean, mirrored: boolean) => (
+    <div className={cn("w-16 shrink-0", mirrored ? "text-left" : "text-right")}>
+      <p className={cn("text-lg font-bold tabular-nums leading-tight", scoreTone(won))}>
+        {side.live.toFixed(2)}
+      </p>
+      <p className={cn("text-[11px] font-medium tabular-nums", projTone(side.live, side.proj))}>
+        {side.proj.toFixed(2)}
+      </p>
+    </div>
+  );
+
+  return (
+    <li className="py-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        {team(a, false)}
+        {score(a, aWon, false)}
+        <span className="w-6 shrink-0 text-center text-[10px] font-extrabold uppercase text-slate-300">
+          vs
+        </span>
+        {score(b, bWon, true)}
+        {team(b, true)}
+      </div>
+      <div className="mt-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide">
+        <span className={cn("w-10 shrink-0", pctTone(aLeads))}>{pctLabel(a, aWon)}</span>
+        <div className="flex h-1 min-w-0 flex-1 items-center gap-1">
+          <div className="flex h-full min-w-0 flex-1 justify-end overflow-hidden rounded-full bg-slate-100">
+            <div
+              className={cn(
+                "h-full rounded-full transition-[width] duration-500",
+                final ? (aWon ? "bg-emerald-500" : "bg-transparent") : aLeads ? "bg-emerald-500" : "bg-rose-500",
+              )}
+              style={{ width: `${barWidth(a, aWon)}%` }}
+            />
+          </div>
+          <div className="flex h-full min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className={cn(
+                "h-full rounded-full transition-[width] duration-500",
+                final ? (bWon ? "bg-emerald-500" : "bg-transparent") : aLeads ? "bg-rose-500" : "bg-emerald-500",
+              )}
+              style={{ width: `${barWidth(b, bWon)}%` }}
+            />
+          </div>
+        </div>
+        <span className={cn("w-10 shrink-0 text-right", pctTone(!aLeads))}>{pctLabel(b, bWon)}</span>
+      </div>
+    </li>
   );
 }
 
@@ -932,8 +1365,14 @@ function PlaybookDashboardPage() {
       const mine =
         entries.find((row) => Number(row.rosterId) === Number(mySlot)) ?? null;
       const playerPoints = mine?.playerPoints ?? {};
-      const rosterPlayers: CoachingRosterPlayer[] = Object.entries(playerPoints).map(
-        ([id, pts]) => {
+      // Optimal pool = who could legally start that week: the week's own roster
+      // (not today's), plus starters later traded away, minus players acquired
+      // after their game had already kicked off.
+      const weekStarters = new Set((mine?.starters ?? []).filter(Boolean));
+      const notStartable = new Set(mine?.unstartableIds ?? []);
+      const rosterPlayers: CoachingRosterPlayer[] = Object.entries(playerPoints)
+        .filter(([id]) => weekStarters.has(id) || !notStartable.has(id))
+        .map(([id, pts]) => {
           const player =
             playersById.get(id) ?? myTeam?.players.find((p) => p.id === id) ?? null;
           return {
@@ -1027,9 +1466,6 @@ function PlaybookDashboardPage() {
     if (!weeklyMatchups || weeklyMatchups.length === 0) return defaults;
 
     let totalUserScored = 0;
-    /** Scored points only from weeks with a computable optimal ceiling (efficiency). */
-    let scoredForEfficiency = 0;
-    let totalMaxPossible = 0;
     let completedWeeksCount = 0;
     let finalPosition = defaults.position;
     let finalRecord = defaults.record;
@@ -1124,10 +1560,6 @@ function PlaybookDashboardPage() {
 
       const weeklyMaxOptimalCeiling =
         topQb + topRb + topWr + topTe + topFlex + topSuperFlex + topDef + topK;
-      if (weeklyMaxOptimalCeiling > 0) {
-        totalMaxPossible += weeklyMaxOptimalCeiling;
-        scoredForEfficiency += scored;
-      }
       completedWeekStats.push({
         scored,
         optimal: weeklyMaxOptimalCeiling > 0 ? weeklyMaxOptimalCeiling : 0,
@@ -1137,37 +1569,33 @@ function PlaybookDashboardPage() {
     if (completedWeeksCount === 0) return defaults;
 
     const calculatedAvgPoints = totalUserScored / completedWeeksCount;
-    const calculatedEfficiency =
-      totalMaxPossible > 0
-        ? Math.min(100, (scoredForEfficiency / totalMaxPossible) * 100)
-        : 88.0;
 
-    // FantasyPros-style WoW % — hidden until at least two completed weeks
-    // (nothing after week 1 of the season).
+    // Coaching Efficiency = season-to-date scored ÷ optimal across completed weeks.
+    // The delta is how far that season rate moved because of the latest week
+    // (current season rate minus the rate through the week before), in points.
+    const effWeeks = completedWeekStats.filter((w) => w.optimal > 0);
+    const seasonEff = (weeks: { scored: number; optimal: number }[]): number | null => {
+      const optimal = weeks.reduce((sum, w) => sum + w.optimal, 0);
+      if (optimal <= 0) return null;
+      const scored = weeks.reduce((sum, w) => sum + w.scored, 0);
+      return Math.min(100, (scored / optimal) * 100);
+    };
+    const currentEff = seasonEff(effWeeks);
+    const priorEff = effWeeks.length >= 2 ? seasonEff(effWeeks.slice(0, -1)) : null;
+    const calculatedEfficiency = currentEff ?? 88.0;
+
+    // WoW % — hidden until at least two completed weeks.
     // Avg Points: ((curr − prior) / curr) × 100 — FP uses the current avg as the base.
-    // Coaching Efficiency: FP's "−X% since last wk" is last week's weekly efficiency
-    // minus prior-season efficiency (not the small move in the cumulative rate).
-    // Example: cumulative may only drop −0.7pp while last week vs prior pace is −1.8pp.
     let avgPointsDeltaPct: number | null = null;
-    let efficiencyDeltaPct: number | null = null;
+    const efficiencyDeltaPct: number | null =
+      currentEff != null && priorEff != null ? currentEff - priorEff : null;
     if (completedWeeksCount >= 2) {
       const prior = completedWeekStats.slice(0, -1);
-      const lastWeek = completedWeekStats[completedWeekStats.length - 1];
       const priorScored = prior.reduce((sum, w) => sum + w.scored, 0);
       const priorAvg = priorScored / prior.length;
-      const priorEffWeeks = prior.filter((w) => w.optimal > 0);
-      const priorScoredEff = priorEffWeeks.reduce((sum, w) => sum + w.scored, 0);
-      const priorOptimal = priorEffWeeks.reduce((sum, w) => sum + w.optimal, 0);
-      const priorEff =
-        priorOptimal > 0 ? Math.min(100, (priorScoredEff / priorOptimal) * 100) : null;
-
       if (calculatedAvgPoints > 0.05) {
         avgPointsDeltaPct =
           ((calculatedAvgPoints - priorAvg) / calculatedAvgPoints) * 100;
-      }
-      if (priorEff != null && lastWeek && lastWeek.optimal > 0) {
-        const lastWeekEff = Math.min(100, (lastWeek.scored / lastWeek.optimal) * 100);
-        efficiencyDeltaPct = lastWeekEff - priorEff;
       }
     }
 
@@ -1262,8 +1690,10 @@ function PlaybookDashboardPage() {
       myPoints: 0,
       oppPoints: 0,
       myStarterIds: [] as string[],
+      myStarterNames: [] as string[],
       myPlayerPoints: {} as Record<string, number>,
       oppStarterIds: [] as string[],
+      oppStarterNames: [] as string[],
       oppPlayerPoints: {} as Record<string, number>,
       myBaseline: 0,
       oppBaseline: 0,
@@ -1314,8 +1744,10 @@ function PlaybookDashboardPage() {
       myPoints: mine.points,
       oppPoints: rival?.points ?? 0,
       myStarterIds: mine.starters ?? [],
+      myStarterNames: mine.starterNames ?? [],
       myPlayerPoints: mine.playerPoints ?? {},
       oppStarterIds: rival?.starters ?? [],
+      oppStarterNames: rival?.starterNames ?? [],
       oppPlayerPoints: rival?.playerPoints ?? {},
       myBaseline: mine.projectedPoints,
       oppBaseline: rival?.projectedPoints ?? 0,
@@ -1337,12 +1769,14 @@ function PlaybookDashboardPage() {
       labels,
       weeklyPair.myStarterIds,
       playersById,
+      weeklyPair.myStarterNames,
     );
     const oppStarters = resolveMatchupStarters(
       oppTeam,
       labels,
       weeklyPair.oppStarterIds,
       playersById,
+      weeklyPair.oppStarterNames,
     );
 
     const activeWeek = currentWeek ?? 1;
@@ -1430,6 +1864,108 @@ function PlaybookDashboardPage() {
     rosterPositions,
   ]);
 
+  const leagueMatchups = useMemo((): LeagueMatchupPair[] => {
+    const entries = matchups?.entries ?? [];
+    if (!entries.length) return [];
+    const myRosterId = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
+    const skip = new Set(
+      [myRosterId, weeklyPair.oppRosterId]
+        .filter((id): id is number => id != null)
+        .map(Number),
+    );
+    const labels = starterSlotLabels(rosterPositions);
+    const activeWeek = currentWeek ?? 1;
+
+    const byMatchup = new Map<number, typeof entries>();
+    for (const entry of entries) {
+      if (entry.matchupId == null) continue;
+      const bucket = byMatchup.get(Number(entry.matchupId)) ?? [];
+      bucket.push(entry);
+      byMatchup.set(Number(entry.matchupId), bucket);
+    }
+
+    const out: LeagueMatchupPair[] = [];
+    for (const [id, pair] of [...byMatchup.entries()].sort((x, y) => x[0] - y[0])) {
+      const [ea, eb] = pair;
+      if (!ea || !eb) continue;
+      if (skip.has(Number(ea.rosterId)) || skip.has(Number(eb.rosterId))) continue;
+
+      const resolve = (entry: typeof ea) => {
+        const team = teams.find((t) => Number(t.slot) === Number(entry.rosterId)) ?? null;
+        const starters = resolveMatchupStarters(
+          team,
+          labels,
+          entry.starters ?? [],
+          playersById,
+          entry.starterNames ?? [],
+        );
+        let proj = 0;
+        for (const player of starters) {
+          if (player.bye != null && Number(player.bye) === Number(activeWeek)) continue;
+          proj += projectFor(player.id) ?? matchupWeeklyFallback(player);
+        }
+        return {
+          team,
+          starters,
+          entry,
+          proj: Math.round(proj * 100) / 100,
+        };
+      };
+      const sa = resolve(ea);
+      const sb = resolve(eb);
+
+      const { pctA, pctB } = computeDynamicWinProbability({
+        scoreA: ea.points,
+        scoreB: eb.points,
+        startersA: sa.starters,
+        startersB: sb.starters,
+        pointsMapA: ea.playerPoints ?? {},
+        pointsMapB: eb.playerPoints ?? {},
+        projectFor,
+        weeklyFallback: matchupWeeklyFallback,
+        progressByNflTeam,
+        activeWeek,
+      });
+
+      const allStarters = [...sa.starters, ...sb.starters];
+      const started =
+        ea.points > 0.005 ||
+        eb.points > 0.005 ||
+        allStarters.some((p) => {
+          const phase = nflTeamPhase(progressByNflTeam, p.team);
+          return phase === "in" || phase === "post";
+        });
+      const final =
+        allStarters.length > 0 &&
+        allStarters.every(
+          (p) =>
+            (p.bye != null && Number(p.bye) === Number(activeWeek)) ||
+            nflTeamPhase(progressByNflTeam, p.team) === "post",
+        );
+
+      const side = (s: typeof sa, winPct: number): LeagueMatchupSide => ({
+        rosterId: Number(s.entry.rosterId),
+        name: s.team?.team || s.entry.teamName || "Team",
+        logo: s.team?.logo || s.entry.logo || null,
+        live: s.entry.points,
+        proj: s.proj,
+        winPct,
+      });
+      out.push({ id, a: side(sa, pctA), b: side(sb, pctB), started, final });
+    }
+    return out;
+  }, [
+    matchups,
+    myTeam,
+    teams,
+    weeklyPair.oppRosterId,
+    rosterPositions,
+    currentWeek,
+    playersById,
+    projectFor,
+    progressByNflTeam,
+  ]);
+
   const matchupRecordFor = (
     rosterId: number | null | undefined,
     teamName: string,
@@ -1459,6 +1995,52 @@ function PlaybookDashboardPage() {
 
   const newsEvents = useMemo(() => events.slice(0, 5), [events]);
 
+  /** Fresh injury designations, official report lines and news for the synced roster. */
+  const rosterIdsKey = useMemo(
+    () => (myTeam?.players ?? []).map((p) => p.id).filter(Boolean).sort().join(","),
+    [myTeam],
+  );
+  const rosterNewsQuery = useQuery({
+    queryKey: ["roster-news", rosterIdsKey],
+    enabled: rosterIdsKey.length > 0,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+    queryFn: async () => await getRosterNews({ data: { ids: rosterIdsKey.split(",") } }),
+  });
+
+  /** Press Room awards from the last completed week (shares the history matchup cache). */
+  const awardWeek = currentWeek != null && currentWeek > 1 ? currentWeek - 1 : null;
+  const { matchups: awardMatchups } = useActiveMatchups(awardWeek);
+  const playersByName = useMemo(() => buildPlayersByName(players), [players]);
+  const myAwards = useMemo(() => {
+    const entries = awardMatchups?.entries ?? [];
+    if (awardWeek == null || entries.length < 2) return [] as AwardRow[];
+    const { awards } = buildWeekReport({
+      week: awardWeek,
+      entries,
+      playersById,
+      playersByName,
+      rosterPositions,
+      events,
+      teams,
+    });
+    return awardsForTeam(awards, {
+      rosterId: myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null,
+      teamName: myTeam?.team ?? activeLeague?.teamName ?? null,
+    });
+  }, [
+    awardMatchups,
+    awardWeek,
+    playersById,
+    playersByName,
+    rosterPositions,
+    events,
+    teams,
+    myTeam,
+    activeLeague?.teamName,
+  ]);
+
   const insightSlides = useMemo(() => {
     const myPlayers = myTeam?.players ?? [];
     const myStarters = (myTeam?.starters ?? []).filter((p): p is Player => Boolean(p));
@@ -1470,24 +2052,49 @@ function PlaybookDashboardPage() {
       oppStarters,
       progressByNflTeam,
       brain,
+      nflWeek: currentWeek,
+      rosterNews: rosterNewsQuery.data ?? null,
+      awards: myAwards,
     });
-  }, [myTeam, oppTeam, progressByNflTeam, brain]);
+  }, [myTeam, oppTeam, progressByNflTeam, brain, currentWeek, rosterNewsQuery.data, myAwards]);
 
-  const startSitAlerts = useMemo(() => {
+  const { startSitAlerts, startSitLock } = useMemo(() => {
     if (!myTeam) {
-      return [] as {
-        id: string;
-        start: Player;
-        sit: Player;
-        startPts: number;
-        sitPts: number;
-      }[];
+      return {
+        startSitAlerts: [] as {
+          id: string;
+          start: Player;
+          sit: Player;
+          startPts: number;
+          sitPts: number;
+        }[],
+        startSitLock: "none" as "none" | "some" | "all",
+      };
     }
     const starters = (myTeam.starters ?? []).filter((p): p is Player => Boolean(p));
     const starterIds = new Set(starters.map((p) => p.id));
     const bench = (myTeam.bench ?? []).filter((p) => !starterIds.has(p.id));
 
-    return buildStartSitAdvice({
+    const nowMs = Date.now();
+    const lockedIds = new Set(
+      [...starters, ...bench]
+        .filter((p) => nflGameLocked(progressByNflTeam, p.team, nowMs))
+        .map((p) => p.id),
+    );
+    const playingThisWeek = [...starters, ...bench].filter((p) => {
+      const team = (p.team ?? "").trim().toUpperCase();
+      if (!team || team === "FA") return false;
+      return !(p.bye != null && currentWeek != null && Number(p.bye) === Number(currentWeek));
+    });
+    const lockedCount = playingThisWeek.filter((p) => lockedIds.has(p.id)).length;
+    const startSitLock: "none" | "some" | "all" =
+      lockedCount === 0
+        ? "none"
+        : lockedCount >= playingThisWeek.length
+          ? "all"
+          : "some";
+
+    const alerts = buildStartSitAdvice({
       starters,
       bench,
       weeklyFor: (id) => {
@@ -1503,8 +2110,10 @@ function PlaybookDashboardPage() {
       },
       minEdge: 0.8,
       limit: 4,
+      isLocked: (id) => lockedIds.has(id),
     });
-  }, [myTeam, projectFor, currentWeek]);
+    return { startSitAlerts: alerts, startSitLock };
+  }, [myTeam, projectFor, currentWeek, progressByNflTeam]);
 
   const marketRadar = useMemo(() => {
     const toFit = (p: Player): FitPlayer => ({
@@ -1689,6 +2298,85 @@ function PlaybookDashboardPage() {
     return map;
   }, [teams]);
   const leagueCacheKey = activeLeague?.id ?? "none";
+
+  const leagueSettingsQuery = useQuery({
+    queryKey: ["dashboard-league-settings", activeLeague?.id ?? null],
+    enabled: Boolean(activeLeague?.leagueId),
+    retry: false,
+    staleTime: 60 * 60 * 1000,
+    queryFn: async () =>
+      await getConnectionSettings({
+        data: {
+          identifier: activeLeague?.leagueId ?? "",
+          platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
+          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+        },
+      }),
+  });
+
+  const standingsTable = useMemo(() => {
+    const rows = standings?.rows ?? [];
+    if (!rows.length) return null;
+
+    const results = new Map<number, ("W" | "L" | "T")[]>();
+    for (const query of historyMatchupQueries) {
+      const byMatchup = new Map<number, NonNullable<typeof query.data>["entries"]>();
+      for (const entry of query.data?.entries ?? []) {
+        if (entry.matchupId == null) continue;
+        const bucket = byMatchup.get(Number(entry.matchupId)) ?? [];
+        bucket.push(entry);
+        byMatchup.set(Number(entry.matchupId), bucket);
+      }
+      for (const [a, b] of byMatchup.values()) {
+        if (!a || !b || (a.points <= 0 && b.points <= 0)) continue;
+        const diff = a.points - b.points;
+        const ra = Math.abs(diff) < 0.005 ? "T" : diff > 0 ? "W" : "L";
+        const rb = ra === "T" ? "T" : ra === "W" ? "L" : "W";
+        results.set(Number(a.rosterId), [...(results.get(Number(a.rosterId)) ?? []), ra]);
+        results.set(Number(b.rosterId), [...(results.get(Number(b.rosterId)) ?? []), rb]);
+      }
+    }
+
+    const myRosterId = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
+    const out = rows.map((row, index) => ({
+      ...row,
+      rank: index + 1,
+      last: (results.get(Number(row.rosterId)) ?? []).slice(-3),
+      isMine: myRosterId != null && Number(row.rosterId) === Number(myRosterId),
+    }));
+
+    const playoffTeams = leagueSettingsQuery.data?.playoffTeams ?? null;
+    const cut = playoffTeams && playoffTeams < out.length ? playoffTeams : null;
+
+    let summary: string | null = null;
+    const mine = out.find((r) => r.isMine);
+    if (mine && cut) {
+      const gamesAhead = (a: StandingRowLike, b: StandingRowLike) =>
+        (a.wins - b.wins + (b.losses - a.losses)) / 2;
+      const games = (n: number) =>
+        `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? "game" : "games"}`;
+      if (mine.rank <= cut) {
+        const firstOut = out[cut];
+        const lead = firstOut ? gamesAhead(mine, firstOut) : 0;
+        summary =
+          lead > 0
+            ? `You hold the ${ordinalPlace(mine.rank)} seed, ${games(lead)} clear of the playoff line.`
+            : `You hold the ${ordinalPlace(mine.rank)} seed, level on record with the first team out.`;
+      } else {
+        const lastIn = out[cut - 1];
+        const back = lastIn ? gamesAhead(lastIn, mine) : 0;
+        summary =
+          back > 0
+            ? `You're ${games(back)} out of the final playoff spot.`
+            : "You're level on record with the final playoff spot and trail on points.";
+      }
+    }
+
+    return { rows: out, cut, summary };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- historyStamp
+  }, [standings, historyStamp, leagueSettingsQuery.data, myTeam, teams]);
+
   const [rankBaseline, setRankBaseline] = useState<Record<string, number> | null>(null);
 
   useEffect(() => {
@@ -1780,27 +2468,15 @@ function PlaybookDashboardPage() {
           </div>
 
           <Panel
-            title="League Activity"
-            action={{ to: "/playbook/transactions", label: "Open Transactions" }}
-          >
-            {activityLoading ? (
-              <p className="text-sm text-muted-foreground">Loading league activity…</p>
-            ) : (
-              <ActivityFeed
-                events={newsEvents}
-                players={players}
-                compact
-                emptyMessage="No recent transactions recorded. Summaries will appear here after the next league moves."
-              />
-            )}
-          </Panel>
-
-          <Panel
-            title="Matchup"
+            title="Matchups"
+            badge={
+              <span className="rounded-lg border border-border bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
+                Week {currentWeek ?? 1}
+              </span>
+            }
             action={{ to: "/playbook/matchup", label: "View Matchup" }}
           >
             <MatchupPreviewCard
-              week={currentWeek ?? 1}
               loading={loading}
               leagueId={activeLeague?.id ?? null}
               platform={activeLeague?.platform ?? null}
@@ -1819,9 +2495,153 @@ function PlaybookDashboardPage() {
               weekStarted={displayMatchup.weekStarted}
               matchupFinal={displayMatchup.matchupFinal}
             />
+            {!loading && leagueMatchups.length ? (
+              <div className="mt-5 border-t border-slate-200 pt-4">
+                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Around the League
+                </span>
+                <ul className="divide-y divide-slate-100">
+                  {leagueMatchups.map((pair) => (
+                    <LeagueMatchupRow
+                      key={`${leagueCacheKey}-${pair.id}`}
+                      pair={pair}
+                      platform={activeLeague?.platform ?? null}
+                      cacheKey={`${leagueCacheKey}-lm`}
+                      recordFor={matchupRecordFor}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </Panel>
 
-          <TeamInsightsCarousel slides={insightSlides} resetKey={leagueCacheKey} />
+          <TeamInsightsCarousel
+            slides={insightSlides}
+            resetKey={leagueCacheKey}
+            platform={activeLeague?.platform ?? null}
+          />
+
+          <Panel
+            title="Standings"
+            action={{ to: "/standings", label: "Full Standings" }}
+          >
+            {standingsLoading && !standingsTable ? (
+              <p className="text-sm text-muted-foreground">Loading standings…</p>
+            ) : !standingsTable ? (
+              <p className="text-sm text-muted-foreground">No standings available yet.</p>
+            ) : (
+              <div className="w-full min-w-0">
+                <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)_3.5rem_4.25rem_4.25rem_4.5rem] items-center gap-x-2 px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  <span className="text-center">Rank</span>
+                  <span>Team</span>
+                  <span className="text-center">W-L</span>
+                  <span className="text-right">PF</span>
+                  <span className="text-right">PA</span>
+                  <span className="text-right">Last 3</span>
+                </div>
+                <ol className="w-full min-w-0">
+                  {standingsTable.rows.map((row) => {
+                    const inPlayoffs = standingsTable.cut != null && row.rank <= standingsTable.cut;
+                    const record =
+                      row.ties > 0
+                        ? `${row.wins}-${row.losses}-${row.ties}`
+                        : `${row.wins}-${row.losses}`;
+                    return (
+                      <li key={`${leagueCacheKey}-st-${row.rosterId}`}>
+                        <div
+                          className={cn(
+                            "grid w-full min-w-0 grid-cols-[2rem_minmax(0,1fr)_3.5rem_4.25rem_4.25rem_4.5rem] items-center gap-x-2 rounded-md px-2 py-2",
+                            row.isMine && "bg-blue-50/80",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "text-center text-sm font-bold tabular-nums",
+                              standingsTable.cut == null || inPlayoffs
+                                ? "text-slate-900"
+                                : "text-slate-400",
+                            )}
+                          >
+                            {row.rank}
+                          </span>
+                          <Link
+                            to="/playbook/rosters"
+                            search={{ scout: String(row.rosterId) }}
+                            className="flex min-w-0 items-center gap-2 overflow-hidden transition-opacity hover:opacity-85"
+                          >
+                            <MatchupTeamAvatar
+                              name={row.team}
+                              logo={logoBySlot.get(row.rosterId) ?? row.avatar ?? null}
+                              platform={activeLeague?.platform ?? null}
+                              cacheKey={`${leagueCacheKey}-st-${row.rosterId}`}
+                              size="sm"
+                            />
+                            <span className="min-w-0 flex-1 overflow-hidden">
+                              <span className="block truncate text-sm font-medium text-foreground">
+                                {row.team}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {row.owner || "Owner"}
+                              </span>
+                            </span>
+                          </Link>
+                          <span
+                            className={cn(
+                              "text-center text-sm font-semibold tabular-nums",
+                              recordToneClass(record),
+                            )}
+                          >
+                            {record}
+                          </span>
+                          <span className="text-right text-sm tabular-nums text-foreground">
+                            {row.pointsFor.toFixed(1)}
+                          </span>
+                          <span className="text-right text-sm tabular-nums text-slate-500">
+                            {row.pointsAgainst.toFixed(1)}
+                          </span>
+                          <span className="flex justify-end gap-1">
+                            {row.last.length ? (
+                              row.last.map((result, idx) => (
+                                <span
+                                  key={idx}
+                                  className={cn(
+                                    "flex size-5 items-center justify-center rounded text-[10px] font-bold",
+                                    result === "W"
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : result === "L"
+                                        ? "bg-rose-100 text-rose-600"
+                                        : "bg-slate-100 text-slate-500",
+                                  )}
+                                >
+                                  {result}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-slate-300">-</span>
+                            )}
+                          </span>
+                        </div>
+                        {standingsTable.cut != null && row.rank === standingsTable.cut ? (
+                          <div className="my-1 flex items-center gap-2 px-2" aria-label="Playoff line">
+                            <span className="h-px flex-1 border-t border-dashed border-emerald-400" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">
+                              Playoff Line
+                            </span>
+                            <span className="h-px flex-1 border-t border-dashed border-emerald-400" />
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ol>
+                {standingsTable.summary ? (
+                  <p className="mt-3 border-t border-slate-100 pt-3 text-xs font-medium text-slate-500">
+                    {standingsTable.summary}
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </Panel>
         </div>
 
         <div className="space-y-6 lg:col-span-1">
@@ -1905,15 +2725,30 @@ function PlaybookDashboardPage() {
           >
             {!startSitAlerts.length ? (
               <div className="mt-1.5 flex w-full select-none items-center space-x-4 overflow-hidden rounded-xl border border-slate-100 bg-slate-50/40 p-4 text-left shadow-sm">
-                <span className="flex flex-shrink-0 items-center justify-center rounded bg-emerald-100 px-2 py-0.5 text-[9px] font-extrabold tracking-wider text-emerald-800 uppercase shadow-sm">
-                  OPTIMIZED
+                <span
+                  className={cn(
+                    "flex flex-shrink-0 items-center justify-center rounded px-2 py-0.5 text-[9px] font-extrabold tracking-wider uppercase shadow-sm",
+                    startSitLock === "all"
+                      ? "bg-slate-200 text-slate-700"
+                      : "bg-emerald-100 text-emerald-800",
+                  )}
+                >
+                  {startSitLock === "all" ? "LOCKED" : "OPTIMIZED"}
                 </span>
                 <div className="flex min-w-0 flex-col items-start text-left">
                   <span className="block w-full truncate text-xs font-black tracking-wide text-slate-900">
-                    Your Starting Lineup is Locked
+                    {startSitLock === "all"
+                      ? "Games Have Started"
+                      : startSitLock === "some"
+                        ? "No Available Moves"
+                        : "Your Starting Lineup is Locked"}
                   </span>
                   <span className="mt-0.5 block w-full text-[11px] font-bold text-slate-400">
-                    No projection upgrades detected on your bench slots.
+                    {startSitLock === "all"
+                      ? "All of your players' games have kicked off. No lineup moves remain this week."
+                      : startSitLock === "some"
+                        ? "Games are underway. Players whose games have kicked off are locked and left out of this advice."
+                        : "No projection upgrades detected on your bench slots."}
                   </span>
                 </div>
               </div>
@@ -2182,6 +3017,22 @@ function PlaybookDashboardPage() {
                 </div>
               )}
             </div>
+          </Panel>
+
+          <Panel
+            title="League Activity"
+            action={{ to: "/playbook/transactions", label: "Open Transactions" }}
+          >
+            {activityLoading ? (
+              <p className="text-sm text-muted-foreground">Loading league activity…</p>
+            ) : (
+              <ActivityFeed
+                events={newsEvents}
+                players={players}
+                compact
+                emptyMessage="No recent transactions recorded. Summaries will appear here after the next league moves."
+              />
+            )}
           </Panel>
         </div>
       </div>

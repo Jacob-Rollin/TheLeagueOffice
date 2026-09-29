@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
-export type { LeagueActivityEvent, LeagueActivityMove } from "./league.server";
+export type { LeagueActivityEvent, LeagueActivityMove, LeagueTransactionLog } from "./league.server";
 
 export const getUserLeagues = createServerFn({ method: "GET" })
   .inputValidator((input: { username: string }) => ({
@@ -41,6 +41,18 @@ export const getConnectionMeta = createServerFn({ method: "GET" })
     const { loadConnectionMeta, loadEspnConnectionMeta } = await import("./league.server");
     if (data.platform === "espn") return await loadEspnConnectionMeta(data.identifier, data.s2, data.swid);
     return await loadConnectionMeta(data.identifier);
+  });
+
+export const getConnectionSettings = createServerFn({ method: "GET" })
+  .inputValidator((input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
+    identifier: String(input.identifier ?? "").slice(0, 64),
+    platform: String(input.platform ?? "sleeper").slice(0, 16),
+    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const { loadConnectionSettings } = await import("./league-settings.server");
+    return await loadConnectionSettings(data.identifier, data.platform, data.s2, data.swid);
   });
 
 export const getConnectionStandings = createServerFn({ method: "GET" })
@@ -89,6 +101,18 @@ export const getConnectionTransactions = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const { loadConnectionTransactions } = await import("./league.server");
     return await loadConnectionTransactions(data.identifier, data.platform, data.s2, data.swid);
+  });
+
+export const getConnectionTransactionLog = createServerFn({ method: "GET" })
+  .inputValidator((input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
+    identifier: String(input.identifier ?? "").slice(0, 64),
+    platform: String(input.platform ?? "sleeper").slice(0, 16),
+    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const { loadConnectionTransactionLog } = await import("./league.server");
+    return await loadConnectionTransactionLog(data.identifier, data.platform, data.s2, data.swid);
   });
 
 export const getConnectionMatchups = createServerFn({ method: "GET" })

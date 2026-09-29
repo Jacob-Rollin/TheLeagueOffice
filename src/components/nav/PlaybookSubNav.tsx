@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { NavLockBadge, navLinkClass } from "@/components/nav/NavMenus";
+import { NavLockBadge } from "@/components/nav/NavMenus";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -271,24 +271,22 @@ export function PlaybookSubNav() {
 
   return (
     <div className="flex h-12 w-full items-center justify-between border-b border-border/50 bg-slate-50/90 px-6">
-      {/* Same max-w + column geometry as SiteNav (px-3) so Dashboard sits under Playbook */}
+      {/* Same max-w + px-3 as SiteNav so the switcher lines up under the logo */}
       <div className="mx-auto flex h-12 w-full max-w-shell items-center gap-2 px-3">
-        <div className="relative mr-2 shrink-0">
-          <span className="display-title invisible whitespace-nowrap text-lg" aria-hidden="true">
+        {/* Both share one grid cell so the column is as wide as the logo or the switcher, whichever is larger */}
+        <div className="mr-4 grid shrink-0 items-center">
+          <span
+            className="display-title invisible col-start-1 row-start-1 whitespace-nowrap text-lg"
+            aria-hidden="true"
+          >
             THE LEAGUE <span className="rounded px-1.5">OFFICE</span>
           </span>
-          <div className="absolute inset-y-0 left-0 flex items-center">
+          <div className="col-start-1 row-start-1 flex items-center">
             <LeagueSwitcher />
           </div>
         </div>
 
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          <span
-            className={cn(navLinkClass, "pointer-events-none invisible select-none")}
-            aria-hidden="true"
-          >
-            Front Office
-          </span>
           <nav className="flex items-center space-x-5 text-xs font-semibold text-slate-500">
             {LINKS.map((item) => {
               const active = linkIsActive(pathname, item.to);

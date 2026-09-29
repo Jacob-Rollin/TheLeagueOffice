@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
@@ -167,10 +167,26 @@ function formatActivityTime(at: number): string {
   return new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/** Fantasy teams involved in a trade, in the order they first appear. */
+function tradeTeams(moves: LeagueActivityMove[]): string[] {
+  const teams: string[] = [];
+  const push = (name: string | undefined) => {
+    const clean = name?.trim();
+    if (clean && !teams.includes(clean)) teams.push(clean);
+  };
+  for (const move of moves) {
+    push(move.fantasyTeam);
+    push(move.fromFantasyTeam);
+  }
+  return teams;
+}
+
 function activityHeadline(event: LeagueActivityEvent): string {
   const kind = resolveActivityKind(event);
   const manager = (event.teamName ?? "").trim() || "Manager Team";
   if (kind === "trade") {
+    const teams = tradeTeams(event.moves ?? []);
+    if (teams.length === 2) return `${teams[0]} and ${teams[1]} completed a trade`;
     return event.teamName ? `${manager} completed a trade` : "Trade completed";
   }
   if (kind === "ir") {
@@ -204,13 +220,19 @@ function ActivityPlayerRow({
   move,
   eventKind,
   onOpen,
+  actionOverride,
+  note,
+  trailing,
 }: {
   move: LeagueActivityMove;
   eventKind: LeagueActivityEvent["kind"];
   onOpen: (id: string) => void;
+  actionOverride?: LeagueActivityMove["action"];
+  note?: string;
+  trailing?: ReactNode;
 }) {
   const open = () => onOpen(move.playerId);
-  const action = resolveMoveAction(move, eventKind);
+  const action = actionOverride ?? resolveMoveAction(move, eventKind);
 
   const badge =
     action === "add" ? (
@@ -249,8 +271,96 @@ function ActivityPlayerRow({
             {" "}
             {move.pos} - {move.team}
           </span>
+          {note ? <span className="ml-1.5 text-xs font-medium text-slate-400">{note}</span> : null}
         </span>
       </button>
+      {trailing ? <span className="ml-2 shrink-0">{trailing}</span> : null}
+    </div>
+  );
+}
+
+export type TradeGradeChip = { letter: string; tone: "good" | "even" | "bad" };
+
+const GRADE_TONE: Record<TradeGradeChip["tone"], string> = {
+  good: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  even: "bg-slate-50 text-slate-600 border-slate-200",
+  bad: "bg-rose-50 text-rose-600 border-rose-200",
+};
+
+/** Per-team trade breakdown: what each side received (+) and sent (-). */
+function TradeBreakdown({
+  eventId,
+  moves,
+  onOpen,
+  grades,
+}: {
+  eventId: string;
+  moves: LeagueActivityMove[];
+  onOpen: (id: string) => void;
+  grades?: Record<string, TradeGradeChip> | undefined;
+}) {
+  const teams = tradeTeams(moves);
+  const adds = moves.filter((m) => m.action === "add");
+  const releases = moves.filter((m) => m.action === "drop");
+
+  return (
+    <div className="mt-1.5 space-y-2.5">
+      {teams.map((team) => {
+        const received = adds.filter((m) => m.fantasyTeam?.trim() === team);
+        const sent = adds.filter((m) => m.fromFantasyTeam?.trim() === team);
+        const released = releases.filter((m) => m.fantasyTeam?.trim() === team);
+        if (!received.length && !sent.length && !released.length) return null;
+        return (
+          <div key={team}>
+            <p className="flex items-center gap-2 text-xs font-bold text-slate-700">
+              {team}
+              {grades?.[team] ? (
+                <span
+                  className={cn(
+                    "rounded border px-1.5 py-px text-[10px] font-bold tracking-wide",
+                    GRADE_TONE[grades[team]!.tone],
+                  )}
+                  title="Trade grade from current Value/Trend"
+                >
+                  {grades[team]!.letter}
+                </span>
+              ) : null}
+            </p>
+            <div className="mt-0.5 space-y-0.5">
+              {received.map((move, idx) => (
+                <ActivityPlayerRow
+                  key={`${eventId}-${team}-in-${move.playerId}-${idx}`}
+                  move={move}
+                  eventKind="trade"
+                  onOpen={onOpen}
+                  actionOverride="add"
+                  {...(move.fromFantasyTeam ? { note: `from ${move.fromFantasyTeam}` } : {})}
+                />
+              ))}
+              {sent.map((move, idx) => (
+                <ActivityPlayerRow
+                  key={`${eventId}-${team}-out-${move.playerId}-${idx}`}
+                  move={move}
+                  eventKind="trade"
+                  onOpen={onOpen}
+                  actionOverride="drop"
+                  {...(move.fantasyTeam ? { note: `to ${move.fantasyTeam}` } : {})}
+                />
+              ))}
+              {released.map((move, idx) => (
+                <ActivityPlayerRow
+                  key={`${eventId}-${team}-drop-${move.playerId}-${idx}`}
+                  move={move}
+                  eventKind="trade"
+                  onOpen={onOpen}
+                  actionOverride="drop"
+                  note="dropped"
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -264,6 +374,8 @@ export function ActivityFeed({
   className,
   compact = false,
   players,
+  addNote,
+  tradeGrades,
 }: {
   events: LeagueActivityEvent[];
   loading?: boolean;
@@ -273,6 +385,10 @@ export function ActivityFeed({
   compact?: boolean;
   /** Optional Sleeper catalog used to wipe ESPN numeric ghost labels. */
   players?: ActivityCatalogPlayer[];
+  /** Right-aligned note on waiver / free-agent adds (e.g. points since pickup). */
+  addNote?: (event: LeagueActivityEvent, move: LeagueActivityMove) => ReactNode;
+  /** Trade grade chips keyed by event id, then fantasy team name. */
+  tradeGrades?: Record<string, Record<string, TradeGradeChip>>;
 }) {
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
@@ -341,7 +457,14 @@ export function ActivityFeed({
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-900">{activityHeadline(event)}</p>
-                    {orderedMoves.length ? (
+                    {kind === "trade" && tradeTeams(moves).length > 0 ? (
+                      <TradeBreakdown
+                        eventId={event.id}
+                        moves={moves}
+                        onOpen={openPlayer}
+                        grades={tradeGrades?.[event.id]}
+                      />
+                    ) : orderedMoves.length ? (
                       <div className="mt-1.5 space-y-0.5">
                         {orderedMoves.map((move, idx) => (
                           <ActivityPlayerRow
@@ -349,6 +472,11 @@ export function ActivityFeed({
                             move={move}
                             eventKind={kind}
                             onOpen={openPlayer}
+                            trailing={
+                              addNote && resolveMoveAction(move, kind) === "add" && (kind === "waiver" || kind === "free_agent")
+                                ? addNote(event, move)
+                                : null
+                            }
                           />
                         ))}
                       </div>

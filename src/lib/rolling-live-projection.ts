@@ -283,6 +283,12 @@ export function matchupWinPctFromExpected(opts: {
   /** Projected points still on the board for A (0 when slate is done). */
   remainingA: number;
   remainingB: number;
+  /**
+   * Share (0–1) of each team's projected output whose game clock is still running.
+   * When provided, uncertainty decays with time left instead of remaining points.
+   */
+  timeLeftFracA?: number;
+  timeLeftFracB?: number;
 }): { pctA: number; pctB: number } {
   const expectedA = Math.max(0, Number(opts.expectedA) || 0);
   const expectedB = Math.max(0, Number(opts.expectedB) || 0);
@@ -296,8 +302,14 @@ export function matchupWinPctFromExpected(opts: {
     return Math.min(1, remaining / denom);
   };
 
-  const sigmaA = MATCHUP_TEAM_FULL_SD * Math.sqrt(fracFor(remainingA, expectedA));
-  const sigmaB = MATCHUP_TEAM_FULL_SD * Math.sqrt(fracFor(remainingB, expectedB));
+  const clampFrac = (n: number | undefined) => Math.max(0, Math.min(1, Number(n) || 0));
+  const fracA =
+    opts.timeLeftFracA != null ? clampFrac(opts.timeLeftFracA) : fracFor(remainingA, expectedA);
+  const fracB =
+    opts.timeLeftFracB != null ? clampFrac(opts.timeLeftFracB) : fracFor(remainingB, expectedB);
+  // Scoring variance accrues with time played, so σ shrinks with √(time left).
+  const sigmaA = MATCHUP_TEAM_FULL_SD * Math.sqrt(fracA);
+  const sigmaB = MATCHUP_TEAM_FULL_SD * Math.sqrt(fracB);
   const sigma = Math.sqrt(sigmaA * sigmaA + sigmaB * sigmaB);
 
   if (sigma < 0.75) {
@@ -447,7 +459,47 @@ export function computeDynamicWinProbability(opts: {
     expectedB,
     remainingA: projRemainingA,
     remainingB: projRemainingB,
+    timeLeftFracA: starterTimeLeftFraction(opts.startersA, opts.pointsMapA, opts),
+    timeLeftFracB: starterTimeLeftFraction(opts.startersB, opts.pointsMapB, opts),
   });
+}
+
+/**
+ * Projection-weighted share of a lineup's game clock still to play (0–1).
+ * Finished starters count as 0, un-kicked-off starters as 1, live starters
+ * by regulation minutes left, so a lead firms up as the clock runs down.
+ */
+function starterTimeLeftFraction(
+  starters: Player[],
+  pointsMap: Record<string, number>,
+  opts: {
+    projectFor: (id: string) => number | null;
+    weeklyFallback: (player: Player) => number;
+    progressByNflTeam: Map<string, NflGameProgress>;
+    activeWeek: number;
+  },
+): number {
+  let weighted = 0;
+  let total = 0;
+  for (const player of starters) {
+    if (player.bye != null && Number(player.bye) === Number(opts.activeWeek)) continue;
+    const baseline = opts.projectFor(player.id) ?? opts.weeklyFallback(player);
+    const weight = Math.max(1, Number(baseline) || 0);
+    const progress = progressForNflTeam(player.team, opts.progressByNflTeam);
+    const live = Number(pointsMap[player.id] ?? 0) || 0;
+    const timeLeft = !progress
+      ? live > 0
+        ? 0
+        : 1
+      : progress.phase === "post"
+        ? 0
+        : progress.phase === "pre"
+          ? 1
+          : Math.max(0, Math.min(1, progress.minutesRemaining / REGULATION_MINUTES));
+    weighted += weight * timeLeft;
+    total += weight;
+  }
+  return total > 0 ? weighted / total : 0;
 }
 
 /** Compact local kickoff label, e.g. "Sun 3:25PM". */

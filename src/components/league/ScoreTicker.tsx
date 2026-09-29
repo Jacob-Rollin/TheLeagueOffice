@@ -4,6 +4,18 @@ import { cn } from "@/lib/utils";
 
 /** Same-origin proxy — ESPN's scoreboard endpoint sends no CORS headers. */
 const SCOREBOARD_URL = "/api/public/scoreboard";
+const TICKER_LIVE_MS = 10 * 1000;
+const TICKER_IDLE_MS = 60 * 1000;
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function scoreboardHasLiveGame(json: any): boolean {
+  const events: any[] = Array.isArray(json?.events) ? json.events : [];
+  return events.some((ev) => {
+    const state = String(ev?.competitions?.[0]?.status?.type?.state ?? ev?.status?.type?.state ?? "");
+    return state.toLowerCase() === "in";
+  });
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 type TickerTeam = {
   abbr: string;
@@ -182,6 +194,7 @@ export function ScoreTicker() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const skipCycleRef = useRef(false);
+  const anyLiveRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -198,12 +211,30 @@ export function ScoreTicker() {
       : [];
 
   useEffect(() => {
-    if (skipCycleRef.current) {
-      skipCycleRef.current = false;
-      return;
-    }
+    // The first load sets the week, which re-runs this effect; that run already
+    // has fresh data, so it only needs to schedule the next refresh.
+    const skipImmediateLoad = skipCycleRef.current;
+    skipCycleRef.current = false;
 
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const schedule = () => {
+      if (cancelled) return;
+      clearTimeout(timer);
+      timer = setTimeout(tick, anyLiveRef.current ? TICKER_LIVE_MS : TICKER_IDLE_MS);
+    };
+
+    const tick = async () => {
+      // Hidden tabs skip the network and pick up again on visibilitychange.
+      if (typeof document !== "undefined" && document.hidden) return;
+      await load();
+      schedule();
+    };
+
+    const onVisible = () => {
+      if (!document.hidden) void tick();
+    };
 
     const load = async () => {
       try {
@@ -238,17 +269,20 @@ export function ScoreTicker() {
           skipCycleRef.current = true;
         }
 
+        anyLiveRef.current = scoreboardHasLiveGame(json);
         setGames(mapGames(json));
       } catch {
         /* offline or blocked — keep last known scores */
       }
     };
 
-    load();
-    const timer = setInterval(load, 60_000);
+    if (skipImmediateLoad) schedule();
+    else void tick();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [selectedWeek, seasonType]);
 

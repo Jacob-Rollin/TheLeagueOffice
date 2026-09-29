@@ -161,13 +161,52 @@ const loadRosterMap = memo<Map<string, { sleeperId: string; pos: RedZonePos; tea
   },
 );
 
+type WeekAgg = {
+  byGsis: Map<string, Agg>;
+  teamRushAtt: Map<string, number>;
+  teamTgt: Map<string, number>;
+};
+
+function emptyWeekAgg(): WeekAgg {
+  return { byGsis: new Map(), teamRushAtt: new Map(), teamTgt: new Map() };
+}
+
+/** Sum per-week aggregates over an inclusive week range. */
+function mergeWeeks(weeks: Map<number, WeekAgg>, from: number, to: number): WeekAgg {
+  const out = emptyWeekAgg();
+  for (let week = from; week <= to; week++) {
+    const w = weeks.get(week);
+    if (!w) continue;
+    for (const [id, a] of w.byGsis) {
+      const row = ensure(out.byGsis, id, a.name, a.team);
+      if (a.pos) row.pos = a.pos;
+      for (const g of a.games) row.games.add(g);
+      row.fumLost += a.fumLost;
+      row.passCmp += a.passCmp;
+      row.passAtt += a.passAtt;
+      row.passYds += a.passYds;
+      row.passTd += a.passTd;
+      row.passInt += a.passInt;
+      row.passSack += a.passSack;
+      row.rushAtt += a.rushAtt;
+      row.rushYds += a.rushYds;
+      row.rushTd += a.rushTd;
+      row.rec += a.rec;
+      row.recTgt += a.recTgt;
+      row.recYds += a.recYds;
+      row.recTd += a.recTd;
+    }
+    for (const [team, n] of w.teamRushAtt) out.teamRushAtt.set(team, (out.teamRushAtt.get(team) ?? 0) + n);
+    for (const [team, n] of w.teamTgt) out.teamTgt.set(team, (out.teamTgt.get(team) ?? 0) + n);
+  }
+  return out;
+}
+
 const loadRedZoneAgg = memo<{
   season: string;
   yardline: RedZoneYardline;
   maxWeek: number;
-  byGsis: Map<string, Agg>;
-  teamRushAtt: Map<string, number>;
-  teamTgt: Map<string, number>;
+  weeks: Map<number, WeekAgg>;
 }>(6 * HOUR, async (key) => {
   const [season, ylRaw] = key.split(":");
   const seasonKey = season || currentSeason();
@@ -184,17 +223,13 @@ const loadRedZoneAgg = memo<{
       season: seasonKey,
       yardline: yardlineMax,
       maxWeek: 0,
-      byGsis: new Map(),
-      teamRushAtt: new Map(),
-      teamTgt: new Map(),
+      weeks: new Map(),
     };
   }
   const header = parseCsvLine(lines[0]!);
   const idx = Object.fromEntries(header.map((h, i) => [h, i])) as Record<string, number>;
 
-  const byGsis = new Map<string, Agg>();
-  const teamRushAtt = new Map<string, number>();
-  const teamTgt = new Map<string, number>();
+  const weeks = new Map<number, WeekAgg>();
   let maxWeek = 0;
 
   for (let i = 1; i < lines.length; i++) {
@@ -209,6 +244,12 @@ const loadRedZoneAgg = memo<{
 
     const week = num(cell(row, idx, "week"));
     if (week > maxWeek) maxWeek = week;
+    let weekAgg = weeks.get(week);
+    if (!weekAgg) {
+      weekAgg = emptyWeekAgg();
+      weeks.set(week, weekAgg);
+    }
+    const { byGsis, teamRushAtt, teamTgt } = weekAgg;
     const team = cell(row, idx, "posteam").trim();
     const gameId = cell(row, idx, "game_id");
     const fum = num(cell(row, idx, "fumble_lost"));
@@ -257,7 +298,7 @@ const loadRedZoneAgg = memo<{
     }
   }
 
-  return { season: seasonKey, yardline: yardlineMax, maxWeek, byGsis, teamRushAtt, teamTgt };
+  return { season: seasonKey, yardline: yardlineMax, maxWeek, weeks };
 });
 
 function fantasyPoints(input: {
@@ -341,16 +382,27 @@ function hasAnyProduction(r: RedZonePlayerRow): boolean {
 export async function loadRedZoneStats(
   season = currentSeason(),
   yardlineInput: unknown = 20,
+  weekFromInput?: number | null,
+  weekToInput?: number | null,
 ): Promise<RedZoneStatsPayload> {
   const yardline = normalizeYardline(yardlineInput);
   const seasonKey = String(season ?? currentSeason()).slice(0, 16);
   const prev = String(Number(seasonKey) - 1);
-  let active = await loadRedZoneAgg(`${seasonKey}:${yardline}`).catch(() => null);
+  let source = await loadRedZoneAgg(`${seasonKey}:${yardline}`).catch(() => null);
   let usedSeason = seasonKey;
-  if (!active || active.byGsis.size === 0 || active.maxWeek === 0) {
-    active = await loadRedZoneAgg(`${prev}:${yardline}`);
+  if (!source || source.weeks.size === 0 || source.maxWeek === 0) {
+    source = await loadRedZoneAgg(`${prev}:${yardline}`);
     usedSeason = prev;
   }
+
+  const maxWeek = source.maxWeek;
+  const clampWeek = (value: number | null | undefined, fallback: number) => {
+    const n = Math.round(Number(value));
+    return Number.isFinite(n) && n >= 1 ? Math.min(n, maxWeek) : fallback;
+  };
+  const weekFrom = maxWeek > 0 ? clampWeek(weekFromInput, 1) : 0;
+  const weekTo = maxWeek > 0 ? Math.max(weekFrom, clampWeek(weekToInput, maxWeek)) : 0;
+  const active = mergeWeeks(source.weeks, weekFrom, weekTo);
 
   const [roster, ownership] = await Promise.all([
     loadRosterMap(usedSeason).catch(() => new Map()),
@@ -396,10 +448,11 @@ export async function loadRedZoneStats(
 
   return {
     season: usedSeason,
-    weeksFrom: active.maxWeek > 0 ? 1 : 0,
-    weeksTo: active.maxWeek,
+    weeksFrom: weekFrom,
+    weeksTo: weekTo,
+    maxWeek,
     // Always report the depth that was actually aggregated.
-    yardline: active.yardline,
+    yardline: source.yardline,
     rowsByPos,
   };
 }

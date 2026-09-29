@@ -1,5 +1,13 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  ChevronRight,
+  CircleUserRound,
+  LogOut,
+  ShieldCheck,
+  Trophy,
+  type LucideIcon,
+} from "lucide-react";
 
 import { AccessGate } from "@/components/league/AccessGate";
 import { PageTitle } from "@/components/PageTitle";
@@ -8,8 +16,34 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/utils";
 
 const itemClass =
-  "block w-full rounded-md px-3 py-2 text-left text-sm font-medium text-foreground/80 transition-colors hover:bg-muted";
-const activeClass = "bg-muted text-foreground";
+  "group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-foreground/80 transition-colors hover:bg-muted";
+const activeClass = "bg-primary/10 font-semibold text-primary hover:bg-primary/10";
+
+function NavItemContent({
+  icon: Icon,
+  label,
+  active,
+}: {
+  icon: LucideIcon;
+  label: string;
+  active?: boolean;
+}) {
+  return (
+    <>
+      <Icon
+        className={cn(
+          "size-5 shrink-0 stroke-[1.75]",
+          active ? "text-primary" : "text-foreground/60 group-hover:text-foreground/80",
+        )}
+        aria-hidden="true"
+      />
+      <span className="flex-1">{label}</span>
+      {active ? (
+        <ChevronRight className="size-4 shrink-0 stroke-[2.5] text-primary" aria-hidden="true" />
+      ) : null}
+    </>
+  );
+}
 
 /** Shared 25/75 split layout for every /account route. */
 export function AccountShell({
@@ -50,19 +84,29 @@ export function AccountShell({
             {showAdmin && (
               <Link
                 to="/account/admin"
+                aria-current={active === "admin" ? "page" : undefined}
                 className={cn(itemClass, active === "admin" && activeClass)}
               >
-                Admin
+                <NavItemContent icon={ShieldCheck} label="Admin" active={active === "admin"} />
               </Link>
             )}
-            <Link to="/account" className={cn(itemClass, active === "settings" && activeClass)}>
-              Account Settings
+            <Link
+              to="/account"
+              aria-current={active === "settings" ? "page" : undefined}
+              className={cn(itemClass, active === "settings" && activeClass)}
+            >
+              <NavItemContent
+                icon={CircleUserRound}
+                label="Account Settings"
+                active={active === "settings"}
+              />
             </Link>
             <Link
               to="/account/leagues"
+              aria-current={active === "leagues" ? "page" : undefined}
               className={cn(itemClass, active === "leagues" && activeClass)}
             >
-              My Leagues
+              <NavItemContent icon={Trophy} label="My Leagues" active={active === "leagues"} />
             </Link>
             <div className="my-2 border-t border-border" />
             <button
@@ -73,7 +117,7 @@ export function AccountShell({
                 navigate({ to: "/" });
               }}
             >
-              Sign Out
+              <NavItemContent icon={LogOut} label="Sign Out" />
             </button>
           </div>
         </nav>

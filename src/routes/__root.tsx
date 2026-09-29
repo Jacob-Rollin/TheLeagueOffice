@@ -130,9 +130,6 @@ function SiteNav() {
 
         {/* Left-side navigation grouping */}
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          <Link to="/" activeOptions={{ exact: true }} className={navLinkClass}>
-            Front Office
-          </Link>
           <LockedToolsNav />
           <DraftMenu />
           <ResearchMenu />

@@ -222,6 +222,9 @@ function RedZoneStatsPage() {
   const deferredQ = useDeferredValue(q);
   const [season, setSeason] = useState(seasons[0] ?? String(new Date().getFullYear()));
   const [yardline, setYardline] = useState<YardlineOpt>(20);
+  /** Inclusive week range; null means the season's first / latest available week. */
+  const [weekFrom, setWeekFrom] = useState<number | null>(null);
+  const [weekTo, setWeekTo] = useState<number | null>(null);
   const [showRoster, setShowRoster] = useState(true);
   const [showTaken, setShowTaken] = useState(true);
   const [showAvailable, setShowAvailable] = useState(true);
@@ -262,13 +265,20 @@ function RedZoneStatsPage() {
   }, [myTeam?.players]);
 
   const query = useQuery({
-    queryKey: ["red-zone-stats", season, yardline],
+    queryKey: ["red-zone-stats", season, yardline, weekFrom, weekTo],
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
-    queryFn: () => getRedZoneStats({ data: { season, yardline } }),
+    placeholderData: (prev) => prev,
+    queryFn: () => getRedZoneStats({ data: { season, yardline, weekFrom, weekTo } }),
   });
 
   const payload = query.data;
+  const weekOptions = useMemo(
+    () => Array.from({ length: Math.max(0, payload?.maxWeek ?? 0) }, (_, i) => i + 1),
+    [payload?.maxWeek],
+  );
+  const shownFrom = payload?.weeksFrom ?? 0;
+  const shownTo = payload?.weeksTo ?? 0;
   const rows = useMemo((): EnrichedRedZoneRow[] => {
     const list = payload?.rowsByPos?.[pos] ?? [];
     const needle = deferredQ.trim().toLowerCase();
@@ -358,7 +368,11 @@ function RedZoneStatsPage() {
 
   const weekLabel =
     payload && payload.weeksTo > 0
-      ? `Weeks ${payload.weeksFrom} to ${payload.weeksTo} (${payload.season}) · Inside ${payload.yardline}`
+      ? `${
+          payload.weeksFrom === payload.weeksTo
+            ? `Week ${payload.weeksTo}`
+            : `Weeks ${payload.weeksFrom} to ${payload.weeksTo}`
+        } (${payload.season}) · Inside ${payload.yardline}`
       : payload
         ? `Season ${payload.season} · Inside ${payload.yardline}`
         : "Loading red zone board…";
@@ -409,7 +423,7 @@ function RedZoneStatsPage() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2 sm:justify-between">
-        <div className="flex flex-nowrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger className={filterTriggerClass}>
               Availability
@@ -448,7 +462,13 @@ function RedZoneStatsPage() {
 
           <Select
             value={season}
-            onValueChange={(v) => startTransition(() => setSeason(v))}
+            onValueChange={(v) =>
+              startTransition(() => {
+                setSeason(v);
+                setWeekFrom(null);
+                setWeekTo(null);
+              })
+            }
           >
             <SelectTrigger className="h-9 w-[7.5rem] shrink-0 border-slate-200 bg-white shadow-none">
               <SelectValue />
@@ -461,6 +481,60 @@ function RedZoneStatsPage() {
               ))}
             </SelectContent>
           </Select>
+
+          {weekOptions.length > 0 ? (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Select
+                value={String(shownFrom)}
+                onValueChange={(v) =>
+                  startTransition(() => {
+                    const next = Number(v);
+                    setWeekFrom(next);
+                    if (next > shownTo) setWeekTo(next);
+                  })
+                }
+              >
+                <SelectTrigger
+                  aria-label="From week"
+                  className="h-9 w-[7rem] shrink-0 border-slate-200 bg-white shadow-none"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {weekOptions.map((w) => (
+                    <SelectItem key={w} value={String(w)}>
+                      Week {w}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs font-medium text-slate-500">to</span>
+              <Select
+                value={String(shownTo)}
+                onValueChange={(v) =>
+                  startTransition(() => {
+                    const next = Number(v);
+                    setWeekTo(next);
+                    if (next < shownFrom) setWeekFrom(next);
+                  })
+                }
+              >
+                <SelectTrigger
+                  aria-label="To week"
+                  className="h-9 w-[7rem] shrink-0 border-slate-200 bg-white shadow-none"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {weekOptions.map((w) => (
+                    <SelectItem key={w} value={String(w)}>
+                      Week {w}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
 
           <Select
             value={String(yardline)}

@@ -1,3 +1,6 @@
+import { UserRound } from "lucide-react";
+import { useState } from "react";
+
 import { cn } from "@/lib/utils";
 import type { Pos } from "@/lib/draft";
 
@@ -30,19 +33,28 @@ export function PlayerAvatar({
   style?: React.CSSProperties;
 }) {
   const logo = teamLogo(team);
+  const src = playerImage(id, pos, team);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const showSilhouette = !src || failedSrc === src;
   return (
     <div className={cn("relative size-16 shrink-0", className)} style={style}>
       <div className="flex size-full items-center justify-center overflow-hidden rounded-full border border-border bg-surface">
-        <img
-          src={playerImage(id, pos, team)}
-          alt={name}
-          loading="lazy"
-          decoding="async"
-          className="size-full object-cover object-center"
-          onError={(e) => {
-            e.currentTarget.style.visibility = "hidden";
-          }}
-        />
+        {showSilhouette ? (
+          <UserRound
+            aria-label={name}
+            className="size-[70%] translate-y-[8%] text-slate-300"
+            strokeWidth={1.75}
+          />
+        ) : (
+          <img
+            src={src}
+            alt={name}
+            loading="lazy"
+            decoding="async"
+            className="size-full object-cover object-center"
+            onError={() => setFailedSrc(src)}
+          />
+        )}
       </div>
 
       {logo && (
