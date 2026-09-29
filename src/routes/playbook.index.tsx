@@ -885,46 +885,61 @@ function TeamInsightsCarousel({
       </div>
 
       {slide ? (
-        <div className="flex w-full min-h-[140px] items-start space-x-6 p-4">
-          {slide.player ? (
-            <button
-              type="button"
-              aria-label={`Open ${slide.player.name} details`}
-              className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-full border border-slate-100 bg-slate-50 transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-              onClick={() => modalRef.current?.open(slide.player!.id)}
-            >
-              <PlayerAvatar
-                id={slide.player.id}
-                pos={slide.player.pos}
-                team={slide.player.team}
-                name={slide.player.name}
-                className="size-20"
-                logoClassName="size-5"
-              />
-            </button>
-          ) : slide.team ? (
-            <InsightTeamAvatar name={slide.team.name} logo={slide.team.logo} platform={platform} />
-          ) : (
-            <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-full border border-slate-100 bg-slate-50 text-xs font-bold text-slate-400">
-              TLO
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-              {slide.tag}
-            </p>
-            <p className="mb-2 text-base font-black text-slate-900">{slide.headline}</p>
-            <p className="text-xs leading-relaxed text-slate-600">{slide.body}</p>
-            {slide.meta ? (
-              <p className="mt-1.5 text-[11px] font-medium text-slate-400">{slide.meta}</p>
-            ) : null}
-            <Link
-              to={slide.action.to}
-              className="mt-3 inline-block text-xs font-semibold text-primary hover:underline"
-            >
-              {slide.action.label}
-            </Link>
-          </div>
+        // Every slide shares one grid cell so the card keeps the tallest slide's height.
+        <div className="grid">
+          {slides.map((item, i) => {
+            const active = i === safeIndex;
+            return (
+              <div
+                key={item.id}
+                aria-hidden={active ? undefined : true}
+                className={cn(
+                  "flex w-full min-h-[140px] items-start space-x-6 p-4 [grid-area:1/1]",
+                  !active && "invisible",
+                )}
+              >
+                {item.player ? (
+                  <button
+                    type="button"
+                    aria-label={`Open ${item.player.name} details`}
+                    className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-full border border-slate-100 bg-slate-50 transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    onClick={() => modalRef.current?.open(item.player!.id)}
+                  >
+                    <PlayerAvatar
+                      id={item.player.id}
+                      pos={item.player.pos}
+                      team={item.player.team}
+                      name={item.player.name}
+                      className="size-20"
+                      logoClassName="size-5"
+                    />
+                  </button>
+                ) : item.team ? (
+                  <InsightTeamAvatar name={item.team.name} logo={item.team.logo} platform={platform} />
+                ) : (
+                  <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-full border border-slate-100 bg-slate-50 text-xs font-bold text-slate-400">
+                    TLO
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    {item.tag}
+                  </p>
+                  <p className="mb-2 text-base font-black text-slate-900">{item.headline}</p>
+                  <p className="text-xs leading-relaxed text-slate-600">{item.body}</p>
+                  {item.meta ? (
+                    <p className="mt-1.5 text-[11px] font-medium text-slate-400">{item.meta}</p>
+                  ) : null}
+                  <Link
+                    to={item.action.to}
+                    className="mt-3 inline-block text-xs font-semibold text-primary hover:underline"
+                  >
+                    {item.action.label}
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <p className="px-4 py-6 text-sm text-muted-foreground">
