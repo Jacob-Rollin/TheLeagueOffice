@@ -6,6 +6,7 @@ import {
   ActivityFeed,
   LeagueActivityTimeline,
 } from "@/components/dashboard/ActivityFeed";
+import { StreakIndicator } from "@/components/league/StreakIndicator";
 import { ValueTrendCell } from "@/components/research/ValueTrendCell";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
@@ -316,6 +317,11 @@ export function TruePowerRankingsPanel() {
     });
   }, [teams, standings, brain, projectFor, rosterPositions]);
 
+  const streakBySlot = useMemo(
+    () => new Map((standings?.rows ?? []).map((r) => [r.rosterId, r.streak ?? null])),
+    [standings],
+  );
+
   useEffect(() => {
     setBaseline(resolvePowerRankDisplayBaseline(leagueKey, rows));
   }, [leagueKey, rows]);
@@ -360,7 +366,7 @@ export function TruePowerRankingsPanel() {
       </div>
 
       <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
-        <table className="w-full min-w-[860px] border-collapse text-sm">
+        <table className="w-full min-w-[940px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border">
               <th className={headerCellRank}>Rank</th>
@@ -369,20 +375,21 @@ export function TruePowerRankingsPanel() {
               <th className={headerCellRight}>True Power Index</th>
               <th className={headerCellRight}>Roster Market Value</th>
               <th className={headerCellRight}>Weekly Optimal Projection</th>
-              <th className={headerCellRight}>Record / Points For</th>
+              <th className={headerCellCenter}>Streak</th>
+              <th className={headerCellRight}>W-L / Points For</th>
               <th className={headerCellScout}>Scout</th>
             </tr>
           </thead>
           <tbody>
             {loading && rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-muted-foreground">
+                <td colSpan={9} className="px-3 py-6 text-muted-foreground">
                   Calculating true power rankings…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-muted-foreground">
+                <td colSpan={9} className="px-3 py-6 text-muted-foreground">
                   No roster data available for this league yet.
                 </td>
               </tr>
@@ -449,6 +456,9 @@ export function TruePowerRankingsPanel() {
                     </td>
                     <td className="px-3 py-2.5 align-middle text-right tabular-nums font-semibold text-foreground">
                       {row.weeklyProjection.toFixed(1)}
+                    </td>
+                    <td className="px-3 py-2.5 align-middle text-center">
+                      <StreakIndicator streak={streakBySlot.get(row.slot)} />
                     </td>
                     <td className="px-3 py-2.5 align-middle text-right tabular-nums font-semibold text-foreground">
                       {row.recordLabel}

@@ -2,6 +2,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
+import { StreakIndicator } from "@/components/league/StreakIndicator";
 import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import {
   playbookCardClass,
@@ -55,6 +56,9 @@ type DisplayRow = {
   losses: number;
   ties: number;
   winPct: number;
+  streak: string | null;
+  pointsFor?: number | null;
+  pointsAgainst?: number | null;
   isMine: boolean;
 };
 
@@ -105,6 +109,7 @@ function StandingsTable({
   baseline,
   leagueKey,
   platform,
+  showPoints = false,
 }: {
   rows: DisplayRow[];
   loading: boolean;
@@ -113,18 +118,27 @@ function StandingsTable({
   baseline: Record<string, number> | null;
   leagueKey: string;
   platform: string | null;
+  showPoints?: boolean;
 }) {
+  const statGap = showPoints ? "space-x-10" : "space-x-16";
   return (
     <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
-      <div className="min-w-[640px]">
+      <div className={showPoints ? "min-w-[860px]" : "min-w-[720px]"}>
         <div className="flex items-center justify-between border-b border-border bg-slate-50/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 select-none">
           <div className="flex min-w-0 flex-1 items-center">
             <span className="w-12 text-center">Rank</span>
             <span className="w-12 pl-2 text-center">Trend</span>
             <span className="pl-6">Team</span>
           </div>
-          <div className="flex shrink-0 items-center space-x-16 pr-2">
-            <span className="w-20 text-center">Record</span>
+          <div className={cn("flex shrink-0 items-center pr-2", statGap)}>
+            <span className="w-14 text-center">Streak</span>
+            <span className="w-20 text-center">W-L</span>
+            {showPoints ? (
+              <>
+                <span className="w-16 text-right">PF</span>
+                <span className="w-16 text-right">PA</span>
+              </>
+            ) : null}
             <span className="w-16 text-right">Win %</span>
           </div>
         </div>
@@ -209,13 +223,32 @@ function StandingsTable({
                     </div>
                     <div
                       className={cn(
-                        "flex shrink-0 items-center space-x-16 pr-2 select-none text-sm tabular-nums",
+                        "flex shrink-0 items-center pr-2 select-none text-sm tabular-nums",
+                        statGap,
                         row.isMine ? "font-semibold text-white" : "font-semibold text-foreground",
                       )}
                     >
+                      <span className="w-14 text-center">
+                        <StreakIndicator streak={row.streak} highlighted={row.isMine} />
+                      </span>
                       <span className="w-20 text-center">
                         {formatRecord(row.wins, row.losses, row.ties)}
                       </span>
+                      {showPoints ? (
+                        <>
+                          <span className="w-16 text-right">
+                            {row.pointsFor != null ? row.pointsFor.toFixed(1) : "—"}
+                          </span>
+                          <span
+                            className={cn(
+                              "w-16 text-right font-normal",
+                              row.isMine ? "text-white/80" : "text-slate-500",
+                            )}
+                          >
+                            {row.pointsAgainst != null ? row.pointsAgainst.toFixed(1) : "—"}
+                          </span>
+                        </>
+                      ) : null}
                       <span className="w-16 text-right">{pctLabel}</span>
                     </div>
                   </div>
@@ -320,6 +353,9 @@ function StandingsHub() {
       losses: row.losses,
       ties: row.ties,
       winPct: winPercentage(row.wins, row.losses, row.ties),
+      streak: row.streak ?? null,
+      pointsFor: row.pointsFor,
+      pointsAgainst: row.pointsAgainst,
       isMine: isMineRow(row.rosterId, row.team),
     }));
     // isMineRow closes over myRosterId / myTeamName
@@ -420,6 +456,10 @@ function StandingsHub() {
       });
     }
 
+    const streakBySlot = new Map(
+      (standings?.rows ?? []).map((row) => [row.rosterId, row.streak ?? null]),
+    );
+
     return [...tallies.entries()]
       .map(([rosterId, t]) => ({
         rosterId,
@@ -430,6 +470,7 @@ function StandingsHub() {
         losses: t.losses,
         ties: t.ties,
         winPct: winPercentage(t.wins, t.losses, t.ties),
+        streak: streakBySlot.get(rosterId) ?? null,
         pointsFor: t.pointsFor,
         isMine: isMineRow(rosterId, t.team),
       }))
@@ -524,6 +565,7 @@ function StandingsHub() {
               baseline={actualBaseline}
               leagueKey={leagueKey}
               platform={platform}
+              showPoints
             />
           ) : (
             <StandingsTable

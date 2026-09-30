@@ -11,7 +11,7 @@ import { LeagueSyncBootstrap } from "@/hooks/useLeagueSync";
 
 import {
   DraftMenu,
-  LockedToolsNav,
+  PlaybookMenu,
   ProfileMenu,
   ResearchMenu,
   navLinkClass,
@@ -130,7 +130,7 @@ function SiteNav() {
 
         {/* Left-side navigation grouping */}
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          <LockedToolsNav />
+          <PlaybookMenu />
           <DraftMenu />
           <ResearchMenu />
           <Link to="/hof" className={navLinkClass}>

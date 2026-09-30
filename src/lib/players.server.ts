@@ -446,56 +446,165 @@ function toSeasonLine(season: string, pos: Pos, stats: Stats): SeasonLine {
   };
 }
 
-/** Half-PPR points allowed per game by each defense, split by position. */
-const defenseAllowed = memo<Map<string, Map<Pos, { pts: number; games: number }>>>(
-  12 * HOUR,
-  async (season) => {
-    const weeks = Array.from({ length: 17 }, (_, i) => i + 1);
-    const q = `season_type=regular&${POSITIONS.map((p) => `position[]=${p}`).join("&")}`;
-    const table = new Map<string, Map<Pos, { pts: number; games: number }>>();
-    let maxWeekSeen = 0;
+/** Fantasy points [std, half, ppr] one team allowed to a position, total and per game played. */
+type AllowedCell = {
+  pts: PtsTriple;
+  games: number;
+  weeks: Record<number, { vs: string; pts: PtsTriple }>;
+};
 
-    for (let i = 0; i < weeks.length; i += 6) {
-      const chunk = weeks.slice(i, i + 6);
-      const results = await Promise.all(
-        chunk.map(async (week) => ({
-          week,
-          rows: await fetchRows(`${BASE}/stats/nfl/${season}/${week}?${q}`).catch(() => []),
-        })),
-      );
-      for (const { week, rows } of results) {
-        if (!rows.length) continue;
-        maxWeekSeen = Math.max(maxWeekSeen, week);
-        const gamesSeen = new Set<string>();
-        for (const row of rows) {
-          const opp = row.opponent;
-          const pos = (row.player?.position ?? "") as Pos;
-          if (!opp || !POSITIONS.includes(pos)) continue;
-          const pts = num(
-            row.stats?.["pts_half_ppr"] ?? row.stats?.["pts_ppr"] ?? row.stats?.["pts_std"],
-            0,
-          );
-          // Keep zero lines for DEF (can finish negative / near-zero) but skip blank offense.
-          if (pos !== "DEF" && pts <= 0) continue;
-          let byPos = table.get(opp);
-          if (!byPos) table.set(opp, (byPos = new Map()));
-          const cell = byPos.get(pos) ?? { pts: 0, games: 0 };
-          cell.pts += pts;
-          const gameKey = `${opp}|${pos}|${week}`;
-          if (!gamesSeen.has(gameKey)) {
-            cell.games += 1;
-            gamesSeen.add(gameKey);
-          }
-          byPos.set(pos, cell);
+export type AllowedFormat = "std" | "half" | "ppr";
+const FORMAT_SLOT: Record<AllowedFormat, 0 | 1 | 2> = { std: 0, half: 1, ppr: 2 };
+
+type AllowedTable = {
+  maxWeek: number;
+  computedAt: string;
+  /** Team -> position -> allowed. For DEF this is what defenses scored against that offense. */
+  byTeam: Map<string, Map<Pos, AllowedCell>>;
+};
+
+const defenseAllowed = memo<AllowedTable>(HOUR, async (season) => {
+  const weeks = Array.from({ length: 18 }, (_, i) => i + 1);
+  const byTeam = new Map<string, Map<Pos, AllowedCell>>();
+  const cellFor = (team: string, pos: Pos): AllowedCell => {
+    let byPos = byTeam.get(team);
+    if (!byPos) byTeam.set(team, (byPos = new Map()));
+    let cell = byPos.get(pos);
+    if (!cell) byPos.set(pos, (cell = { pts: [0, 0, 0], games: 0, weeks: {} }));
+    return cell;
+  };
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  let maxWeek = 0;
+
+  for (let i = 0; i < weeks.length; i += 6) {
+    const chunk = weeks.slice(i, i + 6);
+    const results = await Promise.all(
+      chunk.map(async (week) => ({
+        week,
+        rows: await fetchRows(
+          `${BASE}/stats/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`,
+        ).catch(() => [] as SleeperRow[]),
+      })),
+    );
+    for (const { week, rows } of results) {
+      // Team -> opponent for every team that played this week.
+      const played = new Map<string, string>();
+      for (const row of rows) {
+        const opp = (row.opponent ?? "").trim().toUpperCase();
+        const team = (row.team ?? "").trim().toUpperCase();
+        const pos = (row.player?.position ?? "") as Pos;
+        if (!opp || !POSITIONS.includes(pos) || !(num(row.stats?.["gp"], 0) > 0)) continue;
+        played.set(opp, team);
+        if (team) played.set(team, opp);
+        const half = num(row.stats?.["pts_half_ppr"], 0);
+        const pts: PtsTriple = [
+          num(row.stats?.["pts_std"], half),
+          half,
+          num(row.stats?.["pts_ppr"], half),
+        ];
+        const cell = cellFor(opp, pos);
+        const wk = (cell.weeks[week] ??= { vs: team, pts: [0, 0, 0] });
+        for (const i of [0, 1, 2] as const) {
+          cell.pts[i] += pts[i];
+          wk.pts[i] += pts[i];
+        }
+      }
+      if (played.size) maxWeek = Math.max(maxWeek, week);
+      // A game counts for every position, so holding a position scoreless lowers its average.
+      for (const [team, opp] of played) {
+        for (const pos of POSITIONS) {
+          const cell = cellFor(team, pos);
+          cell.weeks[week] ??= { vs: opp, pts: [0, 0, 0] };
         }
       }
     }
-    // Stash max week on a sentinel so callers can read coverage without a second scan.
-    (table as Map<string, Map<Pos, { pts: number; games: number }>> & { __maxWeek?: number }).__maxWeek =
-      maxWeekSeen;
-    return table;
-  },
-);
+  }
+
+  for (const byPos of byTeam.values()) {
+    for (const cell of byPos.values()) {
+      cell.games = Object.keys(cell.weeks).length;
+      cell.pts = cell.pts.map(round2) as PtsTriple;
+      for (const wk of Object.values(cell.weeks)) wk.pts = wk.pts.map(round2) as PtsTriple;
+    }
+  }
+  return { maxWeek, computedAt: new Date().toISOString(), byTeam };
+});
+
+/** Games of current-season data before a defense's rank stops leaning on last season. */
+const SOS_PRIOR_GAMES = 4;
+
+type SosAllowed = {
+  season: string;
+  /** Season blended in as a prior, or used outright before any current games. */
+  priorSeason: string | null;
+  maxWeek: number;
+  computedAt: string;
+  current: AllowedTable | null;
+  /** Index into each cell's [std, half, ppr] points for this format. */
+  slot: 0 | 1 | 2;
+  /** Position -> team -> blended points allowed per game. */
+  perGame: Map<Pos, Map<string, number>>;
+  /** Position -> team -> rank (1 = stingiest / toughest matchup, 32 = softest). */
+  rank: Map<Pos, Map<string, number>>;
+};
+
+/**
+ * Positional points allowed per game for SOS: current-season games, regressed toward last
+ * season's average until a team has {@link SOS_PRIOR_GAMES} games this year.
+ */
+const sosAllowedMemo = memo<SosAllowed>(HOUR, async (key) => {
+  const [season = currentSeason(), fmt = "half"] = key.split("|");
+  const slot = FORMAT_SLOT[fmt as AllowedFormat] ?? 1;
+  const prev = String(Number(season) - 1);
+  const [current, previous] = await Promise.all([
+    defenseAllowed(season).catch(() => null),
+    defenseAllowed(prev).catch(() => null),
+  ]);
+  const hasCurrent = Boolean(current && current.maxWeek > 0);
+  let usedPrior = false;
+
+  const perGame = new Map<Pos, Map<string, number>>();
+  const rank = new Map<Pos, Map<string, number>>();
+  for (const pos of POSITIONS) {
+    const scores = new Map<string, number>();
+    const teams = new Set([
+      ...(hasCurrent ? current!.byTeam.keys() : []),
+      ...(previous?.byTeam.keys() ?? []),
+    ]);
+    for (const team of teams) {
+      const cur = hasCurrent ? current!.byTeam.get(team)?.get(pos) : undefined;
+      const prior = previous?.byTeam.get(team)?.get(pos);
+      const priorAvg = prior && prior.games > 0 ? prior.pts[slot] / prior.games : null;
+      const games = cur?.games ?? 0;
+      let value: number | null = null;
+      if (priorAvg != null && games < SOS_PRIOR_GAMES) {
+        const weight = SOS_PRIOR_GAMES - games;
+        value = ((cur?.pts[slot] ?? 0) + priorAvg * weight) / (games + weight);
+        usedPrior = true;
+      } else if (cur && games > 0) {
+        value = cur.pts[slot] / games;
+      }
+      if (value != null) scores.set(team, Math.round(value * 100) / 100);
+    }
+    perGame.set(pos, scores);
+    const ranked = [...scores.entries()].sort((a, b) => a[1] - b[1]);
+    rank.set(pos, new Map(ranked.map(([team], i) => [team, i + 1])));
+  }
+
+  return {
+    season,
+    priorSeason: usedPrior ? prev : null,
+    maxWeek: hasCurrent ? current!.maxWeek : 0,
+    computedAt: (hasCurrent ? current : previous)?.computedAt ?? new Date().toISOString(),
+    current: hasCurrent ? current : null,
+    slot,
+    perGame,
+    rank,
+  };
+});
+
+const sosAllowed = (season: string, format: AllowedFormat = "half") =>
+  sosAllowedMemo(`${season}|${format}`);
 
 export type FantasyPointsAllowedPos = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
 
@@ -521,25 +630,22 @@ const PA_POSITIONS: FantasyPointsAllowedPos[] = ["QB", "RB", "WR", "TE", "K", "D
 
 /**
  * League-wide Fantasy Points Allowed board:
- * For each NFL defense × fantasy position, PA = avg half-PPR points allowed
- * per game, ranked high→low so rank 1 is the easiest offensive matchup.
+ * For each NFL defense × fantasy position, PA = avg points allowed per game in
+ * the given scoring format, ranked high→low so rank 1 is the easiest offensive matchup.
  */
 export async function loadFantasyPointsAllowed(
   season = currentSeason(),
+  format: AllowedFormat = "half",
 ): Promise<FantasyPointsAllowedPayload> {
+  const slot = FORMAT_SLOT[format] ?? 1;
   const prev = String(Number(season) - 1);
   const [active, previous] = await Promise.all([
     defenseAllowed(season).catch(() => null),
     defenseAllowed(prev).catch(() => null),
   ]);
-  const table = active && active.size > 0 ? active : previous;
-  const usedSeason = active && active.size > 0 ? season : prev;
-  const maxWeek =
-    (
-      table as (Map<string, Map<Pos, { pts: number; games: number }>> & {
-        __maxWeek?: number;
-      }) | null
-    )?.__maxWeek ?? 0;
+  const table = active && active.maxWeek > 0 ? active : previous;
+  const usedSeason = active && active.maxWeek > 0 ? season : prev;
+  const maxWeek = table?.maxWeek ?? 0;
 
   const emptyCell = (): FantasyPointsAllowedCell => ({ rank: null, pa: null });
   const perPos = new Map<FantasyPointsAllowedPos, Map<string, number>>();
@@ -547,11 +653,10 @@ export async function loadFantasyPointsAllowed(
   for (const pos of PA_POSITIONS) {
     const scores = new Map<string, number>();
     if (table) {
-      for (const [team, byPos] of table) {
-        if (team.startsWith("__")) continue;
+      for (const [team, byPos] of table.byTeam) {
         const cell = byPos.get(pos);
         if (cell && cell.games > 0) {
-          scores.set(team, Math.round((cell.pts / cell.games) * 100) / 100);
+          scores.set(team, Math.round((cell.pts[slot] / cell.games) * 100) / 100);
         }
       }
     }
@@ -598,26 +703,13 @@ function sosGrade(avgRank: number): string {
 async function buildSosFor(team: string, pos: Pos, season: string) {
   if (team === "FA") return null;
   // DEF uses the same board: fantasy points allowed to defenses by each offense.
-  const prev = String(Number(season) - 1);
-  const [activeAllowed, previousAllowed, schedule] = await Promise.all([
-    defenseAllowed(season).catch(() => null),
-    defenseAllowed(prev).catch(() => null),
+  const [allowed, schedule] = await Promise.all([
+    sosAllowed(season).catch(() => null),
     scheduleFor(season).catch(() => []),
   ]);
-  const allowed = activeAllowed && activeAllowed.size > 0 ? activeAllowed : previousAllowed;
-  if (!allowed || allowed.size === 0) return null;
-
-  const perGame = new Map<string, number>();
-  for (const [defTeam, byPos] of allowed) {
-    const cell = byPos.get(pos);
-    if (cell && cell.games > 0) perGame.set(defTeam, cell.pts / cell.games);
-  }
-  if (perGame.size === 0) return null;
-
-  // rank 1 = stingiest defense against this position (hardest matchup)
-  // For DEF: rank 1 = offense that yields the fewest fantasy points to defenses.
-  const ranked = [...perGame.entries()].sort((a, b) => a[1] - b[1]);
-  const rankOf = new Map(ranked.map(([defTeam], i) => [defTeam, i + 1]));
+  const perGame = allowed?.perGame.get(pos);
+  const rankOf = allowed?.rank.get(pos);
+  if (!perGame || perGame.size === 0 || !rankOf) return null;
 
   const opponents = schedule
     .filter((g) => g.home === team || g.away === team)
@@ -692,6 +784,267 @@ export async function loadSosMatrix(
     }),
   );
   return matrix;
+}
+
+export type SosBoard = {
+  season: string;
+  priorSeason: string | null;
+  dataThroughWeek: number;
+  updatedAt: string;
+  /** Position -> team -> [rank (1 = toughest), points allowed per game]. */
+  ranks: Record<string, Record<string, [number, number]>>;
+  /** [week, home, away] for every regular-season game. */
+  schedule: [number, string, string][];
+};
+
+/** Compact positional SOS ranks + schedule so clients can rebuild any team × position SOS. */
+export async function loadSosBoard(seasonInput?: string): Promise<SosBoard> {
+  const state = await nflState("state");
+  const season = seasonInput && /^\d{4}$/.test(seasonInput) ? seasonInput : state.season;
+  const [allowed, schedule] = await Promise.all([
+    sosAllowed(season).catch(() => null),
+    scheduleFor(season).catch(() => [] as ScheduleGame[]),
+  ]);
+  const ranks: SosBoard["ranks"] = {};
+  for (const pos of POSITIONS) {
+    const byTeam: Record<string, [number, number]> = {};
+    for (const [team, rank] of allowed?.rank.get(pos) ?? []) {
+      byTeam[team] = [rank, allowed?.perGame.get(pos)?.get(team) ?? 0];
+    }
+    ranks[pos] = byTeam;
+  }
+  return {
+    season,
+    priorSeason: allowed?.priorSeason ?? null,
+    dataThroughWeek: allowed?.maxWeek ?? 0,
+    updatedAt: allowed?.computedAt ?? new Date().toISOString(),
+    ranks,
+    schedule: schedule
+      .filter((g) => g.week >= 1 && g.week <= 18 && g.home && g.away)
+      .map((g) => [g.week, g.home, g.away] as [number, string, string]),
+  };
+}
+
+export type MatchupDefenseCell = {
+  /** 1 = toughest matchup for the position, 32 = softest. */
+  rank: number;
+  /** Blended points allowed per game used for the rank. */
+  pa: number;
+  /** This season only: games and points allowed per game. */
+  games: number;
+  seasonPa: number | null;
+  weeks: { week: number; vs: string; pts: number }[];
+};
+
+export type MatchupsGuide = {
+  season: string;
+  week: number;
+  currentWeek: number;
+  priorSeason: string | null;
+  dataThroughWeek: number;
+  updatedAt: string;
+  /** NFL team -> this week's opponent. Teams on bye are absent. */
+  games: Record<string, { opp: string; home: boolean }>;
+  /** Position -> defending team -> matchup cell. */
+  defense: Record<string, Record<string, MatchupDefenseCell>>;
+};
+
+/** Every NFL team's opponent for a week plus positional defense grades behind each matchup. */
+export async function loadMatchupsGuide(
+  weekInput?: number | null,
+  format: AllowedFormat = "half",
+): Promise<MatchupsGuide> {
+  const state = await nflState("state");
+  const season = state.season;
+  const currentWeek = state.seasonType === "regular" ? Math.min(18, state.week) : 1;
+  const week =
+    weekInput != null && Number.isFinite(weekInput) && weekInput >= 1 && weekInput <= 18
+      ? Math.round(weekInput)
+      : currentWeek;
+  const [allowed, schedule] = await Promise.all([
+    sosAllowed(season, format).catch(() => null),
+    scheduleFor(season).catch(() => [] as ScheduleGame[]),
+  ]);
+
+  const games: MatchupsGuide["games"] = {};
+  for (const g of schedule) {
+    if (g.week !== week || !g.home || !g.away) continue;
+    games[g.home] = { opp: g.away, home: true };
+    games[g.away] = { opp: g.home, home: false };
+  }
+
+  const defense: MatchupsGuide["defense"] = {};
+  for (const pos of POSITIONS) {
+    const byTeam: Record<string, MatchupDefenseCell> = {};
+    for (const [team, rank] of allowed?.rank.get(pos) ?? []) {
+      const cur = allowed?.current?.byTeam.get(team)?.get(pos);
+      const slot = allowed?.slot ?? 1;
+      byTeam[team] = {
+        rank,
+        pa: allowed?.perGame.get(pos)?.get(team) ?? 0,
+        games: cur?.games ?? 0,
+        seasonPa:
+          cur && cur.games > 0 ? Math.round((cur.pts[slot] / cur.games) * 100) / 100 : null,
+        weeks: Object.entries(cur?.weeks ?? {})
+          .map(([w, v]) => ({ week: Number(w), vs: v.vs, pts: v.pts[slot] }))
+          .sort((a, b) => a.week - b.week),
+      };
+    }
+    defense[pos] = byTeam;
+  }
+
+  return {
+    season,
+    week,
+    currentWeek,
+    priorSeason: allowed?.priorSeason ?? null,
+    dataThroughWeek: allowed?.maxWeek ?? 0,
+    updatedAt: allowed?.computedAt ?? new Date().toISOString(),
+    games,
+    defense,
+  };
+}
+
+export type DepthChartEntry = { id: string; name: string; injury: string | null };
+
+/** Team -> position -> active players in Sleeper depth chart order. */
+const depthCharts = memo<Map<string, Map<Pos, DepthChartEntry[]>>>(6 * HOUR, async () => {
+  const res = await fetch(`${BASE}/v1/players/nfl`, { headers: { accept: "application/json" } });
+  if (!res.ok) throw new Error(`Upstream ${res.status}`);
+  const raw = (await res.json()) as Record<
+    string,
+    {
+      full_name?: string;
+      first_name?: string;
+      last_name?: string;
+      position?: string | null;
+      team?: string | null;
+      status?: string | null;
+      injury_status?: string | null;
+      depth_chart_order?: number | null;
+    }
+  >;
+  const listed: { team: string; pos: Pos; order: number; entry: DepthChartEntry }[] = [];
+  for (const [id, p] of Object.entries(raw ?? {})) {
+    const pos = (p?.position ?? "") as Pos;
+    const team = (p?.team ?? "").trim().toUpperCase();
+    const order = p?.depth_chart_order;
+    if (!team || pos === "DEF" || !POSITIONS.includes(pos)) continue;
+    if (typeof order !== "number" || p?.status !== "Active") continue;
+    const name = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`).trim();
+    if (!name) continue;
+    listed.push({ team, pos, order, entry: { id, name, injury: p.injury_status ?? null } });
+  }
+  listed.sort((a, b) => a.order - b.order);
+  const byTeam = new Map<string, Map<Pos, DepthChartEntry[]>>();
+  for (const { team, pos, entry } of listed) {
+    let byPos = byTeam.get(team);
+    if (!byPos) byTeam.set(team, (byPos = new Map()));
+    const list = byPos.get(pos) ?? [];
+    list.push(entry);
+    byPos.set(pos, list);
+  }
+  return byTeam;
+});
+
+const SOS_DEPTH_SLOTS: Record<Pos, number> = { QB: 2, RB: 3, WR: 3, TE: 2, K: 1, DEF: 0 };
+
+export type SosAnalysisCell = {
+  /** 1 = toughest remaining schedule for the position, 32 = easiest. */
+  rank: number;
+  /** Average points per game the remaining opponents allow to the position. */
+  avg: number;
+  /** Relative to the league-wide average, e.g. 0.08 = 8% more than average. */
+  vsAvg: number;
+  games: number;
+};
+
+export type SosAnalysisRow = {
+  team: string;
+  teamName: string;
+  cells: Partial<Record<Pos, SosAnalysisCell>>;
+  depth: Partial<Record<Pos, DepthChartEntry[]>>;
+};
+
+export type SosAnalysis = {
+  season: string;
+  fromWeek: number;
+  toWeek: number;
+  dataThroughWeek: number;
+  priorSeason: string | null;
+  updatedAt: string;
+  rows: SosAnalysisRow[];
+};
+
+/** Every NFL team's remaining-schedule difficulty by position, plus its current depth chart. */
+export async function loadSosAnalysis(format: AllowedFormat = "half"): Promise<SosAnalysis> {
+  const state = await nflState("state");
+  const season = state.season;
+  const fromWeek =
+    state.seasonType === "regular" ? Math.min(FANTASY_LAST_WEEK, Math.max(1, state.week)) : 1;
+  const toWeek = FANTASY_LAST_WEEK;
+  const [allowed, schedule, depth] = await Promise.all([
+    sosAllowed(season, format).catch(() => null),
+    scheduleFor(season).catch(() => [] as ScheduleGame[]),
+    depthCharts("all").catch(() => new Map<string, Map<Pos, DepthChartEntry[]>>()),
+  ]);
+
+  const opponents = new Map<string, string[]>();
+  for (const g of schedule) {
+    if (g.week < fromWeek || g.week > toWeek || !g.home || !g.away) continue;
+    opponents.set(g.home, [...(opponents.get(g.home) ?? []), g.away]);
+    opponents.set(g.away, [...(opponents.get(g.away) ?? []), g.home]);
+  }
+
+  const cellsByTeam = new Map<string, Partial<Record<Pos, SosAnalysisCell>>>();
+  for (const pos of POSITIONS) {
+    const perGame = allowed?.perGame.get(pos);
+    if (!perGame?.size) continue;
+    const leagueAvg = [...perGame.values()].reduce((s, v) => s + v, 0) / perGame.size;
+    const scored: { team: string; avg: number; games: number }[] = [];
+    for (const t of NFL_TEAMS) {
+      const pas = (opponents.get(t.id) ?? [])
+        .map((opp) => perGame.get(opp))
+        .filter((v): v is number => v != null);
+      if (!pas.length) continue;
+      scored.push({ team: t.id, avg: pas.reduce((s, v) => s + v, 0) / pas.length, games: pas.length });
+    }
+    scored.sort((a, b) => a.avg - b.avg);
+    scored.forEach((s, i) => {
+      const cells = cellsByTeam.get(s.team) ?? {};
+      cells[pos] = {
+        rank: i + 1,
+        avg: Math.round(s.avg * 100) / 100,
+        vsAvg: leagueAvg > 0 ? Math.round((s.avg / leagueAvg - 1) * 1000) / 1000 : 0,
+        games: s.games,
+      };
+      cellsByTeam.set(s.team, cells);
+    });
+  }
+
+  const rows: SosAnalysisRow[] = NFL_TEAMS.map((t) => {
+    const teamDepth: SosAnalysisRow["depth"] = {};
+    for (const pos of POSITIONS) {
+      const slots = SOS_DEPTH_SLOTS[pos];
+      if (slots > 0) teamDepth[pos] = (depth.get(t.id)?.get(pos) ?? []).slice(0, slots);
+    }
+    return {
+      team: t.id,
+      teamName: teamFullName(t.id),
+      cells: cellsByTeam.get(t.id) ?? {},
+      depth: teamDepth,
+    };
+  }).sort((a, b) => a.teamName.localeCompare(b.teamName));
+
+  return {
+    season,
+    fromWeek,
+    toWeek,
+    dataThroughWeek: allowed?.maxWeek ?? 0,
+    priorSeason: allowed?.priorSeason ?? null,
+    updatedAt: allowed?.computedAt ?? new Date().toISOString(),
+    rows,
+  };
 }
 
 function injuryRisk(player: Player, history: SeasonLine[]) {
@@ -796,9 +1149,18 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
   const sos = await buildSos(player, season).catch(() => null);
   const ownershipMap = await loadSleeperOwnershipMap().catch(() => null);
   const ownership = ownershipMap?.get(id);
+  const liveInjury = (await sleeperInjuryIndex("current").catch(() => null))?.get(id);
   // Sleeper omits 0% players from research — treat missing as 0 when the map loaded.
   const enrichedPlayer = {
     ...player,
+    ...(liveInjury
+      ? {
+          injury: liveInjury.status,
+          injury_status: liveInjury.status,
+          injury_body_part: liveInjury.bodyPart,
+          injury_notes: liveInjury.notes,
+        }
+      : {}),
     rostered_pct: ownershipMap ? (ownership?.owned ?? 0) : null,
     started_pct: ownershipMap ? (ownership?.started ?? 0) : null,
   } as Player & { rostered_pct: number | null; started_pct: number | null };
@@ -1323,6 +1685,7 @@ type EspnInjuryRow = {
   id?: string;
   status?: string;
   date?: string;
+  shortComment?: string;
   longComment?: string;
   athlete?: {
     displayName?: string;
@@ -1347,6 +1710,94 @@ const espnInjuryFeed = memo<EspnInjuryRow[]>(1000 * 60 * 10, async () => {
 const WIRE_POSITIONS: Record<string, string> = { QB: "QB", RB: "RB", WR: "WR", TE: "TE", PK: "K", K: "K" };
 const ESPN_TEAM_FIX: Record<string, string> = { WSH: "WAS" };
 const WIRE_BLURB_WINDOW_MS = 7 * 24 * HOUR;
+
+type SleeperInjury = {
+  /** Sleeper `injury_status` (IR, Out, Doubtful, Questionable, PUP, Sus, NA, DNR, COV); null when healthy. */
+  status: string | null;
+  bodyPart: string | null;
+  notes: string | null;
+  newsUpdated: number | null;
+  pos: string;
+  team: string | null;
+};
+
+/**
+ * Sleeper's live injury designations. Everything else on the site (popup, projections,
+ * lineups) reads Sleeper, so injury pages take the designation from here and only the
+ * news copy from ESPN / RotoWire.
+ */
+const sleeperInjuryIndex = memo<Map<string, SleeperInjury>>(10 * 60 * 1000, async () => {
+  const state = await nflState("state");
+  const week = Math.min(Math.max(state.week, 1), 18);
+  const rows = await fetchRows(
+    `${BASE}/projections/nfl/${state.season}/${week}?season_type=regular&${positionsQuery()}`,
+  );
+  const map = new Map<string, SleeperInjury>();
+  for (const row of rows) {
+    const p = row.player as
+      | (NonNullable<SleeperRow["player"]> & { news_updated?: number | null })
+      | null;
+    if (!row.player_id || !p) continue;
+    map.set(String(row.player_id), {
+      status: p.injury_status?.trim() || null,
+      bodyPart: p.injury_body_part?.trim() || null,
+      notes: p.injury_notes?.trim() || null,
+      newsUpdated: typeof p.news_updated === "number" ? p.news_updated : null,
+      pos: p.position ?? "",
+      team: p.team ?? null,
+    });
+  }
+  return map;
+});
+
+const SLEEPER_STATUS_SHORT: Record<string, string> = {
+  ir: "IR",
+  out: "OUT",
+  doubtful: "D",
+  questionable: "Q",
+  pup: "PUP",
+  sus: "SUSP",
+  na: "NA",
+  dnr: "DNR",
+  cov: "COV",
+};
+
+const STATUS_LONG: Record<string, string> = {
+  IR: "Injured Reserve",
+  OUT: "Out",
+  D: "Doubtful",
+  Q: "Questionable",
+  PUP: "Physically Unable to Perform",
+  SUSP: "Suspended",
+  NA: "Not Active",
+  DNR: "Did Not Report",
+  COV: "COVID-19",
+};
+
+/** Sleeper designation as {short, long}; null when Sleeper lists the player as healthy. */
+function sleeperDesignation(entry: SleeperInjury): { short: string; status: string } | null {
+  if (!entry.status) return null;
+  const short = SLEEPER_STATUS_SHORT[entry.status.toLowerCase()] ?? entry.status.toUpperCase().slice(0, 4);
+  return { short, status: STATUS_LONG[short] ?? entry.status };
+}
+
+/** Plain-language designation for generated copy, e.g. "on injured reserve", "listed as out". */
+function designationPhrase(short: string): string {
+  switch (short) {
+    case "IR":
+      return "on injured reserve";
+    case "PUP":
+      return "on the PUP list";
+    case "SUSP":
+      return "suspended";
+    case "NA":
+      return "listed as not active";
+    case "DNR":
+      return "on the reserve/did not report list";
+    default:
+      return `listed as ${(STATUS_LONG[short] ?? short).toLowerCase()}`;
+  }
+}
 
 function wireStatusShort(status: string): string {
   const s = status.toLowerCase();
@@ -1408,7 +1859,11 @@ function wireHeadline(tag: string, short: string, status: string, details: EspnI
 
 /** Most recent fantasy-relevant NFL injury designations, enriched with RotoWire blurbs. */
 export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
-  const [rows, built] = await Promise.all([espnInjuryFeed("all"), buildPlayers("v2")]);
+  const [rows, built, sleeperInjuries] = await Promise.all([
+    espnInjuryFeed("all"),
+    buildPlayers("v2"),
+    sleeperInjuryIndex("current").catch(() => new Map<string, SleeperInjury>()),
+  ]);
   const rosterIndex = await loadNflRosterIndex(built.payload.season).catch(() => null);
   const sleeperByEspn = new Map<string, string>();
   for (const [sleeperId, entry] of rosterIndex?.bySleeper ?? []) {
@@ -1420,10 +1875,11 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
     .map((r) => {
       const pos = WIRE_POSITIONS[r.athlete?.position?.abbreviation ?? ""];
       const at = Date.parse(r.date ?? "");
-      const status = (r.status ?? "").trim();
       const espnId = /\/(\d+)\.png/.exec(r.athlete?.headshot?.href ?? "")?.[1] ?? null;
       const sleeperId = espnId ? (sleeperByEspn.get(espnId) ?? null) : null;
       const player = sleeperId ? byId.get(sleeperId) : undefined;
+      const sleeper = sleeperId ? sleeperInjuries.get(sleeperId) : undefined;
+      const status = sleeper ? (sleeperDesignation(sleeper)?.status ?? "Active") : (r.status ?? "").trim();
       return { r, pos, at, status, espnId, sleeperId, player };
     })
     .filter((c) => c.pos && Number.isFinite(c.at) && c.status && !/^active$/i.test(c.status) && c.r.athlete?.displayName)
@@ -1447,7 +1903,8 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
       const lastName = c.r.athlete?.lastName ?? name.split(" ").slice(-1)[0] ?? name;
       const espnTeam = c.r.athlete?.team?.abbreviation ?? null;
       const team = c.player?.team || (espnTeam ? (ESPN_TEAM_FIX[espnTeam] ?? espnTeam) : null);
-      const short = wireStatusShort(c.status);
+      const short =
+        Object.entries(STATUS_LONG).find(([, long]) => long === c.status)?.[0] ?? wireStatusShort(c.status);
       const tag = `${name} (${c.pos}-${team ?? "FA"})`;
       const espnNewsLink =
         c.r.athlete?.links?.find((l) => l.rel?.includes("news") && l.href?.startsWith("http"))?.href ?? null;
@@ -1514,6 +1971,308 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
   );
 }
 
+/* ---------- injury reports page ---------- */
+
+export type InjuryReportItem = {
+  id: string;
+  sleeperId: string | null;
+  playerName: string;
+  pos: string;
+  team: string | null;
+  headshot: string | null;
+  /** Sleeper designation, e.g. "Injured Reserve", "Questionable", or "Active" for recovery updates. */
+  status: string;
+  /** IR, OUT, D, Q, PUP, SUSP, NA, DNR, COV; empty for Active players. */
+  statusShort: string;
+  /** Short injury label, e.g. "biceps". */
+  injury: string | null;
+  headline: string;
+  news: string;
+  analysis: string | null;
+  /** ISO time of the latest update; empty when unknown. */
+  published: string;
+  returnDate: string | null;
+  link: string | null;
+  /** Where the news copy came from: "ESPN Injury Report", "RotoWire" or "Sleeper Injury Report". */
+  source: string;
+  /** That source's own designation, which can differ from Sleeper's `statusShort`. "" = Active, null = none stated. */
+  sourceStatusShort: string | null;
+  sourceStatus: string | null;
+};
+
+export type InjuryReports = { updatedAt: string; items: InjuryReportItem[] };
+
+const INJURY_UPDATE_WINDOW_MS = 14 * 24 * HOUR;
+
+function normalizePersonName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g, "")
+    .replace(/[^a-z]/g, "");
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function injuryReportHeadline(name: string, injury: string | null, short: string, text: string): string {
+  const who = injury ? `${name} (${injury})` : name;
+  switch (short) {
+    case "IR":
+      if (/\bactivated\b|designated .*to return|return(?:ed|s)? to practice/i.test(text)) {
+        return `${who} nearing return from IR`;
+      }
+      return /\bplaced\b|\bmoved?\b.*\b(?:injured reserve|IR)\b|lands? on IR|to injured reserve/i.test(text)
+        ? `${who} placed on IR`
+        : `${who} remains on IR`;
+    case "OUT":
+      return /ruled out|won't play|will not play|out for/i.test(text) ? `${who} ruled out` : `${who} listed as out`;
+    case "D":
+      return `${who} listed as doubtful`;
+    case "Q":
+      return `${who} listed as questionable`;
+    case "PUP":
+      return `${who} on PUP list`;
+    case "SUSP":
+      return `${who} suspended`;
+    case "NA":
+      return `${who} listed as not active`;
+    case "DNR":
+      return `${who} has not reported`;
+    case "COV":
+      return `${who} on COVID-19 list`;
+    default:
+      if (/\bactivated\b/i.test(text)) return `${who} activated`;
+      if (/\bpractice\b|\bpracticing\b|full participant/i.test(text)) return `${who} practice update`;
+      return `${who} injury update`;
+  }
+}
+
+/** Sleeper designations that count as an injury report; Coach's Decision benchings don't. */
+function reportableSleeperInjury(entry: SleeperInjury): boolean {
+  return Boolean(entry.status) && !/coach/i.test(entry.bodyPart ?? "");
+}
+
+/** Sleeper body part -> short label ("Knee - ACL" -> "ACL"); null when it says nothing useful. */
+function sleeperInjuryLabel(bodyPart: string | null): string | null {
+  if (!bodyPart || /undisclosed|not injury|coach|^other$/i.test(bodyPart)) return null;
+  if (/personal/i.test(bodyPart)) return "personal";
+  return wireInjuryType(bodyPart);
+}
+
+function injuryNote(lastName: string, short: string, injury: string | null, surgery: boolean): string {
+  if (!short) return injury ? `${lastName} is back from a ${injury} injury.` : `${lastName} is off the injury report.`;
+  const where = designationPhrase(short);
+  if (!injury) return `${lastName} is ${where}.`;
+  if (injury === "personal") return `${lastName} is ${where} for personal reasons.`;
+  if (surgery) return `${lastName} is ${where} while recovering from ${injury} surgery.`;
+  const article = /^([aeiou]|[AEFHILMNORSX][A-Z])/.test(injury) ? "an" : "a";
+  return `${lastName} is ${where} with ${article} ${injury} injury.`;
+}
+
+/** Designation a news blurb states, e.g. "ruled out" -> OUT; null when it doesn't say. */
+function statusFromText(text: string): string | null {
+  if (/\b(?:placed|moved|lands?|landed|reverted|remains?)\b[^.]*\b(?:injured reserve|IR)\b|\bon (?:injured reserve|IR)\b/i.test(text)) {
+    return "IR";
+  }
+  if (/\bPUP\b|physically unable to perform/i.test(text)) return "PUP";
+  if (/\bruled out\b|\bwon't play\b|\bwill not play\b|\bwill miss\b|\binactive\b/i.test(text)) return "OUT";
+  if (/\bdoubtful\b/i.test(text)) return "D";
+  if (/\bquestionable\b/i.test(text)) return "Q";
+  return null;
+}
+
+function lastNameOf(name: string): string {
+  const parts = name.split(" ").filter((w) => !/^(jr|sr|ii|iii|iv|v)\.?$/i.test(w));
+  return parts[parts.length - 1] ?? name;
+}
+
+/** Every current injury designation (per Sleeper) with the latest ESPN / RotoWire news, newest first. */
+export async function loadInjuryReports(): Promise<InjuryReports> {
+  return injuryReportsMemo("all");
+}
+
+const injuryReportsMemo = memo<InjuryReports>(5 * 60 * 1000, async () => {
+  const [rows, built, sleeperInjuries] = await Promise.all([
+    espnInjuryFeed("all"),
+    buildPlayers("v2"),
+    sleeperInjuryIndex("current").catch(() => new Map<string, SleeperInjury>()),
+  ]);
+  const rosterIndex = await loadNflRosterIndex(built.payload.season).catch(() => null);
+  const sleeperByEspn = new Map<string, string>();
+  const espnBySleeper = new Map<string, string>();
+  for (const [sleeperId, entry] of rosterIndex?.bySleeper ?? []) {
+    if (!entry.espnId) continue;
+    sleeperByEspn.set(entry.espnId, sleeperId);
+    espnBySleeper.set(sleeperId, entry.espnId);
+  }
+  const byId = new Map(built.all.map((p) => [p.id, p]));
+  const byName = new Map<string, Player[]>();
+  for (const p of built.all) {
+    const key = normalizePersonName(p.name);
+    byName.set(key, [...(byName.get(key) ?? []), p]);
+  }
+  const now = Date.now();
+
+  type Draft = InjuryReportItem & { at: number; rank: number; espnId: string | null; weak: boolean };
+  const items: Draft[] = [];
+  const seen = new Set<string>();
+  const covered = new Set<string>();
+  for (const r of rows) {
+    const pos = WIRE_POSITIONS[r.athlete?.position?.abbreviation ?? ""];
+    const at = Date.parse(r.date ?? "");
+    const displayName = r.athlete?.displayName?.trim();
+    const espnStatus = (r.status ?? "").trim();
+    if (!pos || !Number.isFinite(at) || !displayName || !espnStatus) continue;
+
+    const espnId = /\/(\d+)\.png/.exec(r.athlete?.headshot?.href ?? "")?.[1] ?? null;
+    const key = espnId ?? displayName;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const espnTeam = r.athlete?.team?.abbreviation ?? null;
+    const espnTeamFixed = espnTeam ? (ESPN_TEAM_FIX[espnTeam] ?? espnTeam) : null;
+    let sleeperId = espnId ? (sleeperByEspn.get(espnId) ?? null) : null;
+    if (!sleeperId) {
+      const matches = (byName.get(normalizePersonName(displayName)) ?? []).filter((p) => p.pos === pos);
+      const match = matches.find((p) => p.team === espnTeamFixed) ?? (matches.length === 1 ? matches[0] : undefined);
+      sleeperId = match?.id ?? null;
+    }
+    const player = sleeperId ? byId.get(sleeperId) : undefined;
+    const sleeper = sleeperId ? sleeperInjuries.get(sleeperId) : undefined;
+    const designation = sleeper
+      ? reportableSleeperInjury(sleeper)
+        ? sleeperDesignation(sleeper)
+        : null
+      : /^active$/i.test(espnStatus)
+        ? null
+        : { short: wireStatusShort(espnStatus), status: espnStatus };
+
+    const news = stripTags(r.shortComment ?? "");
+    const longText = stripTags(r.longComment ?? "");
+    const lastName = r.athlete?.lastName?.trim() || lastNameOf(displayName);
+    const tagged = new RegExp(`\\b${escapeRegExp(lastName)} \\(([a-z][a-z /-]{2,24})\\)`, "i").exec(news);
+    const active = !designation;
+    if (active && (!tagged || now - at > INJURY_UPDATE_WINDOW_MS)) continue;
+    if (sleeperId) covered.add(sleeperId);
+
+    const name = player?.name ?? displayName;
+    const team = player?.team && player.team !== "FA" ? player.team : espnTeamFixed;
+    const type = r.details?.type?.trim();
+    const injury =
+      tagged?.[1]?.toLowerCase() ??
+      sleeperInjuryLabel(sleeper?.bodyPart ?? null) ??
+      (type && !/undisclosed|not specified|^other$/i.test(type) ? wireInjuryType(type) : null);
+    const short = designation?.short ?? "";
+    const surgery = /surgery/i.test(`${r.details?.detail ?? ""} ${sleeper?.notes ?? ""}`);
+
+    // ESPN sometimes posts a bare designation ("questionable") instead of a note.
+    const weak = news.length < 25;
+    // Generated copy follows Sleeper; ESPN's own note keeps ESPN's designation in the title and chip.
+    const sourceShort = weak ? short : /^active$/i.test(espnStatus) ? "" : wireStatusShort(espnStatus);
+
+    items.push({
+      id: String(r.id ?? `${key}-${at}`),
+      sleeperId,
+      playerName: name,
+      pos,
+      team,
+      headshot: r.athlete?.headshot?.href ?? null,
+      status: designation?.status ?? "Active",
+      statusShort: short,
+      injury,
+      headline: injuryReportHeadline(name, injury, sourceShort, sourceShort ? `${news} ${longText}` : news),
+      news: weak ? injuryNote(lastName, short, injury, surgery) : news,
+      analysis: longText.length > 40 && longText !== news ? longText : null,
+      published: new Date(at).toISOString(),
+      returnDate: active ? null : (r.details?.returnDate ?? null),
+      link:
+        r.athlete?.links?.find((l) => l.rel?.includes("news") && l.href?.startsWith("http"))?.href ?? null,
+      source: weak ? "Sleeper Injury Report" : "ESPN Injury Report",
+      sourceStatusShort: sourceShort,
+      sourceStatus: weak ? (designation?.status ?? "Active") : espnStatus,
+      at,
+      rank: player?.rank.half ?? 999,
+      espnId,
+      weak,
+    });
+  }
+
+  // Sleeper designations ESPN's report doesn't carry (long-term IR, late changes).
+  for (const [sleeperId, entry] of sleeperInjuries) {
+    if (covered.has(sleeperId) || !reportableSleeperInjury(entry)) continue;
+    const player = byId.get(sleeperId);
+    if (!player || player.pos === "DEF" || !player.team || player.team === "FA") continue;
+    const designation = sleeperDesignation(entry);
+    if (!designation) continue;
+    const injury = sleeperInjuryLabel(entry.bodyPart);
+    const espnId = espnBySleeper.get(sleeperId) ?? null;
+    const at = entry.newsUpdated ?? 0;
+    items.push({
+      id: `sleeper-${sleeperId}`,
+      sleeperId,
+      playerName: player.name,
+      pos: player.pos,
+      team: player.team,
+      headshot: null,
+      status: designation.status,
+      statusShort: designation.short,
+      injury,
+      headline: injuryReportHeadline(player.name, injury, designation.short, ""),
+      news: injuryNote(lastNameOf(player.name), designation.short, injury, /surgery/i.test(entry.notes ?? "")),
+      analysis: null,
+      published: at ? new Date(at).toISOString() : "",
+      returnDate: null,
+      link: espnId ? `https://www.espn.com/nfl/player/_/id/${espnId}` : null,
+      source: "Sleeper Injury Report",
+      sourceStatusShort: designation.short,
+      sourceStatus: designation.status,
+      at,
+      rank: player.rank.half,
+      espnId,
+      weak: true,
+    });
+  }
+
+  const toEnrich = items.filter((item) => item.weak && item.espnId && now - item.at <= WIRE_BLURB_WINDOW_MS);
+  for (let i = 0; i < toEnrich.length; i += 12) {
+    await Promise.all(
+      toEnrich.slice(i, i + 12).map(async (item) => {
+        const feed = await espnPlayerFeed(item.espnId!).catch(() => [] as EspnFeedItem[]);
+        for (const f of feed) {
+          const headline = stripTags(f.headline ?? "");
+          if (!headline || (f.type && f.type !== "Rotowire")) continue;
+          const at = Date.parse(f.published ?? f.lastModified ?? "");
+          if (!Number.isFinite(at) || now - at > WIRE_BLURB_WINDOW_MS) continue;
+          const story = stripTags(f.story ?? f.description ?? "");
+          if (!ROSTER_INJURY_RE.test(`${headline} ${story}`)) continue;
+          item.news = headline.endsWith(".") ? headline : `${headline}.`;
+          item.analysis = story.length > 40 ? story : item.analysis;
+          item.link = f.links?.web?.href ?? item.link;
+          const stated = statusFromText(`${headline} ${story}`);
+          item.headline = injuryReportHeadline(
+            item.playerName,
+            item.injury,
+            stated ?? "",
+            stated ? `${headline} ${story}` : headline,
+          );
+          item.source = "RotoWire";
+          item.sourceStatusShort = stated;
+          item.sourceStatus = stated ? (STATUS_LONG[stated] ?? stated) : null;
+          break;
+        }
+      }),
+    );
+  }
+
+  // ESPN refreshes many notes in one batch, so ties go to the more fantasy-relevant player.
+  items.sort((a, b) => b.at - a.at || a.rank - b.rank);
+  return {
+    updatedAt: new Date().toISOString(),
+    items: items.map(({ at: _at, rank: _rank, espnId: _espnId, weak: _weak, ...item }) => item),
+  };
+});
+
 /* ---------- transaction pickup results ---------- */
 
 export type PickupRequest = { key: string; playerId: string; fromWeek: number; toWeek: number };
@@ -1568,6 +2327,85 @@ export async function loadPickupResults(
     out[r.key] = { pts: Math.round(pts * 10) / 10, games };
   }
   return out;
+}
+
+/* ---------- weekly fantasy leaders ---------- */
+
+export type FantasyLeaderRow = {
+  id: string;
+  name: string;
+  pos: Pos;
+  team: string;
+  /** Index = week - 1. [std, half, ppr] for weeks the player appeared in; null otherwise. */
+  weeks: (PtsTriple | null)[];
+};
+
+export type FantasyLeaders = {
+  season: string;
+  maxWeek: number;
+  rows: FantasyLeaderRow[];
+};
+
+const leaderWeekRows = memo<SleeperRow[]>(10 * 60 * 1000, async (key) => {
+  const [season, week] = key.split("|");
+  return await fetchRows(`${BASE}/stats/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`);
+});
+
+/** Every player's week-by-week fantasy points for a regular season (all three presets). */
+export async function loadFantasyLeaders(seasonInput?: string): Promise<FantasyLeaders> {
+  const state = await nflState("state");
+  const season = seasonInput && /^\d{4}$/.test(seasonInput) ? seasonInput : state.season;
+  const lastWeek =
+    season === state.season ? (state.seasonType === "regular" ? Math.min(18, state.week) : 0) : 18;
+  if (Number(season) > Number(state.season) || lastWeek < 1) {
+    return { season, maxWeek: 0, rows: [] };
+  }
+
+  const weekRows = await Promise.all(
+    Array.from({ length: lastWeek }, (_, i) =>
+      leaderWeekRows(`${season}|${i + 1}`).catch(() => [] as SleeperRow[]),
+    ),
+  );
+
+  let maxWeek = 0;
+  const byId = new Map<string, FantasyLeaderRow>();
+  weekRows.forEach((rows, index) => {
+    for (const row of rows) {
+      const stats = row.stats;
+      const pos = (row.player?.position ?? "") as Pos;
+      if (!row.player_id || !stats || !POSITIONS.includes(pos)) continue;
+      if (!(Number(stats["gp"]) > 0)) continue;
+      maxWeek = Math.max(maxWeek, index + 1);
+      const id = String(row.player_id);
+      let entry = byId.get(id);
+      if (!entry) {
+        const first = row.player?.first_name?.trim() ?? "";
+        const last = row.player?.last_name?.trim() ?? "";
+        entry = {
+          id,
+          name: `${first} ${last}`.trim() || id,
+          pos,
+          team: (row.team ?? row.player?.team ?? "").trim() || "FA",
+          weeks: [],
+        };
+        byId.set(id, entry);
+      } else if (row.team) {
+        entry.team = row.team.trim();
+      }
+      const round = (v: unknown) => Math.round(num(v, 0) * 100) / 100;
+      entry.weeks[index] = [
+        round(stats["pts_std"]),
+        round(stats["pts_half_ppr"]),
+        round(stats["pts_ppr"]),
+      ];
+    }
+  });
+
+  const rows = [...byId.values()].map((row) => ({
+    ...row,
+    weeks: Array.from({ length: maxWeek }, (_, i) => row.weeks[i] ?? null),
+  }));
+  return { season, maxWeek, rows };
 }
 
 /* ---------- player bio + game logs (ESPN-style profile page) ---------- */

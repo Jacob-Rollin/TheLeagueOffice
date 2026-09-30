@@ -388,7 +388,7 @@ function MostTargetedPage() {
             }
             disabled={weekOptions.length === 0}
           >
-            <SelectTrigger className="h-9 w-[8.5rem] border-slate-200 bg-white shadow-none">
+            <SelectTrigger className="h-9 w-[7rem] border-slate-200 bg-white shadow-none">
               <SelectValue placeholder="Week" />
             </SelectTrigger>
             <SelectContent>

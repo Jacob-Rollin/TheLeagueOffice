@@ -12,15 +12,19 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as DraftRouteImport } from './routes/draft'
+import { Route as FantasyLeadersRouteImport } from './routes/fantasy-leaders'
 import { Route as FantasyPointsAllowedRouteImport } from './routes/fantasy-points-allowed'
 import { Route as HofRouteImport } from './routes/hof'
+import { Route as InjuryReportsRouteImport } from './routes/injury-reports'
 import { Route as LeagueHqRouteImport } from './routes/league-hq'
 import { Route as LeaguesyncRouteImport } from './routes/leaguesync'
+import { Route as MatchupsGuideRouteImport } from './routes/matchups-guide'
 import { Route as MockDraftRouteImport } from './routes/mock-draft'
 import { Route as MostTargetedPlayersRouteImport } from './routes/most-targeted-players'
 import { Route as PlaybookRouteImport } from './routes/playbook'
 import { Route as RedZoneStatsRouteImport } from './routes/red-zone-stats'
 import { Route as SeasonProjectionsRouteImport } from './routes/season-projections'
+import { Route as SosAnalysisRouteImport } from './routes/sos-analysis'
 import { Route as StandingsRouteImport } from './routes/standings'
 import { Route as TheWireRouteImport } from './routes/the-wire'
 import { Route as TradeRouteImport } from './routes/trade'
@@ -65,6 +69,11 @@ const DraftRoute = DraftRouteImport.update({
   path: '/draft',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FantasyLeadersRoute = FantasyLeadersRouteImport.update({
+  id: '/fantasy-leaders',
+  path: '/fantasy-leaders',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FantasyPointsAllowedRoute = FantasyPointsAllowedRouteImport.update({
   id: '/fantasy-points-allowed',
   path: '/fantasy-points-allowed',
@@ -75,6 +84,11 @@ const HofRoute = HofRouteImport.update({
   path: '/hof',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InjuryReportsRoute = InjuryReportsRouteImport.update({
+  id: '/injury-reports',
+  path: '/injury-reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeagueHqRoute = LeagueHqRouteImport.update({
   id: '/league-hq',
   path: '/league-hq',
@@ -83,6 +97,11 @@ const LeagueHqRoute = LeagueHqRouteImport.update({
 const LeaguesyncRoute = LeaguesyncRouteImport.update({
   id: '/leaguesync',
   path: '/leaguesync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MatchupsGuideRoute = MatchupsGuideRouteImport.update({
+  id: '/matchups-guide',
+  path: '/matchups-guide',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MockDraftRoute = MockDraftRouteImport.update({
@@ -108,6 +127,11 @@ const RedZoneStatsRoute = RedZoneStatsRouteImport.update({
 const SeasonProjectionsRoute = SeasonProjectionsRouteImport.update({
   id: '/season-projections',
   path: '/season-projections',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SosAnalysisRoute = SosAnalysisRouteImport.update({
+  id: '/sos-analysis',
+  path: '/sos-analysis',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StandingsRoute = StandingsRouteImport.update({
@@ -256,15 +280,19 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
+  '/fantasy-leaders': typeof FantasyLeadersRoute
   '/fantasy-points-allowed': typeof FantasyPointsAllowedRoute
   '/hof': typeof HofRoute
+  '/injury-reports': typeof InjuryReportsRoute
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
+  '/matchups-guide': typeof MatchupsGuideRoute
   '/mock-draft': typeof MockDraftRoute
   '/most-targeted-players': typeof MostTargetedPlayersRoute
   '/playbook': typeof PlaybookRouteWithChildren
   '/red-zone-stats': typeof RedZoneStatsRoute
   '/season-projections': typeof SeasonProjectionsRoute
+  '/sos-analysis': typeof SosAnalysisRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
@@ -298,14 +326,18 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
+  '/fantasy-leaders': typeof FantasyLeadersRoute
   '/fantasy-points-allowed': typeof FantasyPointsAllowedRoute
   '/hof': typeof HofRoute
+  '/injury-reports': typeof InjuryReportsRoute
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
+  '/matchups-guide': typeof MatchupsGuideRoute
   '/mock-draft': typeof MockDraftRoute
   '/most-targeted-players': typeof MostTargetedPlayersRoute
   '/red-zone-stats': typeof RedZoneStatsRoute
   '/season-projections': typeof SeasonProjectionsRoute
+  '/sos-analysis': typeof SosAnalysisRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
@@ -340,15 +372,19 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
+  '/fantasy-leaders': typeof FantasyLeadersRoute
   '/fantasy-points-allowed': typeof FantasyPointsAllowedRoute
   '/hof': typeof HofRoute
+  '/injury-reports': typeof InjuryReportsRoute
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
+  '/matchups-guide': typeof MatchupsGuideRoute
   '/mock-draft': typeof MockDraftRoute
   '/most-targeted-players': typeof MostTargetedPlayersRoute
   '/playbook': typeof PlaybookRouteWithChildren
   '/red-zone-stats': typeof RedZoneStatsRoute
   '/season-projections': typeof SeasonProjectionsRoute
+  '/sos-analysis': typeof SosAnalysisRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
   '/trade': typeof TradeRoute
@@ -384,15 +420,19 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/draft'
+    | '/fantasy-leaders'
     | '/fantasy-points-allowed'
     | '/hof'
+    | '/injury-reports'
     | '/league-hq'
     | '/leaguesync'
+    | '/matchups-guide'
     | '/mock-draft'
     | '/most-targeted-players'
     | '/playbook'
     | '/red-zone-stats'
     | '/season-projections'
+    | '/sos-analysis'
     | '/standings'
     | '/the-wire'
     | '/trade'
@@ -426,14 +466,18 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/draft'
+    | '/fantasy-leaders'
     | '/fantasy-points-allowed'
     | '/hof'
+    | '/injury-reports'
     | '/league-hq'
     | '/leaguesync'
+    | '/matchups-guide'
     | '/mock-draft'
     | '/most-targeted-players'
     | '/red-zone-stats'
     | '/season-projections'
+    | '/sos-analysis'
     | '/standings'
     | '/the-wire'
     | '/trade'
@@ -467,15 +511,19 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/draft'
+    | '/fantasy-leaders'
     | '/fantasy-points-allowed'
     | '/hof'
+    | '/injury-reports'
     | '/league-hq'
     | '/leaguesync'
+    | '/matchups-guide'
     | '/mock-draft'
     | '/most-targeted-players'
     | '/playbook'
     | '/red-zone-stats'
     | '/season-projections'
+    | '/sos-analysis'
     | '/standings'
     | '/the-wire'
     | '/trade'
@@ -510,15 +558,19 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   DraftRoute: typeof DraftRoute
+  FantasyLeadersRoute: typeof FantasyLeadersRoute
   FantasyPointsAllowedRoute: typeof FantasyPointsAllowedRoute
   HofRoute: typeof HofRoute
+  InjuryReportsRoute: typeof InjuryReportsRoute
   LeagueHqRoute: typeof LeagueHqRoute
   LeaguesyncRoute: typeof LeaguesyncRoute
+  MatchupsGuideRoute: typeof MatchupsGuideRoute
   MockDraftRoute: typeof MockDraftRoute
   MostTargetedPlayersRoute: typeof MostTargetedPlayersRoute
   PlaybookRoute: typeof PlaybookRouteWithChildren
   RedZoneStatsRoute: typeof RedZoneStatsRoute
   SeasonProjectionsRoute: typeof SeasonProjectionsRoute
+  SosAnalysisRoute: typeof SosAnalysisRoute
   StandingsRoute: typeof StandingsRoute
   TheWireRoute: typeof TheWireRoute
   TradeRoute: typeof TradeRoute
@@ -565,6 +617,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DraftRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/fantasy-leaders': {
+      id: '/fantasy-leaders'
+      path: '/fantasy-leaders'
+      fullPath: '/fantasy-leaders'
+      preLoaderRoute: typeof FantasyLeadersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/fantasy-points-allowed': {
       id: '/fantasy-points-allowed'
       path: '/fantasy-points-allowed'
@@ -579,6 +638,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HofRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/injury-reports': {
+      id: '/injury-reports'
+      path: '/injury-reports'
+      fullPath: '/injury-reports'
+      preLoaderRoute: typeof InjuryReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/league-hq': {
       id: '/league-hq'
       path: '/league-hq'
@@ -591,6 +657,13 @@ declare module '@tanstack/react-router' {
       path: '/leaguesync'
       fullPath: '/leaguesync'
       preLoaderRoute: typeof LeaguesyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/matchups-guide': {
+      id: '/matchups-guide'
+      path: '/matchups-guide'
+      fullPath: '/matchups-guide'
+      preLoaderRoute: typeof MatchupsGuideRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mock-draft': {
@@ -626,6 +699,13 @@ declare module '@tanstack/react-router' {
       path: '/season-projections'
       fullPath: '/season-projections'
       preLoaderRoute: typeof SeasonProjectionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sos-analysis': {
+      id: '/sos-analysis'
+      path: '/sos-analysis'
+      fullPath: '/sos-analysis'
+      preLoaderRoute: typeof SosAnalysisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/standings': {
@@ -855,15 +935,19 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   DraftRoute: DraftRoute,
+  FantasyLeadersRoute: FantasyLeadersRoute,
   FantasyPointsAllowedRoute: FantasyPointsAllowedRoute,
   HofRoute: HofRoute,
+  InjuryReportsRoute: InjuryReportsRoute,
   LeagueHqRoute: LeagueHqRoute,
   LeaguesyncRoute: LeaguesyncRoute,
+  MatchupsGuideRoute: MatchupsGuideRoute,
   MockDraftRoute: MockDraftRoute,
   MostTargetedPlayersRoute: MostTargetedPlayersRoute,
   PlaybookRoute: PlaybookRouteWithChildren,
   RedZoneStatsRoute: RedZoneStatsRoute,
   SeasonProjectionsRoute: SeasonProjectionsRoute,
+  SosAnalysisRoute: SosAnalysisRoute,
   StandingsRoute: StandingsRoute,
   TheWireRoute: TheWireRoute,
   TradeRoute: TradeRoute,

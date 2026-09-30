@@ -29,6 +29,24 @@ export type Standings = {
   rows: StandingRow[];
 };
 
+/** "3W" / "2L" / "1T" from any "<count><W|L|T>" token; null when there is no streak. */
+function normalizeStreak(raw: string | null | undefined): string | null {
+  const match = /^\s*(\d+)\s*([WLT])/i.exec(raw ?? "");
+  if (!match) return null;
+  const count = Number(match[1]);
+  return count > 0 ? `${count}${match[2]!.toUpperCase()}` : null;
+}
+
+/** Current streak from a results string like "LWW" (oldest first). */
+function streakFromRecord(record: string | null | undefined): string | null {
+  const results = (record ?? "").toUpperCase().replace(/[^WLT]/g, "");
+  const last = results.at(-1);
+  if (!last) return null;
+  let count = 0;
+  for (let i = results.length - 1; i >= 0 && results[i] === last; i -= 1) count += 1;
+  return `${count}${last}`;
+}
+
 async function json<T>(url: string): Promise<T | null> {
   try {
     const res = await fetch(url);
@@ -140,6 +158,7 @@ export async function loadStandings(leagueId: string): Promise<Standings | null>
         roster_id: number;
         owner_id: string | null;
         settings?: Record<string, number | string | undefined>;
+        metadata?: { streak?: string | null; record?: string | null } | null;
       }[]
     >(`${BASE}/league/${id}/rosters`),
     json<
@@ -175,7 +194,7 @@ export async function loadStandings(leagueId: string): Promise<Standings | null>
       ties: Number(s["ties"] ?? 0),
       pointsFor: Math.round(pf * 10) / 10,
       pointsAgainst: Math.round(pa * 10) / 10,
-      streak: (s["streak"] as string | undefined) ?? null,
+      streak: normalizeStreak(r.metadata?.streak) ?? streakFromRecord(r.metadata?.record),
     };
   });
 
@@ -573,7 +592,15 @@ export async function loadConnectionStandings(
     for (const year of [season, season - 1]) {
       type EspnRecordTeam = EspnTeam & {
         record?: {
-          overall?: { wins?: number; losses?: number; ties?: number; pointsFor?: number; pointsAgainst?: number };
+          overall?: {
+            wins?: number;
+            losses?: number;
+            ties?: number;
+            pointsFor?: number;
+            pointsAgainst?: number;
+            streakLength?: number;
+            streakType?: string;
+          };
         };
       };
       const league = await espnJson<{
@@ -598,7 +625,9 @@ export async function loadConnectionStandings(
           ties: Number(o.ties ?? 0),
           pointsFor: Math.round(Number(o.pointsFor ?? 0) * 10) / 10,
           pointsAgainst: Math.round(Number(o.pointsAgainst ?? 0) * 10) / 10,
-          streak: null,
+          streak: normalizeStreak(
+            o.streakLength ? `${o.streakLength}${(o.streakType ?? "").charAt(0)}` : null,
+          ),
         };
       });
       rows.sort((a, b) => b.wins - a.wins || a.losses - b.losses || b.pointsFor - a.pointsFor);

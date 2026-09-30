@@ -12,6 +12,9 @@ const STATUS_CHIP: Record<string, string> = {
   PUP: "bg-orange-50 text-orange-600",
   D: "bg-orange-50 text-orange-600",
   Q: "bg-amber-50 text-amber-700",
+  NA: "bg-red-50 text-red-600",
+  DNR: "bg-red-50 text-red-600",
+  COV: "bg-red-50 text-red-600",
 };
 
 function timeAgo(iso: string): string {

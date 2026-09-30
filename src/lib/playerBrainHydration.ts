@@ -15,7 +15,9 @@
 import localforage from "localforage";
 
 import type { PlayersPayload } from "@/lib/players-build";
-import type { PlayerSos } from "@/lib/sos-presentation";
+import { getSosBoard } from "@/lib/players.functions";
+import type { SosBoard } from "@/lib/players.server";
+import type { PlayerSos, SosMatchup } from "@/lib/sos-presentation";
 import { readCache } from "@/lib/sleeper-cache";
 
 const BUCKET = "player_brain";
@@ -194,6 +196,86 @@ async function localFallbackMatrix(): Promise<BrainMatrix | null> {
   return (await readBrainMatrix()) ?? (await localTemplateMatrix());
 }
 
+const SOS_REFRESH_MS = 30 * 60 * 1000;
+let sosBoardCache: { at: number; value: Promise<SosBoard | null> } | null = null;
+
+function freshSosBoard(): Promise<SosBoard | null> {
+  const now = Date.now();
+  if (!sosBoardCache || now - sosBoardCache.at > SOS_REFRESH_MS) {
+    sosBoardCache = { at: now, value: getSosBoard({ data: {} }).catch(() => null) };
+  }
+  return sosBoardCache.value;
+}
+
+function sosPosKey(position: string): string {
+  const p = (position || "").trim().toUpperCase();
+  return p === "DST" ? "DEF" : p;
+}
+
+/**
+ * The published brain's SOS is a one-time snapshot, so rebuild every entry's SOS from the
+ * live positional board and the player's current NFL team on each hydration.
+ */
+async function withFreshSos(matrix: BrainMatrix | null): Promise<BrainMatrix | null> {
+  if (!matrix) return matrix;
+  const board = await freshSosBoard();
+  if (!board || board.schedule.length === 0) return matrix;
+
+  const teamById = new Map<string, string>();
+  try {
+    const hit = await readCache<PlayersPayload>(LOCAL_PLAYERS_CACHE_KEY);
+    for (const p of hit?.data?.players ?? []) {
+      if (p?.id && p.team) teamById.set(p.id, p.team);
+    }
+  } catch {
+    /* fall back to brain teams */
+  }
+
+  const gamesByTeam = new Map<string, { week: number; opp: string }[]>();
+  for (const [week, home, away] of board.schedule) {
+    gamesByTeam.set(home, [...(gamesByTeam.get(home) ?? []), { week, opp: away }]);
+    gamesByTeam.set(away, [...(gamesByTeam.get(away) ?? []), { week, opp: home }]);
+  }
+
+  const built = new Map<string, PlayerSos | null>();
+  const sosFor = (team: string, pos: string): PlayerSos | null => {
+    const key = `${team}|${pos}`;
+    if (built.has(key)) return built.get(key)!;
+    const ranks = board.ranks[pos];
+    const games = gamesByTeam.get(team);
+    let sos: PlayerSos | null = null;
+    if (ranks && games?.length) {
+      const matchups: SosMatchup[] = [...games]
+        .sort((a, b) => a.week - b.week)
+        .map((g) => ({
+          week: g.week,
+          opp: g.opp,
+          rank: ranks[g.opp]?.[0] ?? null,
+          pointsAllowed: ranks[g.opp]?.[1] ?? null,
+        }));
+      const known = matchups.map((m) => m.rank).filter((r): r is number => r != null);
+      sos = {
+        rank: known.length ? Math.round(known.reduce((s, r) => s + r, 0) / known.length) : null,
+        matchups,
+      };
+    }
+    built.set(key, sos);
+    return sos;
+  };
+
+  const out: BrainMatrix = {};
+  for (const [id, entry] of Object.entries(matrix)) {
+    const team = (teamById.get(id) ?? entry.team ?? "").trim().toUpperCase();
+    const pos = sosPosKey(entry.position);
+    if (!board.ranks[pos]) {
+      out[id] = entry;
+      continue;
+    }
+    out[id] = { ...entry, sos: team && team !== "FA" ? sosFor(team, pos) : null };
+  }
+  return out;
+}
+
 let inFlight: Promise<BrainMatrix | null> | null = null;
 
 /**
@@ -204,41 +286,42 @@ export function hydratePlayerBrain(options?: { force?: boolean }): Promise<Brain
   if (typeof window === "undefined") return Promise.resolve(null);
   if (inFlight) return inFlight;
 
-  inFlight = (async () => {
-    try {
-      if (!options?.force && !heartbeatCleared()) {
-        // Egress guard: serve entirely from local memory.
-        return await localFallbackMatrix();
-      }
-
-      const url = brainUrl();
-      if (!url) return await localFallbackMatrix();
-
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) return await localFallbackMatrix();
-
-      const brain = (await res.json()) as MasterPlayerBrainPayload;
-      if (!Array.isArray(brain?.ids) || brain.ids.length === 0) return await localFallbackMatrix();
-
-      const matrix = compileMatrix(brain);
-      if (store) {
-        await store.setItem(MATRIX_KEY, matrix);
-        await store.setItem(META_KEY, {
-          v: brain.v,
-          count: brain.count,
-          generated_at: brain.generated_at,
-          storedAt: Date.now(),
-        });
-      }
-      stampHeartbeat();
-      return matrix;
-    } catch {
-      // Silent by design — never surfaces to the UI.
-      return await localFallbackMatrix();
-    } finally {
-      inFlight = null;
-    }
-  })();
-
+  inFlight = (async () => withFreshSos(await loadBrainMatrix(options)))().finally(() => {
+    inFlight = null;
+  });
   return inFlight;
+}
+
+async function loadBrainMatrix(options?: { force?: boolean }): Promise<BrainMatrix | null> {
+  try {
+    if (!options?.force && !heartbeatCleared()) {
+      // Egress guard: serve entirely from local memory.
+      return await localFallbackMatrix();
+    }
+
+    const url = brainUrl();
+    if (!url) return await localFallbackMatrix();
+
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return await localFallbackMatrix();
+
+    const brain = (await res.json()) as MasterPlayerBrainPayload;
+    if (!Array.isArray(brain?.ids) || brain.ids.length === 0) return await localFallbackMatrix();
+
+    const matrix = compileMatrix(brain);
+    if (store) {
+      await store.setItem(MATRIX_KEY, matrix);
+      await store.setItem(META_KEY, {
+        v: brain.v,
+        count: brain.count,
+        generated_at: brain.generated_at,
+        storedAt: Date.now(),
+      });
+    }
+    stampHeartbeat();
+    return matrix;
+  } catch {
+    // Silent by design — never surfaces to the UI.
+    return await localFallbackMatrix();
+  }
 }

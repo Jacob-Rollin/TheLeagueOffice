@@ -455,11 +455,6 @@ function RedZoneStatsPage() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <ScoringFormatSelect
-            value={scoringFormat}
-            onChange={(next) => startTransition(() => setScoringFormat(next))}
-          />
-
           <Select
             value={season}
             onValueChange={(v) =>
@@ -553,6 +548,11 @@ function RedZoneStatsPage() {
               ))}
             </SelectContent>
           </Select>
+
+          <ScoringFormatSelect
+            value={scoringFormat}
+            onChange={(next) => startTransition(() => setScoringFormat(next))}
+          />
         </div>
         <input
           type="search"

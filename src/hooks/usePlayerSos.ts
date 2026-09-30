@@ -84,9 +84,8 @@ function mergeSosWeeks(
 }
 
 /**
- * Prefer synchronized brain SOS (positional fantasy points allowed vs opponent).
- * Always merge the positional FPA schedule so weeks the brain omits (historically
- * week 18) still get opponents and ranks — never leave them as 0 stars / BYE.
+ * Prefer the live positional FPA schedule for the player's current team, filling any
+ * missing weeks from the brain so no week false-byes as 0 stars.
  */
 export function usePlayerSos(
   brainEntry: BrainEntry | null,
@@ -140,8 +139,9 @@ export function usePlayerSos(
     };
   }, [team, pos]);
 
+  // The live schedule uses the player's current team; brain rows only fill gaps.
   return useMemo(
-    () => mergeSosWeeks(fromBrain, scheduleSos),
+    () => mergeSosWeeks(scheduleSos, fromBrain),
     [fromBrain, scheduleSos],
   );
 }

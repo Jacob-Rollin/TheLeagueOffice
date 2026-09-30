@@ -327,25 +327,6 @@ function WeeklyProjectionsPage() {
             .
           </p>
         </div>
-        <div className="w-full max-w-[11rem] shrink-0">
-          <Select
-            value={String(activeWeek)}
-            onValueChange={(value) =>
-              startTransition(() => setSelectedWeek(Math.max(1, Number(value) || 1)))
-            }
-          >
-            <SelectTrigger className="h-9 border-slate-200 bg-white text-sm font-semibold text-slate-800">
-              <SelectValue placeholder="Select week" />
-            </SelectTrigger>
-            <SelectContent>
-              {weekOptions.map((week) => (
-                <SelectItem key={week} value={String(week)}>
-                  Week {week}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
@@ -401,6 +382,26 @@ function WeeklyProjectionsPage() {
               })}
             </DropdownMenuContent>
           </DropdownMenu>
+          <Select
+            value={String(activeWeek)}
+            onValueChange={(value) =>
+              startTransition(() => setSelectedWeek(Math.max(1, Number(value) || 1)))
+            }
+          >
+            <SelectTrigger
+              aria-label="Week"
+              className="h-9 w-[7rem] shrink-0 border-slate-200 bg-white shadow-none"
+            >
+              <SelectValue placeholder="Week" />
+            </SelectTrigger>
+            <SelectContent>
+              {weekOptions.map((week) => (
+                <SelectItem key={week} value={String(week)}>
+                  Week {week}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <ScoringFormatSelect
             value={scoringFormat}
             onChange={(next) => startTransition(() => setScoringFormat(next))}

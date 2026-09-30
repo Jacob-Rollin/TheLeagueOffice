@@ -65,6 +65,11 @@ export const getInjuryWire = createServerFn({ method: "GET" })
     return await loadInjuryWire(data.limit);
   });
 
+export const getInjuryReports = createServerFn({ method: "GET" }).handler(async () => {
+  const { loadInjuryReports } = await import("./players.server");
+  return await loadInjuryReports();
+});
+
 export const getPlayerNews = createServerFn({ method: "GET" })
   .inputValidator((input: { id: string }) => ({ id: String(input.id).slice(0, 32) }))
   .handler(async ({ data }) => {
@@ -113,12 +118,16 @@ export const getNextGame = createServerFn({ method: "GET" })
   });
 
 export const getFantasyPointsAllowed = createServerFn({ method: "GET" })
-  .inputValidator((input?: { season?: string }) => ({
+  .inputValidator((input?: { season?: string; format?: string }) => ({
     season: input?.season != null ? String(input.season).slice(0, 16) : undefined,
+    format: (input?.format === "std" || input?.format === "ppr" ? input.format : "half") as
+      | "std"
+      | "half"
+      | "ppr",
   }))
   .handler(async ({ data }) => {
     const { loadFantasyPointsAllowed } = await import("./players.server");
-    return await loadFantasyPointsAllowed(data.season);
+    return await loadFantasyPointsAllowed(data.season, data.format);
   });
 
 /** Positional strength-of-schedule for one NFL team × fantasy position. */
@@ -131,6 +140,42 @@ export const getTeamPosSos = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const { loadTeamPosSos } = await import("./players.server");
     return await loadTeamPosSos(data.team, data.pos, data.season);
+  });
+
+/** Compact positional SOS ranks + schedule used to refresh cached player SOS. */
+export const getSosBoard = createServerFn({ method: "GET" })
+  .inputValidator((input?: { season?: string }) => ({
+    season: input?.season != null ? String(input.season).slice(0, 4) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const { loadSosBoard } = await import("./players.server");
+    return await loadSosBoard(data.season);
+  });
+
+export const getMatchupsGuide = createServerFn({ method: "GET" })
+  .inputValidator((input?: { week?: number | null; format?: string }) => {
+    const n = Math.round(Number(input?.week));
+    const format = input?.format === "std" || input?.format === "ppr" ? input.format : "half";
+    return {
+      week: input?.week != null && Number.isFinite(n) && n >= 1 && n <= 18 ? n : null,
+      format: format as "std" | "half" | "ppr",
+    };
+  })
+  .handler(async ({ data }) => {
+    const { loadMatchupsGuide } = await import("./players.server");
+    return await loadMatchupsGuide(data.week, data.format);
+  });
+
+export const getSosAnalysis = createServerFn({ method: "GET" })
+  .inputValidator((input?: { format?: string }) => ({
+    format: (input?.format === "std" || input?.format === "ppr" ? input.format : "half") as
+      | "std"
+      | "half"
+      | "ppr",
+  }))
+  .handler(async ({ data }) => {
+    const { loadSosAnalysis } = await import("./players.server");
+    return await loadSosAnalysis(data.format);
   });
 
 export const getRedZoneStats = createServerFn({ method: "POST" })
@@ -161,6 +206,15 @@ export const getRedZoneStats = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { loadRedZoneStats } = await import("./redzone.server");
     return await loadRedZoneStats(data.season, data.yardline, data.weekFrom, data.weekTo);
+  });
+
+export const getFantasyLeaders = createServerFn({ method: "GET" })
+  .inputValidator((input?: { season?: string }) => ({
+    season: input?.season != null ? String(input.season).slice(0, 4) : undefined,
+  }))
+  .handler(async ({ data }) => {
+    const { loadFantasyLeaders } = await import("./players.server");
+    return await loadFantasyLeaders(data.season);
   });
 
 export const getMostTargetedPlayers = createServerFn({ method: "POST" })

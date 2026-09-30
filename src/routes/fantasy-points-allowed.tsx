@@ -1,8 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, startTransition, useMemo, useState } from "react";
 
 import { teamLogo } from "@/components/draft/PlayerAvatar";
+import {
+  ScoringFormatSelect,
+  scoringFormatLabel,
+  useResearchScoringFormat,
+} from "@/components/research/ScoringFormatSelect";
 import {
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
@@ -10,6 +15,7 @@ import {
   SortHeaderButton,
   type SortDir,
 } from "@/components/research/SortHeader";
+import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { getFantasyPointsAllowed } from "@/lib/players.functions";
 import type { FantasyPointsAllowedPos } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
@@ -51,11 +57,16 @@ function FantasyPointsAllowedPage() {
   const [sortKey, setSortKey] = useState<SortKey | null>("team");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
+  const { format: leagueFormat } = useLeagueScoringMeta();
+  const { format: scoringFormat, setFormat: setScoringFormat } =
+    useResearchScoringFormat(leagueFormat);
+
   const query = useQuery({
-    queryKey: ["fantasy-points-allowed"],
+    queryKey: ["fantasy-points-allowed", scoringFormat],
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
-    queryFn: () => getFantasyPointsAllowed(),
+    placeholderData: (prev) => prev,
+    queryFn: () => getFantasyPointsAllowed({ data: { format: scoringFormat } }),
   });
 
   const payload = query.data;
@@ -103,21 +114,27 @@ function FantasyPointsAllowedPage() {
       <div className="mb-4 rounded-xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-slate-600">
         <p className="font-semibold text-slate-800">What are Fantasy Points Allowed?</p>
         <p className="mt-1 leading-relaxed">
-          Each cell shows how many fantasy points a defense allows per game to that position, plus
-          the matchup rank. Rank 1 is the easiest matchup (most points allowed). Top 8 ranks are
+          Each cell shows how many {scoringFormatLabel(scoringFormat)} fantasy points a defense
+          allows per game to that position, plus the matchup rank. Rank 1 is the easiest matchup (most points allowed). Top 8 ranks are
           easy; bottom 8 are tough.
         </p>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-4 text-[11px] font-black uppercase tracking-wider text-slate-600">
-        <span className="inline-flex items-center gap-2">
-          <span className="inline-block size-3 rounded-sm bg-emerald-200" aria-hidden="true" />
-          Easy Matchup (Top 8)
-        </span>
-        <span className="inline-flex items-center gap-2">
-          <span className="inline-block size-3 rounded-sm bg-rose-200" aria-hidden="true" />
-          Tough Matchup (Bottom 8)
-        </span>
+      <div className="mb-4 flex flex-wrap items-center gap-3 sm:justify-between">
+        <ScoringFormatSelect
+          value={scoringFormat}
+          onChange={(next) => startTransition(() => setScoringFormat(next))}
+        />
+        <div className="flex flex-wrap items-center gap-4 text-[11px] font-black uppercase tracking-wider text-slate-600">
+          <span className="inline-flex items-center gap-2">
+            <span className="inline-block size-3 rounded-sm bg-emerald-200" aria-hidden="true" />
+            Easy Matchup (Top 8)
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <span className="inline-block size-3 rounded-sm bg-rose-200" aria-hidden="true" />
+            Tough Matchup (Bottom 8)
+          </span>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

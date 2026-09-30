@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import { StreakIndicator } from "@/components/league/StreakIndicator";
 import {
   resolveAvatarUrl,
   ActivityFeed,
@@ -2354,9 +2355,17 @@ function PlaybookDashboardPage() {
     }
 
     const myRosterId = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
+    const streakFrom = (list: ("W" | "L" | "T")[]): string | null => {
+      const latest = list.at(-1);
+      if (!latest) return null;
+      let count = 0;
+      for (let i = list.length - 1; i >= 0 && list[i] === latest; i -= 1) count += 1;
+      return `${count}${latest}`;
+    };
     const out = rows.map((row, index) => ({
       ...row,
       rank: index + 1,
+      streak: row.streak ?? streakFrom(results.get(Number(row.rosterId)) ?? []),
       last: (results.get(Number(row.rosterId)) ?? []).slice(-3),
       isMine: myRosterId != null && Number(row.rosterId) === Number(myRosterId),
     }));
@@ -2546,9 +2555,10 @@ function PlaybookDashboardPage() {
               <p className="text-sm text-muted-foreground">No standings available yet.</p>
             ) : (
               <div className="w-full min-w-0">
-                <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)_3.5rem_4.25rem_4.25rem_4.5rem] items-center gap-x-2 px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)_3.25rem_3.5rem_4.25rem_4.25rem_4.5rem] items-center gap-x-2 px-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   <span className="text-center">Rank</span>
                   <span>Team</span>
+                  <span className="text-center">Streak</span>
                   <span className="text-center">W-L</span>
                   <span className="text-right">PF</span>
                   <span className="text-right">PA</span>
@@ -2565,7 +2575,7 @@ function PlaybookDashboardPage() {
                       <li key={`${leagueCacheKey}-st-${row.rosterId}`}>
                         <div
                           className={cn(
-                            "grid w-full min-w-0 grid-cols-[2rem_minmax(0,1fr)_3.5rem_4.25rem_4.25rem_4.5rem] items-center gap-x-2 rounded-md px-2 py-2",
+                            "grid w-full min-w-0 grid-cols-[2rem_minmax(0,1fr)_3.25rem_3.5rem_4.25rem_4.25rem_4.5rem] items-center gap-x-2 rounded-md px-2 py-2",
                             row.isMine && "bg-blue-50/80",
                           )}
                         >
@@ -2600,6 +2610,9 @@ function PlaybookDashboardPage() {
                               </span>
                             </span>
                           </Link>
+                          <span className="text-center">
+                            <StreakIndicator streak={row.streak} />
+                          </span>
                           <span
                             className={cn(
                               "text-center text-sm font-semibold tabular-nums",

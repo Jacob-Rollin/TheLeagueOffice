@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Lock, User as UserIcon } from "lucide-react";
 
 import { LeagueAvatar } from "@/components/league/LeagueAvatar";
@@ -20,6 +20,9 @@ import {
 
 const triggerClass =
   "rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[state=open]:border-accent data-[state=open]:text-primary-foreground";
+
+const menuHeadingClass =
+  "px-2 pb-1 pt-1.5 font-display text-[11px] font-semibold uppercase tracking-widest text-muted-foreground";
 
 export const navLinkClass =
   "rounded-md border-b-2 border-transparent px-3 py-1.5 font-display text-sm uppercase tracking-wide text-primary-foreground/70 transition-colors hover:text-primary-foreground data-[status=active]:border-accent data-[status=active]:text-primary-foreground";
@@ -44,20 +47,46 @@ const DRAFT_LINKS: { to: "/war-room" | "/mock-draft/setup"; label: string }[] = 
   { to: "/mock-draft/setup", label: "Mock Draft Simulator" },
 ];
 
-const RESEARCH_LINKS: {
-  to:
-    | "/weekly-projections"
-    | "/season-projections"
-    | "/fantasy-points-allowed"
-    | "/red-zone-stats"
-    | "/most-targeted-players";
-  label: string;
+const RESEARCH_SECTIONS: {
+  heading: string;
+  links: {
+    to:
+      | "/weekly-projections"
+      | "/season-projections"
+      | "/fantasy-leaders"
+      | "/injury-reports"
+      | "/matchups-guide"
+      | "/sos-analysis"
+      | "/fantasy-points-allowed"
+      | "/red-zone-stats"
+      | "/most-targeted-players";
+    label: string;
+  }[];
 }[] = [
-  { to: "/weekly-projections", label: "Weekly Projections" },
-  { to: "/season-projections", label: "Season Projections" },
-  { to: "/fantasy-points-allowed", label: "Fantasy Points Allowed" },
-  { to: "/red-zone-stats", label: "Red Zone Stats" },
-  { to: "/most-targeted-players", label: "Most Targeted Players" },
+  {
+    heading: "News & Analysis",
+    links: [
+      { to: "/injury-reports", label: "Injury Reports" },
+      { to: "/matchups-guide", label: "Matchups Guide" },
+      { to: "/sos-analysis", label: "SoS Analysis" },
+    ],
+  },
+  {
+    heading: "Projections",
+    links: [
+      { to: "/weekly-projections", label: "Weekly Projections" },
+      { to: "/season-projections", label: "Season Projections" },
+    ],
+  },
+  {
+    heading: "Stats",
+    links: [
+      { to: "/fantasy-points-allowed", label: "Fantasy Points Allowed" },
+      { to: "/red-zone-stats", label: "Red Zone Stats" },
+      { to: "/most-targeted-players", label: "Most Targeted Players" },
+      { to: "/fantasy-leaders", label: "Fantasy Leaders" },
+    ],
+  },
 ];
 
 const LOCKED_TOP_LINKS: {
@@ -92,6 +121,82 @@ export function PlaybookNavLink() {
   return <LockedToolsNav />;
 }
 
+type PlaybookPath =
+  | "/playbook"
+  | "/playbook/press-room"
+  | "/playbook/my-team"
+  | "/playbook/matchup"
+  | "/playbook/rosters"
+  | "/playbook/transactions"
+  | "/standings"
+  | "/trade"
+  | "/waiver";
+
+const PLAYBOOK_SECTIONS: { heading: string; links: { to: PlaybookPath; label: string }[] }[] = [
+  {
+    heading: "League",
+    links: [
+      { to: "/playbook", label: "Dashboard" },
+      { to: "/playbook/press-room", label: "Press Room" },
+      { to: "/standings", label: "Standings" },
+      { to: "/playbook/matchup", label: "Matchup" },
+      { to: "/playbook/rosters", label: "Rosters" },
+      { to: "/playbook/transactions", label: "Transactions" },
+    ],
+  },
+  {
+    heading: "My Team",
+    links: [
+      { to: "/playbook/my-team", label: "My Team" },
+      { to: "/trade", label: "Trade Desk" },
+      { to: "/waiver", label: "The Wire" },
+    ],
+  },
+];
+
+const PLAYBOOK_PATH_PREFIXES = ["/playbook", "/standings", "/trade", "/waiver", "/the-wire"];
+
+/** Playbook dropdown — every sub-navbar destination, locked badge for guests. */
+export function PlaybookMenu() {
+  const { user, ready } = useAuth();
+  const locked = ready && !user;
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const active = PLAYBOOK_PATH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`) || pathname.startsWith(`${prefix}-`),
+  );
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className={cn(
+          triggerClass,
+          "inline-flex items-center gap-1.5",
+          active && "border-accent text-primary-foreground",
+        )}
+        aria-label={locked ? "Playbook (account required)" : "Playbook"}
+      >
+        <span>Playbook</span>
+        {locked ? <NavLockBadge /> : null}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        {PLAYBOOK_SECTIONS.map((section, index) => (
+          <Fragment key={section.heading}>
+            {index > 0 ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuLabel className={menuHeadingClass}>{section.heading}</DropdownMenuLabel>
+            {section.links.map((item) => (
+              <DropdownMenuItem key={item.to} asChild>
+                <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+                  {item.label}
+                </Link>
+              </DropdownMenuItem>
+            ))}
+          </Fragment>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function DraftMenu() {
   return (
     <DropdownMenu>
@@ -114,12 +219,18 @@ export function ResearchMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger className={triggerClass}>Research</DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        {RESEARCH_LINKS.map((item) => (
-          <DropdownMenuItem key={item.to} asChild>
-            <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
-              {item.label}
-            </Link>
-          </DropdownMenuItem>
+        {RESEARCH_SECTIONS.map((section, index) => (
+          <Fragment key={section.heading}>
+            {index > 0 ? <DropdownMenuSeparator /> : null}
+            <DropdownMenuLabel className={menuHeadingClass}>{section.heading}</DropdownMenuLabel>
+            {section.links.map((item) => (
+              <DropdownMenuItem key={item.to} asChild>
+                <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+                  {item.label}
+                </Link>
+              </DropdownMenuItem>
+            ))}
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
