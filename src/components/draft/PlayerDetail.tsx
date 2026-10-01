@@ -2259,7 +2259,7 @@ function EditorialNewsPanel({
               <h3 className={headlineClass}>{n.headline}</h3>
             )}
             <span className="mb-4 block text-[11px] font-medium text-slate-400">
-              By ESPN{ago ? ` · ${ago}` : ""}
+              {n.source}{ago ? ` · ${ago}` : ""}
             </span>
             <p className="mb-4 block w-full border-l-2 border-slate-200/80 pl-3.5 text-left text-sm leading-relaxed font-medium text-slate-500 italic">
               {summary}

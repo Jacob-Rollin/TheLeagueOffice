@@ -4,6 +4,7 @@ import { PositionBadge } from "@/components/draft/PositionBadge";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { playbookCardClass } from "@/components/playbook/panels";
 import { SosStars } from "@/components/sos/SosStars";
+import { TeamOverview } from "@/components/team/TeamOverview";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
@@ -42,10 +43,11 @@ export const Route = createFileRoute("/playbook/my-team")({
   component: PlaybookMyTeamPage,
 });
 
-type TeamTab = "overview" | "projections" | "statistics" | "news";
+type TeamTab = "overview" | "lineup" | "projections" | "statistics" | "news";
 
 const TABS: { id: TeamTab; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "lineup", label: "Lineup" },
   { id: "projections", label: "Projections" },
   { id: "statistics", label: "Statistics" },
   { id: "news", label: "News" },
@@ -1016,7 +1018,13 @@ function PlaybookMyTeamPage() {
   const [tab, setTab] = useState<TeamTab>(() => {
     if (typeof window === "undefined") return "overview";
     const saved = window.sessionStorage.getItem("playbook-my-team-tab");
-    if (saved === "overview" || saved === "projections" || saved === "statistics" || saved === "news") {
+    if (
+      saved === "overview" ||
+      saved === "lineup" ||
+      saved === "projections" ||
+      saved === "statistics" ||
+      saved === "news"
+    ) {
       return saved;
     }
     return "overview";
@@ -1212,7 +1220,7 @@ function PlaybookMyTeamPage() {
       queryKey: ["player-news", p.id] as const,
       queryFn: () => getPlayerNews({ data: { id: p.id } }),
       staleTime: 1000 * 60 * 10,
-      enabled: Boolean(p.id) && (tab === "overview" || tab === "news"),
+      enabled: Boolean(p.id) && (tab === "lineup" || tab === "news"),
     })),
   });
 
@@ -1470,7 +1478,7 @@ function PlaybookMyTeamPage() {
             {activeLeague?.name?.trim() || "Active league"} roster command center.
           </p>
         </div>
-        <WeekSelector week={activeWeek} onChange={setSelectedWeek} />
+        {tab === "overview" ? null : <WeekSelector week={activeWeek} onChange={setSelectedWeek} />}
       </div>
 
       <div className="mb-4 flex flex-wrap gap-1 border-b border-border pb-px">
@@ -1491,6 +1499,9 @@ function PlaybookMyTeamPage() {
         ))}
       </div>
 
+      {tab === "overview" && myTeam ? (
+        <TeamOverview rosterId={myTeam.slot} onOpenPlayer={openPlayer} />
+      ) : (
       <section className={playbookCardClass}>
       {loading && !myTeam ? (
         <p className="text-sm text-muted-foreground">Loading your roster…</p>
@@ -1501,7 +1512,7 @@ function PlaybookMyTeamPage() {
             Sync New League
           </Link>
         </p>
-      ) : tab === "overview" ? (
+      ) : tab === "lineup" ? (
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full min-w-[1080px] border-collapse text-sm">
             <thead>
@@ -2143,9 +2154,10 @@ function PlaybookMyTeamPage() {
           onOpenPlayer={openPlayer}
         />
       ) : null}
+      </section>
+      )}
 
       <PlayerModalHost ref={modalRef} />
-      </section>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Lock, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,6 +10,15 @@ import {
   MatchupReplayModal,
   WatchReplayButton,
 } from "@/components/playbook/MatchupReplayModal";
+import {
+  SidebarMatchupCard,
+  SidebarPanel,
+  SlotOrderPanel,
+  StartSitPanel,
+  type SidebarMatchup,
+  type SlotOrderMove,
+  type StartSitAlert,
+} from "@/components/playbook/MatchupSidebar";
 import { playbookCardClass, resolveAvatarUrl } from "@/components/playbook/panels";
 import { SosStars } from "@/components/sos/SosStars";
 import type { MatchupReplayRequest } from "@/lib/matchup-replay";
@@ -40,6 +49,7 @@ import {
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
 import { sosStarsFromRank, weeklySosMatchupFor, type SosMatchup } from "@/lib/sos-presentation";
+import { buildStartSitAdvice } from "@/lib/trade-engine";
 import { cn } from "@/lib/utils";
 import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
 import { getCached } from "@/lib/sleeper-cache";
@@ -124,14 +134,14 @@ function badgeLabel(slot: string): string {
   return slot;
 }
 
-/** Opaque pastel pos fills (same look as the old /15 tints) with solid pos-colored labels. */
+/** Solid position fills with white labels. */
 const SLOT_PILL_TONE: Record<string, string> = {
-  QB: "border-[color-mix(in_oklab,var(--color-qb)_32%,white)] bg-[color-mix(in_oklab,var(--color-qb)_18%,white)] text-qb",
-  RB: "border-[color-mix(in_oklab,var(--color-rb)_32%,white)] bg-[color-mix(in_oklab,var(--color-rb)_18%,white)] text-rb",
-  WR: "border-[color-mix(in_oklab,var(--color-wr)_32%,white)] bg-[color-mix(in_oklab,var(--color-wr)_18%,white)] text-wr",
-  TE: "border-[color-mix(in_oklab,var(--color-te)_32%,white)] bg-[color-mix(in_oklab,var(--color-te)_18%,white)] text-te",
-  K: "border-[color-mix(in_oklab,var(--color-k)_32%,white)] bg-[color-mix(in_oklab,var(--color-k)_18%,white)] text-k",
-  DEF: "border-[color-mix(in_oklab,var(--color-def)_32%,white)] bg-[color-mix(in_oklab,var(--color-def)_18%,white)] text-def",
+  QB: "border-qb bg-qb text-white",
+  RB: "border-rb bg-rb text-white",
+  WR: "border-wr bg-wr text-white",
+  TE: "border-te bg-te text-white",
+  K: "border-k bg-k text-white",
+  DEF: "border-def bg-def text-white",
   BN: "border-slate-300 bg-slate-100 text-slate-600",
   IR: "border-slate-300 bg-slate-100 text-slate-600",
 };
@@ -149,13 +159,13 @@ function MatchupSlotBadge({ slot }: { slot: string }) {
       <span
         className={cn(
           pillBase,
-          "relative isolate overflow-hidden border-slate-300 text-slate-800",
+          "relative isolate overflow-hidden border-slate-300 text-white",
         )}
       >
         <span className="pointer-events-none absolute inset-0 flex" aria-hidden="true">
-          <span className="h-full w-1/3 bg-[color-mix(in_oklab,var(--color-rb)_22%,white)]" />
-          <span className="h-full w-1/3 bg-[color-mix(in_oklab,var(--color-wr)_22%,white)]" />
-          <span className="h-full w-1/3 bg-[color-mix(in_oklab,var(--color-te)_22%,white)]" />
+          <span className="h-full w-1/3 bg-rb" />
+          <span className="h-full w-1/3 bg-wr" />
+          <span className="h-full w-1/3 bg-te" />
         </span>
         <span className="relative z-10">FLX</span>
       </span>
@@ -864,7 +874,9 @@ function LeftPlayerCard({
     "flex h-full w-full items-center justify-between rounded-xl border p-3.5 shadow-sm",
     isFinal
       ? "border-slate-200/80 bg-slate-50/85 opacity-95"
-      : "border-slate-200 bg-white",
+      : showCheck
+        ? "border-emerald-300/80 bg-gradient-to-r from-emerald-50 via-white to-white"
+        : "border-slate-200 bg-white",
   );
 
   if (!player) {
@@ -964,7 +976,9 @@ function RightPlayerCard({
     "flex h-full w-full items-center justify-between rounded-xl border p-3.5 shadow-sm",
     isFinal
       ? "border-slate-200/80 bg-slate-50/85 opacity-95"
-      : "border-slate-200 bg-white",
+      : showCheck
+        ? "border-emerald-300/80 bg-gradient-to-l from-emerald-50 via-white to-white"
+        : "border-slate-200 bg-white",
   );
 
   if (!player) {
@@ -2010,6 +2024,294 @@ function PlaybookMatchupPage() {
     oppTeam?.logo,
   ]);
 
+  const currentNflWeek = nflWeek.data ?? null;
+  const isCurrentWeek = currentNflWeek != null && Number(activeWeek) === Number(currentNflWeek);
+
+  const { startSitAlerts, startSitLock } = useMemo(() => {
+    const none = {
+      startSitAlerts: [] as StartSitAlert[],
+      startSitLock: "none" as "none" | "some" | "all",
+    };
+    if (!myTeam || !isCurrentWeek) return none;
+    const entry =
+      myRosterId == null
+        ? null
+        : (matchups?.entries ?? []).find((e) => Number(e.rosterId) === Number(myRosterId)) ?? null;
+    const liveStarters = entry
+      ? buildCurrentStarterRows(myTeam, slotLabels, entry.starters ?? [], playersById, {
+          fillEmptyFromLive: true,
+          starterNames: entry.starterNames ?? [],
+        }).filter((p): p is Player => Boolean(p))
+      : [];
+    const useLive = liveStarters.length > 0 && (entry?.playerIds ?? []).length > 0;
+    const starters = useLive
+      ? liveStarters
+      : (myTeam.starters ?? []).filter((p): p is Player => Boolean(p));
+    const starterIds = new Set(starters.map((p) => p.id));
+    const irIds = new Set(entry?.irIds ?? []);
+    const bench = useLive
+      ? resolvePlayersByIds(entry?.playerIds ?? []).filter((p) => !starterIds.has(p.id) && !irIds.has(p.id))
+      : (myTeam.bench ?? []).filter((p) => !starterIds.has(p.id));
+    const everyone = [...starters, ...bench];
+    const onBye = (p: Player) => p.bye != null && Number(p.bye) === Number(activeWeek);
+    const hasTeam = (p: Player) => {
+      const team = (p.team ?? "").trim().toUpperCase();
+      return Boolean(team) && team !== "FA";
+    };
+
+    const nowMs = Date.now();
+    const lockedIds = new Set(
+      everyone
+        .filter((p) => {
+          if (!hasTeam(p)) return false;
+          const progress = progressForNflTeam(p.team, progressByNflTeam);
+          if (!progress) return false;
+          if (progress.phase !== "pre") return true;
+          const kickoff = progress.kickoffIso ? Date.parse(progress.kickoffIso) : NaN;
+          return Number.isFinite(kickoff) && kickoff <= nowMs;
+        })
+        .map((p) => p.id),
+    );
+    const playing = everyone.filter((p) => hasTeam(p) && !onBye(p));
+    const lockedCount = playing.filter((p) => lockedIds.has(p.id)).length;
+    const lock: "none" | "some" | "all" =
+      lockedCount === 0 ? "none" : lockedCount >= playing.length ? "all" : "some";
+
+    const alerts = buildStartSitAdvice({
+      starters,
+      bench,
+      weeklyFor: (id) => {
+        const hit = everyone.find((p) => p.id === id);
+        return hit && onBye(hit) ? null : projectFor(id);
+      },
+      minEdge: 0.8,
+      limit: 3,
+      isLocked: (id) => lockedIds.has(id),
+    });
+    return { startSitAlerts: alerts, startSitLock: lock };
+  }, [
+    myTeam,
+    isCurrentWeek,
+    myRosterId,
+    matchups,
+    slotLabels,
+    playersById,
+    resolvePlayersByIds,
+    progressByNflTeam,
+    activeWeek,
+    projectFor,
+  ]);
+
+  const slotOrderMoves = useMemo((): SlotOrderMove[] => {
+    if (!isCurrentWeek || myRosterId == null) return [];
+    const entry = (matchups?.entries ?? []).find((e) => Number(e.rosterId) === Number(myRosterId));
+    if (!entry) return [];
+    const team = teams.find((t) => Number(t.slot) === Number(myRosterId)) ?? myTeam ?? null;
+    const lineup = buildCurrentStarterRows(team, slotLabels, entry.starters ?? [], playersById, {
+      fillEmptyFromLive: true,
+      starterNames: entry.starterNames ?? [],
+    });
+
+    const totals = new Map<string, number>();
+    for (const slot of slotLabels) totals.set(slot, (totals.get(slot) ?? 0) + 1);
+    const seen = new Map<string, number>();
+    const slotNames = slotLabels.map((slot) => {
+      const n = (seen.get(slot) ?? 0) + 1;
+      seen.set(slot, n);
+      const label = badgeLabel(slot) === "FLX" ? "FLEX" : badgeLabel(slot);
+      return (totals.get(slot) ?? 0) > 1 ? `${label}${n}` : label;
+    });
+
+    const nowMs = Date.now();
+    const kickoffOf = (p: Player | null): number | null => {
+      if (!p) return null;
+      const nfl = (p.team ?? "").trim().toUpperCase();
+      if (!nfl || nfl === "FA") return null;
+      if (p.bye != null && Number(p.bye) === Number(activeWeek)) return null;
+      const progress = progressForNflTeam(p.team, progressByNflTeam);
+      if (!progress || progress.phase !== "pre") return null;
+      const kickoff = progress.kickoffIso ? Date.parse(progress.kickoffIso) : NaN;
+      return Number.isFinite(kickoff) && kickoff > nowMs ? kickoff : null;
+    };
+
+    const isFlex = (slot: string) => slot === "FLEX" || slot === "FLX";
+    const flexIdx = slotLabels
+      .map((_, i) => i)
+      .filter((i) => isFlex(slotLabels[i]!) && kickoffOf(lineup[i] ?? null) != null)
+      .sort((a, b) => kickoffOf(lineup[a] ?? null)! - kickoffOf(lineup[b] ?? null)!);
+
+    const used = new Set<number>();
+    const moves: SlotOrderMove[] = [];
+    for (const fi of flexIdx) {
+      const flexPlayer = lineup[fi]!;
+      const flexKick = kickoffOf(flexPlayer)!;
+      let fixedIdx = -1;
+      let bestKick = flexKick;
+      for (let i = 0; i < slotLabels.length; i += 1) {
+        if (used.has(i) || slotLabels[i] !== flexPlayer.pos) continue;
+        const kick = kickoffOf(lineup[i] ?? null);
+        if (kick != null && kick > bestKick) {
+          fixedIdx = i;
+          bestKick = kick;
+        }
+      }
+      if (fixedIdx < 0) continue;
+      const fixedPlayer = lineup[fixedIdx]!;
+      used.add(fixedIdx);
+      const label = (p: Player) => formatNflKickoffLabel(progressForNflTeam(p.team, progressByNflTeam)?.kickoffIso);
+      moves.push(
+        {
+          id: `${flexPlayer.id}-in`,
+          player: flexPlayer,
+          from: slotNames[fi]!,
+          to: slotNames[fixedIdx]!,
+          kickoffLabel: label(flexPlayer),
+        },
+        {
+          id: `${fixedPlayer.id}-out`,
+          player: fixedPlayer,
+          from: slotNames[fixedIdx]!,
+          to: slotNames[fi]!,
+          kickoffLabel: label(fixedPlayer),
+        },
+      );
+    }
+    return moves;
+  }, [
+    isCurrentWeek,
+    myRosterId,
+    matchups,
+    teams,
+    myTeam,
+    slotLabels,
+    playersById,
+    progressByNflTeam,
+    activeWeek,
+  ]);
+
+  const aroundLeague = useMemo((): SidebarMatchup[] => {
+    const entries = matchups?.entries ?? [];
+    const fillEmptyFromLive = nflWeek.data == null || Number(activeWeek) === Number(nflWeek.data);
+    const phaseOf = (p: Player) => progressForNflTeam(p.team, progressByNflTeam)?.phase ?? "pre";
+    const out: SidebarMatchup[] = [];
+    for (const option of matchupOptions) {
+      if (option.id === viewMatchupId || option.rightRosterId == null) continue;
+      const ea = entries.find((e) => Number(e.rosterId) === Number(option.leftRosterId));
+      const eb = entries.find((e) => Number(e.rosterId) === Number(option.rightRosterId));
+      if (!ea || !eb) continue;
+
+      const resolve = (entry: typeof ea) => {
+        const team = teams.find((t) => Number(t.slot) === Number(entry.rosterId)) ?? null;
+        const starters = buildCurrentStarterRows(team, slotLabels, entry.starters ?? [], playersById, {
+          fillEmptyFromLive,
+          starterNames: entry.starterNames ?? [],
+        }).filter((p): p is Player => Boolean(p));
+        let proj = 0;
+        for (const p of starters) {
+          if (p.bye != null && Number(p.bye) === Number(activeWeek)) continue;
+          proj += projectFor(p.id) ?? 0;
+        }
+        return { team, entry, starters, proj: Math.round(proj * 100) / 100 };
+      };
+      const sa = resolve(ea);
+      const sb = resolve(eb);
+      const { pctA, pctB } = computeDynamicWinProbability({
+        scoreA: ea.points,
+        scoreB: eb.points,
+        startersA: sa.starters,
+        startersB: sb.starters,
+        pointsMapA: ea.playerPoints ?? {},
+        pointsMapB: eb.playerPoints ?? {},
+        projectFor,
+        weeklyFallback,
+        progressByNflTeam,
+        activeWeek,
+      });
+      const all = [...sa.starters, ...sb.starters];
+      const started = ea.points > 0.005 || eb.points > 0.005 || all.some((p) => phaseOf(p) !== "pre");
+      const final =
+        all.length > 0 &&
+        all.every((p) => (p.bye != null && Number(p.bye) === Number(activeWeek)) || phaseOf(p) === "post");
+      const side = (s: typeof sa, winPct: number) => ({
+        rosterId: Number(s.entry.rosterId),
+        name: s.team?.team || s.entry.teamName || "Team",
+        logo: s.team?.logo || s.entry.logo || null,
+        live: s.entry.points,
+        proj: s.proj,
+        winPct,
+      });
+      out.push({ id: option.id, a: side(sa, pctA), b: side(sb, pctB), started, final });
+    }
+    return out;
+  }, [
+    matchups,
+    matchupOptions,
+    viewMatchupId,
+    teams,
+    slotLabels,
+    playersById,
+    projectFor,
+    progressByNflTeam,
+    activeWeek,
+    nflWeek.data,
+  ]);
+
+  const nextWeek = currentNflWeek != null && currentNflWeek < 18 ? currentNflWeek + 1 : null;
+  const { projectFor: projectForNext } = useLeagueProjections(nextWeek);
+  const { matchups: nextMatchups, loading: nextMatchupsLoading } = useActiveMatchups(nextWeek);
+
+  const nextUp = useMemo((): SidebarMatchup | null => {
+    if (nextWeek == null || myRosterId == null) return null;
+    const entries = nextMatchups?.entries ?? [];
+    const mine = entries.find((e) => Number(e.rosterId) === Number(myRosterId));
+    if (!mine || mine.matchupId == null) return null;
+    const opp = entries.find(
+      (e) => e.matchupId === mine.matchupId && Number(e.rosterId) !== Number(myRosterId),
+    );
+    if (!opp) return null;
+
+    const noProgress = new Map<string, NflGameProgress>();
+    const resolve = (entry: typeof mine) => {
+      const team = teams.find((t) => Number(t.slot) === Number(entry.rosterId)) ?? null;
+      const starters = buildOptimalStarterRows(team, slotLabels, projectForNext, {
+        pointsMap: {},
+        progressByNflTeam: noProgress,
+        activeWeek: nextWeek,
+      }).filter((p): p is Player => Boolean(p));
+      let proj = 0;
+      for (const p of starters) {
+        if (p.bye != null && Number(p.bye) === Number(nextWeek)) continue;
+        proj += projectForNext(p.id) ?? 0;
+      }
+      return { team, entry, starters, proj: Math.round(proj * 100) / 100 };
+    };
+    const sa = resolve(mine);
+    const sb = resolve(opp);
+    const { pctA, pctB } = computeDynamicWinProbability({
+      scoreA: 0,
+      scoreB: 0,
+      startersA: sa.starters,
+      startersB: sb.starters,
+      pointsMapA: {},
+      pointsMapB: {},
+      projectFor: projectForNext,
+      weeklyFallback,
+      progressByNflTeam: noProgress,
+      activeWeek: nextWeek,
+    });
+    const side = (s: typeof sa, winPct: number) => ({
+      rosterId: Number(s.entry.rosterId),
+      name: s.team?.team || s.entry.teamName || "Team",
+      logo: s.team?.logo || s.entry.logo || null,
+      live: 0,
+      proj: s.proj,
+      winPct,
+    });
+    return { id: `next-${nextWeek}`, a: side(sa, pctA), b: side(sb, pctB), started: false, final: false };
+  }, [nextWeek, myRosterId, nextMatchups, teams, slotLabels, projectForNext]);
+
+  const jumpToBoard = () => window.scrollTo({ top: 0, behavior: "smooth" });
+
   return (
     <div key={activeLeagueId ?? "none"}>
       <header className="mb-4 flex flex-col gap-3 sm:relative sm:flex-row sm:items-start sm:justify-between">
@@ -2031,7 +2333,8 @@ function PlaybookMatchupPage() {
         </div>
       </header>
 
-      <section className={playbookCardClass}>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <section className={cn(playbookCardClass, "min-w-0 lg:col-span-2")}>
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading matchup board…</p>
       ) : (
@@ -2308,6 +2611,101 @@ function PlaybookMatchupPage() {
         request={replayRequest}
       />
       </section>
+
+      <aside className="min-w-0 space-y-6 lg:col-span-1">
+        <SidebarPanel
+          title="Start/Sit Advice"
+          badge={
+            <Link to="/playbook/my-team" className="text-xs font-semibold text-primary hover:underline">
+              Review Lineup
+            </Link>
+          }
+        >
+          <StartSitPanel
+            alerts={startSitAlerts}
+            lock={startSitLock}
+            isCurrentWeek={isCurrentWeek}
+            onOpenPlayer={openPlayer}
+          />
+        </SidebarPanel>
+
+        {slotOrderMoves.length ? (
+          <SidebarPanel
+            title="Slot Order"
+            badge={<span className="text-xs font-bold tabular-nums text-slate-500">{slotOrderMoves.length}</span>}
+          >
+            <SlotOrderPanel moves={slotOrderMoves} onOpenPlayer={openPlayer} />
+          </SidebarPanel>
+        ) : null}
+
+        <SidebarPanel
+          title="Around the League"
+          badge={
+            <span className="rounded-lg border border-border bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
+              Week {activeWeek}
+            </span>
+          }
+        >
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading matchups…</p>
+          ) : aroundLeague.length ? (
+            <div className="space-y-3">
+              {aroundLeague.map((m) => (
+                <SidebarMatchupCard
+                  key={m.id}
+                  matchup={m}
+                  platform={activeLeague?.platform ?? null}
+                  onLineups={() => {
+                    setViewMatchupId(m.id);
+                    jumpToBoard();
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No other matchups this week.</p>
+          )}
+        </SidebarPanel>
+
+        {nextWeek != null ? (
+          <SidebarPanel
+            title="Next Up"
+            badge={
+              <span className="flex items-center gap-2">
+                {nextUp ? (
+                  <span
+                    className={cn(
+                      "text-xs font-bold",
+                      nextUp.a.winPct >= nextUp.b.winPct ? "text-emerald-600" : "text-rose-600",
+                    )}
+                  >
+                    {nextUp.a.winPct >= nextUp.b.winPct ? "Favorite" : "Underdog"}
+                  </span>
+                ) : null}
+                <span className="rounded-lg border border-border bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
+                  Week {nextWeek}
+                </span>
+              </span>
+            }
+          >
+            {nextUp ? (
+              <SidebarMatchupCard
+                matchup={nextUp}
+                platform={activeLeague?.platform ?? null}
+                onLineups={() => {
+                  setSelectedWeek(nextWeek);
+                  jumpToBoard();
+                }}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {nextMatchupsLoading ? "Loading next matchup…" : `No matchup scheduled for Week ${nextWeek}.`}
+              </p>
+            )}
+          </SidebarPanel>
+        ) : null}
+      </aside>
+      </div>
     </div>
   );
 }

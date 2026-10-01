@@ -34,7 +34,12 @@ export const Route = createFileRoute("/playbook/rosters")({
 const SKIP_STARTER_SLOTS = new Set(["BN", "BENCH", "IR", "IL", "TAXI", "RESERVE"]);
 const FLEX_OK = new Set(["RB", "WR", "TE"]);
 const CORE_POS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
-const weeklyFallback = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
+/** Season pace keeps bye / injured players valued; unsigned NFL free agents are worth nothing. */
+const weeklyFallback = (p: Player) => {
+  const team = (p.team ?? "").trim().toUpperCase();
+  if (!team || team === "FA") return 0;
+  return Math.max(0, (p.proj?.half ?? 0) / 17);
+};
 
 type MatrixRow = {
   slot: string;

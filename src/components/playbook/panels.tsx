@@ -358,8 +358,8 @@ export function TruePowerRankingsPanel() {
   };
 
   return (
-    <section key={activeLeagueId ?? leagueKey} className={playbookCardClass}>
-      <div className="mb-4">
+    <section key={activeLeagueId ?? leagueKey}>
+      <div className="mb-3">
         <h2 className={playbookPanelTitleClass}>
           True Power Rankings
         </h2>
@@ -486,7 +486,12 @@ export function TruePowerRankingsPanel() {
 
 const SKIP_STARTER_SLOTS = new Set(["BN", "BENCH", "IR", "IL", "TAXI", "RESERVE"]);
 const FLEX_OK = new Set(["RB", "WR", "TE"]);
-const weeklyFallback = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
+/** Season pace keeps bye / injured players valued; unsigned NFL free agents are worth nothing. */
+const weeklyFallback = (p: Player) => {
+  const team = (p.team ?? "").trim().toUpperCase();
+  if (!team || team === "FA") return 0;
+  return Math.max(0, (p.proj?.half ?? 0) / 17);
+};
 
 type MatrixRow = {
   slot: string;

@@ -1187,6 +1187,8 @@ export type NewsItem = {
   link: string | null;
   image: string | null;
   aboutPlayer: boolean;
+  /** "ESPN Injury Report", "Sleeper Injury Report", "RotoWire" or "ESPN". */
+  source: string;
 };
 
 export type PlayerNews = {
@@ -1216,16 +1218,6 @@ const espnNews = memo(1000 * 60 * 15, async (query: string) => {
   return Array.isArray(json.articles) ? json.articles : [];
 });
 
-function mentions(a: EspnArticle, name: string): boolean {
-  const hay = `${a.headline ?? ""} ${a.description ?? ""}`.toLowerCase();
-  const lower = name.toLowerCase();
-  if (hay.includes(lower)) return true;
-  if ((a.categories ?? []).some((c) => (c.athlete?.description ?? "").toLowerCase() === lower)) {
-    return true;
-  }
-  return false;
-}
-
 function toItem(a: EspnArticle, aboutPlayer: boolean): NewsItem {
   return {
     id: String(a.id ?? a.headline ?? Math.random()),
@@ -1235,6 +1227,7 @@ function toItem(a: EspnArticle, aboutPlayer: boolean): NewsItem {
     link: a.links?.web?.href ?? null,
     image: a.images?.[0]?.url ?? null,
     aboutPlayer,
+    source: "ESPN",
   };
 }
 
@@ -1285,55 +1278,151 @@ function stripTags(html: string): string {
     .trim();
 }
 
+/** Whole-name match ("Josh Allen" never hits "Josh Hines-Allen"); generational suffixes optional. */
+function playerNameRegex(name: string): RegExp {
+  const base = name.replace(/\s+(jr|sr|ii|iii|iv|v)\.?$/i, "").trim();
+  return new RegExp(`(^|[^a-z'-])${escapeRegExp(base)}(?![a-z'-])`, "i");
+}
+
+/**
+ * RotoWire blurbs are one long sentence with no title. The title stays neutral because blurbs
+ * often negate a designation ("won't be placed on IR"); the blurb itself carries the status.
+ */
+function blurbTitle(name: string, blurb: string): string {
+  const tagged = new RegExp(`\\b${escapeRegExp(lastNameOf(name))} \\(([a-z][a-z /-]{2,24})\\)`, "i").exec(blurb);
+  const who = tagged ? `${name} (${tagged[1]!.toLowerCase()})` : name;
+  if (/\bpractic/i.test(blurb)) return `${who} practice update`;
+  if (/\b(?:completed|carries|rushed|caught|receptions?|targets?|catches)\b/i.test(blurb)) {
+    return `${name} game recap`;
+  }
+  if (tagged || ROSTER_INJURY_RE.test(blurb)) return `${who} injury update`;
+  return `${name} news update`;
+}
+
+function newsTextKey(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 80);
+}
+
+/** The shared injury report can be cold (several upstream calls); news shouldn't wait on it. */
+function injuryReportsWithin(ms: number): Promise<InjuryReports | null> {
+  return Promise.race([
+    loadInjuryReports().catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
+/**
+ * Player-only news: the player's current injury report entry (ESPN / RotoWire / Sleeper),
+ * RotoWire blurbs from ESPN's per-player fantasy feed, and ESPN stories that are tagged to
+ * the player or name him in the headline. League roundups that only mention him are dropped.
+ */
 export async function loadPlayerNews(id: string): Promise<PlayerNews | null> {
   const built = await buildPlayers("v2");
   const player = built.all.find((p) => p.id === id);
   if (!player) return null;
 
-  const athleteId = await espnAthleteId(player.name).catch(() => null);
-  const [personal, league, team] = await Promise.all([
-    athleteId ? espnPlayerFeed(athleteId).catch(() => [] as EspnFeedItem[]) : Promise.resolve([]),
+  const nameRe = playerNameRegex(player.name);
+  const lastNameRe = playerNameRegex(lastNameOf(player.name));
+  const isDef = player.pos === "DEF";
+  const hasTeam = Boolean(player.team && player.team !== "FA");
+  const rosterIndex = isDef ? null : await loadNflRosterIndex(built.payload.season).catch(() => null);
+  const athleteId =
+    rosterIndex?.bySleeper.get(id)?.espnId ??
+    (isDef ? null : await espnAthleteId(player.name).catch(() => null));
+
+  const [feed, league, team, reports] = await Promise.all([
+    athleteId ? espnPlayerFeed(athleteId).catch(() => [] as EspnFeedItem[]) : Promise.resolve([] as EspnFeedItem[]),
     espnNews("").catch(() => [] as EspnArticle[]),
-    player.team && player.team !== "FA"
+    hasTeam
       ? espnNews(`&team=${player.team.toLowerCase()}`).catch(() => [] as EspnArticle[])
       : Promise.resolve([] as EspnArticle[]),
+    isDef ? Promise.resolve(null) : injuryReportsWithin(4000),
   ]);
 
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenText = new Set<string>();
   const items: NewsItem[] = [];
-  const push = (a: EspnArticle, about: boolean) => {
-    const item = toItem(a, about);
-    if (seen.has(item.id)) return;
-    seen.add(item.id);
+  // Generated titles repeat ("game recap"), so callers can dedupe on the source copy instead.
+  const push = (item: NewsItem, dedupeText: string = item.headline) => {
+    const keys = [newsTextKey(dedupeText)].filter(Boolean);
+    if (seenIds.has(item.id) || keys.some((k) => seenText.has(k))) return;
+    seenIds.add(item.id);
+    for (const k of keys) seenText.add(k);
     items.push(item);
   };
 
-  for (const f of personal) {
-    const headline = f.headline ?? "Player update";
-    const description = stripTags(f.story ?? f.description ?? "");
-    // Guard against wrong ESPN athlete ID resolution — copy must mention this player.
-    if (!mentions({ headline, description } as EspnArticle, player.name)) continue;
-    const item: NewsItem = {
-      id: String(f.id ?? f.headline ?? Math.random()),
-      headline,
-      description,
+  const report = reports?.items.find((r) => r.sleeperId === id) ?? null;
+  if (report) {
+    push(
+      {
+        id: `injury-${report.id}`,
+        headline: report.headline,
+        description: report.analysis ? `${report.news} ${report.analysis}` : report.news,
+        published: report.published,
+        link: report.link,
+        image: null,
+        aboutPlayer: true,
+        source: report.source,
+      },
+      report.news.replace(/\.$/, ""),
+    );
+  }
+
+  for (const f of feed) {
+    const raw = stripTags(f.headline ?? "");
+    if (!raw) continue;
+    const story = stripTags(f.story ?? f.description ?? "");
+    const isBlurb = !f.type || f.type === "Rotowire";
+    if (isBlurb) {
+      // The feed is per athlete; the surname check guards a wrong athlete id.
+      if (!lastNameRe.test(`${raw} ${story}`)) continue;
+      push(
+        {
+          id: String(f.id ?? raw),
+          headline: blurbTitle(player.name, raw),
+          description: story && story !== raw ? `${raw} ${story}` : raw,
+          published: f.published ?? f.lastModified ?? "",
+          link: f.links?.web?.href ?? null,
+          image: null,
+          aboutPlayer: true,
+          source: "RotoWire",
+        },
+        raw.replace(/\.$/, ""),
+      );
+      continue;
+    }
+    // Columns and videos in his feed often cover other players; keep the ones titled for him.
+    if (!nameRe.test(raw)) continue;
+    push({
+      id: String(f.id ?? raw),
+      headline: raw,
+      description: story,
       published: f.published ?? f.lastModified ?? "",
       link: f.links?.web?.href ?? null,
       image: null,
       aboutPlayer: true,
-    };
-    if (seen.has(item.id)) continue;
-    seen.add(item.id);
-    items.push(item);
+      source: "ESPN",
+    });
   }
 
-  // Only articles that explicitly mention this player — never bleed team/league recaps.
-  for (const a of [...league, ...team]) if (mentions(a, player.name)) push(a, true);
+  // Tags alone let roundups through, so the headline has to be about him.
+  for (const a of [...team, ...league]) {
+    const headline = a.headline ?? "";
+    const tagged =
+      athleteId != null && (a.categories ?? []).some((c) => String(c.athlete?.id ?? "") === athleteId);
+    if (nameRe.test(headline) || (tagged && lastNameRe.test(headline))) push(toItem(a, true));
+  }
 
-  items.sort((a, b) => {
-    if (a.aboutPlayer !== b.aboutPlayer) return a.aboutPlayer ? -1 : 1;
-    return (b.published ?? "").localeCompare(a.published ?? "");
-  });
+  // Current season only (preseason onward). The pinned injury entry is live, so it may be undated.
+  const seasonStart = Date.UTC(Number(built.payload.season) || new Date().getUTCFullYear(), 7, 1);
+  const inSeason = (item: NewsItem) => {
+    const at = Date.parse(item.published);
+    return Number.isFinite(at) && at >= seasonStart;
+  };
+  const pinned = report ? items.slice(0, 1) : [];
+  const rest = (report ? items.slice(1) : items)
+    .filter(inSeason)
+    .sort((a, b) => (b.published ?? "").localeCompare(a.published ?? ""));
 
   return {
     player,
@@ -1343,7 +1432,7 @@ export async function loadPlayerNews(id: string): Promise<PlayerNews | null> {
         ? `Listed ${player.injury}${player.team && player.team !== "FA" ? ` on ${player.team}'s report` : ""}.`
         : null,
     },
-    items: items.slice(0, 12),
+    items: [...pinned, ...rest].slice(0, 12),
   };
 }
 

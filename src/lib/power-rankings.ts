@@ -94,7 +94,9 @@ export function buildTruePowerRankings(
     const fitPlayers = team.players.map((p) => ({
       id: p.id,
       pos: p.pos,
-      weekly: opts.projectFor(p.id) ?? Math.max(0, (p.proj?.half ?? 0) / 17),
+      weekly:
+        opts.projectFor(p.id) ??
+        (!p.team || p.team.toUpperCase() === "FA" ? 0 : Math.max(0, (p.proj?.half ?? 0) / 17)),
     }));
     const weeklyProjection = optimizeLineup(fitPlayers, starters, scoring).points;
 

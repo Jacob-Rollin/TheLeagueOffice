@@ -1,21 +1,20 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
 import { StreakIndicator } from "@/components/league/StreakIndicator";
 import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import {
-  playbookCardClass,
   playbookPanelTitleClass,
   powerRankMovementDelta,
   resolvePowerRankDisplayBaseline,
   TeamAvatarBadge,
   TruePowerRankingsPanel,
 } from "@/components/playbook/panels";
+import { StartingSlotRanks, type SlotRankTeamMeta } from "@/components/standings/StartingSlotRanks";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
+import { type RowAnalytics, useLeagueAnalytics, useStartingSlotRanks } from "@/hooks/useLeagueAnalytics";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
-import { getConnectionMatchups } from "@/lib/league.functions";
 import { cn } from "@/lib/utils";
 
 type StandingsTab = "actual" | "all-play" | "power";
@@ -61,6 +60,37 @@ type DisplayRow = {
   pointsAgainst?: number | null;
   isMine: boolean;
 };
+
+type Tone = "good" | "warn" | "bad" | null;
+
+/** Lighter shades on the highlighted (dark) row so colored stats stay readable. */
+function toneClass(tone: Tone, highlighted: boolean): string {
+  if (tone === "good") return highlighted ? "text-emerald-300" : "text-emerald-600";
+  if (tone === "warn") return highlighted ? "text-amber-300" : "text-amber-600";
+  if (tone === "bad") return highlighted ? "text-rose-300" : "text-rose-600";
+  return "";
+}
+
+/** Top ~30% green, bottom ~30% red. */
+function rankTone(rank: number | null, teams: number): Tone {
+  if (rank == null || teams < 3) return null;
+  const band = Math.ceil(teams * 0.3);
+  if (rank <= band) return "good";
+  if (rank > teams - band) return "bad";
+  return null;
+}
+
+function playoffTone(pct: number | null): Tone {
+  if (pct == null) return null;
+  return pct >= 60 ? "good" : pct >= 20 ? "warn" : "bad";
+}
+
+/** Relative to an even share of the title (10% in a 10-team league). */
+function titleTone(pct: number | null, teams: number): Tone {
+  if (pct == null || teams <= 0) return null;
+  const even = 100 / teams;
+  return pct >= even * 2 ? "good" : pct >= even / 2 ? "warn" : "bad";
+}
 
 function formatRecord(wins: number, losses: number, ties: number): string {
   if (ties > 0) return `${wins}-${losses}-${ties}`;
@@ -110,6 +140,9 @@ function StandingsTable({
   leagueKey,
   platform,
   showPoints = false,
+  analytics,
+  analyticsLoading = false,
+  playoffCut = null,
 }: {
   rows: DisplayRow[];
   loading: boolean;
@@ -119,11 +152,20 @@ function StandingsTable({
   leagueKey: string;
   platform: string | null;
   showPoints?: boolean;
+  /** Actual tab: PF / Max PF ranks, coaching efficiency and playoff / title odds. */
+  analytics?: Map<number, RowAnalytics> | null;
+  analyticsLoading?: boolean;
+  /** Last playoff seed; a dashed line is drawn under it, like the dashboard standings. */
+  playoffCut?: number | null;
 }) {
-  const statGap = showPoints ? "space-x-10" : "space-x-16";
+  const full = analytics !== undefined;
+  const statGap = full ? "space-x-5" : showPoints ? "space-x-10" : "space-x-16";
+  const teamCount = rows.length;
+  const pending = analyticsLoading ? "…" : "—";
+  const cut = playoffCut != null && playoffCut > 0 && playoffCut < rows.length ? playoffCut : null;
   return (
     <div className="overflow-x-auto overflow-y-hidden rounded-lg border border-border">
-      <div className={showPoints ? "min-w-[860px]" : "min-w-[720px]"}>
+      <div className={full ? "min-w-[1240px]" : showPoints ? "min-w-[860px]" : "min-w-[720px]"}>
         <div className="flex items-center justify-between border-b border-border bg-slate-50/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 select-none">
           <div className="flex min-w-0 flex-1 items-center">
             <span className="w-12 text-center">Rank</span>
@@ -132,11 +174,24 @@ function StandingsTable({
           </div>
           <div className={cn("flex shrink-0 items-center pr-2", statGap)}>
             <span className="w-14 text-center">Streak</span>
-            <span className="w-20 text-center">W-L</span>
+            <span className={cn("text-center", full ? "w-14" : "w-20")}>W-L</span>
+            {full ? (
+              <>
+                <span className="w-16 text-center">PF Rank</span>
+                <span className="w-20 text-center">Max PF Rank</span>
+              </>
+            ) : null}
             {showPoints ? (
               <>
                 <span className="w-16 text-right">PF</span>
                 <span className="w-16 text-right">PA</span>
+              </>
+            ) : null}
+            {full ? (
+              <>
+                <span className="w-20 text-center">Coaching Eff</span>
+                <span className="w-16 text-center">Playoff %</span>
+                <span className="w-16 text-center">Title %</span>
               </>
             ) : null}
             <span className="w-16 text-right">Win %</span>
@@ -156,9 +211,16 @@ function StandingsTable({
               const pctLabel = `${row.winPct.toFixed(winPctDigits)}%`;
               const delta = powerRankMovementDelta(baseline, row.rosterId, rank);
               const trend = trendPresentation(delta, row.isMine);
+              const stats = analytics?.get(row.rosterId) ?? null;
 
               return (
-                <li key={row.rosterId} className="border-t border-border">
+                <li
+                  key={row.rosterId}
+                  className={cn(
+                    "relative border-t",
+                    cut != null && rank === cut + 1 ? "border-dashed border-emerald-400" : "border-border",
+                  )}
+                >
                   <div
                     className={cn(
                       "flex items-center justify-between px-4 py-2.5",
@@ -171,7 +233,13 @@ function StandingsTable({
                       <span
                         className={cn(
                           "w-12 text-center text-sm font-semibold tabular-nums",
-                          row.isMine ? "text-white" : "text-slate-500",
+                          row.isMine
+                            ? "text-white"
+                            : cut == null
+                              ? "text-slate-500"
+                              : rank > cut
+                                ? "text-slate-400"
+                                : "text-slate-900",
                         )}
                       >
                         {rank}
@@ -231,9 +299,19 @@ function StandingsTable({
                       <span className="w-14 text-center">
                         <StreakIndicator streak={row.streak} highlighted={row.isMine} />
                       </span>
-                      <span className="w-20 text-center">
+                      <span className={cn("text-center", full ? "w-14" : "w-20")}>
                         {formatRecord(row.wins, row.losses, row.ties)}
                       </span>
+                      {full ? (
+                        <>
+                          <span className={cn("w-16 text-center", toneClass(rankTone(stats?.pfRank ?? null, teamCount), row.isMine))}>
+                            {stats?.pfRank != null ? `#${stats.pfRank}` : pending}
+                          </span>
+                          <span className={cn("w-20 text-center", toneClass(rankTone(stats?.maxPfRank ?? null, teamCount), row.isMine))}>
+                            {stats?.maxPfRank != null ? `#${stats.maxPfRank}` : pending}
+                          </span>
+                        </>
+                      ) : null}
                       {showPoints ? (
                         <>
                           <span className="w-16 text-right">
@@ -249,9 +327,30 @@ function StandingsTable({
                           </span>
                         </>
                       ) : null}
+                      {full ? (
+                        <>
+                          <span className={cn("w-20 text-center", toneClass(rankTone(stats?.effRank ?? null, teamCount), row.isMine))}>
+                            {stats?.efficiency != null ? `${stats.efficiency.toFixed(1)}%` : pending}
+                          </span>
+                          <span className={cn("w-16 text-center", toneClass(playoffTone(stats?.playoffPct ?? null), row.isMine))}>
+                            {stats?.playoffPct != null ? `${Math.round(stats.playoffPct)}%` : pending}
+                          </span>
+                          <span className={cn("w-16 text-center", toneClass(titleTone(stats?.titlePct ?? null, teamCount), row.isMine))}>
+                            {stats?.titlePct != null ? `${stats.titlePct.toFixed(1)}%` : pending}
+                          </span>
+                        </>
+                      ) : null}
                       <span className="w-16 text-right">{pctLabel}</span>
                     </div>
                   </div>
+                  {cut != null && rank === cut + 1 ? (
+                    <span
+                      className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-[9px] font-black uppercase leading-none tracking-widest text-emerald-600"
+                      aria-label="Playoff line"
+                    >
+                      Playoff Line
+                    </span>
+                  ) : null}
                 </li>
               );
             })}
@@ -267,7 +366,7 @@ function StandingsHub() {
   const navigate = Route.useNavigate();
   const { activeLeague, activeLeagueId } = useActiveLeague();
   const { standings, loading: standingsLoading } = useActiveStandings();
-  const { teams, myTeam, loading: rostersLoading } = useLeagueRosters([]);
+  const { teams, myTeam, rosterPositions, loading: rostersLoading } = useLeagueRosters([]);
   const leagueKey = activeLeagueId ?? activeLeague?.id ?? "none";
   const platform = activeLeague?.platform ?? null;
 
@@ -291,54 +390,19 @@ function StandingsHub() {
     return false;
   };
 
-  const nflWeek = useQuery({
-    queryKey: ["nfl-state-week"],
-    staleTime: 30 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
-        headers: { accept: "application/json" },
-      }).catch(() => null);
-      const json = res && res.ok ? ((await res.json()) as Record<string, unknown>) : null;
-      return Math.max(1, Number(json?.["week"] ?? 1) || 1);
-    },
-  });
-
-  const currentWeek = nflWeek.data ?? null;
-  /** Completed NFL weeks only (1 … current−1). Live / in-progress week is excluded. */
-  const completedWeekNumbers = useMemo(() => {
-    if (currentWeek == null || currentWeek <= 1) return [] as number[];
-    return Array.from({ length: currentWeek - 1 }, (_, i) => i + 1);
-  }, [currentWeek]);
-
-  const historyMatchupQueries = useQueries({
-    queries: completedWeekNumbers.map((week) => ({
-      queryKey: ["active-matchups", activeLeague?.id ?? null, week],
-      enabled: Boolean(activeLeague?.leagueId && week && tab === "all-play"),
-      retry: false,
-      staleTime: 10 * 60 * 1000,
-      queryFn: async () =>
-        await getConnectionMatchups({
-          data: {
-            identifier: activeLeague?.leagueId ?? "",
-            platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
-            week,
-            ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-            ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-            ...(activeLeague?.id ? { connectionId: activeLeague.id } : {}),
-          },
-        }),
-    })),
-  });
-
-  const historyStamp = historyMatchupQueries
-    .map((q) => `${q.dataUpdatedAt}:${q.data?.week ?? "x"}:${q.data?.entries?.length ?? 0}`)
-    .join("|");
+  const league = useLeagueAnalytics({ history: tab !== "power", forecast: tab === "actual" });
+  const {
+    currentWeek,
+    completedWeekNumbers,
+    historyQueries: historyMatchupQueries,
+    historyStamp,
+    analytics: actualAnalytics,
+  } = league;
 
   const allPlayLoading =
     tab === "all-play" &&
-    (nflWeek.isLoading ||
-      historyMatchupQueries.some((q) => q.isLoading) ||
+    (league.nflWeekLoading ||
+      league.historyLoading ||
       standingsLoading ||
       rostersLoading);
 
@@ -486,6 +550,19 @@ function StandingsHub() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- historyStamp
   }, [historyStamp, completedWeekNumbers, currentWeek, standings, myRosterId, myTeamName, logoBySlot]);
 
+  const slotRanksQuery = useStartingSlotRanks(currentWeek);
+  const slotRankTeams = useMemo(
+    (): SlotRankTeamMeta[] =>
+      actualRows.map((row) => ({
+        rosterId: row.rosterId,
+        team: row.team,
+        owner: row.owner,
+        logo: row.logo,
+        isMine: row.isMine,
+      })),
+    [actualRows],
+  );
+
   const [actualBaseline, setActualBaseline] = useState<Record<string, number> | null>(null);
   const [allPlayBaseline, setAllPlayBaseline] = useState<Record<string, number> | null>(null);
 
@@ -549,8 +626,8 @@ function StandingsHub() {
       {tab === "power" ? (
         <TruePowerRankingsPanel />
       ) : (
-        <section className={playbookCardClass}>
-          <div className="mb-4">
+        <section>
+          <div className="mb-3">
             <h2 className={playbookPanelTitleClass}>
               {panelTitle}
             </h2>
@@ -561,11 +638,14 @@ function StandingsHub() {
               rows={actualRows}
               loading={standingsLoading || rostersLoading}
               winPctDigits={2}
-              highlightClass="bg-[#ef4444] text-white font-black"
+              highlightClass="bg-slate-700 text-white font-black"
               baseline={actualBaseline}
               leagueKey={leagueKey}
               platform={platform}
               showPoints
+              analytics={actualAnalytics}
+              playoffCut={league.playoffTeamsSetting}
+              analyticsLoading={league.analyticsLoading}
             />
           ) : (
             <StandingsTable
@@ -589,6 +669,16 @@ function StandingsHub() {
           ) : null}
         </section>
       )}
+
+      {activeLeague ? (
+        <StartingSlotRanks
+          data={slotRanksQuery.data}
+          loading={slotRanksQuery.isLoading || league.nflWeekLoading}
+          teams={slotRankTeams}
+          platform={platform}
+          leagueKey={leagueKey}
+        />
+      ) : null}
     </div>
   );
 }

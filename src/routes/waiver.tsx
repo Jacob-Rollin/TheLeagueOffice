@@ -53,7 +53,12 @@ const TARGETS_POS_FILTERS: TargetsPosFilter[] = [
   "DST",
 ];
 
-const weeklyFallback = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
+/** Season pace keeps bye / injured players valued; unsigned NFL free agents are worth nothing. */
+const weeklyFallback = (p: Player) => {
+  const team = (p.team ?? "").trim().toUpperCase();
+  if (!team || team === "FA") return 0;
+  return Math.max(0, (p.proj?.half ?? 0) / 17);
+};
 
 function filterPos(filter: TargetsPosFilter): Pos | null {
   if (filter === "OVERALL") return null;
@@ -497,6 +502,8 @@ function WaiverIntelligencePage() {
       .filter((p) => !rosteredIds.has(p.id) && p.team && p.team !== "FA")
       .map((p) => ({
         ...toFit(p),
+        // Adds must have a real weekly projection, never a season-pace estimate.
+        weekly: projectFor(p.id) ?? 0,
         name: p.name,
         team: p.team,
         injury_status: p.injury || null,
@@ -535,7 +542,7 @@ function WaiverIntelligencePage() {
         return { add, drop };
       })
       .filter((row): row is { add: Player; drop: Player } => Boolean(row));
-  }, [league, players, rosteredIds, brain, weeklyOf]);
+  }, [league, players, rosteredIds, brain, weeklyOf, projectFor]);
 
   const locked = !authReady || !user || !activeLeague?.id;
 

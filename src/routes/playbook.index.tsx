@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { StreakIndicator } from "@/components/league/StreakIndicator";
+import { MatchupPreviewCard, MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
 import {
   resolveAvatarUrl,
   ActivityFeed,
@@ -27,6 +28,12 @@ import { getConnectionMatchups, getConnectionSettings } from "@/lib/league.funct
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import { getRosterNews } from "@/lib/players.functions";
 import type { RosterNews, RosterNewsItem } from "@/lib/players.server";
+import {
+  computeMatchupPreview,
+  matchupSlotLabels as starterSlotLabels,
+  matchupWeeklyFallback,
+  resolveMatchupStarters,
+} from "@/lib/matchup-preview";
 import { buildTruePowerRankings, starterRequirements } from "@/lib/power-rankings";
 import {
   computeDynamicWinProbability,
@@ -40,6 +47,7 @@ import {
   suggestWaiverTransactions,
   type FitPlayer,
 } from "@/lib/trade-engine";
+import { starterSlots, weeklyOptimalPoints } from "@/lib/standings-analytics";
 import { cn } from "@/lib/utils";
 import {
   awardsForTeam,
@@ -49,29 +57,17 @@ import {
   type AwardRow,
 } from "@/lib/weekly-awards";
 
-type CoachingRosterPlayer = { pos: string; points: number };
 type CoachingWeekData = {
   week: number;
   status: "complete" | "open";
   isClosed: boolean;
   isCompleted: boolean;
   userPointsScored: number;
-  rosterPlayers: CoachingRosterPlayer[];
+  /** Best possible lineup that week (shared with the standings page). */
+  optimal: number;
   standingsPosition: string | null;
   standingsRecord: string | null;
 };
-
-function normalizePos(pos: string): string {
-  const p = pos.trim().toUpperCase();
-  if (p === "DST" || p === "D/ST" || p === "DEFENSE") return "DEF";
-  return p;
-}
-
-function takeTopPoints(rows: CoachingRosterPlayer[], count: number): number {
-  let sum = 0;
-  for (let i = 0; i < count; i += 1) sum += rows[i]?.points ?? 0;
-  return sum;
-}
 
 function ordinalPlace(rank: number): string {
   const n = Math.max(1, Math.round(rank));
@@ -95,102 +91,15 @@ export const Route = createFileRoute("/playbook/")({
 });
 
 const panelClass = "rounded-xl border border-border bg-card p-4 sm:p-5";
-/** Season/17 invent for trade/insights only — matchup preview must not use this. */
-const weeklyFallback = (p: Player) => Math.max(0, (p.proj?.half ?? 0) / 17);
-/** Match Matchup page: never invent a weekly proj when Sleeper has none. */
-const matchupWeeklyFallback = (_p: Player) => 0;
-
-const SKIP_STARTER_SLOTS = new Set(["BN", "BENCH", "IR", "IL", "TAXI", "RESERVE"]);
-const FLEX_OK = new Set(["RB", "WR", "TE"]);
-
-function normalizeStarterSlot(pos: string): string {
-  const value = pos.trim().toUpperCase();
-  if (value === "SUPER_FLEX" || value === "SUPERFLEX" || value === "Q/W/R/T") return "FLEX";
-  if (value === "W/R/T" || value === "WRRBTE") return "FLEX";
-  return value;
-}
-
-function starterSlotLabels(rosterPositions: string[]): string[] {
-  const labels = rosterPositions
-    .map((pos) => normalizeStarterSlot(String(pos ?? "")))
-    .filter((pos) => pos && !SKIP_STARTER_SLOTS.has(pos));
-  if (labels.length) return labels;
-  const req = starterRequirements([]);
-  const out: string[] = [];
-  for (const pos of ["QB", "RB", "WR", "TE", "FLEX", "K", "DEF"]) {
-    for (let i = 0; i < (req[pos] ?? 0); i += 1) out.push(pos);
-  }
-  return out;
-}
-
-function playerFitsSlot(player: Player, slot: string): boolean {
-  if (slot === "FLEX" || slot === "FLX") return FLEX_OK.has(player.pos);
-  if (slot === "DEF" || slot === "DST") return player.pos === "DEF";
-  return player.pos === slot;
-}
-
-function playerNameKey(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g, "")
-    .replace(/[^a-z0-9]/g, "");
-}
-
 /**
- * Same slot-aligned starter resolution as the Matchup page. Slots the manager
- * left empty stay empty (never back-filled from the bench or other slots).
+ * Season/17 invent for trade/insights only — matchup preview must not use this.
+ * Keeps bye / injured players valued; unsigned NFL free agents are worth nothing.
  */
-function resolveMatchupStarters(
-  team: ResolvedRosterTeam | null,
-  labels: string[],
-  starterIds: string[],
-  playersById: Map<string, Player>,
-  starterNames: string[] = [],
-): Player[] {
-  if (!team) return [];
-
-  const used = new Set<string>();
-  const takeLiveForSlot = (slot: string, index: number): Player | null => {
-    const atIndex = team.starters[index] ?? null;
-    if (atIndex && !used.has(atIndex.id) && playerFitsSlot(atIndex, slot)) {
-      used.add(atIndex.id);
-      return atIndex;
-    }
-    for (const candidate of team.starters) {
-      if (!candidate || used.has(candidate.id)) continue;
-      if (!playerFitsSlot(candidate, slot)) continue;
-      used.add(candidate.id);
-      return candidate;
-    }
-    return null;
-  };
-
-  if (!starterIds.length) {
-    return team.starters.filter((p): p is Player => Boolean(p));
-  }
-
-  // Claim every resolvable starter first so a fallback never duplicates one.
-  for (const id of starterIds) {
-    const hit = id ? playersById.get(id) : undefined;
-    if (hit) used.add(hit.id);
-  }
-  const rows = labels.map((slot, i): Player | null => {
-    const id = starterIds[i];
-    if (id) return playersById.get(id) ?? takeLiveForSlot(slot, i);
-    const unmatchedName = starterNames[i]?.trim();
-    if (!unmatchedName) return null;
-    const key = playerNameKey(unmatchedName);
-    const byName =
-      team.players.find((p) => !used.has(p.id) && playerNameKey(p.name) === key) ?? null;
-    if (byName) {
-      used.add(byName.id);
-      return byName;
-    }
-    return takeLiveForSlot(slot, i);
-  });
-
-  return rows.filter((p): p is Player => Boolean(p));
-}
+const weeklyFallback = (p: Player) => {
+  const team = (p.team ?? "").trim().toUpperCase();
+  if (!team || team === "FA") return 0;
+  return Math.max(0, (p.proj?.half ?? 0) / 17);
+};
 
 function Panel({
   title,
@@ -237,88 +146,6 @@ function Panel({
       </div>
       {children}
     </section>
-  );
-}
-
-function teamInitials(name: string): string {
-  const cleaned = name.trim();
-  if (!cleaned) return "TM";
-  const letters = cleaned.replace(/[^a-zA-Z0-9]/g, "");
-  if (letters.length >= 2) return letters.slice(0, 2).toUpperCase();
-  return cleaned.slice(0, 2).toUpperCase();
-}
-
-function MatchupTeamAvatar({
-  name,
-  logo,
-  platform,
-  cacheKey,
-  size = "md",
-}: {
-  name: string;
-  logo?: string | null;
-  platform?: string | null;
-  cacheKey?: string | null;
-  size?: "md" | "sm";
-}) {
-  const [failed, setFailed] = useState(false);
-  const src = resolveAvatarUrl(logo);
-  const plat = (platform ?? "").trim().toLowerCase();
-  const remountKey = `${cacheKey ?? "matchup"}:${src ?? "none"}:${plat}`;
-  const box = size === "sm" ? "h-8 w-8" : "h-10 w-10";
-  const espnImg = size === "sm" ? "h-5 w-5" : "h-7 w-7";
-  const initials = size === "sm" ? "text-[10px]" : "text-xs";
-
-  useEffect(() => {
-    setFailed(false);
-  }, [src, cacheKey, plat]);
-
-  if (src && !failed) {
-    return (
-      <span
-        key={remountKey}
-        className={cn(
-          "flex shrink-0 overflow-hidden rounded-lg border border-slate-200/80 bg-slate-50",
-          box,
-        )}
-      >
-        <img
-          key={remountKey}
-          src={src}
-          alt=""
-          className="h-full w-full object-cover"
-          loading="lazy"
-          onError={() => setFailed(true)}
-        />
-      </span>
-    );
-  }
-
-  if (plat === "espn") {
-    return (
-      <span
-        key={remountKey}
-        className={cn(
-          "flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200/80 bg-white p-1",
-          box,
-        )}
-      >
-        <img src="/espn.png" alt="ESPN" className={cn(espnImg, "object-contain")} aria-hidden="true" />
-      </span>
-    );
-  }
-
-  return (
-    <span
-      key={remountKey}
-      className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg border border-slate-200/80 bg-slate-50 font-bold text-slate-600",
-        box,
-        initials,
-      )}
-    >
-      {teamInitials(name)}
-    </span>
   );
 }
 
@@ -953,199 +780,6 @@ function TeamInsightsCarousel({
   );
 }
 
-function MatchupPreviewCard({
-  loading,
-  leagueId,
-  platform,
-  myName,
-  myLogo,
-  myRecord,
-  myLive,
-  myProj,
-  myWinPct,
-  oppName,
-  oppLogo,
-  oppRecord,
-  oppLive,
-  oppProj,
-  oppWinPct,
-  weekStarted = false,
-  matchupFinal = false,
-}: {
-  loading: boolean;
-  leagueId?: string | null;
-  platform?: string | null;
-  myName: string;
-  myLogo?: string | null;
-  myRecord?: string | null;
-  myLive: number;
-  /** Original weekly projection total (not live-collapsed). */
-  myProj: number;
-  /** Dynamic live win probability — same engine as the Matchup page (0–100). */
-  myWinPct: number;
-  oppName: string;
-  oppLogo?: string | null;
-  oppRecord?: string | null;
-  oppLive: number;
-  /** Original weekly projection total (not live-collapsed). */
-  oppProj: number;
-  /** Dynamic live win probability — same engine as the Matchup page (0–100). */
-  oppWinPct: number;
-  /** False before any NFL games kick off this week → proj stays grey. */
-  weekStarted?: boolean;
-  /** True when every starter game is final — show WON / LOST instead of %. */
-  matchupFinal?: boolean;
-}) {
-  const mineWon = myLive > oppLive + 0.005;
-  const oppWon = oppLive > myLive + 0.005;
-  const matchupTied = matchupFinal && !mineWon && !oppWon;
-  const mineLeadsWin = matchupFinal ? mineWon : myWinPct >= oppWinPct;
-
-  const mineBarClass = matchupFinal
-    ? mineWon
-      ? "bg-emerald-500"
-      : "bg-transparent"
-    : mineLeadsWin
-      ? "bg-emerald-500"
-      : "bg-rose-500";
-  const oppBarClass = matchupFinal
-    ? oppWon
-      ? "bg-emerald-500"
-      : "bg-transparent"
-    : mineLeadsWin
-      ? "bg-rose-500"
-      : "bg-emerald-500";
-  const mineBarWidth = matchupFinal ? (mineWon ? 100 : matchupTied ? 50 : 0) : myWinPct;
-  const oppBarWidth = matchupFinal ? (oppWon ? 100 : matchupTied ? 50 : 0) : oppWinPct;
-
-  const mineLabel = matchupFinal
-    ? matchupTied
-      ? "TIE"
-      : mineWon
-        ? "WON"
-        : "LOST"
-    : `${myWinPct}%`;
-  const oppLabel = matchupFinal
-    ? matchupTied
-      ? "TIE"
-      : oppWon
-        ? "WON"
-        : "LOST"
-    : `${oppWinPct}%`;
-  const minePctClass = matchupFinal
-    ? matchupTied
-      ? "text-slate-500"
-      : mineWon
-        ? "text-emerald-600"
-        : "text-rose-600"
-    : mineLeadsWin
-      ? "text-emerald-600"
-      : "text-rose-600";
-  const oppPctClass = matchupFinal
-    ? matchupTied
-      ? "text-slate-500"
-      : oppWon
-        ? "text-emerald-600"
-        : "text-rose-600"
-    : mineLeadsWin
-      ? "text-rose-600"
-      : "text-emerald-600";
-  const avatarLeagueKey = leagueId ?? "none";
-
-  const projTone = (live: number, proj: number) => {
-    if (!weekStarted) return "text-slate-400";
-    if (Math.abs(live - proj) < 0.005) return "text-slate-400";
-    if (live > proj + 0.005) return "text-emerald-600";
-    if (live < proj - 0.005) return "text-rose-600";
-    return "text-slate-400";
-  };
-
-  if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading matchup preview…</p>;
-  }
-
-  return (
-    <div key={avatarLeagueKey} className="rounded-xl border border-blue-100 bg-blue-50/40 pb-4">
-      <div className="flex items-center gap-2 px-3 py-5 sm:gap-3 sm:px-4">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
-          <MatchupTeamAvatar
-            name={myName}
-            logo={myLogo ?? null}
-            platform={platform ?? null}
-            cacheKey={`${avatarLeagueKey}-mine`}
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-bold leading-tight text-slate-900 sm:text-lg">
-              {myName}
-            </p>
-            {myRecord ? (
-              <p className="mt-0.5 text-xs font-medium tabular-nums text-slate-400">{myRecord}</p>
-            ) : null}
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-3xl">
-              {myLive.toFixed(2)}
-            </p>
-            <p className={cn("mt-1 text-xs font-medium tabular-nums", projTone(myLive, myProj))}>
-              {myProj.toFixed(2)}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 flex-col items-center gap-1.5 px-0.5 sm:px-1">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[11px] font-extrabold uppercase text-white">
-            vs
-          </span>
-        </div>
-
-        <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
-          <div className="shrink-0 text-left">
-            <p className="text-2xl font-bold tabular-nums tracking-tight text-slate-900 sm:text-3xl">
-              {oppLive.toFixed(2)}
-            </p>
-            <p className={cn("mt-1 text-xs font-medium tabular-nums", projTone(oppLive, oppProj))}>
-              {oppProj.toFixed(2)}
-            </p>
-          </div>
-          <div className="min-w-0 flex-1 text-right">
-            <p className="truncate text-base font-bold leading-tight text-slate-900 sm:text-lg">
-              {oppName}
-            </p>
-            {oppRecord ? (
-              <p className="mt-0.5 text-xs font-medium tabular-nums text-slate-400">{oppRecord}</p>
-            ) : null}
-          </div>
-          <MatchupTeamAvatar
-            name={oppName}
-            logo={oppLogo ?? null}
-            platform={platform ?? null}
-            cacheKey={`${avatarLeagueKey}-opp`}
-          />
-        </div>
-      </div>
-
-      <div className="mt-4 flex w-full items-center gap-3 px-3 text-xs font-bold uppercase tracking-wide sm:px-4">
-        <span className={cn("w-12 shrink-0", minePctClass)}>{mineLabel}</span>
-        <div className="flex h-1.5 min-w-0 flex-1 items-center gap-1.5">
-          <div className="flex h-full min-w-0 flex-1 justify-end overflow-hidden rounded-full bg-slate-100">
-            <div
-              className={cn("h-full rounded-full transition-[width] duration-500", mineBarClass)}
-              style={{ width: `${mineBarWidth}%` }}
-            />
-          </div>
-          <div className="flex h-full min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className={cn("h-full rounded-full transition-[width] duration-500", oppBarClass)}
-              style={{ width: `${oppBarWidth}%` }}
-            />
-          </div>
-        </div>
-        <span className={cn("w-12 shrink-0 text-right", oppPctClass)}>{oppLabel}</span>
-      </div>
-    </div>
-  );
-}
-
 type StandingRowLike = { wins: number; losses: number };
 
 type LeagueMatchupSide = {
@@ -1329,6 +963,8 @@ function PlaybookDashboardPage() {
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
 
   /** Completed NFL weeks (1 … current−1) for seasonal coaching efficiency. */
+  const optimalSlots = useMemo(() => starterSlots(rosterPositions), [rosterPositions]);
+
   const completedWeekNumbers = useMemo(() => {
     if (currentWeek == null || currentWeek <= 1) return [] as number[];
     return Array.from({ length: currentWeek - 1 }, (_, i) => i + 1);
@@ -1380,23 +1016,11 @@ function PlaybookDashboardPage() {
       const entries = historyMatchupQueries[index]?.data?.entries ?? [];
       const mine =
         entries.find((row) => Number(row.rosterId) === Number(mySlot)) ?? null;
-      const playerPoints = mine?.playerPoints ?? {};
-      // Optimal pool = who could legally start that week: the week's own roster
-      // (not today's), plus starters later traded away, minus players acquired
-      // after their game had already kicked off.
-      const weekStarters = new Set((mine?.starters ?? []).filter(Boolean));
-      const notStartable = new Set(mine?.unstartableIds ?? []);
-      const rosterPlayers: CoachingRosterPlayer[] = Object.entries(playerPoints)
-        .filter(([id]) => weekStarters.has(id) || !notStartable.has(id))
-        .map(([id, pts]) => {
-          const player =
-            playersById.get(id) ?? myTeam?.players.find((p) => p.id === id) ?? null;
-          return {
-            pos: normalizePos(player?.pos ?? ""),
-            points: Number(pts) || 0,
-          };
-        },
-      );
+      const optimal = mine
+        ? weeklyOptimalPoints(mine, optimalSlots, (id) =>
+            (playersById.get(id) ?? myTeam?.players.find((p) => p.id === id))?.pos ?? null,
+          )
+        : 0;
 
       let standingsPosition: string | null = null;
       let standingsRecord: string | null = null;
@@ -1459,7 +1083,7 @@ function PlaybookDashboardPage() {
         isClosed: isCompleted,
         isCompleted,
         userPointsScored: Number(mine?.points ?? 0) || 0,
-        rosterPlayers,
+        optimal,
         standingsPosition,
         standingsRecord,
       });
@@ -1468,7 +1092,7 @@ function PlaybookDashboardPage() {
     return out;
     // historyStamp tracks fetch completion; query array identity is unstable each render.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- historyStamp
-  }, [historyStamp, completedWeekNumbers, myTeam, teams, playersById, currentWeek]);
+  }, [historyStamp, completedWeekNumbers, myTeam, teams, playersById, currentWeek, optimalSlots]);
 
   const synchronizedWeeklyMetrics = useMemo(() => {
     const defaults = {
@@ -1488,44 +1112,6 @@ function PlaybookDashboardPage() {
     /** Per completed week: scored points + optimal ceiling (for WoW deltas). */
     const completedWeekStats: { scored: number; optimal: number }[] = [];
 
-    // Count FLEX vs SUPERFLEX separately — collapsing SUPERFLEX into FLEX undercounts
-    // optimal (QBs can't fill W/R/T), which inflates coaching efficiency vs FantasyPros.
-    let qbSlots = 0;
-    let rbSlots = 0;
-    let wrSlots = 0;
-    let teSlots = 0;
-    let flexSlots = 0;
-    let superFlexSlots = 0;
-    let defSlots = 0;
-    let kSlots = 0;
-    for (const raw of rosterPositions) {
-      const pos = String(raw ?? "").trim().toUpperCase();
-      if (!pos || SKIP_STARTER_SLOTS.has(pos)) continue;
-      if (pos === "SUPER_FLEX" || pos === "SUPERFLEX" || pos === "Q/W/R/T") {
-        superFlexSlots += 1;
-      } else if (pos === "W/R/T" || pos === "WRRBTE" || pos === "FLEX") {
-        flexSlots += 1;
-      } else if (pos === "QB") qbSlots += 1;
-      else if (pos === "RB") rbSlots += 1;
-      else if (pos === "WR") wrSlots += 1;
-      else if (pos === "TE") teSlots += 1;
-      else if (pos === "DEF" || pos === "DST" || pos === "D/ST") defSlots += 1;
-      else if (pos === "K") kSlots += 1;
-    }
-    if (
-      qbSlots + rbSlots + wrSlots + teSlots + flexSlots + superFlexSlots + defSlots + kSlots ===
-      0
-    ) {
-      const req = starterRequirements([]);
-      qbSlots = req["QB"] ?? 1;
-      rbSlots = req["RB"] ?? 2;
-      wrSlots = req["WR"] ?? 2;
-      teSlots = req["TE"] ?? 1;
-      flexSlots = req["FLEX"] ?? 1;
-      defSlots = req["DEF"] ?? 1;
-      kSlots = req["K"] ?? 1;
-    }
-
     weeklyMatchups.forEach((weekData) => {
       // CRITICAL GUARD RAIL: Ignore live, open, or in-progress weeks entirely.
       if (weekData.status !== "complete" && !weekData.isClosed && !weekData.isCompleted) {
@@ -1539,46 +1125,9 @@ function PlaybookDashboardPage() {
       if (weekData.standingsPosition) finalPosition = weekData.standingsPosition;
       if (weekData.standingsRecord) finalRecord = weekData.standingsRecord;
 
-      const playersPool = weekData.rosterPlayers || [];
-      const byPos = (pos: string) =>
-        playersPool
-          .filter((p) => p.pos === pos)
-          .sort((a, b) => b.points - a.points);
-
-      const qbs = byPos("QB");
-      const rbs = byPos("RB");
-      const wrs = byPos("WR");
-      const tes = byPos("TE");
-      const defs = byPos("DEF");
-      const ks = byPos("K");
-
-      const topQb = takeTopPoints(qbs, qbSlots);
-      const topRb = takeTopPoints(rbs, rbSlots);
-      const topWr = takeTopPoints(wrs, wrSlots);
-      const topTe = takeTopPoints(tes, teSlots);
-      const topDef = takeTopPoints(defs, defSlots);
-      const topK = takeTopPoints(ks, kSlots);
-
-      // Standard flex: RB/WR/TE leftovers only.
-      const remainingFlexEligible = [
-        ...rbs.slice(rbSlots),
-        ...wrs.slice(wrSlots),
-        ...tes.slice(teSlots),
-      ].sort((a, b) => b.points - a.points);
-      const topFlex = takeTopPoints(remainingFlexEligible, flexSlots);
-
-      // Superflex: leftover QBs + leftover flex-eligible after standard flex is filled.
-      const remainingSuperFlexEligible = [
-        ...qbs.slice(qbSlots),
-        ...remainingFlexEligible.slice(flexSlots),
-      ].sort((a, b) => b.points - a.points);
-      const topSuperFlex = takeTopPoints(remainingSuperFlexEligible, superFlexSlots);
-
-      const weeklyMaxOptimalCeiling =
-        topQb + topRb + topWr + topTe + topFlex + topSuperFlex + topDef + topK;
       completedWeekStats.push({
         scored,
-        optimal: weeklyMaxOptimalCeiling > 0 ? weeklyMaxOptimalCeiling : 0,
+        optimal: weekData.optimal > 0 ? weekData.optimal : 0,
       });
     });
 
@@ -1623,7 +1172,7 @@ function PlaybookDashboardPage() {
       avgPointsDeltaPct,
       efficiencyDeltaPct,
     };
-  }, [weeklyMatchups, rosterPositions]);
+  }, [weeklyMatchups]);
 
   const sleeperTrending = useQuery({
     queryKey: ["sleeper-trending-add"],
@@ -1778,107 +1327,31 @@ function PlaybookDashboardPage() {
   }, [teams, weeklyPair.oppRosterId]);
 
   /** Matchup preview totals + win% — same Sleeper starter math as /playbook/matchup. */
-  const displayMatchup = useMemo(() => {
-    const labels = starterSlotLabels(rosterPositions);
-    const mineStarters = resolveMatchupStarters(
-      myTeam,
-      labels,
-      weeklyPair.myStarterIds,
-      playersById,
-      weeklyPair.myStarterNames,
-    );
-    const oppStarters = resolveMatchupStarters(
-      oppTeam,
-      labels,
-      weeklyPair.oppStarterIds,
-      playersById,
-      weeklyPair.oppStarterNames,
-    );
-
-    const activeWeek = currentWeek ?? 1;
-    const sumOrigProj = (starters: Player[]) => {
-      let total = 0;
-      for (const player of starters) {
-        if (player.bye != null && Number(player.bye) === Number(activeWeek)) continue;
-        total += projectFor(player.id) ?? matchupWeeklyFallback(player);
-      }
-      return Math.round(total * 100) / 100;
-    };
-
-    const myOrigProj = sumOrigProj(mineStarters);
-    const oppOrigProj = sumOrigProj(oppStarters);
-
-    const { pctA: myWinPct, pctB: oppWinPct } = computeDynamicWinProbability({
-      scoreA: weeklyPair.myPoints,
-      scoreB: weeklyPair.oppPoints,
-      startersA: mineStarters,
-      startersB: oppStarters,
-      pointsMapA: weeklyPair.myPlayerPoints,
-      pointsMapB: weeklyPair.oppPlayerPoints,
-      projectFor,
-      weeklyFallback: matchupWeeklyFallback,
-      progressByNflTeam,
-      activeWeek,
-    });
-
-    let weekStarted =
-      weeklyPair.myPoints > 0.005 || weeklyPair.oppPoints > 0.005;
-    if (!weekStarted) {
-      for (const player of [...mineStarters, ...oppStarters]) {
-        const nfl = (player.team || "").trim().toUpperCase();
-        const aliases =
-          nfl === "WAS" || nfl === "WSH"
-            ? ["WAS", "WSH"]
-            : nfl === "LAR" || nfl === "LA"
-              ? ["LAR", "LA"]
-              : nfl === "JAC" || nfl === "JAX"
-                ? ["JAC", "JAX"]
-                : [nfl];
-        const phase = aliases
-          .map((key) => progressByNflTeam.get(key)?.phase)
-          .find((p) => p === "in" || p === "post");
-        if (phase) {
-          weekStarted = true;
-          break;
-        }
-      }
-    }
-
-    const starterDone = (player: Player) => {
-      if (player.bye != null && Number(player.bye) === Number(activeWeek)) return true;
-      const nfl = (player.team || "").trim().toUpperCase();
-      const aliases =
-        nfl === "WAS" || nfl === "WSH"
-          ? ["WAS", "WSH"]
-          : nfl === "LAR" || nfl === "LA"
-            ? ["LAR", "LA"]
-            : nfl === "JAC" || nfl === "JAX"
-              ? ["JAC", "JAX"]
-              : [nfl];
-      return aliases.some((key) => progressByNflTeam.get(key)?.phase === "post");
-    };
-    const allStarters = [...mineStarters, ...oppStarters];
-    const matchupFinal =
-      allStarters.length > 0 && allStarters.every((player) => starterDone(player));
-
-    return {
-      myOrigProj,
-      oppOrigProj,
-      myWinPct,
-      oppWinPct,
-      weekStarted,
-      matchupFinal,
-    };
-  }, [
-    weeklyPair,
-    myTeam,
-    oppTeam,
-    playersById,
-    projectFor,
-    progressByNflTeam,
-    currentWeek,
-    rosterPositions,
-  ]);
+  const displayMatchup = useMemo(
+    () =>
+      computeMatchupPreview({
+        mine: {
+          team: myTeam,
+          points: weeklyPair.myPoints,
+          starterIds: weeklyPair.myStarterIds,
+          starterNames: weeklyPair.myStarterNames,
+          playerPoints: weeklyPair.myPlayerPoints,
+        },
+        opp: {
+          team: oppTeam,
+          points: weeklyPair.oppPoints,
+          starterIds: weeklyPair.oppStarterIds,
+          starterNames: weeklyPair.oppStarterNames,
+          playerPoints: weeklyPair.oppPlayerPoints,
+        },
+        rosterPositions,
+        playersById,
+        projectFor,
+        progressByNflTeam,
+        activeWeek: currentWeek ?? 1,
+      }),
+    [weeklyPair, myTeam, oppTeam, playersById, projectFor, progressByNflTeam, currentWeek, rosterPositions],
+  );
 
   const leagueMatchups = useMemo((): LeagueMatchupPair[] => {
     const entries = matchups?.entries ?? [];
@@ -2239,7 +1712,8 @@ function PlaybookDashboardPage() {
     const freeAgents = players
       .filter((p) => !rosteredIds.has(p.id))
       .map((p) => {
-        const fit = toFit(p);
+        // Adds must have a real weekly projection, never a season-pace estimate.
+        const fit: FitPlayer = { ...toFit(p), weekly: projectFor(p.id) ?? 0 };
         const team = (p.team || "").trim().toUpperCase();
         const phase = team ? gamePhaseByTeam[team] : undefined;
         const gameStatus =
@@ -2286,8 +1760,8 @@ function PlaybookDashboardPage() {
         return {
           add,
           drop,
-          addProj: row.addProj,
-          dropProj: row.dropProj,
+          addProj: projectFor(addId) ?? row.addProj,
+          dropProj: projectFor(dropId),
           netValue: row.netValue,
         };
       })
@@ -3028,7 +2502,7 @@ function PlaybookDashboardPage() {
                           </span>
                         </span>
                         <span className="ml-auto text-xs font-bold text-slate-800">
-                          -{target.dropProj.toFixed(1)} Proj
+                          {target.dropProj != null ? `-${target.dropProj.toFixed(1)} Proj` : "No Proj"}
                         </span>
                       </button>
                     </div>

@@ -145,6 +145,54 @@ export const getConnectionMatchups = createServerFn({ method: "GET" })
     );
   });
 
+/** Per-team projected best lineup for each remaining regular-season week (playoff / title odds). */
+export const getRestOfSeasonProjections = createServerFn({ method: "GET" })
+  .inputValidator(
+    (input: {
+      identifier: string;
+      platform?: string;
+      fromWeek: number;
+      toWeek: number;
+      s2?: string;
+      swid?: string;
+    }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      fromWeek: Math.max(1, Math.min(18, Math.floor(Number(input.fromWeek) || 1))),
+      toWeek: Math.max(1, Math.min(18, Math.floor(Number(input.toWeek) || 1))),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { loadRestOfSeasonProjections } = await import("./standings-projections.server");
+    return await loadRestOfSeasonProjections(
+      data.identifier,
+      data.platform,
+      data.fromWeek,
+      data.toWeek,
+      data.s2,
+      data.swid,
+    );
+  });
+
+/** Each team's best offensive lineup by projected rest-of-season points per game. */
+export const getStartingSlotRanks = createServerFn({ method: "GET" })
+  .inputValidator(
+    (input: { identifier: string; platform?: string; fromWeek: number; toWeek?: number; s2?: string; swid?: string }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      fromWeek: Math.max(1, Math.min(18, Math.floor(Number(input.fromWeek) || 1))),
+      toWeek: Math.max(1, Math.min(18, Math.floor(Number(input.toWeek ?? 17) || 17))),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { loadStartingSlotRanks } = await import("./standings-projections.server");
+    return await loadStartingSlotRanks(data.identifier, data.platform, data.fromWeek, data.toWeek, data.s2, data.swid);
+  });
+
 /** Unified league payload for any connected platform. */
 export const getUnifiedLeague = createServerFn({ method: "GET" })
   .inputValidator((input: {

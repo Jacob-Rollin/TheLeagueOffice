@@ -177,7 +177,7 @@ export function PlayerNews({ id, pos }: { id: string; pos?: string }) {
                   {tag.label}
                 </span>
                 <span className="tabnum shrink-0 text-[11px] text-muted-foreground">
-                  {timeAgo(n.published)}
+                  {[n.source, timeAgo(n.published)].filter(Boolean).join(" · ")}
                 </span>
               </div>
               <h3 className="text-sm font-semibold leading-snug">{n.headline}</h3>
@@ -191,7 +191,7 @@ export function PlayerNews({ id, pos }: { id: string; pos?: string }) {
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wide text-primary"
                 >
-                  Read on ESPN <ExternalLink className="size-3" />
+                  Read More <ExternalLink className="size-3" />
                 </a>
               )}
             </li>

@@ -192,7 +192,36 @@ function activityHeadline(event: LeagueActivityEvent): string {
   if (kind === "ir") {
     return `${manager} made an IR move`;
   }
-  return `${manager} made a move`;
+  const adds = (event.moves ?? []).filter((m) => resolveMoveAction(m, kind) === "add").length;
+  if (kind === "waiver") {
+    return `${manager} won ${adds > 1 ? `${adds} waiver claims` : "a waiver claim"}`;
+  }
+  return `${manager} made a free agent move.`;
+}
+
+/** Sleeper processes a league's claims in one batch; anything this close together is the same run. */
+const WAIVER_RUN_GAP_MS = 10 * 60 * 1000;
+
+type FeedEntry =
+  | { type: "event"; event: LeagueActivityEvent }
+  | { type: "waiverRun"; id: string; at: number; events: LeagueActivityEvent[] };
+
+function groupWaiverRuns(events: LeagueActivityEvent[]): FeedEntry[] {
+  const out: FeedEntry[] = [];
+  for (const event of events) {
+    if (resolveActivityKind(event) !== "waiver") {
+      out.push({ type: "event", event });
+      continue;
+    }
+    const last = out[out.length - 1];
+    const prev = last?.type === "waiverRun" ? last.events[last.events.length - 1] : undefined;
+    if (last?.type === "waiverRun" && prev && Math.abs(prev.at - event.at) <= WAIVER_RUN_GAP_MS) {
+      last.events.push(event);
+    } else {
+      out.push({ type: "waiverRun", id: `run-${event.id}`, at: event.at, events: [event] });
+    }
+  }
+  return out;
 }
 
 function toAvatarPos(pos: string): Pos {
@@ -416,6 +445,15 @@ export function ActivityFeed({
     return map;
   }, [players]);
 
+  /** Hydrated moves with ADD rows above DROP rows (Sleeper stack). */
+  const orderedMovesFor = (event: LeagueActivityEvent, kind: LeagueActivityEvent["kind"]) => {
+    const moves = (event.moves ?? []).map((m) => hydrateActivityMove(m, playersById, playersByName));
+    return [
+      ...moves.filter((m) => resolveMoveAction(m, kind) === "add"),
+      ...moves.filter((m) => resolveMoveAction(m, kind) === "drop"),
+    ];
+  };
+
   return (
     <>
       <div
@@ -436,19 +474,58 @@ export function ActivityFeed({
           </p>
         ) : (
           <ul className="space-y-0 divide-y divide-border">
-            {events.map((event) => {
+            {groupWaiverRuns(events).map((entry) => {
+              if (entry.type === "waiverRun") {
+                const count = entry.events.length;
+                return (
+                  <li key={entry.id} className="flex items-start gap-3 px-1 py-3">
+                    <span className="w-14 shrink-0 pt-0.5 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                      {formatActivityTime(entry.at)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {count === 1
+                          ? "1 new waiver claim has been processed."
+                          : `${count} new waiver claims have been processed.`}
+                      </p>
+                      <div className="mt-2 space-y-2.5">
+                        {entry.events.map((event) => {
+                          const moves = orderedMovesFor(event, "waiver");
+                          return (
+                            <div key={event.id} className="border-l-2 border-slate-200 pl-3">
+                              <p className="text-xs font-bold text-slate-700">
+                                {(event.teamName ?? "").trim() || "Manager Team"}
+                              </p>
+                              <div className="mt-0.5 space-y-0.5">
+                                {moves.map((move, idx) => (
+                                  <ActivityPlayerRow
+                                    key={`${event.id}-${move.playerId}-${move.action}-${idx}`}
+                                    move={move}
+                                    eventKind="waiver"
+                                    onOpen={openPlayer}
+                                    trailing={
+                                      addNote && resolveMoveAction(move, "waiver") === "add"
+                                        ? addNote(event, move)
+                                        : null
+                                    }
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </li>
+                );
+              }
+
+              const event = entry.event;
               const kind = resolveActivityKind(event);
               const moves = (event.moves ?? []).map((m) =>
                 hydrateActivityMove(m, playersById, playersByName),
               );
-              // Waiver / free-agent: ADD rows above DROP rows (Sleeper stack).
-              const orderedMoves =
-                kind === "waiver" || kind === "free_agent"
-                  ? [
-                      ...moves.filter((m) => resolveMoveAction(m, kind) === "add"),
-                      ...moves.filter((m) => resolveMoveAction(m, kind) === "drop"),
-                    ]
-                  : moves;
+              const orderedMoves = kind === "free_agent" ? orderedMovesFor(event, kind) : moves;
 
               return (
                 <li key={event.id} className="flex items-start gap-3 px-1 py-3">
