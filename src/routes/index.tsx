@@ -53,10 +53,10 @@ const isFantasy = (n: NewsItem) => {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "The League Office — Fantasy Football HQ" },
+      { title: "The League Office" },
       {
         name: "description",
-        content: "Connect your Sleeper league, follow standings, run your War Room and grade trades.",
+        content: "Sync your roster, grade trades, and track the week with tools built for serious managers.",
       },
     ],
   }),
