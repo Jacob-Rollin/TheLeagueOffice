@@ -111,5 +111,8 @@ export async function loadWeekGames(
 
 /** True once a game has kicked off (or is past its scheduled kickoff). */
 export function hasStarted(game: Game, now = Date.now()): boolean {
-  return game.state !== "pre" || now >= Date.parse(game.kickoff);
+  if (now >= Date.parse(game.kickoff)) return true;
+  // Replaying a past moment (--now): ESPN's live state describes today, not then.
+  const replaying = now < Date.now() - 5 * 60_000;
+  return !replaying && game.state !== "pre";
 }

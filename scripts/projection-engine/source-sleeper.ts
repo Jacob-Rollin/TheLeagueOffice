@@ -1,12 +1,22 @@
 import { POSITIONS } from "./config";
 import { fetchJson } from "./http";
 import type { Identity } from "./identity";
-import { cleanLine, points } from "./scoring";
+import { PA_BUCKETS, cleanLine, points } from "./scoring";
 import type { Pos, SourceResult, Stats } from "./types";
 
 type Row = { player_id?: string; stats?: Stats; player?: { position?: string } };
 
 const SLEEPER = "https://api.sleeper.app";
+
+function actualTier(points: number): (typeof PA_BUCKETS)[number] {
+  if (points <= 0) return "pts_allow_0";
+  if (points <= 6) return "pts_allow_1_6";
+  if (points <= 13) return "pts_allow_7_13";
+  if (points <= 20) return "pts_allow_14_20";
+  if (points <= 27) return "pts_allow_21_27";
+  if (points <= 34) return "pts_allow_28_34";
+  return "pts_allow_35p";
+}
 
 export async function fetchSleeperProjections(
   season: number,
@@ -55,8 +65,13 @@ export async function fetchSleeperActuals(
     if (!id || !row.stats) continue;
     const pos = (identity.players.get(id)?.pos ?? row.player?.position) as Pos | undefined;
     if (!pos || !POSITIONS.includes(pos)) continue;
-    const line = cleanLine(row.stats, pos);
-    if (line) out.set(id, { ...line, _pts_std: Number(row.stats.pts_std ?? NaN), _pts_half: Number(row.stats.pts_half_ppr ?? NaN), _pts_ppr: Number(row.stats.pts_ppr ?? NaN) });
+    const raw: Stats = { ...row.stats };
+    if (pos === "DEF" && raw.pts_allow != null && !PA_BUCKETS.some((k) => raw[k] != null)) {
+      for (const k of PA_BUCKETS) raw[k] = 0;
+      raw[actualTier(Number(raw.pts_allow))] = 1;
+    }
+    const line = cleanLine(raw, pos);
+    if (line) out.set(id, { ...line, _pts_half: Number(row.stats.pts_half_ppr ?? NaN) });
   }
   return out;
 }
