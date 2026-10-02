@@ -20,6 +20,7 @@ type ActiveLeagueValue = {
   leagues: ActiveLeagueToken[];
   activeLeague: ActiveLeagueToken | null;
   activeLeagueId: string | null;
+  loading: boolean;
   sandboxMode: boolean;
   setActiveLeagueId: (id: string) => void;
   toggleSandbox: () => void;
@@ -32,6 +33,7 @@ const ActiveLeagueContext = createContext<ActiveLeagueValue>({
   leagues: [],
   activeLeague: null,
   activeLeagueId: null,
+  loading: true,
   sandboxMode: false,
   setActiveLeagueId: () => {},
   toggleSandbox: () => {},
@@ -55,7 +57,7 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const { data } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: ["active-league-connections", userId],
     enabled: Boolean(ready && userId),
     retry: false,
@@ -111,6 +113,7 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
   });
 
   const leagues = useMemo(() => (data ?? []).filter((row) => row.id.length > 0), [data]);
+  const loading = !ready || (Boolean(userId) && isPending);
 
   const setActiveLeagueId = useCallback((id: string) => {
     setActiveId(id);
@@ -162,12 +165,13 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
       leagues,
       activeLeague,
       activeLeagueId: sandboxMode ? null : (activeLeague?.id ?? null),
+      loading,
       sandboxMode,
       setActiveLeagueId,
       toggleSandbox,
       refresh,
     }),
-    [leagues, activeLeague, sandboxMode, setActiveLeagueId, toggleSandbox, refresh],
+    [leagues, activeLeague, loading, sandboxMode, setActiveLeagueId, toggleSandbox, refresh],
   );
 
   return <ActiveLeagueContext.Provider value={value}>{children}</ActiveLeagueContext.Provider>;

@@ -1657,6 +1657,79 @@ export async function loadLeagueWidePlayerNews(limit = 10): Promise<LeagueWideNe
   return rows.slice(0, limit);
 }
 
+export type FantasyNewsItem = {
+  id: string;
+  headline: string;
+  body: string;
+  published: string | null;
+  link: string | null;
+  image: string | null;
+  source: "RotoWire" | "ESPN";
+  player: { id: string; name: string; team: string | null; pos: string } | null;
+};
+
+/** Latest fantasy news across the league: RotoWire player blurbs plus ESPN fantasy stories, newest first. */
+export async function loadFantasyNewsFeed(limit = 40): Promise<FantasyNewsItem[]> {
+  const built = await buildPlayers("v2");
+  const byLower = new Map(built.all.map((p) => [p.name.toLowerCase(), p]));
+  const bySanitized = new Map(
+    built.all.map((p) => [sanitizePlayerName(p.name), p] as const).filter(([k]) => Boolean(k)),
+  );
+
+  const [fantasy, articles] = await Promise.all([
+    espnFantasyLeagueFeed("league").catch(() => [] as EspnFeedItem[]),
+    espnNews("").catch(() => [] as EspnArticle[]),
+  ]);
+
+  const items: FantasyNewsItem[] = [];
+  const seen = new Set<string>();
+  const push = (item: FantasyNewsItem) => {
+    const key = newsTextKey(item.headline);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    items.push(item);
+  };
+
+  for (const f of fantasy) {
+    const headline = (f.headline ?? "").trim();
+    if (!headline) continue;
+    const name = playerNameFromHeadline(headline);
+    const hit = name ? resolveCatalogPlayer(name, byLower, bySanitized) : undefined;
+    push({
+      id: `rw-${f.id ?? headline}`,
+      headline,
+      body: stripTags(f.story ?? f.description ?? ""),
+      published: f.published ?? f.lastModified ?? null,
+      link: f.links?.web?.href ?? null,
+      image: null,
+      source: "RotoWire",
+      player: hit ? { id: hit.id, name: hit.name, team: hit.team || null, pos: hit.pos } : null,
+    });
+  }
+
+  for (const a of articles) {
+    const headline = (a.headline ?? "").trim();
+    if (!headline) continue;
+    const athleteName =
+      (a.categories ?? []).find((c) => (c.athlete?.description ?? "").trim())?.athlete?.description ?? null;
+    const hit = athleteName ? resolveCatalogPlayer(athleteName, byLower, bySanitized) : undefined;
+    if (!hit && !/fantasy/i.test(`${headline} ${a.description ?? ""}`)) continue;
+    push({
+      id: `espn-${a.id ?? headline}`,
+      headline,
+      body: (a.description ?? "").trim(),
+      published: a.published ?? a.lastModified ?? null,
+      link: a.links?.web?.href ?? null,
+      image: a.images?.[0]?.url ?? null,
+      source: "ESPN",
+      player: hit ? { id: hit.id, name: hit.name, team: hit.team || null, pos: hit.pos } : null,
+    });
+  }
+
+  const time = (iso: string | null) => (iso ? Date.parse(iso) || 0 : 0);
+  return items.sort((a, b) => time(b.published) - time(a.published)).slice(0, limit);
+}
+
 /* ---------- synced roster news (dashboard Team Insights) ---------- */
 
 export type RosterNewsItem = {

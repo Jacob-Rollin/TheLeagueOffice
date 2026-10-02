@@ -93,6 +93,15 @@ export const getLeaguePlayerNews = createServerFn({ method: "GET" })
     return await loadLeagueWidePlayerNews(data.limit);
   });
 
+export const getFantasyNewsFeed = createServerFn({ method: "GET" })
+  .inputValidator((input?: { limit?: number }) => ({
+    limit: Math.max(1, Math.min(60, Number(input?.limit ?? 40) || 40)),
+  }))
+  .handler(async ({ data }) => {
+    const { loadFantasyNewsFeed } = await import("./players.server");
+    return await loadFantasyNewsFeed(data.limit);
+  });
+
 export const getPlayerBio = createServerFn({ method: "GET" })
   .inputValidator((input: { id: string }) => ({ id: String(input.id).slice(0, 32) }))
   .handler(async ({ data }) => {

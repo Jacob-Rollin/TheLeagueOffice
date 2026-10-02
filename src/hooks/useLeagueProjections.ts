@@ -181,17 +181,18 @@ async function fetchWeeklyProjectionsFor(
 
 async function fetchSeasonStatRows(
   season: string,
+  week?: number,
 ): Promise<Map<string, WeeklyProjRow>> {
   const q = `season_type=regular&${positionsQuery()}&order_by=pts_half_ppr`;
   const trySeason = async (yr: string) => {
-    const url = `${SLEEPER_BASE}/stats/nfl/${yr}?${q}`;
+    const url = `${SLEEPER_BASE}/stats/nfl/${yr}${week ? `/${week}` : ""}?${q}`;
     const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
     const rows = res && res.ok ? ((await res.json()) as unknown) : null;
     return Array.isArray(rows) ? rows : [];
   };
 
   let rows = await trySeason(season);
-  if (rows.length === 0) {
+  if (rows.length === 0 && !week) {
     rows = await trySeason(String(Number(season) - 1));
   }
 
@@ -248,6 +249,15 @@ function publishedPosRankKey(format: ScoringFormat): string {
   if (format === "ppr") return "pos_rank_ppr";
   if (format === "std") return "pos_rank_std";
   return "pos_rank_half_ppr";
+}
+
+function normalizePlayerName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[.'’-]/g, "")
+    .replace(/\s+(jr|sr|ii|iii|iv|v)$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -380,6 +390,32 @@ export function useLeagueProjections(week?: number | null) {
     };
   }, [seasonStats.data]);
 
+  /** `name|pos` → Sleeper id; names shared by two players at a position are left out. */
+  const idByNamePos = useMemo(() => {
+    const out = new Map<string, string | null>();
+    for (const rows of [seasonStats.data, projections.data]) {
+      if (!rows) continue;
+      for (const [id, row] of rows) {
+        const key = `${normalizePlayerName(row.name)}|${row.pos}`;
+        const prev = out.get(key);
+        out.set(key, prev === undefined || prev === id ? id : null);
+      }
+    }
+    return out;
+  }, [seasonStats.data, projections.data]);
+
+  /**
+   * Sleeper id carrying this player's stats/projection. Host-only ids (`espn:…`)
+   * and ids with no Sleeper rows (stale duplicates) are matched by name + position.
+   */
+  const sleeperIdFor = useCallback(
+    (player: { id: string; name: string; pos: string }): string => {
+      if (seasonStats.data?.has(player.id) || projections.data?.has(player.id)) return player.id;
+      return idByNamePos.get(`${normalizePlayerName(player.name)}|${player.pos}`) ?? player.id;
+    },
+    [idByNamePos, seasonStats.data, projections.data],
+  );
+
   /** League-scored weekly projection for a player id, or null when unknown. */
   const projectFor = useCallback(
     (playerId: string): number | null => {
@@ -416,7 +452,9 @@ export function useLeagueProjections(week?: number | null) {
     projectFor,
     statsFor,
     rankFor,
+    sleeperIdFor,
     projections: projections.data,
+    seasonStats: seasonStats.data,
     scoringMap: map,
     loading:
       projections.isLoading ||
@@ -427,6 +465,17 @@ export function useLeagueProjections(week?: number | null) {
     nflWeek: nflState.data?.week ?? null,
     nflSeason: nflState.data?.season ?? null,
   };
+}
+
+/** Actual Sleeper stat lines for one regular-season week (null week disables). */
+export function useSleeperWeekStats(season: string | null, week: number | null) {
+  return useQuery({
+    queryKey: ["sleeper-week-stats", "v1", season, week],
+    enabled: Boolean(season && week),
+    staleTime: 15 * 60 * 1000,
+    retry: false,
+    queryFn: () => fetchSeasonStatRows(season!, week!),
+  });
 }
 
 /**

@@ -18,6 +18,7 @@ import { Route as HofRouteImport } from './routes/hof'
 import { Route as InjuryReportsRouteImport } from './routes/injury-reports'
 import { Route as LeagueHqRouteImport } from './routes/league-hq'
 import { Route as LeaguesyncRouteImport } from './routes/leaguesync'
+import { Route as MRouteImport } from './routes/m'
 import { Route as MatchupsGuideRouteImport } from './routes/matchups-guide'
 import { Route as MockDraftRouteImport } from './routes/mock-draft'
 import { Route as MostTargetedPlayersRouteImport } from './routes/most-targeted-players'
@@ -38,6 +39,8 @@ import { Route as AdminProjectionAnalyticsRouteImport } from './routes/admin.pro
 import { Route as ArticlesSlugRouteImport } from './routes/articles.$slug'
 import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as AuthResetPasswordRouteImport } from './routes/auth_.reset-password'
+import { Route as MIndexRouteImport } from './routes/m.index'
+import { Route as MSettingsRouteImport } from './routes/m.settings'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
 import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
 import { Route as PlaybookIndexRouteImport } from './routes/playbook.index'
@@ -52,8 +55,16 @@ import { Route as TeamTeamIdRouteImport } from './routes/team.$teamId'
 import { Route as AccountLeaguesIndexRouteImport } from './routes/account.leagues.index'
 import { Route as AccountLeaguesConnectionIdRouteImport } from './routes/account.leagues.$connectionId'
 import { Route as ApiPublicScoreboardRouteImport } from './routes/api/public/scoreboard'
+import { Route as MLeagueLeagueIdRouteImport } from './routes/m.league.$leagueId'
 import { Route as ApiAuthYahooCallbackRouteImport } from './routes/api/auth/yahoo/callback'
 import { Route as ApiAuthYahooConnectRouteImport } from './routes/api/auth/yahoo/connect'
+import { Route as MLeagueLeagueIdIndexRouteImport } from './routes/m.league.$leagueId.index'
+import { Route as MLeagueLeagueIdFeedRouteImport } from './routes/m.league.$leagueId.feed'
+import { Route as MLeagueLeagueIdMatchupRouteImport } from './routes/m.league.$leagueId.matchup'
+import { Route as MLeagueLeagueIdPlayersRouteImport } from './routes/m.league.$leagueId.players'
+import { Route as MLeagueLeagueIdTeamRouteImport } from './routes/m.league.$leagueId.team'
+import { Route as MLeagueLeagueIdTradesRouteImport } from './routes/m.league.$leagueId.trades'
+import { Route as MLeagueLeagueIdWaiversRouteImport } from './routes/m.league.$leagueId.waivers'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -98,6 +109,11 @@ const LeagueHqRoute = LeagueHqRouteImport.update({
 const LeaguesyncRoute = LeaguesyncRouteImport.update({
   id: '/leaguesync',
   path: '/leaguesync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MRoute = MRouteImport.update({
+  id: '/m',
+  path: '/m',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MatchupsGuideRoute = MatchupsGuideRouteImport.update({
@@ -201,6 +217,16 @@ const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
   path: '/auth/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MIndexRoute = MIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MRoute,
+} as any)
+const MSettingsRoute = MSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => MRoute,
+} as any)
 const MockDraftSetupRoute = MockDraftSetupRouteImport.update({
   id: '/mock-draft_/setup',
   path: '/mock-draft/setup',
@@ -272,6 +298,11 @@ const ApiPublicScoreboardRoute = ApiPublicScoreboardRouteImport.update({
   path: '/api/public/scoreboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MLeagueLeagueIdRoute = MLeagueLeagueIdRouteImport.update({
+  id: '/league/$leagueId',
+  path: '/league/$leagueId',
+  getParentRoute: () => MRoute,
+} as any)
 const ApiAuthYahooCallbackRoute = ApiAuthYahooCallbackRouteImport.update({
   id: '/api/auth/yahoo/callback',
   path: '/api/auth/yahoo/callback',
@@ -281,6 +312,41 @@ const ApiAuthYahooConnectRoute = ApiAuthYahooConnectRouteImport.update({
   id: '/api/auth/yahoo/connect',
   path: '/api/auth/yahoo/connect',
   getParentRoute: () => rootRouteImport,
+} as any)
+const MLeagueLeagueIdIndexRoute = MLeagueLeagueIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MLeagueLeagueIdRoute,
+} as any)
+const MLeagueLeagueIdFeedRoute = MLeagueLeagueIdFeedRouteImport.update({
+  id: '/feed',
+  path: '/feed',
+  getParentRoute: () => MLeagueLeagueIdRoute,
+} as any)
+const MLeagueLeagueIdMatchupRoute = MLeagueLeagueIdMatchupRouteImport.update({
+  id: '/matchup',
+  path: '/matchup',
+  getParentRoute: () => MLeagueLeagueIdRoute,
+} as any)
+const MLeagueLeagueIdPlayersRoute = MLeagueLeagueIdPlayersRouteImport.update({
+  id: '/players',
+  path: '/players',
+  getParentRoute: () => MLeagueLeagueIdRoute,
+} as any)
+const MLeagueLeagueIdTeamRoute = MLeagueLeagueIdTeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => MLeagueLeagueIdRoute,
+} as any)
+const MLeagueLeagueIdTradesRoute = MLeagueLeagueIdTradesRouteImport.update({
+  id: '/trades',
+  path: '/trades',
+  getParentRoute: () => MLeagueLeagueIdRoute,
+} as any)
+const MLeagueLeagueIdWaiversRoute = MLeagueLeagueIdWaiversRouteImport.update({
+  id: '/waivers',
+  path: '/waivers',
+  getParentRoute: () => MLeagueLeagueIdRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -293,6 +359,7 @@ export interface FileRoutesByFullPath {
   '/injury-reports': typeof InjuryReportsRoute
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
+  '/m': typeof MRouteWithChildren
   '/matchups-guide': typeof MatchupsGuideRoute
   '/mock-draft': typeof MockDraftRoute
   '/most-targeted-players': typeof MostTargetedPlayersRoute
@@ -312,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
+  '/m/settings': typeof MSettingsRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/playbook/matchup': typeof PlaybookMatchupRoute
@@ -323,12 +391,21 @@ export interface FileRoutesByFullPath {
   '/player/$id': typeof PlayerIdRoute
   '/team/$teamId': typeof TeamTeamIdRoute
   '/account/': typeof AccountIndexRoute
+  '/m/': typeof MIndexRoute
   '/playbook/': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
+  '/m/league/$leagueId': typeof MLeagueLeagueIdRouteWithChildren
   '/account/leagues/': typeof AccountLeaguesIndexRoute
   '/api/auth/yahoo/callback': typeof ApiAuthYahooCallbackRoute
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
+  '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
+  '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
+  '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
+  '/m/league/$leagueId/team': typeof MLeagueLeagueIdTeamRoute
+  '/m/league/$leagueId/trades': typeof MLeagueLeagueIdTradesRoute
+  '/m/league/$leagueId/waivers': typeof MLeagueLeagueIdWaiversRoute
+  '/m/league/$leagueId/': typeof MLeagueLeagueIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -358,6 +435,7 @@ export interface FileRoutesByTo {
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
+  '/m/settings': typeof MSettingsRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/playbook/matchup': typeof PlaybookMatchupRoute
@@ -369,12 +447,20 @@ export interface FileRoutesByTo {
   '/player/$id': typeof PlayerIdRoute
   '/team/$teamId': typeof TeamTeamIdRoute
   '/account': typeof AccountIndexRoute
+  '/m': typeof MIndexRoute
   '/playbook': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
   '/account/leagues': typeof AccountLeaguesIndexRoute
   '/api/auth/yahoo/callback': typeof ApiAuthYahooCallbackRoute
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
+  '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
+  '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
+  '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
+  '/m/league/$leagueId/team': typeof MLeagueLeagueIdTeamRoute
+  '/m/league/$leagueId/trades': typeof MLeagueLeagueIdTradesRoute
+  '/m/league/$leagueId/waivers': typeof MLeagueLeagueIdWaiversRoute
+  '/m/league/$leagueId': typeof MLeagueLeagueIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -387,6 +473,7 @@ export interface FileRoutesById {
   '/injury-reports': typeof InjuryReportsRoute
   '/league-hq': typeof LeagueHqRoute
   '/leaguesync': typeof LeaguesyncRoute
+  '/m': typeof MRouteWithChildren
   '/matchups-guide': typeof MatchupsGuideRoute
   '/mock-draft': typeof MockDraftRoute
   '/most-targeted-players': typeof MostTargetedPlayersRoute
@@ -406,6 +493,7 @@ export interface FileRoutesById {
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth_/confirmed': typeof AuthConfirmedRoute
   '/auth_/reset-password': typeof AuthResetPasswordRoute
+  '/m/settings': typeof MSettingsRoute
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
   '/playbook/matchup': typeof PlaybookMatchupRoute
@@ -417,12 +505,21 @@ export interface FileRoutesById {
   '/player/$id': typeof PlayerIdRoute
   '/team/$teamId': typeof TeamTeamIdRoute
   '/account/': typeof AccountIndexRoute
+  '/m/': typeof MIndexRoute
   '/playbook/': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
+  '/m/league/$leagueId': typeof MLeagueLeagueIdRouteWithChildren
   '/account/leagues/': typeof AccountLeaguesIndexRoute
   '/api/auth/yahoo/callback': typeof ApiAuthYahooCallbackRoute
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
+  '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
+  '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
+  '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
+  '/m/league/$leagueId/team': typeof MLeagueLeagueIdTeamRoute
+  '/m/league/$leagueId/trades': typeof MLeagueLeagueIdTradesRoute
+  '/m/league/$leagueId/waivers': typeof MLeagueLeagueIdWaiversRoute
+  '/m/league/$leagueId/': typeof MLeagueLeagueIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -436,6 +533,7 @@ export interface FileRouteTypes {
     | '/injury-reports'
     | '/league-hq'
     | '/leaguesync'
+    | '/m'
     | '/matchups-guide'
     | '/mock-draft'
     | '/most-targeted-players'
@@ -455,6 +553,7 @@ export interface FileRouteTypes {
     | '/articles/$slug'
     | '/auth/confirmed'
     | '/auth/reset-password'
+    | '/m/settings'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
     | '/playbook/matchup'
@@ -466,12 +565,21 @@ export interface FileRouteTypes {
     | '/player/$id'
     | '/team/$teamId'
     | '/account/'
+    | '/m/'
     | '/playbook/'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
+    | '/m/league/$leagueId'
     | '/account/leagues/'
     | '/api/auth/yahoo/callback'
     | '/api/auth/yahoo/connect'
+    | '/m/league/$leagueId/feed'
+    | '/m/league/$leagueId/matchup'
+    | '/m/league/$leagueId/players'
+    | '/m/league/$leagueId/team'
+    | '/m/league/$leagueId/trades'
+    | '/m/league/$leagueId/waivers'
+    | '/m/league/$leagueId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -501,6 +609,7 @@ export interface FileRouteTypes {
     | '/articles/$slug'
     | '/auth/confirmed'
     | '/auth/reset-password'
+    | '/m/settings'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
     | '/playbook/matchup'
@@ -512,12 +621,20 @@ export interface FileRouteTypes {
     | '/player/$id'
     | '/team/$teamId'
     | '/account'
+    | '/m'
     | '/playbook'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
     | '/account/leagues'
     | '/api/auth/yahoo/callback'
     | '/api/auth/yahoo/connect'
+    | '/m/league/$leagueId/feed'
+    | '/m/league/$leagueId/matchup'
+    | '/m/league/$leagueId/players'
+    | '/m/league/$leagueId/team'
+    | '/m/league/$leagueId/trades'
+    | '/m/league/$leagueId/waivers'
+    | '/m/league/$leagueId'
   id:
     | '__root__'
     | '/'
@@ -529,6 +646,7 @@ export interface FileRouteTypes {
     | '/injury-reports'
     | '/league-hq'
     | '/leaguesync'
+    | '/m'
     | '/matchups-guide'
     | '/mock-draft'
     | '/most-targeted-players'
@@ -548,6 +666,7 @@ export interface FileRouteTypes {
     | '/articles/$slug'
     | '/auth_/confirmed'
     | '/auth_/reset-password'
+    | '/m/settings'
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
     | '/playbook/matchup'
@@ -559,12 +678,21 @@ export interface FileRouteTypes {
     | '/player/$id'
     | '/team/$teamId'
     | '/account/'
+    | '/m/'
     | '/playbook/'
     | '/account/leagues/$connectionId'
     | '/api/public/scoreboard'
+    | '/m/league/$leagueId'
     | '/account/leagues/'
     | '/api/auth/yahoo/callback'
     | '/api/auth/yahoo/connect'
+    | '/m/league/$leagueId/feed'
+    | '/m/league/$leagueId/matchup'
+    | '/m/league/$leagueId/players'
+    | '/m/league/$leagueId/team'
+    | '/m/league/$leagueId/trades'
+    | '/m/league/$leagueId/waivers'
+    | '/m/league/$leagueId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -577,6 +705,7 @@ export interface RootRouteChildren {
   InjuryReportsRoute: typeof InjuryReportsRoute
   LeagueHqRoute: typeof LeagueHqRoute
   LeaguesyncRoute: typeof LeaguesyncRoute
+  MRoute: typeof MRouteWithChildren
   MatchupsGuideRoute: typeof MatchupsGuideRoute
   MockDraftRoute: typeof MockDraftRoute
   MostTargetedPlayersRoute: typeof MostTargetedPlayersRoute
@@ -671,6 +800,13 @@ declare module '@tanstack/react-router' {
       path: '/leaguesync'
       fullPath: '/leaguesync'
       preLoaderRoute: typeof LeaguesyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/m': {
+      id: '/m'
+      path: '/m'
+      fullPath: '/m'
+      preLoaderRoute: typeof MRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/matchups-guide': {
@@ -813,6 +949,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/m/': {
+      id: '/m/'
+      path: '/'
+      fullPath: '/m/'
+      preLoaderRoute: typeof MIndexRouteImport
+      parentRoute: typeof MRoute
+    }
+    '/m/settings': {
+      id: '/m/settings'
+      path: '/settings'
+      fullPath: '/m/settings'
+      preLoaderRoute: typeof MSettingsRouteImport
+      parentRoute: typeof MRoute
+    }
     '/mock-draft_/setup': {
       id: '/mock-draft_/setup'
       path: '/mock-draft/setup'
@@ -911,6 +1061,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicScoreboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/m/league/$leagueId': {
+      id: '/m/league/$leagueId'
+      path: '/league/$leagueId'
+      fullPath: '/m/league/$leagueId'
+      preLoaderRoute: typeof MLeagueLeagueIdRouteImport
+      parentRoute: typeof MRoute
+    }
     '/api/auth/yahoo/callback': {
       id: '/api/auth/yahoo/callback'
       path: '/api/auth/yahoo/callback'
@@ -925,8 +1082,95 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthYahooConnectRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/m/league/$leagueId/': {
+      id: '/m/league/$leagueId/'
+      path: '/'
+      fullPath: '/m/league/$leagueId/'
+      preLoaderRoute: typeof MLeagueLeagueIdIndexRouteImport
+      parentRoute: typeof MLeagueLeagueIdRoute
+    }
+    '/m/league/$leagueId/feed': {
+      id: '/m/league/$leagueId/feed'
+      path: '/feed'
+      fullPath: '/m/league/$leagueId/feed'
+      preLoaderRoute: typeof MLeagueLeagueIdFeedRouteImport
+      parentRoute: typeof MLeagueLeagueIdRoute
+    }
+    '/m/league/$leagueId/matchup': {
+      id: '/m/league/$leagueId/matchup'
+      path: '/matchup'
+      fullPath: '/m/league/$leagueId/matchup'
+      preLoaderRoute: typeof MLeagueLeagueIdMatchupRouteImport
+      parentRoute: typeof MLeagueLeagueIdRoute
+    }
+    '/m/league/$leagueId/players': {
+      id: '/m/league/$leagueId/players'
+      path: '/players'
+      fullPath: '/m/league/$leagueId/players'
+      preLoaderRoute: typeof MLeagueLeagueIdPlayersRouteImport
+      parentRoute: typeof MLeagueLeagueIdRoute
+    }
+    '/m/league/$leagueId/team': {
+      id: '/m/league/$leagueId/team'
+      path: '/team'
+      fullPath: '/m/league/$leagueId/team'
+      preLoaderRoute: typeof MLeagueLeagueIdTeamRouteImport
+      parentRoute: typeof MLeagueLeagueIdRoute
+    }
+    '/m/league/$leagueId/trades': {
+      id: '/m/league/$leagueId/trades'
+      path: '/trades'
+      fullPath: '/m/league/$leagueId/trades'
+      preLoaderRoute: typeof MLeagueLeagueIdTradesRouteImport
+      parentRoute: typeof MLeagueLeagueIdRoute
+    }
+    '/m/league/$leagueId/waivers': {
+      id: '/m/league/$leagueId/waivers'
+      path: '/waivers'
+      fullPath: '/m/league/$leagueId/waivers'
+      preLoaderRoute: typeof MLeagueLeagueIdWaiversRouteImport
+      parentRoute: typeof MLeagueLeagueIdRoute
+    }
   }
 }
+
+interface MLeagueLeagueIdRouteChildren {
+  MLeagueLeagueIdFeedRoute: typeof MLeagueLeagueIdFeedRoute
+  MLeagueLeagueIdMatchupRoute: typeof MLeagueLeagueIdMatchupRoute
+  MLeagueLeagueIdPlayersRoute: typeof MLeagueLeagueIdPlayersRoute
+  MLeagueLeagueIdTeamRoute: typeof MLeagueLeagueIdTeamRoute
+  MLeagueLeagueIdTradesRoute: typeof MLeagueLeagueIdTradesRoute
+  MLeagueLeagueIdWaiversRoute: typeof MLeagueLeagueIdWaiversRoute
+  MLeagueLeagueIdIndexRoute: typeof MLeagueLeagueIdIndexRoute
+}
+
+const MLeagueLeagueIdRouteChildren: MLeagueLeagueIdRouteChildren = {
+  MLeagueLeagueIdFeedRoute: MLeagueLeagueIdFeedRoute,
+  MLeagueLeagueIdMatchupRoute: MLeagueLeagueIdMatchupRoute,
+  MLeagueLeagueIdPlayersRoute: MLeagueLeagueIdPlayersRoute,
+  MLeagueLeagueIdTeamRoute: MLeagueLeagueIdTeamRoute,
+  MLeagueLeagueIdTradesRoute: MLeagueLeagueIdTradesRoute,
+  MLeagueLeagueIdWaiversRoute: MLeagueLeagueIdWaiversRoute,
+  MLeagueLeagueIdIndexRoute: MLeagueLeagueIdIndexRoute,
+}
+
+const MLeagueLeagueIdRouteWithChildren = MLeagueLeagueIdRoute._addFileChildren(
+  MLeagueLeagueIdRouteChildren,
+)
+
+interface MRouteChildren {
+  MSettingsRoute: typeof MSettingsRoute
+  MIndexRoute: typeof MIndexRoute
+  MLeagueLeagueIdRoute: typeof MLeagueLeagueIdRouteWithChildren
+}
+
+const MRouteChildren: MRouteChildren = {
+  MSettingsRoute: MSettingsRoute,
+  MIndexRoute: MIndexRoute,
+  MLeagueLeagueIdRoute: MLeagueLeagueIdRouteWithChildren,
+}
+
+const MRouteWithChildren = MRoute._addFileChildren(MRouteChildren)
 
 interface PlaybookRouteChildren {
   PlaybookMatchupRoute: typeof PlaybookMatchupRoute
@@ -962,6 +1206,7 @@ const rootRouteChildren: RootRouteChildren = {
   InjuryReportsRoute: InjuryReportsRoute,
   LeagueHqRoute: LeagueHqRoute,
   LeaguesyncRoute: LeaguesyncRoute,
+  MRoute: MRouteWithChildren,
   MatchupsGuideRoute: MatchupsGuideRoute,
   MockDraftRoute: MockDraftRoute,
   MostTargetedPlayersRoute: MostTargetedPlayersRoute,

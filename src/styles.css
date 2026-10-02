@@ -55,6 +55,126 @@
   --color-def: var(--pos-def);
 
   --shadow-glow: 0 0 0 1px var(--border), 0 18px 40px -24px oklch(0 0 0 / 0.9);
+
+  /* Mobile app tokens — only resolve inside .mobile-theme-light / .mobile-theme-dark. */
+  --color-m-bg: var(--m-bg);
+  --color-m-header: var(--m-header);
+  --color-m-header-fg: var(--m-header-fg);
+  --color-m-icon-bg: var(--m-icon-bg);
+  --color-m-icon-fg: var(--m-icon-fg);
+  --color-m-card: var(--m-card);
+  --color-m-card-fg: var(--m-card-fg);
+  --color-m-muted: var(--m-muted);
+  --color-m-border: var(--m-border);
+  --color-m-section: var(--m-section);
+  --color-m-cta: var(--m-cta);
+  --color-m-cta-fg: var(--m-cta-fg);
+  --color-m-chip: var(--m-chip);
+  --color-m-chip-fg: var(--m-chip-fg);
+  --color-m-accent: var(--m-accent);
+  --color-m-accent-fg: var(--m-accent-fg);
+  --color-m-tab: var(--m-tab);
+  --color-m-tab-fg: var(--m-tab-fg);
+  --color-m-tab-active: var(--m-tab-active);
+  --color-m-tab-active-fg: var(--m-tab-active-fg);
+  --color-m-tab-active-border: var(--m-tab-active-border);
+  --color-m-nav: var(--m-nav);
+  --color-m-nav-fg: var(--m-nav-fg);
+  --color-m-nav-active: var(--m-nav-active);
+  --color-m-sheet: var(--m-sheet);
+  --color-m-row-alt: var(--m-row-alt);
+  --color-m-rank-col: var(--m-rank-col);
+  --color-m-highlight: var(--m-highlight);
+  --color-m-team-rank-bg: var(--m-team-rank-bg);
+  --color-m-team-rank-fg: var(--m-team-rank-fg);
+  --color-m-pos-rank-bg: var(--m-pos-rank-bg);
+  --color-m-pos-rank-fg: var(--m-pos-rank-fg);
+  --color-m-select-bg: var(--m-select-bg);
+  --color-m-select-fg: var(--m-select-fg);
+}
+
+.mobile-theme-light {
+  --m-bg: #e4e1da;
+  --m-header: #1ba3c6;
+  --m-header-fg: #ffffff;
+  --m-icon-bg: rgba(10, 60, 80, 0.14);
+  --m-icon-fg: #0d2f45;
+  --m-card: #ffffff;
+  --m-card-fg: #1f2328;
+  --m-muted: #50565c;
+  --m-border: #d9d5cc;
+  --m-section: #2a2d31;
+  --m-cta: #f7d117;
+  --m-cta-fg: #141414;
+  --m-chip: #f3f3f3;
+  --m-chip-fg: #3a3f45;
+  --m-hero-from: rgba(27, 163, 198, 0.55);
+  --m-hero-to: rgba(10, 112, 140, 0.96);
+  --m-accent: #1ba3c6;
+  --m-accent-fg: #ffffff;
+  --m-tab: #ffffff;
+  --m-tab-fg: #2a2d31;
+  --m-tab-active: #1ba3c6;
+  --m-tab-active-fg: #ffffff;
+  --m-tab-active-border: #158aa8;
+  --m-nav: #ffffff;
+  --m-nav-fg: #6b7177;
+  --m-nav-active: #0f8fb0;
+  --m-sheet: #f1efea;
+  --m-row-alt: #f6f5f2;
+  --m-rank-col: #e3f4f9;
+  --m-highlight: rgba(27, 163, 198, 0.12);
+  --m-team-hero-from: #1ba3c6;
+  --m-team-hero-to: #0e7593;
+  --m-team-rank-bg: #ffffff;
+  --m-team-rank-fg: #0e7593;
+  --m-pos-rank-bg: #d3eef7;
+  --m-pos-rank-fg: #0b6a86;
+  --m-select-bg: #ececec;
+  --m-select-fg: #2a2d31;
+  color-scheme: light;
+}
+
+.mobile-theme-dark {
+  --m-bg: #121212;
+  --m-header: #121212;
+  --m-header-fg: #ffffff;
+  --m-icon-bg: #2a2a2a;
+  --m-icon-fg: #ffffff;
+  --m-card: #262626;
+  --m-card-fg: #ffffff;
+  --m-muted: #b8b8b8;
+  --m-border: #3a3a3a;
+  --m-section: #f2f2f2;
+  --m-cta: #f7d117;
+  --m-cta-fg: #141414;
+  --m-chip: #333333;
+  --m-chip-fg: #e6e6e6;
+  --m-hero-from: rgba(12, 74, 92, 0.6);
+  --m-hero-to: rgba(10, 18, 22, 0.97);
+  --m-accent: #11a3c4;
+  --m-accent-fg: #ffffff;
+  --m-tab: #3a3a3a;
+  --m-tab-fg: #e6e6e6;
+  --m-tab-active: #1d3a42;
+  --m-tab-active-fg: #ffffff;
+  --m-tab-active-border: #2d6573;
+  --m-nav: #121212;
+  --m-nav-fg: #c9c9c9;
+  --m-nav-active: #f7d117;
+  --m-sheet: #2a2a2a;
+  --m-row-alt: #2e2e2e;
+  --m-rank-col: #173238;
+  --m-highlight: rgba(17, 163, 196, 0.16);
+  --m-team-hero-from: #0f8aa6;
+  --m-team-hero-to: #1a2224;
+  --m-team-rank-bg: #11a3c4;
+  --m-team-rank-fg: #ffffff;
+  --m-pos-rank-bg: #f2f2f2;
+  --m-pos-rank-fg: #141414;
+  --m-select-bg: #3a3a3a;
+  --m-select-fg: #ffffff;
+  color-scheme: dark;
 }
 
 :root {

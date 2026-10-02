@@ -143,6 +143,12 @@ function AdminPage() {
         >
           Projection Analytics
         </Link>
+        <Link
+          to="/m"
+          className="border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Mobile Testing
+        </Link>
       </div>
 
       {tab === "invites" ? (

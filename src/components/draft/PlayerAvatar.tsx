@@ -23,6 +23,8 @@ export function PlayerAvatar({
   className,
   logoClassName,
   style,
+  src: srcOverride,
+  fallbackSrc,
 }: {
   id: string;
   pos: Pos;
@@ -31,11 +33,20 @@ export function PlayerAvatar({
   className?: string;
   logoClassName?: string;
   style?: React.CSSProperties;
+  /** Replaces the Sleeper headshot (e.g. host-platform players with no Sleeper id). */
+  src?: string | null;
+  /** Tried once when the primary headshot fails to load. */
+  fallbackSrc?: string | null;
 }) {
   const logo = teamLogo(team);
-  const src = playerImage(id, pos, team);
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const showSilhouette = !src || failedSrc === src;
+  const primary = srcOverride || playerImage(id, pos, team);
+  const [failed, setFailed] = useState<string[]>([]);
+  const src = !failed.includes(primary)
+    ? primary
+    : fallbackSrc && !failed.includes(fallbackSrc)
+      ? fallbackSrc
+      : "";
+  const showSilhouette = !src;
   return (
     <div className={cn("relative size-16 shrink-0", className)} style={style}>
       <div className="flex size-full items-center justify-center overflow-hidden rounded-full border border-border bg-surface">
@@ -52,7 +63,7 @@ export function PlayerAvatar({
             loading="lazy"
             decoding="async"
             className="size-full object-cover object-center"
-            onError={() => setFailedSrc(src)}
+            onError={() => setFailed((prev) => [...prev, src])}
           />
         )}
       </div>

@@ -924,6 +924,7 @@ type EspnBoxscoreRosterEntry = {
     player?: {
       fullName?: string;
       proTeamId?: number;
+      defaultPositionId?: number;
       stats?: {
         scoringPeriodId?: number;
         statSourceId?: number;
@@ -1158,6 +1159,21 @@ export type WeeklyMatchupEntry = {
    * were traded away later in the week (they no longer appear in the host roster).
    */
   playerPoints: Record<string, number>;
+  /**
+   * ESPN only: host display details keyed by Sleeper id when matched, or
+   * "espn:<espnId>" when not. Unmatched starters keep "" in `starters` and are
+   * found here through `starterNames`.
+   */
+  hostPlayers?: Record<string, HostPlayerMeta>;
+};
+
+export type HostPlayerMeta = {
+  name: string;
+  team: string | null;
+  pos: string | null;
+  headshot: string | null;
+  points: number;
+  slot: "starter" | "bench" | "ir";
 };
 
 export type LeagueWeekMatchups = {
@@ -1663,6 +1679,7 @@ async function fetchConnectionMatchups(
         irIds: string[];
         unstartableIds: string[];
         playerPoints: Record<string, number>;
+        hostPlayers: Record<string, HostPlayerMeta>;
       } => {
         const boxEntries =
           side?.rosterForCurrentScoringPeriod?.entries ??
@@ -1678,12 +1695,32 @@ async function fetchConnectionMatchups(
         const irIds: string[] = [];
         const unstartableIds: string[] = [];
         const playerPoints: Record<string, number> = {};
+        const hostPlayers: Record<string, HostPlayerMeta> = {};
         const seen = new Set<string>();
 
         for (const entry of boxEntries) {
           const sleeperId = resolveEspnBoxPlayer(entry);
           const slot = entry.lineupSlotId ?? -1;
           const pts = sleeperId ? espnBoxEntryPoints(entry, safeWeek) : 0;
+
+          const hostKey = sleeperId ?? (entry.playerId != null ? `espn:${entry.playerId}` : null);
+          if (hostKey) {
+            const athlete = entry.playerPoolEntry?.player;
+            const meta = entry.playerId != null ? espnMeta.get(String(entry.playerId)) : undefined;
+            const pos = ESPN_DEFAULT_POSITION[athlete?.defaultPositionId ?? -1] ?? meta?.pos ?? null;
+            const espnId = Number(entry.playerId);
+            hostPlayers[hostKey] = {
+              name: athlete?.fullName?.trim() || meta?.name || "Unknown player",
+              team: (athlete?.proTeamId != null ? espnProTeamAbbr(athlete.proTeamId) : null) ?? meta?.team ?? null,
+              pos,
+              headshot:
+                Number.isFinite(espnId) && espnId > 0 && pos !== "DEF"
+                  ? `https://a.espncdn.com/i/headshots/nfl/players/full/${espnId}.png`
+                  : null,
+              points: roundHundredths(espnBoxEntryPoints(entry, safeWeek)),
+              slot: slot === 21 ? "ir" : ESPN_SLOT_TOKEN[slot] ? "starter" : "bench",
+            };
+          }
 
           if (sleeperId) {
             playerPoints[sleeperId] = roundHundredths(pts);
@@ -1734,6 +1771,7 @@ async function fetchConnectionMatchups(
           irIds,
           unstartableIds,
           playerPoints,
+          hostPlayers,
         };
       };
 
@@ -1777,6 +1815,7 @@ async function fetchConnectionMatchups(
             irIds: lineup.irIds,
             ...(lineup.unstartableIds.length ? { unstartableIds: lineup.unstartableIds } : {}),
             playerPoints: lineup.playerPoints,
+            hostPlayers: lineup.hostPlayers,
           });
         }
       }
@@ -2142,6 +2181,15 @@ const ESPN_PRO_TEAM_ABBR: Record<number, string> = {
   30: "JAX",
   33: "BAL",
   34: "HOU",
+};
+
+const ESPN_DEFAULT_POSITION: Record<number, string> = {
+  1: "QB",
+  2: "RB",
+  3: "WR",
+  4: "TE",
+  5: "K",
+  16: "DEF",
 };
 
 function espnProTeamAbbr(proTeamId: number): string | null {

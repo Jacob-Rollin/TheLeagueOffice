@@ -51,6 +51,11 @@ function emptyDetail(platform: string): LeagueSettingsDetail {
     waiverBudget: null,
     tradeDeadlineWeek: null,
     tradeDeadlineDate: null,
+    waiverPeriodDays: null,
+    waiverOrder: [],
+    tradeReviewDays: null,
+    maxTrades: null,
+    tradeReviewType: null,
     roster: emptyRoster(),
     scoring: {},
     draft: { type: null, status: null, rounds: null, position: null, date: null, budget: null, order: [] },
@@ -142,7 +147,9 @@ async function loadSleeperSettings(identifier: string): Promise<LeagueSettingsDe
   const [league, users, rosters] = await Promise.all([
     json<SleeperLeague>(`${SLEEPER}/league/${leagueId}`),
     json<SleeperUser[]>(`${SLEEPER}/league/${leagueId}/users`),
-    json<{ roster_id: number; owner_id: string | null }[]>(`${SLEEPER}/league/${leagueId}/rosters`),
+    json<{ roster_id: number; owner_id: string | null; settings?: { waiver_position?: number } }[]>(
+      `${SLEEPER}/league/${leagueId}/rosters`,
+    ),
   ]);
   if (!league) return out;
   const draft = league.draft_id ? await json<SleeperDraft>(`${SLEEPER}/draft/${league.draft_id}`) : null;
@@ -173,6 +180,18 @@ async function loadSleeperSettings(identifier: string): Promise<LeagueSettingsDe
   out.waiverBudget = waiver === 2 ? num(s["waiver_budget"]) : null;
   const deadline = num(s["trade_deadline"]);
   out.tradeDeadlineWeek = deadline && deadline < 99 ? deadline : null;
+  out.waiverPeriodDays = num(s["waiver_clear_days"]);
+  out.tradeReviewDays = num(s["trade_review_days"]);
+  out.waiverOrder = (rosters ?? [])
+    .map((r) => {
+      const priority = num(r.settings?.waiver_position);
+      const u = r.owner_id ? userById.get(r.owner_id) : undefined;
+      return priority
+        ? { priority, team: teamLabel(u, `Team ${r.roster_id}`), isMine: !!userId && r.owner_id === userId }
+        : null;
+    })
+    .filter((r): r is { priority: number; team: string; isMine: boolean } => r != null)
+    .sort((a, b) => a.priority - b.priority);
 
   for (const pos of league.roster_positions ?? []) {
     const key = SLEEPER_SLOT[String(pos).toUpperCase()];
@@ -255,8 +274,9 @@ type EspnSettingsView = {
       isUsingAcquisitionBudget?: boolean;
       acquisitionBudget?: number;
       waiverOrderReset?: boolean;
+      waiverHours?: number;
     };
-    tradeSettings?: { deadlineDate?: number };
+    tradeSettings?: { deadlineDate?: number; max?: number; revisionHours?: number; vetoVotesRequired?: number };
   };
   teams?: EspnTeam[];
 };
@@ -320,6 +340,21 @@ async function loadEspnSettings(
   out.waiverType = acq.isUsingAcquisitionBudget ? "FAAB" : acq.waiverOrderReset ? "Reverse Standings" : "Rolling";
   out.waiverBudget = acq.isUsingAcquisitionBudget ? num(acq.acquisitionBudget) : null;
   out.tradeDeadlineDate = num(set.tradeSettings?.deadlineDate) || null;
+  const waiverHours = num(acq.waiverHours);
+  out.waiverPeriodDays = waiverHours != null ? waiverHours / 24 : null;
+  const trade = set.tradeSettings ?? {};
+  const revisionHours = num(trade.revisionHours);
+  out.tradeReviewDays = revisionHours != null ? revisionHours / 24 : null;
+  out.maxTrades = trade.max != null && trade.max > 0 ? trade.max : null;
+  const vetoes = num(trade.vetoVotesRequired);
+  out.tradeReviewType = vetoes == null ? null : vetoes > 0 ? "League Vote" : "Commissioner Review";
+  out.waiverOrder = teams
+    .map((t) => {
+      const priority = num((t as EspnTeam & { waiverRank?: number }).waiverRank);
+      return priority ? { priority, team: espnTeamName(t) ?? `Team ${t.id}`, isMine: !!mine && t.id === mine.id } : null;
+    })
+    .filter((r): r is { priority: number; team: string; isMine: boolean } => r != null)
+    .sort((a, b) => a.priority - b.priority);
 
   let rounds = 0;
   for (const [raw, count] of Object.entries(set.rosterSettings?.lineupSlotCounts ?? {})) {

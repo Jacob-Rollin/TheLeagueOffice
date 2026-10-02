@@ -54,6 +54,15 @@ export type LeagueSettingsDetail = {
   waiverBudget: number | null;
   tradeDeadlineWeek: number | null;
   tradeDeadlineDate: number | null;
+  /** Days a dropped player sits on waivers before clearing. */
+  waiverPeriodDays: number | null;
+  /** Waiver claim order, 1 = first claim. Empty when the host doesn't expose it. */
+  waiverOrder: { priority: number; team: string; isMine: boolean }[];
+  /** Days other managers have to review an accepted trade. */
+  tradeReviewDays: number | null;
+  /** Null when trades are unlimited. */
+  maxTrades: number | null;
+  tradeReviewType: string | null;
   roster: Record<RosterSlotKey, number>;
   scoring: Record<string, number>;
   draft: {

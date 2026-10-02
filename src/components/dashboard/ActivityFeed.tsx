@@ -39,6 +39,24 @@ function activityDefenseKey(raw: string): string {
   return parts.length ? sanitizeActivityPlayerName(parts[parts.length - 1]!) : "";
 }
 
+/** Id and name lookups consumed by `hydrateActivityMove`. */
+export function buildActivityPlayerIndex(players: ActivityCatalogPlayer[] | undefined) {
+  const playersById = new Map<string, ActivityCatalogPlayer>();
+  const playersByName = new Map<string, ActivityCatalogPlayer>();
+  for (const p of players ?? []) {
+    if (p?.id) playersById.set(p.id, p);
+    const key = sanitizeActivityPlayerName(p.name);
+    if (key && !playersByName.has(key)) playersByName.set(key, p);
+    if (p.pos === "DEF" || p.pos === "DST") {
+      const defKey = activityDefenseKey(p.name);
+      if (defKey && !playersByName.has(defKey)) playersByName.set(defKey, p);
+      const teamKey = sanitizeActivityPlayerName(p.team);
+      if (teamKey && !playersByName.has(teamKey)) playersByName.set(teamKey, p);
+    }
+  }
+  return { playersById, playersByName };
+}
+
 /**
  * Remap activity moves onto the Sleeper player cache so ESPN ids/names
  * render real headshots instead of "Player 4685702" ghosts.
@@ -422,28 +440,7 @@ export function ActivityFeed({
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
 
-  const playersById = useMemo(() => {
-    const map = new Map<string, ActivityCatalogPlayer>();
-    for (const p of players ?? []) {
-      if (p?.id) map.set(p.id, p);
-    }
-    return map;
-  }, [players]);
-
-  const playersByName = useMemo(() => {
-    const map = new Map<string, ActivityCatalogPlayer>();
-    for (const p of players ?? []) {
-      const key = sanitizeActivityPlayerName(p.name);
-      if (key && !map.has(key)) map.set(key, p);
-      if (p.pos === "DEF" || p.pos === "DST") {
-        const defKey = activityDefenseKey(p.name);
-        if (defKey && !map.has(defKey)) map.set(defKey, p);
-        const teamKey = sanitizeActivityPlayerName(p.team);
-        if (teamKey && !map.has(teamKey)) map.set(teamKey, p);
-      }
-    }
-    return map;
-  }, [players]);
+  const { playersById, playersByName } = useMemo(() => buildActivityPlayerIndex(players), [players]);
 
   /** Hydrated moves with ADD rows above DROP rows (Sleeper stack). */
   const orderedMovesFor = (event: LeagueActivityEvent, kind: LeagueActivityEvent["kind"]) => {
