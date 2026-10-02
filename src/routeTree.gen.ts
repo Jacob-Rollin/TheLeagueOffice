@@ -34,6 +34,7 @@ import { Route as WarRoomRouteImport } from './routes/war-room'
 import { Route as WeeklyProjectionsRouteImport } from './routes/weekly-projections'
 import { Route as AccountIndexRouteImport } from './routes/account.index'
 import { Route as AccountAdminRouteImport } from './routes/account.admin'
+import { Route as AdminProjectionAnalyticsRouteImport } from './routes/admin.projection-analytics'
 import { Route as ArticlesSlugRouteImport } from './routes/articles.$slug'
 import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as AuthResetPasswordRouteImport } from './routes/auth_.reset-password'
@@ -179,6 +180,12 @@ const AccountAdminRoute = AccountAdminRouteImport.update({
   path: '/account/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminProjectionAnalyticsRoute =
+  AdminProjectionAnalyticsRouteImport.update({
+    id: '/admin/projection-analytics',
+    path: '/admin/projection-analytics',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ArticlesSlugRoute = ArticlesSlugRouteImport.update({
   id: '/articles/$slug',
   path: '/articles/$slug',
@@ -301,6 +308,7 @@ export interface FileRoutesByFullPath {
   '/war-room': typeof WarRoomRoute
   '/weekly-projections': typeof WeeklyProjectionsRoute
   '/account/admin': typeof AccountAdminRoute
+  '/admin/projection-analytics': typeof AdminProjectionAnalyticsRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
@@ -346,6 +354,7 @@ export interface FileRoutesByTo {
   '/war-room': typeof WarRoomRoute
   '/weekly-projections': typeof WeeklyProjectionsRoute
   '/account/admin': typeof AccountAdminRoute
+  '/admin/projection-analytics': typeof AdminProjectionAnalyticsRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
@@ -393,6 +402,7 @@ export interface FileRoutesById {
   '/war-room': typeof WarRoomRoute
   '/weekly-projections': typeof WeeklyProjectionsRoute
   '/account/admin': typeof AccountAdminRoute
+  '/admin/projection-analytics': typeof AdminProjectionAnalyticsRoute
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth_/confirmed': typeof AuthConfirmedRoute
   '/auth_/reset-password': typeof AuthResetPasswordRoute
@@ -441,6 +451,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/weekly-projections'
     | '/account/admin'
+    | '/admin/projection-analytics'
     | '/articles/$slug'
     | '/auth/confirmed'
     | '/auth/reset-password'
@@ -486,6 +497,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/weekly-projections'
     | '/account/admin'
+    | '/admin/projection-analytics'
     | '/articles/$slug'
     | '/auth/confirmed'
     | '/auth/reset-password'
@@ -532,6 +544,7 @@ export interface FileRouteTypes {
     | '/war-room'
     | '/weekly-projections'
     | '/account/admin'
+    | '/admin/projection-analytics'
     | '/articles/$slug'
     | '/auth_/confirmed'
     | '/auth_/reset-password'
@@ -579,6 +592,7 @@ export interface RootRouteChildren {
   WarRoomRoute: typeof WarRoomRoute
   WeeklyProjectionsRoute: typeof WeeklyProjectionsRoute
   AccountAdminRoute: typeof AccountAdminRoute
+  AdminProjectionAnalyticsRoute: typeof AdminProjectionAnalyticsRoute
   ArticlesSlugRoute: typeof ArticlesSlugRoute
   AuthConfirmedRoute: typeof AuthConfirmedRoute
   AuthResetPasswordRoute: typeof AuthResetPasswordRoute
@@ -771,6 +785,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountAdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/projection-analytics': {
+      id: '/admin/projection-analytics'
+      path: '/admin/projection-analytics'
+      fullPath: '/admin/projection-analytics'
+      preLoaderRoute: typeof AdminProjectionAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/articles/$slug': {
       id: '/articles/$slug'
       path: '/articles/$slug'
@@ -956,6 +977,7 @@ const rootRouteChildren: RootRouteChildren = {
   WarRoomRoute: WarRoomRoute,
   WeeklyProjectionsRoute: WeeklyProjectionsRoute,
   AccountAdminRoute: AccountAdminRoute,
+  AdminProjectionAnalyticsRoute: AdminProjectionAnalyticsRoute,
   ArticlesSlugRoute: ArticlesSlugRoute,
   AuthConfirmedRoute: AuthConfirmedRoute,
   AuthResetPasswordRoute: AuthResetPasswordRoute,
