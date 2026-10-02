@@ -1,0 +1,71 @@
+name: Projection Engine
+
+# Admin-only trial: writes projection, kickoff-lock and accuracy files to the
+# projections Gist. Nothing on the site reads them except /admin/projection-analytics.
+
+on:
+  schedule:
+    # Hourly all week.
+    - cron: "5 * * * *"
+    # Every 15 minutes while inactives and late news land (times in UTC).
+    - cron: "*/15 12-23 * * 0"
+    - cron: "*/15 0-1 * * 1"
+    - cron: "*/15 22-23 * * 1,4"
+    - cron: "*/15 0-1 * * 2,5"
+    - cron: "*/15 16-23 * * 6"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "What to run"
+        type: choice
+        options: [update]
+        default: update
+      week:
+        description: "NFL week override (leave blank for the current week)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: projection-engine
+  cancel-in-progress: false
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            package.json
+            scripts/projection-engine
+            src/lib/scoring-map.ts
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - id: day
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pe-cache
+          key: pe-cache-${{ steps.day.outputs.day }}
+          restore-keys: pe-cache-
+
+      - name: Run engine
+        env:
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          PE_CACHE_DIR: ${{ runner.temp }}/pe-cache
+          MODE: ${{ inputs.mode || 'update' }}
+          WEEK: ${{ inputs.week || '' }}
+        run: |
+          ARGS="$MODE"
+          if [ -n "$WEEK" ]; then ARGS="$ARGS --week=$WEEK"; fi
+          npx --yes tsx@4 scripts/projection-engine/index.ts $ARGS
