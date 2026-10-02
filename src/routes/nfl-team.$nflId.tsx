@@ -393,9 +393,18 @@ function NflTeamHub() {
                             src={headshot}
                             alt={p.name}
                             loading="lazy"
-                            className="h-full w-full object-cover"
+                            className={cn(
+                              "h-full w-full",
+                              p.pos === "DEF" ? "object-contain p-0.5" : "object-cover",
+                            )}
                             onError={(e) => {
-                              e.currentTarget.src = fallbackLogo;
+                              const img = e.currentTarget;
+                              if (img.src === fallbackLogo) {
+                                img.style.visibility = "hidden";
+                                return;
+                              }
+                              img.src = fallbackLogo;
+                              img.className = "h-full w-full object-contain p-0.5";
                             }}
                           />
                         </div>

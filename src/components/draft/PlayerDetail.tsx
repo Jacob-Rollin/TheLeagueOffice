@@ -417,7 +417,10 @@ export function PlayerDetail({
                 src={playerImage(player.id, player.pos, player.team)}
                 alt=""
                 loading="lazy"
-                className="pointer-events-none relative z-20 h-full w-full select-none object-cover object-[55%_center] transition-all"
+                className={cn(
+                  "pointer-events-none relative z-20 h-full w-full select-none transition-all",
+                  isDefense ? "object-contain px-3 pb-9 pt-3" : "object-cover object-[55%_center]",
+                )}
                 onError={(e) => {
                   e.currentTarget.style.visibility = "hidden";
                 }}

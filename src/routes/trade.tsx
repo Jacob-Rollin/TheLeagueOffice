@@ -234,7 +234,7 @@ function SidebarLock({
 function TradeRoute() {
   const { activeLeagueId } = useActiveLeague();
   return (
-    <PlaybookShell wide>
+    <PlaybookShell wide section="trade">
       <TradePage key={activeLeagueId ?? "none"} />
     </PlaybookShell>
   );

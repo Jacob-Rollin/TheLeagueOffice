@@ -15,6 +15,7 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/draft";
 import { computeMatchupPreview, matchupSlotLabels } from "@/lib/matchup-preview";
+import { positionRoomRanks } from "@/lib/position-room-ranks";
 import { cn } from "@/lib/utils";
 
 const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
@@ -282,32 +283,22 @@ export function TeamOverview({
       return new Map(sorted.map((row, i) => [row.slot, i + 1]));
     };
     const totalRank = rankOf((r) => r.total);
-    const posRanks = Object.fromEntries(
-      POSITIONS.map((pos) => [pos, rankOf((r) => r.totals[pos])]),
-    ) as Record<OffensePos, Map<number, number>>;
     const mine = byTeam.find((r) => r.slot === rosterId) ?? null;
-    return { mine, totalRank: totalRank.get(rosterId) ?? null, posRanks, teams: byTeam.length };
+    return { mine, totalRank: totalRank.get(rosterId) ?? null, teams: byTeam.length };
   }, [teams, brain, slotRanks.data, valueView, rosterId]);
 
-  // Position rooms by projected rest-of-season points per game (dedicated seats only).
+  // League position ranks: projected points per game from each team's best lineup, same as Standings.
+  const roomRanks = useMemo(() => positionRoomRanks(slotRanks.data?.teams ?? []), [slotRanks.data]);
   const rooms = useMemo(() => {
-    const all = slotRanks.data?.teams ?? [];
-    if (!all.length) return [];
-    const roomPpg = (t: (typeof all)[number], pos: OffensePos) =>
-      t.seats.filter((s) => s.label.replace(/\d+$/, "") === pos).reduce((sum, s) => sum + s.ppg, 0);
-    return POSITIONS.map((pos) => {
-      const values = all
-        .map((t) => ({ id: t.rosterId, ppg: roomPpg(t, pos) }))
-        .sort((a, b) => b.ppg - a.ppg);
-      const idx = values.findIndex((v) => v.id === rosterId);
-      return {
-        pos,
-        rank: idx >= 0 ? idx + 1 : null,
-        ppg: idx >= 0 ? values[idx]!.ppg : 0,
-        teams: values.length,
-      };
-    }).filter((r) => r.rank != null);
-  }, [slotRanks.data, rosterId]);
+    const mine = roomRanks.ppg.get(rosterId);
+    if (!mine) return [];
+    return POSITIONS.map((pos) => ({
+      pos,
+      rank: roomRanks.ranks[pos].get(rosterId) ?? null,
+      ppg: mine[pos],
+      teams: roomRanks.teams,
+    })).filter((r) => r.rank != null);
+  }, [roomRanks, rosterId]);
   const weakest = rooms.length
     ? [...rooms].sort((a, b) => b.rank! - a.rank! || a.ppg - b.ppg)[0]!
     : null;
@@ -789,7 +780,7 @@ export function TeamOverview({
                   .map((pos) => {
                     const v = valueBoard.mine?.totals[pos] ?? 0;
                     const share = valueTotal > 0 ? (v / valueTotal) * 100 : 0;
-                    const rank = valueBoard.posRanks[pos].get(rosterId) ?? null;
+                    const rank = roomRanks.ranks[pos].get(rosterId) ?? null;
                     return (
                       <div
                         key={pos}
@@ -811,17 +802,26 @@ export function TeamOverview({
                         <span
                           className={cn(
                             "text-right text-sm font-bold tabular-nums",
-                            rankTone(rank, valueBoard.teams),
+                            rankTone(rank, roomRanks.teams),
                           )}
+                          title={
+                            rank
+                              ? `${pos} room: ${(roomRanks.ppg.get(rosterId)?.[pos] ?? 0).toFixed(1)} projected points a week, #${rank} of ${roomRanks.teams}`
+                              : undefined
+                          }
                         >
                           {rank ? `#${rank}` : "—"}
                           <span className="text-xs font-medium text-slate-400">
-                            /{valueBoard.teams}
+                            /{roomRanks.teams || valueBoard.teams}
                           </span>
                         </span>
                       </div>
                     );
                   })}
+                <p className="pt-2 text-[11px] text-slate-400">
+                  Value is trade value. Lg Rank is projected points a week from the best lineup, the same
+                  ranking as Standings.
+                </p>
               </div>
             </div>
           </section>

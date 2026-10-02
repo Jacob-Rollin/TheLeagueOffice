@@ -28,8 +28,10 @@ import { Route as SeasonProjectionsRouteImport } from './routes/season-projectio
 import { Route as SosAnalysisRouteImport } from './routes/sos-analysis'
 import { Route as StandingsRouteImport } from './routes/standings'
 import { Route as TheWireRouteImport } from './routes/the-wire'
+import { Route as TopAvailableRouteImport } from './routes/top-available'
 import { Route as TradeRouteImport } from './routes/trade'
 import { Route as TradeDeskRouteImport } from './routes/trade-desk'
+import { Route as TradeMarketValuesRouteImport } from './routes/trade-market-values'
 import { Route as WaiverRouteImport } from './routes/waiver'
 import { Route as WarRoomRouteImport } from './routes/war-room'
 import { Route as WeeklyProjectionsRouteImport } from './routes/weekly-projections'
@@ -161,6 +163,11 @@ const TheWireRoute = TheWireRouteImport.update({
   path: '/the-wire',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TopAvailableRoute = TopAvailableRouteImport.update({
+  id: '/top-available',
+  path: '/top-available',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TradeRoute = TradeRouteImport.update({
   id: '/trade',
   path: '/trade',
@@ -169,6 +176,11 @@ const TradeRoute = TradeRouteImport.update({
 const TradeDeskRoute = TradeDeskRouteImport.update({
   id: '/trade-desk',
   path: '/trade-desk',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TradeMarketValuesRoute = TradeMarketValuesRouteImport.update({
+  id: '/trade-market-values',
+  path: '/trade-market-values',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WaiverRoute = WaiverRouteImport.update({
@@ -369,8 +381,10 @@ export interface FileRoutesByFullPath {
   '/sos-analysis': typeof SosAnalysisRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
+  '/top-available': typeof TopAvailableRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
+  '/trade-market-values': typeof TradeMarketValuesRoute
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
   '/weekly-projections': typeof WeeklyProjectionsRoute
@@ -425,8 +439,10 @@ export interface FileRoutesByTo {
   '/sos-analysis': typeof SosAnalysisRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
+  '/top-available': typeof TopAvailableRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
+  '/trade-market-values': typeof TradeMarketValuesRoute
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
   '/weekly-projections': typeof WeeklyProjectionsRoute
@@ -483,8 +499,10 @@ export interface FileRoutesById {
   '/sos-analysis': typeof SosAnalysisRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
+  '/top-available': typeof TopAvailableRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
+  '/trade-market-values': typeof TradeMarketValuesRoute
   '/waiver': typeof WaiverRoute
   '/war-room': typeof WarRoomRoute
   '/weekly-projections': typeof WeeklyProjectionsRoute
@@ -543,8 +561,10 @@ export interface FileRouteTypes {
     | '/sos-analysis'
     | '/standings'
     | '/the-wire'
+    | '/top-available'
     | '/trade'
     | '/trade-desk'
+    | '/trade-market-values'
     | '/waiver'
     | '/war-room'
     | '/weekly-projections'
@@ -599,8 +619,10 @@ export interface FileRouteTypes {
     | '/sos-analysis'
     | '/standings'
     | '/the-wire'
+    | '/top-available'
     | '/trade'
     | '/trade-desk'
+    | '/trade-market-values'
     | '/waiver'
     | '/war-room'
     | '/weekly-projections'
@@ -656,8 +678,10 @@ export interface FileRouteTypes {
     | '/sos-analysis'
     | '/standings'
     | '/the-wire'
+    | '/top-available'
     | '/trade'
     | '/trade-desk'
+    | '/trade-market-values'
     | '/waiver'
     | '/war-room'
     | '/weekly-projections'
@@ -715,8 +739,10 @@ export interface RootRouteChildren {
   SosAnalysisRoute: typeof SosAnalysisRoute
   StandingsRoute: typeof StandingsRoute
   TheWireRoute: typeof TheWireRoute
+  TopAvailableRoute: typeof TopAvailableRoute
   TradeRoute: typeof TradeRoute
   TradeDeskRoute: typeof TradeDeskRoute
+  TradeMarketValuesRoute: typeof TradeMarketValuesRoute
   WaiverRoute: typeof WaiverRoute
   WarRoomRoute: typeof WarRoomRoute
   WeeklyProjectionsRoute: typeof WeeklyProjectionsRoute
@@ -872,6 +898,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TheWireRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/top-available': {
+      id: '/top-available'
+      path: '/top-available'
+      fullPath: '/top-available'
+      preLoaderRoute: typeof TopAvailableRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/trade': {
       id: '/trade'
       path: '/trade'
@@ -884,6 +917,13 @@ declare module '@tanstack/react-router' {
       path: '/trade-desk'
       fullPath: '/trade-desk'
       preLoaderRoute: typeof TradeDeskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trade-market-values': {
+      id: '/trade-market-values'
+      path: '/trade-market-values'
+      fullPath: '/trade-market-values'
+      preLoaderRoute: typeof TradeMarketValuesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/waiver': {
@@ -1216,8 +1256,10 @@ const rootRouteChildren: RootRouteChildren = {
   SosAnalysisRoute: SosAnalysisRoute,
   StandingsRoute: StandingsRoute,
   TheWireRoute: TheWireRoute,
+  TopAvailableRoute: TopAvailableRoute,
   TradeRoute: TradeRoute,
   TradeDeskRoute: TradeDeskRoute,
+  TradeMarketValuesRoute: TradeMarketValuesRoute,
   WaiverRoute: WaiverRoute,
   WarRoomRoute: WarRoomRoute,
   WeeklyProjectionsRoute: WeeklyProjectionsRoute,

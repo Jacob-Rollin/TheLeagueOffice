@@ -453,8 +453,9 @@ function buildTeamInsightSlides(opts: {
   /*
    * Injury desk: anyone with a live designation, plus players whose latest
    * news is injury-related from the past week (catches new injuries before
-   * the designation propagates). Newest injury news leads; ties go to
-   * starters, then severity.
+   * the designation propagates). Starters always lead; bench players only
+   * surface when no starter has an injury update. Within each group the
+   * newest injury news leads, then severity.
    */
   const injuryCandidates = myTeamPlayers
     .map((p) => {
@@ -467,8 +468,8 @@ function buildTeamInsightSlides(opts: {
     .filter((c) => c.label != null || c.injuryNewsAt > 0 || (!rosterNews && isActiveInjury(c.player)))
     .sort(
       (a, b) =>
-        b.injuryNewsAt - a.injuryNewsAt ||
         Number(starterIds.has(b.player.id)) - Number(starterIds.has(a.player.id)) ||
+        b.injuryNewsAt - a.injuryNewsAt ||
         (DESIGNATION_RANK[b.label ?? ""] ?? 0) - (DESIGNATION_RANK[a.label ?? ""] ?? 0),
     );
   const lead = injuryCandidates[0] ?? null;
@@ -562,13 +563,13 @@ function buildTeamInsightSlides(opts: {
     });
   }
 
-  // Player notes: latest news on anyone other than the injury-desk lead.
+  // Player notes: latest news on anyone other than the injury-desk lead, starters before bench.
   const noteCandidate = myTeamPlayers
     .filter((p) => p.id !== lead?.player.id && newsById.get(p.id)?.news)
     .sort(
       (a, b) =>
-        newsAt(b) - newsAt(a) ||
-        Number(starterIds.has(b.id)) - Number(starterIds.has(a.id)),
+        Number(starterIds.has(b.id)) - Number(starterIds.has(a.id)) ||
+        newsAt(b) - newsAt(a),
     )[0];
 
   if (noteCandidate) {

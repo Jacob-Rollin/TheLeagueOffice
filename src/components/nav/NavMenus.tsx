@@ -81,10 +81,10 @@ const RESEARCH_SECTIONS: {
   {
     heading: "Stats",
     links: [
-      { to: "/fantasy-points-allowed", label: "Fantasy Points Allowed" },
-      { to: "/red-zone-stats", label: "Red Zone Stats" },
-      { to: "/most-targeted-players", label: "Most Targeted Players" },
       { to: "/fantasy-leaders", label: "Fantasy Leaders" },
+      { to: "/fantasy-points-allowed", label: "Fantasy Points Allowed" },
+      { to: "/most-targeted-players", label: "Most Targeted Players" },
+      { to: "/red-zone-stats", label: "Red Zone Stats" },
     ],
   },
 ];
@@ -128,33 +128,33 @@ type PlaybookPath =
   | "/playbook/matchup"
   | "/playbook/rosters"
   | "/playbook/transactions"
-  | "/standings"
-  | "/trade"
-  | "/waiver";
+  | "/standings";
 
-const PLAYBOOK_SECTIONS: { heading: string; links: { to: PlaybookPath; label: string }[] }[] = [
-  {
-    heading: "League",
-    links: [
-      { to: "/playbook", label: "Dashboard" },
-      { to: "/playbook/press-room", label: "Press Room" },
-      { to: "/standings", label: "Standings" },
-      { to: "/playbook/matchup", label: "Matchup" },
-      { to: "/playbook/rosters", label: "Rosters" },
-      { to: "/playbook/transactions", label: "Transactions" },
-    ],
-  },
-  {
-    heading: "My Team",
-    links: [
-      { to: "/playbook/my-team", label: "My Team" },
-      { to: "/trade", label: "Trade Desk" },
-      { to: "/waiver", label: "The Wire" },
-    ],
-  },
+const PLAYBOOK_LINKS: { to: PlaybookPath; label: string }[] = [
+  { to: "/playbook", label: "Dashboard" },
+  { to: "/playbook/my-team", label: "My Team" },
+  { to: "/playbook/press-room", label: "Press Room" },
+  { to: "/standings", label: "Standings" },
+  { to: "/playbook/matchup", label: "Matchup" },
+  { to: "/playbook/rosters", label: "Rosters" },
+  { to: "/playbook/transactions", label: "Transactions" },
 ];
 
-const PLAYBOOK_PATH_PREFIXES = ["/playbook", "/standings", "/trade", "/waiver", "/the-wire"];
+const PLAYBOOK_PATH_PREFIXES = ["/playbook", "/standings"];
+
+const TRADE_LINKS: { to: "/trade" | "/trade-market-values"; label: string }[] = [
+  { to: "/trade", label: "Trade Desk" },
+  { to: "/trade-market-values", label: "Trade Market Values" },
+];
+
+const TRADE_PATHS = ["/trade", "/trade-desk", "/trade-market-values"];
+
+const WAIVER_LINKS: { to: "/waiver" | "/top-available"; label: string }[] = [
+  { to: "/waiver", label: "The Wire" },
+  { to: "/top-available", label: "Top Available" },
+];
+
+const WAIVER_PATHS = ["/waiver", "/the-wire", "/top-available"];
 
 /** Playbook dropdown — every sub-navbar destination, locked badge for guests. */
 export function PlaybookMenu() {
@@ -179,18 +179,62 @@ export function PlaybookMenu() {
         {locked ? <NavLockBadge /> : null}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        {PLAYBOOK_SECTIONS.map((section, index) => (
-          <Fragment key={section.heading}>
-            {index > 0 ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuLabel className={menuHeadingClass}>{section.heading}</DropdownMenuLabel>
-            {section.links.map((item) => (
-              <DropdownMenuItem key={item.to} asChild>
-                <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
-                  {item.label}
-                </Link>
-              </DropdownMenuItem>
-            ))}
-          </Fragment>
+        {PLAYBOOK_LINKS.map((item) => (
+          <DropdownMenuItem key={item.to} asChild>
+            <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+              {item.label}
+            </Link>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Trade dropdown — signed-in users only. */
+export function TradeMenu() {
+  const { user, ready } = useAuth();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  if (!ready || !user) return null;
+  const active = TRADE_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className={cn(triggerClass, active && "border-accent text-primary-foreground")}>
+        Trade
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        {TRADE_LINKS.map((item) => (
+          <DropdownMenuItem key={item.to} asChild>
+            <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+              {item.label}
+            </Link>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Waiver dropdown — signed-in users only. */
+export function WaiverMenu() {
+  const { user, ready } = useAuth();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  if (!ready || !user) return null;
+  const active = WAIVER_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className={cn(triggerClass, active && "border-accent text-primary-foreground")}>
+        Waiver
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        {WAIVER_LINKS.map((item) => (
+          <DropdownMenuItem key={item.to} asChild>
+            <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+              {item.label}
+            </Link>
+          </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

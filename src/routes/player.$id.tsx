@@ -521,7 +521,13 @@ function PlayerHubPage() {
                                   loading="lazy"
                                   className="h-full w-full object-cover"
                                   onError={(e) => {
-                                    e.currentTarget.src = fallbackLogo;
+                                    const img = e.currentTarget;
+                                    if (img.src === fallbackLogo) {
+                                      img.style.visibility = "hidden";
+                                      return;
+                                    }
+                                    img.src = fallbackLogo;
+                                    img.className = "h-full w-full object-contain p-0.5";
                                   }}
                                 />
                               </div>
@@ -718,7 +724,10 @@ function StandalonePlayerHeader({
             src={playerImage(player.id, player.pos as Pos, player.team)}
             alt=""
             loading="lazy"
-            className="pointer-events-none relative z-20 h-full w-full select-none object-cover object-[55%_center]"
+            className={cn(
+              "pointer-events-none relative z-20 h-full w-full select-none",
+              isDefense ? "object-contain px-3 pb-9 pt-3" : "object-cover object-[55%_center]",
+            )}
             onError={(e) => {
               e.currentTarget.style.visibility = "hidden";
             }}

@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 
+import { ArticleView, type ArticleViewData } from "@/components/articles/ArticleView";
 import type { ArticleInput, ArticleRow } from "@/lib/articles";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,8 @@ const inputClass =
 const labelClass = "block text-xs font-semibold uppercase tracking-wide text-black";
 const blueButton =
   "rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-60";
+const outlineBlueButton =
+  "rounded-md border border-blue-600 bg-transparent px-4 py-2 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-600 hover:text-white";
 const toolButton =
   "inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background text-foreground transition-colors hover:bg-muted";
 
@@ -83,6 +86,7 @@ export function ArticleEditor({
   const [error, setError] = useState<string | null>(null);
   const [sizeOpen, setSizeOpen] = useState(false);
   const [markerOpen, setMarkerOpen] = useState(false);
+  const [preview, setPreview] = useState<ArticleViewData | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const savedRange = useRef<Range | null>(null);
 
@@ -147,6 +151,29 @@ export function ArticleEditor({
     document.execCommand("insertHTML", false, clean);
     rememberSelection();
   };
+
+  const openPreview = () => {
+    setSizeOpen(false);
+    setMarkerOpen(false);
+    setPreview({
+      title: title.trim() || "Untitled Article",
+      category: category.trim() || "Uncategorized",
+      summary: summary.trim(),
+      content: bodyRef.current?.innerHTML ?? "",
+      image_url: imageUrl.trim(),
+      author_name: author.trim() || "The League Office",
+      created_at: article?.created_at ?? new Date().toISOString(),
+    });
+  };
+
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPreview(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
 
   const submit = () => {
     const content = bodyRef.current?.innerHTML ?? "";
@@ -411,12 +438,84 @@ export function ArticleEditor({
             >
               Cancel
             </button>
+            <button type="button" className={outlineBlueButton} onClick={openPreview}>
+              Preview
+            </button>
             <button type="button" className={blueButton} disabled={saving} onClick={submit}>
               {saving ? "Publishing…" : "Publish Article"}
             </button>
           </div>
         </div>
       </div>
+
+      {preview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Article preview"
+          className="fixed inset-0 z-50 overflow-y-auto bg-background"
+        >
+          <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+            <div className="mx-auto flex w-full max-w-shell flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-8">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-600">Preview</p>
+                <p className="text-sm text-muted-foreground">
+                  This is how the article will look once it's posted. It isn't live yet.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button type="button" className={outlineBlueButton} onClick={() => setPreview(null)}>
+                  Back to Editor
+                </button>
+                <button
+                  type="button"
+                  className={blueButton}
+                  disabled={saving}
+                  onClick={() => {
+                    setPreview(null);
+                    submit();
+                  }}
+                >
+                  {saving ? "Publishing…" : "Publish Article"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <main className="mx-auto w-full max-w-shell px-4 pb-16 md:px-8">
+            <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
+              <div className="min-w-0 lg:col-span-2">
+                <ArticleView article={preview} />
+              </div>
+              <aside className="min-w-0 space-y-4 lg:col-span-1">
+                <section className="rounded-xl border border-border/80 bg-card p-4">
+                  <h2 className="display-title text-sm uppercase tracking-wide text-zinc-950">
+                    Before You Post
+                  </h2>
+                  <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground">
+                    {(
+                      [
+                        ["Title", Boolean(title.trim())],
+                        ["Category", Boolean(category.trim())],
+                        ["Summary", Boolean(summary.trim())],
+                        ["Header image", Boolean(imageUrl.trim())],
+                        ["Article body", Boolean(preview.content.trim())],
+                      ] as const
+                    ).map(([label, ok]) => (
+                      <li key={label} className="flex items-center justify-between gap-3">
+                        <span>{label}</span>
+                        <span className={ok ? "font-medium text-blue-600" : "font-medium text-red-600"}>
+                          {ok ? "Ready" : "Missing"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </aside>
+            </div>
+          </main>
+        </div>
+      )}
     </div>
   );
 }

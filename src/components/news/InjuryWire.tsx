@@ -1,20 +1,24 @@
-import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
+import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import type { InjuryWireItem } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
 
-const STATUS_CHIP: Record<string, string> = {
-  IR: "bg-red-50 text-red-600",
-  OUT: "bg-red-50 text-red-600",
-  SUSP: "bg-red-50 text-red-600",
-  PUP: "bg-orange-50 text-orange-600",
-  D: "bg-orange-50 text-orange-600",
-  Q: "bg-amber-50 text-amber-700",
-  NA: "bg-red-50 text-red-600",
-  DNR: "bg-red-50 text-red-600",
-  COV: "bg-red-50 text-red-600",
+const POPUP_ROSE = "bg-rose-600 text-white shadow-rose-600/10";
+const POPUP_AMBER = "bg-amber-500 text-slate-950 shadow-amber-500/10";
+
+/** Same designation text and colors as the player popup badge. */
+const STATUS_BADGE: Record<string, { text: string; tone: string }> = {
+  Q: { text: "Questionable", tone: POPUP_AMBER },
+  D: { text: "Doubtful", tone: POPUP_ROSE },
+  OUT: { text: "Out", tone: POPUP_ROSE },
+  IR: { text: "Injured Reserve", tone: POPUP_ROSE },
+  PUP: { text: "PUP", tone: POPUP_ROSE },
+  SUSP: { text: "Suspended", tone: POPUP_ROSE },
+  NA: { text: "Not Active", tone: POPUP_ROSE },
+  DNR: { text: "Did Not Report", tone: POPUP_ROSE },
+  COV: { text: "COVID-19", tone: POPUP_ROSE },
 };
 
 function timeAgo(iso: string): string {
@@ -53,19 +57,28 @@ function Headshot({ src, name }: { src: string | null; name: string }) {
   );
 }
 
-function CardShell({ item, children }: { item: InjuryWireItem; children: ReactNode }) {
+function CardShell({
+  item,
+  onOpenPlayer,
+  children,
+}: {
+  item: InjuryWireItem;
+  onOpenPlayer: (id: string) => void;
+  children: ReactNode;
+}) {
   const className =
-    "group block rounded-lg border border-border/70 bg-white p-3 transition-colors hover:border-blue-600/40";
-  if (item.sleeperId) {
+    "group block w-full rounded-lg border border-border/70 bg-white p-3 text-left transition-colors hover:border-blue-600/40";
+  const sleeperId = item.sleeperId;
+  if (sleeperId) {
     return (
-      <Link to="/player/$id" params={{ id: item.sleeperId }} className={className}>
+      <button type="button" onClick={() => onOpenPlayer(sleeperId)} className={className}>
         {children}
-      </Link>
+      </button>
     );
   }
   if (item.link) {
     return (
-      <a href={item.link} target="_blank" rel="noreferrer" className={className}>
+      <a href={item.link} target="_blank" rel="noopener noreferrer" className={className}>
         {children}
       </a>
     );
@@ -74,6 +87,8 @@ function CardShell({ item, children }: { item: InjuryWireItem; children: ReactNo
 }
 
 export function InjuryWire({ limit = 5 }: { limit?: number }) {
+  const modalRef = useRef<PlayerModalHandle>(null);
+  const openPlayer = (id: string) => modalRef.current?.open(id);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["injury-wire", limit],
     retry: false,
@@ -112,7 +127,7 @@ export function InjuryWire({ limit = 5 }: { limit?: number }) {
       ) : (
         <div className="flex flex-col gap-2">
           {data.map((item) => (
-            <CardShell key={item.id} item={item}>
+            <CardShell key={item.id} item={item} onOpenPlayer={openPlayer}>
               <div className="flex gap-3">
                 <Headshot src={item.headshot} name={item.playerName} />
                 <div className="min-w-0 flex-1">
@@ -123,24 +138,23 @@ export function InjuryWire({ limit = 5 }: { limit?: number }) {
                 </div>
               </div>
               <div className="mt-2.5 flex items-center gap-1.5">
-                <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
-                  Injury
-                </span>
                 <span
                   className={cn(
-                    "rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider",
-                    STATUS_CHIP[item.statusShort] ?? "bg-blue-50 text-blue-600",
+                    "inline-flex select-none items-center justify-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest shadow-sm",
+                    STATUS_BADGE[item.statusShort]?.tone ?? POPUP_ROSE,
                   )}
                 >
-                  {item.statusShort}
+                  {STATUS_BADGE[item.statusShort]?.text ?? (item.status || item.statusShort)}
                 </span>
-                <span className="text-[11px] text-muted-foreground">{timeAgo(item.published)}</span>
-                <span className="ml-auto truncate text-[11px] text-muted-foreground">via {item.source}</span>
+                <span className="ml-auto truncate text-[11px] text-muted-foreground">
+                  {[timeAgo(item.published), `via ${item.source}`].filter(Boolean).join(" · ")}
+                </span>
               </div>
             </CardShell>
           ))}
         </div>
       )}
+      <PlayerModalHost ref={modalRef} />
     </section>
   );
 }

@@ -349,7 +349,7 @@ const TEAM_PROGRESS_ALIASES: Record<string, string[]> = {
   JAX: ["JAX", "JAC"],
 };
 
-function progressForNflTeam(
+export function progressForNflTeam(
   teamAbbr: string | null | undefined,
   progressByNflTeam: Map<string, NflGameProgress>,
 ): NflGameProgress | undefined {

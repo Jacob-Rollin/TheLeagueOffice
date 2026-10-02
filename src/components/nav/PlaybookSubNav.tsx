@@ -13,7 +13,7 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
-const LINKS: {
+export type SubNavLink = {
   to:
     | "/playbook"
     | "/playbook/my-team"
@@ -23,19 +23,31 @@ const LINKS: {
     | "/playbook/rosters"
     | "/playbook/transactions"
     | "/trade"
-    | "/waiver";
+    | "/trade-market-values"
+    | "/waiver"
+    | "/top-available";
   label: string;
   search?: { tab?: "actual" | "all-play" | "power" };
-}[] = [
+};
+
+export const PLAYBOOK_SUBNAV_LINKS: SubNavLink[] = [
   { to: "/playbook", label: "Dashboard" },
-  { to: "/playbook/press-room", label: "Press Room" },
   { to: "/playbook/my-team", label: "My Team" },
+  { to: "/playbook/press-room", label: "Press Room" },
   { to: "/standings", label: "Standings" },
   { to: "/playbook/matchup", label: "Matchup" },
   { to: "/playbook/rosters", label: "Rosters" },
   { to: "/playbook/transactions", label: "Transactions" },
+];
+
+export const TRADE_SUBNAV_LINKS: SubNavLink[] = [
   { to: "/trade", label: "Trade Desk" },
+  { to: "/trade-market-values", label: "Trade Market Values" },
+];
+
+export const WAIVER_SUBNAV_LINKS: SubNavLink[] = [
   { to: "/waiver", label: "The Wire" },
+  { to: "/top-available", label: "Top Available" },
 ];
 
 function platformLabel(platform: string): string {
@@ -264,7 +276,7 @@ function linkIsActive(pathname: string, to: string): boolean {
  * Sub-navbar: league under brand wordmark; Dashboard under Playbook.
  * Outer frame matches requested low-profile bar; inner track mirrors SiteNav.
  */
-export function PlaybookSubNav() {
+export function PlaybookSubNav({ links = PLAYBOOK_SUBNAV_LINKS }: { links?: SubNavLink[] }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { user, ready } = useAuth();
   const locked = ready && !user;
@@ -288,7 +300,7 @@ export function PlaybookSubNav() {
 
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           <nav className="flex items-center space-x-5 text-xs font-semibold text-slate-500">
-            {LINKS.map((item) => {
+            {links.map((item) => {
               const active = linkIsActive(pathname, item.to);
               return (
                 <Link

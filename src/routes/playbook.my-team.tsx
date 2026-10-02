@@ -2,7 +2,7 @@ import { PlayerAvatar, playerImage, teamLogo } from "@/components/draft/PlayerAv
 import { detailQuery } from "@/components/draft/PlayerDetail";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
-import { playbookCardClass } from "@/components/playbook/panels";
+import { INJURY_STATUS_LABEL, InjuryReportCard } from "@/components/injury/InjuryReportCard";
 import { SosStars } from "@/components/sos/SosStars";
 import { TeamOverview } from "@/components/team/TeamOverview";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
@@ -15,7 +15,8 @@ import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player, Pos } from "@/lib/draft";
-import { getLeaguePlayerNews, getPlayerNews } from "@/lib/players.functions";
+import { getInjuryReports, getPlayerNews } from "@/lib/players.functions";
+import type { InjuryReportItem } from "@/lib/players.server";
 import { getTeamPrimaryColor } from "@/lib/nfl-teams";
 import {
   currentSeason,
@@ -28,6 +29,7 @@ import {
   formatNflKickoffLabel,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
+import { hasScorableProjectionStats, scoreStats, type ScoringMap } from "@/lib/scoring-map";
 import { getCached } from "@/lib/sleeper-cache";
 import { sosStarsFromRank, weeklySosMatchupFor, type SosMatchup } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
@@ -325,46 +327,6 @@ function newsTimeAgo(iso: string): string {
   return days === 1 ? "1 day ago" : `${days} days ago`;
 }
 
-function firstNewsSentence(text: string): string {
-  const raw = (text ?? "").trim();
-  if (!raw) return "No full report available yet.";
-  const match = raw.match(/^[\s\S]+?[.!?](?=\s|$)/);
-  if (match?.[0]) return match[0].trim();
-  const words = raw.split(/\s+/);
-  if (words.length <= 22) return raw;
-  return `${words.slice(0, 22).join(" ").trim()}…`;
-}
-
-function splitNewsCopy(description: string): { body: string; impact: string } {
-  const raw = (description ?? "").trim();
-  if (!raw) {
-    return {
-      body: "No full report available yet.",
-      impact: "Check practice reports and snap trends before locking your lineup.",
-    };
-  }
-  const marker = /fantasy\s*impact\s*:/i;
-  const hit = marker.exec(raw);
-  if (hit && hit.index != null) {
-    const before = raw.slice(0, hit.index).trim();
-    const impact =
-      raw.slice(hit.index + hit[0].length).trim() ||
-      "Monitor role and injury designation ahead of kickoff.";
-    return { body: firstNewsSentence(before || raw), impact: firstNewsSentence(impact) };
-  }
-  const sentences = raw.split(/(?<=[.!?])\s+/).filter(Boolean);
-  if (sentences.length >= 2) {
-    return {
-      body: firstNewsSentence(sentences[0]!),
-      impact: sentences.slice(1).join(" ").trim(),
-    };
-  }
-  return {
-    body: firstNewsSentence(raw),
-    impact: "Factor this update into start/sit and bench priority decisions for the week.",
-  };
-}
-
 function PlayerNewsCell({
   headline,
   description,
@@ -431,6 +393,34 @@ function fmtProjStat(
   if (raw == null || !Number.isFinite(Number(raw))) return "-";
   const n = Number(raw);
   return digits > 0 ? n.toFixed(digits) : String(Math.round(n));
+}
+
+const PTS_ALLOW_TIERS: [max: number, key: string][] = [
+  [0, "pts_allow_0"],
+  [6, "pts_allow_1_6"],
+  [13, "pts_allow_7_13"],
+  [20, "pts_allow_14_20"],
+  [27, "pts_allow_21_27"],
+  [34, "pts_allow_28_34"],
+  [Infinity, "pts_allow_35p"],
+];
+
+/** Fantasy points for a weekly box score in league scoring; null when the player has no line. */
+function scoreActualLine(
+  stats: Record<string, number> | null,
+  map: ScoringMap,
+): number | null {
+  if (!stats) return null;
+  let line = stats;
+  const allowed = Number(stats["pts_allow"]);
+  const hasTier = PTS_ALLOW_TIERS.some(([, key]) => Number(stats[key]) > 0);
+  // Some defense lines only carry the points-allowed total, not its tier flag.
+  if (Number.isFinite(allowed) && !hasTier) {
+    const tier = PTS_ALLOW_TIERS.find(([max]) => allowed <= max)?.[1];
+    if (tier) line = { ...stats, [tier]: 1 };
+  }
+  const pts = scoreStats(line, map);
+  return pts == null ? null : Math.round(pts * 100) / 100;
 }
 
 /** Live stats: empty / missing / zero → dash. Pre-kickoff forces dash regardless. */
@@ -508,41 +498,26 @@ function ProjectionPlayerCell({
   );
 }
 
-type FeaturedNewsCard = {
-  player: Player;
-  item: {
-    id: string;
-    /** Owning sleeper id — must equal `player.id` before render. */
-    playerId: string;
-    headline: string;
-    description: string;
-    link: string | null;
-    published: string;
-  };
-  body: string;
-  impact: string;
-};
-
-type LeagueSidebarRow = {
+type RosterNewsItem = {
   id: string;
-  playerName: string;
-  sleeperId: string | null;
-  team: string | null;
-  pos: string | null;
-  snippet: string;
+  /** Owning sleeper id — must equal the roster player's id before render. */
+  playerId: string;
+  headline: string;
+  description: string;
   link: string | null;
-  injuryLabel: "Q" | "O" | "IR" | "NA" | null;
+  published: string;
+  source: string;
 };
 
-function SidebarInjuryLetter({ label }: { label: "Q" | "O" | "IR" | "NA" }) {
+function SidebarInjuryLetter({ short }: { short: string }) {
   return (
     <span
       className={cn(
         "mr-1.5 inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[2px] px-1 text-[9px] font-bold text-white",
-        label === "Q" ? "bg-amber-500/80" : "bg-rose-600/80",
+        short === "Q" ? "bg-amber-500/80" : short === "D" || short === "PUP" ? "bg-orange-500/80" : "bg-rose-600/80",
       )}
     >
-      {label}
+      {short === "OUT" ? "O" : short}
     </span>
   );
 }
@@ -600,93 +575,73 @@ function isGoofyOrMismatchedCopy(player: Player, text: string | null | undefined
   return false;
 }
 
-function premiumNewsHeadlineFallback(player: Player): string {
-  return `${player.name} Weekly Roster Update`;
+const SLEEPER_INJURY_SHORT: Record<string, string> = {
+  questionable: "Q",
+  doubtful: "D",
+  out: "OUT",
+  ir: "IR",
+  pup: "PUP",
+  sus: "SUSP",
+  suspended: "SUSP",
+  na: "NA",
+  dnr: "DNR",
+  cov: "COV",
+};
+
+/** Sleeper designation in the injury report's short form; "" when healthy. */
+function injuryShortFor(player: Player): string {
+  const raw = (player.injury_status ?? player.injury ?? "").trim().toLowerCase();
+  if (!raw || raw === "healthy" || raw === "active" || raw === "none") return "";
+  return SLEEPER_INJURY_SHORT[raw] ?? raw.toUpperCase().slice(0, 4);
 }
 
-function premiumNewsBodyFallback(player: Player): string {
-  const name = player.name;
-  const team = (player.team || "").trim().toUpperCase() || "club";
-  const pos = (player.pos || "").toUpperCase();
-  switch (pos) {
-    case "QB":
-      return `${name} continues directing the ${team} offensive scheme during weekly team preparations.`;
-    case "RB":
-      return `${name} maintains focus on backfield workloads and team walkthroughs ahead of the upcoming matchup.`;
-    case "WR":
-    case "TE":
-      return `${name} continues working through target-share alignments and team schemes with the ${team} passing offense.`;
-    default:
-      return `${name} continues preparations with the ${team} ahead of the upcoming weekly matchup.`;
+/** RotoWire blurbs lead with the news sentence; the rest is their fantasy analysis. */
+function splitRosterNews(item: RosterNewsItem): { news: string; analysis: string | null } {
+  const raw = item.description.trim();
+  const marker = /fantasy\s*impact\s*:/i.exec(raw);
+  if (marker) {
+    return {
+      news: raw.slice(0, marker.index).trim(),
+      analysis: raw.slice(marker.index + marker[0].length).trim() || null,
+    };
   }
-}
-
-function premiumNewsImpactFallback(player: Player): string {
-  const name = player.name;
-  const pos = (player.pos || "").toUpperCase();
-  switch (pos) {
-    case "QB":
-      return `Ensure ${name} is locked into starting configurations for optimal passing floor potential. Check final weather grids.`;
-    case "RB":
-    case "WR":
-    case "TE":
-      return "Monitor active team practice logs and official game-day depth chart declarations for situational volume adjustments.";
-    default:
-      return "Monitor active team practice logs and official game-day depth chart declarations for situational volume adjustments.";
+  if (item.source === "RotoWire") {
+    const [first, ...rest] = raw.split(/(?<=[.!?])\s+/);
+    return { news: first ?? raw, analysis: rest.join(" ").trim() || null };
   }
+  return { news: raw, analysis: null };
 }
 
-function resolveFeaturedBody(player: Player, body: string, item: FeaturedNewsCard["item"]): string {
-  if (
-    isGoofyOrMismatchedCopy(player, body) ||
-    !newsCopyBelongsToPlayer(player, { headline: item.headline, description: body })
-  ) {
-    return premiumNewsBodyFallback(player);
-  }
-  return body;
+/** Roster news in the injury report card shape so both pages share one card. */
+function rosterNewsCard(player: Player, item: RosterNewsItem): InjuryReportItem {
+  const short = injuryShortFor(player);
+  const { news, analysis } = splitRosterNews(item);
+  return {
+    id: `news-${player.id}-${item.id}`,
+    sleeperId: player.id,
+    playerName: player.name,
+    pos: player.pos,
+    team: player.team && player.team !== "FA" ? player.team : null,
+    headshot: null,
+    status: short ? (INJURY_STATUS_LABEL[short] ?? short) : "Active",
+    statusShort: short,
+    injury: player.injury_body_part ?? null,
+    headline: item.headline,
+    news,
+    analysis,
+    published: item.published,
+    returnDate: null,
+    link: item.link,
+    source: item.source,
+    sourceStatusShort: null,
+    sourceStatus: null,
+  };
 }
 
-function resolveFeaturedImpact(player: Player, impact: string): string {
-  if (isGoofyOrMismatchedCopy(player, impact)) {
-    return premiumNewsImpactFallback(player);
-  }
-  return impact;
-}
-
-const FANTASY_SIDEBAR_POS = new Set([
-  "QB",
-  "RB",
-  "WR",
-  "TE",
-  "K",
-  "DEF",
-  "DST",
-  "DL",
-  "LB",
-  "DB",
-  "DE",
-  "DT",
-  "CB",
-  "S",
-  "IDP",
-]);
-
-const GENERIC_SIDEBAR_NOISE_RE =
-  /\bnfl week\b|\buniforms?\b|\buniform combo\b|\bpower rankings?\b|\bwaiver wire\b|\bdfs\b|\bdraft kit\b|\bfantasy football 101\b|\bcoach\b|\bcoordinator\b|\bhead coach\b|\boffensive coordinator\b|\bdefensive coordinator\b|\bjesse minter\b/i;
-
-function isUsableInjurySidebarRow(row: LeagueSidebarRow): boolean {
-  const name = (row.playerName ?? "").trim();
-  if (!name) return false;
-  if (!row.sleeperId && sanitizePlayerName(name).length < 4) return false;
-  const hay = `${name} ${row.snippet ?? ""}`;
-  if (GENERIC_SIDEBAR_NOISE_RE.test(hay)) return false;
-  if (/\bcoach\b/i.test(name)) return false;
-  const pos = (row.pos ?? "").trim().toUpperCase();
-  // Require a known fantasy / IDP position when the feed supplies one.
-  if (pos && !FANTASY_SIDEBAR_POS.has(pos)) return false;
-  // Unpositioned rows without a sleeper id are too risky (coaches, staff, recaps).
-  if (!pos && !row.sleeperId) return false;
-  return true;
+function clipSnippet(text: string, max = 96): string {
+  const raw = text.trim();
+  if (raw.length <= max) return raw;
+  return `${raw.slice(0, max).replace(/\s+\S*$/, "")}...`;
 }
 
 function isIdpOrDefensivePos(pos: string | null | undefined): boolean {
@@ -710,7 +665,7 @@ function SidebarPlayerThumb({
   row,
 }: {
   resolved: Player | null;
-  row: LeagueSidebarRow;
+  row: Pick<InjuryReportItem, "sleeperId" | "pos" | "team">;
 }) {
   const pos = (resolved?.pos ?? row.pos ?? "").toUpperCase();
   const team = (resolved?.team ?? row.team ?? "").trim();
@@ -721,13 +676,7 @@ function SidebarPlayerThumb({
       : row.sleeperId && row.pos
         ? playerImage(row.sleeperId, row.pos as Pos, row.team ?? "")
         : "";
-  const isDefensiveOrMissing =
-    !headshotCandidate ||
-    isIdpOrDefensivePos(pos) ||
-    pos === "DEF" ||
-    pos === "DL" ||
-    pos === "LB" ||
-    pos === "DB";
+  const isDefensiveOrMissing = !headshotCandidate || isIdpOrDefensivePos(pos);
   const imageSrc = isDefensiveOrMissing ? logo ?? "" : headshotCandidate;
   const [src, setSrc] = useState(imageSrc);
   const showingLogo = Boolean(logo && src === logo);
@@ -757,166 +706,54 @@ function SidebarPlayerThumb({
   );
 }
 
+const SIDEBAR_ROWS = 12;
+
 /**
- * Single News shell: one parent grid, two permanent column children.
- * Left feed + right injury sidebar never render as separate top-level siblings.
+ * Left: news for this user's roster in the Injury Reports card style.
+ * Right: the latest league-wide injury reports, linking to the full Injury Reports page.
  */
 function MyTeamNewsPanel({
-  featuredCards,
-  featuredLoading,
-  sidebarRows,
+  feed,
+  feedLoading,
+  sidebar,
   sidebarLoading,
   players,
   onOpenPlayer,
 }: {
-  featuredCards: FeaturedNewsCard[];
-  featuredLoading: boolean;
-  sidebarRows: LeagueSidebarRow[];
+  feed: InjuryReportItem[];
+  feedLoading: boolean;
+  sidebar: InjuryReportItem[];
   sidebarLoading: boolean;
   players: Player[];
   onOpenPlayer: (id: string) => void;
 }) {
-  const sidebarTrack = useMemo(
-    () => sidebarRows.filter(isUsableInjurySidebarRow).slice(0, 10),
-    [sidebarRows],
-  );
-  const playersBySanitized = useMemo(() => {
-    const map = new Map<string, Player>();
-    for (const p of players) {
-      const key = sanitizePlayerName(p.name);
-      if (key && !map.has(key)) map.set(key, p);
-    }
-    return map;
-  }, [players]);
-
-  const resolveSidebarPlayer = (row: LeagueSidebarRow): Player | null => {
-    if (row.sleeperId) {
-      const byId = players.find((p) => p.id === row.sleeperId) ?? null;
-      if (byId) return byId;
-    }
-    return playersBySanitized.get(sanitizePlayerName(row.playerName)) ?? null;
-  };
+  const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
+  const sidebarTrack = sidebar.slice(0, SIDEBAR_ROWS);
 
   return (
-    <div className="mx-auto mt-4 grid w-full max-w-shell grid-cols-1 items-start gap-6 overflow-visible lg:grid-cols-[1fr_320px]">
-      {/* LEFT COLUMN — featured roster news */}
+    <div className="grid w-full grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_320px]">
       <section className="min-w-0 w-full" aria-label="Team news feed">
-        {featuredLoading && featuredCards.length === 0 ? (
-          <div className="mb-5 flex w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm">
-            <div className="w-full px-6 py-4 text-sm text-slate-500">Loading latest roster news…</div>
-          </div>
-        ) : featuredCards.length === 0 ? (
-          <div className="mb-5 flex w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm">
-            <div className="w-full px-6 py-4 text-sm text-slate-500">
-              No active ESPN notes for your rostered players right now.
-            </div>
+        {feed.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <p className="px-5 py-10 text-center text-sm text-slate-400">
+              {feedLoading ? "Loading your team's news…" : "No recent news for players on your team."}
+            </p>
           </div>
         ) : (
-          featuredCards.map(({ player, item, body, impact }) => {
-            // Strict ownership — never render copy that belongs to another player id.
-            if (item.playerId !== player.id) return null;
-            if (!newsCopyBelongsToPlayer(player, item)) return null;
-            const ago = newsTimeAgo(item.published);
-            const logo = teamLogo(player.team);
-            const displayBody = resolveFeaturedBody(player, body, item);
-            const displayImpact = resolveFeaturedImpact(player, impact);
-            const displayHeadline = newsCopyBelongsToPlayer(player, {
-              headline: item.headline,
-              description: "",
-            })
-              ? item.headline
-              : premiumNewsHeadlineFallback(player);
-            return (
-              <article
-                key={`featured-${player.id}-${item.id}`}
-                className="mb-5 flex w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm"
-              >
-                {/* Full-bleed branded banner */}
-                <div
-                  className="relative z-10 flex w-full items-center justify-between overflow-hidden px-6 py-4"
-                  style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
-                >
-                  <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-r from-black/25 via-transparent to-transparent" />
-                  {logo ? (
-                    <img
-                      src={logo}
-                      alt=""
-                      aria-hidden="true"
-                      className="pointer-events-none absolute right-2 top-1/2 z-0 h-24 w-24 -translate-y-1/2 select-none object-contain opacity-[0.14] mix-blend-normal"
-                    />
-                  ) : null}
-                  <div className="relative z-20 flex min-w-0 items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => onOpenPlayer(player.id)}
-                      className="flex-shrink-0"
-                      aria-label={`Open ${player.name} details`}
-                    >
-                      <img
-                        src={playerImage(player.id, player.pos, player.team)}
-                        alt=""
-                        loading="lazy"
-                        className="relative z-20 h-14 w-14 flex-shrink-0 rounded-full border-2 border-white/40 object-cover shadow-sm"
-                        onError={(e) => {
-                          e.currentTarget.style.visibility = "hidden";
-                        }}
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onOpenPlayer(player.id)}
-                      className="truncate text-base font-black tracking-wide text-white hover:opacity-90"
-                    >
-                      {player.name}
-                    </button>
-                  </div>
-                </div>
-
-                {/* White content pad under banner */}
-                <div className="flex w-full flex-col items-start p-6 pt-4">
-                  {item.link && displayHeadline === item.headline ? (
-                    <a
-                      href={item.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="relative z-10 mt-1.5 mb-1 block cursor-pointer text-xl font-black tracking-tight text-slate-900 transition-colors hover:text-blue-600"
-                    >
-                      {displayHeadline}
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onOpenPlayer(player.id)}
-                      className="relative z-10 mt-1.5 mb-1 block cursor-pointer text-left text-xl font-black tracking-tight text-slate-900 transition-colors hover:text-blue-600"
-                    >
-                      {displayHeadline}
-                    </button>
-                  )}
-
-                  <span className="mb-4 block text-[11px] font-medium text-slate-400">
-                    By ESPN{ago ? ` • ${ago}` : ""}
-                  </span>
-
-                  <p className="mb-4 block w-full border-l-2 border-slate-200/80 pl-3.5 text-left text-sm font-medium italic leading-relaxed text-slate-500">
-                    {displayBody}
-                  </p>
-
-                  <div className="w-full rounded-xl border border-slate-100 bg-slate-50/70 p-4 text-left shadow-inner-sm">
-                    <span className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-900">
-                      Fantasy Impact:
-                    </span>
-                    <p className="text-left text-xs font-medium leading-relaxed text-slate-600">
-                      {displayImpact}
-                    </p>
-                  </div>
-                </div>
-              </article>
-            );
-          })
+          <ul className="space-y-4">
+            {feed.map((item) => (
+              <InjuryReportCard
+                key={item.id}
+                item={item}
+                owner={null}
+                showOwnership={false}
+                onOpen={onOpenPlayer}
+              />
+            ))}
+          </ul>
         )}
       </section>
 
-      {/* RIGHT COLUMN — PLAYER INJURY NEWS */}
       <aside
         className="w-full min-w-0 self-start text-left lg:sticky lg:top-4"
         aria-label="Player injury news"
@@ -941,62 +778,64 @@ function MyTeamNewsPanel({
                     <p className="py-2 text-xs text-slate-400">No active injury reports yet.</p>
                   )
                 : sidebarTrack.map((row) => {
-                    if (!isUsableInjurySidebarRow(row)) return null;
-                    const resolved = resolveSidebarPlayer(row);
-                    const openId = resolved?.id ?? row.sleeperId;
-                    const pos = (resolved?.pos ?? row.pos ?? "").toUpperCase();
-                    if (pos && !FANTASY_SIDEBAR_POS.has(pos)) return null;
+                    const resolved = row.sleeperId ? (playersById.get(row.sleeperId) ?? null) : null;
+                    const openId = row.sleeperId;
+                    const ago = newsTimeAgo(row.published);
+                    const snippet = clipSnippet(row.news || row.headline);
                     return (
                       <div
                         key={row.id}
-                        className="flex w-full items-center space-x-3 border-b border-slate-50 py-2 last:border-0"
+                        className="flex w-full items-start space-x-3 border-b border-slate-50 py-2 last:border-0"
                       >
                         {openId ? (
                           <button
                             type="button"
                             onClick={() => onOpenPlayer(openId)}
-                            className="flex-shrink-0"
+                            className="mt-0.5 flex-shrink-0"
                             aria-label={`Open ${row.playerName}`}
                           >
                             <SidebarPlayerThumb resolved={resolved} row={row} />
                           </button>
                         ) : (
-                          <SidebarPlayerThumb resolved={resolved} row={row} />
+                          <span className="mt-0.5 flex-shrink-0">
+                            <SidebarPlayerThumb resolved={resolved} row={row} />
+                          </span>
                         )}
-                        <p className="min-w-0 text-xs leading-tight text-slate-700">
-                          {openId ? (
-                            <button
-                              type="button"
-                              onClick={() => onOpenPlayer(openId)}
-                              className="mr-1.5 text-xs font-black text-slate-900 hover:text-blue-600"
-                            >
-                              {resolved?.name ?? row.playerName}
-                            </button>
-                          ) : (
-                            <span className="mr-1.5 text-xs font-black text-slate-900">
-                              {row.playerName}
-                            </span>
-                          )}
-                          {row.injuryLabel ? <SidebarInjuryLetter label={row.injuryLabel} /> : null}
-                          {row.link ? (
-                            <a
-                              href={row.link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-slate-700 transition-colors hover:text-blue-600"
-                            >
-                              {row.snippet}
-                            </a>
-                          ) : (
-                            <span className="text-xs text-slate-700">{row.snippet}</span>
-                          )}
-                        </p>
+                        <div className="min-w-0">
+                          <p className="text-xs leading-tight text-slate-700">
+                            {openId ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenPlayer(openId)}
+                                className="mr-1.5 text-xs font-black text-slate-900 hover:text-blue-600"
+                              >
+                                {row.playerName}
+                              </button>
+                            ) : (
+                              <span className="mr-1.5 text-xs font-black text-slate-900">{row.playerName}</span>
+                            )}
+                            {row.statusShort ? <SidebarInjuryLetter short={row.statusShort} /> : null}
+                            {row.link ? (
+                              <a
+                                href={row.link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-slate-700 transition-colors hover:text-blue-600"
+                              >
+                                {snippet}
+                              </a>
+                            ) : (
+                              <span className="text-xs text-slate-700">{snippet}</span>
+                            )}
+                          </p>
+                          {ago ? <span className="mt-0.5 block text-[10px] text-slate-400">{ago}</span> : null}
+                        </div>
                       </div>
                     );
                   })}
           </div>
           <Link
-            to="/the-wire"
+            to="/injury-reports"
             className="block cursor-pointer pt-2 text-center text-xs font-bold tracking-wide text-blue-600 hover:text-blue-800"
           >
             View All News
@@ -1070,7 +909,13 @@ function PlaybookMyTeamPage() {
   }, [nflWeek.data, activeLeagueId]);
 
   const activeWeek = selectedWeek ?? nflWeek.data ?? 1;
-  const { projectFor, statsFor, rankFor, loading: projectionsLoading } = useLeagueProjections(activeWeek);
+  const {
+    projectFor,
+    statsFor,
+    rankFor,
+    scoringMap,
+    loading: projectionsLoading,
+  } = useLeagueProjections(activeWeek);
   const { statsFor: actualStatsFor } = useWeeklyActualStats(activeWeek);
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
@@ -1178,7 +1023,24 @@ function PlaybookMyTeamPage() {
     return (mine?.playerPoints ?? {}) as Record<string, number>;
   }, [matchups, myTeam, activeLeague?.teamName]);
 
-  const livePtsOf = (player: Player) => Number(myPlayerPoints[player.id] ?? 0) || 0;
+  /**
+   * The host's matchup only carries players rostered that week, so anyone added
+   * later is scored from his box score with the league's settings.
+   */
+  const boxScorePoints = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const player of rosteredPlayers) {
+      const pts = scoreActualLine(actualStatsFor(player.id), scoringMap);
+      if (pts != null) map.set(player.id, pts);
+    }
+    return map;
+  }, [rosteredPlayers, actualStatsFor, scoringMap]);
+
+  const livePtsOf = (player: Player): number => {
+    const host = Number(myPlayerPoints[player.id]);
+    if (myPlayerPoints[player.id] != null && Number.isFinite(host)) return host;
+    return boxScorePoints.get(player.id) ?? 0;
+  };
 
   const offensiveStatRows = useMemo(() => {
     return projectionSourceRows
@@ -1192,7 +1054,7 @@ function PlaybookMyTeamPage() {
         if (groupDelta !== 0) return groupDelta;
         return livePtsOf(pb) - livePtsOf(pa);
       });
-  }, [projectionSourceRows, myPlayerPoints]);
+  }, [projectionSourceRows, myPlayerPoints, boxScorePoints]);
 
   const kickerStatRows = useMemo(
     () =>
@@ -1200,7 +1062,7 @@ function PlaybookMyTeamPage() {
         .filter((r) => r.player?.pos === "K")
         .slice()
         .sort((a, b) => livePtsOf(b.player!) - livePtsOf(a.player!)),
-    [projectionSourceRows, myPlayerPoints],
+    [projectionSourceRows, myPlayerPoints, boxScorePoints],
   );
 
   const defensiveStatRows = useMemo(
@@ -1212,7 +1074,7 @@ function PlaybookMyTeamPage() {
         })
         .slice()
         .sort((a, b) => livePtsOf(b.player!) - livePtsOf(a.player!)),
-    [projectionSourceRows, myPlayerPoints],
+    [projectionSourceRows, myPlayerPoints, boxScorePoints],
   );
 
   const newsQueries = useQueries({
@@ -1233,14 +1095,7 @@ function PlaybookMyTeamPage() {
         link: string | null;
         published: string | null;
         injuryNote: string | null;
-        items: {
-          id: string;
-          playerId: string;
-          headline: string;
-          description: string;
-          link: string | null;
-          published: string;
-        }[];
+        items: RosterNewsItem[];
         loading: boolean;
       }
     >();
@@ -1268,6 +1123,7 @@ function PlaybookMyTeamPage() {
           description: item.description?.trim() || "",
           link: item.link?.trim() || null,
           published: item.published?.trim() || "",
+          source: item.source?.trim() || "ESPN",
         }))
         .filter((item) => newsCopyBelongsToPlayer(p, item));
       const top = items[0];
@@ -1284,76 +1140,40 @@ function PlaybookMyTeamPage() {
     return map;
   }, [rosteredPlayers, newsQueries]);
 
-  const featuredNewsCards = useMemo(() => {
-    return rosteredPlayers
-      .map((player) => {
-        const pack = newsById.get(player.id);
-        const loading = Boolean(pack?.loading);
-        const top =
-          pack?.items.find(
-            (item) =>
-              item.playerId === player.id &&
-              newsCopyBelongsToPlayer(player, item) &&
-              !isGoofyOrMismatchedCopy(player, item.headline),
-          ) ?? null;
-
-        // Always show a card for rostered players; use premium editorial fallbacks
-        // when live ESPN copy is missing, goofy, or mismatched.
-        if (!top || top.playerId !== player.id) {
-          return {
-            player,
-            item: {
-              id: `fallback-${player.id}`,
-              playerId: player.id,
-              headline: premiumNewsHeadlineFallback(player),
-              description: premiumNewsBodyFallback(player),
-              link: null,
-              published: "",
-            },
-            body: premiumNewsBodyFallback(player),
-            impact: premiumNewsImpactFallback(player),
-            loading,
-          } satisfies FeaturedNewsCard & { loading: boolean };
-        }
-
-        const copy = splitNewsCopy(top.description || top.headline);
-        const rawImpact =
-          pack?.injuryNote ||
-          copy.impact ||
-          premiumNewsImpactFallback(player);
-        const body = resolveFeaturedBody(player, copy.body, top);
-        const impact = resolveFeaturedImpact(player, firstNewsSentence(rawImpact));
-        return {
-          player,
-          item: {
-            ...top,
-            headline: newsCopyBelongsToPlayer(player, {
-              headline: top.headline,
-              description: "",
-            })
-              ? top.headline
-              : premiumNewsHeadlineFallback(player),
-          },
-          body,
-          impact,
-          loading,
-        } satisfies FeaturedNewsCard & { loading: boolean };
-      })
-      .filter((row): row is NonNullable<typeof row> => row != null);
-  }, [rosteredPlayers, newsById]);
-
-  const leagueWideNews = useQuery({
-    queryKey: ["league-wide-injury-news", 24],
-    queryFn: () => getLeaguePlayerNews({ data: { limit: 24 } }),
-    staleTime: 1000 * 60 * 10,
-    // Prefetch so the News sidebar column never mounts empty on first paint / reload.
-    enabled: true,
+  const injuryReports = useQuery({
+    queryKey: ["injury-reports"],
+    queryFn: () => getInjuryReports(),
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 10 * 60 * 1000,
+    retry: 1,
+    enabled: tab === "news",
   });
 
-  const morePlayerNews = useMemo(
-    () => (leagueWideNews.data ?? []).filter(isUsableInjurySidebarRow),
-    [leagueWideNews.data],
-  );
+  const reportBySleeperId = useMemo(() => {
+    const map = new Map<string, InjuryReportItem>();
+    for (const item of injuryReports.data?.items ?? []) {
+      if (item.sleeperId && !map.has(item.sleeperId)) map.set(item.sleeperId, item);
+    }
+    return map;
+  }, [injuryReports.data]);
+
+  /** One card per rostered player: his injury report when listed, else his latest news. */
+  const myTeamNews = useMemo(() => {
+    const out: InjuryReportItem[] = [];
+    for (const player of rosteredPlayers) {
+      const report = reportBySleeperId.get(player.id);
+      if (report) {
+        out.push(report);
+        continue;
+      }
+      const top = newsById
+        .get(player.id)
+        ?.items.find((item) => item.playerId === player.id && !isGoofyOrMismatchedCopy(player, item.headline));
+      if (top) out.push(rosterNewsCard(player, top));
+    }
+    const at = (iso: string) => Date.parse(iso) || 0;
+    return out.sort((a, b) => at(b.published) - at(a.published));
+  }, [rosteredPlayers, reportBySleeperId, newsById]);
 
   const loading =
     playersLoading || rostersLoading || projectionsLoading || matchupsLoading || nflWeek.isLoading;
@@ -1442,7 +1262,7 @@ function PlaybookMyTeamPage() {
   };
 
   const ptsDetail = (player: Player) => {
-    const live = Number(myPlayerPoints[player.id] ?? 0) || 0;
+    const live = livePtsOf(player);
     const progress = progressForPlayer(player, progressByNflTeam);
     const phase = progress?.phase ?? "pre";
     const showLive = phase !== "pre" || live > 0;
@@ -1455,14 +1275,17 @@ function PlaybookMyTeamPage() {
   };
 
   const gameIsLive = (player: Player): boolean => {
-    const live = Number(myPlayerPoints[player.id] ?? 0) || 0;
     const phase = progressForPlayer(player, progressByNflTeam)?.phase ?? "pre";
-    return phase !== "pre" || live > 0;
+    return (
+      phase !== "pre" ||
+      livePtsOf(player) !== 0 ||
+      hasScorableProjectionStats(actualStatsFor(player.id))
+    );
   };
 
   const fmtLivePts = (player: Player): string => {
     if (!gameIsLive(player)) return "-";
-    const pts = Number(myPlayerPoints[player.id] ?? 0) || 0;
+    const pts = livePtsOf(player);
     if (pts === 0) return "-";
     return pts.toFixed(1);
   };
@@ -1502,7 +1325,7 @@ function PlaybookMyTeamPage() {
       {tab === "overview" && myTeam ? (
         <TeamOverview rosterId={myTeam.slot} onOpenPlayer={openPlayer} />
       ) : (
-      <section className={playbookCardClass}>
+      <section>
       {loading && !myTeam ? (
         <p className="text-sm text-muted-foreground">Loading your roster…</p>
       ) : !myTeam ? (
@@ -2146,10 +1969,10 @@ function PlaybookMyTeamPage() {
         </div>
       ) : tab === "news" ? (
         <MyTeamNewsPanel
-          featuredCards={featuredNewsCards}
-          featuredLoading={newsQueries.some((q) => q.isLoading)}
-          sidebarRows={morePlayerNews}
-          sidebarLoading={leagueWideNews.isLoading}
+          feed={myTeamNews}
+          feedLoading={injuryReports.isLoading || newsQueries.some((q) => q.isLoading)}
+          sidebar={injuryReports.data?.items ?? []}
+          sidebarLoading={injuryReports.isLoading}
           players={players}
           onOpenPlayer={openPlayer}
         />

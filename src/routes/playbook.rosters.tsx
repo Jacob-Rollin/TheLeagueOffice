@@ -165,44 +165,40 @@ function RosterInjuryBadge({
     );
   }
 
-  const raw = (player.injury || player.injury_status || player.injuryStatus || "")
-    .trim()
-    .toUpperCase();
-  if (!raw || /^(HEALTHY|ACTIVE|NONE)$/.test(raw)) return null;
-
-  let label: "Q" | "O" | "D" | "IR" | null = null;
-  let tone = "bg-amber-500";
-  if (raw === "IR" || raw === "INJURED RESERVE" || raw === "PUP") {
-    label = "IR";
-    tone = "bg-red-700";
-  } else if (raw === "Q" || raw === "QUESTIONABLE") {
-    label = "Q";
-    tone = "bg-amber-500";
-  } else if (raw === "D" || raw === "DOUBTFUL") {
-    label = "D";
-    tone = "bg-rose-600";
-  } else if (
-    raw === "O" ||
-    raw === "OUT" ||
-    raw === "SUSPENDED" ||
-    raw === "NA" ||
-    raw === "INACTIVE"
-  ) {
-    label = "O";
-    tone = "bg-rose-600";
-  }
+  const label = injuryTier(player);
   if (!label) return null;
 
   return (
     <span
       className={cn(
         "shrink-0 rounded px-1 py-0.5 text-[8px] font-black uppercase leading-none tracking-wider text-white",
-        tone,
+        INJURY_TIER_TONE[label],
       )}
     >
       {label}
     </span>
   );
+}
+
+type InjuryTier = "IR" | "O" | "D" | "Q";
+
+const INJURY_TIER_TONE: Record<InjuryTier, string> = {
+  IR: "bg-red-700",
+  O: "bg-rose-600",
+  D: "bg-rose-600",
+  Q: "bg-amber-500",
+};
+
+function injuryTier(player: Player): InjuryTier | null {
+  const raw = (player.injury || player.injury_status || player.injuryStatus || "")
+    .trim()
+    .toUpperCase();
+  if (!raw || /^(HEALTHY|ACTIVE|NONE)$/.test(raw)) return null;
+  if (raw === "IR" || raw === "INJURED RESERVE" || raw === "PUP") return "IR";
+  if (raw === "Q" || raw === "QUESTIONABLE") return "Q";
+  if (raw === "D" || raw === "DOUBTFUL") return "D";
+  if (["O", "OUT", "SUSPENDED", "NA", "INACTIVE"].includes(raw)) return "O";
+  return null;
 }
 
 function PlaybookRostersPage() {
@@ -303,10 +299,30 @@ function PlaybookRostersPage() {
     const pfRank = pfRankIndex >= 0 ? pfRankIndex + 1 : null;
     const pointsFor = standing?.pointsFor ?? null;
 
+    // Questionable players usually suit up, so only IR, Out and Doubtful lower the health score.
     const rosterSize = selectedTeam.players.length || 1;
-    const irCount = (selectedTeam.ir ?? []).length;
-    const activeCount = Math.max(0, rosterSize - irCount);
-    const healthPct = Math.round((activeCount / rosterSize) * 100);
+    const irIds = new Set((selectedTeam.ir ?? []).map((p) => p.id));
+    const tierCounts: Record<InjuryTier, number> = { IR: 0, O: 0, D: 0, Q: 0 };
+    let startersOut = 0;
+    for (const p of selectedTeam.players) {
+      const tier = irIds.has(p.id) ? "IR" : injuryTier(p);
+      if (!tier) continue;
+      tierCounts[tier] += 1;
+      if (tier !== "Q" && starterIds.has(p.id)) startersOut += 1;
+    }
+    const unavailable = tierCounts.IR + tierCounts.O + tierCounts.D;
+    const healthPct = Math.round((Math.max(0, rosterSize - unavailable) / rosterSize) * 100);
+    const healthBreakdown = (
+      [
+        [tierCounts.IR, "IR"],
+        [tierCounts.O, "Out"],
+        [tierCounts.D, "Doubtful"],
+        [tierCounts.Q, "Questionable"],
+      ] as const
+    )
+      .filter(([count]) => count > 0)
+      .map(([count, label]) => `${count} ${label}`)
+      .join(" · ");
 
     const emptyStarters = starterRows.filter((r) => !r.player).length;
     const posCounts: Record<string, number> = {};
@@ -348,10 +364,13 @@ function PlaybookRostersPage() {
         pointsFor != null
           ? `${pointsFor.toFixed(1)} pts${pfRank != null ? ` · Rank ${pfRank}` : ""}`
           : "—",
-      healthLabel: `${healthPct}% · ${irCount} Active IR`,
+      healthLabel: `${healthPct}% · ${
+        startersOut > 0 ? `${startersOut} Starter${startersOut === 1 ? "" : "s"} Out` : "Starters Healthy"
+      }`,
+      healthDetail: healthBreakdown || "No injury designations",
       urgencyLabel: `${urgency} · ${urgencyNote}`,
     };
-  }, [selectedTeam, standings, teams.length, starterRows, rosterPositions]);
+  }, [selectedTeam, standings, teams.length, starterRows, starterIds, rosterPositions]);
 
   const topTargets = useMemo(() => {
     if (!selectedTeam || !myTeam || selectedTeam.slot === myTeam.slot) return [] as Player[];
@@ -554,7 +573,11 @@ function PlaybookRostersPage() {
                 <dl className="space-y-3">
                   <IntelRow label="League Rank" value={managerIntel?.leagueRankLabel ?? "—"} />
                   <IntelRow label="Points For (PF)" value={managerIntel?.pointsForLabel ?? "—"} />
-                  <IntelRow label="Roster Health" value={managerIntel?.healthLabel ?? "—"} />
+                  <IntelRow
+                    label="Roster Health"
+                    value={managerIntel?.healthLabel ?? "—"}
+                    {...(managerIntel ? { detail: managerIntel.healthDetail } : {})}
+                  />
                   <IntelRow label="Trade Urgency" value={managerIntel?.urgencyLabel ?? "—"} />
                 </dl>
               </section>
@@ -620,11 +643,16 @@ function PlaybookRostersPage() {
   );
 }
 
-function IntelRow({ label, value }: { label: string; value: string }) {
+function IntelRow({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className="text-[11px] font-bold tracking-wide text-slate-500 uppercase">{label}</dt>
-      <dd className="text-right text-xs font-black text-slate-900">{value}</dd>
+      <dd className="text-right text-xs font-black text-slate-900">
+        {value}
+        {detail ? (
+          <span className="mt-0.5 block text-[10px] font-semibold text-slate-500">{detail}</span>
+        ) : null}
+      </dd>
     </div>
   );
 }

@@ -226,6 +226,31 @@ export const getFantasyLeaders = createServerFn({ method: "GET" })
     return await loadFantasyLeaders(data.season);
   });
 
+export const getTradeMarket = createServerFn({ method: "GET" })
+  .inputValidator((input?: { format?: string }) => ({
+    format: (input?.format === "std" || input?.format === "ppr" ? input.format : "half") as
+      | "std"
+      | "half"
+      | "ppr",
+  }))
+  .handler(async ({ data }) => {
+    const { loadTradeMarket } = await import("./trade-market.server");
+    return await loadTradeMarket(data.format);
+  });
+
+export const getMarketHistory = createServerFn({ method: "GET" })
+  .inputValidator((input: { fcId: number; format?: string }) => ({
+    fcId: Math.max(0, Math.trunc(Number(input?.fcId) || 0)),
+    format: (input?.format === "std" || input?.format === "ppr" ? input.format : "half") as
+      | "std"
+      | "half"
+      | "ppr",
+  }))
+  .handler(async ({ data }) => {
+    const { loadMarketHistory } = await import("./trade-market.server");
+    return await loadMarketHistory(data.fcId, data.format);
+  });
+
 export const getMostTargetedPlayers = createServerFn({ method: "POST" })
   .inputValidator((input?: { season?: string }) => ({
     season: input?.season != null ? String(input.season).slice(0, 16) : undefined,

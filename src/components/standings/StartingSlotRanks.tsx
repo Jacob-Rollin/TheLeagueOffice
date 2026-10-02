@@ -2,6 +2,7 @@ import { ChevronRight } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 
 import { playbookPanelTitleClass, TeamAvatarBadge } from "@/components/playbook/panels";
+import { ROOM_POSITIONS as POSITIONS, positionRoomRanks, rankValues } from "@/lib/position-room-ranks";
 import type { StartingSlotRanks as SlotRanksData } from "@/lib/standings-projections.server";
 import { cn } from "@/lib/utils";
 
@@ -14,8 +15,6 @@ export type SlotRankTeamMeta = {
 };
 
 type View = "seats" | "positions";
-
-const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 
 const POS_TINT: Record<string, string> = {
   QB: "bg-qb/70 text-white border-qb/70",
@@ -31,17 +30,6 @@ const HEAT_TIERS = [
   { label: "Below avg", className: "bg-rose-100 text-rose-900" },
   { label: "Bottom", className: "bg-rose-300 text-rose-950" },
 ] as const;
-
-/** Competition ranking (1, 2, 2, 4), highest value first. */
-function rankValues(values: { id: number; value: number }[]): Map<number, number> {
-  const sorted = [...values].sort((a, b) => b.value - a.value);
-  const out = new Map<number, number>();
-  sorted.forEach((row, index) => {
-    const prev = sorted[index - 1];
-    out.set(row.id, prev && Math.abs(prev.value - row.value) < 0.05 ? out.get(prev.id)! : index + 1);
-  });
-  return out;
-}
 
 /** Five even tiers by rank: strong green for the best seats down to strong red for the worst. */
 function heatClass(rank: number, teams: number): string {
@@ -119,16 +107,8 @@ export function StartingSlotRanks({
   const totalRanks = useMemo(() => rankValues(rows.map((r) => ({ id: r.rosterId, value: r.total }))), [rows]);
 
   const positionRows = useMemo(() => {
-    const sums = rows.map((r) => {
-      const byPos: Record<string, number> = {};
-      for (const seat of r.seats) {
-        if (seat.pos) byPos[seat.pos] = (byPos[seat.pos] ?? 0) + seat.ppg;
-      }
-      return { rosterId: r.rosterId, byPos };
-    });
-    const posRanks = Object.fromEntries(
-      POSITIONS.map((pos) => [pos, rankValues(sums.map((s) => ({ id: s.rosterId, value: s.byPos[pos] ?? 0 })))]),
-    ) as Record<string, Map<number, number>>;
+    const { ppg, ranks: posRanks } = positionRoomRanks(rows);
+    const sums = rows.map((r) => ({ rosterId: r.rosterId, byPos: ppg.get(r.rosterId)! as Record<string, number> }));
     const kept = sums
       .map((s) => ({
         ...s,
