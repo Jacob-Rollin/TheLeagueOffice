@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Trash2 } from "lucide-react";
@@ -137,6 +137,12 @@ function AdminPage() {
         <button type="button" className={tabClass("users")} onClick={() => setTab("users")}>
           Users
         </button>
+        <Link
+          to="/admin/projection-analytics"
+          className="border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Projection Analytics
+        </Link>
       </div>
 
       {tab === "invites" ? (
