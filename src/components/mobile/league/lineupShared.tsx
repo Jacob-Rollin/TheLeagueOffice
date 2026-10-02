@@ -159,6 +159,14 @@ export function shortName(player: Player) {
   return rest.length ? `${first?.charAt(0)}. ${rest.join(" ")}` : player.name;
 }
 
+const MULTI_LETTER_INJURY = new Set(["IR", "PUP", "SUS", "COV", "NA", "DNR"]);
+
+export function injuryAbbrev(status: string | null | undefined): string | null {
+  const s = status?.trim().toUpperCase();
+  if (!s) return null;
+  return MULTI_LETTER_INJURY.has(s) ? s : s.charAt(0);
+}
+
 export function ordinal(n: number) {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;

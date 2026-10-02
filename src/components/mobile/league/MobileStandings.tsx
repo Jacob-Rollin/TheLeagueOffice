@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { resolveAvatarUrl } from "@/components/playbook/panels";
 import type { StandingRow } from "@/lib/league.server";
@@ -57,12 +57,25 @@ export function MobileStandingsTable({
             const mine = isMine(row);
             const cut = playoffTeams > 0 && index === playoffTeams;
             return (
+              <Fragment key={row.rosterId}>
+              {cut ? (
+                <tr aria-hidden>
+                  <td colSpan={5} className="relative h-0 p-0">
+                    <div className="absolute inset-x-0 top-0 z-10 flex -translate-y-1/2 items-center">
+                      <span className="flex-1 border-t-2 border-dashed border-m-accent" />
+                      <span className="rounded-full bg-m-card px-2 font-display text-[10px] font-bold uppercase leading-none tracking-widest text-m-accent">
+                        Playoff Line
+                      </span>
+                      <span className="flex-1 border-t-2 border-dashed border-m-accent" />
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
               <tr
-                key={row.rosterId}
                 className={cn(
                   index % 2 === 1 && "bg-m-row-alt",
                   mine && "bg-m-highlight",
-                  cut ? "border-t-2 border-dashed border-m-accent" : "border-t border-m-border",
+                  !cut && "border-t border-m-border",
                 )}
               >
                 <td className="bg-m-rank-col px-3 py-2.5 text-center">
@@ -88,6 +101,7 @@ export function MobileStandingsTable({
                 <td className="px-1 py-2.5 text-right tabnum">{points(row.pointsFor)}</td>
                 <td className="py-2.5 pl-1 pr-3 text-right tabnum text-m-muted">{points(row.pointsAgainst)}</td>
               </tr>
+              </Fragment>
             );
           })}
         </tbody>

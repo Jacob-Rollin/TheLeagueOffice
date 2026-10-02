@@ -25,6 +25,7 @@ import {
   scheduleOpponent,
   shortName,
   slotLabels,
+  injuryAbbrev,
   useNflSchedule,
   type LineupRow,
 } from "./lineupShared";
@@ -329,7 +330,7 @@ function LineupCard({
             {shortName(player)}
             {player.injury_status ? (
               <span className="ml-1.5 align-middle text-[11px] font-bold uppercase text-red-500">
-                {player.injury_status.slice(0, 1)}
+                {injuryAbbrev(player.injury_status)}
               </span>
             ) : null}
           </p>

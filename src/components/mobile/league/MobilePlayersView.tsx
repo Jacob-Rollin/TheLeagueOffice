@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import {
   HEX_CLIP,
   REGULAR_SEASON_WEEKS,
-  gameStripLabels, progressFor, scheduleOpponent, shortName, useNflSchedule } from "./lineupShared";
+  gameStripLabels, injuryAbbrev, progressFor, scheduleOpponent, shortName, useNflSchedule } from "./lineupShared";
 
 type PosFilter = "ALL" | "QB" | "RB" | "WR" | "TE" | "FLEX" | "K" | "DEF";
 type Mode = "projections" | "stats" | "trends";
@@ -564,7 +564,7 @@ function PlayerRow({
               {shortName(player)}
               {player.injury_status ? (
                 <span className="ml-1 align-middle text-[10px] font-bold uppercase text-red-500">
-                  {player.injury_status.slice(0, 1)}
+                  {injuryAbbrev(player.injury_status)}
                 </span>
               ) : null}
             </p>
