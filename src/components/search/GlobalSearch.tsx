@@ -37,6 +37,11 @@ const PAGES: { label: string; to: string; hint: string }[] = [
   { label: "The Wire", to: "/waiver", hint: "Waivers" },
   { label: "Top Available", to: "/top-available", hint: "Best available players in your league" },
   {
+    label: "Are They Playing?",
+    to: "/are-they-playing",
+    hint: "Chance injured players suit up this week",
+  },
+  {
     label: "Trade Market Values",
     to: "/trade-market-values",
     hint: "Market values, Buy Low and Sell High targets",

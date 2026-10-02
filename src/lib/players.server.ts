@@ -1912,6 +1912,16 @@ const sleeperInjuryIndex = memo<Map<string, SleeperInjury>>(10 * 60 * 1000, asyn
   return map;
 });
 
+/** Live Sleeper injury fields by player id — the same overlay the player popup applies. */
+export async function loadLiveInjuryStatuses(): Promise<
+  Record<string, { status: string | null; bodyPart: string | null }>
+> {
+  const index = await sleeperInjuryIndex("current");
+  const out: Record<string, { status: string | null; bodyPart: string | null }> = {};
+  for (const [id, entry] of index) out[id] = { status: entry.status, bodyPart: entry.bodyPart };
+  return out;
+}
+
 const SLEEPER_STATUS_SHORT: Record<string, string> = {
   ir: "IR",
   out: "OUT",

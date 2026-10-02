@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AreTheyPlayingRouteImport } from './routes/are-they-playing'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as DraftRouteImport } from './routes/draft'
 import { Route as FantasyLeadersRouteImport } from './routes/fantasy-leaders'
@@ -71,6 +72,11 @@ import { Route as MLeagueLeagueIdWaiversRouteImport } from './routes/m.league.$l
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AreTheyPlayingRoute = AreTheyPlayingRouteImport.update({
+  id: '/are-they-playing',
+  path: '/are-they-playing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -363,6 +369,7 @@ const MLeagueLeagueIdWaiversRoute = MLeagueLeagueIdWaiversRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/are-they-playing': typeof AreTheyPlayingRoute
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/fantasy-leaders': typeof FantasyLeadersRoute
@@ -423,6 +430,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/are-they-playing': typeof AreTheyPlayingRoute
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/fantasy-leaders': typeof FantasyLeadersRoute
@@ -481,6 +489,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/are-they-playing': typeof AreTheyPlayingRoute
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
   '/fantasy-leaders': typeof FantasyLeadersRoute
@@ -543,6 +552,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/are-they-playing'
     | '/auth'
     | '/draft'
     | '/fantasy-leaders'
@@ -603,6 +613,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/are-they-playing'
     | '/auth'
     | '/draft'
     | '/fantasy-leaders'
@@ -660,6 +671,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/are-they-playing'
     | '/auth'
     | '/draft'
     | '/fantasy-leaders'
@@ -721,6 +733,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AreTheyPlayingRoute: typeof AreTheyPlayingRoute
   AuthRoute: typeof AuthRoute
   DraftRoute: typeof DraftRoute
   FantasyLeadersRoute: typeof FantasyLeadersRoute
@@ -770,6 +783,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/are-they-playing': {
+      id: '/are-they-playing'
+      path: '/are-they-playing'
+      fullPath: '/are-they-playing'
+      preLoaderRoute: typeof AreTheyPlayingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -1238,6 +1258,7 @@ const PlaybookRouteWithChildren = PlaybookRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AreTheyPlayingRoute: AreTheyPlayingRoute,
   AuthRoute: AuthRoute,
   DraftRoute: DraftRoute,
   FantasyLeadersRoute: FantasyLeadersRoute,

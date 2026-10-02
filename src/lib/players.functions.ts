@@ -226,6 +226,20 @@ export const getFantasyLeaders = createServerFn({ method: "GET" })
     return await loadFantasyLeaders(data.season);
   });
 
+export const getLiveInjuryStatuses = createServerFn({ method: "GET" }).handler(async () => {
+  const { loadLiveInjuryStatuses } = await import("./players.server");
+  return await loadLiveInjuryStatuses();
+});
+
+export const getAreTheyPlaying = createServerFn({ method: "GET" })
+  .inputValidator((input: { week: number }) => ({
+    week: Math.min(18, Math.max(1, Math.trunc(Number(input?.week) || 1))),
+  }))
+  .handler(async ({ data }) => {
+    const { loadAreTheyPlaying } = await import("./are-they-playing.server");
+    return await loadAreTheyPlaying(data.week);
+  });
+
 export const getTradeMarket = createServerFn({ method: "GET" })
   .inputValidator((input?: { format?: string }) => ({
     format: (input?.format === "std" || input?.format === "ppr" ? input.format : "half") as

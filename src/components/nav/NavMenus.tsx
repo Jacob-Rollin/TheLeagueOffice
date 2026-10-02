@@ -55,6 +55,7 @@ const RESEARCH_SECTIONS: {
       | "/season-projections"
       | "/fantasy-leaders"
       | "/injury-reports"
+      | "/are-they-playing"
       | "/matchups-guide"
       | "/sos-analysis"
       | "/fantasy-points-allowed"
@@ -67,6 +68,7 @@ const RESEARCH_SECTIONS: {
     heading: "News & Analysis",
     links: [
       { to: "/injury-reports", label: "Injury Reports" },
+      { to: "/are-they-playing", label: "Are They Playing?" },
       { to: "/matchups-guide", label: "Matchups Guide" },
       { to: "/sos-analysis", label: "SoS Analysis" },
     ],
