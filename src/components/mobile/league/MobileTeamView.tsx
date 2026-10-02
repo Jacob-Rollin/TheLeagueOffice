@@ -3,6 +3,7 @@ import { ArrowLeftRight, ChevronRight, Lock, Timer, UserPlus } from "lucide-reac
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
+import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
@@ -92,6 +93,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     progressFor: (p) => progressFor(p.team, progressByNflTeam),
     opponentFor: (p) => scheduleOpponent(schedule, activeWeek, p.team),
     byeWeek: (p) => p.bye === activeWeek,
+    playerIdFor: (p) => sleeperIdFor(p),
   };
 
   return (
@@ -244,6 +246,7 @@ type RowHelpers = {
   progressFor: (p: Player) => NflGameProgress | undefined;
   opponentFor: (p: Player) => string | null;
   byeWeek: (p: Player) => boolean;
+  playerIdFor: (p: Player) => string;
 };
 
 function LineupSection({ title, rows, ...helpers }: { title: string; rows: LineupRow[] } & RowHelpers) {
@@ -271,7 +274,9 @@ function LineupCard({
   progressFor: progressOf,
   opponentFor,
   byeWeek,
+  playerIdFor,
 }: { row: LineupRow } & RowHelpers) {
+  const openPlayer = useOpenMobilePlayer();
   const player = row.player;
   if (!player) {
     return (
@@ -292,7 +297,7 @@ function LineupCard({
 
   return (
     <article className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
-      <div className="flex items-center gap-3 px-3 py-3">
+      <div className="flex cursor-pointer items-center gap-3 px-3 py-3" {...playerPressProps(openPlayer, playerIdFor(player))}>
         <span className="w-8 shrink-0 text-xs font-semibold text-m-muted">{row.slot}</span>
         <span className="flex w-5 shrink-0 justify-center text-m-muted">
           {locked ? <Lock className="size-4" aria-label="Locked" /> : null}

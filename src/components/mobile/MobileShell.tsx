@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/utils";
 
+import { MobilePlayerSheetProvider } from "./MobilePlayerSheet";
 import { MobileSettingsOverlay } from "./MobileSettings";
 import { MobileThemeProvider, useMobileTheme } from "./MobileThemeContext";
 
@@ -41,7 +42,7 @@ function MobileFrame({ children }: { children: ReactNode }) {
         {checking ? (
           <MobileNotice>Checking access...</MobileNotice>
         ) : allowed ? (
-          children
+          <MobilePlayerSheetProvider>{children}</MobilePlayerSheetProvider>
         ) : (
           <MobileNotice>Admin access required. Mobile pages are in preview.</MobileNotice>
         )}

@@ -4,6 +4,7 @@ import { ArrowLeftRight, ChevronDown, Minus, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
+import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import {
   useLeagueProjections,
   useSeasonProjectionStats,
@@ -468,8 +469,12 @@ function TrendingCard({
   owner: string | null;
 }) {
   const logo = teamLogo(player.team);
+  const openPlayer = useOpenMobilePlayer();
   return (
-    <article className="w-[140px] shrink-0 snap-start overflow-hidden rounded-xl bg-m-card text-m-card-fg">
+    <article
+      className="w-[140px] shrink-0 cursor-pointer snap-start overflow-hidden rounded-xl bg-m-card text-m-card-fg"
+      {...playerPressProps(openPlayer, player.id)}
+    >
       <div className="relative px-2.5 pb-2.5 pt-2.5">
         <span className="absolute left-2.5 top-2 font-display text-sm font-bold text-m-muted">{index}</span>
         <div className="relative mx-auto w-fit">
@@ -528,6 +533,7 @@ function PlayerRow({
 }) {
   const style = ACTION_STYLE[action];
   const Icon = action === "trade" ? ArrowLeftRight : action === "drop" ? Minus : Plus;
+  const openPlayer = useOpenMobilePlayer();
   return (
     <div className="flex border-b border-m-border">
       <div className="sticky left-0 z-10 flex w-[230px] shrink-0 items-center gap-2.5 bg-m-card px-2.5 py-2.5">
@@ -538,30 +544,35 @@ function PlayerRow({
         >
           <Icon className="size-5" strokeWidth={2.5} />
         </Link>
-        <div className="relative shrink-0">
-          <PlayerAvatar
-            id={player.id}
-            pos={player.pos}
-            team={player.team}
-            name={player.name}
-            className="size-11"
-            logoClassName="hidden"
-          />
-          <RankHex rank={badge} className="-left-1.5 -top-1.5 size-6 text-[11px]" />
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-[15px] font-semibold leading-tight">
-            {shortName(player)}
-            {player.injury_status ? (
-              <span className="ml-1 align-middle text-[10px] font-bold uppercase text-red-500">
-                {player.injury_status.slice(0, 1)}
-              </span>
-            ) : null}
-          </p>
-          <p className="truncate text-xs text-m-muted">
-            {player.team || "FA"} - {player.pos}
-          </p>
-          {game ? <p className="truncate text-[10px] font-semibold uppercase text-m-muted">{game}</p> : null}
+        <div
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5"
+          {...playerPressProps(openPlayer, player.id)}
+        >
+          <div className="relative shrink-0">
+            <PlayerAvatar
+              id={player.id}
+              pos={player.pos}
+              team={player.team}
+              name={player.name}
+              className="size-11"
+              logoClassName="hidden"
+            />
+            <RankHex rank={badge} className="-left-1.5 -top-1.5 size-6 text-[11px]" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-semibold leading-tight">
+              {shortName(player)}
+              {player.injury_status ? (
+                <span className="ml-1 align-middle text-[10px] font-bold uppercase text-red-500">
+                  {player.injury_status.slice(0, 1)}
+                </span>
+              ) : null}
+            </p>
+            <p className="truncate text-xs text-m-muted">
+              {player.team || "FA"} - {player.pos}
+            </p>
+            {game ? <p className="truncate text-[10px] font-semibold uppercase text-m-muted">{game}</p> : null}
+          </div>
         </div>
       </div>
       {cols.map((c) => {

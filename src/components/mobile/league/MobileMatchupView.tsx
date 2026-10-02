@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
+import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
@@ -123,6 +124,7 @@ export function MobileMatchupView() {
     progressOf: (p) => progressFor(p.team, progressByNflTeam),
     opponentFor: (p) => scheduleOpponent(schedule, activeWeek, p.team),
     byeWeek: (p) => p.bye === activeWeek,
+    playerIdFor: (p) => sleeperIdFor(p),
   };
 
   return (
@@ -370,6 +372,7 @@ type CardHelpers = {
   progressOf: (p: Player) => NflGameProgress | undefined;
   opponentFor: (p: Player) => string | null;
   byeWeek: (p: Player) => boolean;
+  playerIdFor: (p: Player) => string;
 };
 
 function HeadToHead({
@@ -438,6 +441,7 @@ function HalfCard({
   mirror?: boolean;
   bench?: boolean;
 }) {
+  const openPlayer = useOpenMobilePlayer();
   const player = slot?.player ?? null;
   if (!player) {
     return (
@@ -466,9 +470,10 @@ function HalfCard({
   return (
     <article
       className={cn(
-        "overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
+        "cursor-pointer overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
         bench && "opacity-85",
       )}
+      {...playerPressProps(openPlayer, helpers.playerIdFor(player))}
     >
       <div className="px-2.5 pb-2 pt-2.5">
         <div className={cn("flex items-start gap-1.5", mirror && "flex-row-reverse")}>

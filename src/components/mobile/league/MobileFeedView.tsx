@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
+import { useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { listPublishedArticles } from "@/lib/articles";
 import type { Pos } from "@/lib/draft";
 import { getFantasyNewsFeed } from "@/lib/players.functions";
@@ -145,14 +146,32 @@ function FantasyNews() {
 }
 
 function NewsCard({ item }: { item: FeedNewsItem }) {
+  const openPlayer = useOpenMobilePlayer();
   const when = relativeTime(item.published);
   const pos = item.player?.pos.toUpperCase() ?? "";
+  const playerId = item.player?.id ?? null;
   const body = (
     <article className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
       {item.image ? <img src={item.image} alt="" loading="lazy" className="aspect-[16/9] w-full object-cover" /> : null}
       <div className="p-3.5">
         {item.player ? (
-          <div className="mb-2.5 flex items-center gap-2.5">
+          <div
+            role="button"
+            tabIndex={0}
+            className="mb-2.5 flex w-fit cursor-pointer items-center gap-2.5"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (playerId) openPlayer(playerId);
+            }}
+            onKeyDown={(e) => {
+              if ((e.key === "Enter" || e.key === " ") && playerId) {
+                e.preventDefault();
+                e.stopPropagation();
+                openPlayer(playerId);
+              }
+            }}
+          >
             <PlayerAvatar
               id={item.player.id}
               pos={(AVATAR_POS.has(pos) ? pos : "WR") as Pos}

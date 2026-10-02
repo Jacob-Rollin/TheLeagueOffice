@@ -186,7 +186,7 @@ function formatActivityTime(at: number): string {
 }
 
 /** Fantasy teams involved in a trade, in the order they first appear. */
-function tradeTeams(moves: LeagueActivityMove[]): string[] {
+export function tradeTeams(moves: LeagueActivityMove[]): string[] {
   const teams: string[] = [];
   const push = (name: string | undefined) => {
     const clean = name?.trim();
@@ -224,7 +224,7 @@ type FeedEntry =
   | { type: "event"; event: LeagueActivityEvent }
   | { type: "waiverRun"; id: string; at: number; events: LeagueActivityEvent[] };
 
-function groupWaiverRuns(events: LeagueActivityEvent[]): FeedEntry[] {
+export function groupWaiverRuns(events: LeagueActivityEvent[]): FeedEntry[] {
   const out: FeedEntry[] = [];
   for (const event of events) {
     if (resolveActivityKind(event) !== "waiver") {
@@ -250,7 +250,7 @@ function toAvatarPos(pos: string): Pos {
   return "WR";
 }
 
-function resolveMoveAction(
+export function resolveMoveAction(
   move: LeagueActivityMove,
   eventKind: LeagueActivityEvent["kind"],
 ): LeagueActivityMove["action"] {

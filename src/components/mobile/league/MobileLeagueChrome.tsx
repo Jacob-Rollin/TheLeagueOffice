@@ -2,8 +2,16 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { ArrowLeftRight, Minus, Newspaper, Plus, Shirt, Swords, Trophy, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 
-import { buildActivityPlayerIndex, hydrateActivityMove } from "@/components/dashboard/ActivityFeed";
+import {
+  buildActivityPlayerIndex,
+  groupWaiverRuns,
+  hydrateActivityMove,
+  resolveActivityKind,
+  resolveMoveAction,
+  tradeTeams,
+} from "@/components/dashboard/ActivityFeed";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
+import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
@@ -118,12 +126,12 @@ function useLeagueActivityGroups(kinds?: LeagueActivityEvent["kind"][]) {
     [rawEvents, kindKey],
   );
   const groups = useMemo(() => {
-    const out: { label: string; events: LeagueActivityEvent[] }[] = [];
-    for (const event of events) {
-      const label = dayLabel(event.at);
+    const out: { label: string; entries: ReturnType<typeof groupWaiverRuns> }[] = [];
+    for (const entry of groupWaiverRuns(events)) {
+      const label = dayLabel(entry.type === "event" ? entry.event.at : entry.at);
       const last = out.at(-1);
-      if (last?.label === label) last.events.push(event);
-      else out.push({ label, events: [event] });
+      if (last?.label === label) last.entries.push(entry);
+      else out.push({ label, entries: [entry] });
     }
     return out;
   }, [events]);
@@ -146,12 +154,15 @@ export function MobileActivityList({
 
   const index = useMemo(() => buildActivityPlayerIndex(players), [players]);
   const logoByTeam = useMemo(() => new Map(teams.map((t) => [t.team.trim(), t.logo])), [teams]);
-  const hydrate = (m: LeagueActivityMove) => hydrateActivityMove(m, index.playersById, index.playersByName);
   const isEspn = activeLeague?.platform === "espn";
-  const headshotFor = (m: LeagueActivityMove) =>
-    isEspn && /^\d+$/.test(m.playerId) && !index.playersById.has(m.playerId)
-      ? `https://a.espncdn.com/i/headshots/nfl/players/full/${m.playerId}.png`
-      : null;
+  const rows: MoveRowHelpers = {
+    hydrate: (m) => hydrateActivityMove(m, index.playersById, index.playersByName),
+    headshotFor: (m) =>
+      isEspn && /^\d+$/.test(m.playerId) && !index.playersById.has(m.playerId)
+        ? `https://a.espncdn.com/i/headshots/nfl/players/full/${m.playerId}.png`
+        : null,
+    openableId: (m) => (index.playersById.has(m.playerId) ? m.playerId : null),
+  };
 
   if (loading) return <p className="py-10 text-center text-sm text-m-muted">Loading league activity...</p>;
   if (error) return <p className="py-10 text-center text-sm text-m-muted">League activity is unavailable right now.</p>;
@@ -167,15 +178,15 @@ export function MobileActivityList({
             <span className="h-px flex-1 bg-m-border" />
           </div>
           <div className="space-y-3">
-            {group.events.map((event) => (
-              <ActivityCard
-                key={event.id}
-                event={event}
-                moves={event.moves.map(hydrate)}
-                logoByTeam={logoByTeam}
-                headshotFor={headshotFor}
-              />
-            ))}
+            {group.entries.map((entry) =>
+              entry.type === "waiverRun" ? (
+                <WaiverRunCard key={entry.id} at={entry.at} events={entry.events} rows={rows} />
+              ) : resolveActivityKind(entry.event) === "trade" ? (
+                <TradeCard key={entry.event.id} event={entry.event} rows={rows} />
+              ) : (
+                <ActivityCard key={entry.event.id} event={entry.event} logoByTeam={logoByTeam} rows={rows} />
+              ),
+            )}
           </div>
         </div>
       ))}
@@ -291,72 +302,196 @@ export function MobileLeagueActivitySheet() {
   );
 }
 
-function ActivityCard({
-  event,
-  moves,
-  logoByTeam,
-  headshotFor,
-}: {
-  event: LeagueActivityEvent;
-  moves: LeagueActivityMove[];
-  logoByTeam: Map<string, string | null>;
+type MoveRowHelpers = {
+  hydrate: (move: LeagueActivityMove) => LeagueActivityMove;
   headshotFor: (move: LeagueActivityMove) => string | null;
+  openableId: (move: LeagueActivityMove) => string | null;
+};
+
+function MoveRow({
+  move,
+  action,
+  note,
+  rows,
+}: {
+  move: LeagueActivityMove;
+  action: LeagueActivityMove["action"];
+  note?: string;
+  rows: MoveRowHelpers;
 }) {
-  const trade = event.kind === "trade";
-  const tradeTeams = trade
-    ? [...new Set(moves.map((m) => m.fantasyTeam?.trim()).filter((t): t is string => Boolean(t)))]
-    : [];
-  const title = trade ? tradeTeams.join(" and ") || "Trade" : (event.teamName ?? "League");
-  const ordered = [...moves.filter((m) => m.action === "add"), ...moves.filter((m) => m.action !== "add")];
+  const openPlayer = useOpenMobilePlayer();
+  const pos = move.pos.toUpperCase();
+  const ActionIcon = action === "add" ? Plus : Minus;
+  const openId = rows.openableId(move);
+  return (
+    <li
+      className={cn("flex items-center gap-3 px-3 py-2", openId && "cursor-pointer")}
+      {...playerPressProps(openPlayer, openId)}
+    >
+      {action === "ir" ? (
+        <span className="w-5 text-center text-[11px] font-bold text-m-muted">IR</span>
+      ) : (
+        <ActionIcon
+          className={cn("size-5 shrink-0", action === "add" ? "text-emerald-500" : "text-red-500")}
+          strokeWidth={2.5}
+        />
+      )}
+      <PlayerAvatar
+        id={move.playerId}
+        pos={(AVATAR_POS.has(pos) ? pos : "WR") as Pos}
+        team={move.team}
+        name={move.name}
+        className="size-10"
+        logoClassName="size-4"
+        src={rows.headshotFor(move)}
+      />
+      <span className="min-w-0">
+        <span className="block truncate text-[15px] font-semibold">{move.name}</span>
+        <span className="block truncate text-xs text-m-muted">
+          {pos} - {move.team || "FA"}
+          {note ? ` · ${note}` : ""}
+        </span>
+      </span>
+    </li>
+  );
+}
+
+function CardHeader({ title, kind, at, logo }: { title: string; kind: string; at: number; logo?: ReactNode }) {
+  return (
+    <header className="flex items-center gap-2.5 border-b border-m-border px-3 py-2.5">
+      {logo}
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+      <span className="shrink-0 text-right text-[11px] leading-tight text-m-muted">
+        <span className="block font-semibold uppercase tracking-wide">{kind}</span>
+        {timeLabel(at)}
+      </span>
+    </header>
+  );
+}
+
+function TeamLabel({ children }: { children: ReactNode }) {
+  return <p className="px-3 pb-0.5 pt-2.5 text-xs font-semibold text-m-muted">{children}</p>;
+}
+
+/** One waiver run: every claim the host processed together, grouped by team. */
+function WaiverRunCard({ at, events, rows }: { at: number; events: LeagueActivityEvent[]; rows: MoveRowHelpers }) {
+  const claims = events.reduce(
+    (n, e) => n + Math.max(1, e.moves.filter((m) => resolveMoveAction(m, "waiver") === "add").length),
+    0,
+  );
+  return (
+    <article className="overflow-hidden rounded-xl border border-m-border bg-m-card">
+      <CardHeader title={`${claims} Waiver Claim${claims === 1 ? "" : "s"} Processed`} kind="Waivers" at={at} />
+      <div className="divide-y divide-m-border pb-1">
+        {events.map((event) => {
+          const moves = event.moves.map(rows.hydrate);
+          const ordered = [
+            ...moves.filter((m) => resolveMoveAction(m, "waiver") === "add"),
+            ...moves.filter((m) => resolveMoveAction(m, "waiver") !== "add"),
+          ];
+          return (
+            <div key={event.id}>
+              <TeamLabel>{event.teamName ?? "League"}</TeamLabel>
+              <ul>
+                {ordered.map((move, i) => (
+                  <MoveRow
+                    key={`${move.playerId}-${i}`}
+                    move={move}
+                    action={resolveMoveAction(move, "waiver")}
+                    rows={rows}
+                  />
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
+
+/** Trade split by team: what each side received (+) and sent (-). */
+function TradeCard({ event, rows }: { event: LeagueActivityEvent; rows: MoveRowHelpers }) {
+  const moves = event.moves.map(rows.hydrate);
+  const teams = tradeTeams(moves);
+  const adds = moves.filter((m) => m.action === "add");
+  const releases = moves.filter((m) => m.action === "drop");
 
   return (
     <article className="overflow-hidden rounded-xl border border-m-border bg-m-card">
-      <header className="flex items-center gap-2.5 border-b border-m-border px-3 py-2.5">
-        <MobileTeamLogo
-          name={title}
-          logo={trade ? null : (logoByTeam.get((event.teamName ?? "").trim()) ?? null)}
-          className="size-8"
-        />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
-        <span className="shrink-0 text-right text-[11px] leading-tight text-m-muted">
-          <span className="block font-semibold uppercase tracking-wide">{KIND_LABEL[event.kind]}</span>
-          {timeLabel(event.at)}
-        </span>
-      </header>
-      {ordered.length ? (
-        <ul>
-          {ordered.map((move, i) => {
-            const pos = move.pos.toUpperCase();
-            const ActionIcon = move.action === "add" ? Plus : Minus;
-            return (
-              <li key={`${move.playerId}-${i}`} className="flex items-center gap-3 px-3 py-2.5">
-                {move.action === "ir" ? (
-                  <span className="w-5 text-center text-[11px] font-bold text-m-muted">IR</span>
-                ) : (
-                  <ActionIcon
-                    className={cn("size-5 shrink-0", move.action === "add" ? "text-emerald-500" : "text-red-500")}
-                    strokeWidth={2.5}
+      <CardHeader title={teams.length === 2 ? `${teams[0]} and ${teams[1]}` : "Trade"} kind="Trade" at={event.at} />
+      <div className="divide-y divide-m-border pb-1">
+        {teams.map((team) => {
+          const received = adds.filter((m) => m.fantasyTeam?.trim() === team);
+          const sent = adds.filter((m) => m.fromFantasyTeam?.trim() === team);
+          const released = releases.filter((m) => m.fantasyTeam?.trim() === team);
+          if (!received.length && !sent.length && !released.length) return null;
+          return (
+            <div key={team}>
+              <TeamLabel>{team}</TeamLabel>
+              <ul>
+                {received.map((move, i) => (
+                  <MoveRow
+                    key={`in-${move.playerId}-${i}`}
+                    move={move}
+                    action="add"
+                    rows={rows}
+                    {...(move.fromFantasyTeam ? { note: `from ${move.fromFantasyTeam}` } : {})}
                   />
-                )}
-                <PlayerAvatar
-                  id={move.playerId}
-                  pos={(AVATAR_POS.has(pos) ? pos : "WR") as Pos}
-                  team={move.team}
-                  name={move.name}
-                  className="size-10"
-                  logoClassName="size-4"
-                  src={headshotFor(move)}
-                />
-                <span className="min-w-0">
-                  <span className="block truncate text-[15px] font-semibold">{move.name}</span>
-                  <span className="block truncate text-xs text-m-muted">
-                    {move.team || "FA"} - {pos}
-                    {trade && move.action === "add" && move.fantasyTeam ? ` · to ${move.fantasyTeam}` : ""}
-                  </span>
-                </span>
-              </li>
-            );
-          })}
+                ))}
+                {sent.map((move, i) => (
+                  <MoveRow
+                    key={`out-${move.playerId}-${i}`}
+                    move={move}
+                    action="drop"
+                    rows={rows}
+                    {...(move.fantasyTeam ? { note: `to ${move.fantasyTeam}` } : {})}
+                  />
+                ))}
+                {released.map((move, i) => (
+                  <MoveRow key={`drop-${move.playerId}-${i}`} move={move} action="drop" note="dropped" rows={rows} />
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+        {!teams.length ? <p className="px-3 py-3 text-sm text-m-muted">{event.text}</p> : null}
+      </div>
+    </article>
+  );
+}
+
+/** Free-agent and IR moves for a single team. */
+function ActivityCard({
+  event,
+  logoByTeam,
+  rows,
+}: {
+  event: LeagueActivityEvent;
+  logoByTeam: Map<string, string | null>;
+  rows: MoveRowHelpers;
+}) {
+  const kind = resolveActivityKind(event);
+  const moves = event.moves.map(rows.hydrate);
+  const ordered = [
+    ...moves.filter((m) => resolveMoveAction(m, kind) === "add"),
+    ...moves.filter((m) => resolveMoveAction(m, kind) !== "add"),
+  ];
+  const title = event.teamName ?? "League";
+
+  return (
+    <article className="overflow-hidden rounded-xl border border-m-border bg-m-card">
+      <CardHeader
+        title={title}
+        kind={KIND_LABEL[kind]}
+        at={event.at}
+        logo={<MobileTeamLogo name={title} logo={logoByTeam.get(title.trim()) ?? null} className="size-8" />}
+      />
+      {ordered.length ? (
+        <ul className="py-1">
+          {ordered.map((move, i) => (
+            <MoveRow key={`${move.playerId}-${i}`} move={move} action={resolveMoveAction(move, kind)} rows={rows} />
+          ))}
         </ul>
       ) : (
         <p className="px-3 py-3 text-sm text-m-muted">{event.text}</p>
