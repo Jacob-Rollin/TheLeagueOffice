@@ -1,12 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 import { useNflState } from "@/hooks/useLeagueProjections";
-import {
-  buildNflGameProgressMap,
-  type NflGameProgress,
-} from "@/lib/rolling-live-projection";
+import { usePublicScoreboard } from "@/hooks/usePublicScoreboard";
+import { buildNflGameProgressMap, type NflGameProgress } from "@/lib/rolling-live-projection";
 
-const LIVE_MS = 10 * 1000;
+const LIVE_MS = 20 * 1000;
 const BETWEEN_GAMES_MS = 2 * 60 * 1000;
 const ALL_FINAL_MS = 10 * 60 * 1000;
 
@@ -46,24 +44,17 @@ export function useNflGameProgress(week: number | null | undefined) {
   const nflState = useNflState();
   const currentWeek = nflState.data?.week ?? null;
 
-  const query = useQuery({
-    queryKey: ["nfl-scoreboard-progress", safeWeek],
-    enabled: Boolean(safeWeek),
-    retry: false,
-    staleTime: 8 * 1000,
-    refetchInterval: (q) => liveRefreshMs(safeWeek, currentWeek, q.state.data),
-    queryFn: async (): Promise<Map<string, NflGameProgress>> => {
-      const url = `/api/public/scoreboard?week=${safeWeek}&seasontype=2`;
-      const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
-      if (!res || !res.ok) return new Map();
-      const json = (await res.json()) as unknown;
-      return buildNflGameProgressMap(json);
-    },
-  });
+  // Regular-season scoreboard is seasontype=2 — same React Query key as ScoreTicker.
+  const scoreboard = usePublicScoreboard(safeWeek, safeWeek != null ? 2 : null);
+
+  const progressByNflTeam = useMemo(() => {
+    if (scoreboard.data == null) return new Map<string, NflGameProgress>();
+    return buildNflGameProgressMap(scoreboard.data);
+  }, [scoreboard.data]);
 
   return {
-    progressByNflTeam: query.data ?? new Map<string, NflGameProgress>(),
+    progressByNflTeam,
     currentWeek,
-    loading: query.isLoading,
+    loading: scoreboard.isLoading,
   };
 }

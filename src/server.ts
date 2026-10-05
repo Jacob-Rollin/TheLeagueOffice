@@ -2,7 +2,6 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { ensureWarehouseBootstrap } from "./lib/warehouse-bootstrap.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -47,8 +46,8 @@ function isH3SwallowedErrorBody(body: string): boolean {
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
-    // Background, one-shot warehouse harvest (no UI trigger exists).
-    ensureWarehouseBootstrap();
+    // Warehouse harvest moved to `/api/cron/warehouse-ingest` so SSR traffic
+    // no longer opens outbound Sleeper/FantasyCalc waits on every request.
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

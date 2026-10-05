@@ -57,6 +57,8 @@ import { Route as PlayerIdRouteImport } from './routes/player.$id'
 import { Route as TeamTeamIdRouteImport } from './routes/team.$teamId'
 import { Route as AccountLeaguesIndexRouteImport } from './routes/account.leagues.index'
 import { Route as AccountLeaguesConnectionIdRouteImport } from './routes/account.leagues.$connectionId'
+import { Route as ApiCronLeagueDeltaSyncRouteImport } from './routes/api/cron/league-delta-sync'
+import { Route as ApiCronWarehouseIngestRouteImport } from './routes/api/cron/warehouse-ingest'
 import { Route as ApiPublicScoreboardRouteImport } from './routes/api/public/scoreboard'
 import { Route as MLeagueLeagueIdRouteImport } from './routes/m.league.$leagueId'
 import { Route as ApiAuthYahooCallbackRouteImport } from './routes/api/auth/yahoo/callback'
@@ -311,6 +313,16 @@ const AccountLeaguesConnectionIdRoute =
     path: '/account/leagues/$connectionId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiCronLeagueDeltaSyncRoute = ApiCronLeagueDeltaSyncRouteImport.update({
+  id: '/api/cron/league-delta-sync',
+  path: '/api/cron/league-delta-sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCronWarehouseIngestRoute = ApiCronWarehouseIngestRouteImport.update({
+  id: '/api/cron/warehouse-ingest',
+  path: '/api/cron/warehouse-ingest',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicScoreboardRoute = ApiPublicScoreboardRouteImport.update({
   id: '/api/public/scoreboard',
   path: '/api/public/scoreboard',
@@ -415,6 +427,8 @@ export interface FileRoutesByFullPath {
   '/m/': typeof MIndexRoute
   '/playbook/': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
+  '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
+  '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
   '/m/league/$leagueId': typeof MLeagueLeagueIdRouteWithChildren
   '/account/leagues/': typeof AccountLeaguesIndexRoute
@@ -474,6 +488,8 @@ export interface FileRoutesByTo {
   '/m': typeof MIndexRoute
   '/playbook': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
+  '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
+  '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
   '/account/leagues': typeof AccountLeaguesIndexRoute
   '/api/auth/yahoo/callback': typeof ApiAuthYahooCallbackRoute
@@ -535,6 +551,8 @@ export interface FileRoutesById {
   '/m/': typeof MIndexRoute
   '/playbook/': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
+  '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
+  '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
   '/m/league/$leagueId': typeof MLeagueLeagueIdRouteWithChildren
   '/account/leagues/': typeof AccountLeaguesIndexRoute
@@ -598,6 +616,8 @@ export interface FileRouteTypes {
     | '/m/'
     | '/playbook/'
     | '/account/leagues/$connectionId'
+    | '/api/cron/league-delta-sync'
+    | '/api/cron/warehouse-ingest'
     | '/api/public/scoreboard'
     | '/m/league/$leagueId'
     | '/account/leagues/'
@@ -657,6 +677,8 @@ export interface FileRouteTypes {
     | '/m'
     | '/playbook'
     | '/account/leagues/$connectionId'
+    | '/api/cron/league-delta-sync'
+    | '/api/cron/warehouse-ingest'
     | '/api/public/scoreboard'
     | '/account/leagues'
     | '/api/auth/yahoo/callback'
@@ -717,6 +739,8 @@ export interface FileRouteTypes {
     | '/m/'
     | '/playbook/'
     | '/account/leagues/$connectionId'
+    | '/api/cron/league-delta-sync'
+    | '/api/cron/warehouse-ingest'
     | '/api/public/scoreboard'
     | '/m/league/$leagueId'
     | '/account/leagues/'
@@ -770,6 +794,8 @@ export interface RootRouteChildren {
   TeamTeamIdRoute: typeof TeamTeamIdRoute
   AccountIndexRoute: typeof AccountIndexRoute
   AccountLeaguesConnectionIdRoute: typeof AccountLeaguesConnectionIdRoute
+  ApiCronLeagueDeltaSyncRoute: typeof ApiCronLeagueDeltaSyncRoute
+  ApiCronWarehouseIngestRoute: typeof ApiCronWarehouseIngestRoute
   ApiPublicScoreboardRoute: typeof ApiPublicScoreboardRoute
   AccountLeaguesIndexRoute: typeof AccountLeaguesIndexRoute
   ApiAuthYahooCallbackRoute: typeof ApiAuthYahooCallbackRoute
@@ -1114,6 +1140,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountLeaguesConnectionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/league-delta-sync': {
+      id: '/api/cron/league-delta-sync'
+      path: '/api/cron/league-delta-sync'
+      fullPath: '/api/cron/league-delta-sync'
+      preLoaderRoute: typeof ApiCronLeagueDeltaSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cron/warehouse-ingest': {
+      id: '/api/cron/warehouse-ingest'
+      path: '/api/cron/warehouse-ingest'
+      fullPath: '/api/cron/warehouse-ingest'
+      preLoaderRoute: typeof ApiCronWarehouseIngestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/scoreboard': {
       id: '/api/public/scoreboard'
       path: '/api/public/scoreboard'
@@ -1295,6 +1335,8 @@ const rootRouteChildren: RootRouteChildren = {
   TeamTeamIdRoute: TeamTeamIdRoute,
   AccountIndexRoute: AccountIndexRoute,
   AccountLeaguesConnectionIdRoute: AccountLeaguesConnectionIdRoute,
+  ApiCronLeagueDeltaSyncRoute: ApiCronLeagueDeltaSyncRoute,
+  ApiCronWarehouseIngestRoute: ApiCronWarehouseIngestRoute,
   ApiPublicScoreboardRoute: ApiPublicScoreboardRoute,
   AccountLeaguesIndexRoute: AccountLeaguesIndexRoute,
   ApiAuthYahooCallbackRoute: ApiAuthYahooCallbackRoute,
