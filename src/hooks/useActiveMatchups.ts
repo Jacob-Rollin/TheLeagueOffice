@@ -6,10 +6,10 @@ import { getConnectionMatchups } from "@/lib/league.functions";
 
 /**
  * Lineup edits on the host happen any time before kickoff, so the current week
- * keeps a 30s floor even between games. These calls never touch Supabase and
+ * keeps a 45s floor even between games. These calls never touch Supabase and
  * hidden tabs don't poll.
  */
-const LINEUP_REFRESH_MS = 30 * 1000;
+const LINEUP_REFRESH_MS = 45 * 1000;
 
 /** Weekly host matchup rows for the active synced league. */
 export function useActiveMatchups(week: number | null | undefined) {
@@ -26,7 +26,7 @@ export function useActiveMatchups(week: number | null | undefined) {
     queryKey: ["active-matchups", id, safeWeek],
     enabled: Boolean(activeLeague?.leagueId && safeWeek),
     retry: false,
-    staleTime: isPastWeek ? 10 * 60 * 1000 : 8 * 1000,
+    staleTime: isPastWeek ? 10 * 60 * 1000 : 20 * 1000,
     refetchInterval,
     queryFn: async () =>
       await getConnectionMatchups({

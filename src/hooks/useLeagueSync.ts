@@ -3,13 +3,16 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
-import { forceClearAndReSyncLeague } from "@/lib/league.functions";
+import { deltaSyncLeague } from "@/lib/league.functions";
 import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
 
-/** Versioned key — bump to force every client through a fresh wipe pass. */
-const SESSION_KEY_PREFIX = "tlo.league-auto-resync.v3:";
-/** Skip re-purging the same connection within this window (ms). */
-const RESYNC_COOLDOWN_MS = 90 * 1000;
+/** Versioned key — bump to force every client through a fresh delta pass. */
+const SESSION_KEY_PREFIX = "tlo.league-delta-sync.v1:";
+/**
+ * Skip re-syncing the same connection within this window. Background cron
+ * owns frequent refreshes; page loads only top up stale sessions.
+ */
+const RESYNC_COOLDOWN_MS = 30 * 60 * 1000;
 
 export function useLeagueSync() {
   const { activeLeague, sandboxMode } = useActiveLeague();
@@ -38,7 +41,7 @@ export function useLeagueSync() {
 
     void (async () => {
       try {
-        const result = await forceClearAndReSyncLeague({
+        const result = await deltaSyncLeague({
           data: {
             connectionId,
             leagueId,
@@ -70,7 +73,7 @@ export function useLeagueSync() {
           ]);
         }
       } catch (err) {
-        console.warn("[useLeagueSync] auto re-sync failed:", err);
+        console.warn("[useLeagueSync] delta sync failed:", err);
       } finally {
         if (inFlightRef.current === connectionId) inFlightRef.current = null;
       }

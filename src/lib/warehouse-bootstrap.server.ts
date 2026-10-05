@@ -1,19 +1,15 @@
 /**
- * One-shot, server-side warehouse bootstrap.
+ * Warehouse bootstrap / scheduled ingest for Database B player_warehouse +
+ * master_player_brain.json.
  *
- * Runs `runWarehouseIngestion()` exactly once per deployed server instance,
- * and only when the `master_player_brain.json` asset is actually missing from
- * the Database B public bucket (the HTTP 400/404 state). This keeps outbound
- * bandwidth clamped: no UI trigger exists, and no repeat harvest happens once
- * the file is published.
+ * Prefer the Vercel cron at `/api/cron/warehouse-ingest` over request-path
+ * triggers so Fluid Active CPU is not spent on every SSR hit.
  *
  * Server-only. Never import from client-reachable component code.
  */
 
 const BUCKET = "player_brain";
 const FILE = "master_player_brain.json";
-
-let started = false;
 
 function brainUrl(): string | null {
   const raw =
@@ -37,21 +33,44 @@ async function brainExists(): Promise<boolean> {
   }
 }
 
-/** Fire-and-forget bootstrap; safe to call on every request. */
-export function ensureWarehouseBootstrap(): void {
-  if (started) return;
-  started = true;
+export type WarehouseIngestReport = {
+  ok: boolean;
+  skipped: boolean;
+  reason?: string;
+  compiled?: number;
+  bytes?: number;
+};
 
-  void (async () => {
-    try {
-      if (await brainExists()) return;
-      const { runWarehouseIngestion } = await import("./aggregation.server");
-      const report = await runWarehouseIngestion();
-      console.info(
-        `[warehouse-bootstrap] ok=${report.ok} compiled=${report.compiled} bytes=${report.bytes}`,
-      );
-    } catch {
-      // Silent by design — the client hydration layer has its own fallback.
+/**
+ * Cron / ops entry: harvest when brain is missing, or when `force` is set.
+ */
+export async function runScheduledWarehouseIngest(opts?: {
+  force?: boolean;
+}): Promise<WarehouseIngestReport> {
+  const force = Boolean(opts?.force);
+  try {
+    if (!force && (await brainExists())) {
+      return { ok: true, skipped: true, reason: "brain-present" };
     }
-  })();
+    const { runWarehouseIngestion } = await import("./aggregation.server");
+    const report = await runWarehouseIngestion();
+    console.info(
+      `[warehouse-ingest] ok=${report.ok} compiled=${report.compiled} bytes=${report.bytes}`,
+    );
+    return {
+      ok: Boolean(report.ok),
+      skipped: false,
+      compiled: report.compiled,
+      bytes: report.bytes,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ingest failed";
+    console.error("[warehouse-ingest]", message);
+    return { ok: false, skipped: false, reason: message };
+  }
+}
+
+/** @deprecated Prefer `/api/cron/warehouse-ingest`. Kept for emergency manual calls. */
+export function ensureWarehouseBootstrap(): void {
+  void runScheduledWarehouseIngest({ force: false });
 }

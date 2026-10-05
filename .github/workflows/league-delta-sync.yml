@@ -1,0 +1,41 @@
+name: League Delta Sync
+
+# Invokes the Vercel cron endpoint so synced league caches stay warm without
+# every page load wiping/re-pulling host platforms. Requires CRON_SECRET +
+# APP_URL repository secrets.
+
+on:
+  schedule:
+    # Every 15 minutes during typical NFL game windows (UTC).
+    - cron: "*/15 16-23 * * 0"
+    - cron: "*/15 0-4 * * 1"
+    - cron: "*/15 00-04,16-23 * * 4"
+    - cron: "*/15 16-23 * * 1,4"
+    - cron: "*/15 17-23 * * 6"
+    # Off-window heartbeat every 2 hours.
+    - cron: "20 */2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: league-delta-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger delta sync
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL / CRON_SECRET not configured — skipping."
+            exit 0
+          fi
+          curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
+            "${APP_URL%/}/api/cron/league-delta-sync?limit=40"

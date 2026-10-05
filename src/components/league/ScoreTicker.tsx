@@ -1,21 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+
+import { usePublicScoreboard } from "@/hooks/usePublicScoreboard";
+import { scoreboardQueryKey } from "@/lib/public-scoreboard";
 import { cn } from "@/lib/utils";
-
-/** Same-origin proxy — ESPN's scoreboard endpoint sends no CORS headers. */
-const SCOREBOARD_URL = "/api/public/scoreboard";
-const TICKER_LIVE_MS = 10 * 1000;
-const TICKER_IDLE_MS = 60 * 1000;
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function scoreboardHasLiveGame(json: any): boolean {
-  const events: any[] = Array.isArray(json?.events) ? json.events : [];
-  return events.some((ev) => {
-    const state = String(ev?.competitions?.[0]?.status?.type?.state ?? ev?.status?.type?.state ?? "");
-    return state.toLowerCase() === "in";
-  });
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 type TickerTeam = {
   abbr: string;
@@ -90,13 +79,21 @@ function mapGames(json: any): TickerGame[] {
         logo: c?.team?.logo ?? "",
         score: c?.score ?? "0",
         possession: Boolean(possessionId) && String(c?.id) === String(possessionId),
-        record: String(c?.records?.find((r: any) => r?.type === "total")?.summary ?? c?.records?.[0]?.summary ?? ""),
+        record: String(
+          c?.records?.find((r: any) => r?.type === "total")?.summary ??
+            c?.records?.[0]?.summary ??
+            "",
+        ),
       };
     };
-    const state: TickerGame["state"] = type?.state === "in" ? "in" : type?.state === "post" ? "post" : "pre";
+    const state: TickerGame["state"] =
+      type?.state === "in" ? "in" : type?.state === "post" ? "post" : "pre";
     const sit = comp?.situation ?? {};
     const network =
-      comp?.broadcasts?.[0]?.names?.[0] ?? comp?.geoBroadcasts?.[0]?.media?.shortName ?? comp?.broadcast ?? "";
+      comp?.broadcasts?.[0]?.names?.[0] ??
+      comp?.geoBroadcasts?.[0]?.media?.shortName ??
+      comp?.broadcast ??
+      "";
     return {
       id: String(ev?.id ?? Math.random()),
       state,
@@ -104,7 +101,9 @@ function mapGames(json: any): TickerGame[] {
       kickoff: formatKickoff(ev?.date ?? comp?.date),
       clock: status?.displayClock ?? "",
       period: status?.period ? `Q${status.period}` : "",
-      downDistance: String(sit?.shortDownDistanceText ?? String(sit?.downDistanceText ?? "").split(" at ")[0] ?? ""),
+      downDistance: String(
+        sit?.shortDownDistanceText ?? String(sit?.downDistanceText ?? "").split(" at ")[0] ?? "",
+      ),
       ballOn: String(sit?.possessionText ?? "").replace(/^at\s+/i, ""),
       network: String(network || ""),
       away: pick("away"),
@@ -140,7 +139,9 @@ function shortLabel(seasonType: number, week: number, raw: string): string {
 }
 
 function buildWeekOptions(json: any): WeekOption[] {
-  const calendar: any[] = Array.isArray(json?.leagues?.[0]?.calendar) ? json.leagues[0].calendar : [];
+  const calendar: any[] = Array.isArray(json?.leagues?.[0]?.calendar)
+    ? json.leagues[0].calendar
+    : [];
   const options: WeekOption[] = [];
   for (const block of calendar) {
     const seasonType = Number(block?.value);
@@ -159,7 +160,11 @@ function buildWeekOptions(json: any): WeekOption[] {
   return options;
 }
 
-function filterWeekOptions(options: WeekOption[], currentSeasonType: number, currentWeek: number): WeekOption[] {
+function filterWeekOptions(
+  options: WeekOption[],
+  currentSeasonType: number,
+  currentWeek: number,
+): WeekOption[] {
   const filtered: WeekOption[] = [];
   for (const opt of options) {
     if (opt.seasonType !== currentSeasonType) continue;
@@ -183,6 +188,7 @@ function filterWeekOptions(options: WeekOption[], currentSeasonType: number, cur
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export function ScoreTicker() {
+  const queryClient = useQueryClient();
   const [games, setGames] = useState<TickerGame[]>([]);
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const [seasonType, setSeasonType] = useState<number | null>(null);
@@ -193,8 +199,9 @@ export function ScoreTicker() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
-  const skipCycleRef = useRef(false);
-  const anyLiveRef = useRef(false);
+
+  // Shares React Query cache + CDN proxy with useNflGameProgress.
+  const scoreboard = usePublicScoreboard(selectedWeek, seasonType);
 
   useEffect(() => {
     if (!open) return;
@@ -211,80 +218,24 @@ export function ScoreTicker() {
       : [];
 
   useEffect(() => {
-    // The first load sets the week, which re-runs this effect; that run already
-    // has fresh data, so it only needs to schedule the next refresh.
-    const skipImmediateLoad = skipCycleRef.current;
-    skipCycleRef.current = false;
+    const json = scoreboard.data;
+    if (json == null) return;
 
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (!initializedRef.current) {
+      const cw = readCurrentWeek(json);
+      const cst = readCurrentSeasonType(json);
+      // Seed the week-keyed cache so switching from null→current does not re-hit ESPN.
+      queryClient.setQueryData(scoreboardQueryKey(cw, cst), json);
+      setSelectedWeek(cw);
+      setSeasonType(cst);
+      setCurrentWeek(cw);
+      setCurrentSeasonType(cst);
+      setWeekOptions(buildWeekOptions(json));
+      initializedRef.current = true;
+    }
 
-    const schedule = () => {
-      if (cancelled) return;
-      clearTimeout(timer);
-      timer = setTimeout(tick, anyLiveRef.current ? TICKER_LIVE_MS : TICKER_IDLE_MS);
-    };
-
-    const tick = async () => {
-      // Hidden tabs skip the network and pick up again on visibilitychange.
-      if (typeof document !== "undefined" && document.hidden) return;
-      await load();
-      schedule();
-    };
-
-    const onVisible = () => {
-      if (!document.hidden) void tick();
-    };
-
-    const load = async () => {
-      try {
-        const queryParams = selectedWeek != null && seasonType != null
-          ? `?week=${selectedWeek}&seasontype=${seasonType}`
-          : '';
-          
-        const url = `${SCOREBOARD_URL}${queryParams}`;
-        
-        let res = await fetch(url);
-        
-        // 🟢 THE FIX: If the local Vercel proxy route fails (e.g. on a static host),
-        // fall back directly to ESPN's public raw feed link so data still populates.
-        if (!res.ok) {
-          const backupUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard${queryParams}`;
-          res = await fetch(backupUrl);
-        }
-        
-        if (!res.ok) return;
-        const json = await res.json();
-        if (cancelled) return;
-
-        if (!initializedRef.current) {
-          const cw = readCurrentWeek(json);
-          const cst = readCurrentSeasonType(json);
-          setSelectedWeek(cw);
-          setSeasonType(cst);
-          setCurrentWeek(cw);
-          setCurrentSeasonType(cst);
-          setWeekOptions(buildWeekOptions(json));
-          initializedRef.current = true;
-          skipCycleRef.current = true;
-        }
-
-        anyLiveRef.current = scoreboardHasLiveGame(json);
-        setGames(mapGames(json));
-      } catch {
-        /* offline or blocked — keep last known scores */
-      }
-    };
-
-    if (skipImmediateLoad) schedule();
-    else void tick();
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [selectedWeek, seasonType]);
+    setGames(mapGames(json));
+  }, [scoreboard.data, queryClient]);
 
   const nudge = (dir: -1 | 1) => {
     const el = scrollerRef.current;
@@ -304,7 +255,8 @@ export function ScoreTicker() {
 
   if (!games.length) return null;
 
-  const selectValue = selectedWeek != null && seasonType != null ? `${seasonType}-${selectedWeek}` : "";
+  const selectValue =
+    selectedWeek != null && seasonType != null ? `${seasonType}-${selectedWeek}` : "";
 
   const selectedLabel =
     visibleOptions.find((o) => `${o.seasonType}-${o.week}` === selectValue)?.label ??
@@ -312,7 +264,10 @@ export function ScoreTicker() {
 
   return (
     <div className="relative flex items-stretch border-b border-border bg-primary text-primary-foreground">
-      <div ref={dropdownRef} className="relative flex shrink-0 items-stretch border-r border-primary-foreground/15">
+      <div
+        ref={dropdownRef}
+        className="relative flex shrink-0 items-stretch border-r border-primary-foreground/15"
+      >
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -323,7 +278,10 @@ export function ScoreTicker() {
         >
           <span className="whitespace-nowrap">{selectedLabel}</span>
           <ChevronDown
-            className={cn("size-3 shrink-0 text-primary-foreground/70 transition-transform", open && "rotate-180")}
+            className={cn(
+              "size-3 shrink-0 text-primary-foreground/70 transition-transform",
+              open && "rotate-180",
+            )}
           />
         </button>
 
@@ -365,7 +323,10 @@ export function ScoreTicker() {
 
       <div className="relative min-w-0 flex-1">
         <ScrollButton side="left" onClick={() => nudge(-1)} />
-        <div ref={scrollerRef} className="no-scrollbar flex items-stretch gap-0 overflow-x-auto scroll-smooth px-8">
+        <div
+          ref={scrollerRef}
+          className="no-scrollbar flex items-stretch gap-0 overflow-x-auto scroll-smooth px-8"
+        >
           {games.map((g) => {
             const live = g.state === "in";
             const pre = g.state === "pre";
@@ -379,7 +340,6 @@ export function ScoreTicker() {
                   "flex shrink-0 flex-col justify-center gap-1 border-r border-primary-foreground/15 px-3 py-2 transition-colors hover:bg-primary-foreground/10",
                   live ? "w-[186px]" : pre ? "w-[168px]" : "w-[132px]",
                 )}
-
               >
                 <div className="flex items-center justify-between gap-1.5 text-[10px] uppercase tracking-widest text-primary-foreground/70">
                   <span className="flex shrink-0 items-center gap-1 whitespace-nowrap">
@@ -430,11 +390,25 @@ function ScrollButton({ side, onClick }: { side: "left" | "right"; onClick: () =
   );
 }
 
-function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; pre: boolean; extra?: string }) {
+function TeamRow({
+  team,
+  live,
+  pre,
+  extra,
+}: {
+  team: TickerTeam;
+  live: boolean;
+  pre: boolean;
+  extra?: string;
+}) {
   return (
-    <div className={cn("grid items-center gap-1.5", live ? "grid-cols-[1fr_40px_52px]" : "grid-cols-[1fr_auto]")}>
+    <div
+      className={cn(
+        "grid items-center gap-1.5",
+        live ? "grid-cols-[1fr_40px_52px]" : "grid-cols-[1fr_auto]",
+      )}
+    >
       <div className="flex min-w-0 items-center gap-1.5">
-
         {team.logo && (
           <img
             src={team.logo}
@@ -462,7 +436,9 @@ function TeamRow({ team, live, pre, extra }: { team: TickerTeam; live: boolean; 
       {!pre ? (
         <span className="tabnum text-right text-xs font-semibold">{team.score}</span>
       ) : (
-        <span className="tabnum text-right text-[10px] text-primary-foreground/60">{team.record}</span>
+        <span className="tabnum text-right text-[10px] text-primary-foreground/60">
+          {team.record}
+        </span>
       )}
 
       {live && (

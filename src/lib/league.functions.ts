@@ -1,6 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 
-export type { LeagueActivityEvent, LeagueActivityMove, LeagueTransactionLog } from "./league.server";
+export type {
+  LeagueActivityEvent,
+  LeagueActivityMove,
+  LeagueTransactionLog,
+} from "./league.server";
 
 export const getUserLeagues = createServerFn({ method: "GET" })
   .inputValidator((input: { username: string }) => ({
@@ -31,85 +35,100 @@ export const getLeagueSync = createServerFn({ method: "GET" })
   });
 
 export const getConnectionMeta = createServerFn({ method: "GET" })
-  .inputValidator((input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
-    identifier: String(input.identifier ?? "").slice(0, 64),
-    platform: String(input.platform ?? "sleeper").slice(0, 16),
-    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
-    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
-  }))
+  .inputValidator(
+    (input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+    }),
+  )
   .handler(async ({ data }) => {
     const { loadConnectionMeta, loadEspnConnectionMeta } = await import("./league.server");
-    if (data.platform === "espn") return await loadEspnConnectionMeta(data.identifier, data.s2, data.swid);
+    if (data.platform === "espn")
+      return await loadEspnConnectionMeta(data.identifier, data.s2, data.swid);
     return await loadConnectionMeta(data.identifier);
   });
 
 export const getConnectionSettings = createServerFn({ method: "GET" })
-  .inputValidator((input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
-    identifier: String(input.identifier ?? "").slice(0, 64),
-    platform: String(input.platform ?? "sleeper").slice(0, 16),
-    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
-    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
-  }))
+  .inputValidator(
+    (input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+    }),
+  )
   .handler(async ({ data }) => {
     const { loadConnectionSettings } = await import("./league-settings.server");
     return await loadConnectionSettings(data.identifier, data.platform, data.s2, data.swid);
   });
 
 export const getConnectionStandings = createServerFn({ method: "GET" })
-  .inputValidator((input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
-    identifier: String(input.identifier ?? "").slice(0, 64),
-    platform: String(input.platform ?? "sleeper").slice(0, 16),
-    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
-    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
-  }))
+  .inputValidator(
+    (input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+    }),
+  )
   .handler(async ({ data }) => {
     const { loadConnectionStandings } = await import("./league.server");
     return await loadConnectionStandings(data.identifier, data.platform, data.s2, data.swid);
   });
 
 export const getConnectionSync = createServerFn({ method: "GET" })
-  .inputValidator((input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
-    identifier: String(input.identifier ?? "").slice(0, 64),
-    platform: String(input.platform ?? "sleeper").slice(0, 16),
-    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
-    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
-  }))
+  .inputValidator(
+    (input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+    }),
+  )
   .handler(async ({ data }) => {
     const { loadConnectionSync } = await import("./league.server");
     return await loadConnectionSync(data.identifier, data.platform, data.s2, data.swid);
   });
 
 export const getConnectionRosters = createServerFn({ method: "GET" })
-  .inputValidator((input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
-    identifier: String(input.identifier ?? "").slice(0, 64),
-    platform: String(input.platform ?? "sleeper").slice(0, 16),
-    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
-    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
-  }))
+  .inputValidator(
+    (input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+    }),
+  )
   .handler(async ({ data }) => {
     const { loadConnectionRosters } = await import("./league.server");
     return await loadConnectionRosters(data.identifier, data.platform, data.s2, data.swid);
   });
 
 export const getConnectionTransactions = createServerFn({ method: "GET" })
-  .inputValidator((input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
-    identifier: String(input.identifier ?? "").slice(0, 64),
-    platform: String(input.platform ?? "sleeper").slice(0, 16),
-    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
-    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
-  }))
+  .inputValidator(
+    (input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+    }),
+  )
   .handler(async ({ data }) => {
     const { loadConnectionTransactions } = await import("./league.server");
     return await loadConnectionTransactions(data.identifier, data.platform, data.s2, data.swid);
   });
 
 export const getConnectionTransactionLog = createServerFn({ method: "GET" })
-  .inputValidator((input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
-    identifier: String(input.identifier ?? "").slice(0, 64),
-    platform: String(input.platform ?? "sleeper").slice(0, 16),
-    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
-    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
-  }))
+  .inputValidator(
+    (input: { identifier: string; platform?: string; s2?: string; swid?: string }) => ({
+      identifier: String(input.identifier ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+    }),
+  )
   .handler(async ({ data }) => {
     const { loadConnectionTransactionLog } = await import("./league.server");
     return await loadConnectionTransactionLog(data.identifier, data.platform, data.s2, data.swid);
@@ -179,7 +198,14 @@ export const getRestOfSeasonProjections = createServerFn({ method: "GET" })
 /** Each team's best offensive lineup by projected rest-of-season points per game. */
 export const getStartingSlotRanks = createServerFn({ method: "GET" })
   .inputValidator(
-    (input: { identifier: string; platform?: string; fromWeek: number; toWeek?: number; s2?: string; swid?: string }) => ({
+    (input: {
+      identifier: string;
+      platform?: string;
+      fromWeek: number;
+      toWeek?: number;
+      s2?: string;
+      swid?: string;
+    }) => ({
       identifier: String(input.identifier ?? "").slice(0, 64),
       platform: String(input.platform ?? "sleeper").slice(0, 16),
       fromWeek: Math.max(1, Math.min(18, Math.floor(Number(input.fromWeek) || 1))),
@@ -190,24 +216,33 @@ export const getStartingSlotRanks = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const { loadStartingSlotRanks } = await import("./standings-projections.server");
-    return await loadStartingSlotRanks(data.identifier, data.platform, data.fromWeek, data.toWeek, data.s2, data.swid);
+    return await loadStartingSlotRanks(
+      data.identifier,
+      data.platform,
+      data.fromWeek,
+      data.toWeek,
+      data.s2,
+      data.swid,
+    );
   });
 
 /** Unified league payload for any connected platform. */
 export const getUnifiedLeague = createServerFn({ method: "GET" })
-  .inputValidator((input: {
-    leagueId: string;
-    platform?: string;
-    s2?: string;
-    swid?: string;
-    accessToken?: string;
-  }) => ({
-    leagueId: String(input.leagueId ?? "").slice(0, 64),
-    platform: String(input.platform ?? "sleeper").slice(0, 16),
-    s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
-    swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
-    accessToken: input.accessToken ? String(input.accessToken).slice(0, 2048) : undefined,
-  }))
+  .inputValidator(
+    (input: {
+      leagueId: string;
+      platform?: string;
+      s2?: string;
+      swid?: string;
+      accessToken?: string;
+    }) => ({
+      leagueId: String(input.leagueId ?? "").slice(0, 64),
+      platform: String(input.platform ?? "sleeper").slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+      accessToken: input.accessToken ? String(input.accessToken).slice(0, 2048) : undefined,
+    }),
+  )
   .handler(async ({ data }) => {
     const { fetchUnifiedLeague } = await import("./league.server");
     return await fetchUnifiedLeague({
@@ -232,7 +267,10 @@ export const forceClearAndReSyncLeague = createServerFn({ method: "POST" })
     }) => ({
       connectionId: String(input.connectionId ?? "").slice(0, 64),
       leagueId: String(input.leagueId ?? "").slice(0, 64),
-      platform: String(input.platform ?? "espn").trim().toLowerCase().slice(0, 16),
+      platform: String(input.platform ?? "espn")
+        .trim()
+        .toLowerCase()
+        .slice(0, 16),
       s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
       swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
       throughWeek: input.throughWeek
@@ -242,6 +280,45 @@ export const forceClearAndReSyncLeague = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { forceClearAndReSyncLeague: run } = await import("./league-resync.server");
+    return await run({
+      connectionId: data.connectionId,
+      leagueId: data.leagueId,
+      platform: data.platform,
+      s2: data.s2 ?? null,
+      swid: data.swid ?? null,
+      throughWeek: data.throughWeek,
+    });
+  });
+
+/**
+ * Routine sync: upsert recent weeks only (or full backfill when cache is empty).
+ * Prefer this over forceClearAndReSyncLeague for page-load / cron paths.
+ */
+export const deltaSyncLeague = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: {
+      connectionId: string;
+      leagueId: string;
+      platform?: string;
+      s2?: string;
+      swid?: string;
+      throughWeek?: number;
+    }) => ({
+      connectionId: String(input.connectionId ?? "").slice(0, 64),
+      leagueId: String(input.leagueId ?? "").slice(0, 64),
+      platform: String(input.platform ?? "espn")
+        .trim()
+        .toLowerCase()
+        .slice(0, 16),
+      s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
+      swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
+      throughWeek: input.throughWeek
+        ? Math.max(1, Math.min(18, Math.floor(Number(input.throughWeek) || 18)))
+        : undefined,
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { deltaSyncLeague: run } = await import("./league-resync.server");
     return await run({
       connectionId: data.connectionId,
       leagueId: data.leagueId,

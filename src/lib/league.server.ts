@@ -123,7 +123,14 @@ export async function loadUserLeagues(username: string, season?: string): Promis
   const out: LeagueSummary[] = [];
   for (const s of seasons) {
     const leagues = await json<
-      { league_id: string; name: string; season: string; total_rosters: number; status: string; scoring_settings?: Record<string, unknown> }[]
+      {
+        league_id: string;
+        name: string;
+        season: string;
+        total_rosters: number;
+        status: string;
+        scoring_settings?: Record<string, unknown>;
+      }[]
     >(`${BASE}/user/${user.user_id}/leagues/nfl/${s}`);
     for (const l of leagues ?? []) {
       out.push({
@@ -198,9 +205,7 @@ export async function loadStandings(leagueId: string): Promise<Standings | null>
     };
   });
 
-  rows.sort(
-    (a, b) => b.wins - a.wins || a.losses - b.losses || b.pointsFor - a.pointsFor,
-  );
+  rows.sort((a, b) => b.wins - a.wins || a.losses - b.losses || b.pointsFor - a.pointsFor);
 
   return {
     league: {
@@ -272,7 +277,10 @@ function slotCounts(positions: string[] | undefined): RosterSlotCounts {
   return roster;
 }
 
-export async function loadLeagueSync(leagueId: string, username?: string): Promise<LeagueSync | null> {
+export async function loadLeagueSync(
+  leagueId: string,
+  username?: string,
+): Promise<LeagueSync | null> {
   const id = leagueId.trim();
   if (!/^\d+$/.test(id)) return null;
 
@@ -309,7 +317,8 @@ export async function loadLeagueSync(leagueId: string, username?: string): Promi
   const slotByRoster = new Map<number, number>();
   const s2r = draft?.slot_to_roster_id ?? null;
   if (s2r) {
-    for (const [slot, rosterId] of Object.entries(s2r)) slotByRoster.set(Number(rosterId), Number(slot));
+    for (const [slot, rosterId] of Object.entries(s2r))
+      slotByRoster.set(Number(rosterId), Number(slot));
   }
   const ordered = [...rosters].sort((a, b) => a.roster_id - b.roster_id);
   ordered.forEach((r, i) => {
@@ -396,7 +405,11 @@ export type EspnTeam = {
 };
 
 type EspnLeagueView = {
-  settings?: { name?: string; size?: number; scoringSettings?: { scoringItems?: { statId?: number; points?: number }[] } };
+  settings?: {
+    name?: string;
+    size?: number;
+    scoringSettings?: { scoringItems?: { statId?: number; points?: number }[] };
+  };
   teams?: EspnTeam[];
   members?: { id?: string }[];
 };
@@ -476,15 +489,12 @@ export async function loadEspnConnectionMeta(
     // every owner-ish identifier ESPN exposes on a team row.
     const matchesSwid = (t: EspnTeam) => {
       if (!swidGuid) return false;
-      const candidates: (string | undefined)[] = [
-        ...(t.owners ?? []),
-        t.primaryOwner,
-        t.swid,
-      ];
+      const candidates: (string | undefined)[] = [...(t.owners ?? []), t.primaryOwner, t.swid];
       return candidates.some((c) => c && c.replace(/[{}]/g, "").toUpperCase() === swidGuid);
     };
     const mine = teams.find(matchesSwid) ?? teams[0];
-    const rec = league.settings?.scoringSettings?.scoringItems?.find((s) => s.statId === 53)?.points ?? null;
+    const rec =
+      league.settings?.scoringSettings?.scoringItems?.find((s) => s.statId === 53)?.points ?? null;
     return {
       leagueName: league.settings?.name ?? null,
       teamName: espnTeamName(mine),
@@ -552,7 +562,12 @@ export async function loadConnectionMeta(identifier: string): Promise<Connection
       scoring_settings?: Record<string, unknown>;
     }>(`${BASE}/league/${leagueId}`),
     json<
-      { user_id: string; display_name: string; avatar: string | null; metadata?: { team_name?: string; avatar?: string } }[]
+      {
+        user_id: string;
+        display_name: string;
+        avatar: string | null;
+        metadata?: { team_name?: string; avatar?: string };
+      }[]
     >(`${BASE}/league/${leagueId}/users`),
   ]);
 
@@ -562,10 +577,7 @@ export async function loadConnectionMeta(identifier: string): Promise<Connection
     leagueName: league?.name ?? null,
     teamName: me?.metadata?.team_name?.trim() || me?.display_name || null,
     avatar:
-      me?.metadata?.avatar ||
-      sleeperAvatar(me?.avatar) ||
-      sleeperAvatar(league?.avatar) ||
-      null,
+      me?.metadata?.avatar || sleeperAvatar(me?.avatar) || sleeperAvatar(league?.avatar) || null,
     scoring: league ? scoringLabel(league.scoring_settings) : null,
     teams: league?.total_rosters ?? null,
     hostLeagueId: leagueId,
@@ -840,13 +852,16 @@ type EspnRosterView = {
 
 /** Host platform slot token -> internal position tag. */
 export function normalizeSlotToken(raw: string): string {
-  const t = String(raw ?? "").toUpperCase().replace(/[^A-Z+/]/g, "");
+  const t = String(raw ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z+/]/g, "");
   if (t === "QB") return "QB";
   if (t === "RB") return "RB";
   if (t === "WR") return "WR";
   if (t === "TE") return "TE";
   if (t === "K" || t === "PK") return "K";
-  if (t === "DEF" || t === "DST" || t === "D/ST" || t === "DST/DEF" || t === "DEFENSE") return "DEF";
+  if (t === "DEF" || t === "DST" || t === "D/ST" || t === "DST/DEF" || t === "DEFENSE")
+    return "DEF";
   if (t.startsWith("FLEX") || t === "WRRBTE" || t === "RBWRTE" || t === "WRRB" || t === "REC")
     return "FLEX";
   if (t === "IR" || t === "IL" || t === "IL+") return "IR";
@@ -951,7 +966,6 @@ function espnBoxEntryPoints(entry: EspnBoxscoreRosterEntry, week: number): numbe
   return 0;
 }
 
-
 /** Every team in the active league with its current roster. */
 export async function loadConnectionRosters(
   identifier: string,
@@ -982,11 +996,12 @@ export async function loadConnectionRosters(
       const mineId = (rows.find(matchesSwid) ?? rows[0])?.id;
       // Build the starting-slot template from ESPN's lineup slot counts
       // (RB/WR, WR/TE and OP collapse into FLEX), in Sleeper-style display order.
-      const rosterPositions = espnStarterTemplate(league?.settings?.rosterSettings?.lineupSlotCounts);
+      const rosterPositions = espnStarterTemplate(
+        league?.settings?.rosterSettings?.lineupSlotCounts,
+      );
       const teams: LeagueRosterTeam[] = rows.map((t, i) => {
         const entries = t.roster?.entries ?? [];
-        const nameOf = (e: (typeof entries)[number]) =>
-          e.playerPoolEntry?.player?.fullName ?? "";
+        const nameOf = (e: (typeof entries)[number]) => e.playerPoolEntry?.player?.fullName ?? "";
         const logoRaw = t.logo?.trim() || null;
         return {
           slot: t.id ?? i + 1,
@@ -1021,7 +1036,6 @@ export async function loadConnectionRosters(
         teams,
         rosterPositions,
       };
-
     }
     return null;
   }
@@ -1104,7 +1118,6 @@ export async function loadConnectionRosters(
     myTeamName: teams.find((t) => t.isMine)?.team ?? null,
     teams,
     rosterPositions,
-
   };
 }
 
@@ -1254,7 +1267,13 @@ function readNativeProjected(row: Record<string, unknown>): number | null {
     const val = row[key];
     if (!val || typeof val !== "object" || Array.isArray(val)) continue;
     const obj = val as Record<string, unknown>;
-    const nested = readNativeNumber(obj, ["total", "points", "projected", "projected_points", "value"]);
+    const nested = readNativeNumber(obj, [
+      "total",
+      "points",
+      "projected",
+      "projected_points",
+      "value",
+    ]);
     if (nested != null) return nested;
     let sum = 0;
     let touched = false;
@@ -1438,8 +1457,7 @@ async function reconstructSleeperIrByRoster(
       const isWaiver = type === "waiver";
       const isFreeAgent = type === "free_agent";
       const isIrType = type === "injury" || type === "ir";
-      const placingOnIr =
-        isIrType || (!isWaiver && !isFreeAgent && !isTrade && toSlot === "IR");
+      const placingOnIr = isIrType || (!isWaiver && !isFreeAgent && !isTrade && toSlot === "IR");
       const activatingOffIr = fromSlot === "IR" && toSlot !== "IR";
 
       const at = Number(txn.status_updated ?? txn.created ?? 0) || 0;
@@ -1496,14 +1514,21 @@ async function reconstructSleeperIrByRoster(
 }
 
 /** Load host-platform weekly matchup rows keyed by roster + matchup_id. */
-const LIVE_MATCHUP_TTL_MS = 8 * 1000;
+const LIVE_MATCHUP_TTL_MS = 20 * 1000;
 const FINAL_MATCHUP_TTL_MS = 10 * 60 * 1000;
 const NFL_STATE_URL = `${BASE}/state/nfl`;
 
+export type LoadMatchupsOptions = {
+  /** When true (default), past weeks prefer durable `weekly_matchups` rows. */
+  preferCache?: boolean;
+  /** When true (default), write-through live/upstream boards into Supabase. */
+  persist?: boolean;
+};
+
 /**
- * Weekly matchup board, cached per league + week. Past weeks are final and
- * cached for minutes; the current / future week refreshes every few seconds,
- * shared by everyone viewing the same league.
+ * Weekly matchup board, cached per league + week. Past weeks prefer the
+ * durable Supabase cache (no host wait). Current week refreshes on a short
+ * shared TTL so concurrent viewers coalesce onto one upstream call.
  */
 export async function loadConnectionMatchups(
   identifier: string,
@@ -1512,18 +1537,49 @@ export async function loadConnectionMatchups(
   s2?: string | null,
   swid?: string | null,
   connectionId?: string | null,
+  options?: LoadMatchupsOptions,
 ): Promise<LeagueWeekMatchups | null> {
   const safeWeek = Math.max(1, Math.floor(Number(week) || 1));
   const plat = platform.trim().toLowerCase();
+  const preferCache = options?.preferCache !== false;
+  const persist = options?.persist !== false;
   // Credentials are part of the key so a private ESPN league is never served
   // to a caller who could not fetch it themselves.
   const key = `matchups|${plat}|${identifier.trim()}|${safeWeek}|${s2 ?? ""}|${swid ?? ""}`;
   const nflState = await cachedJson<{ week?: number }>(NFL_STATE_URL, 5 * 60 * 1000);
   const currentNflWeek = Math.max(0, Number(nflState?.week ?? 0) || 0);
   const isFinalWeek = currentNflWeek > 0 && safeWeek < currentNflWeek;
-  return cachedUpstream(key, isFinalWeek ? FINAL_MATCHUP_TTL_MS : LIVE_MATCHUP_TTL_MS, () =>
-    fetchConnectionMatchups(identifier, platform, safeWeek, s2, swid, connectionId),
+
+  if (preferCache && isFinalWeek) {
+    try {
+      const { loadCachedWeekMatchups } = await import("./league-resync.server");
+      const cached = await loadCachedWeekMatchups(identifier.trim(), safeWeek, connectionId);
+      if (cached?.entries?.length) return cached;
+    } catch {
+      /* fall through to host */
+    }
+  }
+
+  const board = await cachedUpstream(
+    key,
+    isFinalWeek ? FINAL_MATCHUP_TTL_MS : LIVE_MATCHUP_TTL_MS,
+    () => fetchConnectionMatchups(identifier, platform, safeWeek, s2, swid, connectionId),
   );
+
+  if (persist && board?.entries?.length && connectionId?.trim()) {
+    void import("./league-resync.server")
+      .then(({ persistWeekMatchups }) =>
+        persistWeekMatchups({
+          leagueId: identifier.trim(),
+          connectionId,
+          platform: plat,
+          board,
+        }),
+      )
+      .catch(() => undefined);
+  }
+
+  return board;
 }
 
 async function fetchConnectionMatchups(
@@ -1707,11 +1763,15 @@ async function fetchConnectionMatchups(
           if (hostKey) {
             const athlete = entry.playerPoolEntry?.player;
             const meta = entry.playerId != null ? espnMeta.get(String(entry.playerId)) : undefined;
-            const pos = ESPN_DEFAULT_POSITION[athlete?.defaultPositionId ?? -1] ?? meta?.pos ?? null;
+            const pos =
+              ESPN_DEFAULT_POSITION[athlete?.defaultPositionId ?? -1] ?? meta?.pos ?? null;
             const espnId = Number(entry.playerId);
             hostPlayers[hostKey] = {
               name: athlete?.fullName?.trim() || meta?.name || "Unknown player",
-              team: (athlete?.proTeamId != null ? espnProTeamAbbr(athlete.proTeamId) : null) ?? meta?.team ?? null,
+              team:
+                (athlete?.proTeamId != null ? espnProTeamAbbr(athlete.proTeamId) : null) ??
+                meta?.team ??
+                null,
               pos,
               headshot:
                 Number.isFinite(espnId) && espnId > 0 && pos !== "DEF"
@@ -1866,10 +1926,7 @@ async function fetchConnectionMatchups(
 
   const reserveByRoster = new Map<number, string[]>();
   for (const r of rosters ?? []) {
-    reserveByRoster.set(
-      r.roster_id,
-      (r.reserve ?? []).map((p) => String(p)).filter(Boolean),
-    );
+    reserveByRoster.set(r.roster_id, (r.reserve ?? []).map((p) => String(p)).filter(Boolean));
   }
 
   const byUser = new Map((users ?? []).map((u) => [u.user_id, u]));
@@ -2208,9 +2265,7 @@ const ESPN_ATHLETE_MISS_TTL_MS = 30 * 60 * 1000;
  * Fantasy mTransactions2 items usually omit fullName; the public athlete API
  * fills the gap when Sleeper's espn_id field is null/missing.
  */
-async function loadEspnPlayerMetaByIds(
-  playerIds: string[],
-): Promise<Map<string, EspnPlayerMeta>> {
+async function loadEspnPlayerMetaByIds(playerIds: string[]): Promise<Map<string, EspnPlayerMeta>> {
   const out = new Map<string, EspnPlayerMeta>();
   const ids = [...new Set(playerIds.map((id) => String(id).trim()).filter(Boolean))];
   if (!ids.length) return out;
@@ -2266,9 +2321,7 @@ async function loadEspnPlayerMetaByIds(
       }
       const meta: EspnPlayerMeta = {
         name,
-        ...(athlete?.position?.abbreviation
-          ? { pos: athlete.position.abbreviation }
-          : {}),
+        ...(athlete?.position?.abbreviation ? { pos: athlete.position.abbreviation } : {}),
         ...(athlete?.team?.abbreviation ? { team: athlete.team.abbreviation } : {}),
       };
       remember(meta);
@@ -2330,10 +2383,7 @@ function espnItemPlayerName(item: {
   player?: { fullName?: string };
   playerPoolEntry?: { player?: { fullName?: string } };
 }): string | undefined {
-  const full =
-    item.playerPoolEntry?.player?.fullName ??
-    item.player?.fullName ??
-    item.playerName;
+  const full = item.playerPoolEntry?.player?.fullName ?? item.player?.fullName ?? item.playerName;
   return typeof full === "string" && full.trim() ? full.trim() : undefined;
 }
 
@@ -2373,8 +2423,12 @@ function isDraftActivityTransaction(txn: {
 }): boolean {
   if (txn.metadata?.is_draft === true) return true;
 
-  const type = String(txn.type ?? "").trim().toUpperCase();
-  const actionType = String(txn.action_type ?? "").trim().toUpperCase();
+  const type = String(txn.type ?? "")
+    .trim()
+    .toUpperCase();
+  const actionType = String(txn.action_type ?? "")
+    .trim()
+    .toUpperCase();
   const executionType = String(txn.execution_type ?? txn.executionType ?? "")
     .trim()
     .toUpperCase();
@@ -2401,7 +2455,13 @@ function isDraftActivityTransaction(txn: {
   }
 
   // Any item coded as a draft pick → entire transaction is draft noise.
-  if ((txn.items ?? []).some((item) => String(item.type ?? "").toUpperCase().includes("DRAFT"))) {
+  if (
+    (txn.items ?? []).some((item) =>
+      String(item.type ?? "")
+        .toUpperCase()
+        .includes("DRAFT"),
+    )
+  ) {
     return true;
   }
 
@@ -2519,8 +2579,7 @@ function formatSleeperTransaction(
       });
     }
     const parts = [...byRoster.entries()].map(
-      ([rosterId, players]) =>
-        `${teamLabel(teams, rosterId)} received ${players.join(", ")}`,
+      ([rosterId, players]) => `${teamLabel(teams, rosterId)} received ${players.join(", ")}`,
     );
     if (!parts.length) return [];
     const prefix = status === "failed" ? "TRADE REJECTED" : "TRADE COMPLETED";
@@ -2622,8 +2681,7 @@ function formatSleeperTransaction(
     // Mirror waiver gate: unfinished / failed IR moves stay off the feed.
     if (status && status !== "complete" && status !== "successful") return [];
 
-    const primaryRoster =
-      adds[0]?.[1] ?? drops[0]?.[1] ?? txn.roster_ids?.[0] ?? undefined;
+    const primaryRoster = adds[0]?.[1] ?? drops[0]?.[1] ?? txn.roster_ids?.[0] ?? undefined;
     const team = teamLabel(teams, primaryRoster);
     const irPlayers = adds.length ? adds : drops;
     if (!irPlayers.length) return [];
@@ -2657,12 +2715,7 @@ async function resolveSleeperLeagueId(clean: string): Promise<string | null> {
 }
 
 /** ESPN mTransactions2 only returns rows when scoringPeriodId + filterType are set. */
-const ESPN_ACTIVITY_TXN_TYPES = [
-  "FREEAGENT",
-  "WAIVER",
-  "TRADE_ACCEPT",
-  "TRADE_UPHOLD",
-] as const;
+const ESPN_ACTIVITY_TXN_TYPES = ["FREEAGENT", "WAIVER", "TRADE_ACCEPT", "TRADE_UPHOLD"] as const;
 
 type EspnActivityTxn = {
   id?: number | string;
@@ -2791,7 +2844,9 @@ async function loadTransactionLogCore(
       );
       // Recent scope mirrors Sleeper (current + prior 3); season scope pulls every period.
       const periodCount = scope === "season" ? latestPeriod : Math.min(latestPeriod, 4);
-      const periods = Array.from({ length: periodCount }, (_, i) => latestPeriod - i).filter((w) => w >= 1);
+      const periods = Array.from({ length: periodCount }, (_, i) => latestPeriod - i).filter(
+        (w) => w >= 1,
+      );
       const weekLists = await Promise.all(
         periods.map((period) => loadEspnTransactionsForPeriod(clean, year, period, s2, swid)),
       );
@@ -2800,12 +2855,17 @@ async function loadTransactionLogCore(
       const weekByTxnId = new Map<string, number>();
       weekLists.forEach((list, i) => {
         for (const txn of list) {
-          const key = String(txn.id ?? `${txn.processDate ?? txn.proposedDate ?? ""}-${txn.type ?? ""}`);
+          const key = String(
+            txn.id ?? `${txn.processDate ?? txn.proposedDate ?? ""}-${txn.type ?? ""}`,
+          );
           if (seenTxnIds.has(key)) continue;
           seenTxnIds.add(key);
           rawTxns.push(txn);
           const at = Number(txn.processDate ?? txn.proposedDate ?? 0);
-          weekByTxnId.set(String(txn.id ?? `${at}`), Number(txn.scoringPeriodId ?? txn.scoring_period ?? periods[i]));
+          weekByTxnId.set(
+            String(txn.id ?? `${at}`),
+            Number(txn.scoringPeriodId ?? txn.scoring_period ?? periods[i]),
+          );
         }
       });
 
@@ -2888,7 +2948,15 @@ async function loadTransactionLogCore(
             (isEspnFantasyTeamId(i.fromTeamId) && !isEspnFantasyTeamId(i.toTeamId))
           );
         });
-        const isTrade = String(txn.type ?? "").toUpperCase().includes("TRADE") || items.some((i) => String(i.type ?? "").toUpperCase().includes("TRADE"));
+        const isTrade =
+          String(txn.type ?? "")
+            .toUpperCase()
+            .includes("TRADE") ||
+          items.some((i) =>
+            String(i.type ?? "")
+              .toUpperCase()
+              .includes("TRADE"),
+          );
 
         const chipFor = (item: (typeof items)[number]) => {
           if (item.playerId == null && !nameForEspnItem(item)) return "Unknown Player";
@@ -2938,7 +3006,10 @@ async function loadTransactionLogCore(
               `${espnManagerTeamName(teamMap, teams, teamId)} received ${players.join(", ")}`,
           );
           if (!parts.length) continue;
-          const prefix = status.includes("reject") || status.includes("fail") ? "TRADE REJECTED" : "TRADE COMPLETED";
+          const prefix =
+            status.includes("reject") || status.includes("fail")
+              ? "TRADE REJECTED"
+              : "TRADE COMPLETED";
           events.push({
             id,
             at,
@@ -3501,11 +3572,11 @@ export async function fetchYahooLeague(
   const leagueNode = ((settingsRes["fantasy_content"] as Record<string, unknown>)?.["league"] ??
     null) as unknown;
   const leagueArr = Array.isArray(leagueNode) ? leagueNode : [];
-  const teamsNode = ((rostersRes?.["fantasy_content"] as Record<string, unknown>)?.[
-    "league"
-  ] as unknown[] | undefined)?.find(
-    (n) => n && typeof n === "object" && "teams" in (n as Record<string, unknown>),
-  ) as Record<string, unknown> | undefined;
+  const teamsNode = (
+    (rostersRes?.["fantasy_content"] as Record<string, unknown>)?.["league"] as
+      unknown[] | undefined
+  )?.find((n) => n && typeof n === "object" && "teams" in (n as Record<string, unknown>)) as
+    Record<string, unknown> | undefined;
 
   const teams: UnifiedRosterTeam[] = yahooCollection(teamsNode?.["teams"]).map((row, i) => {
     const teamNode = (row as Record<string, unknown>)["team"];
@@ -3529,7 +3600,16 @@ export async function fetchYahooLeague(
     };
   });
 
-  const draftSlots: RosterSlotCounts = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DEF: 0, BENCH: 0 };
+  const draftSlots: RosterSlotCounts = {
+    QB: 0,
+    RB: 0,
+    WR: 0,
+    TE: 0,
+    FLEX: 0,
+    K: 0,
+    DEF: 0,
+    BENCH: 0,
+  };
   let ir = 0;
   const rosterPositions = findNode(leagueArr as YahooNode, "roster_positions");
   const positionRows = Array.isArray(rosterPositions) ? rosterPositions : [];
