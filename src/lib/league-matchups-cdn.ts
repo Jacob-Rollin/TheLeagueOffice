@@ -204,8 +204,10 @@ export async function fetchLeagueMatchupsHistory(input: {
   leagueId: string;
   platform: string;
   weeks: number[];
-  /** NFL state week — prior week (`currentWeek - 1`) gets Tuesday freshness. */
+  /** NFL state week — used with completedThrough for soft-final prior week. */
   currentWeek?: number | null;
+  /** Latest completed slate (standings games / display_week aware). */
+  completedThrough?: number | null;
   s2?: string;
   swid?: string;
   connectionId?: string;
@@ -222,7 +224,13 @@ export async function fetchLeagueMatchupsHistory(input: {
   ).sort((a, b) => a - b);
 
   const currentWeek = Math.max(0, Math.floor(Number(input.currentWeek ?? 0)) || 0);
-  const priorWeek = currentWeek > 1 ? currentWeek - 1 : 0;
+  const completedThrough = Math.max(
+    0,
+    Math.floor(Number(input.completedThrough ?? 0)) || 0,
+    currentWeek > 1 ? currentWeek - 1 : 0,
+  );
+  // Soft-final target is the latest completed slate (often display_week / games played).
+  const priorWeek = completedThrough > 0 ? completedThrough : 0;
 
   const missing = needed.filter((week) => {
     const hit = out.get(week);

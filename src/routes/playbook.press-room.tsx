@@ -17,11 +17,13 @@ import {
 } from "@/components/ui/select";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
+import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useLeagueActivity } from "@/hooks/useLeagueActivity";
 import { useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player, Pos } from "@/lib/draft";
+import { completedWeekNumberList, standingsGamesPlayed } from "@/lib/completed-weeks";
 import { cn } from "@/lib/utils";
 import {
   buildPlayersByName,
@@ -382,16 +384,21 @@ function PressRoomPage() {
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const playersByName = useMemo(() => buildPlayersByName(players), [players]);
   const { teams, rosterPositions } = useLeagueRosters(players);
+  const { standings } = useActiveStandings();
   const { events } = useLeagueActivity();
   const modalRef = useRef<PlayerModalHandle>(null);
 
   const nflWeek = useNflState();
   const currentWeek = nflWeek.data?.week ?? null;
+  const displayWeek = nflWeek.data?.displayWeek ?? null;
   const finalizedWeeks = useMemo(() => {
-    if (currentWeek == null) return [1];
-    if (currentWeek <= 1) return [1];
-    return Array.from({ length: currentWeek - 1 }, (_, i) => i + 1);
-  }, [currentWeek]);
+    const weeks = completedWeekNumberList({
+      nflWeek: currentWeek,
+      displayWeek,
+      gamesPlayed: standingsGamesPlayed(standings?.rows),
+    });
+    return weeks.length ? weeks : [1];
+  }, [currentWeek, displayWeek, standings?.rows]);
 
   const defaultWeek = finalizedWeeks[finalizedWeeks.length - 1] ?? 1;
   const [selectedWeek, setSelectedWeek] = useState<number>(defaultWeek);

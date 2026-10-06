@@ -25,6 +25,11 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/draft";
 import { getConnectionSettings } from "@/lib/league.functions";
+import {
+  completedWeekNumberList,
+  completedWeeksThrough,
+  standingsGamesPlayed,
+} from "@/lib/completed-weeks";
 import { fetchLeagueMatchupsHistory } from "@/lib/league-matchups-cdn";
 import { isPageVisible } from "@/lib/page-visibility";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
@@ -949,17 +954,33 @@ function PlaybookDashboardPage() {
 
   const nflWeek = useNflState();
   const currentWeek = nflWeek.data?.week ?? null;
+  const displayWeek = nflWeek.data?.displayWeek ?? null;
   const { matchups, loading: matchupsLoading } = useActiveMatchups(currentWeek);
   const { progressByNflTeam } = useNflGameProgress(currentWeek);
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
 
-  /** Completed NFL weeks (1 … current−1) for seasonal coaching efficiency. */
+  /** Completed slates for coaching / avg PF — standings + Sleeper display_week aware. */
   const optimalSlots = useMemo(() => starterSlots(rosterPositions), [rosterPositions]);
+  const gamesPlayed = useMemo(() => standingsGamesPlayed(standings?.rows), [standings?.rows]);
+  const completedThrough = useMemo(
+    () =>
+      completedWeeksThrough({
+        nflWeek: currentWeek,
+        displayWeek,
+        gamesPlayed,
+      }),
+    [currentWeek, displayWeek, gamesPlayed],
+  );
 
-  const completedWeekNumbers = useMemo(() => {
-    if (currentWeek == null || currentWeek <= 1) return [] as number[];
-    return Array.from({ length: currentWeek - 1 }, (_, i) => i + 1);
-  }, [currentWeek]);
+  const completedWeekNumbers = useMemo(
+    () =>
+      completedWeekNumberList({
+        nflWeek: currentWeek,
+        displayWeek,
+        gamesPlayed,
+      }),
+    [currentWeek, displayWeek, gamesPlayed],
+  );
 
   // CDN/TiDB first; Fluid backfill only for completed weeks still missing (cold TiDB).
   const historyAllQuery = useQuery({
@@ -968,6 +989,7 @@ function PlaybookDashboardPage() {
       activeLeague?.id ?? null,
       completedWeekNumbers.join(","),
       currentWeek,
+      completedThrough,
     ],
     enabled: Boolean(activeLeague?.leagueId && completedWeekNumbers.length > 0),
     retry: false,
@@ -979,6 +1001,7 @@ function PlaybookDashboardPage() {
         platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
         weeks: completedWeekNumbers,
         currentWeek,
+        completedThrough,
         ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
         ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
         ...(activeLeague?.id ? { connectionId: activeLeague.id } : {}),
@@ -1006,7 +1029,8 @@ function PlaybookDashboardPage() {
 
     for (let index = 0; index < completedWeekNumbers.length; index += 1) {
       const week = completedWeekNumbers[index] ?? index + 1;
-      const isCompleted = week < (currentWeek ?? 1);
+      // Use standings/display-aware ceiling — not only `week < nfl.week`.
+      const isCompleted = week <= completedThrough;
       const entries = historyAllQuery.data?.get(week)?.board.entries ?? [];
       const mine =
         entries.find((row) => Number(row.rosterId) === Number(mySlot)) ?? null;
@@ -1086,7 +1110,7 @@ function PlaybookDashboardPage() {
     return out;
     // historyStamp tracks fetch completion; query array identity is unstable each render.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- historyStamp
-  }, [historyStamp, completedWeekNumbers, myTeam, teams, playersById, currentWeek, optimalSlots]);
+  }, [historyStamp, completedWeekNumbers, completedThrough, myTeam, teams, playersById, currentWeek, optimalSlots]);
 
   const synchronizedWeeklyMetrics = useMemo(() => {
     const empty = {
@@ -1489,7 +1513,7 @@ function PlaybookDashboardPage() {
   });
 
   /** Press Room awards from the last completed week (shares the history matchup cache). */
-  const awardWeek = currentWeek != null && currentWeek > 1 ? currentWeek - 1 : null;
+  const awardWeek = completedThrough > 0 ? completedThrough : null;
   const { matchups: awardMatchups } = useActiveMatchups(awardWeek);
   const playersByName = useMemo(() => buildPlayersByName(players), [players]);
   const myAwards = useMemo(() => {

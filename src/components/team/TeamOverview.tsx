@@ -553,9 +553,17 @@ export function TeamOverview({
   const recordTone: Tone =
     winRate == null ? "mid" : winRate >= 0.6 ? "good" : winRate <= 0.4 ? "bad" : "mid";
   const streak = standing?.streak ?? null;
+  const throughWeek =
+    league.completedWeekNumbers?.length
+      ? league.completedWeekNumbers[league.completedWeekNumbers.length - 1]!
+      : currentWeek != null && currentWeek > 1
+        ? currentWeek - 1
+        : gamesPlayed > 0
+          ? gamesPlayed
+          : null;
   const recordFooter =
-    currentWeek != null && currentWeek > 1
-      ? `Through Week ${currentWeek - 1}${streak ? ` · ${streak} streak` : ""}`
+    throughWeek != null
+      ? `Through Week ${throughWeek}${streak ? ` · ${streak} streak` : ""}`
       : "Season opener";
   const standingRank = standingIndex >= 0 ? standingIndex + 1 : null;
   const playoffCut = league.playoffTeamsSetting;
