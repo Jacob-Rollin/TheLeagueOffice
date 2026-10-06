@@ -39,3 +39,33 @@ jobs:
           fi
           curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
             "${APP_URL%/}/api/cron/league-delta-sync?limit=40"
+
+      # 🟢 Send Success Metrics to Axiom if the sync completes perfectly
+      - name: Log Success to Axiom
+        if: success()
+        run: |
+          curl -X POST "https://axiom.co" \
+            -H "Authorization: Bearer ${{ secrets.AXIOM_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '[{
+              "event_source": "github_actions",
+              "workflow": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "status": "success",
+              "msg": "League data delta sync completed successfully across all rosters."
+            }]'
+
+      # 🔴 Catch the exact reason your background script fails or times out
+      - name: Log Failure to Axiom
+        if: failure()
+        run: |
+          curl -X POST "https://axiom.co" \
+            -H "Authorization: Bearer ${{ secrets.AXIOM_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '[{
+              "event_source": "github_actions",
+              "workflow": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "status": "failed",
+              "msg": "League delta sync script crashed. Check runner logs for API threshold closures."
+            }]'
