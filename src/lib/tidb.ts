@@ -4,20 +4,97 @@
  */
 import { connect, type Config, type Connection } from "@tidbcloud/serverless";
 
+/** App database name — TiDB console cluster name may differ; this is the MySQL schema. */
+export const TIDB_APP_DATABASE = "league-office-native";
+
+const RESERVED_DATABASES = new Set([
+  "",
+  "sys",
+  "mysql",
+  "information_schema",
+  "performance_schema",
+  "test",
+]);
+
 let cached: Connection<Config> | null = null;
+let readyPromise: Promise<Connection<Config>> | null = null;
 
 export function tidbConfigured(): boolean {
   return Boolean(process.env["DATABASE_URL"]?.trim());
 }
 
+/** Database segment from a mysql:// URL path (may be a reserved system schema). */
+export function tidbDatabaseFromUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return decodeURIComponent(parsed.pathname.replace(/^\//, "").split("/")[0] ?? "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * TiDB Cloud often hands out `/test` or `/sys` in the connection string.
+ * Rewrite those to the app schema so warehouse tables are not created in system DBs.
+ */
+export function normalizeTidbDatabaseUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const db = decodeURIComponent(parsed.pathname.replace(/^\//, "").split("/")[0] ?? "");
+    if (RESERVED_DATABASES.has(db.toLowerCase())) {
+      parsed.pathname = `/${TIDB_APP_DATABASE}`;
+      return parsed.toString();
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
+async function readyTidb(): Promise<Connection<Config>> {
+  if (cached) return cached;
+  if (readyPromise) return readyPromise;
+
+  readyPromise = (async () => {
+    const raw = process.env["DATABASE_URL"]?.trim();
+    if (!raw) throw new Error("DATABASE_URL is not configured");
+
+    const normalized = normalizeTidbDatabaseUrl(raw);
+    const needsCreate = normalized !== raw;
+
+    if (needsCreate) {
+      const bootstrap = connect({ url: raw });
+      try {
+        await bootstrap.execute(
+          `CREATE DATABASE IF NOT EXISTS \`${TIDB_APP_DATABASE.replace(/`/g, "")}\``,
+        );
+      } finally {
+        try {
+          await bootstrap.close();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    cached = connect({ url: normalized });
+    return cached;
+  })().catch((err) => {
+    readyPromise = null;
+    cached = null;
+    throw err;
+  });
+
+  return readyPromise;
+}
+
+/** Sync accessor for callers that already awaited tidbExecute / ready path. Prefer tidbExecute. */
 export function getTidb(): Connection<Config> {
+  if (cached) return cached;
   const url = process.env["DATABASE_URL"]?.trim();
-  if (!url) {
-    throw new Error("DATABASE_URL is not configured");
-  }
-  if (!cached) {
-    cached = connect({ url });
-  }
+  if (!url) throw new Error("DATABASE_URL is not configured");
+  // Best-effort sync connect (may still hit reserved DB until first tidbExecute).
+  cached = connect({ url: normalizeTidbDatabaseUrl(url) });
   return cached;
 }
 
@@ -26,7 +103,7 @@ export async function tidbExecute<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = [],
 ): Promise<T[]> {
-  const client = getTidb();
+  const client = await readyTidb();
   const result = await client.execute(sql, params);
   if (Array.isArray(result)) return result as T[];
   if (result && typeof result === "object" && "rows" in result) {

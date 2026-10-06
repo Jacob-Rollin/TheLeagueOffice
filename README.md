@@ -65,12 +65,26 @@ YAHOO_CLIENT_SECRET=
 
 Set the same variables in your Vercel project settings for deployments.
 
-### TiDB setup (one-time)
+### TiDB warehouse cutover (one-time)
 
-1. Apply [`scripts/tidb/schema.sql`](scripts/tidb/schema.sql) to your TiDB cluster.
-2. Set `DATABASE_URL` on Vercel + GitHub Actions secrets.
-3. Seed warehouse: `POST /api/admin/seed-player-warehouse` with `Authorization: Bearer $CRON_SECRET`.
-4. Background sync uses `/api/webhooks/sync` and `/api/cron/*` — never wire host events to `repository_dispatch`.
+Full click-by-click guide: [`scripts/tidb/CUTOVER.md`](scripts/tidb/CUTOVER.md).
+
+1. Create a TiDB Serverless cluster and set `DATABASE_URL` on **Vercel** (Production + Preview). Prefer a URL ending in `/league-office-native` (the app rewrites `/sys` and `/test` automatically).
+2. Deploy a build that includes `/api/admin/tidb-migrate` (merge the TiDB cutover PR).
+3. **Run migrate** (GitHub Actions → **TiDB Warehouse Migrate** → Run workflow), or:
+   ```sh
+   export APP_URL="https://theleagueoffice.app"
+   export CRON_SECRET="from-vercel"
+   curl -X POST "$APP_URL/api/admin/tidb-migrate" \
+     -H "Authorization: Bearer $CRON_SECRET" \
+     -H "Content-Type: application/json" \
+     -d '{"action":"migrate"}'
+   ```
+4. **Verify**: `GET /api/admin/tidb-migrate` (same auth) shows `playerWarehouseCount` ≈ 4000+, and `curl -s "$APP_URL/api/data/players-export" | head -c 200` starts with `{"ok":true,"v":7`. No extra redeploy needed unless you just changed env vars.
+5. Optional env flags:
+   - `WAREHOUSE_DUAL_WRITE_SUPABASE=1` — keep writing Supabase B during transition
+   - `WAREHOUSE_UPLOAD_BRAIN=1` — keep publishing `master_player_brain.json`
+6. Background sync uses `/api/webhooks/sync` and `/api/cron/*` — never wire host events to `repository_dispatch`.
 
 ## Scripts
 

@@ -1,0 +1,73 @@
+name: TiDB Warehouse Migrate
+
+# One-click cutover: apply schema + seed player_warehouse from Supabase brain.
+# Requires repo secrets APP_URL and CRON_SECRET (same as other cron workflows).
+# After PR #19 (or this branch) is on the target deployment, run:
+#   Actions → TiDB Warehouse Migrate → Run workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "migrate (schema+seed), schema, seed, or status"
+        required: true
+        default: migrate
+        type: choice
+        options:
+          - migrate
+          - schema
+          - seed
+          - status
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tidb-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Run tidb-migrate / verify export
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::Set GitHub secrets APP_URL (e.g. https://theleagueoffice.app) and CRON_SECRET"
+            exit 1
+          fi
+          BASE="${APP_URL%/}"
+
+          if [ "$ACTION" = "status" ]; then
+            echo "GET $BASE/api/admin/tidb-migrate"
+            curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
+              "$BASE/api/admin/tidb-migrate" | tee /tmp/tidb-status.json
+          else
+            echo "POST $BASE/api/admin/tidb-migrate action=$ACTION"
+            curl -fsS -X POST "$BASE/api/admin/tidb-migrate" \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              -H "Content-Type: application/json" \
+              -d "{\"action\":\"$ACTION\"}" | tee /tmp/tidb-migrate.json
+          fi
+
+          echo ""
+          echo "GET $BASE/api/data/players-export (first 240 bytes)"
+          EXPORT="$(curl -fsS "$BASE/api/data/players-export")"
+          echo "$EXPORT" | head -c 240
+          echo ""
+          echo "$EXPORT" | grep -q '"ok":true' || {
+            echo "::error::players-export did not return ok:true — check DATABASE_URL + migrate output above"
+            exit 1
+          }
+          COUNT="$(echo "$EXPORT" | sed -n 's/.*"count":\([0-9]*\).*/\1/p' | head -1)"
+          echo "players-export count=${COUNT:-unknown}"
+          if [ -n "${COUNT:-}" ] && [ "$COUNT" -lt 100 ]; then
+            echo "::error::warehouse count too low ($COUNT)"
+            exit 1
+          fi
