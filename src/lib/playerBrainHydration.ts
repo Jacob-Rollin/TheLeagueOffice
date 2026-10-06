@@ -1,11 +1,9 @@
 /**
- * Client-side master player brain hydration.
+ * Client-side player matrix hydration.
  *
- * Silent, background-only parallel track: downloads the compiled
- * `master_player_brain.json` payload from the Database B public storage
- * bucket at most once every 30 minutes, compiles the parallel arrays into a
- * key-value lookup dictionary, and stores that dictionary in IndexedDB via
- * localforage.
+ * Prefers the CDN-cached TiDB export (`/api/data/players-export`). Falls back
+ * to the legacy Supabase Storage `master_player_brain.json` only when TiDB is
+ * not seeded yet. Stores the dictionary in IndexedDB via localforage.
  *
  * This module deliberately does NOT feed the War Room, Trade Desk, Waiver
  * Evaluator, or global search — those keep reading from their existing
@@ -23,7 +21,7 @@ import { readCache } from "@/lib/sleeper-cache";
 const BUCKET = "player_brain";
 const FILE = "master_player_brain.json";
 // Schema-versioned heartbeat forces one refresh when synchronized fields expand.
-const HEARTBEAT_KEY = "player-brain:last-sync:v6";
+const HEARTBEAT_KEY = "player-brain:last-sync:v7-tidb";
 const MATRIX_KEY = "player-brain:matrix";
 const META_KEY = "player-brain:meta";
 const HEARTBEAT_MS = 30 * 60 * 1000;

@@ -65,12 +65,23 @@ YAHOO_CLIENT_SECRET=
 
 Set the same variables in your Vercel project settings for deployments.
 
-### TiDB setup (one-time)
+### TiDB warehouse cutover (one-time)
 
-1. Apply [`scripts/tidb/schema.sql`](scripts/tidb/schema.sql) to your TiDB cluster.
-2. Set `DATABASE_URL` on Vercel + GitHub Actions secrets.
-3. Seed warehouse: `POST /api/admin/seed-player-warehouse` with `Authorization: Bearer $CRON_SECRET`.
-4. Background sync uses `/api/webhooks/sync` and `/api/cron/*` — never wire host events to `repository_dispatch`.
+1. Create a TiDB Serverless cluster and set `DATABASE_URL` on **Vercel** (Production + Preview) and in this Cloud Agent environment.
+2. Apply schema + seed from the Supabase brain in one call:
+   ```sh
+   curl -X POST "$APP_URL/api/admin/tidb-migrate" \
+     -H "Authorization: Bearer $CRON_SECRET" \
+     -H "Content-Type: application/json" \
+     -d '{"action":"migrate"}'
+   ```
+   Or separately: `{"action":"schema"}` then `{"action":"seed"}`.
+3. Confirm: `GET /api/admin/tidb-migrate` (same auth) reports `playerWarehouseCount` ≈ 4000+.
+4. Redeploy Vercel. Clients hydrate from `/api/data/players-export` (CDN-cached); Supabase brain is legacy fallback only.
+5. Optional env flags:
+   - `WAREHOUSE_DUAL_WRITE_SUPABASE=1` — keep writing Supabase B during transition
+   - `WAREHOUSE_UPLOAD_BRAIN=1` — keep publishing `master_player_brain.json`
+6. Background sync uses `/api/webhooks/sync` and `/api/cron/*` — never wire host events to `repository_dispatch`.
 
 ## Scripts
 
