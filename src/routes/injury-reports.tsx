@@ -15,7 +15,7 @@ import {
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import { getInjuryReports } from "@/lib/players.functions";
+import { fetchSnapInjuryReports } from "@/lib/snap-cdn";
 
 export const Route = createFileRoute("/injury-reports")({
   ssr: false,
@@ -64,7 +64,7 @@ function InjuryReportsPage() {
         : 10 * 60 * 1000,
     refetchIntervalInBackground: false,
     retry: false,
-    queryFn: () => getInjuryReports(),
+    queryFn: () => fetchSnapInjuryReports(),
   });
 
   const { data: playersPayload } = useSleeperPlayers();

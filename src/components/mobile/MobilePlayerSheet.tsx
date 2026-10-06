@@ -606,7 +606,8 @@ function usePlayerLogs(id: string, team: string | null | undefined, pos: string 
   return useQuery({
     queryKey: ["player-logs", id, "current", team ?? "FA", pos ?? ""],
     enabled: Boolean(id && pos),
-    queryFn: () => fetchGameLogsClient(id, team ?? "FA", pos ?? "WR"),
+    queryFn: () =>
+      fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", null, { includeCareer: false }),
     staleTime: 30 * 60 * 1000,
     retry: false,
   });

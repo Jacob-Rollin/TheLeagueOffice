@@ -13,6 +13,7 @@ import {
 } from "@/lib/scoring-map";
 import type { Player, Pos } from "@/lib/players-build";
 import { POSITIONS } from "@/lib/players-build";
+import { getCached } from "@/lib/sleeper-cache";
 import { fetchNflStateClient } from "@/lib/sleeper-client";
 
 const HOUR = 1000 * 60 * 60;
@@ -125,100 +126,118 @@ async function fetchWeeklyProjectionsFor(
   season: string,
   week: number,
 ): Promise<Map<string, WeeklyProjRow>> {
-  const url = `${SLEEPER_BASE}/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`;
-  const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
-  const rows = res && res.ok ? ((await res.json()) as unknown) : null;
-  const map = new Map<string, WeeklyProjRow>();
-  if (Array.isArray(rows)) {
-    for (const row of rows as {
-      player_id?: string;
-      team?: string | null;
-      stats?: Record<string, number>;
-      player?: {
-        first_name?: string;
-        last_name?: string;
-        position?: string;
-        fantasy_positions?: string[];
-        team?: string | null;
-        injury_status?: string | null;
-      };
-    }[]) {
-      // Skip ADP-only / empty rows — Sleeper's "—" (no weekly projection).
-      if (!row?.player_id || !hasScorableProjectionStats(row.stats)) continue;
-      const pos = String(
-        row.player?.position ||
-          row.player?.fantasy_positions?.[0] ||
-          "",
-      ).toUpperCase();
-      const name =
-        `${row.player?.first_name ?? ""} ${row.player?.last_name ?? ""}`.trim() ||
-        row.team ||
-        row.player?.team ||
-        row.player_id;
-      map.set(String(row.player_id), {
-        stats: row.stats!,
-        pos,
-        name,
-        team: row.team ?? row.player?.team ?? "FA",
-        injury: row.player?.injury_status ?? null,
-      });
-    }
-  }
-  return map;
+  const entries = await getCached(
+    `weekly-proj-map-v1:${season}|${week}`,
+    15 * 60 * 1000,
+    async () => {
+      const url = `${SLEEPER_BASE}/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`;
+      const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
+      const rows = res && res.ok ? ((await res.json()) as unknown) : null;
+      const out: [string, WeeklyProjRow][] = [];
+      if (Array.isArray(rows)) {
+        for (const row of rows as {
+          player_id?: string;
+          team?: string | null;
+          stats?: Record<string, number>;
+          player?: {
+            first_name?: string;
+            last_name?: string;
+            position?: string;
+            fantasy_positions?: string[];
+            team?: string | null;
+            injury_status?: string | null;
+          };
+        }[]) {
+          // Skip ADP-only / empty rows — Sleeper's "—" (no weekly projection).
+          if (!row?.player_id || !hasScorableProjectionStats(row.stats)) continue;
+          const pos = String(
+            row.player?.position || row.player?.fantasy_positions?.[0] || "",
+          ).toUpperCase();
+          const name =
+            `${row.player?.first_name ?? ""} ${row.player?.last_name ?? ""}`.trim() ||
+            row.team ||
+            row.player?.team ||
+            row.player_id;
+          out.push([
+            String(row.player_id),
+            {
+              stats: row.stats!,
+              pos,
+              name,
+              team: row.team ?? row.player?.team ?? "FA",
+              injury: row.player?.injury_status ?? null,
+            },
+          ]);
+        }
+      }
+      return out;
+    },
+  );
+  return new Map(entries);
 }
 
 async function fetchSeasonStatRows(
   season: string,
   week?: number,
 ): Promise<Map<string, WeeklyProjRow>> {
-  const q = `season_type=regular&${positionsQuery()}&order_by=pts_half_ppr`;
-  const trySeason = async (yr: string) => {
-    const url = `${SLEEPER_BASE}/stats/nfl/${yr}${week ? `/${week}` : ""}?${q}`;
-    const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
-    const rows = res && res.ok ? ((await res.json()) as unknown) : null;
-    return Array.isArray(rows) ? rows : [];
-  };
+  const entries = await getCached(
+    `season-stats-map-v1:${season}|${week ?? "ytd"}`,
+    30 * 60 * 1000,
+    async () => {
+      const q = `season_type=regular&${positionsQuery()}&order_by=pts_half_ppr`;
+      const trySeason = async (yr: string) => {
+        const url = `${SLEEPER_BASE}/stats/nfl/${yr}${week ? `/${week}` : ""}?${q}`;
+        const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
+        const rows = res && res.ok ? ((await res.json()) as unknown) : null;
+        return Array.isArray(rows) ? rows : [];
+      };
 
-  let rows = await trySeason(season);
-  if (rows.length === 0 && !week) {
-    rows = await trySeason(String(Number(season) - 1));
-  }
+      let rows = await trySeason(season);
+      if (rows.length === 0 && !week) {
+        rows = await trySeason(String(Number(season) - 1));
+      }
 
-  const map = new Map<string, WeeklyProjRow>();
-  for (const row of rows as {
-    player_id?: string;
-    team?: string | null;
-    stats?: Record<string, number>;
-    player?: {
-      position?: string;
-      fantasy_positions?: string[];
-      active?: boolean;
-      first_name?: string;
-      last_name?: string;
-      team?: string | null;
-      injury_status?: string | null;
-    };
-  }[]) {
-    if (!row?.player_id || !row.stats) continue;
-    const pos = String(
-      row.player?.position || row.player?.fantasy_positions?.[0] || "",
-    ).toUpperCase();
-    if (pos !== "DEF" && row.player?.active === false) continue;
-    if (!pos) continue;
-    const name =
-      `${row.player?.first_name ?? ""} ${row.player?.last_name ?? ""}`.trim() ||
-      row.team ||
-      row.player?.team ||
-      row.player_id;
-    map.set(String(row.player_id), {
-      stats: row.stats,
-      pos,
-      name,
-      team: row.team ?? row.player?.team ?? "FA",
-      injury: row.player?.injury_status ?? null,
-    });
-  }
-  return map;
+      const out: [string, WeeklyProjRow][] = [];
+      for (const row of rows as {
+        player_id?: string;
+        team?: string | null;
+        stats?: Record<string, number>;
+        player?: {
+          position?: string;
+          fantasy_positions?: string[];
+          active?: boolean;
+          first_name?: string;
+          last_name?: string;
+          team?: string | null;
+          injury_status?: string | null;
+        };
+      }[]) {
+        if (!row?.player_id || !row.stats) continue;
+        const pos = String(
+          row.player?.position || row.player?.fantasy_positions?.[0] || "",
+        ).toUpperCase();
+        if (pos !== "DEF" && row.player?.active === false) continue;
+        if (!pos) continue;
+        const name =
+          `${row.player?.first_name ?? ""} ${row.player?.last_name ?? ""}`.trim() ||
+          row.team ||
+          row.player?.team ||
+          row.player_id;
+        out.push([
+          String(row.player_id),
+          {
+            stats: row.stats,
+            pos,
+            name,
+            team: row.team ?? row.player?.team ?? "FA",
+            injury: row.player?.injury_status ?? null,
+          },
+        ]);
+      }
+      return out;
+    },
+  );
+  return new Map(entries);
 }
 
 function ptsKey(format: ScoringFormat): string {
@@ -349,7 +368,8 @@ export function useLeagueProjections(week?: number | null) {
     enabled: Boolean(season && resolvedWeek),
     // Sleeper updates Out → projected mid-week; refresh often enough to track them.
     staleTime: 15 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    // IndexedDB TTL handles freshness — avoid focus storms on visitor IPs.
+    refetchOnWindowFocus: false,
     retry: false,
     queryFn: () => fetchWeeklyProjectionsFor(season!, resolvedWeek!),
   });
@@ -358,7 +378,7 @@ export function useLeagueProjections(week?: number | null) {
     queryKey: ["sleeper-season-stats-ranks", "v1-ytd", season],
     enabled: Boolean(season),
     staleTime: 30 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     retry: false,
     queryFn: () => fetchSeasonStatRows(season!),
   });
@@ -474,51 +494,59 @@ export function useSleeperWeekStats(season: string | null, week: number | null) 
 async function fetchSeasonProjectionsFor(
   season: string,
 ): Promise<Map<string, WeeklyProjRow>> {
-  const q = `season_type=regular&${positionsQuery()}&order_by=adp_half_ppr`;
-  const trySeason = async (yr: string) => {
-    const url = `${SLEEPER_BASE}/projections/nfl/${yr}?${q}`;
-    const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
-    const rows = res && res.ok ? ((await res.json()) as unknown) : null;
-    return Array.isArray(rows) ? rows : [];
-  };
-
-  let rows = await trySeason(season);
-  if (!rows.some((r) => hasScorableProjectionStats((r as { stats?: Record<string, number> }).stats))) {
-    rows = await trySeason(String(Number(season) - 1));
-  }
-
-  const map = new Map<string, WeeklyProjRow>();
-  for (const row of rows as {
-    player_id?: string;
-    team?: string | null;
-    stats?: Record<string, number>;
-    player?: {
-      position?: string;
-      fantasy_positions?: string[];
-      first_name?: string;
-      last_name?: string;
-      team?: string | null;
-      injury_status?: string | null;
+  const entries = await getCached(`season-proj-map-v1:${season}`, 30 * 60 * 1000, async () => {
+    const q = `season_type=regular&${positionsQuery()}&order_by=adp_half_ppr`;
+    const trySeason = async (yr: string) => {
+      const url = `${SLEEPER_BASE}/projections/nfl/${yr}?${q}`;
+      const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
+      const rows = res && res.ok ? ((await res.json()) as unknown) : null;
+      return Array.isArray(rows) ? rows : [];
     };
-  }[]) {
-    if (!row?.player_id || !hasScorableProjectionStats(row.stats)) continue;
-    const pos = String(
-      row.player?.position || row.player?.fantasy_positions?.[0] || "",
-    ).toUpperCase();
-    const name =
-      `${row.player?.first_name ?? ""} ${row.player?.last_name ?? ""}`.trim() ||
-      row.team ||
-      row.player?.team ||
-      row.player_id;
-    map.set(String(row.player_id), {
-      stats: row.stats!,
-      pos,
-      name,
-      team: row.team ?? row.player?.team ?? "FA",
-      injury: row.player?.injury_status ?? null,
-    });
-  }
-  return map;
+
+    let rows = await trySeason(season);
+    if (
+      !rows.some((r) => hasScorableProjectionStats((r as { stats?: Record<string, number> }).stats))
+    ) {
+      rows = await trySeason(String(Number(season) - 1));
+    }
+
+    const out: [string, WeeklyProjRow][] = [];
+    for (const row of rows as {
+      player_id?: string;
+      team?: string | null;
+      stats?: Record<string, number>;
+      player?: {
+        position?: string;
+        fantasy_positions?: string[];
+        first_name?: string;
+        last_name?: string;
+        team?: string | null;
+        injury_status?: string | null;
+      };
+    }[]) {
+      if (!row?.player_id || !hasScorableProjectionStats(row.stats)) continue;
+      const pos = String(
+        row.player?.position || row.player?.fantasy_positions?.[0] || "",
+      ).toUpperCase();
+      const name =
+        `${row.player?.first_name ?? ""} ${row.player?.last_name ?? ""}`.trim() ||
+        row.team ||
+        row.player?.team ||
+        row.player_id;
+      out.push([
+        String(row.player_id),
+        {
+          stats: row.stats!,
+          pos,
+          name,
+          team: row.team ?? row.player?.team ?? "FA",
+          injury: row.player?.injury_status ?? null,
+        },
+      ]);
+    }
+    return out;
+  });
+  return new Map(entries);
 }
 
 /** Season projected counting stats + league-scored fantasy points. */
@@ -551,7 +579,7 @@ export function useSeasonProjectionStats() {
     enabled: Boolean(season),
     // Mid-season role changes land on Sleeper season lines — keep fresher than a day.
     staleTime: 30 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     retry: false,
     queryFn: () => fetchSeasonProjectionsFor(season!),
   });

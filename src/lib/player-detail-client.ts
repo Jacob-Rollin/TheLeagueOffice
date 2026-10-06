@@ -126,7 +126,10 @@ export async function fetchPlayerDetailClient(
 
   const [sosBoard, logsBundle] = await Promise.all([
     fetchResearchSosBoard(season).catch(() => null),
-    fetchGameLogsClient(clean, player.team || "FA", player.pos, season).catch(() => null),
+    // Current season only here — full career loads when the Game Logs tab opens.
+    fetchGameLogsClient(clean, player.team || "FA", player.pos, season, {
+      includeCareer: false,
+    }).catch(() => null),
   ]);
 
   const sos = sosFromBoard(sosBoard, player.team, player.pos);
@@ -138,9 +141,8 @@ export async function fetchPlayerDetailClient(
       ? seasonLineFromCareer(season, currentCareer.games, currentCareer.pts, currentCareer.raw)
       : null;
 
-  const history = career
-    .filter((c) => c.year !== season && c.games > 0)
-    .map((c) => seasonLineFromCareer(c.year, c.games, c.pts, c.raw));
+  // History filled when user opens Logs (includeCareer). Keep injury-risk usable.
+  const history: SeasonLine[] = [];
 
   const projection: SeasonLine = {
     ...emptySeasonLine(season),

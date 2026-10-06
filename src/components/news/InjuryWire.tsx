@@ -99,8 +99,8 @@ export function InjuryWire({ limit = 5 }: { limit?: number }) {
         : 10 * 60 * 1000,
     refetchIntervalInBackground: false,
     queryFn: async () => {
-      const { getInjuryWire } = await import("@/lib/players.functions");
-      return await getInjuryWire({ data: { limit } });
+      const { fetchSnapInjuryWire } = await import("@/lib/snap-cdn");
+      return await fetchSnapInjuryWire(limit);
     },
   });
 

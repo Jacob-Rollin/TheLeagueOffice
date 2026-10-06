@@ -72,6 +72,7 @@ import { Route as ApiAuthYahooConnectRouteImport } from './routes/api/auth/yahoo
 import { Route as ApiDataLeagueIdRouteImport } from './routes/api/data/league.$id'
 import { Route as ApiDataPlayerIdRouteImport } from './routes/api/data/player.$id'
 import { Route as ApiDataResearchKindRouteImport } from './routes/api/data/research.$kind'
+import { Route as ApiDataSnapKindRouteImport } from './routes/api/data/snap.$kind'
 import { Route as MLeagueLeagueIdIndexRouteImport } from './routes/m.league.$leagueId.index'
 import { Route as MLeagueLeagueIdFeedRouteImport } from './routes/m.league.$leagueId.feed'
 import { Route as MLeagueLeagueIdMatchupRouteImport } from './routes/m.league.$leagueId.matchup'
@@ -399,6 +400,11 @@ const ApiDataResearchKindRoute = ApiDataResearchKindRouteImport.update({
   path: '/api/data/research/$kind',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDataSnapKindRoute = ApiDataSnapKindRouteImport.update({
+  id: '/api/data/snap/$kind',
+  path: '/api/data/snap/$kind',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MLeagueLeagueIdIndexRoute = MLeagueLeagueIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -499,6 +505,7 @@ export interface FileRoutesByFullPath {
   '/api/data/league/$id': typeof ApiDataLeagueIdRoute
   '/api/data/player/$id': typeof ApiDataPlayerIdRoute
   '/api/data/research/$kind': typeof ApiDataResearchKindRoute
+  '/api/data/snap/$kind': typeof ApiDataSnapKindRoute
   '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
   '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
   '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
@@ -568,6 +575,7 @@ export interface FileRoutesByTo {
   '/api/data/league/$id': typeof ApiDataLeagueIdRoute
   '/api/data/player/$id': typeof ApiDataPlayerIdRoute
   '/api/data/research/$kind': typeof ApiDataResearchKindRoute
+  '/api/data/snap/$kind': typeof ApiDataSnapKindRoute
   '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
   '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
   '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
@@ -641,6 +649,7 @@ export interface FileRoutesById {
   '/api/data/league/$id': typeof ApiDataLeagueIdRoute
   '/api/data/player/$id': typeof ApiDataPlayerIdRoute
   '/api/data/research/$kind': typeof ApiDataResearchKindRoute
+  '/api/data/snap/$kind': typeof ApiDataSnapKindRoute
   '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
   '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
   '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
@@ -715,6 +724,7 @@ export interface FileRouteTypes {
     | '/api/data/league/$id'
     | '/api/data/player/$id'
     | '/api/data/research/$kind'
+    | '/api/data/snap/$kind'
     | '/m/league/$leagueId/feed'
     | '/m/league/$leagueId/matchup'
     | '/m/league/$leagueId/players'
@@ -784,6 +794,7 @@ export interface FileRouteTypes {
     | '/api/data/league/$id'
     | '/api/data/player/$id'
     | '/api/data/research/$kind'
+    | '/api/data/snap/$kind'
     | '/m/league/$leagueId/feed'
     | '/m/league/$leagueId/matchup'
     | '/m/league/$leagueId/players'
@@ -856,6 +867,7 @@ export interface FileRouteTypes {
     | '/api/data/league/$id'
     | '/api/data/player/$id'
     | '/api/data/research/$kind'
+    | '/api/data/snap/$kind'
     | '/m/league/$leagueId/feed'
     | '/m/league/$leagueId/matchup'
     | '/m/league/$leagueId/players'
@@ -919,6 +931,7 @@ export interface RootRouteChildren {
   ApiDataLeagueIdRoute: typeof ApiDataLeagueIdRoute
   ApiDataPlayerIdRoute: typeof ApiDataPlayerIdRoute
   ApiDataResearchKindRoute: typeof ApiDataResearchKindRoute
+  ApiDataSnapKindRoute: typeof ApiDataSnapKindRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1364,6 +1377,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDataResearchKindRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/data/snap/$kind': {
+      id: '/api/data/snap/$kind'
+      path: '/api/data/snap/$kind'
+      fullPath: '/api/data/snap/$kind'
+      preLoaderRoute: typeof ApiDataSnapKindRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/m/league/$leagueId/': {
       id: '/m/league/$leagueId/'
       path: '/'
@@ -1532,6 +1552,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDataLeagueIdRoute: ApiDataLeagueIdRoute,
   ApiDataPlayerIdRoute: ApiDataPlayerIdRoute,
   ApiDataResearchKindRoute: ApiDataResearchKindRoute,
+  ApiDataSnapKindRoute: ApiDataSnapKindRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

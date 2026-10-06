@@ -71,33 +71,17 @@ export async function fetchNflStateClient(): Promise<NflStateClient> {
   });
 }
 
-/** Live Sleeper injury overlay (same fields the player popup uses). */
+/** Live Sleeper injury overlay — reuses shared week projection bundle (no second download). */
 export async function fetchLiveInjuryStatusesClient(): Promise<
   Record<string, { status: string | null; bodyPart: string | null }>
 > {
-  return getCached("live-injury-statuses-v1", 10 * 60 * 1000, async () => {
+  return getCached("live-injury-statuses-v2", 10 * 60 * 1000, async () => {
     const state = await fetchNflStateClient();
     const week = Math.min(Math.max(state.week, 1), 18);
-    const url = `${SLEEPER_BASE}/projections/nfl/${state.season}/${week}?season_type=regular&${positionsQuery()}`;
-    const res = await sleeperFetch(url);
-    // Soft-empty on rate limit / outage — ATP page keeps CDN board without Fluid.
-    if (!res.ok) return {};
-    const rows = (await res.json()) as Array<{
-      player_id?: string;
-      player?: {
-        injury_status?: string | null;
-        injury_body_part?: string | null;
-        position?: string | null;
-        team?: string | null;
-      } | null;
-    }>;
+    const bundle = await weekProjectionBundle(state.season, week);
     const out: Record<string, { status: string | null; bodyPart: string | null }> = {};
-    for (const row of Array.isArray(rows) ? rows : []) {
-      if (!row?.player_id || !row.player) continue;
-      out[String(row.player_id)] = {
-        status: row.player.injury_status?.trim() || null,
-        bodyPart: row.player.injury_body_part?.trim() || null,
-      };
+    for (const [id, row] of Object.entries(bundle)) {
+      out[id] = { status: row.injuryStatus, bodyPart: row.injuryBodyPart };
     }
     return out;
   });
@@ -220,15 +204,27 @@ const LOG_KEYS = [
 
 type WeekProjBundle = Record<
   string,
-  { std: number | null; half: number | null; ppr: number | null; raw: Record<string, number> }
+  {
+    std: number | null;
+    half: number | null;
+    ppr: number | null;
+    raw: Record<string, number>;
+    injuryStatus: string | null;
+    injuryBodyPart: string | null;
+  }
 >;
 
 async function weekProjectionBundle(season: string, week: number): Promise<WeekProjBundle> {
-  return getCached(`week-proj-bundle-v1:${season}|${week}`, 30 * 60 * 1000, async () => {
+  // v2: includes injury fields so ATP overlay reuses the same download.
+  return getCached(`week-proj-bundle-v2:${season}|${week}`, 30 * 60 * 1000, async () => {
     const url = `${SLEEPER_BASE}/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`;
     const res = await sleeperFetch(url);
     if (!res.ok) return {};
-    const rows = (await res.json()) as Array<{ player_id?: string; stats?: Record<string, number> }>;
+    const rows = (await res.json()) as Array<{
+      player_id?: string;
+      stats?: Record<string, number>;
+      player?: { injury_status?: string | null; injury_body_part?: string | null } | null;
+    }>;
     const map: WeekProjBundle = {};
     for (const row of Array.isArray(rows) ? rows : []) {
       if (!row.player_id || !row.stats) continue;
@@ -244,6 +240,8 @@ async function weekProjectionBundle(season: string, week: number): Promise<WeekP
         half: half != null && Number(half) > 0 ? Number(half) : null,
         ppr: ppr != null && Number(ppr) > 0 ? Number(ppr) : null,
         raw,
+        injuryStatus: row.player?.injury_status?.trim() || null,
+        injuryBodyPart: row.player?.injury_body_part?.trim() || null,
       };
     }
     return map;
@@ -259,9 +257,11 @@ export async function fetchGameLogsClient(
   team: string,
   pos: string,
   seasonRequest?: string | null,
+  opts?: { includeCareer?: boolean },
 ): Promise<{ season: string; logs: GameLog[]; career: CareerSeasonRow[] } | null> {
   const clean = String(id ?? "").slice(0, 32);
   if (!clean) return null;
+  const includeCareer = opts?.includeCareer !== false;
   const current = currentSeason();
   const requested = (seasonRequest ?? "").trim();
   const season = requested && /^\d{4}$/.test(requested) ? requested : current;
@@ -269,9 +269,11 @@ export async function fetchGameLogsClient(
   const upperPos = (pos || "").toUpperCase() as Pos;
   const state = await fetchNflStateClient().catch(() => ({ season: current, week: 1 }));
 
-  const careerYears = [current, String(Number(current) - 1), String(Number(current) - 2)].filter(
-    (y, i, arr) => /^\d{4}$/.test(y) && arr.indexOf(y) === i,
-  );
+  const careerYears = includeCareer
+    ? [current, String(Number(current) - 1), String(Number(current) - 2)].filter(
+        (y, i, arr) => /^\d{4}$/.test(y) && arr.indexOf(y) === i,
+      )
+    : [season];
 
   const buildLogs = async (year: string, withProj: boolean): Promise<GameLog[]> => {
     const [raw, schedule] = await Promise.all([

@@ -37,7 +37,8 @@ import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import { getMarketHistory, getTradeMarket } from "@/lib/players.functions";
+import { getMarketHistory } from "@/lib/players.functions";
+import { fetchSnapTradeMarket } from "@/lib/snap-cdn";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { scaleValue } from "@/lib/trade-engine";
 import {
@@ -161,7 +162,7 @@ function TradeMarketPage() {
     queryKey: ["trade-market", format],
     staleTime: 60 * 60 * 1000,
     retry: 1,
-    queryFn: () => getTradeMarket({ data: { format } }),
+    queryFn: () => fetchSnapTradeMarket(format),
   });
   const payload = query.data;
 

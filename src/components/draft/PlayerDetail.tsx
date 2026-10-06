@@ -1060,8 +1060,8 @@ function GameLogsPanel({
   } = useLeagueProjections();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["player-logs", id, season, team || "FA", pos],
-    queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season),
+    queryKey: ["player-logs", id, season, team || "FA", pos, "career"],
+    queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
@@ -1247,7 +1247,7 @@ function ProjectionsPanel({
 
   const { data, isLoading } = useQuery({
     queryKey: ["player-logs", id, "current", team || "FA", pos],
-    queryFn: () => fetchGameLogsClient(id, team || "FA", pos),
+    queryFn: () => fetchGameLogsClient(id, team || "FA", pos, null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
@@ -1713,10 +1713,11 @@ function OutlookPanel({
   const { myTeam } = useLeagueRosters(catalog);
 
   const { data: logsBundle } = useQuery({
-    // Share cache with Game Logs / Projections panels.
+    // Current season only — career years load when Game Logs opens.
     queryKey: ["player-logs", playerId, "current", team || "FA", pos],
     enabled: Boolean(playerId && pos),
-    queryFn: () => fetchGameLogsClient(playerId, team || "FA", pos || "WR"),
+    queryFn: () =>
+      fetchGameLogsClient(playerId, team || "FA", pos || "WR", null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });

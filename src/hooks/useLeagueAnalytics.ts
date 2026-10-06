@@ -6,12 +6,9 @@ import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import {
-  getConnectionSettings,
-  getRestOfSeasonProjections,
-  getStartingSlotRanks,
-} from "@/lib/league.functions";
+import { getConnectionSettings } from "@/lib/league.functions";
 import { fetchLeagueAllMatchupsCdn } from "@/lib/league-matchups-cdn";
+import { fetchSnapRestOfSeason, fetchSnapStartingSlotRanks } from "@/lib/snap-cdn";
 import { computeStandingsAnalytics, type TeamAnalytics } from "@/lib/standings-analytics";
 
 export type RowAnalytics = TeamAnalytics & {
@@ -90,12 +87,10 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
     staleTime: 30 * 60 * 1000,
     refetchIntervalInBackground: false,
     queryFn: async () =>
-      await getRestOfSeasonProjections({
-        data: {
-          ...connectionArgs(activeLeague),
-          fromWeek: remainingWeekNumbers[0]!,
-          toWeek: remainingWeekNumbers.at(-1)!,
-        },
+      fetchSnapRestOfSeason({
+        ...connectionArgs(activeLeague),
+        fromWeek: remainingWeekNumbers[0]!,
+        toWeek: remainingWeekNumbers.at(-1)!,
       }),
   });
   const scheduleLoading = allMatchups.isLoading || rosProjections.isLoading;
@@ -204,8 +199,10 @@ export function useStartingSlotRanks(currentWeek: number | null, enabled = true)
     staleTime: 30 * 60 * 1000,
     refetchIntervalInBackground: false,
     queryFn: async () =>
-      await getStartingSlotRanks({
-        data: { ...connectionArgs(activeLeague), fromWeek: fromWeek!, toWeek: 17 },
+      fetchSnapStartingSlotRanks({
+        ...connectionArgs(activeLeague),
+        fromWeek: fromWeek!,
+        toWeek: 17,
       }),
   });
 }

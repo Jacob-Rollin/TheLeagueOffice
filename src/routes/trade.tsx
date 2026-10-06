@@ -38,7 +38,8 @@ import {
 } from "@/lib/trade-engine";
 
 import { loadPlayersCatalog } from "@/lib/players-catalog";
-import { getPlayerDetail, getTradeValueBasis } from "@/lib/players.functions";
+import { getPlayerDetail } from "@/lib/players.functions";
+import { fetchSnapTradeValueBasis } from "@/lib/snap-cdn";
 import { inSeasonWeeklyValue, type InSeasonValue } from "@/lib/trade-value";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
@@ -313,7 +314,7 @@ function TradePage() {
    */
   const { data: valueBasis } = useQuery({
     queryKey: ["trade-value-basis"],
-    queryFn: () => getTradeValueBasis(),
+    queryFn: () => fetchSnapTradeValueBasis(),
     staleTime: 30 * 60 * 1000,
   });
   const valueOf = useCallback(

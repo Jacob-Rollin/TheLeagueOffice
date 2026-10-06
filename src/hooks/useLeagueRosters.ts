@@ -12,6 +12,10 @@ import {
   shouldRevalidate,
   writeRosterCache,
 } from "@/lib/roster-cache";
+import {
+  canFetchRostersClient,
+  fetchSleeperLeagueRostersClient,
+} from "@/lib/sleeper-rosters-client";
 
 export type ResolvedRosterTeam = {
   slot: number;
@@ -103,14 +107,21 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
     refetchOnWindowFocus: false,
     retry: false,
     queryFn: async () => {
-      const data = await getConnectionRosters({
-        data: {
-          identifier,
-          platform,
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
-      });
+      // Sleeper rosters are public — load in the browser (IndexedDB + visitor IP).
+      // ESPN/Yahoo still need Fluid credentials.
+      let data = canFetchRostersClient(platform)
+        ? await fetchSleeperLeagueRostersClient(identifier, activeLeague?.teamName).catch(() => null)
+        : null;
+      if (!data?.teams?.length) {
+        data = await getConnectionRosters({
+          data: {
+            identifier,
+            platform,
+            ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+            ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+          },
+        });
+      }
       // Network roster pulls (not IndexedDB hydrate) update My Leagues "Synced".
       if (connectionId && data) {
         void touchLeagueSyncTimestamp(connectionId, queryClient, userId);

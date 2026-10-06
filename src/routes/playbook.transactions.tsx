@@ -29,7 +29,8 @@ import {
   type LeagueActivityMove,
   type LeagueTransactionLog,
 } from "@/lib/league.functions";
-import { getPickupResults, getTradeValueBasis } from "@/lib/players.functions";
+import { getPickupResults } from "@/lib/players.functions";
+import { fetchSnapTradeValueBasis } from "@/lib/snap-cdn";
 import { fetchTrendingAddsClient } from "@/lib/sleeper-trending";
 import { packageScore } from "@/lib/trade-engine";
 import { inSeasonWeeklyValue } from "@/lib/trade-value";
@@ -407,7 +408,7 @@ function PlaybookTransactionsPage() {
   const { format: valueScoring } = useLeagueScoringMeta();
   const { data: valueBasis } = useQuery({
     queryKey: ["trade-value-basis"],
-    queryFn: () => getTradeValueBasis(),
+    queryFn: () => fetchSnapTradeValueBasis(),
     staleTime: 30 * 60 * 1000,
   });
   const playerById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);

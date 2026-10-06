@@ -14,7 +14,8 @@ import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player, Pos } from "@/lib/draft";
-import { getInjuryReports, getRosterNews } from "@/lib/players.functions";
+import { getRosterNews } from "@/lib/players.functions";
+import { fetchSnapInjuryReports } from "@/lib/snap-cdn";
 import type { InjuryReportItem } from "@/lib/players.server";
 import { getTeamPrimaryColor } from "@/lib/nfl-teams";
 import {
@@ -1113,7 +1114,7 @@ function PlaybookMyTeamPage() {
 
   const injuryReports = useQuery({
     queryKey: ["injury-reports"],
-    queryFn: () => getInjuryReports(),
+    queryFn: () => fetchSnapInjuryReports(),
     staleTime: 5 * 60 * 1000,
     refetchInterval: (q) =>
       typeof document !== "undefined" && document.visibilityState !== "visible"
