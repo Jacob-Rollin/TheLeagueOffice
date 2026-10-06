@@ -1,14 +1,40 @@
-# Project Styling & Layout Guidelines
-- The overall theme is very light with an almost white background.
-- Maintain the existing light aesthetic; do not apply terminal-style themes to components.
-- The only dark-themed exception is the Hall of Fame page, which uses an almost black background.
+# Project Theme & Visual Language
+- Desktop theme is **"Broadcast"** (NFL.com-inspired): near-white background, navy primary chrome, red accents. Tokens live in `src/styles.css` `:root` (`--background`, `--primary`, `--accent`, position colors `--pos-*`, etc.).
+- Maintain the existing light aesthetic; do not apply terminal-style, purple-glow, or generic AI dashboard themes to components.
+- Fonts: **Archivo** (`--font-sans`) for body; **Barlow Condensed** (`--font-display`) for titles via the `display-title` utility (uppercase, tracking). Loaded from `__root.tsx`.
+- Content width: `max-w-shell` (90rem). Page shells typically use `main.mx-auto.w-full.max-w-shell.px-3.pb-16.pt-6`.
+- Page titles: `h1.display-title.text-3xl.text-slate-900` with the distinctive second word in `text-primary` when it fits (e.g. Fantasy Points **Allowed**).
+- The only dark-themed desktop exception is the Hall of Fame page (`hof.tsx`: almost black / zinc-950, amber accents).
+- Mobile `/m/*` routes use separate `.mobile-theme-light` / `.mobile-theme-dark` tokens — do not mix those into desktop research/playbook pages.
+- Prefer theme tokens / existing slate-blue utility patterns already used on research boards; do not invent a new color system per page.
 
-# Shared UI & Component Rules
-- When creating new pages or views, always preserve and wrap them in the existing layout structure to retain the top navbar and live ticker.
-- Do not add icons next to descriptions in dropdown navigation layouts.
-- In dropdown menus and navigation bars, ensure the "Account" option is placed at the top of the profile dropdown list.
-- Never shrink or modify the size of the navbar profile circle icon.
+# Shared UI & Chrome Rules
+- When creating new pages or views, always preserve and wrap them in the existing layout structure to retain the top navbar (`SiteNav`) and live ticker (`ScoreTicker`) from `__root.tsx`. Skip both only on `/m` mobile routes (already handled in root).
+- League-scoped tools (Playbook, Trade, Waiver, Top Available, etc.) wrap with `PlaybookShell` (`section`: `playbook` | `trade` | `waiver`; `wide` for Trade Desk). Do not rebuild guest/no-league gates — `PlaybookShell` + `AccessGate` + `PlaybookSubNav` own that.
+- Do not add icons next to descriptions in dropdown navigation layouts (Research menu, Playbook subnav, etc.).
+- In the profile dropdown, place **Account** at the top of the list. Never shrink the navbar profile circle (`size-8` / `h-8 w-8`).
 - Maintain clean blue account-style text-only button designs. Strictly no bracket symbols [] or emojis in buttons or main section headers.
+- Open players via `PlayerModalHost` ref (`open(id)`), not one-off modal state per page.
+- League-scoped titles should include `ActiveLeagueLabel` when the tool depends on the synced league.
+- Injuries: use `resolveInjuryStatus` / `injuryMicroBadge` from `sandbox-rosters` — do not invent ad-hoc status strings.
+- Sandbox mode (`ActiveLeagueContext.sandboxMode`) unlocks Trade Desk / mock rosters without a synced league — preserve that behavior; do not remove the exit-to-prior-league path.
+- Player brain hydration (`usePlayerBrain` / `hydratePlayerBrain`) is silent and non-blocking — do not gate UI on it.
+
+# Research Page & Player Table Design
+# New research / leaderboard / projection boards must match existing pages
+# (fantasy-points-allowed, fantasy-leaders, matchups-guide, sos-analysis, red-zone-stats,
+# most-targeted-players, trade-market-values, weekly/season-projections, top-available).
+
+- Reuse `src/components/research/*`: `SortHeader` (`SortHeaderButton`, `nextSortState`, `PLAYER_LIST_*` classes), `ScoringFormatSelect` + `useResearchScoringFormat`, `ValueTrendCell`, `ProjectionListRow` / `PROJECTION_OWNERSHIP_META`, `projectionStatColumns`, `statRanks`.
+- Sort cycle is 3-click via `nextSortState`: activate → flip direction → clear.
+- Grouped stat tables: two header rows (`PLAYER_LIST_GROUP_HEADER_ROW` + `PLAYER_LIST_COL_HEADER_ROW`); leave Rk/Player group cells blank (no “Players” label). Single-row boards use `PLAYER_LIST_HEADER_ROW`.
+- Table chrome: wrap the board in `overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm` with an inner `overflow-x-auto`. Research boards use this white sheet — do not invent a new card/dashboard layout.
+- Scoring format: default from the synced league via `useResearchScoringFormat`, fallback `"half"`; change filters with `startTransition`. Search text should use `useDeferredValue` when filtering large lists.
+- Position filter chips: active `border-blue-600 bg-blue-600 text-white`; inactive white / `text-blue-700`.
+- UI label for defense position is **DST** (internal pos remains `DEF`).
+- Market value columns: `ValueTrendCell` + `scaleValue`; column label is **Value/Trend** (never a bare `$` header).
+- Research routes: `ssr: false`. Remount league-dependent boards with `key={activeLeagueId ?? "none"}` when the active league changes.
+- Prefer CDN research helpers (`research-cdn`) with `staleTime: RESEARCH_CLIENT_STALE_MS` and `placeholderData: (prev) => prev` so format toggles do not flash empty.
 
 # Data & AI Logic Constraints
 - Never suggest dropping essential starting positions or players that would leave a roster vacancy (such as dropping a solo defense).
@@ -24,6 +50,16 @@
 1. Browser → public APIs with IndexedDB (`getCached` in `sleeper-cache`, helpers in `sleeper-client`, `sleeper-rosters-client`, `scoring-client`, `sleeper-trending`).
 2. Browser → edge-cached routes: `/api/data/research/*` (`research-cdn`), `/api/data/snap/*` (`snap-cdn`), `/api/data/league/$id` (`league-matchups-cdn`), `/api/data/players-export`.
 3. Fluid `createServerFn` only for credentials/secrets/writes (ESPN s2/swid, Yahoo OAuth, league sync writes, account delete) or true last-resort misses in **dev**.
+
+## Client-first caching without burning visitor IPs
+- Prefer client/public fetches **and** CDN snaps, but never unbounded fan-out from the browser.
+- Always wrap public Sleeper (and similar) fetches in `getCached(key, ttlMs, fetcher)` so IndexedDB/localStorage + in-flight dedupe share one download per visitor.
+- Cap concurrency when a week/player fan-out is unavoidable (existing pattern: projection weeks `PROJ_WEEK_CONCURRENCY = 2` in `sleeper-client`; do not raise without cause). Prefer shared week bundles over per-player downloads.
+- Reuse shared React Query keys instead of inventing parallel caches: `["players-catalog"]`, `["player", id, "client-v1"]`, `["nfl-state", …]`, `["league-scoring", "v5", …]`, `["league-rosters", connectionId]`, `["league-matchups-cdn-all", …]`, `["injury-reports"]`, `["trade-value-basis"]`, `["fantasy-news-feed", limit]`, etc.
+- Global RQ defaults (`router.tsx`): `staleTime` 5m, `gcTime` 30m, `refetchOnWindowFocus: false`, `refetchIntervalInBackground: false` — do not override these to be more aggressive for heavy queries.
+- Soft-empty / stale-on-error for public reads — do not retry storms on 429; one polite backoff then stop (see `sleeper-client`).
+- ESPN athlete/news feeds are especially ban-prone: batch via snaps (`fetchSnapFantasyNews`, `fetchSnapRosterNews`, injury snaps) — never N concurrent Fluid or browser ESPN calls per visible row.
+- When data is identical for every visitor, put it on CDN (`research` / `snap` / cron-warmed TiDB) so each client hits the edge once, not upstream APIs.
 
 ## Never do these (regressions we already fixed)
 - Do not call Fluid `createServerFn` for public Sleeper reads (state, projections, stats, game logs, bio, next game, trending, Sleeper rosters/scoring when league id is known).
@@ -52,18 +88,19 @@
 - Dev-only Fluid fallback when local snaps are cold.
 
 ## When adding a new data surface
-- Ask: can the browser fetch this publicly with `getCached`?
+- Ask: can the browser fetch this publicly with `getCached` (and a concurrency cap if fan-out is needed)?
 - If shared across visitors: add or extend `/api/data/research/*` or `/api/data/snap/*` with `processMemo` + long `researchCacheControl` / appropriate cache helper; wire a client helper that soft-empties in prod.
 - If league-scoped synced data: prefer `/api/data/league/$id` CDN (TiDB) over Fluid host pulls; Fluid refresh only when snap is cold/stale **and** the tab is visible (see `league-matchups-cdn`).
 - If credentials required: keep Fluid, but cache aggressively client-side and avoid polling when hidden.
-- Never “fix” Fluid burn by blasting TiDB on every page load without CDN/`processMemo`, or by unbounded concurrent Sleeper calls from the browser (cap concurrency; share IndexedDB keys).
+- Never “fix” Fluid burn by blasting TiDB on every page load without CDN/`processMemo`, or by unbounded concurrent Sleeper/ESPN calls from the browser.
 
 ## Key modules to reuse (do not reinvent)
 - `src/lib/page-visibility.ts` — pause polls when hidden
 - `src/lib/sleeper-cache.ts` / `sleeper-client.ts` / `sleeper-rosters-client.ts` / `scoring-client.ts` / `sleeper-trending.ts`
 - `src/lib/research-cdn.ts` / `snap-cdn.ts` / `league-matchups-cdn.ts` / `league-rosters-fetch.ts`
-- `src/lib/player-detail-client.ts` / `sos-from-board.ts`
+- `src/lib/player-detail-client.ts` / `sos-from-board.ts` / `players-catalog.ts`
 - `src/lib/process-memo.ts` / `api-cache.ts` (`dataCacheControl`, `leagueHistoryCacheControl`, `researchCacheControl`, `warehouseCacheControl`)
+- `src/components/research/*`, `PlaybookShell`, `PlayerModalHost`, `ActiveLeagueLabel`
 - Routes: `api/data/research.$kind.ts`, `api/data/snap.$kind.ts`, `api/data/league.$id.ts`, `api/data/players-export.ts`
 
 # Strict Schema Utilization Instructions
