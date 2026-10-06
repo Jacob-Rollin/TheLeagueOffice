@@ -659,7 +659,13 @@ export async function loadFantasyPointsAllowed(
     rows: [],
   };
   const { withResearchSnap } = await import("./research-agg.server");
-  return withResearchSnap("agg_fpa", snapKey, opts, empty, () => computeFantasyPointsAllowed(seasonKey, fmt));
+  return withResearchSnap(
+    "agg_fpa",
+    snapKey,
+    { ...opts, isWarm: (p) => Array.isArray(p.rows) && p.rows.length > 0 },
+    empty,
+    () => computeFantasyPointsAllowed(seasonKey, fmt),
+  );
 }
 
 async function computeFantasyPointsAllowed(
@@ -944,8 +950,16 @@ export async function loadMatchupsGuide(
     defense: {},
   };
   const { withResearchSnap } = await import("./research-agg.server");
-  return withResearchSnap("agg_matchups_guide", snapKey, opts, empty, () =>
-    computeMatchupsGuide(season, week, currentWeek, fmt),
+  return withResearchSnap(
+    "agg_matchups_guide",
+    snapKey,
+    {
+      ...opts,
+      isWarm: (p) =>
+        Object.keys(p.games ?? {}).length > 0 || Object.keys(p.defense ?? {}).length > 0,
+    },
+    empty,
+    () => computeMatchupsGuide(season, week, currentWeek, fmt),
   );
 }
 
@@ -1092,8 +1106,12 @@ export async function loadSosAnalysis(
     rows: [],
   };
   const { withResearchSnap } = await import("./research-agg.server");
-  return withResearchSnap("agg_sos_analysis", snapKey, opts, empty, () =>
-    computeSosAnalysis(season, fromWeek, toWeek, fmt),
+  return withResearchSnap(
+    "agg_sos_analysis",
+    snapKey,
+    { ...opts, isWarm: (p) => Array.isArray(p.rows) && p.rows.length > 0 },
+    empty,
+    () => computeSosAnalysis(season, fromWeek, toWeek, fmt),
   );
 }
 
@@ -2683,10 +2701,16 @@ export async function loadFantasyLeaders(
   const season = seasonKnown ?? currentSeason();
   const empty: FantasyLeaders = { season, maxWeek: 0, rows: [] };
   const { withResearchSnap } = await import("./research-agg.server");
-  return withResearchSnap("agg_fantasy_leaders", season, opts, empty, async () => {
-    const state = await nflState("state");
-    return computeFantasyLeaders(seasonKnown ?? state.season, state);
-  });
+  return withResearchSnap(
+    "agg_fantasy_leaders",
+    season,
+    { ...opts, isWarm: (p) => Array.isArray(p.rows) && p.rows.length > 0 },
+    empty,
+    async () => {
+      const state = await nflState("state");
+      return computeFantasyLeaders(seasonKnown ?? state.season, state);
+    },
+  );
 }
 
 async function computeFantasyLeaders(

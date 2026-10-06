@@ -77,7 +77,12 @@ export const Route = createFileRoute("/api/data/research/$kind")({
             }
 
             if (kind === "fantasy-leaders") {
-              const payload = await players.loadFantasyLeaders(season);
+              // Self-heal a cold/empty TiDB snap once (cron also rebuilds). Empty snaps
+              // used to pin forever because withResearchSnap treated them as hits.
+              let payload = await players.loadFantasyLeaders(season);
+              if (!payload.rows.length) {
+                payload = await players.loadFantasyLeaders(season, { allowCompute: true });
+              }
               return researchOk(payload, payload.rows.length > 0);
             }
 
