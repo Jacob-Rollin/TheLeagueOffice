@@ -171,7 +171,7 @@ export type TidbWeekMatchupsHit = {
 };
 
 /** Coalesce concurrent matchup polls in one Fluid isolate onto one TiDB SELECT. */
-const TIDB_MATCHUP_READ_TTL_MS = 45 * 1000;
+const TIDB_MATCHUP_READ_TTL_MS = 20 * 1000;
 const tidbMatchupReadMemo = new Map<
   string,
   { at: number; value: Promise<TidbWeekMatchupsHit | null> }
@@ -266,8 +266,11 @@ export async function loadTidbWeekMatchups(
   return value;
 }
 
-/** Cap dual-writes when many viewers miss the TiDB freshness window together. */
-const PERSIST_MIN_INTERVAL_MS = 2 * 60 * 1000;
+/**
+ * Cap dual-writes when many viewers miss the TiDB freshness window together.
+ * 60s still lets live boards refresh every minute without N viewers each writing.
+ */
+const PERSIST_MIN_INTERVAL_MS = 60 * 1000;
 const lastPersistAt = new Map<string, number>();
 
 /** Upsert one week's host board into `weekly_matchups` (fire-and-forget safe). */
