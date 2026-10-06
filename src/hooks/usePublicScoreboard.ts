@@ -5,6 +5,7 @@ import {
   scoreboardHasLiveGame,
   scoreboardQueryKey,
 } from "@/lib/public-scoreboard";
+import { visibleRefetchInterval } from "@/lib/page-visibility";
 
 const LIVE_MS = 20 * 1000;
 const IDLE_MS = 2 * 60 * 1000;
@@ -25,7 +26,7 @@ export function usePublicScoreboard(week?: number | null, seasontype?: number | 
       return json;
     },
     staleTime: LIVE_MS,
-    refetchInterval: (q) => {
+    refetchInterval: visibleRefetchInterval((q) => {
       const json = q.state.data;
       if (json == null) return IDLE_MS;
       if (scoreboardHasLiveGame(json)) return LIVE_MS;
@@ -39,7 +40,7 @@ export function usePublicScoreboard(week?: number | null, seasontype?: number | 
         return state.toLowerCase() === "pre";
       });
       return anyUpcoming ? IDLE_MS : ALL_FINAL_MS;
-    },
+    }),
     refetchIntervalInBackground: false,
     retry: false,
   });

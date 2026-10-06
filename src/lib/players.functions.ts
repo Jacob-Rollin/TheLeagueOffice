@@ -102,6 +102,7 @@ export const getFantasyNewsFeed = createServerFn({ method: "GET" })
     return await loadFantasyNewsFeed(data.limit);
   });
 
+/** @deprecated Prefer fetchPlayerBioClient — kept for rare catalog-miss fallbacks. */
 export const getPlayerBio = createServerFn({ method: "GET" })
   .inputValidator((input: { id: string }) => ({ id: String(input.id).slice(0, 32) }))
   .handler(async ({ data }) => {
@@ -109,6 +110,7 @@ export const getPlayerBio = createServerFn({ method: "GET" })
     return await loadPlayerBio(data.id);
   });
 
+/** @deprecated Prefer fetchGameLogsClient — Fluid path retained only as last resort. */
 export const getGameLogs = createServerFn({ method: "GET" })
   .inputValidator((input: { id: string; season?: string }) => ({
     id: String(input.id).slice(0, 32),
@@ -119,6 +121,7 @@ export const getGameLogs = createServerFn({ method: "GET" })
     return await loadGameLogs(data.id, data.season);
   });
 
+/** @deprecated Prefer fetchNextGameClient. */
 export const getNextGame = createServerFn({ method: "GET" })
   .inputValidator((input: { team: string }) => ({ team: String(input.team).slice(0, 4) }))
   .handler(async ({ data }) => {
@@ -226,6 +229,7 @@ export const getFantasyLeaders = createServerFn({ method: "GET" })
     return await loadFantasyLeaders(data.season);
   });
 
+/** @deprecated Prefer fetchLiveInjuryStatusesClient. */
 export const getLiveInjuryStatuses = createServerFn({ method: "GET" }).handler(async () => {
   const { loadLiveInjuryStatuses } = await import("./players.server");
   return await loadLiveInjuryStatuses();

@@ -12,6 +12,8 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { Pos, Scoring } from "@/lib/draft";
 import { getTeamPrimaryColor, NFL_TEAMS, teamById } from "@/lib/nfl-teams";
 import { getPlayerDetail } from "@/lib/players.functions";
+import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
+import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import {
   fetchNextGameClient,
   fetchPlayerBioClient,
@@ -61,9 +63,15 @@ function clickPlayerDetailTab(root: HTMLElement | null, label: string) {
 
 const profileQuery = (id: string) =>
   queryOptions({
-    queryKey: ["player", id],
-    queryFn: () => getPlayerDetail({ data: { id } }),
+    queryKey: ["player", id, "client-v1"],
+    queryFn: async () => {
+      const brain = await hydratePlayerBrain().catch(() => null);
+      const client = await fetchPlayerDetailClient(id, brain);
+      if (client) return client;
+      return getPlayerDetail({ data: { id } });
+    },
     staleTime: 1000 * 60 * 30,
+    retry: false,
   });
 
 const bioQuery = (id: string) =>

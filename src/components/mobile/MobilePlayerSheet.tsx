@@ -18,6 +18,8 @@ import type { Pos } from "@/lib/draft";
 import { teamFullName } from "@/lib/nfl-teams";
 import { getPlayerDetail, getPlayerNews } from "@/lib/players.functions";
 import type { SeasonLine } from "@/lib/players.server";
+import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
+import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import { fetchResearchFpa } from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { projectionPoints } from "@/lib/scoring-map";
@@ -85,9 +87,15 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   }, [onClose]);
 
   const detail = useQuery({
-    queryKey: ["player", id],
-    queryFn: () => getPlayerDetail({ data: { id } }),
+    queryKey: ["player", id, "client-v1"],
+    queryFn: async () => {
+      const brain = await hydratePlayerBrain().catch(() => null);
+      const client = await fetchPlayerDetailClient(id, brain);
+      if (client) return client;
+      return getPlayerDetail({ data: { id } });
+    },
     staleTime: HOUR,
+    retry: false,
   });
   const { data: bio } = useQuery({
     queryKey: ["player-bio", id],

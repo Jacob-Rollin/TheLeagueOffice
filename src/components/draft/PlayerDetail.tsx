@@ -20,6 +20,8 @@ import { getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
 import { getPlayerDetail, getPlayerNews } from "@/lib/players.functions";
 import type { CareerSeasonRow, GameLog } from "@/lib/players.server";
 import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
+import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
+import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import { formatNflGameStatusLabel, formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { getLeagueScoring } from "@/lib/scoring.functions";
 import { projectionPoints, type ScoringMap } from "@/lib/scoring-map";
@@ -172,9 +174,16 @@ const SCORING_OPTIONS: { value: Scoring; label: string }[] = [
 
 export const detailQuery = (id: string) =>
   queryOptions({
-    queryKey: ["player", id],
-    queryFn: () => getPlayerDetail({ data: { id } }),
+    queryKey: ["player", id, "client-v1"],
+    queryFn: async () => {
+      const brain = await hydratePlayerBrain().catch(() => null);
+      const client = await fetchPlayerDetailClient(id, brain);
+      if (client) return client;
+      // Catalog miss only — keep Fluid as last resort.
+      return getPlayerDetail({ data: { id } });
+    },
     staleTime: 1000 * 60 * 30,
+    retry: false,
   });
 
 export function PlayerDetail({
@@ -1051,7 +1060,7 @@ function GameLogsPanel({
   } = useLeagueProjections();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["player-logs", id, season, team, pos],
+    queryKey: ["player-logs", id, season, team || "FA", pos],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -1237,7 +1246,7 @@ function ProjectionsPanel({
   } = useLeagueProjections();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["player-projections-weekly", id, team, pos],
+    queryKey: ["player-logs", id, "current", team || "FA", pos],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -1704,7 +1713,8 @@ function OutlookPanel({
   const { myTeam } = useLeagueRosters(catalog);
 
   const { data: logsBundle } = useQuery({
-    queryKey: ["player-outlook-logs", playerId, team, pos],
+    // Share cache with Game Logs / Projections panels.
+    queryKey: ["player-logs", playerId, "current", team || "FA", pos],
     enabled: Boolean(playerId && pos),
     queryFn: () => fetchGameLogsClient(playerId, team || "FA", pos || "WR"),
     staleTime: 1000 * 60 * 15,

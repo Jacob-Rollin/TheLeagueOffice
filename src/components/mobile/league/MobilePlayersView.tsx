@@ -16,6 +16,7 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/players-build";
 import { projectionPoints } from "@/lib/scoring-map";
+import { fetchTrendingAddsClient } from "@/lib/sleeper-trending";
 import { cn } from "@/lib/utils";
 
 import {
@@ -47,16 +48,11 @@ type TrendRow = { player_id: string; count: number };
 
 function useSleeperTrending(type: "add" | "drop") {
   return useQuery({
-    queryKey: ["sleeper-trending", type, "24h-100"],
+    queryKey: ["sleeper-trending-add", "v1", 24, 50, type],
     staleTime: 15 * 60 * 1000,
     retry: false,
-    queryFn: async (): Promise<TrendRow[]> => {
-      const res = await fetch(
-        `https://api.sleeper.app/v1/players/nfl/trending/${type}?lookback_hours=24&limit=100`,
-      ).catch(() => null);
-      const rows = res && res.ok ? ((await res.json()) as unknown) : null;
-      return Array.isArray(rows) ? (rows as TrendRow[]) : [];
-    },
+    refetchIntervalInBackground: false,
+    queryFn: () => fetchTrendingAddsClient(24, 50, type),
   });
 }
 

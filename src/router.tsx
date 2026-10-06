@@ -10,6 +10,8 @@ export const getRouter = () => {
         staleTime: 1000 * 60 * 5,
         gcTime: 1000 * 60 * 30,
         refetchOnWindowFocus: false,
+        // Hidden / minimized tabs must not burn Vercel, TiDB, or visitor Sleeper quotas.
+        refetchIntervalInBackground: false,
       },
     },
   });

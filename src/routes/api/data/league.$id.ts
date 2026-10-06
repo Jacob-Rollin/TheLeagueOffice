@@ -27,6 +27,7 @@ type MatchupRow = {
   owner_name: string | null;
   starters: unknown;
   player_points: unknown;
+  platform: string | null;
   synced_at: string | null;
 };
 
@@ -63,7 +64,8 @@ export const Route = createFileRoute("/api/data/league/$id")({
             }
             const matchups = await tidbExecute<MatchupRow>(
               `SELECT id, league_id, week, team_id, matchup_id, roster_points, projected_points,
-                      opponent_team_id, team_name, owner_name, starters, player_points, synced_at
+                      opponent_team_id, team_name, owner_name, starters, player_points,
+                      platform, synced_at
                FROM synced_matchups
                WHERE league_id = ? ${weekClause}
                ORDER BY week ASC, team_id ASC
