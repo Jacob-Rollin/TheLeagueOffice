@@ -321,13 +321,13 @@ export async function fetchGameLogsClient(
       });
     }
 
-    // Only warm the next few projection weeks (shared bundles). Full 18-week
-    // fan-out was the main visitor-IP burst on cold game-log opens.
+    // All remaining current-season weeks (through 18). Bundles are shared in
+    // IndexedDB across players; concurrency stays capped to protect visitor IPs.
     const projWeeks =
       withProj && year === state.season
-        ? Array.from({ length: 18 }, (_, i) => i + 1)
-            .filter((w) => !playedWeeks.has(w) && w >= state.week)
-            .slice(0, 4)
+        ? Array.from({ length: 18 }, (_, i) => i + 1).filter(
+            (w) => !playedWeeks.has(w) && w >= state.week,
+          )
         : [];
     const projHits = await mapPool(projWeeks, PROJ_WEEK_CONCURRENCY, async (w) => {
       const bundle = await weekProjectionBundle(year, w);
