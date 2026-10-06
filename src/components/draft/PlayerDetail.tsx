@@ -216,6 +216,7 @@ export function PlayerDetail({
     queryKey: ["player-bio", id],
     queryFn: () => fetchPlayerBioClient(id),
     staleTime: 1000 * 60 * 60 * 12,
+    retry: false,
   });
   const draft = useDraft();
   const { activeLeague } = useActiveLeague();
@@ -1053,6 +1054,7 @@ function GameLogsPanel({
     queryKey: ["player-logs", id, season, team, pos],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season),
     staleTime: 1000 * 60 * 15,
+    retry: false,
   });
 
   const career = data?.career ?? [];
@@ -1238,6 +1240,7 @@ function ProjectionsPanel({
     queryKey: ["player-projections-weekly", id, team, pos],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos),
     staleTime: 1000 * 60 * 15,
+    retry: false,
   });
 
   if (isLoading) {
@@ -1690,6 +1693,7 @@ function OutlookPanel({
     queryFn: () => fetchNextGameClient(team),
     staleTime: 1000 * 60 * 60 * 6,
     enabled: Boolean(team?.trim()),
+    retry: false,
   });
 
   const week = nextGame?.week ?? null;
@@ -1704,6 +1708,7 @@ function OutlookPanel({
     enabled: Boolean(playerId && pos),
     queryFn: () => fetchGameLogsClient(playerId, team || "FA", pos || "WR"),
     staleTime: 1000 * 60 * 15,
+    retry: false,
   });
 
   const currentMatchup = useMemo(() => {

@@ -137,7 +137,8 @@ function AreTheyPlayingPage() {
     queryKey: ["live-injury-statuses"],
     staleTime: 10 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
-    retry: 1,
+    // Soft-empty inside client helper — do not retry-storm Sleeper.
+    retry: false,
     // Public Sleeper projections — browser pool, not Fluid.
     queryFn: () => fetchLiveInjuryStatusesClient(),
   });

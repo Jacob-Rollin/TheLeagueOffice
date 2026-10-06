@@ -93,6 +93,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
     queryKey: ["player-bio", id],
     queryFn: () => fetchPlayerBioClient(id),
     staleTime: 12 * HOUR,
+    retry: false,
   });
   const player = detail.data?.player ?? null;
   const team = player?.team && player.team !== "FA" ? player.team : null;
@@ -101,6 +102,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
     enabled: Boolean(team),
     queryFn: () => fetchNextGameClient(team!),
     staleTime: HOUR,
+    retry: false,
   });
 
   const { rankFor, projectFor, seasonStats, scoringMap, format } = useLeagueProjections(
@@ -598,6 +600,7 @@ function usePlayerLogs(id: string, team: string | null | undefined, pos: string 
     enabled: Boolean(id && pos),
     queryFn: () => fetchGameLogsClient(id, team ?? "FA", pos ?? "WR"),
     staleTime: 30 * 60 * 1000,
+    retry: false,
   });
 }
 

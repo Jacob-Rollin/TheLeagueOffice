@@ -2,6 +2,12 @@
  * Browser-side Sleeper loaders for public endpoints.
  * Prefer these over createServerFn whenever the data is not secret-gated —
  * each visitor uses their own rate-limit pool and Vercel Fluid stays idle.
+ *
+ * Per-visitor safeguards (avoid IP bans without bouncing cost to Vercel):
+ * - IndexedDB TTL cache + in-flight dedupe (`getCached`)
+ * - Soft empty returns on most failures (no Fluid fallback)
+ * - 429 backoff (one retry) then stale/empty
+ * - Projection week fan-out capped at 2 concurrent
  */
 import { getCached } from "@/lib/sleeper-cache";
 import {
@@ -16,14 +22,46 @@ import type { CareerSeasonRow, GameLog, NextGame, PlayerBio } from "@/lib/player
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
+/** Keep cold game-log opens from opening 10+ projection fetches at once. */
+const PROJ_WEEK_CONCURRENCY = 2;
+
+async function sleeperFetch(url: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(url, {
+    ...init,
+    headers: { accept: "application/json", ...(init?.headers ?? {}) },
+  });
+  if (res.status !== 429) return res;
+  // One polite backoff — do not retry storms; caller soft-fails or uses stale.
+  await new Promise((r) => setTimeout(r, 1200));
+  return fetch(url, {
+    ...init,
+    headers: { accept: "application/json", ...(init?.headers ?? {}) },
+  });
+}
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (!items.length) return [];
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
 
 export type NflStateClient = { season: string; week: number };
 
 export async function fetchNflStateClient(): Promise<NflStateClient> {
   return getCached("nfl-state-client-v1", 30 * 60 * 1000, async () => {
-    const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
-      headers: { accept: "application/json" },
-    });
+    const res = await sleeperFetch("https://api.sleeper.app/v1/state/nfl");
     if (!res.ok) throw new Error(`state ${res.status}`);
     const json = (await res.json()) as Record<string, unknown>;
     return {
@@ -41,8 +79,9 @@ export async function fetchLiveInjuryStatusesClient(): Promise<
     const state = await fetchNflStateClient();
     const week = Math.min(Math.max(state.week, 1), 18);
     const url = `${SLEEPER_BASE}/projections/nfl/${state.season}/${week}?season_type=regular&${positionsQuery()}`;
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (!res.ok) throw new Error(`projections ${res.status}`);
+    const res = await sleeperFetch(url);
+    // Soft-empty on rate limit / outage — ATP page keeps CDN board without Fluid.
+    if (!res.ok) return {};
     const rows = (await res.json()) as Array<{
       player_id?: string;
       player?: {
@@ -68,9 +107,7 @@ export async function fetchPlayerBioClient(id: string): Promise<PlayerBio | null
   const clean = String(id ?? "").slice(0, 32);
   if (!clean) return null;
   return getCached(`player-bio-v1:${clean}`, DAY, async () => {
-    const res = await fetch(`${SLEEPER_BASE}/players/nfl/${encodeURIComponent(clean)}`, {
-      headers: { accept: "application/json" },
-    });
+    const res = await sleeperFetch(`${SLEEPER_BASE}/players/nfl/${encodeURIComponent(clean)}`);
     if (!res.ok) return null;
     const j = (await res.json()) as Record<string, unknown>;
     const h = typeof j["height"] === "string" ? j["height"] : null;
@@ -107,9 +144,7 @@ async function fetchScheduleClient(
   season: string,
 ): Promise<ScheduleGame[]> {
   return getCached(`schedule-${type}-${season}`, 6 * HOUR, async () => {
-    const res = await fetch(`${SLEEPER_BASE}/schedule/nfl/${type}/${season}`, {
-      headers: { accept: "application/json" },
-    });
+    const res = await sleeperFetch(`${SLEEPER_BASE}/schedule/nfl/${type}/${season}`);
     if (!res.ok) return [];
     const json = (await res.json()) as ScheduleGame[];
     return Array.isArray(json) ? json : [];
@@ -158,9 +193,8 @@ async function weeklyRawClient(
   season: string,
 ): Promise<Record<string, { stats?: Record<string, number> | null }>> {
   return getCached(`weekly-raw-v1:${season}:${id}`, 15 * 60 * 1000, async () => {
-    const res = await fetch(
+    const res = await sleeperFetch(
       `${SLEEPER_BASE}/stats/nfl/player/${encodeURIComponent(id)}?season_type=regular&season=${season}&grouping=week`,
-      { headers: { accept: "application/json" } },
     );
     if (!res.ok) return {};
     const j = (await res.json()) as Record<string, { stats?: Record<string, number> | null }> | null;
@@ -192,7 +226,7 @@ type WeekProjBundle = Record<
 async function weekProjectionBundle(season: string, week: number): Promise<WeekProjBundle> {
   return getCached(`week-proj-bundle-v1:${season}|${week}`, 30 * 60 * 1000, async () => {
     const url = `${SLEEPER_BASE}/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`;
-    const res = await fetch(url, { headers: { accept: "application/json" } });
+    const res = await sleeperFetch(url);
     if (!res.ok) return {};
     const rows = (await res.json()) as Array<{ player_id?: string; stats?: Record<string, number> }>;
     const map: WeekProjBundle = {};
@@ -293,12 +327,11 @@ export async function fetchGameLogsClient(
             (w) => !playedWeeks.has(w) && w >= state.week,
           )
         : [];
-    const projHits = await Promise.all(
-      projWeeks.map(async (w) => {
-        const bundle = await weekProjectionBundle(year, w);
-        return [w, bundle[clean] ?? null] as const;
-      }),
-    );
+    // Cap concurrency so mid-season cold opens do not blast a visitor IP.
+    const projHits = await mapPool(projWeeks, PROJ_WEEK_CONCURRENCY, async (w) => {
+      const bundle = await weekProjectionBundle(year, w);
+      return [w, bundle[clean] ?? null] as const;
+    });
     const projByWeek = new Map(projHits.filter(([, b]) => b != null));
 
     const logs: GameLog[] = [];

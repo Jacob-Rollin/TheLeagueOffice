@@ -71,6 +71,7 @@ const bioQuery = (id: string) =>
     queryKey: ["player-bio", id],
     queryFn: () => fetchPlayerBioClient(id),
     staleTime: 1000 * 60 * 60 * 12,
+    retry: false,
   });
 
 const nextGameQuery = (team: string) =>
@@ -78,6 +79,7 @@ const nextGameQuery = (team: string) =>
     queryKey: ["player-next-game", team],
     queryFn: () => fetchNextGameClient(team),
     staleTime: 1000 * 60 * 60 * 6,
+    retry: false,
   });
 
 const TEAM_NAME: Record<string, string> = Object.fromEntries(
