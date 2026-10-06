@@ -71,6 +71,7 @@ import { Route as ApiAuthYahooCallbackRouteImport } from './routes/api/auth/yaho
 import { Route as ApiAuthYahooConnectRouteImport } from './routes/api/auth/yahoo/connect'
 import { Route as ApiDataLeagueIdRouteImport } from './routes/api/data/league.$id'
 import { Route as ApiDataPlayerIdRouteImport } from './routes/api/data/player.$id'
+import { Route as ApiDataResearchKindRouteImport } from './routes/api/data/research.$kind'
 import { Route as MLeagueLeagueIdIndexRouteImport } from './routes/m.league.$leagueId.index'
 import { Route as MLeagueLeagueIdFeedRouteImport } from './routes/m.league.$leagueId.feed'
 import { Route as MLeagueLeagueIdMatchupRouteImport } from './routes/m.league.$leagueId.matchup'
@@ -393,6 +394,11 @@ const ApiDataPlayerIdRoute = ApiDataPlayerIdRouteImport.update({
   path: '/api/data/player/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDataResearchKindRoute = ApiDataResearchKindRouteImport.update({
+  id: '/api/data/research/$kind',
+  path: '/api/data/research/$kind',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MLeagueLeagueIdIndexRoute = MLeagueLeagueIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -492,6 +498,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
   '/api/data/league/$id': typeof ApiDataLeagueIdRoute
   '/api/data/player/$id': typeof ApiDataPlayerIdRoute
+  '/api/data/research/$kind': typeof ApiDataResearchKindRoute
   '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
   '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
   '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
@@ -560,6 +567,7 @@ export interface FileRoutesByTo {
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
   '/api/data/league/$id': typeof ApiDataLeagueIdRoute
   '/api/data/player/$id': typeof ApiDataPlayerIdRoute
+  '/api/data/research/$kind': typeof ApiDataResearchKindRoute
   '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
   '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
   '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
@@ -632,6 +640,7 @@ export interface FileRoutesById {
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
   '/api/data/league/$id': typeof ApiDataLeagueIdRoute
   '/api/data/player/$id': typeof ApiDataPlayerIdRoute
+  '/api/data/research/$kind': typeof ApiDataResearchKindRoute
   '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
   '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
   '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
@@ -705,6 +714,7 @@ export interface FileRouteTypes {
     | '/api/auth/yahoo/connect'
     | '/api/data/league/$id'
     | '/api/data/player/$id'
+    | '/api/data/research/$kind'
     | '/m/league/$leagueId/feed'
     | '/m/league/$leagueId/matchup'
     | '/m/league/$leagueId/players'
@@ -773,6 +783,7 @@ export interface FileRouteTypes {
     | '/api/auth/yahoo/connect'
     | '/api/data/league/$id'
     | '/api/data/player/$id'
+    | '/api/data/research/$kind'
     | '/m/league/$leagueId/feed'
     | '/m/league/$leagueId/matchup'
     | '/m/league/$leagueId/players'
@@ -844,6 +855,7 @@ export interface FileRouteTypes {
     | '/api/auth/yahoo/connect'
     | '/api/data/league/$id'
     | '/api/data/player/$id'
+    | '/api/data/research/$kind'
     | '/m/league/$leagueId/feed'
     | '/m/league/$leagueId/matchup'
     | '/m/league/$leagueId/players'
@@ -906,6 +918,7 @@ export interface RootRouteChildren {
   ApiAuthYahooConnectRoute: typeof ApiAuthYahooConnectRoute
   ApiDataLeagueIdRoute: typeof ApiDataLeagueIdRoute
   ApiDataPlayerIdRoute: typeof ApiDataPlayerIdRoute
+  ApiDataResearchKindRoute: typeof ApiDataResearchKindRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1344,6 +1357,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDataPlayerIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/data/research/$kind': {
+      id: '/api/data/research/$kind'
+      path: '/api/data/research/$kind'
+      fullPath: '/api/data/research/$kind'
+      preLoaderRoute: typeof ApiDataResearchKindRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/m/league/$leagueId/': {
       id: '/m/league/$leagueId/'
       path: '/'
@@ -1511,6 +1531,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthYahooConnectRoute: ApiAuthYahooConnectRoute,
   ApiDataLeagueIdRoute: ApiDataLeagueIdRoute,
   ApiDataPlayerIdRoute: ApiDataPlayerIdRoute,
+  ApiDataResearchKindRoute: ApiDataResearchKindRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -11,7 +11,8 @@ export type AggTable =
   | "agg_sos"
   | "agg_fpa"
   | "agg_matchups_guide"
-  | "agg_sos_analysis";
+  | "agg_sos_analysis"
+  | "agg_fantasy_leaders";
 
 export async function readAggJson<T>(table: AggTable, key: string): Promise<T | null> {
   if (!tidbConfigured()) return null;
@@ -62,6 +63,7 @@ export async function writeAggJson(
 
 /**
  * TiDB-first research helper: serve snap, empty on miss (request), or compute+write (cron).
+ * Never double-invokes compute on failure (that was inflating Fluid timeouts / 5xx).
  */
 export async function withResearchSnap<T>(
   table: AggTable,
@@ -71,18 +73,26 @@ export async function withResearchSnap<T>(
   compute: () => Promise<T>,
 ): Promise<T> {
   const allowCompute = opts?.allowCompute === true;
-  try {
-    if (tidbConfigured()) {
+
+  if (tidbConfigured()) {
+    try {
       const cached = await readAggJson<T>(table, key);
       if (cached != null) return cached;
-      if (!allowCompute) return empty;
+    } catch {
+      /* treat as miss */
+    }
+    if (!allowCompute) return empty;
+    try {
       const payload = await compute();
       void writeAggJson(table, key, payload).catch(() => undefined);
       return payload;
+    } catch (error) {
+      console.warn(`[research-agg] compute ${table}/${key} failed`, error);
+      return empty;
     }
-  } catch {
-    /* fall through to compute when TiDB unavailable */
   }
+
+  // Local/dev without TiDB may still compute on the request path.
   return compute();
 }
 

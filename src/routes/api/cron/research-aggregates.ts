@@ -2,9 +2,33 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { authorizeCronRequest } from "@/lib/cron-auth.server";
 
+const FORMATS = ["std", "half", "ppr"] as const;
+const REDZONE_YARDLINES = [5, 10, 15, 20] as const;
+
+async function section<T>(
+  report: Record<string, unknown>,
+  key: string,
+  run: () => Promise<T>,
+): Promise<T | null> {
+  try {
+    const value = await run();
+    return value;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[cron/research-aggregates] ${key}`, message);
+    report[key] = { ok: false, error: message };
+    report["partialErrors"] = [...((report["partialErrors"] as string[]) ?? []), key];
+    return null;
+  }
+}
+
 /**
  * Warm research aggregates into TiDB so page loads never gunzip nflverse PBP,
  * scrape 32 club sites, or fan out 18-week Sleeper stats.
+ *
+ * Covers all scoring formats (std/half/ppr), matchup weeks 1…current,
+ * red-zone yardlines, and Fantasy Leaders. Sections are isolated so one
+ * failure does not 500 the whole cron (keeps Vercel error rate honest).
  */
 export const Route = createFileRoute("/api/cron/research-aggregates")({
   server: {
@@ -17,7 +41,7 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
           });
         }
 
-        const report: Record<string, unknown> = { ok: true };
+        const report: Record<string, unknown> = { ok: true, partialErrors: [] as string[] };
         try {
           const { currentSeason } = await import("@/lib/players-build");
           const season = currentSeason();
@@ -35,61 +59,119 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
           const week = Math.max(1, Number(state.week) || 1);
 
           const { loadRedZoneStats } = await import("@/lib/redzone.server");
-          const redzone = await loadRedZoneStats(season, 20, null, null, { allowCompute: true });
-          report["redzone"] = {
-            season: redzone.season,
-            maxWeek: redzone.maxWeek,
-            players: Object.values(redzone.rowsByPos).reduce((n, rows) => n + rows.length, 0),
-          };
+          const redzoneByYl: Record<string, unknown> = {};
+          for (const yl of REDZONE_YARDLINES) {
+            const redzone = await section(report, `redzone:${yl}`, () =>
+              loadRedZoneStats(season, yl, null, null, { allowCompute: true }),
+            );
+            if (redzone) {
+              redzoneByYl[String(yl)] = {
+                season: redzone.season,
+                maxWeek: redzone.maxWeek,
+                players: Object.values(redzone.rowsByPos).reduce((n, rows) => n + rows.length, 0),
+              };
+            }
+          }
+          report["redzone"] = redzoneByYl;
 
           const { loadMostTargetedPlayers } = await import("@/lib/targets.server");
-          const targets = await loadMostTargetedPlayers(season, { allowCompute: true });
-          report["targets"] = {
-            season: targets.season,
-            maxWeek: targets.maxWeek,
-            players: targets.rows.length,
-          };
+          const targets = await section(report, "targets", () =>
+            loadMostTargetedPlayers(season, { allowCompute: true }),
+          );
+          if (targets) {
+            report["targets"] = {
+              season: targets.season,
+              maxWeek: targets.maxWeek,
+              players: targets.rows.length,
+            };
+          }
 
           const { loadAreTheyPlaying } = await import("@/lib/are-they-playing.server");
-          const atp = await loadAreTheyPlaying(week, { allowCompute: true });
-          report["areTheyPlaying"] = { week: atp.week, lines: atp.lines.length };
+          const atp = await section(report, "areTheyPlaying", () =>
+            loadAreTheyPlaying(week, { allowCompute: true }),
+          );
+          if (atp) {
+            report["areTheyPlaying"] = { week: atp.week, lines: atp.lines.length };
+          }
 
           const {
             loadSosBoard,
             loadFantasyPointsAllowed,
             loadMatchupsGuide,
             loadSosAnalysis,
+            loadFantasyLeaders,
           } = await import("@/lib/players.server");
 
-          const sos = await loadSosBoard(season, { allowCompute: true });
-          report["sos"] = {
-            season: sos.season,
-            dataThroughWeek: sos.dataThroughWeek,
-            scheduleGames: sos.schedule.length,
-          };
+          const sos = await section(report, "sos", () =>
+            loadSosBoard(season, { allowCompute: true }),
+          );
+          if (sos) {
+            report["sos"] = {
+              season: sos.season,
+              dataThroughWeek: sos.dataThroughWeek,
+              scheduleGames: sos.schedule.length,
+            };
+          }
 
-          const fpa = await loadFantasyPointsAllowed(season, "half", { allowCompute: true });
-          report["fpa"] = { season: fpa.season, weeksTo: fpa.weeksTo, rows: fpa.rows.length };
+          const fpaByFmt: Record<string, unknown> = {};
+          for (const fmt of FORMATS) {
+            const fpa = await section(report, `fpa:${fmt}`, () =>
+              loadFantasyPointsAllowed(season, fmt, { allowCompute: true }),
+            );
+            if (fpa) {
+              fpaByFmt[fmt] = { season: fpa.season, weeksTo: fpa.weeksTo, rows: fpa.rows.length };
+            }
+          }
+          report["fpa"] = fpaByFmt;
 
-          const guide = await loadMatchupsGuide(week, "half", { allowCompute: true });
-          report["matchupsGuide"] = {
-            week: guide.week,
-            games: Object.keys(guide.games).length,
-            dataThroughWeek: guide.dataThroughWeek,
-          };
+          let guideKeys = 0;
+          for (let w = 1; w <= week; w += 1) {
+            for (const fmt of FORMATS) {
+              const guide = await section(report, `matchupsGuide:${w}|${fmt}`, () =>
+                loadMatchupsGuide(w, fmt, { allowCompute: true }),
+              );
+              if (guide) guideKeys += 1;
+            }
+          }
+          report["matchupsGuide"] = { weeks: week, formats: FORMATS.length, keys: guideKeys };
 
-          const analysis = await loadSosAnalysis("half", { allowCompute: true });
-          report["sosAnalysis"] = {
-            season: analysis.season,
-            rows: analysis.rows.length,
-            fromWeek: analysis.fromWeek,
-          };
+          const analysisByFmt: Record<string, unknown> = {};
+          for (const fmt of FORMATS) {
+            const analysis = await section(report, `sosAnalysis:${fmt}`, () =>
+              loadSosAnalysis(fmt, { allowCompute: true }),
+            );
+            if (analysis) {
+              analysisByFmt[fmt] = {
+                season: analysis.season,
+                rows: analysis.rows.length,
+                fromWeek: analysis.fromWeek,
+              };
+            }
+          }
+          report["sosAnalysis"] = analysisByFmt;
+
+          const leaders = await section(report, "fantasyLeaders", () =>
+            loadFantasyLeaders(season, { allowCompute: true }),
+          );
+          if (leaders) {
+            report["fantasyLeaders"] = {
+              season: leaders.season,
+              maxWeek: leaders.maxWeek,
+              rows: leaders.rows.length,
+            };
+          }
 
           // Warm Matchup Replay PBP snaps for completed weeks (and current).
           const { warmWeekPlaysSnapshots } = await import("@/lib/matchup-replay.server");
-          const plays = await warmWeekPlaysSnapshots(season, week);
-          report["weekPlays"] = plays;
+          const plays = await section(report, "weekPlays", () =>
+            warmWeekPlaysSnapshots(season, week),
+          );
+          if (plays) report["weekPlays"] = plays;
 
+          const partial = (report["partialErrors"] as string[]) ?? [];
+          report["ok"] = partial.length === 0;
+          // Always 200 when auth succeeded — partial section failures are in the body.
+          // A top-level 500 here was inflating Vercel function error rate on warm runs.
           return new Response(JSON.stringify(report), {
             status: 200,
             headers: { "content-type": "application/json", "cache-control": "no-store" },

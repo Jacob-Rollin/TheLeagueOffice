@@ -79,9 +79,11 @@ export const Route = createFileRoute("/api/data/players-export")({
         try {
           const rows = await loadWarehouseRows();
           if (rows.length < 100) {
+            // 200 (not 503): expected warm-gap; clients already treat ok:false as miss.
+            // 503 was inflating Vercel function error rate during cutover.
             return jsonResponse(
               { ok: false, error: "warehouse not seeded", count: rows.length },
-              { status: 503, cache: "no-store" },
+              { cache: "no-store" },
             );
           }
           return jsonResponse(exportPayload(rows));

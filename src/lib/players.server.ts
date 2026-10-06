@@ -710,56 +710,13 @@ async function computeFantasyPointsAllowed(
   };
 }
 
-function sosGrade(avgRank: number): string {
-  if (avgRank <= 10) return "Very hard";
-  if (avgRank <= 14) return "Hard";
-  if (avgRank <= 19) return "Neutral";
-  if (avgRank <= 24) return "Easy";
-  return "Very easy";
-}
-
 async function buildSosFor(team: string, pos: Pos, season: string) {
   if (team === "FA") return null;
-  // DEF uses the same board: fantasy points allowed to defenses by each offense.
-  const [allowed, schedule] = await Promise.all([
-    sosAllowed(season).catch(() => null),
-    scheduleFor(season).catch(() => []),
-  ]);
-  const perGame = allowed?.perGame.get(pos);
-  const rankOf = allowed?.rank.get(pos);
-  if (!perGame || perGame.size === 0 || !rankOf) return null;
-
-  const opponents = schedule
-    .filter((g) => g.home === team || g.away === team)
-    .filter((g) => g.week >= 1 && g.week <= 18)
-    .sort((a, b) => a.week - b.week)
-    .map((g) => {
-      const opp = g.home === team ? g.away : g.home;
-      const pointsAllowed = perGame.get(opp);
-      return {
-        week: g.week,
-        opp,
-        rank: rankOf.get(opp) ?? null,
-        pointsAllowed: pointsAllowed === undefined ? null : Math.round(pointsAllowed * 100) / 100,
-      };
-    });
-
-  const ranks = opponents.map((o) => o.rank).filter((r): r is number => r !== null);
-  const avg = ranks.length ? ranks.reduce((a, b) => a + b, 0) / ranks.length : null;
-  const schedulePa = opponents
-    .map((o) => o.pointsAllowed)
-    .filter((v): v is number => v != null && Number.isFinite(v));
-  const avgPa =
-    schedulePa.length > 0
-      ? schedulePa.reduce((a, b) => a + b, 0) / schedulePa.length
-      : null;
-
-  return {
-    grade: avg === null ? "Unknown" : sosGrade(avg),
-    rank: avg === null ? null : Math.round(avg),
-    pointsAllowedPerGame: avgPa === null ? null : Math.round(avgPa * 100) / 100,
-    opponents,
-  };
+  // Rebuild from the TiDB SOS board snap — never fan out 18-week Sleeper stats
+  // on the request path (defenseAllowed / sosAllowed stay cron-only).
+  const { sosFromBoard } = await import("./sos-from-board");
+  const board = await loadSosBoard(season).catch(() => null);
+  return sosFromBoard(board, team, pos);
 }
 
 export type SosMatrixEntry = NonNullable<PlayerDetail["sos"]>;
@@ -2676,9 +2633,23 @@ const leaderWeekRows = memo<SleeperRow[]>(10 * 60 * 1000, async (key) => {
 });
 
 /** Every player's week-by-week fantasy points for a regular season (all three presets). */
-export async function loadFantasyLeaders(seasonInput?: string): Promise<FantasyLeaders> {
+export async function loadFantasyLeaders(
+  seasonInput?: string,
+  opts?: { allowCompute?: boolean },
+): Promise<FantasyLeaders> {
   const state = await nflState("state");
   const season = seasonInput && /^\d{4}$/.test(seasonInput) ? seasonInput : state.season;
+  const empty: FantasyLeaders = { season, maxWeek: 0, rows: [] };
+  const { withResearchSnap } = await import("./research-agg.server");
+  return withResearchSnap("agg_fantasy_leaders", season, opts, empty, () =>
+    computeFantasyLeaders(season, state),
+  );
+}
+
+async function computeFantasyLeaders(
+  season: string,
+  state: { season: string; seasonType: string; week: number },
+): Promise<FantasyLeaders> {
   const lastWeek =
     season === state.season ? (state.seasonType === "regular" ? Math.min(18, state.week) : 0) : 18;
   if (Number(season) > Number(state.season) || lastWeek < 1) {
@@ -2916,24 +2887,27 @@ const weekProjectionBundles = memo<Map<string, WeekProjectionBundle>>(
 );
 
 /**
- * Weekly projected points + raw stats for one player across weeks 1–18.
- * Fetches each week once (shared Map memo) instead of re-downloading all 18
- * league projection files per player card open.
+ * Weekly projected points + raw stats for one player.
+ * Only fetches the weeks requested (shared Map memo per season|week).
+ * Callers should pass unplayed / upcoming weeks — never all 18 by default.
  */
 async function playerWeekProjections(
   id: string,
   season: string,
+  weeks: readonly number[],
 ): Promise<Map<number, WeekProjectionBundle>> {
   const out = new Map<number, WeekProjectionBundle>();
-  const weeks = await Promise.all(
-    Array.from({ length: 18 }, (_, i) => i + 1).map(async (week) => {
+  if (!weeks.length) return out;
+  const unique = [...new Set(weeks.filter((w) => w >= 1 && w <= 18))];
+  const resolved = await Promise.all(
+    unique.map(async (week) => {
       const byPlayer = await weekProjectionBundles(`${season}|${week}`).catch(
         () => new Map<string, WeekProjectionBundle>(),
       );
       return [week, byPlayer.get(id) ?? null] as const;
     }),
   );
-  for (const [week, bundle] of weeks) {
+  for (const [week, bundle] of resolved) {
     if (bundle) out.set(week, bundle);
   }
   return out;
@@ -2963,14 +2937,33 @@ async function buildSeasonLogsForPlayer(
   opts: { includeProjections?: boolean } = {},
 ): Promise<GameLog[]> {
   const includeProjections = opts.includeProjections !== false;
-  const [raw, schedule, projByWeek, byeByTeam] = await Promise.all([
+  // Actuals first — then only pull projection files for weeks without stats.
+  // Avoids an 18-week Sleeper projections fan-out on every player-card open.
+  const [raw, schedule, byeByTeam, state] = await Promise.all([
     weeklyRaw(id, season),
     scheduleFor(season).catch(() => [] as ScheduleGame[]),
-    includeProjections
-      ? playerWeekProjections(id, season).catch(() => new Map<number, WeekProjectionBundle>())
-      : Promise.resolve(new Map<number, WeekProjectionBundle>()),
     byeWeeks(season).catch(() => new Map<string, number>()),
+    includeProjections ? nflState("state").catch(() => null) : Promise.resolve(null),
   ]);
+  const playedWeeks = new Set(
+    Object.keys(raw)
+      .map((w) => Number(w))
+      .filter((w) => Number.isFinite(w) && raw[String(w)]?.stats),
+  );
+  const currentWeek =
+    state && state.season === season && state.seasonType === "regular"
+      ? Math.min(18, Math.max(1, state.week))
+      : 18;
+  const projWeeks = includeProjections
+    ? Array.from({ length: 18 }, (_, i) => i + 1).filter(
+        (w) => !playedWeeks.has(w) && w >= currentWeek,
+      )
+    : [];
+  const projByWeek = includeProjections
+    ? await playerWeekProjections(id, season, projWeeks).catch(
+        () => new Map<number, WeekProjectionBundle>(),
+      )
+    : new Map<number, WeekProjectionBundle>();
   const byeWeek = byeByTeam.get(player.team.toUpperCase()) ?? null;
   const byWeek = new Map<number, GameLog>();
   for (const [wk, entry] of Object.entries(raw)) {

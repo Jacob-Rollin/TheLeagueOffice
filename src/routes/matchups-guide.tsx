@@ -29,7 +29,7 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos } from "@/lib/draft";
-import { getMatchupsGuide } from "@/lib/players.functions";
+import { fetchResearchMatchupsGuide } from "@/lib/research-cdn";
 import type { MatchupDefenseCell } from "@/lib/players.server";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import {
@@ -159,7 +159,7 @@ function MatchupsGuidePage() {
     staleTime: 10 * 60 * 1000,
     retry: 1,
     placeholderData: (prev) => prev,
-    queryFn: () => getMatchupsGuide({ data: { week, format: scoringFormat } }),
+    queryFn: () => fetchResearchMatchupsGuide(week, scoringFormat),
   });
   const guide = query.data;
   const activeWeek = week ?? guide?.week ?? null;
