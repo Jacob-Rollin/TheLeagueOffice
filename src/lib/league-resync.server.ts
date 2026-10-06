@@ -170,6 +170,13 @@ export type TidbWeekMatchupsHit = {
   syncedAtMs: number;
 };
 
+/** Coalesce concurrent matchup polls in one Fluid isolate onto one TiDB SELECT. */
+const TIDB_MATCHUP_READ_TTL_MS = 20 * 1000;
+const tidbMatchupReadMemo = new Map<
+  string,
+  { at: number; value: Promise<TidbWeekMatchupsHit | null> }
+>();
+
 /** Read a week board from TiDB `synced_matchups` (delta-sync / persist dual-write). */
 export async function loadTidbWeekMatchups(
   leagueId: string,
@@ -179,77 +186,92 @@ export async function loadTidbWeekMatchups(
   const cleanLeague = leagueId.trim().slice(0, 64);
   const safeWeek = Math.max(1, Math.floor(Number(week) || 1));
   if (!cleanLeague) return null;
+  const conn = connectionId?.trim().slice(0, 64) ?? "";
+  const memoKey = `${cleanLeague}|${safeWeek}|${conn}`;
+  const hit = tidbMatchupReadMemo.get(memoKey);
+  if (hit && Date.now() - hit.at < TIDB_MATCHUP_READ_TTL_MS) return hit.value;
 
-  try {
-    const { tidbConfigured, tidbExecute } = await import("@/lib/tidb");
-    if (!tidbConfigured()) return null;
+  const value = (async (): Promise<TidbWeekMatchupsHit | null> => {
+    try {
+      const { tidbConfigured, tidbExecute } = await import("@/lib/tidb");
+      if (!tidbConfigured()) return null;
 
-    const params: unknown[] = [cleanLeague, safeWeek];
-    let connClause = "";
-    const conn = connectionId?.trim();
-    if (conn) {
-      connClause = "AND (connection_id = ? OR connection_id IS NULL)";
-      params.push(conn.slice(0, 64));
-    }
-
-    const rows = await tidbExecute<{
-      team_id: number;
-      matchup_id: number | null;
-      roster_points: number;
-      projected_points: number;
-      team_name: string | null;
-      owner_name: string | null;
-      starters: unknown;
-      player_points: unknown;
-      platform: string | null;
-      synced_at: string | Date | null;
-    }>(
-      `SELECT team_id, matchup_id, roster_points, projected_points, team_name, owner_name,
-              starters, player_points, platform, synced_at
-       FROM synced_matchups
-       WHERE league_id = ? AND week = ? ${connClause}
-       ORDER BY team_id ASC
-       LIMIT 64`,
-      params,
-    );
-    if (!rows.length) return null;
-
-    const parseJson = <T,>(raw: unknown, fallback: T): T => {
-      if (raw == null) return fallback;
-      if (typeof raw === "string") {
-        try {
-          return JSON.parse(raw) as T;
-        } catch {
-          return fallback;
-        }
+      const params: unknown[] = [cleanLeague, safeWeek];
+      let connClause = "";
+      if (conn) {
+        connClause = "AND (connection_id = ? OR connection_id IS NULL)";
+        params.push(conn);
       }
-      return raw as T;
-    };
 
-    let syncedAtMs = 0;
-    const cacheRows: MatchupCacheRow[] = rows.map((r) => {
-      const at = r.synced_at ? Date.parse(String(r.synced_at)) : 0;
-      if (Number.isFinite(at)) syncedAtMs = Math.max(syncedAtMs, at);
-      return {
-        roster_id: Number(r.team_id),
-        matchup_id: r.matchup_id == null ? null : Number(r.matchup_id),
-        points: Number(r.roster_points) || 0,
-        projected_points: Number(r.projected_points) || 0,
-        team_name: r.team_name,
-        owner_name: r.owner_name,
-        starters: parseJson<string[]>(r.starters, []),
-        player_points: parseJson<Record<string, number>>(r.player_points, {}),
-        platform: r.platform,
+      const rows = await tidbExecute<{
+        team_id: number;
+        matchup_id: number | null;
+        roster_points: number;
+        projected_points: number;
+        team_name: string | null;
+        owner_name: string | null;
+        starters: unknown;
+        player_points: unknown;
+        platform: string | null;
+        synced_at: string | Date | null;
+      }>(
+        `SELECT team_id, matchup_id, roster_points, projected_points, team_name, owner_name,
+                starters, player_points, platform, synced_at
+         FROM synced_matchups
+         WHERE league_id = ? AND week = ? ${connClause}
+         ORDER BY team_id ASC
+         LIMIT 64`,
+        params,
+      );
+      if (!rows.length) return null;
+
+      const parseJson = <T,>(raw: unknown, fallback: T): T => {
+        if (raw == null) return fallback;
+        if (typeof raw === "string") {
+          try {
+            return JSON.parse(raw) as T;
+          } catch {
+            return fallback;
+          }
+        }
+        return raw as T;
       };
-    });
 
-    const board = matchupsFromCacheRows(safeWeek, cacheRows);
-    if (!board) return null;
-    return { board, syncedAtMs };
-  } catch {
-    return null;
-  }
+      let syncedAtMs = 0;
+      const cacheRows: MatchupCacheRow[] = rows.map((r) => {
+        const at = r.synced_at ? Date.parse(String(r.synced_at)) : 0;
+        if (Number.isFinite(at)) syncedAtMs = Math.max(syncedAtMs, at);
+        return {
+          roster_id: Number(r.team_id),
+          matchup_id: r.matchup_id == null ? null : Number(r.matchup_id),
+          points: Number(r.roster_points) || 0,
+          projected_points: Number(r.projected_points) || 0,
+          team_name: r.team_name,
+          owner_name: r.owner_name,
+          starters: parseJson<string[]>(r.starters, []),
+          player_points: parseJson<Record<string, number>>(r.player_points, {}),
+          platform: r.platform,
+        };
+      });
+
+      const board = matchupsFromCacheRows(safeWeek, cacheRows);
+      if (!board) return null;
+      return { board, syncedAtMs };
+    } catch {
+      return null;
+    }
+  })();
+
+  tidbMatchupReadMemo.set(memoKey, { at: Date.now(), value });
+  return value;
 }
+
+/**
+ * Cap dual-writes when many viewers miss the TiDB freshness window together.
+ * 60s still lets live boards refresh every minute without N viewers each writing.
+ */
+const PERSIST_MIN_INTERVAL_MS = 60 * 1000;
+const lastPersistAt = new Map<string, number>();
 
 /** Upsert one week's host board into `weekly_matchups` (fire-and-forget safe). */
 export async function persistWeekMatchups(input: {
@@ -263,6 +285,16 @@ export async function persistWeekMatchups(input: {
   const platform = input.platform.trim().toLowerCase() || "sleeper";
   const week = input.board.week;
   if (!leagueId || !input.board.entries.length) return 0;
+
+  const persistKey = `${leagueId}|${week}`;
+  const now = Date.now();
+  const prev = lastPersistAt.get(persistKey) ?? 0;
+  if (now - prev < PERSIST_MIN_INTERVAL_MS) return 0;
+  lastPersistAt.set(persistKey, now);
+  // Drop stale in-process reads so the next poll can see the upsert.
+  for (const key of tidbMatchupReadMemo.keys()) {
+    if (key.startsWith(`${persistKey}|`)) tidbMatchupReadMemo.delete(key);
+  }
 
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { jsonResponse } from "@/lib/api-cache";
+import { jsonResponse, warehouseCacheControl } from "@/lib/api-cache";
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
 
 type WarehouseRow = {
@@ -86,7 +86,7 @@ export const Route = createFileRoute("/api/data/players-export")({
               { cache: "no-store" },
             );
           }
-          return jsonResponse(exportPayload(rows));
+          return jsonResponse(exportPayload(rows), { cache: warehouseCacheControl() });
         } catch (error) {
           const message = error instanceof Error ? error.message : "export failed";
           console.error("[api/data/players-export]", message);
