@@ -440,12 +440,8 @@ const loadRosterMap = memo<Map<string, RosterHit>>(12 * HOUR, async (season) => 
   return map;
 });
 
-/** Season PBP → week-keyed skill scoring plays (memoized). */
-const loadWeekPlays = memo<RawPlay[]>(6 * HOUR, async (key) => {
-  const [season, weekRaw] = key.split(":");
-  const seasonKey = season || currentSeason();
-  const week = Math.max(1, Number(weekRaw) || 1);
-
+/** Parse full-season PBP once; bucket by week (avoids re-gunzip per week key). */
+const loadSeasonWeekPlays = memo<Map<number, RawPlay[]>>(6 * HOUR, async (seasonKey) => {
   const res = await fetch(PBP_URL(seasonKey), {
     headers: { accept: "*/*", "user-agent": "TheLeagueOffice/1.0" },
   });
@@ -453,18 +449,19 @@ const loadWeekPlays = memo<RawPlay[]>(6 * HOUR, async (key) => {
   const { gunzipSync } = await import("node:zlib");
   const csv = gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8");
   const lines = csv.split(/\r?\n/);
-  if (lines.length < 2) return [];
+  const byWeek = new Map<number, RawPlay[]>();
+  if (lines.length < 2) return byWeek;
 
   const header = parseCsvLine(lines[0]!);
   const idx = Object.fromEntries(header.map((h, i) => [h, i])) as Record<string, number>;
-  const plays: RawPlay[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     if (!line) continue;
     const row = parseCsvLine(line);
     if (cell(row, idx, "season_type") !== "REG") continue;
-    if (num(cell(row, idx, "week")) !== week) continue;
+    const week = num(cell(row, idx, "week"));
+    if (week < 1 || week > 22) continue;
     const playType = cell(row, idx, "play_type");
     if (playType !== "pass" && playType !== "run") continue;
 
@@ -547,6 +544,7 @@ const loadWeekPlays = memo<RawPlay[]>(6 * HOUR, async (key) => {
 
     if (!contributions.length) continue;
 
+    const plays = byWeek.get(week) ?? [];
     plays.push({
       gameId: cell(row, idx, "game_id"),
       gameDate: cell(row, idx, "game_date").trim() || "1970-01-01",
@@ -555,18 +553,48 @@ const loadWeekPlays = memo<RawPlay[]>(6 * HOUR, async (key) => {
       contributions,
       td,
     });
+    byWeek.set(week, plays);
   }
 
-  plays.sort((a, b) => {
-    if (a.gameDate !== b.gameDate) return a.gameDate.localeCompare(b.gameDate);
-    if (a.gameId !== b.gameId) return a.gameId.localeCompare(b.gameId);
-    if (a.gameSecondsRemaining !== b.gameSecondsRemaining) {
-      return b.gameSecondsRemaining - a.gameSecondsRemaining;
-    }
-    return a.playId - b.playId;
-  });
+  for (const plays of byWeek.values()) {
+    plays.sort((a, b) => {
+      if (a.gameDate !== b.gameDate) return a.gameDate.localeCompare(b.gameDate);
+      if (a.gameId !== b.gameId) return a.gameId.localeCompare(b.gameId);
+      if (a.gameSecondsRemaining !== b.gameSecondsRemaining) {
+        return b.gameSecondsRemaining - a.gameSecondsRemaining;
+      }
+      return a.playId - b.playId;
+    });
+  }
 
-  return plays;
+  // Persist each week slice to TiDB for cross-isolate reuse.
+  void import("./research-agg.server")
+    .then(async ({ writeWeekPlaysMeta }) => {
+      for (const [week, plays] of byWeek) {
+        await writeWeekPlaysMeta(seasonKey, week, plays);
+      }
+    })
+    .catch(() => undefined);
+
+  return byWeek;
+});
+
+/** Season PBP → week-keyed skill scoring plays (TiDB snapshot first). */
+const loadWeekPlays = memo<RawPlay[]>(6 * HOUR, async (key) => {
+  const [season, weekRaw] = key.split(":");
+  const seasonKey = season || currentSeason();
+  const week = Math.max(1, Number(weekRaw) || 1);
+
+  try {
+    const { readWeekPlaysMeta } = await import("./research-agg.server");
+    const cached = await readWeekPlaysMeta(seasonKey, week);
+    if (Array.isArray(cached) && cached.length > 0) return cached as RawPlay[];
+  } catch {
+    /* compute below */
+  }
+
+  const byWeek = await loadSeasonWeekPlays(seasonKey);
+  return byWeek.get(week) ?? [];
 });
 
 /**

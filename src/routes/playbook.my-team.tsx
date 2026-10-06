@@ -1,5 +1,4 @@
 import { PlayerAvatar, playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
-import { detailQuery } from "@/components/draft/PlayerDetail";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { INJURY_STATUS_LABEL, InjuryReportCard } from "@/components/injury/InjuryReportCard";
@@ -15,7 +14,7 @@ import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player, Pos } from "@/lib/draft";
-import { getInjuryReports, getPlayerNews } from "@/lib/players.functions";
+import { getInjuryReports, getRosterNews } from "@/lib/players.functions";
 import type { InjuryReportItem } from "@/lib/players.server";
 import { getTeamPrimaryColor } from "@/lib/nfl-teams";
 import {
@@ -29,12 +28,13 @@ import {
   formatNflKickoffLabel,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
+import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { hasScorableProjectionStats, scoreStats, type ScoringMap } from "@/lib/scoring-map";
 import { getCached } from "@/lib/sleeper-cache";
 import { sosStarsFromRank, weeklySosMatchupFor, type SosMatchup } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export const Route = createFileRoute("/playbook/my-team")({
@@ -220,35 +220,18 @@ function buildScheduleOppByTeam(games: ScheduleGame[]): Map<string, ScheduleSosR
 }
 
 /**
- * Compact injury chip — same `["player", id]` / `player.injury` cache as PlayerDetail.
- * Healthy / null → render nothing.
+ * Compact injury chip from the already-loaded Sleeper catalog — no per-slot
+ * `detailQuery` / Sleeper fan-out on My Team remounts.
  */
 function RowInjuryBadge({
-  playerId,
-  playerName,
+  player,
   onOpen,
 }: {
-  playerId: string;
-  playerName: string;
+  player: Player;
   onOpen: () => void;
 }) {
-  const { data } = useQuery({
-    ...detailQuery(playerId),
-    enabled: Boolean(playerId),
-  });
-
-  const injury = data?.player?.injury;
-  if (!injury || injury === "Healthy" || injury === "Active" || injury === "None") {
-    return null;
-  }
-
-  let label: "Q" | "O" | "D" | "IR" | "NA" | null = null;
-  if (injury === "Questionable") label = "Q";
-  else if (injury === "Doubtful") label = "D";
-  else if (injury === "Out") label = "O";
-  else if (injury === "IR") label = "IR";
-  else if (injury === "NA") label = "NA";
-  else return null;
+  const badge = injuryMicroBadge(resolveInjuryStatus(player));
+  if (!badge) return null;
 
   return (
     <button
@@ -257,15 +240,13 @@ function RowInjuryBadge({
         e.stopPropagation();
         onOpen();
       }}
-      aria-label={`${playerName} injury status ${label}`}
+      aria-label={`${player.name} injury status ${badge.label}`}
       className={cn(
         "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[2px] px-1 text-[9px] font-bold text-white transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-        label === "Q"
-          ? "bg-amber-500/80"
-          : "bg-rose-600/80",
+        badge.className,
       )}
     >
-      {label}
+      {badge.label}
     </button>
   );
 }
@@ -484,11 +465,7 @@ function ProjectionPlayerCell({
       <span className="min-w-0">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate font-semibold text-slate-900">{player.name}</span>
-          <RowInjuryBadge
-            playerId={player.id}
-            playerName={player.name}
-            onOpen={() => onOpen(player.id)}
-          />
+          <RowInjuryBadge player={player} onOpen={() => onOpen(player.id)} />
         </span>
         <span className="mt-0.5 block truncate text-[11px] font-medium uppercase text-slate-400">
           {playerByeMeta(player)}
@@ -1077,13 +1054,17 @@ function PlaybookMyTeamPage() {
     [projectionSourceRows, myPlayerPoints, boxScorePoints],
   );
 
-  const newsQueries = useQueries({
-    queries: rosteredPlayers.map((p) => ({
-      queryKey: ["player-news", p.id] as const,
-      queryFn: () => getPlayerNews({ data: { id: p.id } }),
-      staleTime: 1000 * 60 * 10,
-      enabled: Boolean(p.id) && (tab === "lineup" || tab === "news"),
-    })),
+  const rosterIdsKey = useMemo(
+    () => rosteredPlayers.map((p) => p.id).filter(Boolean).sort().join(","),
+    [rosteredPlayers],
+  );
+
+  const rosterNewsQuery = useQuery({
+    queryKey: ["roster-news", rosterIdsKey],
+    enabled: rosterIdsKey.length > 0 && (tab === "lineup" || tab === "news"),
+    staleTime: 1000 * 60 * 10,
+    retry: false,
+    queryFn: async () => await getRosterNews({ data: { ids: rosterIdsKey.split(",") } }),
   });
 
   const newsById = useMemo(() => {
@@ -1099,46 +1080,47 @@ function PlaybookMyTeamPage() {
         loading: boolean;
       }
     >();
-    rosteredPlayers.forEach((p, i) => {
-      const q = newsQueries[i];
-      // Reject payload if the server player id does not match this roster row.
-      const payloadPlayerId = q?.data?.player?.id;
-      if (payloadPlayerId && payloadPlayerId !== p.id) {
-        map.set(p.id, {
-          headline: null,
-          description: null,
-          link: null,
-          published: null,
-          injuryNote: null,
-          items: [],
-          loading: Boolean(q?.isLoading),
-        });
-        return;
-      }
-      const items = (q?.data?.items ?? [])
-        .map((item) => ({
-          id: String(item.id),
-          playerId: p.id,
-          headline: item.headline?.trim() || "Player update",
-          description: item.description?.trim() || "",
-          link: item.link?.trim() || null,
-          published: item.published?.trim() || "",
-          source: item.source?.trim() || "ESPN",
-        }))
-        .filter((item) => newsCopyBelongsToPlayer(p, item));
-      const top = items[0];
+    const loading = rosterNewsQuery.isLoading;
+    for (const p of rosteredPlayers) {
       map.set(p.id, {
+        headline: null,
+        description: null,
+        link: null,
+        published: null,
+        injuryNote: null,
+        items: [],
+        loading,
+      });
+    }
+    for (const entry of rosterNewsQuery.data?.players ?? []) {
+      const player = rosteredPlayers.find((p) => p.id === entry.id);
+      if (!player) continue;
+      const items: RosterNewsItem[] = entry.news
+        ? [
+            {
+              id: `${entry.id}-news`,
+              playerId: entry.id,
+              headline: entry.news.headline?.trim() || "Player update",
+              description: entry.news.analysis?.trim() || "",
+              link: entry.news.link?.trim() || null,
+              published: entry.news.published?.trim() || "",
+              source: "ESPN",
+            },
+          ].filter((item) => newsCopyBelongsToPlayer(player, item))
+        : [];
+      const top = items[0];
+      map.set(entry.id, {
         headline: top?.headline ?? null,
         description: top?.description ?? null,
         link: top?.link ?? null,
         published: top?.published ?? null,
-        injuryNote: q?.data?.injury?.note?.trim() || null,
+        injuryNote: entry.report?.practice?.trim() || entry.bodyPart?.trim() || null,
         items,
-        loading: Boolean(q?.isLoading),
+        loading,
       });
-    });
+    }
     return map;
-  }, [rosteredPlayers, newsQueries]);
+  }, [rosteredPlayers, rosterNewsQuery.data, rosterNewsQuery.isLoading]);
 
   const injuryReports = useQuery({
     queryKey: ["injury-reports"],
@@ -1400,8 +1382,7 @@ function PlaybookMyTeamPage() {
                               {player.name}
                             </span>
                             <RowInjuryBadge
-                              playerId={player.id}
-                              playerName={player.name}
+                              player={player}
                               onOpen={() => openPlayer(player.id)}
                             />
                           </span>
@@ -1970,7 +1951,7 @@ function PlaybookMyTeamPage() {
       ) : tab === "news" ? (
         <MyTeamNewsPanel
           feed={myTeamNews}
-          feedLoading={injuryReports.isLoading || newsQueries.some((q) => q.isLoading)}
+          feedLoading={injuryReports.isLoading || rosterNewsQuery.isLoading}
           sidebar={injuryReports.data?.items ?? []}
           sidebarLoading={injuryReports.isLoading}
           players={players}

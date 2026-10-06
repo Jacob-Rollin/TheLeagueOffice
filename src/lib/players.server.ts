@@ -2733,51 +2733,59 @@ type WeekProjectionBundle = {
   raw: Record<string, number>;
 };
 
-/** Weekly projected points + raw stats for one player across weeks 1–18. */
-// 15m TTL: Out → projected mid-week; keep popup PROJ in sync with matchup board.
-const playerWeekProjections = memo<Map<number, WeekProjectionBundle>>(
+/** One week's full projection bundles keyed by player id (shared across all popups). */
+const weekProjectionBundles = memo<Map<string, WeekProjectionBundle>>(
   15 * 60 * 1000,
   async (key) => {
-  const [id, season] = key.split("|") as [string, string];
-  const out = new Map<number, WeekProjectionBundle>();
-  await Promise.all(
-    Array.from({ length: 18 }, (_, i) => i + 1).map(async (week) => {
-      try {
-        const res = await fetch(
-          `${BASE}/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`,
-          { headers: { accept: "application/json" } },
-        );
-        if (!res.ok) return;
-        const rows = (await res.json().catch(() => null)) as
-          | { player_id?: string; stats?: Stats | null }[]
-          | null;
-        if (!Array.isArray(rows)) return;
-        const hit = rows.find((r) => String(r.player_id) === id);
-        const stats = hit?.stats;
-        if (!stats) return;
-        // Skip ADP-only / all-zero lines so popup PROJ matches research "—".
-        if (!hasScorableProjectionStats(stats)) return;
-        const std = stats["pts_std"];
-        const half = stats["pts_half_ppr"];
-        const ppr = stats["pts_ppr"];
-        // Keep every numeric projected stat so league scoring can match matchup.
-        const raw: Record<string, number> = {};
-        for (const [k, v] of Object.entries(stats)) {
-          if (v != null && Number.isFinite(Number(v))) raw[k] = Number(v);
-        }
-        out.set(week, {
-          std: std != null && Number.isFinite(Number(std)) && Number(std) > 0 ? Number(std) : null,
-          half: half != null && Number.isFinite(Number(half)) && Number(half) > 0 ? Number(half) : null,
-          ppr: ppr != null && Number.isFinite(Number(ppr)) && Number(ppr) > 0 ? Number(ppr) : null,
-          raw,
-        });
-      } catch {
-        /* ignore week miss */
+    const [season, week] = key.split("|") as [string, string];
+    const rows = await fetchRows(
+      `${BASE}/projections/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`,
+    ).catch(() => []);
+    const map = new Map<string, WeekProjectionBundle>();
+    for (const row of rows) {
+      const stats = row.stats;
+      if (!row.player_id || !stats || !hasScorableProjectionStats(stats)) continue;
+      const raw: Record<string, number> = {};
+      for (const [k, v] of Object.entries(stats)) {
+        if (v != null && Number.isFinite(Number(v))) raw[k] = Number(v);
       }
+      const std = stats["pts_std"];
+      const half = stats["pts_half_ppr"];
+      const ppr = stats["pts_ppr"];
+      map.set(String(row.player_id), {
+        std: std != null && Number.isFinite(Number(std)) && Number(std) > 0 ? Number(std) : null,
+        half: half != null && Number.isFinite(Number(half)) && Number(half) > 0 ? Number(half) : null,
+        ppr: ppr != null && Number.isFinite(Number(ppr)) && Number(ppr) > 0 ? Number(ppr) : null,
+        raw,
+      });
+    }
+    return map;
+  },
+);
+
+/**
+ * Weekly projected points + raw stats for one player across weeks 1–18.
+ * Fetches each week once (shared Map memo) instead of re-downloading all 18
+ * league projection files per player card open.
+ */
+async function playerWeekProjections(
+  id: string,
+  season: string,
+): Promise<Map<number, WeekProjectionBundle>> {
+  const out = new Map<number, WeekProjectionBundle>();
+  const weeks = await Promise.all(
+    Array.from({ length: 18 }, (_, i) => i + 1).map(async (week) => {
+      const byPlayer = await weekProjectionBundles(`${season}|${week}`).catch(
+        () => new Map<string, WeekProjectionBundle>(),
+      );
+      return [week, byPlayer.get(id) ?? null] as const;
     }),
   );
+  for (const [week, bundle] of weeks) {
+    if (bundle) out.set(week, bundle);
+  }
   return out;
-});
+}
 
 function sumRaw(logs: GameLog[], key: string): number | null {
   let total = 0;
@@ -2800,11 +2808,15 @@ async function buildSeasonLogsForPlayer(
   id: string,
   player: { team: string; pos: Pos },
   season: string,
+  opts: { includeProjections?: boolean } = {},
 ): Promise<GameLog[]> {
+  const includeProjections = opts.includeProjections !== false;
   const [raw, schedule, projByWeek, byeByTeam] = await Promise.all([
     weeklyRaw(id, season),
     scheduleFor(season).catch(() => [] as ScheduleGame[]),
-    playerWeekProjections(`${id}|${season}`).catch(() => new Map<number, WeekProjectionBundle>()),
+    includeProjections
+      ? playerWeekProjections(id, season).catch(() => new Map<number, WeekProjectionBundle>())
+      : Promise.resolve(new Map<number, WeekProjectionBundle>()),
     byeWeeks(season).catch(() => new Map<string, number>()),
   ]);
   const byeWeek = byeByTeam.get(player.team.toUpperCase()) ?? null;
@@ -2965,12 +2977,17 @@ export async function loadGameLogs(
   const season =
     requested && /^\d{4}$/.test(requested) ? requested : current;
 
-  const careerYears = ["2026", "2025", "2024", "2023", "2022"];
+  // Career totals only need weekly actuals — skip the 18-week projection fan-out.
+  const careerYears = [current, String(Number(current) - 1), String(Number(current) - 2)].filter(
+    (y, i, arr) => /^\d{4}$/.test(y) && arr.indexOf(y) === i,
+  );
   const [logs, careerBundles] = await Promise.all([
-    buildSeasonLogsForPlayer(id, player, season),
+    buildSeasonLogsForPlayer(id, player, season, { includeProjections: true }),
     Promise.all(
       careerYears.map(async (year) => {
-        const seasonLogs = await buildSeasonLogsForPlayer(id, player, year);
+        const seasonLogs = await buildSeasonLogsForPlayer(id, player, year, {
+          includeProjections: false,
+        });
         return careerRowFromLogs(id, year, player.team, seasonLogs);
       }),
     ),

@@ -1514,7 +1514,7 @@ async function reconstructSleeperIrByRoster(
 }
 
 /** Load host-platform weekly matchup rows keyed by roster + matchup_id. */
-const LIVE_MATCHUP_TTL_MS = 20 * 1000;
+const LIVE_MATCHUP_TTL_MS = 60 * 1000;
 const FINAL_MATCHUP_TTL_MS = 10 * 60 * 1000;
 const NFL_STATE_URL = `${BASE}/state/nfl`;
 

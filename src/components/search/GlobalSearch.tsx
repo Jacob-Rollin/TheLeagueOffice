@@ -60,9 +60,16 @@ const PAGES: { label: string; to: string; hint: string }[] = [
 export function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  // 300ms debounce — prevents typing spikes from re-filtering / re-querying every keystroke.
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQ(q), 300);
+    return () => window.clearTimeout(t);
+  }, [q]);
 
   const { data } = useQuery({
     queryKey: ["players"],
@@ -140,7 +147,7 @@ export function GlobalSearch() {
     setOpen(false);
   };
 
-  const term = q.trim().toLowerCase();
+  const term = debouncedQ.trim().toLowerCase();
   const active = term.length > 0;
 
   const pages = useMemo(

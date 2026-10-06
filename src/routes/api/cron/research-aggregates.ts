@@ -1,0 +1,67 @@
+import { createFileRoute } from "@tanstack/react-router";
+
+import { authorizeCronRequest } from "@/lib/cron-auth.server";
+
+/**
+ * Warm research aggregates (redzone / targets / are-they-playing) into TiDB
+ * so page loads never gunzip nflverse PBP or scrape 32 club sites.
+ */
+export const Route = createFileRoute("/api/cron/research-aggregates")({
+  server: {
+    handlers: {
+      GET: async ({ request }) => {
+        if (!authorizeCronRequest(request)) {
+          return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
+            status: 401,
+            headers: { "content-type": "application/json", "cache-control": "no-store" },
+          });
+        }
+
+        const report: Record<string, unknown> = { ok: true };
+        try {
+          const { currentSeason } = await import("@/lib/players-build");
+          const season = currentSeason();
+
+          const { loadRedZoneStats } = await import("@/lib/redzone.server");
+          const redzone = await loadRedZoneStats(season, 20);
+          report["redzone"] = {
+            season: redzone.season,
+            maxWeek: redzone.maxWeek,
+            players: Object.values(redzone.rowsByPos).reduce((n, rows) => n + rows.length, 0),
+          };
+
+          const { loadMostTargetedPlayers } = await import("@/lib/targets.server");
+          const targets = await loadMostTargetedPlayers(season);
+          report["targets"] = {
+            season: targets.season,
+            maxWeek: targets.maxWeek,
+            players: targets.rows.length,
+          };
+
+          const { loadAreTheyPlaying } = await import("@/lib/are-they-playing.server");
+          const stateRes = await fetch("https://api.sleeper.app/v1/state/nfl", {
+            headers: { accept: "application/json" },
+          }).catch(() => null);
+          const state = stateRes?.ok
+            ? ((await stateRes.json()) as { week?: number })
+            : { week: 1 };
+          const week = Math.max(1, Number(state.week) || 1);
+          const atp = await loadAreTheyPlaying(week);
+          report["areTheyPlaying"] = { week: atp.week, lines: atp.lines.length };
+
+          return new Response(JSON.stringify(report), {
+            status: 200,
+            headers: { "content-type": "application/json", "cache-control": "no-store" },
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "research aggregates failed";
+          console.error("[cron/research-aggregates]", message);
+          return new Response(JSON.stringify({ ok: false, error: message }), {
+            status: 500,
+            headers: { "content-type": "application/json", "cache-control": "no-store" },
+          });
+        }
+      },
+    },
+  },
+});

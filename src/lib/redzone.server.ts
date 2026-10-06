@@ -387,6 +387,17 @@ export async function loadRedZoneStats(
 ): Promise<RedZoneStatsPayload> {
   const yardline = normalizeYardline(yardlineInput);
   const seasonKey = String(season ?? currentSeason()).slice(0, 16);
+
+  // Durable TiDB snapshot — skip nflverse PBP gunzip on the request path when warm.
+  const earlyKey = `${seasonKey}:${yardline}:${weekFromInput ?? "d"}:${weekToInput ?? "d"}`;
+  try {
+    const { readAggJson } = await import("./research-agg.server");
+    const cached = await readAggJson<RedZoneStatsPayload>("agg_redzone", earlyKey);
+    if (cached?.rowsByPos) return cached;
+  } catch {
+    /* compute below */
+  }
+
   const prev = String(Number(seasonKey) - 1);
   let source = await loadRedZoneAgg(`${seasonKey}:${yardline}`).catch(() => null);
   let usedSeason = seasonKey;
@@ -446,7 +457,7 @@ export async function loadRedZoneStats(
     });
   }
 
-  return {
+  const payload: RedZoneStatsPayload = {
     season: usedSeason,
     weeksFrom: weekFrom,
     weeksTo: weekTo,
@@ -455,4 +466,20 @@ export async function loadRedZoneStats(
     yardline: source.yardline,
     rowsByPos,
   };
+
+  // Persist under both the early (caller) key and the resolved week key.
+  void import("./research-agg.server")
+    .then(({ writeAggJson }) =>
+      Promise.all([
+        writeAggJson("agg_redzone", earlyKey, payload),
+        writeAggJson(
+          "agg_redzone",
+          `${usedSeason}:${payload.yardline}:${weekFrom}:${weekTo}`,
+          payload,
+        ),
+      ]),
+    )
+    .catch(() => undefined);
+
+  return payload;
 }

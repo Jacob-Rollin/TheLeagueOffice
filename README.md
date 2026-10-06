@@ -18,10 +18,10 @@ A fantasy football headquarters for drafting, managing, and researching your lea
 
 - [TanStack Start](https://tanstack.com/start) (React 19, TanStack Router, TanStack Query) with server-side rendering
 - Vite, Tailwind CSS v4, and Radix UI components
-- [Supabase](https://supabase.com) for auth and data, split across two projects:
+- [Supabase](https://supabase.com) for auth and native league ops:
   - **Database A**: users, profiles, leagues, rosters, lineups, transactions, articles, and Hall of Fame records
-  - **Database B**: the player warehouse with player values, status, and injury data
-- Deployed on [Vercel](https://vercel.com)
+- [TiDB Cloud Serverless](https://www.pingcap.com/tidb-cloud/) (`DATABASE_URL`) for `player_warehouse`, synced league snapshots, and research aggregates (CDN-cached `/api/data/*` routes)
+- Deployed on [Vercel](https://vercel.com) with GitHub Actions for tiered background sync
 
 ## Getting started
 
@@ -52,12 +52,25 @@ SUPABASE_URL=
 SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
+# TiDB Serverless (player warehouse + synced snapshots)
+DATABASE_URL=mysql://USER:PASS@GATEWAY/league-office-native
+
+# Cron / webhook auth
+CRON_SECRET=
+
 # Yahoo league sync
 YAHOO_CLIENT_ID=
 YAHOO_CLIENT_SECRET=
 ```
 
 Set the same variables in your Vercel project settings for deployments.
+
+### TiDB setup (one-time)
+
+1. Apply [`scripts/tidb/schema.sql`](scripts/tidb/schema.sql) to your TiDB cluster.
+2. Set `DATABASE_URL` on Vercel + GitHub Actions secrets.
+3. Seed warehouse: `POST /api/admin/seed-player-warehouse` with `Authorization: Bearer $CRON_SECRET`.
+4. Background sync uses `/api/webhooks/sync` and `/api/cron/*` — never wire host events to `repository_dispatch`.
 
 ## Scripts
 
