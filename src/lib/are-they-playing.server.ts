@@ -377,7 +377,25 @@ async function buildPayload(week: number): Promise<AreTheyPlayingPayload> {
 export function loadAreTheyPlaying(week: number): Promise<AreTheyPlayingPayload> {
   const hit = cache.get(week);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
-  const value = buildPayload(week);
+
+  const value = (async () => {
+    const snapKey = `week-${week}`;
+    try {
+      const { readAggJson } = await import("./research-agg.server");
+      const cached = await readAggJson<AreTheyPlayingPayload>("agg_are_they_playing", snapKey);
+      if (cached?.lines?.length) return cached;
+    } catch {
+      /* scrape below */
+    }
+    const payload = await buildPayload(week);
+    if (payload.lines.length > 0) {
+      void import("./research-agg.server")
+        .then(({ writeAggJson }) => writeAggJson("agg_are_they_playing", snapKey, payload))
+        .catch(() => undefined);
+    }
+    return payload;
+  })();
+
   cache.set(week, { at: Date.now(), value });
   void value.then((payload) => {
     if (payload.lines.length === 0) cache.delete(week);

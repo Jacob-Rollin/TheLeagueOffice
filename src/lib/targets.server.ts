@@ -156,6 +156,15 @@ export async function loadMostTargetedPlayers(
   season = currentSeason(),
 ): Promise<MostTargetedPayload> {
   const seasonKey = String(season ?? currentSeason()).slice(0, 16);
+
+  try {
+    const { readAggJson } = await import("./research-agg.server");
+    const cached = await readAggJson<MostTargetedPayload>("agg_targets", seasonKey);
+    if (cached?.rows?.length) return cached;
+  } catch {
+    /* compute below */
+  }
+
   const prev = String(Number(seasonKey) - 1);
   let active = await loadTargetsAgg(seasonKey).catch(() => null);
   let usedSeason = seasonKey;
@@ -196,9 +205,15 @@ export async function loadMostTargetedPlayers(
 
   rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 
-  return {
+  const payload: MostTargetedPayload = {
     season: usedSeason,
     maxWeek,
     rows,
   };
+
+  void import("./research-agg.server")
+    .then(({ writeAggJson }) => writeAggJson("agg_targets", seasonKey, payload))
+    .catch(() => undefined);
+
+  return payload;
 }

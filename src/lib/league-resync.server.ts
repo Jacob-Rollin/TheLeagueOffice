@@ -216,6 +216,42 @@ export async function persistWeekMatchups(input: {
       console.warn(`[persistWeekMatchups] week ${week}:`, error.message);
       return 0;
     }
+
+    // Dual-write TiDB synced_matchups (batch ON DUPLICATE KEY UPDATE).
+    void import("@/lib/tidb-sync.server")
+      .then(({ upsertSyncedMatchups }) =>
+        upsertSyncedMatchups(
+          rows.map((r: {
+            league_id: string;
+            connection_id: string | null;
+            platform: string;
+            week: number;
+            roster_id: number;
+            matchup_id: number | null;
+            points: number;
+            projected_points: number;
+            team_name: string | null;
+            owner_name: string | null;
+            starters: string[];
+            player_points: Record<string, number>;
+          }) => ({
+            league_id: r.league_id,
+            connection_id: r.connection_id,
+            platform: r.platform,
+            week: r.week,
+            team_id: r.roster_id,
+            matchup_id: r.matchup_id,
+            roster_points: r.points,
+            projected_points: r.projected_points,
+            team_name: r.team_name,
+            owner_name: r.owner_name,
+            starters: r.starters,
+            player_points: r.player_points,
+          })),
+        ),
+      )
+      .catch((err) => console.warn("[persistWeekMatchups] TiDB:", err));
+
     return data?.length ?? rows.length;
   } catch (err) {
     console.warn("[persistWeekMatchups] failed:", err);

@@ -292,6 +292,21 @@ export function hydratePlayerBrain(options?: { force?: boolean }): Promise<Brain
   return inFlight;
 }
 
+/** Prefer CDN-cached TiDB warehouse export over Supabase brain download when seeded. */
+async function loadTidbWarehouseMatrix(): Promise<BrainMatrix | null> {
+  try {
+    const res = await fetch("/api/data/players-export", {
+      headers: { accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const brain = (await res.json()) as MasterPlayerBrainPayload & { ok?: boolean };
+    if (!brain.ok || !Array.isArray(brain.ids) || brain.ids.length < 100) return null;
+    return compileMatrix(brain);
+  } catch {
+    return null;
+  }
+}
+
 async function loadBrainMatrix(options?: { force?: boolean }): Promise<BrainMatrix | null> {
   try {
     if (!options?.force && !heartbeatCleared()) {
@@ -299,6 +314,24 @@ async function loadBrainMatrix(options?: { force?: boolean }): Promise<BrainMatr
       return await localFallbackMatrix();
     }
 
+    // Phase 3: stream warehouse rows from TiDB-backed API when seeded.
+    const tidbMatrix = await loadTidbWarehouseMatrix();
+    if (tidbMatrix) {
+      if (store) {
+        await store.setItem(MATRIX_KEY, tidbMatrix);
+        await store.setItem(META_KEY, {
+          v: 7,
+          count: Object.keys(tidbMatrix).length,
+          generated_at: new Date().toISOString(),
+          storedAt: Date.now(),
+          source: "tidb",
+        });
+      }
+      stampHeartbeat();
+      return tidbMatrix;
+    }
+
+    // Legacy fallback: Supabase Storage brain (removed from request path once TiDB is seeded).
     const url = brainUrl();
     if (!url) return await localFallbackMatrix();
 

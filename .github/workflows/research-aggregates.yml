@@ -1,34 +1,30 @@
-name: League Delta Sync
+name: Research Aggregates Warm
 
-# Invokes the Vercel cron endpoint so synced league caches stay warm without
-# every page load wiping/re-pulling host platforms. Requires CRON_SECRET +
-# APP_URL repository secrets.
-# Tiered cadence to conserve GitHub's 2,000 free runner minutes / month.
-# Webhooks MUST hit Vercel /api/webhooks/sync — never repository_dispatch.
+# Precomputes nflverse / club-scrape research payloads into TiDB so request
+# paths never gunzip PBP or crawl 32 club sites. Hits Vercel cron only.
 
 on:
   schedule:
-    # Mid-week (Tue–Wed): every 3 hours.
-    - cron: "0 */3 * * 2,3"
-    # Gameday windows (Thu–Mon): every 15 minutes during active NFL blocks (UTC).
-    - cron: "*/15 12-23 * * 0,1,4"
-    - cron: "*/15 0-5 * * 1,2,5"
-    - cron: "*/15 16-23 * * 6"
+    # Mid-week every 3 hours (Tue–Wed).
+    - cron: "30 */3 * * 2,3"
+    # Gameday: hourly during active windows.
+    - cron: "10 12-23 * * 0,1,4"
+    - cron: "10 0-5 * * 1,2,5"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: league-delta-sync
+  group: research-aggregates
   cancel-in-progress: true
 
 jobs:
-  sync:
+  warm:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Trigger delta sync
+      - name: Trigger research aggregates cron
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -38,9 +34,8 @@ jobs:
             exit 0
           fi
           curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
-            "${APP_URL%/}/api/cron/league-delta-sync?limit=40"
+            "${APP_URL%/}/api/cron/research-aggregates"
 
-      # 🟢 Send Success Metrics to Axiom if the sync completes perfectly
       - name: Log Success to Axiom
         if: success()
         run: |
@@ -52,10 +47,9 @@ jobs:
               "workflow": "${{ github.workflow }}",
               "run_id": "${{ github.run_id }}",
               "status": "success",
-              "msg": "League data delta sync completed successfully across all rosters."
+              "msg": "Research aggregates warmed into TiDB."
             }]'
 
-      # 🔴 Catch the exact reason your background script fails or times out
       - name: Log Failure to Axiom
         if: failure()
         run: |
@@ -67,5 +61,5 @@ jobs:
               "workflow": "${{ github.workflow }}",
               "run_id": "${{ github.run_id }}",
               "status": "failed",
-              "msg": "League delta sync script crashed. Check runner logs for API threshold closures."
+              "msg": "Research aggregates warm failed."
             }]'

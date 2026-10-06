@@ -44,11 +44,28 @@ export type WarehouseIngestReport = {
 /**
  * Cron / ops entry: harvest when brain is missing, or when `force` is set.
  */
+async function tidbWarehousePopulated(): Promise<boolean> {
+  try {
+    const { tidbConfigured, tidbExecute } = await import("@/lib/tidb");
+    if (!tidbConfigured()) return false;
+    const rows = await tidbExecute<{ c: number }>(
+      "SELECT COUNT(*) AS c FROM player_warehouse LIMIT 1",
+    );
+    return Number(rows[0]?.c ?? 0) > 1000;
+  } catch {
+    return false;
+  }
+}
+
 export async function runScheduledWarehouseIngest(opts?: {
   force?: boolean;
 }): Promise<WarehouseIngestReport> {
   const force = Boolean(opts?.force);
   try {
+    // When TiDB is seeded, skip the legacy brain HEAD/GET on the cron path unless forced.
+    if (!force && (await tidbWarehousePopulated())) {
+      return { ok: true, skipped: true, reason: "tidb-warehouse-populated" };
+    }
     if (!force && (await brainExists())) {
       return { ok: true, skipped: true, reason: "brain-present" };
     }

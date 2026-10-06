@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/warehouse-ingest",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/research-aggregates",
+      "schedule": "0 7 * * *"
     }
   ]
 }

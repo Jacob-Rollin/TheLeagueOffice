@@ -1,14 +1,14 @@
 // @lovable.dev/vite-tanstack-config already includes the following — do NOT add them manually
 // or the app will break with duplicate plugins:
 //   - TanStack devtools (dev-only, first), tanstackStart, viteReact, tailwindcss, tsConfigPaths,
-//     nitro (build-only using cloudflare as a default target), VITE_* env injection, @ path alias,
+//     nitro, VITE_* env injection, @ path alias,
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-// Deploy target: Lovable/Cloudflare by default; Vercel builds get the `vercel` preset
-// so the SSR server + static assets land in .vercel/output instead of a Worker bundle.
-const preset = process.env["NITRO_PRESET"] ?? (process.env["VERCEL"] ? "vercel" : undefined);
+// Vercel-only deploy target. Cloudflare Workers Builds is abandoned; always emit
+// Nitro's vercel preset unless NITRO_PRESET is explicitly overridden.
+const preset = process.env["NITRO_PRESET"] ?? "vercel";
 
 // Unique per build; injected into the client bundle so asset URLs change every deploy.
 const buildId = process.env["VERCEL_GIT_COMMIT_SHA"]?.slice(0, 8) ?? Date.now().toString(36);

@@ -57,12 +57,19 @@ import { Route as PlayerIdRouteImport } from './routes/player.$id'
 import { Route as TeamTeamIdRouteImport } from './routes/team.$teamId'
 import { Route as AccountLeaguesIndexRouteImport } from './routes/account.leagues.index'
 import { Route as AccountLeaguesConnectionIdRouteImport } from './routes/account.leagues.$connectionId'
+import { Route as ApiAdminSeedPlayerWarehouseRouteImport } from './routes/api/admin/seed-player-warehouse'
 import { Route as ApiCronLeagueDeltaSyncRouteImport } from './routes/api/cron/league-delta-sync'
+import { Route as ApiCronResearchAggregatesRouteImport } from './routes/api/cron/research-aggregates'
 import { Route as ApiCronWarehouseIngestRouteImport } from './routes/api/cron/warehouse-ingest'
+import { Route as ApiDataPlayersRouteImport } from './routes/api/data/players'
+import { Route as ApiDataPlayersExportRouteImport } from './routes/api/data/players-export'
 import { Route as ApiPublicScoreboardRouteImport } from './routes/api/public/scoreboard'
+import { Route as ApiWebhooksSyncRouteImport } from './routes/api/webhooks/sync'
 import { Route as MLeagueLeagueIdRouteImport } from './routes/m.league.$leagueId'
 import { Route as ApiAuthYahooCallbackRouteImport } from './routes/api/auth/yahoo/callback'
 import { Route as ApiAuthYahooConnectRouteImport } from './routes/api/auth/yahoo/connect'
+import { Route as ApiDataLeagueIdRouteImport } from './routes/api/data/league.$id'
+import { Route as ApiDataPlayerIdRouteImport } from './routes/api/data/player.$id'
 import { Route as MLeagueLeagueIdIndexRouteImport } from './routes/m.league.$leagueId.index'
 import { Route as MLeagueLeagueIdFeedRouteImport } from './routes/m.league.$leagueId.feed'
 import { Route as MLeagueLeagueIdMatchupRouteImport } from './routes/m.league.$leagueId.matchup'
@@ -313,19 +320,46 @@ const AccountLeaguesConnectionIdRoute =
     path: '/account/leagues/$connectionId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAdminSeedPlayerWarehouseRoute =
+  ApiAdminSeedPlayerWarehouseRouteImport.update({
+    id: '/api/admin/seed-player-warehouse',
+    path: '/api/admin/seed-player-warehouse',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiCronLeagueDeltaSyncRoute = ApiCronLeagueDeltaSyncRouteImport.update({
   id: '/api/cron/league-delta-sync',
   path: '/api/cron/league-delta-sync',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronResearchAggregatesRoute =
+  ApiCronResearchAggregatesRouteImport.update({
+    id: '/api/cron/research-aggregates',
+    path: '/api/cron/research-aggregates',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiCronWarehouseIngestRoute = ApiCronWarehouseIngestRouteImport.update({
   id: '/api/cron/warehouse-ingest',
   path: '/api/cron/warehouse-ingest',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDataPlayersRoute = ApiDataPlayersRouteImport.update({
+  id: '/api/data/players',
+  path: '/api/data/players',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDataPlayersExportRoute = ApiDataPlayersExportRouteImport.update({
+  id: '/api/data/players-export',
+  path: '/api/data/players-export',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicScoreboardRoute = ApiPublicScoreboardRouteImport.update({
   id: '/api/public/scoreboard',
   path: '/api/public/scoreboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWebhooksSyncRoute = ApiWebhooksSyncRouteImport.update({
+  id: '/api/webhooks/sync',
+  path: '/api/webhooks/sync',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MLeagueLeagueIdRoute = MLeagueLeagueIdRouteImport.update({
@@ -341,6 +375,16 @@ const ApiAuthYahooCallbackRoute = ApiAuthYahooCallbackRouteImport.update({
 const ApiAuthYahooConnectRoute = ApiAuthYahooConnectRouteImport.update({
   id: '/api/auth/yahoo/connect',
   path: '/api/auth/yahoo/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDataLeagueIdRoute = ApiDataLeagueIdRouteImport.update({
+  id: '/api/data/league/$id',
+  path: '/api/data/league/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDataPlayerIdRoute = ApiDataPlayerIdRouteImport.update({
+  id: '/api/data/player/$id',
+  path: '/api/data/player/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MLeagueLeagueIdIndexRoute = MLeagueLeagueIdIndexRouteImport.update({
@@ -427,13 +471,20 @@ export interface FileRoutesByFullPath {
   '/m/': typeof MIndexRoute
   '/playbook/': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
+  '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
+  '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
+  '/api/data/players': typeof ApiDataPlayersRoute
+  '/api/data/players-export': typeof ApiDataPlayersExportRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
+  '/api/webhooks/sync': typeof ApiWebhooksSyncRoute
   '/m/league/$leagueId': typeof MLeagueLeagueIdRouteWithChildren
   '/account/leagues/': typeof AccountLeaguesIndexRoute
   '/api/auth/yahoo/callback': typeof ApiAuthYahooCallbackRoute
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
+  '/api/data/league/$id': typeof ApiDataLeagueIdRoute
+  '/api/data/player/$id': typeof ApiDataPlayerIdRoute
   '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
   '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
   '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
@@ -488,12 +539,19 @@ export interface FileRoutesByTo {
   '/m': typeof MIndexRoute
   '/playbook': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
+  '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
+  '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
+  '/api/data/players': typeof ApiDataPlayersRoute
+  '/api/data/players-export': typeof ApiDataPlayersExportRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
+  '/api/webhooks/sync': typeof ApiWebhooksSyncRoute
   '/account/leagues': typeof AccountLeaguesIndexRoute
   '/api/auth/yahoo/callback': typeof ApiAuthYahooCallbackRoute
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
+  '/api/data/league/$id': typeof ApiDataLeagueIdRoute
+  '/api/data/player/$id': typeof ApiDataPlayerIdRoute
   '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
   '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
   '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
@@ -551,13 +609,20 @@ export interface FileRoutesById {
   '/m/': typeof MIndexRoute
   '/playbook/': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
+  '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
+  '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
+  '/api/data/players': typeof ApiDataPlayersRoute
+  '/api/data/players-export': typeof ApiDataPlayersExportRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
+  '/api/webhooks/sync': typeof ApiWebhooksSyncRoute
   '/m/league/$leagueId': typeof MLeagueLeagueIdRouteWithChildren
   '/account/leagues/': typeof AccountLeaguesIndexRoute
   '/api/auth/yahoo/callback': typeof ApiAuthYahooCallbackRoute
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
+  '/api/data/league/$id': typeof ApiDataLeagueIdRoute
+  '/api/data/player/$id': typeof ApiDataPlayerIdRoute
   '/m/league/$leagueId/feed': typeof MLeagueLeagueIdFeedRoute
   '/m/league/$leagueId/matchup': typeof MLeagueLeagueIdMatchupRoute
   '/m/league/$leagueId/players': typeof MLeagueLeagueIdPlayersRoute
@@ -616,13 +681,20 @@ export interface FileRouteTypes {
     | '/m/'
     | '/playbook/'
     | '/account/leagues/$connectionId'
+    | '/api/admin/seed-player-warehouse'
     | '/api/cron/league-delta-sync'
+    | '/api/cron/research-aggregates'
     | '/api/cron/warehouse-ingest'
+    | '/api/data/players'
+    | '/api/data/players-export'
     | '/api/public/scoreboard'
+    | '/api/webhooks/sync'
     | '/m/league/$leagueId'
     | '/account/leagues/'
     | '/api/auth/yahoo/callback'
     | '/api/auth/yahoo/connect'
+    | '/api/data/league/$id'
+    | '/api/data/player/$id'
     | '/m/league/$leagueId/feed'
     | '/m/league/$leagueId/matchup'
     | '/m/league/$leagueId/players'
@@ -677,12 +749,19 @@ export interface FileRouteTypes {
     | '/m'
     | '/playbook'
     | '/account/leagues/$connectionId'
+    | '/api/admin/seed-player-warehouse'
     | '/api/cron/league-delta-sync'
+    | '/api/cron/research-aggregates'
     | '/api/cron/warehouse-ingest'
+    | '/api/data/players'
+    | '/api/data/players-export'
     | '/api/public/scoreboard'
+    | '/api/webhooks/sync'
     | '/account/leagues'
     | '/api/auth/yahoo/callback'
     | '/api/auth/yahoo/connect'
+    | '/api/data/league/$id'
+    | '/api/data/player/$id'
     | '/m/league/$leagueId/feed'
     | '/m/league/$leagueId/matchup'
     | '/m/league/$leagueId/players'
@@ -739,13 +818,20 @@ export interface FileRouteTypes {
     | '/m/'
     | '/playbook/'
     | '/account/leagues/$connectionId'
+    | '/api/admin/seed-player-warehouse'
     | '/api/cron/league-delta-sync'
+    | '/api/cron/research-aggregates'
     | '/api/cron/warehouse-ingest'
+    | '/api/data/players'
+    | '/api/data/players-export'
     | '/api/public/scoreboard'
+    | '/api/webhooks/sync'
     | '/m/league/$leagueId'
     | '/account/leagues/'
     | '/api/auth/yahoo/callback'
     | '/api/auth/yahoo/connect'
+    | '/api/data/league/$id'
+    | '/api/data/player/$id'
     | '/m/league/$leagueId/feed'
     | '/m/league/$leagueId/matchup'
     | '/m/league/$leagueId/players'
@@ -794,12 +880,19 @@ export interface RootRouteChildren {
   TeamTeamIdRoute: typeof TeamTeamIdRoute
   AccountIndexRoute: typeof AccountIndexRoute
   AccountLeaguesConnectionIdRoute: typeof AccountLeaguesConnectionIdRoute
+  ApiAdminSeedPlayerWarehouseRoute: typeof ApiAdminSeedPlayerWarehouseRoute
   ApiCronLeagueDeltaSyncRoute: typeof ApiCronLeagueDeltaSyncRoute
+  ApiCronResearchAggregatesRoute: typeof ApiCronResearchAggregatesRoute
   ApiCronWarehouseIngestRoute: typeof ApiCronWarehouseIngestRoute
+  ApiDataPlayersRoute: typeof ApiDataPlayersRoute
+  ApiDataPlayersExportRoute: typeof ApiDataPlayersExportRoute
   ApiPublicScoreboardRoute: typeof ApiPublicScoreboardRoute
+  ApiWebhooksSyncRoute: typeof ApiWebhooksSyncRoute
   AccountLeaguesIndexRoute: typeof AccountLeaguesIndexRoute
   ApiAuthYahooCallbackRoute: typeof ApiAuthYahooCallbackRoute
   ApiAuthYahooConnectRoute: typeof ApiAuthYahooConnectRoute
+  ApiDataLeagueIdRoute: typeof ApiDataLeagueIdRoute
+  ApiDataPlayerIdRoute: typeof ApiDataPlayerIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1140,11 +1233,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountLeaguesConnectionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/seed-player-warehouse': {
+      id: '/api/admin/seed-player-warehouse'
+      path: '/api/admin/seed-player-warehouse'
+      fullPath: '/api/admin/seed-player-warehouse'
+      preLoaderRoute: typeof ApiAdminSeedPlayerWarehouseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/cron/league-delta-sync': {
       id: '/api/cron/league-delta-sync'
       path: '/api/cron/league-delta-sync'
       fullPath: '/api/cron/league-delta-sync'
       preLoaderRoute: typeof ApiCronLeagueDeltaSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cron/research-aggregates': {
+      id: '/api/cron/research-aggregates'
+      path: '/api/cron/research-aggregates'
+      fullPath: '/api/cron/research-aggregates'
+      preLoaderRoute: typeof ApiCronResearchAggregatesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/cron/warehouse-ingest': {
@@ -1154,11 +1261,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCronWarehouseIngestRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/data/players': {
+      id: '/api/data/players'
+      path: '/api/data/players'
+      fullPath: '/api/data/players'
+      preLoaderRoute: typeof ApiDataPlayersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/data/players-export': {
+      id: '/api/data/players-export'
+      path: '/api/data/players-export'
+      fullPath: '/api/data/players-export'
+      preLoaderRoute: typeof ApiDataPlayersExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/scoreboard': {
       id: '/api/public/scoreboard'
       path: '/api/public/scoreboard'
       fullPath: '/api/public/scoreboard'
       preLoaderRoute: typeof ApiPublicScoreboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/webhooks/sync': {
+      id: '/api/webhooks/sync'
+      path: '/api/webhooks/sync'
+      fullPath: '/api/webhooks/sync'
+      preLoaderRoute: typeof ApiWebhooksSyncRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/m/league/$leagueId': {
@@ -1180,6 +1308,20 @@ declare module '@tanstack/react-router' {
       path: '/api/auth/yahoo/connect'
       fullPath: '/api/auth/yahoo/connect'
       preLoaderRoute: typeof ApiAuthYahooConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/data/league/$id': {
+      id: '/api/data/league/$id'
+      path: '/api/data/league/$id'
+      fullPath: '/api/data/league/$id'
+      preLoaderRoute: typeof ApiDataLeagueIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/data/player/$id': {
+      id: '/api/data/player/$id'
+      path: '/api/data/player/$id'
+      fullPath: '/api/data/player/$id'
+      preLoaderRoute: typeof ApiDataPlayerIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/m/league/$leagueId/': {
@@ -1335,23 +1477,20 @@ const rootRouteChildren: RootRouteChildren = {
   TeamTeamIdRoute: TeamTeamIdRoute,
   AccountIndexRoute: AccountIndexRoute,
   AccountLeaguesConnectionIdRoute: AccountLeaguesConnectionIdRoute,
+  ApiAdminSeedPlayerWarehouseRoute: ApiAdminSeedPlayerWarehouseRoute,
   ApiCronLeagueDeltaSyncRoute: ApiCronLeagueDeltaSyncRoute,
+  ApiCronResearchAggregatesRoute: ApiCronResearchAggregatesRoute,
   ApiCronWarehouseIngestRoute: ApiCronWarehouseIngestRoute,
+  ApiDataPlayersRoute: ApiDataPlayersRoute,
+  ApiDataPlayersExportRoute: ApiDataPlayersExportRoute,
   ApiPublicScoreboardRoute: ApiPublicScoreboardRoute,
+  ApiWebhooksSyncRoute: ApiWebhooksSyncRoute,
   AccountLeaguesIndexRoute: AccountLeaguesIndexRoute,
   ApiAuthYahooCallbackRoute: ApiAuthYahooCallbackRoute,
   ApiAuthYahooConnectRoute: ApiAuthYahooConnectRoute,
+  ApiDataLeagueIdRoute: ApiDataLeagueIdRoute,
+  ApiDataPlayerIdRoute: ApiDataPlayerIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

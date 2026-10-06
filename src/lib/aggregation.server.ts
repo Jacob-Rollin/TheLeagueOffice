@@ -339,8 +339,51 @@ export async function harvestLeagueLogs(index: IdentityIndex): Promise<ProviderR
 /* Warehouse writes                                                    */
 /* ------------------------------------------------------------------ */
 
+async function upsertBatchTidb(rows: PlayerWarehouseRow[]): Promise<number> {
+  const { buildUpsertSql, chunkRows, tidbConfigured, tidbExecute } = await import("@/lib/tidb");
+  if (!tidbConfigured() || rows.length === 0) return 0;
+  const cols = [
+    "sleeper_id",
+    "player_name",
+    "position",
+    "team",
+    "fantasycalc_value",
+    "leaguelogs_status",
+    "injury_type",
+    "injury_notes",
+    "updated_at",
+  ];
+  const updateCols = cols.filter((c) => c !== "sleeper_id");
+  let written = 0;
+  for (const chunk of chunkRows(rows, 200)) {
+    const flat: unknown[] = [];
+    for (const r of chunk) {
+      flat.push(
+        r.sleeper_id,
+        r.player_name ?? null,
+        r.position ?? null,
+        r.team ?? null,
+        r.fantasycalc_value ?? null,
+        r.leaguelogs_status ?? null,
+        r.injury_type ?? null,
+        r.injury_notes ?? null,
+        r.updated_at ?? new Date().toISOString().slice(0, 19).replace("T", " "),
+      );
+    }
+    await tidbExecute(buildUpsertSql("player_warehouse", cols, chunk.length, updateCols), flat);
+    written += chunk.length;
+  }
+  return written;
+}
+
 async function upsertBatch(rows: PlayerWarehouseRow[]): Promise<{ written: number }> {
   if (rows.length === 0) return { written: 0 };
+
+  // Prefer TiDB when configured; keep Supabase B dual-write during migration.
+  const tidbWritten = await upsertBatchTidb(rows).catch((err) => {
+    console.warn("[aggregation] TiDB upsert failed:", err);
+    return 0;
+  });
 
   const CHUNK = 500;
   for (let i = 0; i < rows.length; i += CHUNK) {
@@ -350,7 +393,7 @@ async function upsertBatch(rows: PlayerWarehouseRow[]): Promise<{ written: numbe
     if (error) throw new Error(`[aggregation] upsert failed: ${error.message}`);
   }
 
-  return { written: rows.length };
+  return { written: Math.max(rows.length, tidbWritten) };
 }
 
 /** Ingest Sleeper base player data (identity anchor source). */

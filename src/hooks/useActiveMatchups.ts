@@ -26,7 +26,7 @@ export function useActiveMatchups(week: number | null | undefined) {
     queryKey: ["active-matchups", id, safeWeek],
     enabled: Boolean(activeLeague?.leagueId && safeWeek),
     retry: false,
-    staleTime: isPastWeek ? 10 * 60 * 1000 : 20 * 1000,
+    staleTime: isPastWeek ? 10 * 60 * 1000 : 60 * 1000,
     refetchInterval,
     queryFn: async () =>
       await getConnectionMatchups({

@@ -4,7 +4,6 @@ import { ChevronDown } from "lucide-react";
 import {
   memo,
   startTransition,
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -128,7 +127,11 @@ function TradeMarketPage() {
   const [pos, setPos] = useState<PosFilter>("ALL");
   const [view, setView] = useState<TargetView>("all");
   const [q, setQ] = useState("");
-  const deferredQ = useDeferredValue(q);
+  const [deferredQ, setDeferredQ] = useState("");
+  useEffect(() => {
+    const t = window.setTimeout(() => setDeferredQ(q), 300);
+    return () => window.clearTimeout(t);
+  }, [q]);
   const [showRoster, setShowRoster] = useState(true);
   const [showTaken, setShowTaken] = useState(true);
   const [showAvailable, setShowAvailable] = useState(true);
