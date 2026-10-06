@@ -675,6 +675,8 @@ export async function deltaSyncLeague(input: ForceResyncInput): Promise<ForceRes
   }
 
   const currentWeek = await resolveCurrentNflWeek();
+  // Always re-pull current + prior. Prior week is soft-final through Tuesday
+  // morning — ingest uses preferCache:false so midweek scores are replaced.
   const weeks = [...new Set([currentWeek, Math.max(1, currentWeek - 1)])].sort((a, b) => a - b);
 
   const insertedTransactions = await ingestTransactions(

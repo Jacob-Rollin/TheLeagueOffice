@@ -59,13 +59,19 @@ async function mapPool<T, R>(
 
 export type NflStateClient = { season: string; week: number };
 
+/** Short enough that Tuesday week-roll lands in completed-week metrics quickly. */
+const NFL_STATE_TTL_MS = 10 * 60 * 1000;
+
 export async function fetchNflStateClient(): Promise<NflStateClient> {
-  return getCached("nfl-state-client-v1", 30 * 60 * 1000, async () => {
+  // v2 busts IndexedDB rows that pinned an older `week` across the roll.
+  return getCached("nfl-state-client-v2", NFL_STATE_TTL_MS, async () => {
     const res = await sleeperFetch("https://api.sleeper.app/v1/state/nfl");
     if (!res.ok) throw new Error(`state ${res.status}`);
     const json = (await res.json()) as Record<string, unknown>;
     return {
       season: String(json["season"] ?? currentSeason()),
+      // Sleeper `week` advances when the slate rolls; use it (not display_week)
+      // so completed weeks include the slate that just finished.
       week: Math.max(1, Number(json["week"] ?? 1) || 1),
     };
   });

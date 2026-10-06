@@ -5,6 +5,7 @@
  * or older than the live freshness window (and the tab is visible).
  */
 
+import { isPriorWeekBoardFresh } from "@/lib/api-cache";
 import type { LeagueWeekMatchups, WeeklyMatchupEntry } from "@/lib/league.server";
 
 type CdnMatchupRow = {
@@ -193,8 +194,8 @@ async function mapPool<T, R>(
 
 /**
  * CDN/TiDB first for all weeks, then Fluid backfill only for weeks the caller
- * needs that are missing/empty. Merges Fluid boards into the map (TiDB dual-write
- * is async, so a CDN re-read alone is not enough on the cold path).
+ * needs that are missing/empty — or the just-completed prior week whose board
+ * is still a midweek snapshot (pre–Tuesday morning finalize).
  *
  * Use this for dashboard coaching metrics + standings analytics — CDN-only left
  * those surfaces on placeholder zeros when TiDB had not been warmed yet.
@@ -203,6 +204,8 @@ export async function fetchLeagueMatchupsHistory(input: {
   leagueId: string;
   platform: string;
   weeks: number[];
+  /** NFL state week — prior week (`currentWeek - 1`) gets Tuesday freshness. */
+  currentWeek?: number | null;
   s2?: string;
   swid?: string;
   connectionId?: string;
@@ -218,7 +221,18 @@ export async function fetchLeagueMatchupsHistory(input: {
     ),
   ).sort((a, b) => a - b);
 
-  const missing = needed.filter((week) => !(out.get(week)?.board.entries.length));
+  const currentWeek = Math.max(0, Math.floor(Number(input.currentWeek ?? 0)) || 0);
+  const priorWeek = currentWeek > 1 ? currentWeek - 1 : 0;
+
+  const missing = needed.filter((week) => {
+    const hit = out.get(week);
+    if (!(hit?.board.entries.length)) return true;
+    // Soft-final prior week: force host refresh when CDN still has a midweek board.
+    if (priorWeek > 0 && week === priorWeek && !isPriorWeekBoardFresh(hit.syncedAtMs)) {
+      return true;
+    }
+    return false;
+  });
   if (!missing.length || input.allowFluid === false || !leagueId) return out;
 
   await mapPool(missing, HISTORY_BACKFILL_CONCURRENCY, async (week) => {
@@ -241,6 +255,18 @@ export async function fetchLeagueMatchupsHistory(input: {
 
 export function isLiveMatchupFresh(syncedAtMs: number, now = Date.now()): boolean {
   return syncedAtMs > 0 && now - syncedAtMs <= LIVE_MAX_AGE_MS;
+}
+
+/** True when a past-week CDN board is safe to trust without a Fluid refresh. */
+export function isPastWeekMatchupFresh(
+  week: number,
+  currentWeek: number | null | undefined,
+  syncedAtMs: number,
+): boolean {
+  const cur = Math.max(0, Math.floor(Number(currentWeek ?? 0)) || 0);
+  if (cur <= 0 || week >= cur) return isLiveMatchupFresh(syncedAtMs);
+  if (week === cur - 1) return isPriorWeekBoardFresh(syncedAtMs);
+  return syncedAtMs > 0;
 }
 
 /**

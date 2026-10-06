@@ -78,7 +78,7 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
 
   // CDN/TiDB first; Fluid backfill for weeks still missing (cold TiDB / unsynced history).
   const allMatchups = useQuery({
-    queryKey: ["league-matchups-history", leagueId, historyWeeks.join(",")],
+    queryKey: ["league-matchups-history", leagueId, historyWeeks.join(","), currentWeek],
     enabled: hasLeague && loadHistory && historyWeeks.length > 0,
     retry: false,
     staleTime: 10 * 60 * 1000,
@@ -88,6 +88,7 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
         leagueId: platformLeagueId,
         platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
         weeks: historyWeeks,
+        currentWeek,
         ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
         ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
         ...(leagueId ? { connectionId: leagueId } : {}),
