@@ -14,29 +14,48 @@ export type AggTable =
   | "agg_sos_analysis"
   | "agg_fantasy_leaders";
 
+/** Coalesce Fluid-isolate stampede on CDN miss (snaps change on cron, not per request). */
+const AGG_READ_TTL_MS = 60 * 1000;
+const aggReadMemo = new Map<string, { at: number; value: Promise<unknown | null> }>();
+
+function memoKey(table: AggTable, key: string): string {
+  return `${table}|${key}`;
+}
+
 export async function readAggJson<T>(table: AggTable, key: string): Promise<T | null> {
   if (!tidbConfigured()) return null;
-  try {
-    if (table === "agg_are_they_playing") {
+  const mk = memoKey(table, key);
+  const hit = aggReadMemo.get(mk);
+  if (hit && Date.now() - hit.at < AGG_READ_TTL_MS) {
+    return (await hit.value) as T | null;
+  }
+
+  const value = (async (): Promise<unknown | null> => {
+    try {
+      if (table === "agg_are_they_playing") {
+        const rows = await tidbExecute<{ payload: string | T }>(
+          `SELECT payload FROM ${table} WHERE snapshot_key = ? LIMIT 1`,
+          [key],
+        );
+        const raw = rows[0]?.payload;
+        if (raw == null) return null;
+        return typeof raw === "string" ? (JSON.parse(raw) as T) : (raw as T);
+      }
       const rows = await tidbExecute<{ payload: string | T }>(
-        `SELECT payload FROM ${table} WHERE snapshot_key = ? LIMIT 1`,
+        `SELECT payload FROM ${table} WHERE season = ? LIMIT 1`,
         [key],
       );
       const raw = rows[0]?.payload;
       if (raw == null) return null;
       return typeof raw === "string" ? (JSON.parse(raw) as T) : (raw as T);
+    } catch (error) {
+      console.warn(`[research-agg] read ${table} failed`, error);
+      return null;
     }
-    const rows = await tidbExecute<{ payload: string | T }>(
-      `SELECT payload FROM ${table} WHERE season = ? LIMIT 1`,
-      [key],
-    );
-    const raw = rows[0]?.payload;
-    if (raw == null) return null;
-    return typeof raw === "string" ? (JSON.parse(raw) as T) : (raw as T);
-  } catch (error) {
-    console.warn(`[research-agg] read ${table} failed`, error);
-    return null;
-  }
+  })();
+
+  aggReadMemo.set(mk, { at: Date.now(), value });
+  return (await value) as T | null;
 }
 
 export async function writeAggJson(
@@ -52,6 +71,7 @@ export async function writeAggJson(
        ON DUPLICATE KEY UPDATE payload = VALUES(payload), updated_at = CURRENT_TIMESTAMP`,
       [key, json],
     );
+    aggReadMemo.delete(memoKey(table, key));
     return;
   }
   await tidbExecute(
@@ -59,6 +79,7 @@ export async function writeAggJson(
      ON DUPLICATE KEY UPDATE payload = VALUES(payload), updated_at = CURRENT_TIMESTAMP`,
     [key, json],
   );
+  aggReadMemo.delete(memoKey(table, key));
 }
 
 /**

@@ -1522,8 +1522,12 @@ async function reconstructSleeperIrByRoster(
 /** Load host-platform weekly matchup rows keyed by roster + matchup_id. */
 const LIVE_MATCHUP_TTL_MS = 60 * 1000;
 const FINAL_MATCHUP_TTL_MS = 10 * 60 * 1000;
-/** Serve current-week boards from TiDB when fresher than this (avoids host wait). */
-const TIDB_LIVE_MATCHUP_MAX_AGE_MS = 5 * 60 * 1000;
+/**
+ * Serve current-week boards from TiDB when fresher than this (avoids host wait).
+ * 8m covers several client polls and keeps TiDB RUs flat as concurrent viewers grow;
+ * GH/Vercel delta-sync still refreshes the snap on a shorter cadence gameday.
+ */
+const TIDB_LIVE_MATCHUP_MAX_AGE_MS = 8 * 60 * 1000;
 
 /** Reject hollow or mid-game past-week caches so we don't freeze incomplete scores as final. */
 function isUsableFinalBoard(board: LeagueWeekMatchups): boolean {

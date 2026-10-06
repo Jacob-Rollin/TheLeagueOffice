@@ -1,7 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { jsonResponse } from "@/lib/api-cache";
+import { jsonResponse, researchCacheControl } from "@/lib/api-cache";
 import { tidbConfigured } from "@/lib/tidb";
+
+function researchOk(payload: unknown, warm: boolean): Response {
+  return jsonResponse(payload, {
+    cache: warm ? researchCacheControl() : "no-store",
+  });
+}
 
 type Format = "std" | "half" | "ppr";
 
@@ -55,36 +61,28 @@ export const Route = createFileRoute("/api/data/research/$kind")({
 
             if (kind === "fpa") {
               const payload = await players.loadFantasyPointsAllowed(season, format);
-              return jsonResponse(payload, {
-                cache: payload.rows.length ? undefined : "no-store",
-              });
+              return researchOk(payload, payload.rows.length > 0);
             }
 
             if (kind === "matchups-guide") {
               const payload = await players.loadMatchupsGuide(week, format);
               const warm =
                 Object.keys(payload.games).length > 0 || Object.keys(payload.defense).length > 0;
-              return jsonResponse(payload, { cache: warm ? undefined : "no-store" });
+              return researchOk(payload, warm);
             }
 
             if (kind === "sos-analysis") {
               const payload = await players.loadSosAnalysis(format);
-              return jsonResponse(payload, {
-                cache: payload.rows.length ? undefined : "no-store",
-              });
+              return researchOk(payload, payload.rows.length > 0);
             }
 
             if (kind === "fantasy-leaders") {
               const payload = await players.loadFantasyLeaders(season);
-              return jsonResponse(payload, {
-                cache: payload.rows.length ? undefined : "no-store",
-              });
+              return researchOk(payload, payload.rows.length > 0);
             }
 
             const payload = await players.loadSosBoard(season);
-            return jsonResponse(payload, {
-              cache: payload.schedule.length ? undefined : "no-store",
-            });
+            return researchOk(payload, payload.schedule.length > 0);
           }
 
           if (kind === "redzone") {
@@ -101,23 +99,19 @@ export const Route = createFileRoute("/api/data/research/$kind")({
               parseWeekBound(url.searchParams.get("weekTo")),
             );
             const warm = Object.values(payload.rowsByPos).some((rows) => rows.length > 0);
-            return jsonResponse(payload, { cache: warm ? undefined : "no-store" });
+            return researchOk(payload, warm);
           }
 
           if (kind === "targets") {
             const { loadMostTargetedPlayers } = await import("@/lib/targets.server");
             const payload = await loadMostTargetedPlayers(season);
-            return jsonResponse(payload, {
-              cache: payload.rows.length ? undefined : "no-store",
-            });
+            return researchOk(payload, payload.rows.length > 0);
           }
 
           if (kind === "are-they-playing") {
             const { loadAreTheyPlaying } = await import("@/lib/are-they-playing.server");
             const payload = await loadAreTheyPlaying(week ?? 1);
-            return jsonResponse(payload, {
-              cache: payload.lines.length ? undefined : "no-store",
-            });
+            return researchOk(payload, payload.lines.length > 0);
           }
 
           return jsonResponse(
