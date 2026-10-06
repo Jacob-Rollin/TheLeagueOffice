@@ -2982,19 +2982,13 @@ async function buildSeasonLogsForPlayer(
   const includeProjections = opts.includeProjections !== false;
   // Actuals first — then only pull projection files for weeks without stats.
   // Avoids an 18-week Sleeper projections fan-out on every player-card open.
-  const [raw, schedule, byeByTeam, state] = await Promise.all([
+  const [raw, schedule, byeByTeam] = await Promise.all([
     weeklyRaw(id, season),
     scheduleFor(season).catch(() => [] as ScheduleGame[]),
     byeWeeks(season).catch(() => new Map<string, number>()),
-    includeProjections ? nflState("state").catch(() => null) : Promise.resolve(null),
   ]);
-  const playedWeeks = new Set(
-    Object.keys(raw)
-      .map((w) => Number(w))
-      .filter((w) => Number.isFinite(w) && raw[String(w)]?.stats),
-  );
-  // Full 1–18 for current-season projs (played + upcoming) so game-log Proj
-  // columns and the Projections tab keep past-week lines. Bundles are memoized.
+  // Full 1–18 for season projs (played + upcoming) so game-log Proj columns
+  // and the Projections tab keep past-week lines. Bundles are memoized.
   const projWeeks = includeProjections
     ? Array.from({ length: 18 }, (_, i) => i + 1)
     : [];
@@ -3003,8 +2997,6 @@ async function buildSeasonLogsForPlayer(
         () => new Map<number, WeekProjectionBundle>(),
       )
     : new Map<number, WeekProjectionBundle>();
-  void playedWeeks;
-  void state;
   const byeWeek = byeByTeam.get(player.team.toUpperCase()) ?? null;
   const byWeek = new Map<number, GameLog>();
   for (const [wk, entry] of Object.entries(raw)) {
