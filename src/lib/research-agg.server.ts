@@ -8,7 +8,10 @@ export type AggTable =
   | "agg_redzone"
   | "agg_targets"
   | "agg_are_they_playing"
-  | "agg_sos";
+  | "agg_sos"
+  | "agg_fpa"
+  | "agg_matchups_guide"
+  | "agg_sos_analysis";
 
 export async function readAggJson<T>(table: AggTable, key: string): Promise<T | null> {
   if (!tidbConfigured()) return null;
@@ -55,6 +58,32 @@ export async function writeAggJson(
      ON DUPLICATE KEY UPDATE payload = VALUES(payload), updated_at = CURRENT_TIMESTAMP`,
     [key, json],
   );
+}
+
+/**
+ * TiDB-first research helper: serve snap, empty on miss (request), or compute+write (cron).
+ */
+export async function withResearchSnap<T>(
+  table: AggTable,
+  key: string,
+  opts: { allowCompute?: boolean } | undefined,
+  empty: T,
+  compute: () => Promise<T>,
+): Promise<T> {
+  const allowCompute = opts?.allowCompute === true;
+  try {
+    if (tidbConfigured()) {
+      const cached = await readAggJson<T>(table, key);
+      if (cached != null) return cached;
+      if (!allowCompute) return empty;
+      const payload = await compute();
+      void writeAggJson(table, key, payload).catch(() => undefined);
+      return payload;
+    }
+  } catch {
+    /* fall through to compute when TiDB unavailable */
+  }
+  return compute();
 }
 
 export async function readWeekPlaysMeta(

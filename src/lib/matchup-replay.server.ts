@@ -579,6 +579,30 @@ const loadSeasonWeekPlays = memo<Map<number, RawPlay[]>>(6 * HOUR, async (season
   return byWeek;
 });
 
+/**
+ * Cron-only: gunzip season PBP once and persist each week into TiDB so
+ * Matchup Replay request paths never hit nflverse.
+ */
+export async function warmWeekPlaysSnapshots(
+  seasonInput?: string,
+  throughWeek?: number,
+): Promise<{ season: string; weeksWritten: number; plays: number }> {
+  const seasonKey = String(seasonInput || currentSeason()).slice(0, 16);
+  const maxWeek = Math.max(1, Math.min(22, Math.floor(Number(throughWeek) || 18)));
+  const byWeek = await loadSeasonWeekPlays(seasonKey);
+  const { writeWeekPlaysMeta } = await import("./research-agg.server");
+  let weeksWritten = 0;
+  let plays = 0;
+  for (let w = 1; w <= maxWeek; w++) {
+    const list = byWeek.get(w) ?? [];
+    if (!list.length) continue;
+    await writeWeekPlaysMeta(seasonKey, w, list);
+    weeksWritten += 1;
+    plays += list.length;
+  }
+  return { season: seasonKey, weeksWritten, plays };
+}
+
 /** Season PBP → week-keyed skill scoring plays (TiDB snapshot first). */
 const loadWeekPlays = memo<RawPlay[]>(6 * HOUR, async (key) => {
   const [season, weekRaw] = key.split(":");

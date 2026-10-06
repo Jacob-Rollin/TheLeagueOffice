@@ -17,7 +17,7 @@ import { useMemo, useState } from "react";
 import type { Player, Pos } from "@/lib/draft";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import { currentSeason, fetchSchedule } from "@/lib/players-build";
-import { getPlayers } from "@/lib/players.functions";
+import { loadPlayersCatalog } from "@/lib/players-catalog";
 import { starterRequirements } from "@/lib/power-rankings";
 import { sosStarsFromRank } from "@/lib/sos-presentation";
 import {
@@ -37,8 +37,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const playersQuery = queryOptions({
-  queryKey: ["players"],
-  queryFn: () => getPlayers(),
+  queryKey: ["players-catalog"],
+  queryFn: () => loadPlayersCatalog(),
   staleTime: 1000 * 60 * 30,
 });
 

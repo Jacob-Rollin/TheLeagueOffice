@@ -2,14 +2,15 @@ name: Research Aggregates Warm
 
 # Precomputes nflverse / club-scrape research payloads into TiDB so request
 # paths never gunzip PBP or crawl 32 club sites. Hits Vercel cron only.
+# Kept to 1–2 runs/day to protect Vercel Hobby Fluid CPU; daily Vercel cron
+# at 07:00 remains the backup.
 
 on:
   schedule:
-    # Mid-week every 3 hours (Tue–Wed).
-    - cron: "30 */3 * * 2,3"
-    # Gameday: hourly during active windows.
-    - cron: "10 12-23 * * 0,1,4"
-    - cron: "10 0-5 * * 1,2,5"
+    # Morning warm (after Vercel 07:00 backup window) — all days including Saturday.
+    - cron: "15 8 * * *"
+    # Evening refresh on gamedays (Sun/Mon/Thu) for injury designations.
+    - cron: "15 19 * * 0,1,4"
   workflow_dispatch:
 
 permissions:
