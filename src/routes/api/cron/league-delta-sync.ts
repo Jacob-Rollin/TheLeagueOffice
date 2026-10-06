@@ -8,8 +8,9 @@ import { authorizeCronRequest } from "@/lib/cron-auth.server";
  * Upserts current (+ prior) week matchups for each synced_leagues row so page
  * loads can read from weekly_matchups instead of waiting on Sleeper/ESPN.
  *
- * Tuesday mornings (week-roll window) process a larger batch so the just-
- * completed week is force-refreshed into TiDB before dashboard analytics run.
+ * Early Tuesday (~1am ET / 05:00 UTC week-roll window) processes a larger
+ * batch so coaching/standings/avg-PF history sees finalized prior-week scores.
+ * Live matchup cadence is unchanged — this only warms completed-week boards.
  */
 export const Route = createFileRoute("/api/cron/league-delta-sync")({
   server: {

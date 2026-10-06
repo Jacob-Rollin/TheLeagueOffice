@@ -1640,16 +1640,18 @@ export async function loadConnectionMatchups(
     return board;
   }
 
-  // Soft-final prior week: bucket the upstream memo by week-roll so Sunday
-  // boards cannot ride FINAL_MATCHUP_TTL past Tuesday morning finalize.
+  // Soft-final prior week (analytics): bucket the upstream memo by week-roll
+  // so Sunday boards cannot ride FINAL_MATCHUP_TTL past the early-Tuesday finalize.
+  // Current-week live boards keep the normal short LIVE TTL path above.
   let upstreamKey = key;
   let upstreamTtl = isFinalWeek ? FINAL_MATCHUP_TTL_MS : LIVE_MATCHUP_TTL_MS;
   if (isPriorWeek && isFinalWeek) {
-    const { mostRecentWeekRollUtcMs } = await import("./api-cache");
+    const { WEEK_ROLL_CRON_UTC_HOUR, mostRecentWeekRollUtcMs } = await import("./api-cache");
     const now = new Date();
     const day = now.getUTCDay();
     const overnight =
-      (day === 1 && now.getUTCHours() >= 20) || (day === 2 && now.getUTCHours() < 8);
+      (day === 1 && now.getUTCHours() >= 20) ||
+      (day === 2 && now.getUTCHours() < WEEK_ROLL_CRON_UTC_HOUR);
     const bucket = overnight ? Math.floor(now.getTime() / (60 * 60 * 1000)) : 0;
     upstreamKey = `${key}|prior:${mostRecentWeekRollUtcMs(now)}:${bucket}`;
     upstreamTtl = LIVE_MATCHUP_TTL_MS;

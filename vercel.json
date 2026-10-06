@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/league-delta-sync",
-      "schedule": "0 12 * * 2"
+      "schedule": "0 5 * * 2"
     },
     {
       "path": "/api/cron/warehouse-ingest",

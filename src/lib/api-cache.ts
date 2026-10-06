@@ -12,18 +12,23 @@ export function isGamedayUtc(date = new Date()): boolean {
 }
 
 /**
- * Tuesday (and early Wednesday UTC) after the NFL week rolls — completed-week
- * boards must propagate from the morning delta-sync cron, not sit behind a
- * 30-minute history CDN pin.
+ * Early Tuesday UTC after the NFL week rolls — completed-week *analytics*
+ * (coaching efficiency, avg points, standings Actual/All-Play, etc.) must
+ * pick up the Tuesday ~1am ET finalize cron. Live matchup polls stay on the
+ * normal gameday / short live TTLs and are not gated on this window.
  */
 export function isWeekRollWindowUtc(date = new Date()): boolean {
   const day = date.getUTCDay(); // 2 Tue, 3 Wed
   if (day === 2) return true;
+  // Short Wednesday morning so late finalize still propagates on history CDN.
   return day === 3 && date.getUTCHours() < 12;
 }
 
+/** Tuesday 05:00 UTC ≈ 1:00 AM Eastern (EDT) — week-roll finalize cron. */
+export const WEEK_ROLL_CRON_UTC_HOUR = 5;
+
 /**
- * Most recent Tuesday 08:00 UTC (matches `league-delta-sync` cron).
+ * Most recent Tuesday 05:00 UTC (matches Tuesday week-roll `league-delta-sync`).
  * Before that instant on Tuesday, returns the previous Tuesday.
  */
 export function mostRecentWeekRollUtcMs(date = new Date()): number {
@@ -33,7 +38,7 @@ export function mostRecentWeekRollUtcMs(date = new Date()): number {
     date.getUTCFullYear(),
     date.getUTCMonth(),
     date.getUTCDate() - daysSinceTuesday,
-    8,
+    WEEK_ROLL_CRON_UTC_HOUR,
     0,
     0,
     0,
@@ -43,8 +48,9 @@ export function mostRecentWeekRollUtcMs(date = new Date()): number {
 }
 
 /**
- * Just-completed week (NFL `week - 1`) boards are soft-final until the Tuesday
- * morning cron re-pulls host scores. Reject midweek snapshots frozen as "final".
+ * Just-completed week (NFL `week - 1`) boards are soft-final until the early
+ * Tuesday cron re-pulls host scores for completed-week analytics.
+ * Live current-week matchups do not use this gate.
  */
 export function isPriorWeekBoardFresh(syncedAtMs: number, date = new Date()): boolean {
   if (!(syncedAtMs > 0)) return false;
@@ -52,7 +58,10 @@ export function isPriorWeekBoardFresh(syncedAtMs: number, date = new Date()): bo
   const ageMs = date.getTime() - syncedAtMs;
   // Late Monday / pre-cron Tuesday: `mostRecentWeekRollUtcMs` steps back a week,
   // so Sunday boards would look "after roll" — require a recent overnight pull.
-  if ((day === 1 && date.getUTCHours() >= 20) || (day === 2 && date.getUTCHours() < 8)) {
+  if (
+    (day === 1 && date.getUTCHours() >= 20) ||
+    (day === 2 && date.getUTCHours() < WEEK_ROLL_CRON_UTC_HOUR)
+  ) {
     return ageMs <= 8 * 60 * 60 * 1000;
   }
   return syncedAtMs >= mostRecentWeekRollUtcMs(date);
@@ -60,16 +69,18 @@ export function isPriorWeekBoardFresh(syncedAtMs: number, date = new Date()): bo
 
 /** Default for live-ish /api/data routes (league boards, etc.). */
 export function dataCacheControl(date = new Date()): string {
-  if (isGamedayUtc(date) || isWeekRollWindowUtc(date)) {
+  // Live matchups stay on the fast path — do not tie them to week-roll analytics.
+  if (isGamedayUtc(date)) {
     return "public, s-maxage=30, stale-while-revalidate=10, max-age=15";
   }
   return "public, s-maxage=300, stale-while-revalidate=60, max-age=60";
 }
 
 /**
- * Past-week / all-weeks matchup boards — not live scoring.
- * Longer edge TTL cuts TiDB RUs when analytics hydrates history.
- * Shorten on Tuesday week-roll mornings so finalized prior-week scores land.
+ * Past-week / all-weeks matchup boards for completed-week analytics
+ * (coaching / standings / avg PF). Longer edge TTL mid-week; shorten only
+ * during the Tuesday week-roll window so finalized prior-week scores land.
+ * Single-week live boards use `dataCacheControl` and stay frequent.
  */
 export function leagueHistoryCacheControl(date = new Date()): string {
   if (isWeekRollWindowUtc(date)) {
