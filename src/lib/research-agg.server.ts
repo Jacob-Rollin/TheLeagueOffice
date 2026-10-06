@@ -4,10 +4,13 @@
  */
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
 
-export async function readAggJson<T>(
-  table: "agg_redzone" | "agg_targets" | "agg_are_they_playing",
-  key: string,
-): Promise<T | null> {
+export type AggTable =
+  | "agg_redzone"
+  | "agg_targets"
+  | "agg_are_they_playing"
+  | "agg_sos";
+
+export async function readAggJson<T>(table: AggTable, key: string): Promise<T | null> {
   if (!tidbConfigured()) return null;
   try {
     if (table === "agg_are_they_playing") {
@@ -33,7 +36,7 @@ export async function readAggJson<T>(
 }
 
 export async function writeAggJson(
-  table: "agg_redzone" | "agg_targets" | "agg_are_they_playing",
+  table: AggTable,
   key: string,
   payload: unknown,
 ): Promise<void> {

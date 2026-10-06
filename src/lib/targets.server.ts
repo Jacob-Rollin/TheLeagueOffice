@@ -154,15 +154,28 @@ const loadTargetsAgg = memo<{
 
 export async function loadMostTargetedPlayers(
   season = currentSeason(),
+  opts?: { allowCompute?: boolean },
 ): Promise<MostTargetedPayload> {
   const seasonKey = String(season ?? currentSeason()).slice(0, 16);
+  const allowCompute = opts?.allowCompute === true;
 
   try {
     const { readAggJson } = await import("./research-agg.server");
     const cached = await readAggJson<MostTargetedPayload>("agg_targets", seasonKey);
     if (cached?.rows?.length) return cached;
   } catch {
-    /* compute below */
+    /* compute below when allowed */
+  }
+
+  if (!allowCompute) {
+    try {
+      const { tidbConfigured } = await import("@/lib/tidb");
+      if (tidbConfigured()) {
+        return { season: seasonKey, maxWeek: 0, rows: [] };
+      }
+    } catch {
+      /* local/dev without TiDB may still compute */
+    }
   }
 
   const prev = String(Number(seasonKey) - 1);

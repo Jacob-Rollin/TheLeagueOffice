@@ -590,7 +590,15 @@ const loadWeekPlays = memo<RawPlay[]>(6 * HOUR, async (key) => {
     const cached = await readWeekPlaysMeta(seasonKey, week);
     if (Array.isArray(cached) && cached.length > 0) return cached as RawPlay[];
   } catch {
-    /* compute below */
+    /* compute below when TiDB is not the primary store */
+  }
+
+  // Request path must not gunzip season PBP when TiDB is configured — cron warms snaps.
+  try {
+    const { tidbConfigured } = await import("@/lib/tidb");
+    if (tidbConfigured()) return [];
+  } catch {
+    /* local/dev without TiDB may still compute */
   }
 
   const byWeek = await loadSeasonWeekPlays(seasonKey);

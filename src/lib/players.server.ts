@@ -797,10 +797,59 @@ export type SosBoard = {
   schedule: [number, string, string][];
 };
 
-/** Compact positional SOS ranks + schedule so clients can rebuild any team × position SOS. */
-export async function loadSosBoard(seasonInput?: string): Promise<SosBoard> {
+/**
+ * Compact positional SOS ranks + schedule so clients can rebuild any team × position SOS.
+ * TiDB-first when configured: request path never fans out 18 Sleeper week stats.
+ * Pass `{ allowCompute: true }` from cron to warm/rebuild the snapshot.
+ */
+export async function loadSosBoard(
+  seasonInput?: string,
+  opts?: { allowCompute?: boolean },
+): Promise<SosBoard> {
   const state = await nflState("state");
   const season = seasonInput && /^\d{4}$/.test(seasonInput) ? seasonInput : state.season;
+  const allowCompute = opts?.allowCompute === true;
+
+  try {
+    const { tidbConfigured } = await import("@/lib/tidb");
+    if (tidbConfigured()) {
+      const { readAggJson } = await import("./research-agg.server");
+      const cached = await readAggJson<SosBoard>("agg_sos", season);
+      if (cached?.ranks && Array.isArray(cached.schedule)) return cached;
+      if (!allowCompute) {
+        return {
+          season,
+          priorSeason: null,
+          dataThroughWeek: 0,
+          updatedAt: new Date().toISOString(),
+          ranks: {},
+          schedule: [],
+        };
+      }
+    }
+  } catch {
+    /* compute below when allowed */
+  }
+
+  if (!allowCompute) {
+    // No TiDB (or read failed) and not a cron warm — avoid request-path 18-week fan-out.
+    try {
+      const { tidbConfigured } = await import("@/lib/tidb");
+      if (tidbConfigured()) {
+        return {
+          season,
+          priorSeason: null,
+          dataThroughWeek: 0,
+          updatedAt: new Date().toISOString(),
+          ranks: {},
+          schedule: [],
+        };
+      }
+    } catch {
+      /* fall through to compute for local/dev without TiDB */
+    }
+  }
+
   const [allowed, schedule] = await Promise.all([
     sosAllowed(season).catch(() => null),
     scheduleFor(season).catch(() => [] as ScheduleGame[]),
@@ -813,7 +862,7 @@ export async function loadSosBoard(seasonInput?: string): Promise<SosBoard> {
     }
     ranks[pos] = byTeam;
   }
-  return {
+  const board: SosBoard = {
     season,
     priorSeason: allowed?.priorSeason ?? null,
     dataThroughWeek: allowed?.maxWeek ?? 0,
@@ -823,6 +872,12 @@ export async function loadSosBoard(seasonInput?: string): Promise<SosBoard> {
       .filter((g) => g.week >= 1 && g.week <= 18 && g.home && g.away)
       .map((g) => [g.week, g.home, g.away] as [number, string, string]),
   };
+
+  void import("./research-agg.server")
+    .then(({ writeAggJson }) => writeAggJson("agg_sos", season, board))
+    .catch(() => undefined);
+
+  return board;
 }
 
 export type MatchupDefenseCell = {
@@ -1754,13 +1809,32 @@ export type RosterNewsItem = {
 export type RosterNews = { season: string; week: number; players: RosterNewsItem[] };
 
 const ROSTER_NEWS_WINDOW_MS = 14 * 24 * HOUR;
+/** Whole-roster response coalesce — My Team lineup/news share one Fluid burst per isolate. */
+const ROSTER_NEWS_TTL_MS = 5 * 60 * 1000;
+/** Cap concurrent ESPN player-feed fetches (memo still dedupes per athleteId). */
+const ROSTER_NEWS_FEED_CONCURRENCY = 5;
 
 /** Injury-specific wording (stricter than INJURY_COPY_RE, which also matches recaps). */
 const ROSTER_INJURY_RE =
   /\binjur(?:y|ed|ies)\b|\bquestionable\b|\bdoubtful\b|\bruled out\b|\bwon't play\b|\bwill not play\b|\binactive\b|\binjured reserve\b|\bIR\b|\bsurgery\b|\bfracture|\bsprain|\bstrain|\btorn\b|\btear\b|\bconcussion|\bhamstring|\bankle\b|\bknee\b|\bgroin\b|\bcalf\b|\bshoulder\b|\bthumb\b|\bwrist\b|\bfoot\b|\btoe\b|\bhip\b|\bribs?\b|\billness\b|did not practice|\bDNP\b|limited (?:in )?practice|full practice|week-to-week|day-to-day|\bPUP\b|\bNFI\b|\bsuspen/i;
 
-/** Latest injury designations, official report lines and news for a synced roster. */
-export async function loadRosterNews(ids: string[]): Promise<RosterNews> {
+async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  if (items.length === 0) return [];
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const out = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        out[i] = await fn(items[i]!);
+      }
+    }),
+  );
+  return out;
+}
+
+async function loadRosterNewsUncached(ids: string[]): Promise<RosterNews> {
   const [built, state] = await Promise.all([buildPlayers("v2"), nflState("state")]);
   const season = built.payload.season;
   const [rosterIndex, report] = await Promise.all([
@@ -1771,55 +1845,64 @@ export async function loadRosterNews(ids: string[]): Promise<RosterNews> {
   const minReportWeek = state.season === season ? state.week - 1 : Number.POSITIVE_INFINITY;
   const now = Date.now();
 
-  const players = await Promise.all(
-    ids.map(async (id): Promise<RosterNewsItem> => {
-      const player = byId.get(id);
-      const nfl = rosterIndex?.bySleeper.get(id) ?? null;
-      const reportRow = nfl?.gsisId ? (report?.get(nfl.gsisId) ?? null) : null;
+  // Only nflverse→ESPN ids (exact). Skip espnAthleteId name-search — wrong athlete + extra Fluid wait.
+  const players = await mapPool(ids, ROSTER_NEWS_FEED_CONCURRENCY, async (id): Promise<RosterNewsItem> => {
+    const player = byId.get(id);
+    const nfl = rosterIndex?.bySleeper.get(id) ?? null;
+    const reportRow = nfl?.gsisId ? (report?.get(nfl.gsisId) ?? null) : null;
 
-      let news: RosterNewsItem["news"] = null;
-      if (player && player.pos !== "DEF") {
-        const rosterEspnId = nfl?.espnId ?? null;
-        const athleteId = rosterEspnId ?? (await espnAthleteId(player.name).catch(() => null));
-        const feed = athleteId
-          ? await espnPlayerFeed(athleteId).catch(() => [] as EspnFeedItem[])
-          : [];
-        const lastName = player.name.split(" ").filter(Boolean).slice(-1)[0]?.toLowerCase() ?? "";
-        let bestAt = 0;
-        for (const f of feed) {
-          const headline = (f.headline ?? "").trim();
-          if (!headline || (f.type && f.type !== "Rotowire")) continue;
-          const published = f.published ?? f.lastModified ?? "";
-          const at = Date.parse(published);
-          if (!Number.isFinite(at) || now - at > ROSTER_NEWS_WINDOW_MS || at <= bestAt) continue;
-          const analysis = stripTags(f.story ?? f.description ?? "");
-          // Name-search ids can resolve to the wrong athlete; nflverse ids are exact.
-          if (!rosterEspnId && lastName && !`${headline} ${analysis}`.toLowerCase().includes(lastName)) {
-            continue;
-          }
-          bestAt = at;
-          news = {
-            headline,
-            analysis,
-            published,
-            link: f.links?.web?.href ?? null,
-            injury: ROSTER_INJURY_RE.test(headline),
-          };
-        }
+    let news: RosterNewsItem["news"] = null;
+    if (player && player.pos !== "DEF") {
+      const athleteId = nfl?.espnId ?? null;
+      const feed = athleteId
+        ? await espnPlayerFeed(athleteId).catch(() => [] as EspnFeedItem[])
+        : [];
+      let bestAt = 0;
+      for (const f of feed) {
+        const headline = (f.headline ?? "").trim();
+        if (!headline || (f.type && f.type !== "Rotowire")) continue;
+        const published = f.published ?? f.lastModified ?? "";
+        const at = Date.parse(published);
+        if (!Number.isFinite(at) || now - at > ROSTER_NEWS_WINDOW_MS || at <= bestAt) continue;
+        const analysis = stripTags(f.story ?? f.description ?? "");
+        bestAt = at;
+        news = {
+          headline,
+          analysis,
+          published,
+          link: f.links?.web?.href ?? null,
+          injury: ROSTER_INJURY_RE.test(headline),
+        };
       }
+    }
 
-      return {
-        id,
-        status: player?.injury ?? null,
-        bodyPart: player?.injury_body_part ?? null,
-        reserve: nfl?.status === "RES",
-        report: reportRow && reportRow.week >= minReportWeek ? reportRow : null,
-        news,
-      };
-    }),
-  );
+    return {
+      id,
+      status: player?.injury ?? null,
+      bodyPart: player?.injury_body_part ?? null,
+      reserve: nfl?.status === "RES",
+      report: reportRow && reportRow.week >= minReportWeek ? reportRow : null,
+      news,
+    };
+  });
 
   return { season, week: state.week, players };
+}
+
+const rosterNewsMemo = memo<RosterNews>(ROSTER_NEWS_TTL_MS, (key) =>
+  loadRosterNewsUncached(key.split(",").filter(Boolean)),
+);
+
+/** Latest injury designations, official report lines and news for a synced roster. */
+export async function loadRosterNews(ids: string[]): Promise<RosterNews> {
+  const clean = Array.from(new Set(ids.map((id) => String(id).slice(0, 32)).filter(Boolean)))
+    .sort()
+    .slice(0, 30);
+  if (clean.length === 0) {
+    const state = await nflState("state");
+    return { season: state.season, week: state.week, players: [] };
+  }
+  return rosterNewsMemo(clean.join(","));
 }
 
 /* ---------- homepage injury wire ---------- */

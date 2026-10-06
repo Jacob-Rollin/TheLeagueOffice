@@ -384,9 +384,11 @@ export async function loadRedZoneStats(
   yardlineInput: unknown = 20,
   weekFromInput?: number | null,
   weekToInput?: number | null,
+  opts?: { allowCompute?: boolean },
 ): Promise<RedZoneStatsPayload> {
   const yardline = normalizeYardline(yardlineInput);
   const seasonKey = String(season ?? currentSeason()).slice(0, 16);
+  const allowCompute = opts?.allowCompute === true;
 
   // Durable TiDB snapshot — skip nflverse PBP gunzip on the request path when warm.
   const earlyKey = `${seasonKey}:${yardline}:${weekFromInput ?? "d"}:${weekToInput ?? "d"}`;
@@ -395,7 +397,25 @@ export async function loadRedZoneStats(
     const cached = await readAggJson<RedZoneStatsPayload>("agg_redzone", earlyKey);
     if (cached?.rowsByPos) return cached;
   } catch {
-    /* compute below */
+    /* compute below when allowed */
+  }
+
+  if (!allowCompute) {
+    try {
+      const { tidbConfigured } = await import("@/lib/tidb");
+      if (tidbConfigured()) {
+        return {
+          season: seasonKey,
+          weeksFrom: 0,
+          weeksTo: 0,
+          maxWeek: 0,
+          yardline,
+          rowsByPos: { QB: [], RB: [], WR: [], TE: [] },
+        };
+      }
+    } catch {
+      /* local/dev without TiDB may still compute */
+    }
   }
 
   const prev = String(Number(seasonKey) - 1);

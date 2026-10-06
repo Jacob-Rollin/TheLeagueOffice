@@ -151,10 +151,11 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
-  // Silent background player-brain hydration (30-min heartbeat guarded).
+  // Silent background player-brain hydration once per session (30-min heartbeat inside).
+  // Do not re-fire on every pathname change — that re-entered withFreshSos / getSosBoard.
   useEffect(() => {
     void hydratePlayerBrain();
-  }, [pathname]);
+  }, []);
 
   const isMobilePage = pathname === "/m" || pathname.startsWith("/m/");
 
