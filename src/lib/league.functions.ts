@@ -143,6 +143,8 @@ export const getConnectionMatchups = createServerFn({ method: "GET" })
       s2?: string;
       swid?: string;
       connectionId?: string;
+      /** When false, skip durable cache (history backfill for just-completed week). */
+      preferCache?: boolean;
     }) => ({
       identifier: String(input.identifier ?? "").slice(0, 64),
       platform: String(input.platform ?? "sleeper").slice(0, 16),
@@ -150,6 +152,7 @@ export const getConnectionMatchups = createServerFn({ method: "GET" })
       s2: input.s2 ? String(input.s2).slice(0, 512) : undefined,
       swid: input.swid ? String(input.swid).slice(0, 64) : undefined,
       connectionId: input.connectionId ? String(input.connectionId).slice(0, 64) : undefined,
+      preferCache: input.preferCache !== false,
     }),
   )
   .handler(async ({ data }) => {
@@ -161,6 +164,7 @@ export const getConnectionMatchups = createServerFn({ method: "GET" })
       data.s2,
       data.swid,
       data.connectionId,
+      { preferCache: data.preferCache, persist: true },
     );
   });
 

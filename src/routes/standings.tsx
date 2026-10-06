@@ -475,7 +475,8 @@ function StandingsHub() {
       const week = completedWeekNumbers[index] ?? index + 1;
 
       // CRITICAL GUARD RAIL: skip uncompleted, live, or future weeks entirely.
-      const isCompleted = currentWeek != null && week < currentWeek;
+      // Use standings/display-aware ceiling — not only `week < nfl.week`.
+      const isCompleted = completedThrough > 0 && week <= completedThrough;
       if (!isCompleted) continue;
 
       const entries = historyMatchupQueries[index]?.data?.entries ?? [];

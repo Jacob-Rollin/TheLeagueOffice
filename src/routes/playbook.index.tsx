@@ -30,8 +30,8 @@ import {
   completedWeeksThrough,
   standingsGamesPlayed,
 } from "@/lib/completed-weeks";
-import { fetchLeagueMatchupsHistory } from "@/lib/league-matchups-cdn";
-import { isPageVisible } from "@/lib/page-visibility";
+import { boardHasUsableScores, fetchLeagueMatchupsHistory } from "@/lib/league-matchups-cdn";
+import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import type { RosterNews, RosterNewsItem } from "@/lib/players.server";
 import { fetchSnapRosterNews } from "@/lib/snap-cdn";
@@ -982,7 +982,7 @@ function PlaybookDashboardPage() {
     [currentWeek, displayWeek, gamesPlayed],
   );
 
-  // CDN/TiDB first; Fluid backfill only for completed weeks still missing (cold TiDB).
+  // CDN/TiDB first; Fluid backfill for completed weeks still missing (cold TiDB).
   const historyAllQuery = useQuery({
     queryKey: [
       "league-matchups-history",
@@ -994,6 +994,14 @@ function PlaybookDashboardPage() {
     enabled: Boolean(activeLeague?.leagueId && completedWeekNumbers.length > 0),
     retry: false,
     staleTime: 10 * 60 * 1000,
+    // Keep pulling the just-completed slate until TiDB/host returns usable scores
+    // (coaching efficiency needs week boards; avg PF uses standings as fallback).
+    refetchInterval: visibleRefetchInterval((query) => {
+      const map = query.state.data as Map<number, { board: unknown }> | undefined;
+      if (completedThrough <= 0) return false;
+      const hit = map?.get(completedThrough) as { board?: Parameters<typeof boardHasUsableScores>[0] } | undefined;
+      return boardHasUsableScores(hit?.board) ? false : 15_000;
+    }),
     refetchIntervalInBackground: false,
     queryFn: () =>
       fetchLeagueMatchupsHistory({
@@ -1121,47 +1129,84 @@ function PlaybookDashboardPage() {
       avgPointsDeltaPct: null as number | null,
       efficiencyDeltaPct: null as number | null,
     };
-    if (!weeklyMatchups || weeklyMatchups.length === 0) return empty;
+
+    // Host standings are the source of truth for record / PF (already include
+    // week 4 when the standings page does). Matchup-history boards can lag TiDB.
+    const mySlot = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
+    const standingRows = standings?.rows ?? [];
+    const myStanding =
+      (mySlot != null
+        ? standingRows.find((r) => Number(r.rosterId) === Number(mySlot))
+        : null) ??
+      standingRows.find((r) => r.isMine) ??
+      null;
+    const hostGames =
+      myStanding != null
+        ? (Number(myStanding.wins) || 0) +
+          (Number(myStanding.losses) || 0) +
+          (Number(myStanding.ties) || 0)
+        : 0;
+    const hostPf = myStanding != null ? Number(myStanding.pointsFor) || 0 : 0;
+    const hostAvg = hostGames > 0 && hostPf > 0 ? hostPf / hostGames : null;
+    const hostRank =
+      myStanding != null
+        ? standingRows.findIndex((r) => Number(r.rosterId) === Number(myStanding.rosterId))
+        : -1;
+    const hostPosition = hostRank >= 0 ? ordinalPlace(hostRank + 1) : null;
+    const hostRecord =
+      myStanding != null
+        ? myStanding.ties > 0
+          ? `${myStanding.wins}-${myStanding.losses}-${myStanding.ties}`
+          : `${myStanding.wins}-${myStanding.losses}`
+        : null;
 
     let totalUserScored = 0;
     let completedWeeksCount = 0;
     let weeksWithScores = 0;
-    let finalPosition = empty.position;
-    let finalRecord = empty.record;
+    let finalPosition = hostPosition ?? empty.position;
+    let finalRecord = hostRecord ?? empty.record;
     /** Per completed week: scored points + optimal ceiling (for WoW deltas). */
     const completedWeekStats: { scored: number; optimal: number }[] = [];
 
-    weeklyMatchups.forEach((weekData) => {
+    for (const weekData of weeklyMatchups ?? []) {
       // CRITICAL GUARD RAIL: Ignore live, open, or in-progress weeks entirely.
       if (weekData.status !== "complete" && !weekData.isClosed && !weekData.isCompleted) {
-        return;
+        continue;
       }
 
       // Skip hollow weeks (CDN miss / no board) so we don't average zeros.
-      const hasScore = (weekData.userPointsScored || 0) > 0 || weekData.optimal > 0 || Boolean(weekData.standingsRecord);
-      if (!hasScore) return;
+      const hasScore =
+        (weekData.userPointsScored || 0) > 0 ||
+        weekData.optimal > 0 ||
+        Boolean(weekData.standingsRecord);
+      if (!hasScore) continue;
 
       completedWeeksCount += 1;
       const scored = weekData.userPointsScored || 0;
       totalUserScored += scored;
       if (scored > 0 || weekData.optimal > 0) weeksWithScores += 1;
 
-      if (weekData.standingsPosition) finalPosition = weekData.standingsPosition;
-      if (weekData.standingsRecord) finalRecord = weekData.standingsRecord;
+      // Prefer host standings for the card; history tallies only fill gaps.
+      if (!hostPosition && weekData.standingsPosition) finalPosition = weekData.standingsPosition;
+      if (!hostRecord && weekData.standingsRecord) finalRecord = weekData.standingsRecord;
 
       completedWeekStats.push({
         scored,
         optimal: weekData.optimal > 0 ? weekData.optimal : 0,
       });
-    });
+    }
 
-    if (completedWeeksCount === 0 || weeksWithScores === 0) return empty;
+    // Avg points: host PF ÷ games when available (matches standings page).
+    // Fall back to history average only when standings have not loaded yet.
+    const historyAvg =
+      completedWeeksCount > 0 && weeksWithScores > 0
+        ? totalUserScored / completedWeeksCount
+        : null;
+    const calculatedAvgPoints = hostAvg ?? historyAvg;
+    if (calculatedAvgPoints == null) return empty;
 
-    const calculatedAvgPoints = totalUserScored / completedWeeksCount;
-
-    // Coaching Efficiency = season-to-date scored ÷ optimal across completed weeks.
-    // The delta is how far that season rate moved because of the latest week
-    // (current season rate minus the rate through the week before), in points.
+    // Coaching Efficiency still needs weekly boards (optimal lineup). Use every
+    // completed week we have — do not pretend missing week 4 is 0.
     const effWeeks = completedWeekStats.filter((w) => w.optimal > 0);
     const seasonEff = (weeks: { scored: number; optimal: number }[]): number | null => {
       const optimal = weeks.reduce((sum, w) => sum + w.optimal, 0);
@@ -1171,20 +1216,23 @@ function PlaybookDashboardPage() {
     };
     const currentEff = seasonEff(effWeeks);
     const priorEff = effWeeks.length >= 2 ? seasonEff(effWeeks.slice(0, -1)) : null;
-    const calculatedEfficiency = currentEff;
 
-    // WoW % — hidden until at least two completed weeks.
-    // Avg Points: ((curr − prior) / curr) × 100 — FP uses the current avg as the base.
+    // WoW % — prefer host avg vs history-through-(n-1) when host has the extra week.
     let avgPointsDeltaPct: number | null = null;
     const efficiencyDeltaPct: number | null =
       currentEff != null && priorEff != null ? currentEff - priorEff : null;
-    if (completedWeeksCount >= 2) {
-      const prior = completedWeekStats.slice(0, -1);
-      const priorScored = prior.reduce((sum, w) => sum + w.scored, 0);
-      const priorAvg = priorScored / prior.length;
-      if (calculatedAvgPoints > 0.05) {
-        avgPointsDeltaPct =
-          ((calculatedAvgPoints - priorAvg) / calculatedAvgPoints) * 100;
+    const deltaWeeks = Math.max(completedWeeksCount, hostGames);
+    if (deltaWeeks >= 2 && calculatedAvgPoints > 0.05) {
+      if (hostAvg != null && completedWeekStats.length >= hostGames - 1 && hostGames >= 2) {
+        const prior = completedWeekStats.slice(0, hostGames - 1);
+        if (prior.length) {
+          const priorAvg = prior.reduce((sum, w) => sum + w.scored, 0) / prior.length;
+          avgPointsDeltaPct = ((calculatedAvgPoints - priorAvg) / calculatedAvgPoints) * 100;
+        }
+      } else if (completedWeekStats.length >= 2) {
+        const prior = completedWeekStats.slice(0, -1);
+        const priorAvg = prior.reduce((sum, w) => sum + w.scored, 0) / prior.length;
+        avgPointsDeltaPct = ((calculatedAvgPoints - priorAvg) / calculatedAvgPoints) * 100;
       }
     }
 
@@ -1192,11 +1240,11 @@ function PlaybookDashboardPage() {
       position: finalPosition,
       record: finalRecord,
       avgPoints: calculatedAvgPoints.toFixed(1),
-      efficiency: calculatedEfficiency != null ? `${calculatedEfficiency.toFixed(1)}%` : "—",
+      efficiency: currentEff != null ? `${currentEff.toFixed(1)}%` : "—",
       avgPointsDeltaPct,
       efficiencyDeltaPct,
     };
-  }, [weeklyMatchups]);
+  }, [weeklyMatchups, standings, myTeam, teams]);
 
   const sleeperTrending = useQuery({
     queryKey: ["sleeper-trending-add", "v1", 24, 50],

@@ -31,6 +31,13 @@ const LIVE_MAX_AGE_MS = 90 * 1000;
 const lastFluidRefresh = new Map<string, number>();
 const FLUID_REFRESH_MIN_MS = 60 * 1000;
 
+export function boardHasUsableScores(board: LeagueWeekMatchups | null | undefined): boolean {
+  const entries = board?.entries ?? [];
+  if (entries.length < 2) return false;
+  const scored = entries.filter((e) => Number(e.points) > 0).length;
+  return scored >= Math.ceil(entries.length * 0.4);
+}
+
 function parseJson<T>(raw: unknown, fallback: T): T {
   if (raw == null) return fallback;
   if (typeof raw === "string") {
@@ -234,15 +241,17 @@ export async function fetchLeagueMatchupsHistory(input: {
 
   const missing = needed.filter((week) => {
     const hit = out.get(week);
-    if (!(hit?.board.entries.length)) return true;
+    if (!boardHasUsableScores(hit?.board)) return true;
     // Soft-final prior week: force host refresh when CDN still has a midweek board.
-    if (priorWeek > 0 && week === priorWeek && !isPriorWeekBoardFresh(hit.syncedAtMs)) {
+    if (priorWeek > 0 && week === priorWeek && !isPriorWeekBoardFresh(hit!.syncedAtMs)) {
       return true;
     }
     return false;
   });
   if (!missing.length || input.allowFluid === false || !leagueId) return out;
 
+  // Latest completed slate is product-critical (avg PF / coaching) — always force
+  // host pull even if a recent Fluid attempt throttled/failed.
   await mapPool(missing, HISTORY_BACKFILL_CONCURRENCY, async (week) => {
     const board = await maybeRefreshMatchupsViaFluid({
       leagueId,
@@ -252,9 +261,10 @@ export async function fetchLeagueMatchupsHistory(input: {
       ...(input.swid ? { swid: input.swid } : {}),
       ...(input.connectionId ? { connectionId: input.connectionId } : {}),
       allow: true,
+      force: priorWeek > 0 && week === priorWeek,
     });
-    if (board?.entries?.length) {
-      out.set(week, { board, syncedAtMs: Date.now() });
+    if (boardHasUsableScores(board)) {
+      out.set(week, { board: board!, syncedAtMs: Date.now() });
     }
   });
 
@@ -289,16 +299,17 @@ export async function maybeRefreshMatchupsViaFluid(input: {
   swid?: string;
   connectionId?: string;
   allow: boolean;
+  /** Bypass in-tab throttle (history backfill for the just-completed week). */
+  force?: boolean;
 }): Promise<LeagueWeekMatchups | null> {
   if (!input.allow) return null;
   const key = `${input.leagueId}|${input.week}`;
   const now = Date.now();
   const prev = lastFluidRefresh.get(key) ?? 0;
-  if (now - prev < FLUID_REFRESH_MIN_MS) return null;
-  lastFluidRefresh.set(key, now);
+  if (!input.force && now - prev < FLUID_REFRESH_MIN_MS) return null;
   try {
     const { getConnectionMatchups } = await import("@/lib/league.functions");
-    return await getConnectionMatchups({
+    const board = await getConnectionMatchups({
       data: {
         identifier: input.leagueId,
         platform: input.platform,
@@ -306,8 +317,13 @@ export async function maybeRefreshMatchupsViaFluid(input: {
         ...(input.s2 ? { s2: input.s2 } : {}),
         ...(input.swid ? { swid: input.swid } : {}),
         ...(input.connectionId ? { connectionId: input.connectionId } : {}),
+        // Forced history backfill must hit host, not a midweek TiDB freeze.
+        ...(input.force ? { preferCache: false } : {}),
       },
     });
+    // Only throttle after a usable board — failed/empty pulls must retry.
+    if (boardHasUsableScores(board)) lastFluidRefresh.set(key, Date.now());
+    return board;
   } catch {
     return null;
   }
