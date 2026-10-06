@@ -1,11 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { isWeekRollWindowUtc } from "@/lib/api-cache";
 import { authorizeCronRequest } from "@/lib/cron-auth.server";
 
 /**
  * Centralized league delta-sync heartbeat.
  * Upserts current (+ prior) week matchups for each synced_leagues row so page
  * loads can read from weekly_matchups instead of waiting on Sleeper/ESPN.
+ *
+ * Tuesday mornings (week-roll window) process a larger batch so the just-
+ * completed week is force-refreshed into TiDB before dashboard analytics run.
  */
 export const Route = createFileRoute("/api/cron/league-delta-sync")({
   server: {
@@ -19,12 +23,17 @@ export const Route = createFileRoute("/api/cron/league-delta-sync")({
         }
 
         const url = new URL(request.url);
-        const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? 40) || 40));
+        const weekRoll = isWeekRollWindowUtc();
+        const defaultLimit = weekRoll ? 100 : 40;
+        const limit = Math.max(
+          1,
+          Math.min(200, Number(url.searchParams.get("limit") ?? defaultLimit) || defaultLimit),
+        );
 
         try {
           const { deltaSyncAllConnections } = await import("@/lib/league-resync.server");
           const report = await deltaSyncAllConnections(limit);
-          return new Response(JSON.stringify(report), {
+          return new Response(JSON.stringify({ ...report, weekRoll, limit }), {
             status: report.ok ? 200 : 500,
             headers: { "content-type": "application/json", "cache-control": "no-store" },
           });

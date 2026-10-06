@@ -1554,6 +1554,10 @@ export type LoadMatchupsOptions = {
  * Weekly matchup board, cached per league + week. Past weeks prefer the
  * durable Supabase cache (no host wait). Current week refreshes on a short
  * shared TTL so concurrent viewers coalesce onto one upstream call.
+ *
+ * The immediately prior NFL week (`current - 1`) is soft-final: durable rows
+ * are only trusted after the Tuesday morning week-roll sync so midweek
+ * snapshots are not frozen as completed-week analytics.
  */
 export async function loadConnectionMatchups(
   identifier: string,
@@ -1574,14 +1578,25 @@ export async function loadConnectionMatchups(
   const nflState = await cachedJson<{ week?: number }>(NFL_STATE_URL, 5 * 60 * 1000);
   const currentNflWeek = Math.max(0, Number(nflState?.week ?? 0) || 0);
   const isFinalWeek = currentNflWeek > 0 && safeWeek < currentNflWeek;
+  const isPriorWeek = currentNflWeek > 0 && safeWeek === currentNflWeek - 1;
 
   if (preferCache && isFinalWeek) {
     try {
+      const { isPriorWeekBoardFresh } = await import("./api-cache");
       const { loadCachedWeekMatchups, loadTidbWeekMatchups } = await import("./league-resync.server");
-      const cached = await loadCachedWeekMatchups(identifier.trim(), safeWeek, connectionId);
-      if (cached && isUsableFinalBoard(cached)) return cached;
+      // Hard-final weeks (older than prior): durable cache is fine.
+      if (!isPriorWeek) {
+        const cached = await loadCachedWeekMatchups(identifier.trim(), safeWeek, connectionId);
+        if (cached && isUsableFinalBoard(cached)) return cached;
+      }
       const tidb = await loadTidbWeekMatchups(identifier.trim(), safeWeek, connectionId);
-      if (tidb?.board && isUsableFinalBoard(tidb.board)) return tidb.board;
+      if (
+        tidb?.board &&
+        isUsableFinalBoard(tidb.board) &&
+        (!isPriorWeek || isPriorWeekBoardFresh(tidb.syncedAtMs))
+      ) {
+        return tidb.board;
+      }
     } catch {
       /* fall through to host — prefer live pull over a hollow/mid-game freeze */
     }
@@ -1604,11 +1619,43 @@ export async function loadConnectionMatchups(
     }
   }
 
-  const board = await cachedUpstream(
-    key,
-    isFinalWeek ? FINAL_MATCHUP_TTL_MS : LIVE_MATCHUP_TTL_MS,
-    () => fetchConnectionMatchups(identifier, platform, safeWeek, s2, swid, connectionId),
-  );
+  const fetchBoard = () =>
+    fetchConnectionMatchups(identifier, platform, safeWeek, s2, swid, connectionId);
+
+  // Cron / explicit ingest must not reuse an in-process midweek freeze.
+  if (!preferCache) {
+    const board = await fetchBoard();
+    if (persist && board?.entries?.length && connectionId?.trim()) {
+      void import("./league-resync.server")
+        .then(({ persistWeekMatchups }) =>
+          persistWeekMatchups({
+            leagueId: identifier.trim(),
+            connectionId,
+            platform: plat,
+            board,
+          }),
+        )
+        .catch(() => undefined);
+    }
+    return board;
+  }
+
+  // Soft-final prior week: bucket the upstream memo by week-roll so Sunday
+  // boards cannot ride FINAL_MATCHUP_TTL past Tuesday morning finalize.
+  let upstreamKey = key;
+  let upstreamTtl = isFinalWeek ? FINAL_MATCHUP_TTL_MS : LIVE_MATCHUP_TTL_MS;
+  if (isPriorWeek && isFinalWeek) {
+    const { mostRecentWeekRollUtcMs } = await import("./api-cache");
+    const now = new Date();
+    const day = now.getUTCDay();
+    const overnight =
+      (day === 1 && now.getUTCHours() >= 20) || (day === 2 && now.getUTCHours() < 8);
+    const bucket = overnight ? Math.floor(now.getTime() / (60 * 60 * 1000)) : 0;
+    upstreamKey = `${key}|prior:${mostRecentWeekRollUtcMs(now)}:${bucket}`;
+    upstreamTtl = LIVE_MATCHUP_TTL_MS;
+  }
+
+  const board = await cachedUpstream(upstreamKey, upstreamTtl, fetchBoard);
 
   if (persist && board?.entries?.length && connectionId?.trim()) {
     void import("./league-resync.server")

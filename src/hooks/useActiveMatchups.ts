@@ -5,6 +5,7 @@ import { liveRefreshMs, useNflGameProgress } from "@/hooks/useNflGameProgress";
 import {
   fetchLeagueWeekMatchupsCdn,
   isLiveMatchupFresh,
+  isPastWeekMatchupFresh,
   maybeRefreshMatchupsViaFluid,
 } from "@/lib/league-matchups-cdn";
 import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
@@ -45,11 +46,13 @@ export function useActiveMatchups(week: number | null | undefined) {
       const cdn = await fetchLeagueWeekMatchupsCdn(leagueId, week);
       const past = currentWeek != null && week < currentWeek;
       if (cdn?.board.entries.length) {
-        if (past || isLiveMatchupFresh(cdn.syncedAtMs) || !isPageVisible()) {
+        const pastFresh = past && isPastWeekMatchupFresh(week, currentWeek, cdn.syncedAtMs);
+        const liveFresh = !past && isLiveMatchupFresh(cdn.syncedAtMs);
+        if (pastFresh || liveFresh || !isPageVisible()) {
           return cdn.board;
         }
       }
-      // Cold/stale live board: one throttled Fluid refresh (writes TiDB for peers).
+      // Cold/stale live or soft-final prior week: one throttled Fluid refresh.
       const refreshed = await maybeRefreshMatchupsViaFluid({
         leagueId,
         week,
