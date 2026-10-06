@@ -73,15 +73,23 @@ CREATE TABLE IF NOT EXISTS synced_matchups (
 );
 
 -- Pre-aggregated research snapshots (written by cron; request path only SELECTs).
+-- season may hold composite keys (e.g. redzone "2025:20:d:d").
 CREATE TABLE IF NOT EXISTS agg_redzone (
-  season VARCHAR(8) NOT NULL,
+  season VARCHAR(64) NOT NULL,
   payload JSON NOT NULL,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (season)
 );
 
 CREATE TABLE IF NOT EXISTS agg_targets (
-  season VARCHAR(8) NOT NULL,
+  season VARCHAR(64) NOT NULL,
+  payload JSON NOT NULL,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (season)
+);
+
+CREATE TABLE IF NOT EXISTS agg_sos (
+  season VARCHAR(16) NOT NULL,
   payload JSON NOT NULL,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (season)
@@ -95,7 +103,7 @@ CREATE TABLE IF NOT EXISTS agg_are_they_playing (
 );
 
 CREATE TABLE IF NOT EXISTS agg_week_plays_meta (
-  season VARCHAR(8) NOT NULL,
+  season VARCHAR(16) NOT NULL,
   week INT NOT NULL,
   payload JSON NOT NULL,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

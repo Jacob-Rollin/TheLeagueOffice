@@ -1516,6 +1516,8 @@ async function reconstructSleeperIrByRoster(
 /** Load host-platform weekly matchup rows keyed by roster + matchup_id. */
 const LIVE_MATCHUP_TTL_MS = 60 * 1000;
 const FINAL_MATCHUP_TTL_MS = 10 * 60 * 1000;
+/** Serve current-week boards from TiDB when fresher than this (avoids host wait). */
+const TIDB_LIVE_MATCHUP_MAX_AGE_MS = 90 * 1000;
 const NFL_STATE_URL = `${BASE}/state/nfl`;
 
 export type LoadMatchupsOptions = {
@@ -1552,9 +1554,28 @@ export async function loadConnectionMatchups(
 
   if (preferCache && isFinalWeek) {
     try {
-      const { loadCachedWeekMatchups } = await import("./league-resync.server");
+      const { loadCachedWeekMatchups, loadTidbWeekMatchups } = await import("./league-resync.server");
       const cached = await loadCachedWeekMatchups(identifier.trim(), safeWeek, connectionId);
       if (cached?.entries?.length) return cached;
+      const tidb = await loadTidbWeekMatchups(identifier.trim(), safeWeek, connectionId);
+      if (tidb?.board.entries.length) return tidb.board;
+    } catch {
+      /* fall through to host */
+    }
+  }
+
+  // Current week: prefer a fresh TiDB snapshot so concurrent viewers skip Sleeper/ESPN.
+  if (preferCache && !isFinalWeek) {
+    try {
+      const { loadTidbWeekMatchups } = await import("./league-resync.server");
+      const tidb = await loadTidbWeekMatchups(identifier.trim(), safeWeek, connectionId);
+      if (
+        tidb?.board.entries.length &&
+        tidb.syncedAtMs > 0 &&
+        Date.now() - tidb.syncedAtMs <= TIDB_LIVE_MATCHUP_MAX_AGE_MS
+      ) {
+        return tidb.board;
+      }
     } catch {
       /* fall through to host */
     }

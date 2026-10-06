@@ -374,9 +374,13 @@ async function buildPayload(week: number): Promise<AreTheyPlayingPayload> {
   return { week, updatedAt: now, lines };
 }
 
-export function loadAreTheyPlaying(week: number): Promise<AreTheyPlayingPayload> {
+export function loadAreTheyPlaying(
+  week: number,
+  opts?: { allowCompute?: boolean },
+): Promise<AreTheyPlayingPayload> {
   const hit = cache.get(week);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
+  const allowCompute = opts?.allowCompute === true;
 
   const value = (async () => {
     const snapKey = `week-${week}`;
@@ -385,7 +389,17 @@ export function loadAreTheyPlaying(week: number): Promise<AreTheyPlayingPayload>
       const cached = await readAggJson<AreTheyPlayingPayload>("agg_are_they_playing", snapKey);
       if (cached?.lines?.length) return cached;
     } catch {
-      /* scrape below */
+      /* scrape below when allowed */
+    }
+    if (!allowCompute) {
+      try {
+        const { tidbConfigured } = await import("@/lib/tidb");
+        if (tidbConfigured()) {
+          return { week, updatedAt: Date.now(), lines: [] };
+        }
+      } catch {
+        /* local/dev without TiDB may still scrape */
+      }
     }
     const payload = await buildPayload(week);
     if (payload.lines.length > 0) {

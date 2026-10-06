@@ -69,13 +69,19 @@ const SCHEMA_STATEMENTS = [
   INDEX idx_sm_league_id (league_id)
 )`,
   `CREATE TABLE IF NOT EXISTS agg_redzone (
-  season VARCHAR(8) NOT NULL,
+  season VARCHAR(64) NOT NULL,
   payload JSON NOT NULL,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (season)
 )`,
   `CREATE TABLE IF NOT EXISTS agg_targets (
-  season VARCHAR(8) NOT NULL,
+  season VARCHAR(64) NOT NULL,
+  payload JSON NOT NULL,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (season)
+)`,
+  `CREATE TABLE IF NOT EXISTS agg_sos (
+  season VARCHAR(16) NOT NULL,
   payload JSON NOT NULL,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (season)
@@ -87,12 +93,15 @@ const SCHEMA_STATEMENTS = [
   PRIMARY KEY (snapshot_key)
 )`,
   `CREATE TABLE IF NOT EXISTS agg_week_plays_meta (
-  season VARCHAR(8) NOT NULL,
+  season VARCHAR(16) NOT NULL,
   week INT NOT NULL,
   payload JSON NOT NULL,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (season, week)
 )`,
+  // Widen keys if an older VARCHAR(8) schema was applied (composite research keys).
+  `ALTER TABLE agg_redzone MODIFY season VARCHAR(64) NOT NULL`,
+  `ALTER TABLE agg_targets MODIFY season VARCHAR(64) NOT NULL`,
 ];
 
 export type WarehouseSeedRow = {
@@ -110,8 +119,20 @@ export async function applyTidbSchema(): Promise<{ applied: number }> {
   if (!tidbConfigured()) throw new Error("DATABASE_URL not configured");
   let applied = 0;
   for (const sql of SCHEMA_STATEMENTS) {
-    await tidbExecute(sql);
-    applied += 1;
+    try {
+      await tidbExecute(sql);
+      applied += 1;
+    } catch (error) {
+      // ALTER on missing table / identical column is non-fatal during bootstrap.
+      const message = error instanceof Error ? error.message : String(error);
+      if (/ALTER TABLE/i.test(sql) && /doesn't exist|1146|42S02|Duplicate|same/i.test(message)) {
+        continue;
+      }
+      if (/already exists|1050/i.test(message)) {
+        continue;
+      }
+      throw error;
+    }
   }
   return { applied };
 }

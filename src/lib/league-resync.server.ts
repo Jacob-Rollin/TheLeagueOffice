@@ -164,6 +164,93 @@ export async function loadCachedWeekMatchups(
   }
 }
 
+export type TidbWeekMatchupsHit = {
+  board: LeagueWeekMatchups;
+  /** Newest synced_at among rows (ms epoch), or 0. */
+  syncedAtMs: number;
+};
+
+/** Read a week board from TiDB `synced_matchups` (delta-sync / persist dual-write). */
+export async function loadTidbWeekMatchups(
+  leagueId: string,
+  week: number,
+  connectionId?: string | null,
+): Promise<TidbWeekMatchupsHit | null> {
+  const cleanLeague = leagueId.trim().slice(0, 64);
+  const safeWeek = Math.max(1, Math.floor(Number(week) || 1));
+  if (!cleanLeague) return null;
+
+  try {
+    const { tidbConfigured, tidbExecute } = await import("@/lib/tidb");
+    if (!tidbConfigured()) return null;
+
+    const params: unknown[] = [cleanLeague, safeWeek];
+    let connClause = "";
+    const conn = connectionId?.trim();
+    if (conn) {
+      connClause = "AND (connection_id = ? OR connection_id IS NULL)";
+      params.push(conn.slice(0, 64));
+    }
+
+    const rows = await tidbExecute<{
+      team_id: number;
+      matchup_id: number | null;
+      roster_points: number;
+      projected_points: number;
+      team_name: string | null;
+      owner_name: string | null;
+      starters: unknown;
+      player_points: unknown;
+      platform: string | null;
+      synced_at: string | Date | null;
+    }>(
+      `SELECT team_id, matchup_id, roster_points, projected_points, team_name, owner_name,
+              starters, player_points, platform, synced_at
+       FROM synced_matchups
+       WHERE league_id = ? AND week = ? ${connClause}
+       ORDER BY team_id ASC
+       LIMIT 64`,
+      params,
+    );
+    if (!rows.length) return null;
+
+    const parseJson = <T,>(raw: unknown, fallback: T): T => {
+      if (raw == null) return fallback;
+      if (typeof raw === "string") {
+        try {
+          return JSON.parse(raw) as T;
+        } catch {
+          return fallback;
+        }
+      }
+      return raw as T;
+    };
+
+    let syncedAtMs = 0;
+    const cacheRows: MatchupCacheRow[] = rows.map((r) => {
+      const at = r.synced_at ? Date.parse(String(r.synced_at)) : 0;
+      if (Number.isFinite(at)) syncedAtMs = Math.max(syncedAtMs, at);
+      return {
+        roster_id: Number(r.team_id),
+        matchup_id: r.matchup_id == null ? null : Number(r.matchup_id),
+        points: Number(r.roster_points) || 0,
+        projected_points: Number(r.projected_points) || 0,
+        team_name: r.team_name,
+        owner_name: r.owner_name,
+        starters: parseJson<string[]>(r.starters, []),
+        player_points: parseJson<Record<string, number>>(r.player_points, {}),
+        platform: r.platform,
+      };
+    });
+
+    const board = matchupsFromCacheRows(safeWeek, cacheRows);
+    if (!board) return null;
+    return { board, syncedAtMs };
+  } catch {
+    return null;
+  }
+}
+
 /** Upsert one week's host board into `weekly_matchups` (fire-and-forget safe). */
 export async function persistWeekMatchups(input: {
   leagueId: string;

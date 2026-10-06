@@ -22,8 +22,12 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
           const { currentSeason } = await import("@/lib/players-build");
           const season = currentSeason();
 
+          // allowCompute: cron is the only path that may gunzip PBP / scrape clubs / fan out SOS.
+          const { applyTidbSchema } = await import("@/lib/tidb-migrate.server");
+          await applyTidbSchema().catch(() => undefined);
+
           const { loadRedZoneStats } = await import("@/lib/redzone.server");
-          const redzone = await loadRedZoneStats(season, 20);
+          const redzone = await loadRedZoneStats(season, 20, null, null, { allowCompute: true });
           report["redzone"] = {
             season: redzone.season,
             maxWeek: redzone.maxWeek,
@@ -31,7 +35,7 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
           };
 
           const { loadMostTargetedPlayers } = await import("@/lib/targets.server");
-          const targets = await loadMostTargetedPlayers(season);
+          const targets = await loadMostTargetedPlayers(season, { allowCompute: true });
           report["targets"] = {
             season: targets.season,
             maxWeek: targets.maxWeek,
@@ -46,8 +50,16 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
             ? ((await stateRes.json()) as { week?: number })
             : { week: 1 };
           const week = Math.max(1, Number(state.week) || 1);
-          const atp = await loadAreTheyPlaying(week);
+          const atp = await loadAreTheyPlaying(week, { allowCompute: true });
           report["areTheyPlaying"] = { week: atp.week, lines: atp.lines.length };
+
+          const { loadSosBoard } = await import("@/lib/players.server");
+          const sos = await loadSosBoard(season, { allowCompute: true });
+          report["sos"] = {
+            season: sos.season,
+            dataThroughWeek: sos.dataThroughWeek,
+            scheduleGames: sos.schedule.length,
+          };
 
           return new Response(JSON.stringify(report), {
             status: 200,
