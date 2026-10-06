@@ -43,7 +43,7 @@ curl -fsSL -X POST "$APP_URL/api/admin/tidb-migrate" \
 You want JSON with `"ok":true` and a `seed.total` / `status.playerWarehouseCount` around **4000+**.
 
 If you get **404**, PR #19 is not on that deployment yet — merge it and wait for Vercel Production.
-If you get **401**, `CRON_SECRET` does not match Vercel.
+If you get **401** / curl exit **22**, GitHub `CRON_SECRET` ≠ Vercel Production `CRON_SECRET` (or Production is missing it). Re-copy from Vercel → Environment Variables → Production → `CRON_SECRET` into GitHub Actions secrets (no quotes).
 If you get **503** `DATABASE_URL not configured`, add the env var to **Production** (not only Preview) and redeploy.
 
 ---
