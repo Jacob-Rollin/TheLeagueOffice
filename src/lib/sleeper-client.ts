@@ -57,22 +57,29 @@ async function mapPool<T, R>(
   return out;
 }
 
-export type NflStateClient = { season: string; week: number };
+export type NflStateClient = {
+  season: string;
+  week: number;
+  /** Sleeper UI slate — often lags `week` by one while scores finalize. */
+  displayWeek: number;
+};
 
 /** Short enough that Tuesday week-roll lands in completed-week metrics quickly. */
 const NFL_STATE_TTL_MS = 10 * 60 * 1000;
 
 export async function fetchNflStateClient(): Promise<NflStateClient> {
-  // v2 busts IndexedDB rows that pinned an older `week` across the roll.
-  return getCached("nfl-state-client-v2", NFL_STATE_TTL_MS, async () => {
+  // v3 includes displayWeek so analytics can close the just-finished slate.
+  return getCached("nfl-state-client-v3", NFL_STATE_TTL_MS, async () => {
     const res = await sleeperFetch("https://api.sleeper.app/v1/state/nfl");
     if (!res.ok) throw new Error(`state ${res.status}`);
     const json = (await res.json()) as Record<string, unknown>;
+    const week = Math.max(1, Number(json["week"] ?? 1) || 1);
+    const displayWeek = Math.max(1, Number(json["display_week"] ?? week) || week);
     return {
       season: String(json["season"] ?? currentSeason()),
-      // Sleeper `week` advances when the slate rolls; use it (not display_week)
-      // so completed weeks include the slate that just finished.
-      week: Math.max(1, Number(json["week"] ?? 1) || 1),
+      // Prefer advanced `week` for live matchups; analytics also reads displayWeek.
+      week,
+      displayWeek,
     };
   });
 }
@@ -273,7 +280,11 @@ export async function fetchGameLogsClient(
   const season = requested && /^\d{4}$/.test(requested) ? requested : current;
   const upperTeam = (team || "").toUpperCase() || "FA";
   const upperPos = (pos || "").toUpperCase() as Pos;
-  const state = await fetchNflStateClient().catch(() => ({ season: current, week: 1 }));
+  const state = await fetchNflStateClient().catch(() => ({
+    season: current,
+    week: 1,
+    displayWeek: 1,
+  }));
 
   const careerYears = includeCareer
     ? [current, String(Number(current) - 1), String(Number(current) - 2)].filter(

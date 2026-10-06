@@ -80,7 +80,7 @@ export type SleeperWeeklyRanks = {
 /** Shared NFL calendar state — RQ + IndexedDB via sleeper-client (browser pool). */
 export function useNflState() {
   return useQuery({
-    queryKey: ["nfl-state", "v4-week"],
+    queryKey: ["nfl-state", "v5-week"],
     staleTime: 10 * 60 * 1000,
     retry: false,
     queryFn: fetchNflStateClient,

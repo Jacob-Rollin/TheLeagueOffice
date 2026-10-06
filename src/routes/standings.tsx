@@ -393,6 +393,7 @@ function StandingsHub() {
   const league = useLeagueAnalytics({ history: tab !== "power", forecast: tab === "actual" });
   const {
     currentWeek,
+    completedThrough,
     completedWeekNumbers,
     historyQueries: historyMatchupQueries,
     historyStamp,

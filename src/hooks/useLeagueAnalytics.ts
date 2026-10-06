@@ -6,6 +6,11 @@ import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import {
+  completedWeekNumberList,
+  completedWeeksThrough,
+  standingsGamesPlayed,
+} from "@/lib/completed-weeks";
 import { getConnectionSettings } from "@/lib/league.functions";
 import { fetchLeagueMatchupsHistory } from "@/lib/league-matchups-cdn";
 import { isPageVisible } from "@/lib/page-visibility";
@@ -44,15 +49,31 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
   const { data: playersPayload } = useSleeperPlayers();
   const nflWeek = useNflState();
   const currentWeek = nflWeek.data?.week ?? null;
+  const displayWeek = nflWeek.data?.displayWeek ?? null;
   const leagueId = activeLeague?.id ?? null;
   const platformLeagueId = activeLeague?.leagueId ?? "";
   const hasLeague = Boolean(platformLeagueId);
   const loadHistory = history || forecast;
 
-  const completedWeekNumbers = useMemo(() => {
-    if (currentWeek == null || currentWeek <= 1) return [] as number[];
-    return Array.from({ length: currentWeek - 1 }, (_, i) => i + 1);
-  }, [currentWeek]);
+  const gamesPlayed = useMemo(() => standingsGamesPlayed(standings?.rows), [standings?.rows]);
+  const completedThrough = useMemo(
+    () =>
+      completedWeeksThrough({
+        nflWeek: currentWeek,
+        displayWeek,
+        gamesPlayed,
+      }),
+    [currentWeek, displayWeek, gamesPlayed],
+  );
+  const completedWeekNumbers = useMemo(
+    () =>
+      completedWeekNumberList({
+        nflWeek: currentWeek,
+        displayWeek,
+        gamesPlayed,
+      }),
+    [currentWeek, displayWeek, gamesPlayed],
+  );
 
   const settingsQuery = useQuery({
     queryKey: ["dashboard-league-settings", leagueId],
@@ -67,8 +88,12 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
 
   const remainingWeekNumbers = useMemo(() => {
     if (currentWeek == null || currentWeek >= playoffStartWeek) return [] as number[];
-    return Array.from({ length: playoffStartWeek - currentWeek }, (_, i) => currentWeek + i);
-  }, [currentWeek, playoffStartWeek]);
+    // Remaining schedule starts after the latest completed slate when that
+    // slate is still the NFL "current" week (standings already include it).
+    const from = Math.max(currentWeek, completedThrough + 1);
+    if (from >= playoffStartWeek) return [] as number[];
+    return Array.from({ length: playoffStartWeek - from }, (_, i) => from + i);
+  }, [currentWeek, completedThrough, playoffStartWeek]);
 
   const historyWeeks = useMemo(() => {
     const weeks = [...completedWeekNumbers];
@@ -78,7 +103,7 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
 
   // CDN/TiDB first; Fluid backfill for weeks still missing (cold TiDB / unsynced history).
   const allMatchups = useQuery({
-    queryKey: ["league-matchups-history", leagueId, historyWeeks.join(","), currentWeek],
+    queryKey: ["league-matchups-history", leagueId, historyWeeks.join(","), currentWeek, completedThrough],
     enabled: hasLeague && loadHistory && historyWeeks.length > 0,
     retry: false,
     staleTime: 10 * 60 * 1000,
@@ -89,6 +114,7 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
         platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
         weeks: historyWeeks,
         currentWeek,
+        completedThrough,
         ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
         ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
         ...(leagueId ? { connectionId: leagueId } : {}),
@@ -188,6 +214,7 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
 
   return {
     currentWeek,
+    completedThrough,
     nflWeekLoading: nflWeek.isLoading,
     completedWeekNumbers,
     historyQueries,
