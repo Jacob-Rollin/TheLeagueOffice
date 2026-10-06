@@ -604,7 +604,8 @@ function StatsTab({
 
 function usePlayerLogs(id: string, team: string | null | undefined, pos: string | null | undefined) {
   return useQuery({
-    queryKey: ["player-logs", id, "current", team ?? "FA", pos ?? ""],
+    // v2: past-week Proj from shared week projection bundles.
+    queryKey: ["player-logs", id, "current", team ?? "FA", pos ?? "", "proj-v2"],
     enabled: Boolean(id && pos),
     queryFn: () =>
       fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", null, { includeCareer: false }),
@@ -613,7 +614,7 @@ function usePlayerLogs(id: string, team: string | null | undefined, pos: string 
   });
 }
 
-/** Upcoming weeks with Sleeper's projected stat line, from the current NFL week on. */
+/** Season weeks with a Sleeper projected line (played + upcoming). */
 function WeeklyProjections({
   id,
   team,
@@ -626,9 +627,10 @@ function WeeklyProjections({
   format: Format;
 }) {
   const { data, isLoading } = usePlayerLogs(id, team, pos);
-  const { data: nfl } = useNflState();
-  const currentWeek = nfl?.week ?? 1;
-  const weeks = (data?.logs ?? []).filter((l) => l.week >= currentWeek && !l.played);
+  // Include past weeks that have a proj line (game-log / proj tab parity).
+  const weeks = (data?.logs ?? []).filter(
+    (l) => l.isBye || l.proj != null || (l.projRaw && Object.keys(l.projRaw).length > 0) || !l.played,
+  );
 
   if (isLoading) return <p className="px-4 py-6 text-center text-sm text-m-muted">Loading weekly projections...</p>;
   if (!weeks.length) return null;
