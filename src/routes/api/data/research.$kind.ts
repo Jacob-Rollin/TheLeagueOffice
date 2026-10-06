@@ -12,6 +12,9 @@ function parseFormat(raw: string | null): Format {
 /**
  * CDN-cached research aggregates. Read-only TiDB SELECTs — never compute/seed.
  * Kinds: fpa | matchups-guide | sos-analysis | fantasy-leaders | sos-board
+ *
+ * Cold / empty snaps return **200 + no-store** (not 503) so Vercel Observability
+ * does not count expected warm-gaps as function errors.
  */
 export const Route = createFileRoute("/api/data/research/$kind")({
   server: {
@@ -38,57 +41,37 @@ export const Route = createFileRoute("/api/data/research/$kind")({
 
           if (kind === "fpa") {
             const payload = await players.loadFantasyPointsAllowed(season, format);
-            if (!payload.rows.length) {
-              return jsonResponse(
-                { ok: false, error: "fpa snap not warm", format },
-                { status: 503, cache: "no-store" },
-              );
-            }
-            return jsonResponse(payload);
+            return jsonResponse(payload, {
+              cache: payload.rows.length ? undefined : "no-store",
+            });
           }
 
           if (kind === "matchups-guide") {
             const payload = await players.loadMatchupsGuide(week, format);
-            if (!Object.keys(payload.games).length && !Object.keys(payload.defense).length) {
-              return jsonResponse(
-                { ok: false, error: "matchups-guide snap not warm", week, format },
-                { status: 503, cache: "no-store" },
-              );
-            }
-            return jsonResponse(payload);
+            const warm =
+              Object.keys(payload.games).length > 0 || Object.keys(payload.defense).length > 0;
+            return jsonResponse(payload, { cache: warm ? undefined : "no-store" });
           }
 
           if (kind === "sos-analysis") {
             const payload = await players.loadSosAnalysis(format);
-            if (!payload.rows.length) {
-              return jsonResponse(
-                { ok: false, error: "sos-analysis snap not warm", format },
-                { status: 503, cache: "no-store" },
-              );
-            }
-            return jsonResponse(payload);
+            return jsonResponse(payload, {
+              cache: payload.rows.length ? undefined : "no-store",
+            });
           }
 
           if (kind === "fantasy-leaders") {
             const payload = await players.loadFantasyLeaders(season);
-            if (!payload.rows.length) {
-              return jsonResponse(
-                { ok: false, error: "fantasy-leaders snap not warm", season: payload.season },
-                { status: 503, cache: "no-store" },
-              );
-            }
-            return jsonResponse(payload);
+            return jsonResponse(payload, {
+              cache: payload.rows.length ? undefined : "no-store",
+            });
           }
 
           if (kind === "sos-board") {
             const payload = await players.loadSosBoard(season);
-            if (!payload.schedule.length) {
-              return jsonResponse(
-                { ok: false, error: "sos-board snap not warm", season: payload.season },
-                { status: 503, cache: "no-store" },
-              );
-            }
-            return jsonResponse(payload);
+            return jsonResponse(payload, {
+              cache: payload.schedule.length ? undefined : "no-store",
+            });
           }
 
           return jsonResponse(
