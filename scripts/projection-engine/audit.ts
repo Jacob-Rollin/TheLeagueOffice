@@ -77,8 +77,14 @@ function byPosition(rows: AccuracyRow[]): Partial<Record<Pos, Summary>> {
   return out;
 }
 
-export async function runAudit(opts: { season: number; dryRun: boolean; week?: number }): Promise<void> {
-  const { season, dryRun } = opts;
+export async function runAudit(opts: {
+  season: number;
+  dryRun: boolean;
+  week?: number;
+  /** When false, skip weeks already present in the accuracy file (hourly catch-up). */
+  regrade?: boolean;
+}): Promise<void> {
+  const { season, dryRun, regrade = true } = opts;
   const nowIso = new Date().toISOString();
   const locksName = GIST_FILES.locks(season);
   const accName = GIST_FILES.accuracy(season);
@@ -109,6 +115,10 @@ export async function runAudit(opts: { season: number; dryRun: boolean; week?: n
   const graded: number[] = [];
 
   for (const week of weeks) {
+    if (!regrade && acc.weeks[String(week)]) {
+      console.log(`[audit] week ${week}: already graded, skipping (pass regrade to refresh)`);
+      continue;
+    }
     const games = await loadWeekGames(season, week, []);
     const list = [...new Set(games.values())];
     if (!list.length || list.some((g) => g.state !== "post")) {
