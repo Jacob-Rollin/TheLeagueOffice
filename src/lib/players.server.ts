@@ -2993,20 +2993,18 @@ async function buildSeasonLogsForPlayer(
       .map((w) => Number(w))
       .filter((w) => Number.isFinite(w) && raw[String(w)]?.stats),
   );
-  const currentWeek =
-    state && state.season === season && state.seasonType === "regular"
-      ? Math.min(18, Math.max(1, state.week))
-      : 18;
+  // Full 1–18 for current-season projs (played + upcoming) so game-log Proj
+  // columns and the Projections tab keep past-week lines. Bundles are memoized.
   const projWeeks = includeProjections
-    ? Array.from({ length: 18 }, (_, i) => i + 1).filter(
-        (w) => !playedWeeks.has(w) && w >= currentWeek,
-      )
+    ? Array.from({ length: 18 }, (_, i) => i + 1)
     : [];
   const projByWeek = includeProjections
     ? await playerWeekProjections(id, season, projWeeks).catch(
         () => new Map<number, WeekProjectionBundle>(),
       )
     : new Map<number, WeekProjectionBundle>();
+  void playedWeeks;
+  void state;
   const byeWeek = byeByTeam.get(player.team.toUpperCase()) ?? null;
   const byWeek = new Map<number, GameLog>();
   for (const [wk, entry] of Object.entries(raw)) {
