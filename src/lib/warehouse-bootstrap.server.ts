@@ -43,49 +43,6 @@ export type WarehouseIngestReport = {
   bytes?: number;
 };
 
-/**
- * One-shot: if TiDB has no warehouse rows (or missing table), apply schema +
- * seed from Supabase brain so `/api/data/players-export` works without a
- * separate manual migrate call.
- */
-async function ensureTidbWarehouseSeeded(): Promise<{
-  migrated: boolean;
-  count: number;
-  detail?: string;
-}> {
-  const {
-    applyTidbSchema,
-    loadSeedRowsFromSupabase,
-    seedPlayerWarehouse,
-    tidbWarehouseStatus,
-  } = await import("@/lib/tidb-migrate.server");
-
-  try {
-    const status = await tidbWarehouseStatus();
-    if (status.playerWarehouseCount >= 100) {
-      return { migrated: false, count: status.playerWarehouseCount };
-    }
-  } catch {
-    // Table missing or first connect — fall through to migrate.
-  }
-
-  await applyTidbSchema();
-  const loaded = await loadSeedRowsFromSupabase();
-  if (loaded.rows.length < 100) {
-    return {
-      migrated: false,
-      count: loaded.rows.length,
-      detail: `seed source too small (${loaded.rows.length}) from ${loaded.source}`,
-    };
-  }
-  const seeded = await seedPlayerWarehouse(loaded.rows);
-  return {
-    migrated: true,
-    count: seeded.total,
-    detail: `seeded ${seeded.written} from ${loaded.source}`,
-  };
-}
-
 export async function runScheduledWarehouseIngest(opts?: {
   force?: boolean;
 }): Promise<WarehouseIngestReport> {
@@ -101,6 +58,7 @@ export async function runScheduledWarehouseIngest(opts?: {
     }
 
     if (usingTidb) {
+      const { ensureTidbWarehouseSeeded } = await import("@/lib/tidb-migrate.server");
       const boot = await ensureTidbWarehouseSeeded();
       if (boot.migrated) {
         console.info(`[warehouse-ingest] auto-migrate ${boot.detail} count=${boot.count}`);

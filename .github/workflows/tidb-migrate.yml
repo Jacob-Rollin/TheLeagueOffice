@@ -42,10 +42,8 @@ jobs:
             exit 1
           fi
 
-          # Apex theleagueoffice.app 308s to www; without -L curl only sees "Redirecting..."
-          # and never runs migrate. Normalize to the canonical host when possible.
+          # Apex theleagueoffice.app 308s to www; without following redirects curl only sees "Redirecting..."
           BASE="${APP_URL%/}"
-          BASE="${BASE%/}"
           case "$BASE" in
             http://theleagueoffice.app|https://theleagueoffice.app)
               BASE="https://www.theleagueoffice.app"
@@ -57,50 +55,57 @@ jobs:
               ;;
           esac
 
-          # Do not use curl -f here: we need the JSON body on 401/500 to diagnose.
-          curl_json() {
+          request() {
+            local method="$1"; shift
+            local url="$1"; shift
             local code
-            code="$(curl -sS -L --post301 --post302 --post303 -o /tmp/curl-body.txt -w "%{http_code}" "$@")"
+            if [ "$method" = "POST" ]; then
+              code="$(curl -sS -L --post301 --post302 --post303 -o /tmp/curl-body.txt -w "%{http_code}" \
+                -X POST "$url" "$@")"
+            else
+              code="$(curl -sS -L -o /tmp/curl-body.txt -w "%{http_code}" "$url" "$@")"
+            fi
+            echo "HTTP $code"
             cat /tmp/curl-body.txt
             echo ""
-            echo "HTTP $code"
             if [ "$code" = "401" ] || [ "$code" = "403" ]; then
-              echo "::error::Auth failed (HTTP $code). Copy CRON_SECRET from Vercel → Project → Settings → Environment Variables (Production) into GitHub → Settings → Secrets → Actions. Values must match exactly (no quotes, no spaces)."
+              echo "::error::Auth failed (HTTP $code). Copy CRON_SECRET from Vercel → Project → Settings → Environment Variables (Production) into GitHub → Settings → Secrets and variables → Actions. Must match exactly — no quotes, no leading/trailing spaces, Production env (not Preview-only)."
               exit 1
             fi
             if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
               echo "::error::Request failed with HTTP $code — see body above"
               exit 1
             fi
+            if grep -q 'Redirecting' /tmp/curl-body.txt; then
+              echo "::error::Got redirect body instead of JSON — set APP_URL=https://www.theleagueoffice.app"
+              exit 1
+            fi
           }
 
           if [ "$ACTION" = "status" ]; then
             echo "GET $BASE/api/admin/tidb-migrate"
-            curl_json -H "Authorization: Bearer $CRON_SECRET" \
-              "$BASE/api/admin/tidb-migrate" | tee /tmp/tidb-status.json
-            grep -q '"ok":true' /tmp/curl-body.txt || {
-              echo "::error::status did not return ok:true — check CRON_SECRET / deploy"
-              exit 1
-            }
+            request GET "$BASE/api/admin/tidb-migrate" \
+              -H "Authorization: Bearer $CRON_SECRET"
           else
             echo "POST $BASE/api/admin/tidb-migrate action=$ACTION"
-            curl_json -X POST "$BASE/api/admin/tidb-migrate" \
+            request POST "$BASE/api/admin/tidb-migrate" \
               -H "Authorization: Bearer $CRON_SECRET" \
               -H "Content-Type: application/json" \
-              -d "{\"action\":\"$ACTION\"}" | tee /tmp/tidb-migrate.json
-            grep -q '"ok":true' /tmp/curl-body.txt || {
-              echo "::error::migrate did not return ok:true — see JSON above (DATABASE_URL or seed source)"
-              exit 1
-            }
+              -d "{\"action\":\"$ACTION\"}"
           fi
+
+          grep -q '"ok":true' /tmp/curl-body.txt || {
+            echo "::error::migrate/status did not return ok:true — see JSON above (DATABASE_URL or seed source)"
+            exit 1
+          }
 
           echo ""
           echo "GET $BASE/api/data/players-export (first 240 bytes)"
           EXPORT_CODE="$(curl -sS -L -o /tmp/export-body.txt -w "%{http_code}" "$BASE/api/data/players-export")"
           EXPORT="$(cat /tmp/export-body.txt)"
+          echo "HTTP $EXPORT_CODE"
           echo "$EXPORT" | head -c 240
           echo ""
-          echo "HTTP $EXPORT_CODE"
           echo "$EXPORT" | grep -q '"ok":true' || {
             echo "::error::players-export did not return ok:true — migrate may have failed; see JSON above"
             exit 1

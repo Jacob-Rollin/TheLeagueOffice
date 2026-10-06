@@ -16,7 +16,14 @@ URL path to `/league-office-native` in the TiDB console copy when you can.
 
 ## Step 3 — Run migrate (pick ONE)
 
-### Option A — GitHub Actions (easiest)
+### Option A — Open players-export (no secret needed)
+After Production has this build, open:
+
+`https://www.theleagueoffice.app/api/data/players-export`
+
+The first request auto-creates tables and seeds from the Supabase brain. Wait for JSON starting with `{"ok":true,"v":7`.
+
+### Option B — GitHub Actions
 1. Open **Actions** → **TiDB Warehouse Migrate**.
 2. Click **Run workflow**.
 3. Leave action = `migrate`.
@@ -27,7 +34,7 @@ If the workflow errors about missing secrets, add under
 - `APP_URL` = `https://www.theleagueoffice.app`
 - `CRON_SECRET` = same value as Vercel → Settings → Environment Variables → `CRON_SECRET`
 
-### Option B — Terminal (Mac/Linux)
+### Option C — Terminal (Mac/Linux)
 Copy your `CRON_SECRET` from Vercel, then run:
 
 ```sh

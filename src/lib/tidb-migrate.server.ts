@@ -161,6 +161,63 @@ export async function seedPlayerWarehouse(
   return { written, total: Number(countRows[0]?.c ?? written) };
 }
 
+let ensureSeedPromise: Promise<{
+  migrated: boolean;
+  count: number;
+  detail?: string;
+}> | null = null;
+
+/**
+ * One-shot: if TiDB has no warehouse rows (or missing table), apply schema +
+ * seed from Supabase brain. Safe to call from export/cron; concurrent callers
+ * share one in-flight migrate.
+ */
+export async function ensureTidbWarehouseSeeded(): Promise<{
+  migrated: boolean;
+  count: number;
+  detail?: string;
+}> {
+  if (!tidbConfigured()) {
+    return { migrated: false, count: 0, detail: "DATABASE_URL not configured" };
+  }
+  if (ensureSeedPromise) return ensureSeedPromise;
+
+  ensureSeedPromise = (async () => {
+    try {
+      try {
+        const status = await tidbWarehouseStatus();
+        if (status.playerWarehouseCount >= 100) {
+          return { migrated: false, count: status.playerWarehouseCount };
+        }
+      } catch {
+        // Table missing or first connect — fall through to migrate.
+      }
+
+      await applyTidbSchema();
+      const loaded = await loadSeedRowsFromSupabase();
+      if (loaded.rows.length < 100) {
+        ensureSeedPromise = null; // allow retry
+        return {
+          migrated: false,
+          count: loaded.rows.length,
+          detail: `seed source too small (${loaded.rows.length}) from ${loaded.source}`,
+        };
+      }
+      const seeded = await seedPlayerWarehouse(loaded.rows);
+      return {
+        migrated: true,
+        count: seeded.total,
+        detail: `seeded ${seeded.written} from ${loaded.source}`,
+      };
+    } catch (error) {
+      ensureSeedPromise = null; // allow retry after hard failure
+      throw error;
+    }
+  })();
+
+  return ensureSeedPromise;
+}
+
 export async function tidbWarehouseStatus(): Promise<{
   configured: boolean;
   playerWarehouseCount: number;
