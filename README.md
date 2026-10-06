@@ -21,7 +21,7 @@ A fantasy football headquarters for drafting, managing, and researching your lea
 - [Supabase](https://supabase.com) for auth and native league ops:
   - **Database A**: users, profiles, leagues, rosters, lineups, transactions, articles, and Hall of Fame records
 - [TiDB Cloud Serverless](https://www.pingcap.com/tidb-cloud/) (`DATABASE_URL`) for `player_warehouse`, synced league snapshots, and research aggregates (CDN-cached `/api/data/*` routes)
-- Deployed on [Vercel](https://vercel.com) with GitHub Actions for tiered background sync
+- Deployed on [Vercel](https://vercel.com) with GitHub Actions for tiered background sync (Cloudflare Workers abandoned)
 
 ## Getting started
 
