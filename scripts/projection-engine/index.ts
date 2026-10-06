@@ -5,7 +5,8 @@ import { runUpdate } from "./update";
 /**
  * Usage: tsx scripts/projection-engine/index.ts <update|audit> [--dry-run] [--season=2026] [--week=5] [--now=ISO]
  * Publishing needs GIST_ID and GIST_TOKEN; --dry-run writes to PE_OUT_DIR instead.
- * `audit --week=N` grades only week N; plain `audit` grades every finished locked week.
+ * `audit --week=N` grades only week N; plain `audit` re-grades every finished locked week.
+ * `update` also catch-up grades any finished locked week that is still missing from accuracy.
  */
 async function main() {
   const [mode = "update", ...rest] = process.argv.slice(2);
@@ -20,7 +21,12 @@ async function main() {
 
   if (mode === "audit") {
     // Runs after the regular season too, so Week 18 still gets graded.
-    await runAudit({ season, dryRun, ...(flag("week") ? { week: Number(flag("week")) } : {}) });
+    await runAudit({
+      season,
+      dryRun,
+      regrade: true,
+      ...(flag("week") ? { week: Number(flag("week")) } : {}),
+    });
     return;
   }
   if (mode !== "update") throw new Error(`unknown mode "${mode}"`);
@@ -37,6 +43,9 @@ async function main() {
   }
   const now = flag("now") ? Date.parse(flag("now")!) : undefined;
   await runUpdate({ season, week, dryRun, ...(now ? { now } : {}) });
+  // GitHub Actions schedule crons are often delayed or skipped at :00; catch up here so a
+  // missed Tuesday audit still grades as soon as an hourly update sees final scores.
+  await runAudit({ season, dryRun, regrade: false });
 }
 
 main().catch((err) => {

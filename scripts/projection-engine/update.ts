@@ -224,8 +224,9 @@ export async function runUpdate(opts: RunOptions): Promise<void> {
     const game = games.get(locked.team);
     if (!players[id] && game && !hasStarted(game, now)) delete weekLocks[id];
   }
+  // Keep enough history for a missed Tuesday audit (hourly catch-up grades finished weeks).
   for (const key of Object.keys(locks.weeks)) {
-    if (Number(key) < week - 2) delete locks.weeks[key];
+    if (Number(key) < week - 4) delete locks.weeks[key];
   }
   const locksHash = sha1(locks.weeks);
 
