@@ -414,8 +414,8 @@ function round2(n: number): number {
 const loadRosterMap = memo<Map<string, RosterHit>>(12 * HOUR, async (season) => {
   const res = await fetch(ROSTER_URL(season), {
     headers: { accept: "*/*", "user-agent": "TheLeagueOffice/1.0" },
-  });
-  if (!res.ok) throw new Error(`Roster upstream ${res.status}`);
+  }).catch(() => null);
+  if (!res?.ok) return new Map();
   const text = await res.text();
   const lines = text.split(/\r?\n/);
   if (lines.length < 2) return new Map();
@@ -444,12 +444,12 @@ const loadRosterMap = memo<Map<string, RosterHit>>(12 * HOUR, async (season) => 
 const loadSeasonWeekPlays = memo<Map<number, RawPlay[]>>(6 * HOUR, async (seasonKey) => {
   const res = await fetch(PBP_URL(seasonKey), {
     headers: { accept: "*/*", "user-agent": "TheLeagueOffice/1.0" },
-  });
-  if (!res.ok) throw new Error(`PBP upstream ${res.status}`);
+  }).catch(() => null);
+  const byWeek = new Map<number, RawPlay[]>();
+  if (!res?.ok) return byWeek;
   const { gunzipSync } = await import("node:zlib");
   const csv = gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8");
   const lines = csv.split(/\r?\n/);
-  const byWeek = new Map<number, RawPlay[]>();
   if (lines.length < 2) return byWeek;
 
   const header = parseCsvLine(lines[0]!);

@@ -5,11 +5,11 @@ import { liveRefreshMs, useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { getConnectionMatchups } from "@/lib/league.functions";
 
 /**
- * Lineup edits on the host happen any time before kickoff, so the current week
- * keeps a 45s floor even between games. These calls never touch Supabase and
- * hidden tabs don't poll.
+ * During live games, keep a 45s ceiling so lineup/score shifts show quickly.
+ * Between games / all-final, honor the slower liveRefreshMs (2–10m) so we do
+ * not hammer Fluid with getConnectionMatchups every 45s.
  */
-const LINEUP_REFRESH_MS = 45 * 1000;
+const LIVE_LINEUP_CEILING_MS = 45 * 1000;
 
 /** Weekly host matchup rows for the active synced league. */
 export function useActiveMatchups(week: number | null | undefined) {
@@ -20,7 +20,13 @@ export function useActiveMatchups(week: number | null | undefined) {
   const { progressByNflTeam, currentWeek } = useNflGameProgress(safeWeek);
   const isPastWeek = safeWeek != null && currentWeek != null && safeWeek < currentWeek;
   const liveMs = liveRefreshMs(safeWeek, currentWeek, progressByNflTeam);
-  const refetchInterval = liveMs === false ? false : Math.min(liveMs, LINEUP_REFRESH_MS);
+  const anyInProgress = [...(progressByNflTeam?.values() ?? [])].some((g) => g.phase === "in");
+  const refetchInterval =
+    liveMs === false
+      ? false
+      : anyInProgress
+        ? Math.min(liveMs, LIVE_LINEUP_CEILING_MS)
+        : liveMs;
 
   const query = useQuery({
     queryKey: ["active-matchups", id, safeWeek],

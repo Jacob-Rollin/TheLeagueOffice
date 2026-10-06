@@ -29,7 +29,8 @@ import {
   type InjuryReportLine,
 } from "@/lib/are-they-playing";
 import { currentSeason, fetchSchedule, type Player } from "@/lib/players-build";
-import { getAreTheyPlaying, getLiveInjuryStatuses } from "@/lib/players.functions";
+import { getLiveInjuryStatuses } from "@/lib/players.functions";
+import { fetchResearchAreTheyPlaying } from "@/lib/research-cdn";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 import { buildScheduleByTeam, formatOppLabel } from "@/lib/wire-matchups";
@@ -129,7 +130,7 @@ function AreTheyPlayingPage() {
     staleTime: 10 * 60 * 1000,
     refetchInterval: 15 * 60 * 1000,
     retry: 1,
-    queryFn: () => getAreTheyPlaying({ data: { week: week ?? 1 } }),
+    queryFn: () => fetchResearchAreTheyPlaying(week ?? 1),
   });
 
   const liveInjuries = useQuery({

@@ -1431,6 +1431,8 @@ async function sleeperLateAcquisitionsByRoster(
 /**
  * Replay Sleeper IR slot moves through `throughWeek` so past matchups can
  * place reserve players correctly (matchup payloads omit historical reserve).
+ * Transaction weeks are cached (10m) so browsing past matchups does not
+ * re-fan every `1..W` Sleeper txn endpoint on each open.
  */
 async function reconstructSleeperIrByRoster(
   leagueId: string,
@@ -1439,9 +1441,12 @@ async function reconstructSleeperIrByRoster(
   const irByRoster = new Map<number, Set<string>>();
   const end = Math.max(1, Math.min(18, Math.floor(throughWeek) || 1));
   const weeks = Array.from({ length: end }, (_, i) => i + 1);
+  const TXN_TTL_MS = 10 * 60 * 1000;
 
   const lists = await Promise.all(
-    weeks.map((w) => json<SleeperTxn[]>(`${BASE}/league/${leagueId}/transactions/${w}`)),
+    weeks.map((w) =>
+      cachedJson<SleeperTxn[]>(`${BASE}/league/${leagueId}/transactions/${w}`, TXN_TTL_MS),
+    ),
   );
 
   const events: { at: number; rosterId: number; playerId: string; onIr: boolean }[] = [];
@@ -1485,13 +1490,14 @@ async function reconstructSleeperIrByRoster(
 
       // Dropped / traded-away players leave IR with the roster.
       if (isTrade || isWaiver || isFreeAgent) {
+        const addKeys = new Set(
+          adds.map(([pid, rid]) => `${pid}|${Number(rid)}`),
+        );
         for (const [playerId, rosterRaw] of drops) {
           const rosterId = Number(rosterRaw);
           if (!playerId || !Number.isFinite(rosterId) || rosterId <= 0) continue;
           // Same player in adds+drops on one roster is a slot shuffle, not a cut.
-          if (adds.some(([pid, rid]) => pid === playerId && Number(rid) === rosterId)) {
-            continue;
-          }
+          if (addKeys.has(`${playerId}|${rosterId}`)) continue;
           events.push({ at, rosterId, playerId: String(playerId), onIr: false });
         }
       }

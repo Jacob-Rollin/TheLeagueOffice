@@ -9,9 +9,16 @@ function parseFormat(raw: string | null): Format {
   return raw === "std" || raw === "ppr" ? raw : "half";
 }
 
+function parseWeekBound(raw: string | null): number | null {
+  if (raw == null) return null;
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) && n >= 1 && n <= 22 ? n : null;
+}
+
 /**
  * CDN-cached research aggregates. Read-only TiDB SELECTs — never compute/seed.
  * Kinds: fpa | matchups-guide | sos-analysis | fantasy-leaders | sos-board
+ *        | redzone | targets | are-they-playing
  *
  * Cold / empty snaps return **200 + no-store** (not 503) so Vercel Observability
  * does not count expected warm-gaps as function errors.
@@ -37,40 +44,79 @@ export const Route = createFileRoute("/api/data/research/$kind")({
           weekN != null && Number.isFinite(weekN) && weekN >= 1 && weekN <= 18 ? weekN : null;
 
         try {
-          const players = await import("@/lib/players.server");
+          if (
+            kind === "fpa" ||
+            kind === "matchups-guide" ||
+            kind === "sos-analysis" ||
+            kind === "fantasy-leaders" ||
+            kind === "sos-board"
+          ) {
+            const players = await import("@/lib/players.server");
 
-          if (kind === "fpa") {
-            const payload = await players.loadFantasyPointsAllowed(season, format);
-            return jsonResponse(payload, {
-              cache: payload.rows.length ? undefined : "no-store",
-            });
-          }
+            if (kind === "fpa") {
+              const payload = await players.loadFantasyPointsAllowed(season, format);
+              return jsonResponse(payload, {
+                cache: payload.rows.length ? undefined : "no-store",
+              });
+            }
 
-          if (kind === "matchups-guide") {
-            const payload = await players.loadMatchupsGuide(week, format);
-            const warm =
-              Object.keys(payload.games).length > 0 || Object.keys(payload.defense).length > 0;
-            return jsonResponse(payload, { cache: warm ? undefined : "no-store" });
-          }
+            if (kind === "matchups-guide") {
+              const payload = await players.loadMatchupsGuide(week, format);
+              const warm =
+                Object.keys(payload.games).length > 0 || Object.keys(payload.defense).length > 0;
+              return jsonResponse(payload, { cache: warm ? undefined : "no-store" });
+            }
 
-          if (kind === "sos-analysis") {
-            const payload = await players.loadSosAnalysis(format);
-            return jsonResponse(payload, {
-              cache: payload.rows.length ? undefined : "no-store",
-            });
-          }
+            if (kind === "sos-analysis") {
+              const payload = await players.loadSosAnalysis(format);
+              return jsonResponse(payload, {
+                cache: payload.rows.length ? undefined : "no-store",
+              });
+            }
 
-          if (kind === "fantasy-leaders") {
-            const payload = await players.loadFantasyLeaders(season);
-            return jsonResponse(payload, {
-              cache: payload.rows.length ? undefined : "no-store",
-            });
-          }
+            if (kind === "fantasy-leaders") {
+              const payload = await players.loadFantasyLeaders(season);
+              return jsonResponse(payload, {
+                cache: payload.rows.length ? undefined : "no-store",
+              });
+            }
 
-          if (kind === "sos-board") {
             const payload = await players.loadSosBoard(season);
             return jsonResponse(payload, {
               cache: payload.schedule.length ? undefined : "no-store",
+            });
+          }
+
+          if (kind === "redzone") {
+            const { loadRedZoneStats } = await import("@/lib/redzone.server");
+            const yardlineRaw = Number(url.searchParams.get("yardline") ?? 20);
+            const yardline =
+              yardlineRaw === 5 || yardlineRaw === 10 || yardlineRaw === 15 || yardlineRaw === 20
+                ? yardlineRaw
+                : 20;
+            const payload = await loadRedZoneStats(
+              season,
+              yardline,
+              parseWeekBound(url.searchParams.get("weekFrom")),
+              parseWeekBound(url.searchParams.get("weekTo")),
+            );
+            const warm = Object.values(payload.rowsByPos).some((rows) => rows.length > 0);
+            return jsonResponse(payload, { cache: warm ? undefined : "no-store" });
+          }
+
+          if (kind === "targets") {
+            const { loadMostTargetedPlayers } = await import("@/lib/targets.server");
+            const payload = await loadMostTargetedPlayers(season);
+            return jsonResponse(payload, {
+              cache: payload.rows.length ? undefined : "no-store",
+            });
+          }
+
+          if (kind === "are-they-playing") {
+            const { loadAreTheyPlaying } = await import("@/lib/are-they-playing.server");
+            const payload = await loadAreTheyPlaying(week ?? 1);
+            return jsonResponse(payload, {
+              cache: payload.lines.length ? undefined : "no-store",
             });
           }
 
@@ -79,7 +125,16 @@ export const Route = createFileRoute("/api/data/research/$kind")({
               ok: false,
               error: "unknown research kind",
               kind,
-              known: ["fpa", "matchups-guide", "sos-analysis", "fantasy-leaders", "sos-board"],
+              known: [
+                "fpa",
+                "matchups-guide",
+                "sos-analysis",
+                "fantasy-leaders",
+                "sos-board",
+                "redzone",
+                "targets",
+                "are-they-playing",
+              ],
             },
             { status: 404, cache: "no-store" },
           );
