@@ -73,17 +73,20 @@ export async function fetchSleeperLeagueScoringClient(
   const clean = String(leagueId ?? "").trim();
   if (!/^\d{6,}$/.test(clean)) return null;
 
-  return getCached(`sleeper-scoring-v1:${clean}`, DAY, async () => {
-    const league = await sleeperJson<{
-      league_id?: string;
-      scoring_settings?: Record<string, unknown>;
-    }>(`${SLEEPER}/league/${encodeURIComponent(clean)}`);
-    const raw = league?.scoring_settings;
-    if (!raw || typeof raw !== "object") {
-      return { format: "half" as const, map: defaultScoringMap("half"), source: "default" as const };
-    }
-    return mapFromSleeperSettings(raw, clean);
-  });
+  try {
+    return await getCached(`sleeper-scoring-v2:${clean}`, DAY, async () => {
+      const league = await sleeperJson<{
+        league_id?: string;
+        scoring_settings?: Record<string, unknown>;
+      }>(`${SLEEPER}/league/${encodeURIComponent(clean)}`);
+      const raw = league?.scoring_settings;
+      // Throw so we do not IndexedDB-cache a half-PPR default for a day.
+      if (!raw || typeof raw !== "object") throw new Error("scoring_settings missing");
+      return mapFromSleeperSettings(raw, clean);
+    });
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchLeagueScoringPreferred(input: {
@@ -95,7 +98,9 @@ export async function fetchLeagueScoringPreferred(input: {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
   if (platform === "sleeper") {
     const client = await fetchSleeperLeagueScoringClient(input.identifier).catch(() => null);
-    if (client?.map && Object.keys(client.map).length > 0) return client;
+    if (client?.source === "sleeper" && client.map && Object.keys(client.map).length > 0) {
+      return client;
+    }
   }
   const { getLeagueScoring } = await import("@/lib/scoring.functions");
   return getLeagueScoring({

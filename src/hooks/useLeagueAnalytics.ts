@@ -7,7 +7,8 @@ import { useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { getConnectionSettings } from "@/lib/league.functions";
-import { fetchLeagueAllMatchupsCdn } from "@/lib/league-matchups-cdn";
+import { fetchLeagueMatchupsHistory } from "@/lib/league-matchups-cdn";
+import { isPageVisible } from "@/lib/page-visibility";
 import { fetchSnapRestOfSeason, fetchSnapStartingSlotRanks } from "@/lib/snap-cdn";
 import { computeStandingsAnalytics, type TeamAnalytics } from "@/lib/standings-analytics";
 
@@ -53,17 +54,6 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
     return Array.from({ length: currentWeek - 1 }, (_, i) => i + 1);
   }, [currentWeek]);
 
-  const allMatchups = useQuery({
-    queryKey: ["league-matchups-cdn-all", leagueId],
-    enabled: hasLeague && loadHistory,
-    retry: false,
-    staleTime: 10 * 60 * 1000,
-    refetchIntervalInBackground: false,
-    queryFn: () => fetchLeagueAllMatchupsCdn(platformLeagueId),
-  });
-  const historyLoading = allMatchups.isLoading;
-  const historyStamp = `${allMatchups.dataUpdatedAt}:${allMatchups.data?.size ?? 0}`;
-
   const settingsQuery = useQuery({
     queryKey: ["dashboard-league-settings", leagueId],
     enabled: hasLeague && forecast,
@@ -79,6 +69,33 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
     if (currentWeek == null || currentWeek >= playoffStartWeek) return [] as number[];
     return Array.from({ length: playoffStartWeek - currentWeek }, (_, i) => currentWeek + i);
   }, [currentWeek, playoffStartWeek]);
+
+  const historyWeeks = useMemo(() => {
+    const weeks = [...completedWeekNumbers];
+    if (forecast) weeks.push(...remainingWeekNumbers);
+    return weeks;
+  }, [completedWeekNumbers, remainingWeekNumbers, forecast]);
+
+  // CDN/TiDB first; Fluid backfill for weeks still missing (cold TiDB / unsynced history).
+  const allMatchups = useQuery({
+    queryKey: ["league-matchups-history", leagueId, historyWeeks.join(",")],
+    enabled: hasLeague && loadHistory && historyWeeks.length > 0,
+    retry: false,
+    staleTime: 10 * 60 * 1000,
+    refetchIntervalInBackground: false,
+    queryFn: () =>
+      fetchLeagueMatchupsHistory({
+        leagueId: platformLeagueId,
+        platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
+        weeks: historyWeeks,
+        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+        ...(leagueId ? { connectionId: leagueId } : {}),
+        allowFluid: isPageVisible(),
+      }),
+  });
+  const historyLoading = allMatchups.isLoading;
+  const historyStamp = `${allMatchups.dataUpdatedAt}:${allMatchups.data?.size ?? 0}`;
 
   const rosProjections = useQuery({
     queryKey: ["ros-projections", leagueId, remainingWeekNumbers[0] ?? null, remainingWeekNumbers.at(-1) ?? null],
