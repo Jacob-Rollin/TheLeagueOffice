@@ -84,3 +84,59 @@ export async function fetchResearchSosBoard(season?: string) {
   const { getSosBoard } = await import("./players.functions");
   return getSosBoard({ data: season ? { season } : {} });
 }
+
+export async function fetchResearchRedZone(opts?: {
+  season?: string;
+  yardline?: number;
+  weekFrom?: number | null;
+  weekTo?: number | null;
+}) {
+  if (typeof window !== "undefined") {
+    const qs = new URLSearchParams();
+    if (opts?.season) qs.set("season", opts.season);
+    if (opts?.yardline != null) qs.set("yardline", String(opts.yardline));
+    if (opts?.weekFrom != null) qs.set("weekFrom", String(opts.weekFrom));
+    if (opts?.weekTo != null) qs.set("weekTo", String(opts.weekTo));
+    const hit = await fetchJson<Awaited<ReturnType<typeof import("./players.functions").getRedZoneStats>>>(
+      `/api/data/research/redzone?${qs}`,
+    );
+    if (hit && (hit as { rowsByPos?: unknown }).rowsByPos) return hit;
+  }
+  const { getRedZoneStats } = await import("./players.functions");
+  const data: {
+    season?: string;
+    yardline?: number;
+    weekFrom?: number | null;
+    weekTo?: number | null;
+  } = {
+    weekFrom: opts?.weekFrom ?? null,
+    weekTo: opts?.weekTo ?? null,
+  };
+  if (opts?.season) data.season = opts.season;
+  if (opts?.yardline != null) data.yardline = opts.yardline;
+  return getRedZoneStats({ data });
+}
+
+export async function fetchResearchTargets(season?: string) {
+  if (typeof window !== "undefined") {
+    const qs = season ? `?season=${encodeURIComponent(season)}` : "";
+    const hit = await fetchJson<Awaited<ReturnType<typeof import("./players.functions").getMostTargetedPlayers>>>(
+      `/api/data/research/targets${qs}`,
+    );
+    if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
+  }
+  const { getMostTargetedPlayers } = await import("./players.functions");
+  return getMostTargetedPlayers({ data: season ? { season } : {} });
+}
+
+export async function fetchResearchAreTheyPlaying(week: number) {
+  const safeWeek = Math.min(18, Math.max(1, Math.trunc(week) || 1));
+  if (typeof window !== "undefined") {
+    const hit = await fetchJson<Awaited<ReturnType<typeof import("./players.functions").getAreTheyPlaying>>>(
+      `/api/data/research/are-they-playing?week=${safeWeek}`,
+    );
+    if (hit && Array.isArray((hit as { lines?: unknown[] }).lines)) return hit;
+  }
+  const { getAreTheyPlaying } = await import("./players.functions");
+  return getAreTheyPlaying({ data: { week: safeWeek } });
+}

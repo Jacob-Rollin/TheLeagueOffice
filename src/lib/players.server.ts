@@ -221,10 +221,21 @@ const tradeValueBasis = memo<TradeValueBasis>(30 * 60 * 1000, async () => {
     (_, i) => startWeek + i,
   );
 
-  const [current, prev, weekMaps] = await Promise.all([
+  // Chunk week projection fetches so cold Fluid isolates do not open 10–17
+  // parallel Sleeper connections at once (timeouts → 5xx under Hobby).
+  const weekMaps: Map<string, PtsTriple>[] = [];
+  for (let i = 0; i < weeks.length; i += 3) {
+    const chunk = await Promise.all(
+      weeks
+        .slice(i, i + 3)
+        .map((w) => weekProjectionPoints(`${season}|${w}`).catch(() => new Map<string, PtsTriple>())),
+    );
+    weekMaps.push(...chunk);
+  }
+
+  const [current, prev] = await Promise.all([
     inSeason ? seasonToDateStats(season).catch(() => new Map<string, Stats>()) : new Map<string, Stats>(),
     seasonStats(String(Number(season) - 1)).catch(() => new Map<string, Stats>()),
-    Promise.all(weeks.map((w) => weekProjectionPoints(`${season}|${w}`).catch(() => new Map()))),
   ]);
 
   const triple = (stats: Stats | undefined): PtsTriple => [
@@ -781,8 +792,11 @@ export async function loadSosBoard(
   seasonInput?: string,
   opts?: { allowCompute?: boolean },
 ): Promise<SosBoard> {
-  const state = await nflState("state");
-  const season = seasonInput && /^\d{4}$/.test(seasonInput) ? seasonInput : state.season;
+  // Prefer the caller's season so warm CDN/TiDB hits skip a Sleeper state RTT.
+  const season =
+    seasonInput && /^\d{4}$/.test(seasonInput)
+      ? seasonInput
+      : (await nflState("state")).season;
   const allowCompute = opts?.allowCompute === true;
 
   try {
@@ -885,14 +899,39 @@ export async function loadMatchupsGuide(
   format: AllowedFormat = "half",
   opts?: { allowCompute?: boolean },
 ): Promise<MatchupsGuide> {
+  const fmt = format in FORMAT_SLOT ? format : "half";
+  const weekKnown =
+    weekInput != null && Number.isFinite(weekInput) && weekInput >= 1 && weekInput <= 18
+      ? Math.round(weekInput)
+      : null;
+
+  // Warm CDN hit with explicit week: try TiDB before Sleeper state/nfl.
+  if (weekKnown != null) {
+    try {
+      const { tidbConfigured } = await import("@/lib/tidb");
+      if (tidbConfigured()) {
+        const seasonGuess = currentSeason();
+        const { readAggJson } = await import("./research-agg.server");
+        const cached = await readAggJson<MatchupsGuide>(
+          "agg_matchups_guide",
+          `${seasonGuess}|${weekKnown}|${fmt}`,
+        );
+        if (cached && (Object.keys(cached.games).length || Object.keys(cached.defense).length)) {
+          return cached;
+        }
+        if (opts?.allowCompute !== true) {
+          // Fall through to state only when we need accurate empty shell fields.
+        }
+      }
+    } catch {
+      /* resolve via state below */
+    }
+  }
+
   const state = await nflState("state");
   const season = state.season;
   const currentWeek = state.seasonType === "regular" ? Math.min(18, state.week) : 1;
-  const week =
-    weekInput != null && Number.isFinite(weekInput) && weekInput >= 1 && weekInput <= 18
-      ? Math.round(weekInput)
-      : currentWeek;
-  const fmt = format in FORMAT_SLOT ? format : "half";
+  const week = weekKnown ?? currentWeek;
   const snapKey = `${season}|${week}|${fmt}`;
   const empty: MatchupsGuide = {
     season,
@@ -1227,10 +1266,13 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
             })),
         );
 
-  const sos = await buildSos(player, season).catch(() => null);
-  const ownershipMap = await loadSleeperOwnershipMap().catch(() => null);
+  const [sos, ownershipMap, injuryIndex] = await Promise.all([
+    buildSos(player, season).catch(() => null),
+    loadSleeperOwnershipMap().catch(() => null),
+    sleeperInjuryIndex("current").catch(() => null),
+  ]);
   const ownership = ownershipMap?.get(id);
-  const liveInjury = (await sleeperInjuryIndex("current").catch(() => null))?.get(id);
+  const liveInjury = injuryIndex?.get(id);
   // Sleeper omits 0% players from research — treat missing as 0 when the map loaded.
   const enrichedPlayer = {
     ...player,
@@ -2637,13 +2679,14 @@ export async function loadFantasyLeaders(
   seasonInput?: string,
   opts?: { allowCompute?: boolean },
 ): Promise<FantasyLeaders> {
-  const state = await nflState("state");
-  const season = seasonInput && /^\d{4}$/.test(seasonInput) ? seasonInput : state.season;
+  const seasonKnown = seasonInput && /^\d{4}$/.test(seasonInput) ? seasonInput : null;
+  const season = seasonKnown ?? currentSeason();
   const empty: FantasyLeaders = { season, maxWeek: 0, rows: [] };
   const { withResearchSnap } = await import("./research-agg.server");
-  return withResearchSnap("agg_fantasy_leaders", season, opts, empty, () =>
-    computeFantasyLeaders(season, state),
-  );
+  return withResearchSnap("agg_fantasy_leaders", season, opts, empty, async () => {
+    const state = await nflState("state");
+    return computeFantasyLeaders(seasonKnown ?? state.season, state);
+  });
 }
 
 async function computeFantasyLeaders(
