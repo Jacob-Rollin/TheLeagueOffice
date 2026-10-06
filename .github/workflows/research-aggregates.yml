@@ -33,8 +33,13 @@ jobs:
             echo "APP_URL / CRON_SECRET not configured — skipping."
             exit 0
           fi
-          curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
-            "${APP_URL%/}/api/cron/research-aggregates"
+          BASE="${APP_URL%/}"
+          case "$BASE" in
+            http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+            http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+          esac
+          curl -fsSL -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE/api/cron/research-aggregates"
 
       - name: Log Success to Axiom
         if: success()

@@ -10,13 +10,20 @@ URL path to `/league-office-native` in the TiDB console copy when you can.
 ## Prerequisites still needed
 1. **Merge PR #19** (or keep this branch deployed) so `/api/admin/tidb-migrate` exists on production. Without it, migrate returns **404**.
 2. **`CRON_SECRET`** on Vercel **and** as a GitHub Actions secret (same value).
-3. **`APP_URL`** GitHub secret = `https://theleagueoffice.app` (no trailing slash).
+3. **`APP_URL`** GitHub secret = `https://www.theleagueoffice.app` (use **www** — apex redirects and the Action would only see “Redirecting…”).
 
 ---
 
 ## Step 3 — Run migrate (pick ONE)
 
-### Option A — GitHub Actions (easiest)
+### Option A — Open players-export (no secret needed)
+After Production has this build, open:
+
+`https://www.theleagueoffice.app/api/data/players-export`
+
+The first request auto-creates tables and seeds from the Supabase brain. Wait for JSON starting with `{"ok":true,"v":7`.
+
+### Option B — GitHub Actions
 1. Open **Actions** → **TiDB Warehouse Migrate**.
 2. Click **Run workflow**.
 3. Leave action = `migrate`.
@@ -24,17 +31,17 @@ URL path to `/league-office-native` in the TiDB console copy when you can.
 
 If the workflow errors about missing secrets, add under
 **Settings → Secrets and variables → Actions**:
-- `APP_URL` = `https://theleagueoffice.app`
+- `APP_URL` = `https://www.theleagueoffice.app`
 - `CRON_SECRET` = same value as Vercel → Settings → Environment Variables → `CRON_SECRET`
 
-### Option B — Terminal (Mac/Linux)
+### Option C — Terminal (Mac/Linux)
 Copy your `CRON_SECRET` from Vercel, then run:
 
 ```sh
-export APP_URL="https://theleagueoffice.app"
+export APP_URL="https://www.theleagueoffice.app"
 export CRON_SECRET="paste-from-vercel-here"
 
-curl -X POST "$APP_URL/api/admin/tidb-migrate" \
+curl -fsSL -X POST "$APP_URL/api/admin/tidb-migrate" \
   -H "Authorization: Bearer $CRON_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"action":"migrate"}'
@@ -43,7 +50,7 @@ curl -X POST "$APP_URL/api/admin/tidb-migrate" \
 You want JSON with `"ok":true` and a `seed.total` / `status.playerWarehouseCount` around **4000+**.
 
 If you get **404**, PR #19 is not on that deployment yet — merge it and wait for Vercel Production.
-If you get **401**, `CRON_SECRET` does not match Vercel.
+If you get **401** / curl exit **22**, GitHub `CRON_SECRET` ≠ Vercel Production `CRON_SECRET` (or Production is missing it). Re-copy from Vercel → Environment Variables → Production → `CRON_SECRET` into GitHub Actions secrets (no quotes).
 If you get **503** `DATABASE_URL not configured`, add the env var to **Production** (not only Preview) and redeploy.
 
 ---
@@ -51,15 +58,15 @@ If you get **503** `DATABASE_URL not configured`, add the env var to **Productio
 ## Step 4 — Verify
 
 ```sh
-export APP_URL="https://theleagueoffice.app"
+export APP_URL="https://www.theleagueoffice.app"
 export CRON_SECRET="paste-from-vercel-here"
 
 # Row count / health
-curl -sH "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/admin/tidb-migrate"
+curl -fsSL -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/admin/tidb-migrate"
 # expect: "playerWarehouseCount": 4000+ 
 
 # Public CDN export (no auth)
-curl -s "$APP_URL/api/data/players-export" | head -c 200
+curl -fsSL "$APP_URL/api/data/players-export" | head -c 200
 # expect: {"ok":true,"v":7,...}
 ```
 

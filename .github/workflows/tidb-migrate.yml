@@ -2,8 +2,7 @@ name: TiDB Warehouse Migrate
 
 # One-click cutover: apply schema + seed player_warehouse from Supabase brain.
 # Requires repo secrets APP_URL and CRON_SECRET (same as other cron workflows).
-# After PR #19 (or this branch) is on the target deployment, run:
-#   Actions → TiDB Warehouse Migrate → Run workflow
+# Prefer APP_URL=https://www.theleagueoffice.app (apex redirects and drops POST bodies).
 
 on:
   workflow_dispatch:
@@ -39,30 +38,76 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${APP_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
-            echo "::error::Set GitHub secrets APP_URL (e.g. https://theleagueoffice.app) and CRON_SECRET"
+            echo "::error::Set GitHub secrets APP_URL (https://www.theleagueoffice.app) and CRON_SECRET"
             exit 1
           fi
+
+          # Apex theleagueoffice.app 308s to www; without following redirects curl only sees "Redirecting..."
           BASE="${APP_URL%/}"
+          case "$BASE" in
+            http://theleagueoffice.app|https://theleagueoffice.app)
+              BASE="https://www.theleagueoffice.app"
+              echo "Normalized APP_URL → $BASE (apex redirects to www)"
+              ;;
+            http://www.theleagueoffice.app)
+              BASE="https://www.theleagueoffice.app"
+              echo "Normalized APP_URL → $BASE"
+              ;;
+          esac
+
+          request() {
+            local method="$1"; shift
+            local url="$1"; shift
+            local code
+            if [ "$method" = "POST" ]; then
+              code="$(curl -sS -L --post301 --post302 --post303 -o /tmp/curl-body.txt -w "%{http_code}" \
+                -X POST "$url" "$@")"
+            else
+              code="$(curl -sS -L -o /tmp/curl-body.txt -w "%{http_code}" "$url" "$@")"
+            fi
+            echo "HTTP $code"
+            cat /tmp/curl-body.txt
+            echo ""
+            if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+              echo "::error::Auth failed (HTTP $code). Copy CRON_SECRET from Vercel → Project → Settings → Environment Variables (Production) into GitHub → Settings → Secrets and variables → Actions. Must match exactly — no quotes, no leading/trailing spaces, Production env (not Preview-only)."
+              exit 1
+            fi
+            if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+              echo "::error::Request failed with HTTP $code — see body above"
+              exit 1
+            fi
+            if grep -q 'Redirecting' /tmp/curl-body.txt; then
+              echo "::error::Got redirect body instead of JSON — set APP_URL=https://www.theleagueoffice.app"
+              exit 1
+            fi
+          }
 
           if [ "$ACTION" = "status" ]; then
             echo "GET $BASE/api/admin/tidb-migrate"
-            curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
-              "$BASE/api/admin/tidb-migrate" | tee /tmp/tidb-status.json
+            request GET "$BASE/api/admin/tidb-migrate" \
+              -H "Authorization: Bearer $CRON_SECRET"
           else
             echo "POST $BASE/api/admin/tidb-migrate action=$ACTION"
-            curl -fsS -X POST "$BASE/api/admin/tidb-migrate" \
+            request POST "$BASE/api/admin/tidb-migrate" \
               -H "Authorization: Bearer $CRON_SECRET" \
               -H "Content-Type: application/json" \
-              -d "{\"action\":\"$ACTION\"}" | tee /tmp/tidb-migrate.json
+              -d "{\"action\":\"$ACTION\"}"
           fi
+
+          grep -q '"ok":true' /tmp/curl-body.txt || {
+            echo "::error::migrate/status did not return ok:true — see JSON above (DATABASE_URL or seed source)"
+            exit 1
+          }
 
           echo ""
           echo "GET $BASE/api/data/players-export (first 240 bytes)"
-          EXPORT="$(curl -fsS "$BASE/api/data/players-export")"
+          EXPORT_CODE="$(curl -sS -L -o /tmp/export-body.txt -w "%{http_code}" "$BASE/api/data/players-export")"
+          EXPORT="$(cat /tmp/export-body.txt)"
+          echo "HTTP $EXPORT_CODE"
           echo "$EXPORT" | head -c 240
           echo ""
           echo "$EXPORT" | grep -q '"ok":true' || {
-            echo "::error::players-export did not return ok:true — check DATABASE_URL + migrate output above"
+            echo "::error::players-export did not return ok:true — migrate may have failed; see JSON above"
             exit 1
           }
           COUNT="$(echo "$EXPORT" | sed -n 's/.*"count":\([0-9]*\).*/\1/p' | head -1)"
