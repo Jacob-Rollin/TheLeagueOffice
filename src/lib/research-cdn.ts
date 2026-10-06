@@ -84,8 +84,15 @@ export async function fetchResearchFantasyLeaders(season?: string) {
     const hit = await fetchJson<Awaited<ReturnType<typeof import("./players.functions").getFantasyLeaders>>>(
       `/api/data/research/fantasy-leaders${qs}`,
     );
-    if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
-    if (!allowFluidFallback()) return { season: season ?? "", rows: [] };
+    // Empty rows are a cold snap (API returns no-store) — do not treat as warm.
+    if (hit && Array.isArray((hit as { rows?: unknown[] }).rows) && (hit as { rows: unknown[] }).rows.length > 0) {
+      return hit;
+    }
+    if (!allowFluidFallback()) {
+      return hit && typeof hit === "object"
+        ? hit
+        : { season: season ?? "", maxWeek: 0, rows: [] };
+    }
   }
   const { getFantasyLeaders } = await import("./players.functions");
   return getFantasyLeaders({ data: season ? { season } : {} });

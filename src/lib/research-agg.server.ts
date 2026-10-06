@@ -82,35 +82,74 @@ export async function writeAggJson(
   aggReadMemo.delete(memoKey(table, key));
 }
 
+/** Coalesce concurrent cron/request computes for the same snap key. */
+const aggComputeMemo = new Map<string, Promise<unknown>>();
+/** After a cold compute, cool down before allowing another fan-out on this isolate. */
+const aggColdComputeAt = new Map<string, number>();
+const COLD_COMPUTE_COOLDOWN_MS = 60 * 1000;
+
+export type ResearchSnapOpts<T> = {
+  allowCompute?: boolean;
+  /** When set, cold/empty snaps are treated as misses (cron may rebuild; request soft-empties). */
+  isWarm?: (payload: T) => boolean;
+};
+
 /**
- * TiDB-first research helper: serve snap, empty on miss (request), or compute+write (cron).
+ * TiDB-first research helper: serve warm snap, empty on miss (request), or compute+write (cron).
  * Never double-invokes compute on failure (that was inflating Fluid timeouts / 5xx).
+ * Empty/cold payloads are not treated as hits and are not persisted — a one-time failed
+ * warm must not pin the board empty forever.
  */
 export async function withResearchSnap<T>(
   table: AggTable,
   key: string,
-  opts: { allowCompute?: boolean } | undefined,
+  opts: ResearchSnapOpts<T> | undefined,
   empty: T,
   compute: () => Promise<T>,
 ): Promise<T> {
   const allowCompute = opts?.allowCompute === true;
+  const isWarm = opts?.isWarm;
+  const warm = (payload: T) => (isWarm ? isWarm(payload) : true);
 
   if (tidbConfigured()) {
     try {
       const cached = await readAggJson<T>(table, key);
-      if (cached != null) return cached;
+      if (cached != null && warm(cached)) return cached;
     } catch {
       /* treat as miss */
     }
     if (!allowCompute) return empty;
-    try {
-      const payload = await compute();
-      void writeAggJson(table, key, payload).catch(() => undefined);
-      return payload;
-    } catch (error) {
-      console.warn(`[research-agg] compute ${table}/${key} failed`, error);
+
+    const mk = memoKey(table, key);
+    const coldAt = aggColdComputeAt.get(mk);
+    if (coldAt != null && Date.now() - coldAt < COLD_COMPUTE_COOLDOWN_MS) {
       return empty;
     }
+
+    const pending = aggComputeMemo.get(mk);
+    if (pending) return (await pending) as T;
+
+    const run = (async (): Promise<T> => {
+      try {
+        const payload = await compute();
+        // Only persist warm snaps so a transient upstream miss cannot pin empty.
+        if (warm(payload)) {
+          aggColdComputeAt.delete(mk);
+          void writeAggJson(table, key, payload).catch(() => undefined);
+        } else {
+          aggColdComputeAt.set(mk, Date.now());
+        }
+        return payload;
+      } catch (error) {
+        console.warn(`[research-agg] compute ${table}/${key} failed`, error);
+        aggColdComputeAt.set(mk, Date.now());
+        return empty;
+      } finally {
+        aggComputeMemo.delete(mk);
+      }
+    })();
+    aggComputeMemo.set(mk, run);
+    return await run;
   }
 
   // Local/dev without TiDB may still compute on the request path.
