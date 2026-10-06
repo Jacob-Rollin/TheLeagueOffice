@@ -15,6 +15,57 @@
 - Use explicit text explanations for component placements instead of referencing user-provided images.
 - Use the text labels "Value/Trend" for player metrics instead of a standard dollar sign ($).
 
+# Free-Tier Performance & Limit Guardrails (Vercel Fluid / TiDB / visitor IPs)
+# One solo tester previously burned >50% of monthly Fluid Active CPU. Keep these
+# rules when adding features — do not reintroduce Fluid waterfalls or dump load
+# onto TiDB RUs, GitHub raw, or visitor Sleeper/ESPN rate limits.
+
+## Default data path (prefer in this order)
+1. Browser → public APIs with IndexedDB (`getCached` in `sleeper-cache`, helpers in `sleeper-client`, `sleeper-rosters-client`, `scoring-client`, `sleeper-trending`).
+2. Browser → edge-cached routes: `/api/data/research/*` (`research-cdn`), `/api/data/snap/*` (`snap-cdn`), `/api/data/league/$id` (`league-matchups-cdn`), `/api/data/players-export`.
+3. Fluid `createServerFn` only for credentials/secrets/writes (ESPN s2/swid, Yahoo OAuth, league sync writes, account delete) or true last-resort misses in **dev**.
+
+## Never do these (regressions we already fixed)
+- Do not call Fluid `createServerFn` for public Sleeper reads (state, projections, stats, game logs, bio, next game, trending, Sleeper rosters/scoring when league id is known).
+- Do not fan out N Fluid calls per page (e.g. one `getConnectionMatchups` / `getPlayerNews` per week or per visible row). Use one CDN/all-weeks fetch or one shared snap.
+- Do not add `refetchOnWindowFocus: true` for heavy Sleeper/projection queries — IndexedDB TTL owns freshness.
+- Do not poll while the tab is hidden. Use `visibleRefetchInterval` / `isPageVisible` from `page-visibility.ts`, and keep `refetchIntervalInBackground: false`.
+- Do not fall back to Fluid in **production** when research/snap CDN misses — soft-empty instead (`allowFluidFallback` only when `import.meta.env.DEV`). Align new CDN helpers with `research-cdn` / `snap-cdn`.
+- Do not load full career game-log years on player popup open — use `fetchGameLogsClient(..., { includeCareer: false })` until Game Logs needs career.
+- Do not re-download week projection bundles for ATP injuries — reuse `weekProjectionBundle` / live-injury overlay in `sleeper-client`.
+- Do not bypass shared roster loaders: use `fetchLeagueRostersForConnection` (Sleeper client-first) for any `["league-rosters", …]` queryFn (Global Search, fantasy team name, playbook).
+- Do not use playbook dashboard history via N× Fluid matchups — use `fetchLeagueAllMatchupsCdn` (same key as analytics).
+- Do not wire Top Available / list headlines through N× `getPlayerNews` — use `fetchSnapFantasyNews` (or another single snap).
+- Do not call `getRosterNews` Fluid directly from UI — use `fetchSnapRosterNews`.
+- Do not call trade basis / injury reports / injury wire / fantasy news / trade market / Sleeper ROS / slot ranks via Fluid first — use the matching `fetchSnap*` helper in `snap-cdn.ts`.
+- Do not call research aggregates (FPA, SOS, leaders, red zone, targets, ATP, matchups guide) via Fluid first — use `research-cdn` helpers.
+- Do not assemble player detail via Fluid `getPlayerDetail` when catalog is warm — use `fetchPlayerDetailClient`.
+- Do not shorten CDN TTLs or remove `processMemo` coalescing on TiDB-backed data routes without a clear freshness need (RU burn).
+- Do not lower league sync cooldown below the intentional long window (cron owns frequent refresh; page loads only top up stale sessions).
+- Do not move heavy work onto GitHub raw/nflverse downloads on the request path (prefer cron → TiDB/CDN). Matchup replay PBP is an exception — do not expand that pattern.
+
+## When Fluid is allowed
+- ESPN/Yahoo paths that require `s2` / `swid` / OAuth tokens.
+- League sync writes: `deltaSyncLeague`, `forceClearAndReSyncLeague`, cron host→TiDB upserts.
+- Admin / account / secret-gated operations.
+- CDN **origin** handlers on `/api/data/*` (shared edge miss is OK; per-visitor `createServerFn` is not).
+- Dev-only Fluid fallback when local snaps are cold.
+
+## When adding a new data surface
+- Ask: can the browser fetch this publicly with `getCached`?
+- If shared across visitors: add or extend `/api/data/research/*` or `/api/data/snap/*` with `processMemo` + long `researchCacheControl` / appropriate cache helper; wire a client helper that soft-empties in prod.
+- If league-scoped synced data: prefer `/api/data/league/$id` CDN (TiDB) over Fluid host pulls; Fluid refresh only when snap is cold/stale **and** the tab is visible (see `league-matchups-cdn`).
+- If credentials required: keep Fluid, but cache aggressively client-side and avoid polling when hidden.
+- Never “fix” Fluid burn by blasting TiDB on every page load without CDN/`processMemo`, or by unbounded concurrent Sleeper calls from the browser (cap concurrency; share IndexedDB keys).
+
+## Key modules to reuse (do not reinvent)
+- `src/lib/page-visibility.ts` — pause polls when hidden
+- `src/lib/sleeper-cache.ts` / `sleeper-client.ts` / `sleeper-rosters-client.ts` / `scoring-client.ts` / `sleeper-trending.ts`
+- `src/lib/research-cdn.ts` / `snap-cdn.ts` / `league-matchups-cdn.ts` / `league-rosters-fetch.ts`
+- `src/lib/player-detail-client.ts` / `sos-from-board.ts`
+- `src/lib/process-memo.ts` / `api-cache.ts` (`dataCacheControl`, `leagueHistoryCacheControl`, `researchCacheControl`, `warehouseCacheControl`)
+- Routes: `api/data/research.$kind.ts`, `api/data/snap.$kind.ts`, `api/data/league.$id.ts`, `api/data/players-export.ts`
+
 # Strict Schema Utilization Instructions
 - Always use these exact active tables and property data types when writing TypeScript functions, UI layout components, or custom Supabase mutations.
 - The table `public.user_roles` has been completely dropped from the database schema cache. Never generate code targeting it.
