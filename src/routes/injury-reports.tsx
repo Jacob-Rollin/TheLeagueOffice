@@ -58,8 +58,12 @@ function InjuryReportsPage() {
   const query = useQuery({
     queryKey: ["injury-reports"],
     staleTime: 5 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
-    retry: 1,
+    refetchInterval: (q) =>
+      typeof document !== "undefined" && document.visibilityState !== "visible"
+        ? false
+        : 10 * 60 * 1000,
+    refetchIntervalInBackground: false,
+    retry: false,
     queryFn: () => getInjuryReports(),
   });
 

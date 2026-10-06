@@ -59,10 +59,18 @@ const playersQuery = () =>
 
 const defDetailQuery = (id: string | null) =>
   queryOptions({
-    queryKey: ["player", id],
-    queryFn: () => getPlayerDetail({ data: { id: id! } }),
+    queryKey: ["player", id, "client-v1"],
+    queryFn: async () => {
+      const { hydratePlayerBrain } = await import("@/lib/playerBrainHydration");
+      const { fetchPlayerDetailClient } = await import("@/lib/player-detail-client");
+      const brain = await hydratePlayerBrain().catch(() => null);
+      const client = await fetchPlayerDetailClient(id!, brain);
+      if (client) return client;
+      return getPlayerDetail({ data: { id: id! } });
+    },
     enabled: Boolean(id),
     staleTime: 1000 * 60 * 30,
+    retry: false,
   });
 
 export const Route = createFileRoute("/nfl-team/$nflId")({

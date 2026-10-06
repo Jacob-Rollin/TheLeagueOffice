@@ -41,12 +41,12 @@ import {
 } from "@/lib/rolling-live-projection";
 import {
   buildStartSitAdvice,
-  loadFantasyCalcMarketMap,
   scaleValue,
   suggestMarketRadarTrade,
   suggestWaiverTransactions,
   type FitPlayer,
 } from "@/lib/trade-engine";
+import { fetchTrendingAddsClient } from "@/lib/sleeper-trending";
 import { starterSlots, weeklyOptimalPoints } from "@/lib/standings-analytics";
 import { cn } from "@/lib/utils";
 import {
@@ -1164,41 +1164,27 @@ function PlaybookDashboardPage() {
   }, [weeklyMatchups]);
 
   const sleeperTrending = useQuery({
-    queryKey: ["sleeper-trending-add"],
+    queryKey: ["sleeper-trending-add", "v1", 24, 50],
     staleTime: 15 * 60 * 1000,
     retry: false,
-    queryFn: async () => {
-      const res = await fetch(
-        "https://api.sleeper.app/v1/players/nfl/trending/add?lookback_hours=24&limit=50",
-        { headers: { accept: "application/json" } },
-      ).catch(() => null);
-      if (!res || !res.ok) return [] as { player_id: string; count: number }[];
-      const json = (await res.json()) as { player_id?: string; count?: number }[];
-      return (Array.isArray(json) ? json : [])
-        .map((row) => ({
-          player_id: String(row?.player_id ?? ""),
-          count: Number(row?.count ?? 0) || 0,
-        }))
-        .filter((row) => row.player_id);
-    },
+    refetchIntervalInBackground: false,
+    queryFn: () => fetchTrendingAddsClient(24, 50),
   });
 
+  // Brain / TiDB warehouse values — no live FantasyCalc from the browser.
   const fantasyCalcMarket = useQuery({
-    queryKey: ["fantasycalc-current-values-v2", players.length],
+    queryKey: ["fantasycalc-brain-values-v1", Boolean(brain)],
     staleTime: 30 * 60 * 1000,
-    retry: 1,
-    enabled: players.length > 0,
-    queryFn: () =>
-      loadFantasyCalcMarketMap(
-        players.map((p) => ({
-          id: p.id,
-          name: p.name,
-          seasonProj: p.proj?.half ?? p.proj?.ppr ?? p.proj?.std ?? 0,
-          weekly: projectFor(p.id) ?? weeklyFallback(p),
-          value: brain?.[p.id]?.value ?? null,
-          trend: brain?.[p.id]?.trend ?? null,
-        })),
-      ),
+    retry: false,
+    enabled: Boolean(brain),
+    queryFn: async () => {
+      const out: Record<string, { value: number; trend: number }> = {};
+      for (const [id, entry] of Object.entries(brain ?? {})) {
+        if (!entry) continue;
+        out[id] = { value: Number(entry.value) || 0, trend: Number(entry.trend) || 0 };
+      }
+      return out;
+    },
   });
 
   const trendingAddById = useMemo(() => {
@@ -1483,7 +1469,11 @@ function PlaybookDashboardPage() {
     enabled: rosterIdsKey.length > 0,
     retry: false,
     staleTime: 5 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
+    refetchInterval: (q) =>
+      typeof document !== "undefined" && document.visibilityState !== "visible"
+        ? false
+        : 10 * 60 * 1000,
+    refetchIntervalInBackground: false,
     queryFn: async () => await getRosterNews({ data: { ids: rosterIdsKey.split(",") } }),
   });
 
