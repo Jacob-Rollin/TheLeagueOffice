@@ -164,18 +164,23 @@ export async function seedPlayerWarehouse(
 export async function tidbWarehouseStatus(): Promise<{
   configured: boolean;
   playerWarehouseCount: number;
+  database?: string;
   sample?: { sleeper_id: string; player_name: string | null }[];
 }> {
   if (!tidbConfigured()) {
     return { configured: false, playerWarehouseCount: 0 };
   }
   try {
+    const { normalizeTidbDatabaseUrl, tidbDatabaseFromUrl } = await import("@/lib/tidb");
+    const raw = process.env["DATABASE_URL"]?.trim() ?? "";
+    const database = tidbDatabaseFromUrl(normalizeTidbDatabaseUrl(raw));
     const countRows = await tidbExecute<{ c: number }>("SELECT COUNT(*) AS c FROM player_warehouse");
     const sample = await tidbExecute<{ sleeper_id: string; player_name: string | null }>(
       "SELECT sleeper_id, player_name FROM player_warehouse ORDER BY player_name ASC LIMIT 5",
     );
     return {
       configured: true,
+      database,
       playerWarehouseCount: Number(countRows[0]?.c ?? 0),
       sample,
     };
