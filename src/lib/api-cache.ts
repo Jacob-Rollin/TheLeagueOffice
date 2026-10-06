@@ -20,6 +20,17 @@ export function dataCacheControl(date = new Date()): string {
 }
 
 /**
+ * Past-week / all-weeks matchup boards — not live scoring.
+ * Longer edge TTL cuts TiDB RUs when analytics hydrates history.
+ */
+export function leagueHistoryCacheControl(date = new Date()): string {
+  if (isGamedayUtc(date)) {
+    return "public, s-maxage=300, stale-while-revalidate=120, max-age=60";
+  }
+  return "public, s-maxage=1800, stale-while-revalidate=600, max-age=300";
+}
+
+/**
  * Research aggregates (FPA, SOS, leaders, redzone, …). Cron warms a few times
  * a day — edge can hold for an hour mid-week without stale product risk.
  */

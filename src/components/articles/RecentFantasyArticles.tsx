@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { getFantasyNewsFeed } from "@/lib/players.functions";
 import type { FantasyNewsItem } from "@/lib/players.server";
+import { fetchSnapFantasyNews } from "@/lib/snap-cdn";
 
 const COUNT = 5;
 
@@ -44,7 +44,7 @@ function Thumb({ src }: { src: string | null }) {
 export function RecentFantasyArticles() {
   const { data, isLoading } = useQuery({
     queryKey: ["fantasy-news-feed", 40],
-    queryFn: () => getFantasyNewsFeed({ data: { limit: 40 } }),
+    queryFn: () => fetchSnapFantasyNews(40),
     staleTime: 10 * 60 * 1000,
     retry: 1,
   });

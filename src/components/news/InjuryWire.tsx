@@ -93,10 +93,14 @@ export function InjuryWire({ limit = 5 }: { limit?: number }) {
     queryKey: ["injury-wire", limit],
     retry: false,
     staleTime: 5 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
+    refetchInterval: (q) =>
+      typeof document !== "undefined" && document.visibilityState !== "visible"
+        ? false
+        : 10 * 60 * 1000,
+    refetchIntervalInBackground: false,
     queryFn: async () => {
-      const { getInjuryWire } = await import("@/lib/players.functions");
-      return await getInjuryWire({ data: { limit } });
+      const { fetchSnapInjuryWire } = await import("@/lib/snap-cdn");
+      return await fetchSnapInjuryWire(limit);
     },
   });
 

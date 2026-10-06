@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
@@ -6,12 +6,9 @@ import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import {
-  getConnectionMatchups,
-  getConnectionSettings,
-  getRestOfSeasonProjections,
-  getStartingSlotRanks,
-} from "@/lib/league.functions";
+import { getConnectionSettings } from "@/lib/league.functions";
+import { fetchLeagueAllMatchupsCdn } from "@/lib/league-matchups-cdn";
+import { fetchSnapRestOfSeason, fetchSnapStartingSlotRanks } from "@/lib/snap-cdn";
 import { computeStandingsAnalytics, type TeamAnalytics } from "@/lib/standings-analytics";
 
 export type RowAnalytics = TeamAnalytics & {
@@ -36,9 +33,8 @@ function connectionArgs(league: ReturnType<typeof useActiveLeague>["activeLeague
 }
 
 /**
- * League-wide standings analytics shared by Standings and My Team: completed-week matchups,
- * the remaining schedule, rest-of-season projections, and the simulated playoff / title odds.
- * `history` loads completed weeks; `forecast` also loads the schedule and runs the simulation.
+ * League-wide standings analytics shared by Standings and My Team.
+ * Matchup history/schedule come from one CDN/TiDB snap (not N Fluid week calls).
  */
 export function useLeagueAnalytics({ history, forecast }: { history: boolean; forecast: boolean }) {
   const { activeLeague } = useActiveLeague();
@@ -48,85 +44,77 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
   const nflWeek = useNflState();
   const currentWeek = nflWeek.data?.week ?? null;
   const leagueId = activeLeague?.id ?? null;
-  const hasLeague = Boolean(activeLeague?.leagueId);
+  const platformLeagueId = activeLeague?.leagueId ?? "";
+  const hasLeague = Boolean(platformLeagueId);
   const loadHistory = history || forecast;
 
-  /** Completed NFL weeks only (1 … current−1). The live week is excluded. */
   const completedWeekNumbers = useMemo(() => {
     if (currentWeek == null || currentWeek <= 1) return [] as number[];
     return Array.from({ length: currentWeek - 1 }, (_, i) => i + 1);
   }, [currentWeek]);
 
-  const historyQueries = useQueries({
-    queries: completedWeekNumbers.map((week) => ({
-      queryKey: ["active-matchups", leagueId, week],
-      enabled: hasLeague && loadHistory,
-      retry: false,
-      staleTime: 10 * 60 * 1000,
-      queryFn: async () =>
-        await getConnectionMatchups({
-          data: {
-            ...connectionArgs(activeLeague),
-            week,
-            ...(activeLeague?.id ? { connectionId: activeLeague.id } : {}),
-          },
-        }),
-    })),
+  const allMatchups = useQuery({
+    queryKey: ["league-matchups-cdn-all", leagueId],
+    enabled: hasLeague && loadHistory,
+    retry: false,
+    staleTime: 10 * 60 * 1000,
+    refetchIntervalInBackground: false,
+    queryFn: () => fetchLeagueAllMatchupsCdn(platformLeagueId),
   });
-  const historyStamp = historyQueries
-    .map((q) => `${q.dataUpdatedAt}:${q.data?.week ?? "x"}:${q.data?.entries?.length ?? 0}`)
-    .join("|");
-  const historyLoading = historyQueries.some((q) => q.isLoading);
+  const historyLoading = allMatchups.isLoading;
+  const historyStamp = `${allMatchups.dataUpdatedAt}:${allMatchups.data?.size ?? 0}`;
 
   const settingsQuery = useQuery({
     queryKey: ["dashboard-league-settings", leagueId],
     enabled: hasLeague && forecast,
     retry: false,
     staleTime: 60 * 60 * 1000,
+    refetchIntervalInBackground: false,
     queryFn: async () => await getConnectionSettings({ data: connectionArgs(activeLeague) }),
   });
   const playoffStartWeek = settingsQuery.data?.playoffStartWeek ?? 15;
   const playoffTeams = settingsQuery.data?.playoffTeams ?? ((standings?.rows.length ?? 0) >= 10 ? 6 : 4);
 
-  /** Rest of the regular season, current week included (it isn't final yet). */
   const remainingWeekNumbers = useMemo(() => {
     if (currentWeek == null || currentWeek >= playoffStartWeek) return [] as number[];
     return Array.from({ length: playoffStartWeek - currentWeek }, (_, i) => currentWeek + i);
   }, [currentWeek, playoffStartWeek]);
-
-  const scheduleQueries = useQueries({
-    queries: remainingWeekNumbers.map((week) => ({
-      queryKey: ["active-matchups", leagueId, week],
-      enabled: hasLeague && forecast,
-      retry: false,
-      staleTime: 30 * 60 * 1000,
-      queryFn: async () =>
-        await getConnectionMatchups({
-          data: {
-            ...connectionArgs(activeLeague),
-            week,
-            ...(activeLeague?.id ? { connectionId: activeLeague.id } : {}),
-          },
-        }),
-    })),
-  });
-  const scheduleStamp = scheduleQueries.map((q) => `${q.dataUpdatedAt}:${q.data?.entries?.length ?? 0}`).join("|");
 
   const rosProjections = useQuery({
     queryKey: ["ros-projections", leagueId, remainingWeekNumbers[0] ?? null, remainingWeekNumbers.at(-1) ?? null],
     enabled: hasLeague && forecast && remainingWeekNumbers.length > 0,
     retry: false,
     staleTime: 30 * 60 * 1000,
+    refetchIntervalInBackground: false,
     queryFn: async () =>
-      await getRestOfSeasonProjections({
-        data: {
-          ...connectionArgs(activeLeague),
-          fromWeek: remainingWeekNumbers[0]!,
-          toWeek: remainingWeekNumbers.at(-1)!,
-        },
+      fetchSnapRestOfSeason({
+        ...connectionArgs(activeLeague),
+        fromWeek: remainingWeekNumbers[0]!,
+        toWeek: remainingWeekNumbers.at(-1)!,
       }),
   });
-  const scheduleLoading = scheduleQueries.some((q) => q.isLoading) || rosProjections.isLoading;
+  const scheduleLoading = allMatchups.isLoading || rosProjections.isLoading;
+  const scheduleStamp = historyStamp;
+
+  // Compatibility shape for callers that still map over historyQueries / scheduleQueries.
+  const historyQueries = useMemo(
+    () =>
+      completedWeekNumbers.map((week) => ({
+        data: allMatchups.data?.get(week)?.board ?? null,
+        dataUpdatedAt: allMatchups.dataUpdatedAt,
+        isLoading: allMatchups.isLoading,
+      })),
+    [completedWeekNumbers, allMatchups.data, allMatchups.dataUpdatedAt, allMatchups.isLoading],
+  );
+  const scheduleQueries = useMemo(
+    () =>
+      remainingWeekNumbers.map((week) => ({
+        data: allMatchups.data?.get(week)?.board ?? null,
+        dataUpdatedAt: allMatchups.dataUpdatedAt,
+        isLoading: allMatchups.isLoading,
+      })),
+    [remainingWeekNumbers, allMatchups.data, allMatchups.dataUpdatedAt, allMatchups.isLoading],
+  );
 
   const analytics = useMemo((): Map<number, RowAnalytics> | null => {
     const rows = standings?.rows ?? [];
@@ -145,7 +133,7 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
       projectedByWeek: remainingWeekNumbers.map((week) => {
         const index = rosProjections.data?.weeks.indexOf(week) ?? -1;
         const row = index >= 0 ? rosProjections.data?.byWeek[index] : undefined;
-        return new Map(Object.entries(row ?? {}).map(([slot, pts]) => [Number(slot), pts]));
+        return new Map(Object.entries(row ?? {}).map(([slot, pts]) => [Number(slot), pts as number]));
       }),
     });
 
@@ -209,9 +197,12 @@ export function useStartingSlotRanks(currentWeek: number | null, enabled = true)
     enabled: Boolean(enabled && activeLeague?.leagueId && fromWeek != null),
     retry: false,
     staleTime: 30 * 60 * 1000,
+    refetchIntervalInBackground: false,
     queryFn: async () =>
-      await getStartingSlotRanks({
-        data: { ...connectionArgs(activeLeague), fromWeek: fromWeek!, toWeek: 17 },
+      fetchSnapStartingSlotRanks({
+        ...connectionArgs(activeLeague),
+        fromWeek: fromWeek!,
+        toWeek: 17,
       }),
   });
 }

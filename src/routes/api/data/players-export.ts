@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { jsonResponse, warehouseCacheControl } from "@/lib/api-cache";
+import { processMemo } from "@/lib/process-memo";
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
+
+const EXPORT_MEMO_MS = 5 * 60 * 1000;
 
 type WarehouseRow = {
   sleeper_id: string;
@@ -77,16 +80,19 @@ export const Route = createFileRoute("/api/data/players-export")({
         }
 
         try {
-          const rows = await loadWarehouseRows();
-          if (rows.length < 100) {
+          const payload = await processMemo("players-export-v1", EXPORT_MEMO_MS, async () => {
+            const rows = await loadWarehouseRows();
+            if (rows.length < 100) return null;
+            return exportPayload(rows);
+          });
+          if (!payload) {
             // 200 (not 503): expected warm-gap; clients already treat ok:false as miss.
-            // 503 was inflating Vercel function error rate during cutover.
             return jsonResponse(
-              { ok: false, error: "warehouse not seeded", count: rows.length },
+              { ok: false, error: "warehouse not seeded", count: 0 },
               { cache: "no-store" },
             );
           }
-          return jsonResponse(exportPayload(rows), { cache: warehouseCacheControl() });
+          return jsonResponse(payload, { cache: warehouseCacheControl() });
         } catch (error) {
           const message = error instanceof Error ? error.message : "export failed";
           console.error("[api/data/players-export]", message);

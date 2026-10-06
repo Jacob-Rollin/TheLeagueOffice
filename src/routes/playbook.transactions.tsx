@@ -29,7 +29,9 @@ import {
   type LeagueActivityMove,
   type LeagueTransactionLog,
 } from "@/lib/league.functions";
-import { getPickupResults, getTradeValueBasis } from "@/lib/players.functions";
+import { getPickupResults } from "@/lib/players.functions";
+import { fetchSnapTradeValueBasis } from "@/lib/snap-cdn";
+import { fetchTrendingAddsClient } from "@/lib/sleeper-trending";
 import { packageScore } from "@/lib/trade-engine";
 import { inSeasonWeeklyValue } from "@/lib/trade-value";
 import { cn } from "@/lib/utils";
@@ -234,14 +236,6 @@ function buildPickupRequests(events: LeagueActivityEvent[], currentWeek: number)
 
 type TrendingRow = { player_id: string; count: number };
 
-/** Platform-wide adds / drops across every Sleeper league over the last 24 hours. */
-async function fetchSleeperTrending(type: "add" | "drop"): Promise<TrendingRow[]> {
-  const res = await fetch(`https://api.sleeper.app/v1/players/nfl/trending/${type}?lookback_hours=24&limit=25`);
-  if (!res.ok) return [];
-  const rows = (await res.json()) as TrendingRow[];
-  return Array.isArray(rows) ? rows : [];
-}
-
 function compactCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K`;
@@ -414,7 +408,7 @@ function PlaybookTransactionsPage() {
   const { format: valueScoring } = useLeagueScoringMeta();
   const { data: valueBasis } = useQuery({
     queryKey: ["trade-value-basis"],
-    queryFn: () => getTradeValueBasis(),
+    queryFn: () => fetchSnapTradeValueBasis(),
     staleTime: 30 * 60 * 1000,
   });
   const playerById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
@@ -447,10 +441,11 @@ function PlaybookTransactionsPage() {
   const [insightTab, setInsightTab] = useState<"trending" | "pickups">("trending");
   const [trendType, setTrendType] = useState<"add" | "drop">("add");
   const { data: trending, isLoading: trendingLoading } = useQuery({
-    queryKey: ["sleeper-trending", trendType],
+    queryKey: ["sleeper-trending-add", "v1", 24, 25, trendType],
     staleTime: 15 * 60 * 1000,
     retry: false,
-    queryFn: () => fetchSleeperTrending(trendType),
+    refetchIntervalInBackground: false,
+    queryFn: () => fetchTrendingAddsClient(24, 25, trendType),
   });
   const ownerByPlayer = useMemo(() => {
     const map = new Map<string, { team: string; isMine: boolean }>();

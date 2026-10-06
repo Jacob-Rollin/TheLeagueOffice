@@ -14,7 +14,7 @@ import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player, Pos } from "@/lib/draft";
-import { getInjuryReports, getRosterNews } from "@/lib/players.functions";
+import { fetchSnapInjuryReports, fetchSnapRosterNews } from "@/lib/snap-cdn";
 import type { InjuryReportItem } from "@/lib/players.server";
 import { getTeamPrimaryColor } from "@/lib/nfl-teams";
 import {
@@ -1051,9 +1051,9 @@ function PlaybookMyTeamPage() {
   const rosterNewsQuery = useQuery({
     queryKey: ["roster-news", rosterIdsKey],
     enabled: rosterIdsKey.length > 0 && (tab === "lineup" || tab === "news"),
-    staleTime: 1000 * 60 * 10,
+    staleTime: 15 * 60 * 1000,
     retry: false,
-    queryFn: async () => await getRosterNews({ data: { ids: rosterIdsKey.split(",") } }),
+    queryFn: async () => fetchSnapRosterNews(rosterIdsKey.split(",")),
   });
 
   const newsById = useMemo(() => {
@@ -1113,10 +1113,14 @@ function PlaybookMyTeamPage() {
 
   const injuryReports = useQuery({
     queryKey: ["injury-reports"],
-    queryFn: () => getInjuryReports(),
+    queryFn: () => fetchSnapInjuryReports(),
     staleTime: 5 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
-    retry: 1,
+    refetchInterval: (q) =>
+      typeof document !== "undefined" && document.visibilityState !== "visible"
+        ? false
+        : 10 * 60 * 1000,
+    refetchIntervalInBackground: false,
+    retry: false,
     enabled: tab === "news",
   });
 

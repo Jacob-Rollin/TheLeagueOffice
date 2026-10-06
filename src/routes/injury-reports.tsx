@@ -15,7 +15,7 @@ import {
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import { getInjuryReports } from "@/lib/players.functions";
+import { fetchSnapInjuryReports } from "@/lib/snap-cdn";
 
 export const Route = createFileRoute("/injury-reports")({
   ssr: false,
@@ -58,9 +58,13 @@ function InjuryReportsPage() {
   const query = useQuery({
     queryKey: ["injury-reports"],
     staleTime: 5 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
-    retry: 1,
-    queryFn: () => getInjuryReports(),
+    refetchInterval: (q) =>
+      typeof document !== "undefined" && document.visibilityState !== "visible"
+        ? false
+        : 10 * 60 * 1000,
+    refetchIntervalInBackground: false,
+    retry: false,
+    queryFn: () => fetchSnapInjuryReports(),
   });
 
   const { data: playersPayload } = useSleeperPlayers();

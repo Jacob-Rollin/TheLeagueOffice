@@ -7,7 +7,7 @@ import { PositionBadge } from "@/components/draft/PositionBadge";
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
 import { resolveAvatarUrl } from "@/components/playbook/panels";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
-import { getConnectionRosters } from "@/lib/league.functions";
+import { fetchLeagueRostersForConnection } from "@/lib/league-rosters-fetch";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import { cn } from "@/lib/utils";
@@ -88,13 +88,12 @@ export function GlobalSearch() {
       refetchOnWindowFocus: false,
       retry: false,
       queryFn: async () =>
-        await getConnectionRosters({
-          data: {
-            identifier: league.leagueId,
-            platform: league.platform,
-            ...(league.s2 ? { s2: league.s2 } : {}),
-            ...(league.swid ? { swid: league.swid } : {}),
-          },
+        fetchLeagueRostersForConnection({
+          leagueId: league.leagueId,
+          platform: league.platform,
+          teamName: league.teamName,
+          s2: league.s2,
+          swid: league.swid,
         }),
     })),
   });

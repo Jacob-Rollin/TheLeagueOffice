@@ -6,7 +6,7 @@ import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { listPublishedArticles } from "@/lib/articles";
 import type { Pos } from "@/lib/draft";
-import { getFantasyNewsFeed } from "@/lib/players.functions";
+import { fetchSnapFantasyNews } from "@/lib/snap-cdn";
 import { cn } from "@/lib/utils";
 
 import { MobileActivityList } from "./MobileLeagueChrome";
@@ -29,7 +29,7 @@ const AVATAR_POS = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
 async function loadFantasyNews(): Promise<FeedNewsItem[]> {
   const [articles, feed] = await Promise.all([
     listPublishedArticles(6).catch(() => []),
-    getFantasyNewsFeed({ data: { limit: 40 } }).catch(() => []),
+    fetchSnapFantasyNews(40).catch(() => []),
   ]);
   const ours: FeedNewsItem[] = articles.map((a) => ({
     id: `article-${a.id}`,

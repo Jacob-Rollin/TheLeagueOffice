@@ -38,7 +38,8 @@ import {
 } from "@/lib/trade-engine";
 
 import { loadPlayersCatalog } from "@/lib/players-catalog";
-import { getPlayerDetail, getTradeValueBasis } from "@/lib/players.functions";
+import { getPlayerDetail } from "@/lib/players.functions";
+import { fetchSnapTradeValueBasis } from "@/lib/snap-cdn";
 import { inSeasonWeeklyValue, type InSeasonValue } from "@/lib/trade-value";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
@@ -55,9 +56,17 @@ const playersQuery = queryOptions({
 
 const detailQuery = (id: string) =>
   queryOptions({
-    queryKey: ["player-detail", id],
-    queryFn: () => getPlayerDetail({ data: { id } }),
+    queryKey: ["player", id, "client-v1"],
+    queryFn: async () => {
+      const { hydratePlayerBrain } = await import("@/lib/playerBrainHydration");
+      const { fetchPlayerDetailClient } = await import("@/lib/player-detail-client");
+      const brain = await hydratePlayerBrain().catch(() => null);
+      const client = await fetchPlayerDetailClient(id, brain);
+      if (client) return client;
+      return getPlayerDetail({ data: { id } });
+    },
     staleTime: 1000 * 60 * 30,
+    retry: false,
   });
 
 export const Route = createFileRoute("/trade")({
@@ -305,7 +314,7 @@ function TradePage() {
    */
   const { data: valueBasis } = useQuery({
     queryKey: ["trade-value-basis"],
-    queryFn: () => getTradeValueBasis(),
+    queryFn: () => fetchSnapTradeValueBasis(),
     staleTime: 30 * 60 * 1000,
   });
   const valueOf = useCallback(

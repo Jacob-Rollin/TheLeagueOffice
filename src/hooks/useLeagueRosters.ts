@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
-import { getConnectionRosters } from "@/lib/league.functions";
 import type { Player } from "@/lib/draft";
+import { fetchLeagueRostersForConnection } from "@/lib/league-rosters-fetch";
 import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
 import {
   markRevalidated,
@@ -83,7 +83,7 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
     hydrated.current = true;
     void (async () => {
       if (queryClient.getQueryData(queryKey)) return;
-      const cached = await readRosterCache<Awaited<ReturnType<typeof getConnectionRosters>>>(
+      const cached = await readRosterCache<Awaited<ReturnType<typeof fetchLeagueRostersForConnection>>>(
         storeKey,
       );
       if (cached && !queryClient.getQueryData(queryKey)) {
@@ -103,13 +103,12 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
     refetchOnWindowFocus: false,
     retry: false,
     queryFn: async () => {
-      const data = await getConnectionRosters({
-        data: {
-          identifier,
-          platform,
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      const data = await fetchLeagueRostersForConnection({
+        leagueId: identifier,
+        platform,
+        teamName: activeLeague?.teamName,
+        s2: activeLeague?.s2,
+        swid: activeLeague?.swid,
       });
       // Network roster pulls (not IndexedDB hydrate) update My Leagues "Synced".
       if (connectionId && data) {

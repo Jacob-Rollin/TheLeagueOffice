@@ -29,6 +29,7 @@ import {
   type InjuryReportLine,
 } from "@/lib/are-they-playing";
 import { currentSeason, fetchSchedule, type Player } from "@/lib/players-build";
+import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
 import { fetchResearchAreTheyPlaying, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import { fetchLiveInjuryStatusesClient } from "@/lib/sleeper-client";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
@@ -128,19 +129,28 @@ function AreTheyPlayingPage() {
     queryKey: ["are-they-playing", week],
     enabled: week != null,
     staleTime: RESEARCH_CLIENT_STALE_MS,
-    refetchInterval: 15 * 60 * 1000,
-    retry: 1,
+    refetchInterval: visibleRefetchInterval(15 * 60 * 1000),
+    refetchIntervalInBackground: false,
+    retry: false,
     queryFn: () => fetchResearchAreTheyPlaying(week ?? 1),
   });
 
   const liveInjuries = useQuery({
     queryKey: ["live-injury-statuses"],
     staleTime: 10 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
+    refetchInterval: visibleRefetchInterval(10 * 60 * 1000),
+    refetchIntervalInBackground: false,
     // Soft-empty inside client helper — do not retry-storm Sleeper.
     retry: false,
     // Public Sleeper projections — browser pool, not Fluid.
-    queryFn: () => fetchLiveInjuryStatusesClient(),
+    queryFn: () => {
+      if (!isPageVisible()) {
+        return Promise.resolve(
+          {} as Record<string, { status: string | null; bodyPart: string | null }>,
+        );
+      }
+      return fetchLiveInjuryStatusesClient();
+    },
   });
 
   const schedule = useQuery({

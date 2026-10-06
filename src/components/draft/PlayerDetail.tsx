@@ -20,8 +20,10 @@ import { getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
 import { getPlayerDetail, getPlayerNews } from "@/lib/players.functions";
 import type { CareerSeasonRow, GameLog } from "@/lib/players.server";
 import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
+import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
+import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import { formatNflGameStatusLabel, formatNflKickoffLabel } from "@/lib/rolling-live-projection";
-import { getLeagueScoring } from "@/lib/scoring.functions";
+import { fetchLeagueScoringPreferred } from "@/lib/scoring-client";
 import { projectionPoints, type ScoringMap } from "@/lib/scoring-map";
 import {
   fetchGameLogsClient,
@@ -172,9 +174,16 @@ const SCORING_OPTIONS: { value: Scoring; label: string }[] = [
 
 export const detailQuery = (id: string) =>
   queryOptions({
-    queryKey: ["player", id],
-    queryFn: () => getPlayerDetail({ data: { id } }),
+    queryKey: ["player", id, "client-v1"],
+    queryFn: async () => {
+      const brain = await hydratePlayerBrain().catch(() => null);
+      const client = await fetchPlayerDetailClient(id, brain);
+      if (client) return client;
+      // Catalog miss only — keep Fluid as last resort.
+      return getPlayerDetail({ data: { id } });
+    },
     staleTime: 1000 * 60 * 30,
+    retry: false,
   });
 
 export function PlayerDetail({
@@ -268,13 +277,11 @@ export function PlayerDetail({
     enabled: Boolean(activeLeague?.leagueId) && !scoringControlled,
     staleTime: 1000 * 60 * 60,
     queryFn: () =>
-      getLeagueScoring({
-        data: {
-          identifier: activeLeague!.leagueId,
-          platform: activeLeague!.platform,
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      fetchLeagueScoringPreferred({
+        identifier: activeLeague!.leagueId,
+        platform: activeLeague!.platform,
+        s2: activeLeague?.s2,
+        swid: activeLeague?.swid,
       }),
   });
 
@@ -1051,8 +1058,8 @@ function GameLogsPanel({
   } = useLeagueProjections();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["player-logs", id, season, team, pos],
-    queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season),
+    queryKey: ["player-logs", id, season, team || "FA", pos, "career"],
+    queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
@@ -1237,8 +1244,8 @@ function ProjectionsPanel({
   } = useLeagueProjections();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["player-projections-weekly", id, team, pos],
-    queryFn: () => fetchGameLogsClient(id, team || "FA", pos),
+    queryKey: ["player-logs", id, "current", team || "FA", pos],
+    queryFn: () => fetchGameLogsClient(id, team || "FA", pos, null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
@@ -1704,9 +1711,11 @@ function OutlookPanel({
   const { myTeam } = useLeagueRosters(catalog);
 
   const { data: logsBundle } = useQuery({
-    queryKey: ["player-outlook-logs", playerId, team, pos],
+    // Current season only — career years load when Game Logs opens.
+    queryKey: ["player-logs", playerId, "current", team || "FA", pos],
     enabled: Boolean(playerId && pos),
-    queryFn: () => fetchGameLogsClient(playerId, team || "FA", pos || "WR"),
+    queryFn: () =>
+      fetchGameLogsClient(playerId, team || "FA", pos || "WR", null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
