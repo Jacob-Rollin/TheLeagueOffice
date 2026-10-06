@@ -44,7 +44,7 @@ jobs:
       - name: Log Success to Axiom
         if: success()
         run: |
-          curl -X POST "api.axiom.co/v1/datasets/the-league-office/ingest" \
+          curl -X POST "https://api.axiom.co/v1/datasets/the-league-office/ingest" \
             -H "Authorization: Bearer ${{ secrets.AXIOM_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '[{
@@ -59,7 +59,7 @@ jobs:
       - name: Log Failure to Axiom
         if: failure()
         run: |
-          curl -X POST "api.axiom.co/v1/datasets/the-league-office/ingest" \
+          curl -X POST "https://api.axiom.co/v1/datasets/the-league-office/ingest" \
             -H "Authorization: Bearer ${{ secrets.AXIOM_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '[{
