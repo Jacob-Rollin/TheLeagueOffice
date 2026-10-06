@@ -23,7 +23,12 @@ export async function fetchLeagueRostersForConnection(input: {
 
   if (canFetchRostersClient(platform)) {
     const client = await fetchSleeperLeagueRostersClient(leagueId, input.teamName).catch(() => null);
-    if (client?.teams?.length) return client;
+    if (client?.teams?.length) {
+      // If we expected a "mine" team and none matched, fall through to Fluid
+      // (authoritative owner_id resolution) instead of leaving every team as opponent.
+      const mineOk = !input.teamName?.trim() || client.teams.some((t) => t.isMine);
+      if (mineOk) return client;
+    }
   }
 
   return getConnectionRosters({

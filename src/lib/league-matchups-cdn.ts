@@ -171,6 +171,74 @@ export async function fetchLeagueAllMatchupsCdn(
   return out;
 }
 
+const HISTORY_BACKFILL_CONCURRENCY = 2;
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (!items.length) return [];
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/**
+ * CDN/TiDB first for all weeks, then Fluid backfill only for weeks the caller
+ * needs that are missing/empty. Merges Fluid boards into the map (TiDB dual-write
+ * is async, so a CDN re-read alone is not enough on the cold path).
+ *
+ * Use this for dashboard coaching metrics + standings analytics — CDN-only left
+ * those surfaces on placeholder zeros when TiDB had not been warmed yet.
+ */
+export async function fetchLeagueMatchupsHistory(input: {
+  leagueId: string;
+  platform: string;
+  weeks: number[];
+  s2?: string;
+  swid?: string;
+  connectionId?: string;
+  allowFluid?: boolean;
+}): Promise<Map<number, LeagueMatchupsCdnHit>> {
+  const leagueId = String(input.leagueId ?? "").trim();
+  const out = leagueId ? await fetchLeagueAllMatchupsCdn(leagueId) : new Map<number, LeagueMatchupsCdnHit>();
+  const needed = Array.from(
+    new Set(
+      input.weeks
+        .map((w) => Math.max(1, Math.min(18, Math.floor(Number(w) || 0))))
+        .filter((w) => w > 0),
+    ),
+  ).sort((a, b) => a - b);
+
+  const missing = needed.filter((week) => !(out.get(week)?.board.entries.length));
+  if (!missing.length || input.allowFluid === false || !leagueId) return out;
+
+  await mapPool(missing, HISTORY_BACKFILL_CONCURRENCY, async (week) => {
+    const board = await maybeRefreshMatchupsViaFluid({
+      leagueId,
+      week,
+      platform: input.platform,
+      ...(input.s2 ? { s2: input.s2 } : {}),
+      ...(input.swid ? { swid: input.swid } : {}),
+      ...(input.connectionId ? { connectionId: input.connectionId } : {}),
+      allow: true,
+    });
+    if (board?.entries?.length) {
+      out.set(week, { board, syncedAtMs: Date.now() });
+    }
+  });
+
+  return out;
+}
+
 export function isLiveMatchupFresh(syncedAtMs: number, now = Date.now()): boolean {
   return syncedAtMs > 0 && now - syncedAtMs <= LIVE_MAX_AGE_MS;
 }

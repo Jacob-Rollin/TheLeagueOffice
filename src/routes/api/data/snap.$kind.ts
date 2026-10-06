@@ -98,8 +98,10 @@ export const Route = createFileRoute("/api/data/snap/$kind")({
             });
             const warm =
               kind === "ros"
-                ? Array.isArray((payload as { weeks?: unknown[] })?.weeks)
-                : Array.isArray((payload as { teams?: unknown[] })?.teams);
+                ? Array.isArray((payload as { weeks?: unknown[] })?.weeks) &&
+                  ((payload as { weeks: unknown[] }).weeks.length > 0)
+                : Array.isArray((payload as { teams?: unknown[] })?.teams) &&
+                  ((payload as { teams: unknown[] }).teams.length > 0);
             return jsonResponse(payload, { cache: warm ? researchCacheControl() : "no-store" });
           }
 

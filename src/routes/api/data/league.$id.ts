@@ -78,6 +78,10 @@ export const Route = createFileRoute("/api/data/league/$id")({
                 paramsSql,
               );
             });
+            // Never edge-cache an empty board — cold TiDB would pin dashboards to zeros.
+            if (!matchups.length) {
+              return jsonResponse({ ok: true, leagueId, matchups }, { cache: "no-store" });
+            }
             // Live single-week boards stay short-TTL; history/all-weeks longer.
             const cache = week > 0 ? dataCacheControl() : leagueHistoryCacheControl();
             return jsonResponse({ ok: true, leagueId, matchups }, { cache });
@@ -93,6 +97,9 @@ export const Route = createFileRoute("/api/data/league/$id")({
               [leagueId],
             ),
           );
+          if (!rosters.length) {
+            return jsonResponse({ ok: true, leagueId, rosters }, { cache: "no-store" });
+          }
           return jsonResponse(
             { ok: true, leagueId, rosters },
             { cache: leagueHistoryCacheControl() },

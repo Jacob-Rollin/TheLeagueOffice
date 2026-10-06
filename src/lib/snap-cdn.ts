@@ -28,16 +28,8 @@ export async function fetchSnapTradeValueBasis() {
   const hit = await fetchSnapJson<Awaited<ReturnType<typeof import("./players.server").loadTradeValueBasis>>>(
     "/api/data/snap/trade-basis",
   );
-  if (hit && hit.players) return hit;
-  if (!allowFluidFallback()) {
-    return {
-      season: "",
-      week: 0,
-      remainingWeeks: 0,
-      rosAvailable: false,
-      players: {},
-    };
-  }
+  if (hit?.players && Object.keys(hit.players).length > 0) return hit;
+  // League-critical values: prefer one Fluid warm over grading on an empty map.
   const { getTradeValueBasis } = await import("./players.functions");
   return getTradeValueBasis();
 }
@@ -95,13 +87,17 @@ export async function fetchSnapRosterNews(ids: string[]) {
   const hit = await fetchSnapJson<Awaited<ReturnType<typeof import("./players.server").loadRosterNews>>>(
     `/api/data/snap/roster-news?${qs}`,
   );
-  if (hit && Array.isArray(hit.players)) return hit;
-  if (!allowFluidFallback()) return { season: "", week: 0, players: [] };
+  if (hit && Array.isArray(hit.players) && hit.players.length > 0) return hit;
+  // Roster-scoped: Fluid warm on miss (CDN still wins once populated).
   const { getRosterNews } = await import("./players.functions");
   return getRosterNews({ data: { ids: clean } });
 }
 
-/** Sleeper-only CDN path — ESPN/Yahoo keep Fluid (credentials). */
+/**
+ * League-scoped snaps: CDN first when the identifier is a numeric host league id.
+ * On miss (or username identifiers), fall through to Fluid — soft-emptying these
+ * blanked playoff odds / slot ranks for real leagues.
+ */
 export async function fetchSnapRestOfSeason(input: {
   identifier: string;
   platform: string;
@@ -111,7 +107,7 @@ export async function fetchSnapRestOfSeason(input: {
   swid?: string;
 }) {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
-  if (platform === "sleeper" && input.identifier) {
+  if (platform === "sleeper" && /^\d{6,}$/.test(input.identifier)) {
     const qs = new URLSearchParams({
       league: input.identifier,
       from: String(input.fromWeek),
@@ -120,8 +116,7 @@ export async function fetchSnapRestOfSeason(input: {
     const hit = await fetchSnapJson<
       Awaited<ReturnType<typeof import("./standings-projections.server").loadRestOfSeasonProjections>>
     >(`/api/data/snap/ros?${qs}`);
-    if (hit && Array.isArray(hit.weeks)) return hit;
-    if (!allowFluidFallback()) return { weeks: [], byWeek: [] };
+    if (hit && Array.isArray(hit.weeks) && hit.weeks.length > 0) return hit;
   }
   const { getRestOfSeasonProjections } = await import("./league.functions");
   return getRestOfSeasonProjections({
@@ -146,7 +141,7 @@ export async function fetchSnapStartingSlotRanks(input: {
 }) {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
   const toWeek = input.toWeek ?? input.fromWeek;
-  if (platform === "sleeper" && input.identifier) {
+  if (platform === "sleeper" && /^\d{6,}$/.test(input.identifier)) {
     const qs = new URLSearchParams({
       league: input.identifier,
       from: String(input.fromWeek),
@@ -155,8 +150,7 @@ export async function fetchSnapStartingSlotRanks(input: {
     const hit = await fetchSnapJson<
       Awaited<ReturnType<typeof import("./standings-projections.server").loadStartingSlotRanks>>
     >(`/api/data/snap/slot-ranks?${qs}`);
-    if (hit && Array.isArray(hit.teams)) return hit;
-    if (!allowFluidFallback()) return { seats: [], teams: [] };
+    if (hit && Array.isArray(hit.teams) && hit.teams.length > 0) return hit;
   }
   const { getStartingSlotRanks } = await import("./league.functions");
   return getStartingSlotRanks({
