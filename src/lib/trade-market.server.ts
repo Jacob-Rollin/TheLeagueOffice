@@ -32,13 +32,17 @@ function memo<T>(ttl: number, fn: (key: string) => Promise<T>) {
   };
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: { accept: "application/json" },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!res.ok) throw new Error(`Upstream ${res.status}`);
-  return (await res.json()) as T;
+async function fetchJson<T>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
 }
 
 type FcEntry = {
@@ -65,6 +69,7 @@ const marketValues = memo<MarketRow[]>(HOUR, async (format) => {
   const rows = await fetchJson<FcEntry[]>(
     `${FC_BASE}/values/current?isDynasty=false&numQbs=1&numTeams=12&ppr=${ppr}`,
   );
+  if (!rows) return [];
   const out: MarketRow[] = [];
   for (const entry of Array.isArray(rows) ? rows : []) {
     const p = entry.player;
@@ -215,7 +220,7 @@ const opportunityForSeason = memo<OpportunityRow[]>(3 * HOUR, async (season) => 
 export async function loadTradeMarket(format: MarketFormat): Promise<TradeMarketPayload> {
   const season = currentSeason();
   const [rows, opportunity] = await Promise.all([
-    marketValues(format),
+    marketValues(format).catch(() => [] as MarketRow[]),
     opportunityForSeason(season).catch(() => [] as OpportunityRow[]),
   ]);
   return { format, season, rows, opportunity };
@@ -244,13 +249,13 @@ const marketHistory = memo<MarketHistoryPoint[]>(6 * HOUR, async (key) => {
   const [fcId, format] = key.split(":");
   const ppr = PPR_PARAM[(format as MarketFormat) ?? "half"] ?? "0.5";
   const url = `${FC_BASE}/trades/implied/${encodeURIComponent(fcId ?? "")}?isDynasty=false&numQbs=1&numTeams=12&ppr=${ppr}`;
-  const json = await withHistorySlot(() =>
-    fetchJson<FcImplied>(url).catch(async () => {
-      await new Promise((r) => setTimeout(r, 750));
-      return await fetchJson<FcImplied>(url);
-    }),
-  );
-  return (json.historicalValues ?? [])
+  const json = await withHistorySlot(async () => {
+    const first = await fetchJson<FcImplied>(url);
+    if (first) return first;
+    await new Promise((r) => setTimeout(r, 750));
+    return await fetchJson<FcImplied>(url);
+  });
+  return (json?.historicalValues ?? [])
     .filter((p): p is { date: string; value: number } => typeof p.date === "string" && Number(p.value) > 0)
     .slice(-HISTORY_DAYS)
     .map((p) => ({ date: p.date, value: Number(p.value) }));
@@ -260,5 +265,5 @@ export async function loadMarketHistory(
   fcId: number,
   format: MarketFormat,
 ): Promise<MarketHistoryPoint[]> {
-  return await marketHistory(`${fcId}:${format}`);
+  return await marketHistory(`${fcId}:${format}`).catch(() => [] as MarketHistoryPoint[]);
 }

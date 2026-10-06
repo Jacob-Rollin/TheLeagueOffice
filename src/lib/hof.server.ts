@@ -59,11 +59,7 @@ function publicClient() {
       ? ((import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string | undefined) ||
         (import.meta.env["VITE_SUPABASE_ANON_KEY"] as string | undefined))
       : undefined);
-  if (!url || !key) {
-    throw new Error(
-      "Missing Supabase environment variable(s): VITE_SUPABASE_URL / SUPABASE_URL, VITE_SUPABASE_ANON_KEY / SUPABASE_ANON_KEY.",
-    );
-  }
+  if (!url || !key) return null;
   return createClient<Database>(url, key, {
     auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
   });
@@ -71,6 +67,7 @@ function publicClient() {
 
 export async function loadHallOfFame(): Promise<HofYear[]> {
   const supabase = publicClient();
+  if (!supabase) return [];
 
   const [champs, playerWeeks, teamWeeks, teamSeasons] = await Promise.all([
     supabase
@@ -89,7 +86,11 @@ export async function loadHallOfFame(): Promise<HofYear[]> {
 
   const firstError =
     champs.error ?? playerWeeks.error ?? teamWeeks.error ?? teamSeasons.error;
-  if (firstError) throw new Error(firstError.message);
+  // Empty board beats a Fluid 500 when Supabase blips.
+  if (firstError) {
+    console.warn("[hof] query failed", firstError.message);
+    return [];
+  }
 
   const byYear = new Map<number, HofYear>();
   const slot = (year: number) => {
