@@ -9,7 +9,7 @@ import { resolveAvatarUrl } from "@/components/playbook/panels";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { getConnectionRosters } from "@/lib/league.functions";
 import { NFL_TEAMS } from "@/lib/nfl-teams";
-import { getPlayers } from "@/lib/players.functions";
+import { loadPlayersCatalog } from "@/lib/players-catalog";
 import { cn } from "@/lib/utils";
 
 type LeagueTeamHit = {
@@ -72,8 +72,8 @@ export function GlobalSearch() {
   }, [q]);
 
   const { data } = useQuery({
-    queryKey: ["players"],
-    queryFn: () => getPlayers(),
+    queryKey: ["players-catalog"],
+    queryFn: () => loadPlayersCatalog(),
     staleTime: 1000 * 60 * 30,
     enabled: open,
   });

@@ -26,12 +26,12 @@ import {
   type Settings,
 } from "@/lib/draft";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import { getPlayers } from "@/lib/players.functions";
+import { loadPlayersCatalog } from "@/lib/players-catalog";
 import { cn } from "@/lib/utils";
 
 const playersQuery = queryOptions({
-  queryKey: ["players"],
-  queryFn: () => getPlayers(),
+  queryKey: ["players-catalog"],
+  queryFn: () => loadPlayersCatalog(),
   staleTime: 1000 * 60 * 30,
 });
 export const Route = createFileRoute("/draft")({

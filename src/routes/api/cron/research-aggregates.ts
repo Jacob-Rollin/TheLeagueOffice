@@ -3,8 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { authorizeCronRequest } from "@/lib/cron-auth.server";
 
 /**
- * Warm research aggregates (redzone / targets / are-they-playing) into TiDB
- * so page loads never gunzip nflverse PBP or scrape 32 club sites.
+ * Warm research aggregates into TiDB so page loads never gunzip nflverse PBP,
+ * scrape 32 club sites, or fan out 18-week Sleeper stats.
  */
 export const Route = createFileRoute("/api/cron/research-aggregates")({
   server: {
@@ -26,6 +26,14 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
           const { applyTidbSchema } = await import("@/lib/tidb-migrate.server");
           await applyTidbSchema().catch(() => undefined);
 
+          const stateRes = await fetch("https://api.sleeper.app/v1/state/nfl", {
+            headers: { accept: "application/json" },
+          }).catch(() => null);
+          const state = stateRes?.ok
+            ? ((await stateRes.json()) as { week?: number })
+            : { week: 1 };
+          const week = Math.max(1, Number(state.week) || 1);
+
           const { loadRedZoneStats } = await import("@/lib/redzone.server");
           const redzone = await loadRedZoneStats(season, 20, null, null, { allowCompute: true });
           report["redzone"] = {
@@ -43,23 +51,44 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
           };
 
           const { loadAreTheyPlaying } = await import("@/lib/are-they-playing.server");
-          const stateRes = await fetch("https://api.sleeper.app/v1/state/nfl", {
-            headers: { accept: "application/json" },
-          }).catch(() => null);
-          const state = stateRes?.ok
-            ? ((await stateRes.json()) as { week?: number })
-            : { week: 1 };
-          const week = Math.max(1, Number(state.week) || 1);
           const atp = await loadAreTheyPlaying(week, { allowCompute: true });
           report["areTheyPlaying"] = { week: atp.week, lines: atp.lines.length };
 
-          const { loadSosBoard } = await import("@/lib/players.server");
+          const {
+            loadSosBoard,
+            loadFantasyPointsAllowed,
+            loadMatchupsGuide,
+            loadSosAnalysis,
+          } = await import("@/lib/players.server");
+
           const sos = await loadSosBoard(season, { allowCompute: true });
           report["sos"] = {
             season: sos.season,
             dataThroughWeek: sos.dataThroughWeek,
             scheduleGames: sos.schedule.length,
           };
+
+          const fpa = await loadFantasyPointsAllowed(season, "half", { allowCompute: true });
+          report["fpa"] = { season: fpa.season, weeksTo: fpa.weeksTo, rows: fpa.rows.length };
+
+          const guide = await loadMatchupsGuide(week, "half", { allowCompute: true });
+          report["matchupsGuide"] = {
+            week: guide.week,
+            games: Object.keys(guide.games).length,
+            dataThroughWeek: guide.dataThroughWeek,
+          };
+
+          const analysis = await loadSosAnalysis("half", { allowCompute: true });
+          report["sosAnalysis"] = {
+            season: analysis.season,
+            rows: analysis.rows.length,
+            fromWeek: analysis.fromWeek,
+          };
+
+          // Warm Matchup Replay PBP snaps for completed weeks (and current).
+          const { warmWeekPlaysSnapshots } = await import("@/lib/matchup-replay.server");
+          const plays = await warmWeekPlaysSnapshots(season, week);
+          report["weekPlays"] = plays;
 
           return new Response(JSON.stringify(report), {
             status: 200,

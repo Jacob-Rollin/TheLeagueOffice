@@ -636,6 +636,24 @@ const PA_POSITIONS: FantasyPointsAllowedPos[] = ["QB", "RB", "WR", "TE", "K", "D
 export async function loadFantasyPointsAllowed(
   season = currentSeason(),
   format: AllowedFormat = "half",
+  opts?: { allowCompute?: boolean },
+): Promise<FantasyPointsAllowedPayload> {
+  const seasonKey = String(season ?? currentSeason()).slice(0, 16);
+  const fmt = format in FORMAT_SLOT ? format : "half";
+  const snapKey = `${seasonKey}|${fmt}`;
+  const empty: FantasyPointsAllowedPayload = {
+    season: seasonKey,
+    weeksFrom: 0,
+    weeksTo: 0,
+    rows: [],
+  };
+  const { withResearchSnap } = await import("./research-agg.server");
+  return withResearchSnap("agg_fpa", snapKey, opts, empty, () => computeFantasyPointsAllowed(seasonKey, fmt));
+}
+
+async function computeFantasyPointsAllowed(
+  season: string,
+  format: AllowedFormat,
 ): Promise<FantasyPointsAllowedPayload> {
   const slot = FORMAT_SLOT[format] ?? 1;
   const prev = String(Number(season) - 1);
@@ -908,6 +926,7 @@ export type MatchupsGuide = {
 export async function loadMatchupsGuide(
   weekInput?: number | null,
   format: AllowedFormat = "half",
+  opts?: { allowCompute?: boolean },
 ): Promise<MatchupsGuide> {
   const state = await nflState("state");
   const season = state.season;
@@ -916,6 +935,30 @@ export async function loadMatchupsGuide(
     weekInput != null && Number.isFinite(weekInput) && weekInput >= 1 && weekInput <= 18
       ? Math.round(weekInput)
       : currentWeek;
+  const fmt = format in FORMAT_SLOT ? format : "half";
+  const snapKey = `${season}|${week}|${fmt}`;
+  const empty: MatchupsGuide = {
+    season,
+    week,
+    currentWeek,
+    priorSeason: null,
+    dataThroughWeek: 0,
+    updatedAt: new Date().toISOString(),
+    games: {},
+    defense: {},
+  };
+  const { withResearchSnap } = await import("./research-agg.server");
+  return withResearchSnap("agg_matchups_guide", snapKey, opts, empty, () =>
+    computeMatchupsGuide(season, week, currentWeek, fmt),
+  );
+}
+
+async function computeMatchupsGuide(
+  season: string,
+  week: number,
+  currentWeek: number,
+  format: AllowedFormat,
+): Promise<MatchupsGuide> {
   const [allowed, schedule] = await Promise.all([
     sosAllowed(season, format).catch(() => null),
     scheduleFor(season).catch(() => [] as ScheduleGame[]),
@@ -1032,12 +1075,38 @@ export type SosAnalysis = {
 };
 
 /** Every NFL team's remaining-schedule difficulty by position, plus its current depth chart. */
-export async function loadSosAnalysis(format: AllowedFormat = "half"): Promise<SosAnalysis> {
+export async function loadSosAnalysis(
+  format: AllowedFormat = "half",
+  opts?: { allowCompute?: boolean },
+): Promise<SosAnalysis> {
   const state = await nflState("state");
   const season = state.season;
   const fromWeek =
     state.seasonType === "regular" ? Math.min(FANTASY_LAST_WEEK, Math.max(1, state.week)) : 1;
   const toWeek = FANTASY_LAST_WEEK;
+  const fmt = format in FORMAT_SLOT ? format : "half";
+  const snapKey = `${season}|${fmt}|${fromWeek}`;
+  const empty: SosAnalysis = {
+    season,
+    fromWeek,
+    toWeek,
+    dataThroughWeek: 0,
+    priorSeason: null,
+    updatedAt: new Date().toISOString(),
+    rows: [],
+  };
+  const { withResearchSnap } = await import("./research-agg.server");
+  return withResearchSnap("agg_sos_analysis", snapKey, opts, empty, () =>
+    computeSosAnalysis(season, fromWeek, toWeek, fmt),
+  );
+}
+
+async function computeSosAnalysis(
+  season: string,
+  fromWeek: number,
+  toWeek: number,
+  format: AllowedFormat,
+): Promise<SosAnalysis> {
   const [allowed, schedule, depth] = await Promise.all([
     sosAllowed(season, format).catch(() => null),
     scheduleFor(season).catch(() => [] as ScheduleGame[]),

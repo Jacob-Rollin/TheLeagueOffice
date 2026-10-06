@@ -5,8 +5,8 @@ name: Projection Engine
 
 on:
   schedule:
-    # Hourly all week.
-    - cron: "5 * * * *"
+    # Midweek: every 4 hours (runs on GH runner — not Vercel Fluid).
+    - cron: "5 */4 * * *"
     # Every 15 minutes while inactives and late news land (times in UTC).
     - cron: "*/15 12-23 * * 0"
     - cron: "*/15 0-1 * * 1"

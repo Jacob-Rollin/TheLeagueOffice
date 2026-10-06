@@ -1517,7 +1517,19 @@ async function reconstructSleeperIrByRoster(
 const LIVE_MATCHUP_TTL_MS = 60 * 1000;
 const FINAL_MATCHUP_TTL_MS = 10 * 60 * 1000;
 /** Serve current-week boards from TiDB when fresher than this (avoids host wait). */
-const TIDB_LIVE_MATCHUP_MAX_AGE_MS = 90 * 1000;
+const TIDB_LIVE_MATCHUP_MAX_AGE_MS = 3 * 60 * 1000;
+
+/** Reject hollow or mid-game past-week caches so we don't freeze incomplete scores as final. */
+function isUsableFinalBoard(board: LeagueWeekMatchups): boolean {
+  const n = board.entries?.length ?? 0;
+  if (n < 2) return false;
+  const scored = board.entries.filter((e) => Number(e.points) > 0).length;
+  const started = board.entries.filter((e) => (e.starters?.length ?? 0) > 0).length;
+  if (started === 0 && scored === 0) return false;
+  // Mid-game snapshot risk: only a minority of teams have points.
+  if (scored > 0 && scored < Math.ceil(n * 0.4)) return false;
+  return started >= Math.ceil(n * 0.5) || scored >= Math.ceil(n * 0.5);
+}
 const NFL_STATE_URL = `${BASE}/state/nfl`;
 
 export type LoadMatchupsOptions = {
@@ -1556,11 +1568,11 @@ export async function loadConnectionMatchups(
     try {
       const { loadCachedWeekMatchups, loadTidbWeekMatchups } = await import("./league-resync.server");
       const cached = await loadCachedWeekMatchups(identifier.trim(), safeWeek, connectionId);
-      if (cached?.entries?.length) return cached;
+      if (cached && isUsableFinalBoard(cached)) return cached;
       const tidb = await loadTidbWeekMatchups(identifier.trim(), safeWeek, connectionId);
-      if (tidb?.board.entries.length) return tidb.board;
+      if (tidb?.board && isUsableFinalBoard(tidb.board)) return tidb.board;
     } catch {
-      /* fall through to host */
+      /* fall through to host — prefer live pull over a hollow/mid-game freeze */
     }
   }
 

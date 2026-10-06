@@ -12,7 +12,7 @@ const SESSION_KEY_PREFIX = "tlo.league-delta-sync.v1:";
  * Skip re-syncing the same connection within this window. Background cron
  * owns frequent refreshes; page loads only top up stale sessions.
  */
-const RESYNC_COOLDOWN_MS = 30 * 60 * 1000;
+const RESYNC_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
 export function useLeagueSync() {
   const { activeLeague, sandboxMode } = useActiveLeague();

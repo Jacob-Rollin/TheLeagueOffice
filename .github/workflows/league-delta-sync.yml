@@ -3,17 +3,18 @@ name: League Delta Sync
 # Invokes the Vercel cron endpoint so synced league caches stay warm without
 # every page load wiping/re-pulling host platforms. Requires CRON_SECRET +
 # APP_URL repository secrets.
-# Tiered cadence to conserve GitHub's 2,000 free runner minutes / month.
+# Cadence kept lean for Vercel Hobby Fluid CPU (4 hrs/mo) — gameday every 30m,
+# small batch limit so each run finishes under the 300s Hobby wall clock.
 # Webhooks MUST hit Vercel /api/webhooks/sync — never repository_dispatch.
 
 on:
   schedule:
-    # Mid-week (Tue–Wed): every 3 hours.
-    - cron: "0 */3 * * 2,3"
-    # Gameday windows (Thu–Mon): every 15 minutes during active NFL blocks (UTC).
-    - cron: "*/15 12-23 * * 0,1,4"
-    - cron: "*/15 0-5 * * 1,2,5"
-    - cron: "*/15 16-23 * * 6"
+    # Mid-week (Tue–Wed): every 6 hours.
+    - cron: "0 */6 * * 2,3"
+    # Gameday windows (Thu–Mon): every 30 minutes during active NFL blocks (UTC).
+    - cron: "*/30 12-23 * * 0,1,4"
+    - cron: "*/30 0-5 * * 1,2,5"
+    - cron: "*/30 16-23 * * 6"
   workflow_dispatch:
 
 permissions:
@@ -43,9 +44,8 @@ jobs:
             http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
           esac
           curl -fsSL -H "Authorization: Bearer $CRON_SECRET" \
-            "$BASE/api/cron/league-delta-sync?limit=40"
+            "$BASE/api/cron/league-delta-sync?limit=12"
 
-      # 🟢 Send Success Metrics to Axiom if the sync completes perfectly
       - name: Log Success to Axiom
         if: success()
         run: |
@@ -60,7 +60,6 @@ jobs:
               "msg": "League data delta sync completed successfully across all rosters."
             }]'
 
-      # 🔴 Catch the exact reason your background script fails or times out
       - name: Log Failure to Axiom
         if: failure()
         run: |

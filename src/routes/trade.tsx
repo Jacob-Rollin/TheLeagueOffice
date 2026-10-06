@@ -37,7 +37,8 @@ import {
   type RosterConstraint,
 } from "@/lib/trade-engine";
 
-import { getPlayerDetail, getPlayers, getTradeValueBasis } from "@/lib/players.functions";
+import { loadPlayersCatalog } from "@/lib/players-catalog";
+import { getPlayerDetail, getTradeValueBasis } from "@/lib/players.functions";
 import { inSeasonWeeklyValue, type InSeasonValue } from "@/lib/trade-value";
 import type { PlayerDetail } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
@@ -47,8 +48,8 @@ import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 
 
 const playersQuery = queryOptions({
-  queryKey: ["players"],
-  queryFn: () => getPlayers(),
+  queryKey: ["players-catalog"],
+  queryFn: () => loadPlayersCatalog(),
   staleTime: 1000 * 60 * 30,
 });
 

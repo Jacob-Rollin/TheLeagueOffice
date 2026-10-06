@@ -7,7 +7,8 @@ import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { PlayerDetail } from "@/components/draft/PlayerDetail";
 import type { Pos, Scoring } from "@/lib/draft";
 import { NFL_TEAMS, getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
-import { getPlayerDetail, getPlayers } from "@/lib/players.functions";
+import { loadPlayersCatalog } from "@/lib/players-catalog";
+import { getPlayerDetail } from "@/lib/players.functions";
 import { cn } from "@/lib/utils";
 
 type TeamTabKey = "logs" | "projections" | "sos" | "outlook" | "depth" | "news";
@@ -51,8 +52,8 @@ function clickPlayerDetailTab(root: HTMLElement | null, label: string) {
 
 const playersQuery = () =>
   queryOptions({
-    queryKey: ["players"],
-    queryFn: () => getPlayers(),
+    queryKey: ["players-catalog"],
+    queryFn: () => loadPlayersCatalog(),
     staleTime: 1000 * 60 * 30,
   });
 

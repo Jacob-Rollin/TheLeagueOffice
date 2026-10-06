@@ -33,13 +33,13 @@ import {
   type Personality,
 } from "@/lib/mock-ai";
 import { loadMockConfig, timerSecondsFor, type MockConfig } from "@/lib/mock-config";
-import { getPlayers } from "@/lib/players.functions";
+import { loadPlayersCatalog } from "@/lib/players-catalog";
 import { cn } from "@/lib/utils";
 
 
 const playersQuery = queryOptions({
-  queryKey: ["players"],
-  queryFn: () => getPlayers(),
+  queryKey: ["players-catalog"],
+  queryFn: () => loadPlayersCatalog(),
   staleTime: 1000 * 60 * 30,
 });
 

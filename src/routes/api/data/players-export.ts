@@ -63,9 +63,7 @@ function exportPayload(rows: WarehouseRow[]) {
 
 /**
  * Compact warehouse dump for client brain hydration (replaces master_player_brain.json).
- * CDN-cached; single response instead of paginated fan-out.
- * If the TiDB table is missing/empty, auto-applies schema + seeds from Supabase brain
- * so cutover does not depend on CRON_SECRET / the admin migrate Action.
+ * CDN-cached; read-only. Seed/migrate only via admin/cron — never on this public route.
  */
 export const Route = createFileRoute("/api/data/players-export")({
   server: {
@@ -79,34 +77,13 @@ export const Route = createFileRoute("/api/data/players-export")({
         }
 
         try {
-          let rows: WarehouseRow[] = [];
-          try {
-            rows = await loadWarehouseRows();
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            const missing =
-              /doesn't exist|1146|42S02|not found/i.test(message) ||
-              /player_warehouse/i.test(message);
-            if (!missing) throw error;
-            console.warn("[api/data/players-export] warehouse missing — auto-migrate", message);
-          }
-
-          if (rows.length < 100) {
-            const { ensureTidbWarehouseSeeded } = await import("@/lib/tidb-migrate.server");
-            const boot = await ensureTidbWarehouseSeeded();
-            console.info(
-              `[api/data/players-export] ensure seed migrated=${boot.migrated} count=${boot.count} ${boot.detail ?? ""}`,
-            );
-            rows = await loadWarehouseRows();
-          }
-
+          const rows = await loadWarehouseRows();
           if (rows.length < 100) {
             return jsonResponse(
               { ok: false, error: "warehouse not seeded", count: rows.length },
               { status: 503, cache: "no-store" },
             );
           }
-
           return jsonResponse(exportPayload(rows));
         } catch (error) {
           const message = error instanceof Error ? error.message : "export failed";
