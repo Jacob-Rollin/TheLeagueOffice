@@ -110,6 +110,9 @@ export async function clearCache(key: string): Promise<void> {
   }
 }
 
+/** Concurrent callers for the same key share one in-flight fetch (per tab). */
+const inFlight = new Map<string, Promise<unknown>>();
+
 /** Cached fetch: fresh record wins, otherwise refetch, falling back to stale. */
 export async function getCached<T>(
   key: string,
@@ -118,12 +121,24 @@ export async function getCached<T>(
 ): Promise<T> {
   const hit = await readCache<T>(key);
   if (hit && Date.now() - hit.fetchedAt < ttlMs) return hit.data;
-  try {
-    const fresh = await fetcher();
-    await writeCache(key, fresh);
-    return fresh;
-  } catch (err) {
-    if (hit) return hit.data;
-    throw err;
-  }
+
+  const pending = inFlight.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+
+  const run = (async (): Promise<T> => {
+    try {
+      const fresh = await fetcher();
+      await writeCache(key, fresh);
+      return fresh;
+    } catch (err) {
+      // Prefer stale over throwing — keeps UI up without retry storms.
+      if (hit) return hit.data;
+      throw err;
+    } finally {
+      inFlight.delete(key);
+    }
+  })();
+
+  inFlight.set(key, run);
+  return run;
 }

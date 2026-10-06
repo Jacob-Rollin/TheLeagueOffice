@@ -32,7 +32,7 @@ import {
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
-import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
@@ -1266,25 +1266,14 @@ function PlaybookMatchupPage() {
   const [viewMatchupId, setViewMatchupId] = useState<string | null>(null);
   const [replayOpen, setReplayOpen] = useState(false);
 
-  const nflWeek = useQuery({
-    queryKey: ["nfl-state-week", "v3-week"],
-    staleTime: 30 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
-        headers: { accept: "application/json" },
-      }).catch(() => null);
-      const json = res && res.ok ? ((await res.json()) as Record<string, unknown>) : null;
-      return Math.max(1, Number(json?.["week"] ?? 1) || 1);
-    },
-  });
+  const nflWeek = useNflState();
 
   // Default to the active sync week on mount / league switch.
   useEffect(() => {
-    if (nflWeek.data != null) setSelectedWeek(nflWeek.data);
-  }, [nflWeek.data, activeLeagueId]);
+    if (nflWeek.data?.week != null) setSelectedWeek(nflWeek.data.week);
+  }, [nflWeek.data?.week, activeLeagueId]);
 
-  const activeWeek = selectedWeek ?? nflWeek.data ?? 1;
+  const activeWeek = selectedWeek ?? nflWeek.data?.week ?? 1;
   const { projectFor, scoringMap, loading: projectionsLoading } = useLeagueProjections(activeWeek);
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
@@ -1469,7 +1458,7 @@ function PlaybookMatchupPage() {
       : undefined;
     const fillEmptyFromLive =
       // Current NFL week, or week still loading (ESPN boxscore holes need live fill).
-      nflWeek.data == null || Number(activeWeek) === Number(nflWeek.data);
+      nflWeek.data?.week == null || Number(activeWeek) === Number(nflWeek.data.week);
     const minePlayers =
       myMode === "optimal"
         ? buildOptimalStarterRows(leftTeam, slotLabels, projectFor, {
@@ -2024,7 +2013,7 @@ function PlaybookMatchupPage() {
     oppTeam?.logo,
   ]);
 
-  const currentNflWeek = nflWeek.data ?? null;
+  const currentNflWeek = nflWeek.data?.week ?? null;
   const isCurrentWeek = currentNflWeek != null && Number(activeWeek) === Number(currentNflWeek);
 
   const { startSitAlerts, startSitLock } = useMemo(() => {
@@ -2191,7 +2180,8 @@ function PlaybookMatchupPage() {
 
   const aroundLeague = useMemo((): SidebarMatchup[] => {
     const entries = matchups?.entries ?? [];
-    const fillEmptyFromLive = nflWeek.data == null || Number(activeWeek) === Number(nflWeek.data);
+    const fillEmptyFromLive =
+      nflWeek.data?.week == null || Number(activeWeek) === Number(nflWeek.data.week);
     const phaseOf = (p: Player) => progressForNflTeam(p.team, progressByNflTeam)?.phase ?? "pre";
     const out: SidebarMatchup[] = [];
     for (const option of matchupOptions) {

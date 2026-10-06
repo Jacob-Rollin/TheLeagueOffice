@@ -11,7 +11,11 @@ import { sosHasUsableRanks, usePlayerSos, useSosPeerMatrix } from "@/hooks/usePl
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { Pos, Scoring } from "@/lib/draft";
 import { getTeamPrimaryColor, NFL_TEAMS, teamById } from "@/lib/nfl-teams";
-import { getNextGame, getPlayerBio, getPlayerDetail } from "@/lib/players.functions";
+import { getPlayerDetail } from "@/lib/players.functions";
+import {
+  fetchNextGameClient,
+  fetchPlayerBioClient,
+} from "@/lib/sleeper-client";
 import {
   playoffWindowPresentation,
   positionalSosStanding,
@@ -65,15 +69,17 @@ const profileQuery = (id: string) =>
 const bioQuery = (id: string) =>
   queryOptions({
     queryKey: ["player-bio", id],
-    queryFn: () => getPlayerBio({ data: { id } }),
+    queryFn: () => fetchPlayerBioClient(id),
     staleTime: 1000 * 60 * 60 * 12,
+    retry: false,
   });
 
 const nextGameQuery = (team: string) =>
   queryOptions({
     queryKey: ["player-next-game", team],
-    queryFn: () => getNextGame({ data: { team } }),
+    queryFn: () => fetchNextGameClient(team),
     staleTime: 1000 * 60 * 60 * 6,
+    retry: false,
   });
 
 const TEAM_NAME: Record<string, string> = Object.fromEntries(

@@ -17,7 +17,7 @@ import {
 } from "@/components/research/SortHeader";
 import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import type { FantasyPointsAllowedPos } from "@/lib/players.server";
-import { fetchResearchFpa } from "@/lib/research-cdn";
+import { fetchResearchFpa, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/fantasy-points-allowed")({
@@ -63,7 +63,7 @@ function FantasyPointsAllowedPage() {
 
   const query = useQuery({
     queryKey: ["fantasy-points-allowed", scoringFormat],
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: RESEARCH_CLIENT_STALE_MS,
     retry: 1,
     placeholderData: (prev) => prev,
     queryFn: () => fetchResearchFpa(scoringFormat),

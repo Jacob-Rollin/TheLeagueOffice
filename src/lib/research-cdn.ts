@@ -6,6 +6,9 @@
 
 export type ResearchFormat = "std" | "half" | "ppr";
 
+/** Match mid-week research CDN s-maxage (1h) so RQ does not revalidate early. */
+export const RESEARCH_CLIENT_STALE_MS = 60 * 60 * 1000;
+
 function normalizeFormat(format?: string | null): ResearchFormat {
   return format === "std" || format === "ppr" ? format : "half";
 }

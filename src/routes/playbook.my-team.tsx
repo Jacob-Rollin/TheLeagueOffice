@@ -6,7 +6,7 @@ import { SosStars } from "@/components/sos/SosStars";
 import { TeamOverview } from "@/components/team/TeamOverview";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
-import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
@@ -868,24 +868,13 @@ function PlaybookMyTeamPage() {
     };
   }, []);
 
-  const nflWeek = useQuery({
-    queryKey: ["nfl-state-week", "v3-week"],
-    staleTime: 30 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
-        headers: { accept: "application/json" },
-      }).catch(() => null);
-      const json = res && res.ok ? ((await res.json()) as Record<string, unknown>) : null;
-      return Math.max(1, Number(json?.["week"] ?? 1) || 1);
-    },
-  });
+  const nflWeek = useNflState();
 
   useEffect(() => {
-    if (nflWeek.data != null) setSelectedWeek(nflWeek.data);
-  }, [nflWeek.data, activeLeagueId]);
+    if (nflWeek.data?.week != null) setSelectedWeek(nflWeek.data.week);
+  }, [nflWeek.data?.week, activeLeagueId]);
 
-  const activeWeek = selectedWeek ?? nflWeek.data ?? 1;
+  const activeWeek = selectedWeek ?? nflWeek.data?.week ?? 1;
   const {
     projectFor,
     statsFor,

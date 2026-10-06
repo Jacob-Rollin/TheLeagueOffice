@@ -153,7 +153,8 @@ export async function readBrainMatrix(): Promise<BrainMatrix | null> {
   }
 }
 
-const LOCAL_PLAYERS_CACHE_KEY = "players-v1";
+/** Must match useSleeperPlayers / players-catalog (`players-v3`). */
+const LOCAL_PLAYERS_CACHE_KEY = "players-v3";
 
 /**
  * Offline safety guard. When the storage bucket is empty or answers 400/404,

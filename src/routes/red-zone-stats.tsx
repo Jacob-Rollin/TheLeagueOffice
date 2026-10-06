@@ -48,7 +48,7 @@ import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import { fetchResearchRedZone } from "@/lib/research-cdn";
+import { fetchResearchRedZone, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import type { RedZonePlayerRow, RedZonePos } from "@/lib/redzone";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
@@ -266,7 +266,7 @@ function RedZoneStatsPage() {
 
   const query = useQuery({
     queryKey: ["red-zone-stats", season, yardline, weekFrom, weekTo],
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: RESEARCH_CLIENT_STALE_MS,
     retry: 1,
     placeholderData: (prev) => prev,
     queryFn: () => fetchResearchRedZone({ season, yardline, weekFrom, weekTo }),

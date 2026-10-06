@@ -39,7 +39,7 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import { fetchResearchTargets } from "@/lib/research-cdn";
+import { fetchResearchTargets, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import type { TargetedPlayerRow, TargetPos } from "@/lib/targets";
 import { cn } from "@/lib/utils";
@@ -143,7 +143,7 @@ function MostTargetedPage() {
 
   const query = useQuery({
     queryKey: ["most-targeted-players", season],
-    staleTime: 6 * 60 * 60 * 1000,
+    staleTime: RESEARCH_CLIENT_STALE_MS,
     retry: 1,
     queryFn: () => fetchResearchTargets(season),
   });

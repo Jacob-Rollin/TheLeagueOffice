@@ -3,6 +3,7 @@ import { useMemo } from "react";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
+import { useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import {
@@ -25,21 +26,6 @@ export function rankBy<T>(items: T[], key: (item: T) => number | null, id: (item
   return new Map(ranked.map((item, index) => [id(item), index + 1]));
 }
 
-function useNflWeek() {
-  return useQuery({
-    queryKey: ["nfl-state-week"],
-    staleTime: 30 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
-        headers: { accept: "application/json" },
-      }).catch(() => null);
-      const json = res && res.ok ? ((await res.json()) as Record<string, unknown>) : null;
-      return Math.max(1, Number(json?.["week"] ?? 1) || 1);
-    },
-  });
-}
-
 function connectionArgs(league: ReturnType<typeof useActiveLeague>["activeLeague"]) {
   return {
     identifier: league?.leagueId ?? "",
@@ -59,8 +45,8 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
   const { standings } = useActiveStandings();
   const { rosterPositions } = useLeagueRosters([]);
   const { data: playersPayload } = useSleeperPlayers();
-  const nflWeek = useNflWeek();
-  const currentWeek = nflWeek.data ?? null;
+  const nflWeek = useNflState();
+  const currentWeek = nflWeek.data?.week ?? null;
   const leagueId = activeLeague?.id ?? null;
   const hasLeague = Boolean(activeLeague?.leagueId);
   const loadHistory = history || forecast;

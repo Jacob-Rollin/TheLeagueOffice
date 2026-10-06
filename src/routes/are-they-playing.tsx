@@ -29,8 +29,8 @@ import {
   type InjuryReportLine,
 } from "@/lib/are-they-playing";
 import { currentSeason, fetchSchedule, type Player } from "@/lib/players-build";
-import { getLiveInjuryStatuses } from "@/lib/players.functions";
-import { fetchResearchAreTheyPlaying } from "@/lib/research-cdn";
+import { fetchResearchAreTheyPlaying, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
+import { fetchLiveInjuryStatusesClient } from "@/lib/sleeper-client";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 import { buildScheduleByTeam, formatOppLabel } from "@/lib/wire-matchups";
@@ -127,7 +127,7 @@ function AreTheyPlayingPage() {
   const query = useQuery({
     queryKey: ["are-they-playing", week],
     enabled: week != null,
-    staleTime: 10 * 60 * 1000,
+    staleTime: RESEARCH_CLIENT_STALE_MS,
     refetchInterval: 15 * 60 * 1000,
     retry: 1,
     queryFn: () => fetchResearchAreTheyPlaying(week ?? 1),
@@ -135,10 +135,12 @@ function AreTheyPlayingPage() {
 
   const liveInjuries = useQuery({
     queryKey: ["live-injury-statuses"],
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
     refetchInterval: 10 * 60 * 1000,
-    retry: 1,
-    queryFn: () => getLiveInjuryStatuses(),
+    // Soft-empty inside client helper — do not retry-storm Sleeper.
+    retry: false,
+    // Public Sleeper projections — browser pool, not Fluid.
+    queryFn: () => fetchLiveInjuryStatusesClient(),
   });
 
   const schedule = useQuery({
