@@ -73,7 +73,7 @@ Full click-by-click guide: [`scripts/tidb/CUTOVER.md`](scripts/tidb/CUTOVER.md).
 2. Deploy a build that includes `/api/admin/tidb-migrate` (merge the TiDB cutover PR).
 3. **Run migrate** (GitHub Actions → **TiDB Warehouse Migrate** → Run workflow), or:
    ```sh
-   export APP_URL="https://theleagueoffice.app"
+   export APP_URL="https://www.theleagueoffice.app"
    export CRON_SECRET="from-vercel"
    curl -X POST "$APP_URL/api/admin/tidb-migrate" \
      -H "Authorization: Bearer $CRON_SECRET" \
