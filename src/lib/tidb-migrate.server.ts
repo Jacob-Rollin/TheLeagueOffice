@@ -117,9 +117,18 @@ const SCHEMA_STATEMENTS = [
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (season, week)
 )`,
+  `CREATE TABLE IF NOT EXISTS agg_fantasy_leaders (
+  season VARCHAR(16) NOT NULL,
+  payload JSON NOT NULL,
+  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (season)
+)`,
   // Widen keys if an older VARCHAR(8) schema was applied (composite research keys).
   `ALTER TABLE agg_redzone MODIFY season VARCHAR(64) NOT NULL`,
   `ALTER TABLE agg_targets MODIFY season VARCHAR(64) NOT NULL`,
+  `ALTER TABLE agg_fpa MODIFY season VARCHAR(64) NOT NULL`,
+  `ALTER TABLE agg_matchups_guide MODIFY season VARCHAR(64) NOT NULL`,
+  `ALTER TABLE agg_sos_analysis MODIFY season VARCHAR(64) NOT NULL`,
 ];
 
 export type WarehouseSeedRow = {

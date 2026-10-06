@@ -1,20 +1,21 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { getFantasyPointsAllowed } from "@/lib/players.functions";
+import { fetchResearchFpa } from "@/lib/research-cdn";
 
 const HOUR = 1000 * 60 * 60;
 
 /**
  * Positional defensive ranks for SOS stars (1 = toughest / stingiest).
  * Inverts the Fantasy Points Allowed board (where 1 = easiest / highest PA).
+ * Prefers CDN /api/data/research/fpa (no Fluid fan-out when warm).
  */
 export function usePositionalDefenseRanks() {
   const query = useQuery({
     queryKey: ["fantasy-points-allowed", "sos-defense-ranks", "v2-incl-def"],
     staleTime: 6 * HOUR,
     retry: false,
-    queryFn: () => getFantasyPointsAllowed({ data: {} }),
+    queryFn: () => fetchResearchFpa("half"),
   });
 
   const ranksByPos = useMemo(() => {

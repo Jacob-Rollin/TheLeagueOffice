@@ -17,7 +17,6 @@ import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import type { Pos } from "@/lib/draft";
 import { teamFullName } from "@/lib/nfl-teams";
 import {
-  getFantasyPointsAllowed,
   getGameLogs,
   getNextGame,
   getPlayerBio,
@@ -25,6 +24,7 @@ import {
   getPlayerNews,
 } from "@/lib/players.functions";
 import type { SeasonLine } from "@/lib/players.server";
+import { fetchResearchFpa } from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { projectionPoints } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
@@ -325,7 +325,7 @@ function Overview({
     queryKey: ["fantasy-points-allowed", "sos-defense-ranks", "v2-incl-def"],
     staleTime: 6 * HOUR,
     retry: false,
-    queryFn: () => getFantasyPointsAllowed({ data: {} }),
+    queryFn: () => fetchResearchFpa("half"),
   });
   const opp = nextGame?.opponent ?? null;
   const vsRank = defenseRank(pos, opp);

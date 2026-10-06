@@ -16,8 +16,8 @@ import {
   type SortDir,
 } from "@/components/research/SortHeader";
 import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
-import { getFantasyPointsAllowed } from "@/lib/players.functions";
 import type { FantasyPointsAllowedPos } from "@/lib/players.server";
+import { fetchResearchFpa } from "@/lib/research-cdn";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/fantasy-points-allowed")({
@@ -66,7 +66,7 @@ function FantasyPointsAllowedPage() {
     staleTime: 6 * 60 * 60 * 1000,
     retry: 1,
     placeholderData: (prev) => prev,
-    queryFn: () => getFantasyPointsAllowed({ data: { format: scoringFormat } }),
+    queryFn: () => fetchResearchFpa(scoringFormat),
   });
 
   const payload = query.data;

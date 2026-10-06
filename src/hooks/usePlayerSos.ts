@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { Scoring } from "@/lib/draft";
 import type { BrainEntry, BrainMatrix } from "@/lib/playerBrainHydration";
-import { getTeamPosSos } from "@/lib/players.functions";
+import { fetchResearchSosBoard } from "@/lib/research-cdn";
+import { sosFromBoard, sosPosKey } from "@/lib/sos-from-board";
 import type { PlayerSos, SosMatchup } from "@/lib/sos-presentation";
 
 function averageRank(matchups: SosMatchup[]): number | null {
@@ -28,20 +29,6 @@ function normalizeMatchup(m: SosMatchup): SosMatchup {
       m.pointsAllowed != null && Number.isFinite(Number(m.pointsAllowed))
         ? Number(m.pointsAllowed)
         : null,
-  };
-}
-
-function fromDetailOrMatrix(raw: {
-  rank: number | null;
-  opponents?: SosMatchup[];
-  matchups?: SosMatchup[];
-} | null | undefined): PlayerSos | null {
-  if (!raw) return null;
-  const matchups = (raw.matchups ?? raw.opponents ?? []).map(normalizeMatchup);
-  if (!matchups.length) return null;
-  return {
-    rank: raw.rank ?? averageRank(matchups),
-    matchups,
   };
 }
 
@@ -83,9 +70,25 @@ function mergeSosWeeks(
   };
 }
 
+const SOS_BOARD_TTL_MS = 30 * 60 * 1000;
+let sosBoardCache: { at: number; value: Promise<Awaited<ReturnType<typeof fetchResearchSosBoard>> | null> } | null =
+  null;
+
+function cachedSosBoard() {
+  const now = Date.now();
+  if (!sosBoardCache || now - sosBoardCache.at > SOS_BOARD_TTL_MS) {
+    sosBoardCache = {
+      at: now,
+      value: fetchResearchSosBoard().catch(() => null),
+    };
+  }
+  return sosBoardCache.value;
+}
+
 /**
  * Prefer the live positional FPA schedule for the player's current team, filling any
  * missing weeks from the brain so no week false-byes as 0 stars.
+ * Rebuilds from the CDN/TiDB SOS board — never calls getTeamPosSos (18-week fan-out).
  */
 export function usePlayerSos(
   brainEntry: BrainEntry | null,
@@ -106,7 +109,7 @@ export function usePlayerSos(
     };
   }, [brainSos]);
 
-  const pos = (position || brainEntry?.position || "").toUpperCase();
+  const pos = sosPosKey(position || brainEntry?.position || "");
   const [scheduleSos, setScheduleSos] = useState<PlayerSos | null>(null);
 
   useEffect(() => {
@@ -118,18 +121,16 @@ export function usePlayerSos(
         alive = false;
       };
     }
-    const sosPos = pos === "DST" ? "DEF" : pos;
     (async () => {
-      const raw = await getTeamPosSos({ data: { team: upperTeam, pos: sosPos } });
+      const board = await cachedSosBoard();
       if (!alive) return;
-      const next = fromDetailOrMatrix(
-        raw
-          ? {
-              rank: raw.rank,
-              opponents: raw.opponents,
-            }
-          : null,
-      );
+      const built = sosFromBoard(board, upperTeam, pos);
+      const next: PlayerSos | null = built
+        ? {
+            rank: built.rank,
+            matchups: built.opponents.map(normalizeMatchup),
+          }
+        : null;
       setScheduleSos(sosHasUsableRanks(next) ? next : null);
     })().catch(() => {
       if (alive) setScheduleSos(null);
@@ -158,15 +159,11 @@ export function useSosPeerMatrix(
 ): Record<string, SosPeer> | null {
   return useMemo(() => {
     if (!brain || !position) return null;
-    const normalize = (p: string) => {
-      const u = (p || "").toUpperCase();
-      return u === "DST" ? "DEF" : u;
-    };
-    const want = normalize(position);
+    const want = sosPosKey(position);
     const peers: Record<string, SosPeer> = {};
     let count = 0;
     for (const [id, entry] of Object.entries(brain)) {
-      if (normalize(entry.position) !== want) continue;
+      if (sosPosKey(entry.position) !== want) continue;
       if (!sosHasUsableRanks(entry.sos)) continue;
       peers[id] = { position: entry.position, sos: entry.sos };
       count += 1;

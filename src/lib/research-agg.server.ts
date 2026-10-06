@@ -11,7 +11,8 @@ export type AggTable =
   | "agg_sos"
   | "agg_fpa"
   | "agg_matchups_guide"
-  | "agg_sos_analysis";
+  | "agg_sos_analysis"
+  | "agg_fantasy_leaders";
 
 export async function readAggJson<T>(table: AggTable, key: string): Promise<T | null> {
   if (!tidbConfigured()) return null;

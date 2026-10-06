@@ -1517,7 +1517,7 @@ async function reconstructSleeperIrByRoster(
 const LIVE_MATCHUP_TTL_MS = 60 * 1000;
 const FINAL_MATCHUP_TTL_MS = 10 * 60 * 1000;
 /** Serve current-week boards from TiDB when fresher than this (avoids host wait). */
-const TIDB_LIVE_MATCHUP_MAX_AGE_MS = 3 * 60 * 1000;
+const TIDB_LIVE_MATCHUP_MAX_AGE_MS = 5 * 60 * 1000;
 
 /** Reject hollow or mid-game past-week caches so we don't freeze incomplete scores as final. */
 function isUsableFinalBoard(board: LeagueWeekMatchups): boolean {

@@ -13,7 +13,7 @@
 import localforage from "localforage";
 
 import type { PlayersPayload } from "@/lib/players-build";
-import { getSosBoard } from "@/lib/players.functions";
+import { fetchResearchSosBoard } from "@/lib/research-cdn";
 import type { SosBoard } from "@/lib/players.server";
 import type { PlayerSos, SosMatchup } from "@/lib/sos-presentation";
 import { readCache } from "@/lib/sleeper-cache";
@@ -200,7 +200,12 @@ let sosBoardCache: { at: number; value: Promise<SosBoard | null> } | null = null
 function freshSosBoard(): Promise<SosBoard | null> {
   const now = Date.now();
   if (!sosBoardCache || now - sosBoardCache.at > SOS_REFRESH_MS) {
-    sosBoardCache = { at: now, value: getSosBoard({ data: {} }).catch(() => null) };
+    sosBoardCache = {
+      at: now,
+      value: fetchResearchSosBoard()
+        .then((board) => board as SosBoard | null)
+        .catch(() => null),
+    };
   }
   return sosBoardCache.value;
 }

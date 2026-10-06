@@ -18,7 +18,7 @@ import {
 } from "@/components/research/SortHeader";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
-import { getSosAnalysis } from "@/lib/players.functions";
+import { fetchResearchSosAnalysis } from "@/lib/research-cdn";
 import type { DepthChartEntry, SosAnalysisCell, SosAnalysisRow } from "@/lib/players.server";
 import { injuryMicroBadge } from "@/lib/sandbox-rosters";
 import {
@@ -125,7 +125,7 @@ function SosAnalysisPage() {
     staleTime: 30 * 60 * 1000,
     retry: 1,
     placeholderData: (prev) => prev,
-    queryFn: () => getSosAnalysis({ data: { format: scoringFormat } }),
+    queryFn: () => fetchResearchSosAnalysis(scoringFormat),
   });
   const payload = query.data;
 

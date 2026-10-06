@@ -2,9 +2,15 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { authorizeCronRequest } from "@/lib/cron-auth.server";
 
+const FORMATS = ["std", "half", "ppr"] as const;
+const REDZONE_YARDLINES = [5, 10, 15, 20] as const;
+
 /**
  * Warm research aggregates into TiDB so page loads never gunzip nflverse PBP,
  * scrape 32 club sites, or fan out 18-week Sleeper stats.
+ *
+ * Covers all scoring formats (std/half/ppr), matchup weeks 1…current,
+ * red-zone yardlines, and Fantasy Leaders.
  */
 export const Route = createFileRoute("/api/cron/research-aggregates")({
   server: {
@@ -35,12 +41,16 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
           const week = Math.max(1, Number(state.week) || 1);
 
           const { loadRedZoneStats } = await import("@/lib/redzone.server");
-          const redzone = await loadRedZoneStats(season, 20, null, null, { allowCompute: true });
-          report["redzone"] = {
-            season: redzone.season,
-            maxWeek: redzone.maxWeek,
-            players: Object.values(redzone.rowsByPos).reduce((n, rows) => n + rows.length, 0),
-          };
+          const redzoneByYl: Record<string, unknown> = {};
+          for (const yl of REDZONE_YARDLINES) {
+            const redzone = await loadRedZoneStats(season, yl, null, null, { allowCompute: true });
+            redzoneByYl[String(yl)] = {
+              season: redzone.season,
+              maxWeek: redzone.maxWeek,
+              players: Object.values(redzone.rowsByPos).reduce((n, rows) => n + rows.length, 0),
+            };
+          }
+          report["redzone"] = redzoneByYl;
 
           const { loadMostTargetedPlayers } = await import("@/lib/targets.server");
           const targets = await loadMostTargetedPlayers(season, { allowCompute: true });
@@ -59,6 +69,7 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
             loadFantasyPointsAllowed,
             loadMatchupsGuide,
             loadSosAnalysis,
+            loadFantasyLeaders,
           } = await import("@/lib/players.server");
 
           const sos = await loadSosBoard(season, { allowCompute: true });
@@ -68,21 +79,42 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
             scheduleGames: sos.schedule.length,
           };
 
-          const fpa = await loadFantasyPointsAllowed(season, "half", { allowCompute: true });
-          report["fpa"] = { season: fpa.season, weeksTo: fpa.weeksTo, rows: fpa.rows.length };
+          const fpaByFmt: Record<string, unknown> = {};
+          for (const fmt of FORMATS) {
+            const fpa = await loadFantasyPointsAllowed(season, fmt, { allowCompute: true });
+            fpaByFmt[fmt] = { season: fpa.season, weeksTo: fpa.weeksTo, rows: fpa.rows.length };
+          }
+          report["fpa"] = fpaByFmt;
 
-          const guide = await loadMatchupsGuide(week, "half", { allowCompute: true });
-          report["matchupsGuide"] = {
-            week: guide.week,
-            games: Object.keys(guide.games).length,
-            dataThroughWeek: guide.dataThroughWeek,
-          };
+          const guideByKey: Record<string, unknown> = {};
+          for (let w = 1; w <= week; w += 1) {
+            for (const fmt of FORMATS) {
+              const guide = await loadMatchupsGuide(w, fmt, { allowCompute: true });
+              guideByKey[`${w}|${fmt}`] = {
+                week: guide.week,
+                games: Object.keys(guide.games).length,
+                dataThroughWeek: guide.dataThroughWeek,
+              };
+            }
+          }
+          report["matchupsGuide"] = { weeks: week, formats: FORMATS.length, keys: Object.keys(guideByKey).length };
 
-          const analysis = await loadSosAnalysis("half", { allowCompute: true });
-          report["sosAnalysis"] = {
-            season: analysis.season,
-            rows: analysis.rows.length,
-            fromWeek: analysis.fromWeek,
+          const analysisByFmt: Record<string, unknown> = {};
+          for (const fmt of FORMATS) {
+            const analysis = await loadSosAnalysis(fmt, { allowCompute: true });
+            analysisByFmt[fmt] = {
+              season: analysis.season,
+              rows: analysis.rows.length,
+              fromWeek: analysis.fromWeek,
+            };
+          }
+          report["sosAnalysis"] = analysisByFmt;
+
+          const leaders = await loadFantasyLeaders(season, { allowCompute: true });
+          report["fantasyLeaders"] = {
+            season: leaders.season,
+            maxWeek: leaders.maxWeek,
+            rows: leaders.rows.length,
           };
 
           // Warm Matchup Replay PBP snaps for completed weeks (and current).
