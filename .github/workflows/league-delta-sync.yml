@@ -37,8 +37,13 @@ jobs:
             echo "APP_URL / CRON_SECRET not configured — skipping."
             exit 0
           fi
-          curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
-            "${APP_URL%/}/api/cron/league-delta-sync?limit=40"
+          BASE="${APP_URL%/}"
+          case "$BASE" in
+            http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+            http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+          esac
+          curl -fsSL -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE/api/cron/league-delta-sync?limit=40"
 
       # 🟢 Send Success Metrics to Axiom if the sync completes perfectly
       - name: Log Success to Axiom

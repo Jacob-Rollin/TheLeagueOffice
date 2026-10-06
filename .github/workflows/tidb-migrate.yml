@@ -2,8 +2,7 @@ name: TiDB Warehouse Migrate
 
 # One-click cutover: apply schema + seed player_warehouse from Supabase brain.
 # Requires repo secrets APP_URL and CRON_SECRET (same as other cron workflows).
-# After PR #19 (or this branch) is on the target deployment, run:
-#   Actions → TiDB Warehouse Migrate → Run workflow
+# Prefer APP_URL=https://www.theleagueoffice.app (apex redirects and drops POST bodies).
 
 on:
   workflow_dispatch:
@@ -39,30 +38,63 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${APP_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
-            echo "::error::Set GitHub secrets APP_URL (e.g. https://theleagueoffice.app) and CRON_SECRET"
+            echo "::error::Set GitHub secrets APP_URL (https://www.theleagueoffice.app) and CRON_SECRET"
             exit 1
           fi
+
+          # Apex theleagueoffice.app 308s to www; without -L curl only sees "Redirecting..."
+          # and never runs migrate. Normalize to the canonical host when possible.
           BASE="${APP_URL%/}"
+          BASE="${BASE%/}"
+          case "$BASE" in
+            http://theleagueoffice.app|https://theleagueoffice.app)
+              BASE="https://www.theleagueoffice.app"
+              echo "Normalized APP_URL → $BASE (apex redirects to www)"
+              ;;
+            http://www.theleagueoffice.app)
+              BASE="https://www.theleagueoffice.app"
+              echo "Normalized APP_URL → $BASE"
+              ;;
+          esac
+
+          curl_json() {
+            # -L follows redirects; --post301/302/303 keep POST across hops when needed
+            curl -fsSL --post301 --post302 --post303 "$@"
+          }
 
           if [ "$ACTION" = "status" ]; then
             echo "GET $BASE/api/admin/tidb-migrate"
-            curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
-              "$BASE/api/admin/tidb-migrate" | tee /tmp/tidb-status.json
+            RESP="$(curl_json -H "Authorization: Bearer $CRON_SECRET" \
+              "$BASE/api/admin/tidb-migrate")"
+            echo "$RESP" | tee /tmp/tidb-status.json
+            echo "$RESP" | grep -q '"ok":true' || {
+              echo "::error::status did not return ok:true — check CRON_SECRET / deploy"
+              exit 1
+            }
           else
             echo "POST $BASE/api/admin/tidb-migrate action=$ACTION"
-            curl -fsS -X POST "$BASE/api/admin/tidb-migrate" \
+            RESP="$(curl_json -X POST "$BASE/api/admin/tidb-migrate" \
               -H "Authorization: Bearer $CRON_SECRET" \
               -H "Content-Type: application/json" \
-              -d "{\"action\":\"$ACTION\"}" | tee /tmp/tidb-migrate.json
+              -d "{\"action\":\"$ACTION\"}")"
+            echo "$RESP" | tee /tmp/tidb-migrate.json
+            echo "$RESP" | grep -q '"ok":true' || {
+              echo "::error::migrate did not return ok:true — see JSON above (auth, DATABASE_URL, or seed source)"
+              exit 1
+            }
+            echo "$RESP" | grep -q 'Redirecting' && {
+              echo "::error::got redirect body instead of JSON — set APP_URL=https://www.theleagueoffice.app"
+              exit 1
+            }
           fi
 
           echo ""
           echo "GET $BASE/api/data/players-export (first 240 bytes)"
-          EXPORT="$(curl -fsS "$BASE/api/data/players-export")"
+          EXPORT="$(curl_json "$BASE/api/data/players-export")"
           echo "$EXPORT" | head -c 240
           echo ""
           echo "$EXPORT" | grep -q '"ok":true' || {
-            echo "::error::players-export did not return ok:true — check DATABASE_URL + migrate output above"
+            echo "::error::players-export did not return ok:true — migrate may have failed; see JSON above"
             exit 1
           }
           COUNT="$(echo "$EXPORT" | sed -n 's/.*"count":\([0-9]*\).*/\1/p' | head -1)"

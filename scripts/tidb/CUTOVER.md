@@ -10,7 +10,7 @@ URL path to `/league-office-native` in the TiDB console copy when you can.
 ## Prerequisites still needed
 1. **Merge PR #19** (or keep this branch deployed) so `/api/admin/tidb-migrate` exists on production. Without it, migrate returns **404**.
 2. **`CRON_SECRET`** on Vercel **and** as a GitHub Actions secret (same value).
-3. **`APP_URL`** GitHub secret = `https://theleagueoffice.app` (no trailing slash).
+3. **`APP_URL`** GitHub secret = `https://www.theleagueoffice.app` (use **www** — apex redirects and the Action would only see “Redirecting…”).
 
 ---
 
@@ -24,17 +24,17 @@ URL path to `/league-office-native` in the TiDB console copy when you can.
 
 If the workflow errors about missing secrets, add under
 **Settings → Secrets and variables → Actions**:
-- `APP_URL` = `https://theleagueoffice.app`
+- `APP_URL` = `https://www.theleagueoffice.app`
 - `CRON_SECRET` = same value as Vercel → Settings → Environment Variables → `CRON_SECRET`
 
 ### Option B — Terminal (Mac/Linux)
 Copy your `CRON_SECRET` from Vercel, then run:
 
 ```sh
-export APP_URL="https://theleagueoffice.app"
+export APP_URL="https://www.theleagueoffice.app"
 export CRON_SECRET="paste-from-vercel-here"
 
-curl -X POST "$APP_URL/api/admin/tidb-migrate" \
+curl -fsSL -X POST "$APP_URL/api/admin/tidb-migrate" \
   -H "Authorization: Bearer $CRON_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"action":"migrate"}'
@@ -51,15 +51,15 @@ If you get **503** `DATABASE_URL not configured`, add the env var to **Productio
 ## Step 4 — Verify
 
 ```sh
-export APP_URL="https://theleagueoffice.app"
+export APP_URL="https://www.theleagueoffice.app"
 export CRON_SECRET="paste-from-vercel-here"
 
 # Row count / health
-curl -sH "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/admin/tidb-migrate"
+curl -fsSL -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/admin/tidb-migrate"
 # expect: "playerWarehouseCount": 4000+ 
 
 # Public CDN export (no auth)
-curl -s "$APP_URL/api/data/players-export" | head -c 200
+curl -fsSL "$APP_URL/api/data/players-export" | head -c 200
 # expect: {"ok":true,"v":7,...}
 ```
 
