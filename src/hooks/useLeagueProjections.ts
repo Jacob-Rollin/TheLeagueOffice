@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
-import { getLeagueScoring } from "@/lib/scoring.functions";
+import { fetchLeagueScoringPreferred } from "@/lib/scoring-client";
 import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
 import {
   defaultScoringMap,
@@ -99,13 +99,11 @@ export function useLeagueScoringMeta() {
     staleTime: 12 * HOUR,
     retry: false,
     queryFn: () =>
-      getLeagueScoring({
-        data: {
-          identifier,
-          platform,
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      fetchLeagueScoringPreferred({
+        identifier,
+        platform,
+        s2: activeLeague?.s2,
+        swid: activeLeague?.swid,
       }),
   });
 
@@ -349,13 +347,11 @@ export function useLeagueProjections(week?: number | null) {
     staleTime: 12 * HOUR,
     retry: false,
     queryFn: () =>
-      getLeagueScoring({
-        data: {
-          identifier,
-          platform,
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      fetchLeagueScoringPreferred({
+        identifier,
+        platform,
+        s2: activeLeague?.s2,
+        swid: activeLeague?.swid,
       }),
   });
 
@@ -563,13 +559,11 @@ export function useSeasonProjectionStats() {
     staleTime: 12 * HOUR,
     retry: false,
     queryFn: () =>
-      getLeagueScoring({
-        data: {
-          identifier,
-          platform,
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      fetchLeagueScoringPreferred({
+        identifier,
+        platform,
+        s2: activeLeague?.s2,
+        swid: activeLeague?.swid,
       }),
   });
 

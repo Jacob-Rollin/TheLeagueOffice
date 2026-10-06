@@ -14,8 +14,7 @@ import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player, Pos } from "@/lib/draft";
-import { getRosterNews } from "@/lib/players.functions";
-import { fetchSnapInjuryReports } from "@/lib/snap-cdn";
+import { fetchSnapInjuryReports, fetchSnapRosterNews } from "@/lib/snap-cdn";
 import type { InjuryReportItem } from "@/lib/players.server";
 import { getTeamPrimaryColor } from "@/lib/nfl-teams";
 import {
@@ -1052,9 +1051,9 @@ function PlaybookMyTeamPage() {
   const rosterNewsQuery = useQuery({
     queryKey: ["roster-news", rosterIdsKey],
     enabled: rosterIdsKey.length > 0 && (tab === "lineup" || tab === "news"),
-    staleTime: 1000 * 60 * 10,
+    staleTime: 15 * 60 * 1000,
     retry: false,
-    queryFn: async () => await getRosterNews({ data: { ids: rosterIdsKey.split(",") } }),
+    queryFn: async () => fetchSnapRosterNews(rosterIdsKey.split(",")),
   });
 
   const newsById = useMemo(() => {

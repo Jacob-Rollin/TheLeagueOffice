@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
-import { getConnectionRosters } from "@/lib/league.functions";
+import { fetchLeagueRostersForConnection } from "@/lib/league-rosters-fetch";
 
 const normalize = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
 
@@ -27,13 +27,12 @@ export function useFantasyRosterTeamName(
     refetchOnWindowFocus: false,
     retry: false,
     queryFn: () =>
-      getConnectionRosters({
-        data: {
-          identifier,
-          platform,
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      fetchLeagueRostersForConnection({
+        leagueId: identifier,
+        platform,
+        teamName: activeLeague?.teamName,
+        s2: activeLeague?.s2,
+        swid: activeLeague?.swid,
       }),
   });
 

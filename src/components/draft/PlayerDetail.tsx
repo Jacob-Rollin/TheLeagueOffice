@@ -23,7 +23,7 @@ import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-b
 import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
 import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import { formatNflGameStatusLabel, formatNflKickoffLabel } from "@/lib/rolling-live-projection";
-import { getLeagueScoring } from "@/lib/scoring.functions";
+import { fetchLeagueScoringPreferred } from "@/lib/scoring-client";
 import { projectionPoints, type ScoringMap } from "@/lib/scoring-map";
 import {
   fetchGameLogsClient,
@@ -277,13 +277,11 @@ export function PlayerDetail({
     enabled: Boolean(activeLeague?.leagueId) && !scoringControlled,
     staleTime: 1000 * 60 * 60,
     queryFn: () =>
-      getLeagueScoring({
-        data: {
-          identifier: activeLeague!.leagueId,
-          platform: activeLeague!.platform,
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      fetchLeagueScoringPreferred({
+        identifier: activeLeague!.leagueId,
+        platform: activeLeague!.platform,
+        s2: activeLeague?.s2,
+        swid: activeLeague?.swid,
       }),
   });
 

@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 
@@ -32,7 +32,7 @@ import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player, Pos } from "@/lib/draft";
 import { currentSeason, fetchSchedule } from "@/lib/players-build";
-import { getPlayerNews } from "@/lib/players.functions";
+import { fetchSnapFantasyNews } from "@/lib/snap-cdn";
 import { formatNflKickoffLabel, progressForNflTeam } from "@/lib/rolling-live-projection";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { scoreStats } from "@/lib/scoring-map";
@@ -287,27 +287,28 @@ function TopAvailablePage() {
     () => tables.flatMap((t) => t.players.map((p) => p.id)),
     [tables],
   );
-  const newsQueries = useQueries({
-    queries: visibleIds.map((id) => ({
-      queryKey: ["player-news", id] as const,
-      queryFn: () => getPlayerNews({ data: { id } }),
-      staleTime: 10 * 60 * 1000,
-      enabled: view === "overview",
-    })),
+  // One CDN fantasy-news snap (not N Fluid getPlayerNews calls per visible row).
+  const fantasyNewsQuery = useQuery({
+    queryKey: ["fantasy-news-feed", 60],
+    queryFn: () => fetchSnapFantasyNews(60),
+    staleTime: 15 * 60 * 1000,
+    enabled: view === "overview",
+    retry: false,
   });
   const { newsById, newsLoadingIds } = useMemo(() => {
     const map = new Map<string, string>();
     const pending = new Set<string>();
-    visibleIds.forEach((id, i) => {
-      const query = newsQueries[i];
-      if (query?.isLoading) pending.add(id);
-      const data = query?.data;
-      if (data?.player?.id && data.player.id !== id) return;
-      const headline = data?.items?.find((item) => item.headline?.trim())?.headline?.trim();
+    if (fantasyNewsQuery.isLoading) {
+      for (const id of visibleIds) pending.add(id);
+    }
+    for (const item of fantasyNewsQuery.data ?? []) {
+      const id = item.player?.id;
+      if (!id || map.has(id)) continue;
+      const headline = item.headline?.trim();
       if (headline) map.set(id, headline);
-    });
+    }
     return { newsById: map, newsLoadingIds: pending };
-  }, [visibleIds, newsQueries]);
+  }, [visibleIds, fantasyNewsQuery.data, fantasyNewsQuery.isLoading]);
 
   const statLineFor = (id: string): Record<string, number> | null => {
     if (view === "projections") return statsFor(id);

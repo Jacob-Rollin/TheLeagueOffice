@@ -1,7 +1,18 @@
 /**
  * Client helpers for edge-cached Fluid snapshots (`/api/data/snap/*`).
  * Prefer these over createServerFn so concurrent visitors share CDN.
+ *
+ * Production: never fall back to createServerFn — a CDN miss must soft-empty
+ * so we do not burn Fluid CPU. Dev/local may still use Fluid when snaps are absent.
  */
+
+function allowFluidFallback(): boolean {
+  try {
+    return import.meta.env.DEV === true;
+  } catch {
+    return false;
+  }
+}
 
 async function fetchSnapJson<T>(url: string): Promise<T | null> {
   try {
@@ -18,6 +29,15 @@ export async function fetchSnapTradeValueBasis() {
     "/api/data/snap/trade-basis",
   );
   if (hit && hit.players) return hit;
+  if (!allowFluidFallback()) {
+    return {
+      season: "",
+      week: 0,
+      remainingWeeks: 0,
+      rosAvailable: false,
+      players: {},
+    };
+  }
   const { getTradeValueBasis } = await import("./players.functions");
   return getTradeValueBasis();
 }
@@ -27,6 +47,7 @@ export async function fetchSnapInjuryReports() {
     "/api/data/snap/injury-reports",
   );
   if (hit && Array.isArray(hit.items)) return hit;
+  if (!allowFluidFallback()) return { updatedAt: "", items: [] };
   const { getInjuryReports } = await import("./players.functions");
   return getInjuryReports();
 }
@@ -36,6 +57,7 @@ export async function fetchSnapInjuryWire(limit = 5) {
     `/api/data/snap/injury-wire?limit=${limit}`,
   );
   if (Array.isArray(hit)) return hit;
+  if (!allowFluidFallback()) return [];
   const { getInjuryWire } = await import("./players.functions");
   return getInjuryWire({ data: { limit } });
 }
@@ -45,6 +67,7 @@ export async function fetchSnapFantasyNews(limit = 40) {
     `/api/data/snap/fantasy-news?limit=${limit}`,
   );
   if (Array.isArray(hit)) return hit;
+  if (!allowFluidFallback()) return [];
   const { getFantasyNewsFeed } = await import("./players.functions");
   return getFantasyNewsFeed({ data: { limit } });
 }
@@ -54,8 +77,28 @@ export async function fetchSnapTradeMarket(format: "std" | "half" | "ppr" = "hal
     `/api/data/snap/trade-market?format=${format}`,
   );
   if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
+  if (!allowFluidFallback()) return { format, season: "", rows: [], opportunity: [] };
   const { getTradeMarket } = await import("./players.functions");
   return getTradeMarket({ data: { format } });
+}
+
+export async function fetchSnapRosterNews(ids: string[]) {
+  const clean = Array.from(new Set(ids.map((id) => String(id).slice(0, 32)).filter(Boolean)))
+    .sort()
+    .slice(0, 30);
+  if (!clean.length) {
+    return { season: "", week: 0, players: [] as Awaited<
+      ReturnType<typeof import("./players.server").loadRosterNews>
+    >["players"] };
+  }
+  const qs = new URLSearchParams({ ids: clean.join(",") });
+  const hit = await fetchSnapJson<Awaited<ReturnType<typeof import("./players.server").loadRosterNews>>>(
+    `/api/data/snap/roster-news?${qs}`,
+  );
+  if (hit && Array.isArray(hit.players)) return hit;
+  if (!allowFluidFallback()) return { season: "", week: 0, players: [] };
+  const { getRosterNews } = await import("./players.functions");
+  return getRosterNews({ data: { ids: clean } });
 }
 
 /** Sleeper-only CDN path — ESPN/Yahoo keep Fluid (credentials). */
@@ -78,6 +121,7 @@ export async function fetchSnapRestOfSeason(input: {
       Awaited<ReturnType<typeof import("./standings-projections.server").loadRestOfSeasonProjections>>
     >(`/api/data/snap/ros?${qs}`);
     if (hit && Array.isArray(hit.weeks)) return hit;
+    if (!allowFluidFallback()) return { weeks: [], byWeek: [] };
   }
   const { getRestOfSeasonProjections } = await import("./league.functions");
   return getRestOfSeasonProjections({
@@ -112,6 +156,7 @@ export async function fetchSnapStartingSlotRanks(input: {
       Awaited<ReturnType<typeof import("./standings-projections.server").loadStartingSlotRanks>>
     >(`/api/data/snap/slot-ranks?${qs}`);
     if (hit && Array.isArray(hit.teams)) return hit;
+    if (!allowFluidFallback()) return { seats: [], teams: [] };
   }
   const { getStartingSlotRanks } = await import("./league.functions");
   return getStartingSlotRanks({

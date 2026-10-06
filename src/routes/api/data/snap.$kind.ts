@@ -8,7 +8,7 @@ import { processMemo } from "@/lib/process-memo";
  * First miss after CDN TTL pays one compute; everyone else hits the edge.
  *
  * Kinds: trade-basis | injury-reports | injury-wire | fantasy-news |
- * trade-market | ros | slot-ranks
+ * trade-market | roster-news | ros | slot-ranks
  */
 export const Route = createFileRoute("/api/data/snap/$kind")({
   server: {
@@ -63,6 +63,21 @@ export const Route = createFileRoute("/api/data/snap/$kind")({
               return loadTradeMarket(fmt);
             });
             const warm = Array.isArray((payload as { rows?: unknown[] })?.rows) && (payload as { rows: unknown[] }).rows.length > 0;
+            return jsonResponse(payload, { cache: warm ? researchCacheControl() : "no-store" });
+          }
+
+          if (kind === "roster-news") {
+            const ids = String(url.searchParams.get("ids") ?? "")
+              .split(",")
+              .map((id) => id.trim().slice(0, 32))
+              .filter(Boolean)
+              .slice(0, 30);
+            const key = ids.slice().sort().join(",");
+            const payload = await processMemo(`snap:roster-news:${key || "empty"}`, 5 * 60 * 1000, async () => {
+              const { loadRosterNews } = await import("@/lib/players.server");
+              return loadRosterNews(ids);
+            });
+            const warm = Array.isArray(payload?.players) && payload.players.length > 0;
             return jsonResponse(payload, { cache: warm ? researchCacheControl() : "no-store" });
           }
 

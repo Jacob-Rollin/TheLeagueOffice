@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Gauge, Target } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -24,10 +24,11 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/draft";
-import { getConnectionMatchups, getConnectionSettings } from "@/lib/league.functions";
+import { getConnectionSettings } from "@/lib/league.functions";
+import { fetchLeagueAllMatchupsCdn } from "@/lib/league-matchups-cdn";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
-import { getRosterNews } from "@/lib/players.functions";
 import type { RosterNews, RosterNewsItem } from "@/lib/players.server";
+import { fetchSnapRosterNews } from "@/lib/snap-cdn";
 import {
   computeMatchupPreview,
   matchupSlotLabels as starterSlotLabels,
@@ -959,29 +960,17 @@ function PlaybookDashboardPage() {
     return Array.from({ length: currentWeek - 1 }, (_, i) => i + 1);
   }, [currentWeek]);
 
-  const historyMatchupQueries = useQueries({
-    queries: completedWeekNumbers.map((week) => ({
-      queryKey: ["active-matchups", activeLeague?.id ?? null, week],
-      enabled: Boolean(activeLeague?.leagueId && week),
-      retry: false,
-      staleTime: 10 * 60 * 1000,
-      queryFn: async () =>
-        await getConnectionMatchups({
-          data: {
-            identifier: activeLeague?.leagueId ?? "",
-            platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
-            week,
-            ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-            ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-            ...(activeLeague?.id ? { connectionId: activeLeague.id } : {}),
-          },
-        }),
-    })),
+  // One CDN/TiDB all-weeks fetch (shared with analytics) — not N Fluid week calls.
+  const historyAllQuery = useQuery({
+    queryKey: ["league-matchups-cdn-all", activeLeague?.id ?? null],
+    enabled: Boolean(activeLeague?.leagueId && completedWeekNumbers.length > 0),
+    retry: false,
+    staleTime: 10 * 60 * 1000,
+    refetchIntervalInBackground: false,
+    queryFn: () => fetchLeagueAllMatchupsCdn(activeLeague!.leagueId),
   });
 
-  const historyStamp = historyMatchupQueries
-    .map((q) => `${q.dataUpdatedAt}:${q.data?.week ?? "x"}:${q.data?.entries?.length ?? 0}`)
-    .join("|");
+  const historyStamp = `${historyAllQuery.dataUpdatedAt}:${historyAllQuery.data?.size ?? 0}`;
 
   const weeklyMatchups = useMemo((): CoachingWeekData[] => {
     const mySlot = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
@@ -999,10 +988,10 @@ function PlaybookDashboardPage() {
 
     const out: CoachingWeekData[] = [];
 
-    for (let index = 0; index < historyMatchupQueries.length; index += 1) {
+    for (let index = 0; index < completedWeekNumbers.length; index += 1) {
       const week = completedWeekNumbers[index] ?? index + 1;
       const isCompleted = week < (currentWeek ?? 1);
-      const entries = historyMatchupQueries[index]?.data?.entries ?? [];
+      const entries = historyAllQuery.data?.get(week)?.board.entries ?? [];
       const mine =
         entries.find((row) => Number(row.rosterId) === Number(mySlot)) ?? null;
       const optimal = mine
@@ -1468,13 +1457,13 @@ function PlaybookDashboardPage() {
     queryKey: ["roster-news", rosterIdsKey],
     enabled: rosterIdsKey.length > 0,
     retry: false,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 15 * 60 * 1000,
     refetchInterval: (q) =>
       typeof document !== "undefined" && document.visibilityState !== "visible"
         ? false
-        : 10 * 60 * 1000,
+        : 30 * 60 * 1000,
     refetchIntervalInBackground: false,
-    queryFn: async () => await getRosterNews({ data: { ids: rosterIdsKey.split(",") } }),
+    queryFn: async () => fetchSnapRosterNews(rosterIdsKey.split(",")),
   });
 
   /** Press Room awards from the last completed week (shares the history matchup cache). */
@@ -1789,9 +1778,10 @@ function PlaybookDashboardPage() {
     if (!rows.length) return null;
 
     const results = new Map<number, ("W" | "L" | "T")[]>();
-    for (const query of historyMatchupQueries) {
-      const byMatchup = new Map<number, NonNullable<typeof query.data>["entries"]>();
-      for (const entry of query.data?.entries ?? []) {
+    for (const week of completedWeekNumbers) {
+      const entries = historyAllQuery.data?.get(week)?.board.entries ?? [];
+      const byMatchup = new Map<number, typeof entries>();
+      for (const entry of entries) {
         if (entry.matchupId == null) continue;
         const bucket = byMatchup.get(Number(entry.matchupId)) ?? [];
         bucket.push(entry);
