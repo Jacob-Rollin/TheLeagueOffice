@@ -6,7 +6,7 @@ import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import { SosStars } from "@/components/sos/SosStars";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
-import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
@@ -303,19 +303,8 @@ function WaiverIntelligencePage() {
     [sleeperRankFor],
   );
 
-  const nflWeek = useQuery({
-    queryKey: ["nfl-state-week"],
-    staleTime: 30 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
-        headers: { accept: "application/json" },
-      }).catch(() => null);
-      const json = res && res.ok ? ((await res.json()) as Record<string, unknown>) : null;
-      return Math.max(1, Number(json?.["week"] ?? 1) || 1);
-    },
-  });
-  const currentWeek = nflWeek.data ?? null;
+  const nflWeek = useNflState();
+  const currentWeek = nflWeek.data?.week ?? null;
 
   const scheduleByTeam = useQuery({
     queryKey: ["wire-schedule-sos", "v2-no-def-proj", currentSeason()],

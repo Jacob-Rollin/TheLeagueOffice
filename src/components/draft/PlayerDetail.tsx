@@ -17,18 +17,17 @@ import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Scoring } from "@/lib/draft";
 import type { Pos } from "@/lib/draft";
 import { getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
-import {
-  getGameLogs,
-  getNextGame,
-  getPlayerBio,
-  getPlayerDetail,
-  getPlayerNews,
-} from "@/lib/players.functions";
+import { getPlayerDetail, getPlayerNews } from "@/lib/players.functions";
 import type { CareerSeasonRow, GameLog } from "@/lib/players.server";
 import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
 import { formatNflGameStatusLabel, formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { getLeagueScoring } from "@/lib/scoring.functions";
 import { projectionPoints, type ScoringMap } from "@/lib/scoring-map";
+import {
+  fetchGameLogsClient,
+  fetchNextGameClient,
+  fetchPlayerBioClient,
+} from "@/lib/sleeper-client";
 import {
   playoffWindowPresentation,
   positionalSosStanding,
@@ -215,7 +214,7 @@ export function PlayerDetail({
   const { data, isLoading } = useQuery(detailQuery(id));
   const { data: bio } = useQuery({
     queryKey: ["player-bio", id],
-    queryFn: () => getPlayerBio({ data: { id } }),
+    queryFn: () => fetchPlayerBioClient(id),
     staleTime: 1000 * 60 * 60 * 12,
   });
   const draft = useDraft();
@@ -657,7 +656,12 @@ export function PlayerDetail({
           />
         )}
         {tab === "projections" && (
-          <ProjectionsPanel id={player.id} pos={player.pos} scoringFormat={scoringFormat} />
+          <ProjectionsPanel
+            id={player.id}
+            pos={player.pos}
+            team={player.team}
+            scoringFormat={scoringFormat}
+          />
         )}
         {tab === "sos" && (
           <SosHeatmapPanel
@@ -671,6 +675,7 @@ export function PlayerDetail({
           <OutlookPanel
             playerId={player.id}
             team={player.team}
+            pos={player.pos}
             posRankLabel={
               sleeperRanks.pos != null
                 ? `${player.pos}${sleeperRanks.pos}`
@@ -1045,8 +1050,8 @@ function GameLogsPanel({
   } = useLeagueProjections();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["player-logs", id, season],
-    queryFn: () => getGameLogs({ data: { id, season } }),
+    queryKey: ["player-logs", id, season, team, pos],
+    queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season),
     staleTime: 1000 * 60 * 15,
   });
 
@@ -1211,10 +1216,12 @@ function GameLogsPanel({
 function ProjectionsPanel({
   id,
   pos,
+  team,
   scoringFormat,
 }: {
   id: string;
   pos: string;
+  team: string;
   scoringFormat: Scoring;
 }) {
   const statGroups = useMemo(() => positionStatGroups(pos), [pos]);
@@ -1228,8 +1235,8 @@ function ProjectionsPanel({
   } = useLeagueProjections();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["player-projections-weekly", id],
-    queryFn: () => getGameLogs({ data: { id } }),
+    queryKey: ["player-projections-weekly", id, team, pos],
+    queryFn: () => fetchGameLogsClient(id, team || "FA", pos),
     staleTime: 1000 * 60 * 15,
   });
 
@@ -1666,19 +1673,21 @@ function outlookWeatherIcon(
 function OutlookPanel({
   playerId,
   team,
+  pos,
   posRankLabel,
   brainSos,
   scoringFormat,
 }: {
   playerId: string;
   team: string;
+  pos: string;
   posRankLabel: string;
   brainSos: PlayerSos | null;
   scoringFormat: Scoring;
 }) {
   const { data: nextGame, isLoading } = useQuery({
     queryKey: ["player-next-game", team],
-    queryFn: () => getNextGame({ data: { team } }),
+    queryFn: () => fetchNextGameClient(team),
     staleTime: 1000 * 60 * 60 * 6,
     enabled: Boolean(team?.trim()),
   });
@@ -1691,8 +1700,9 @@ function OutlookPanel({
   const { myTeam } = useLeagueRosters(catalog);
 
   const { data: logsBundle } = useQuery({
-    queryKey: ["player-outlook-logs", playerId],
-    queryFn: () => getGameLogs({ data: { id: playerId } }),
+    queryKey: ["player-outlook-logs", playerId, team, pos],
+    enabled: Boolean(playerId && pos),
+    queryFn: () => fetchGameLogsClient(playerId, team || "FA", pos || "WR"),
     staleTime: 1000 * 60 * 15,
   });
 
@@ -1727,7 +1737,7 @@ function OutlookPanel({
     ? resolveLogProjection(weekLog, playerId, scoringFormat, {
         projectFor,
         nflWeek: week,
-        seasonYear: logsBundle?.season,
+        seasonYear: logsBundle?.season ?? null,
         nflSeason,
         scoringMap,
         leagueFormat: format,

@@ -13,10 +13,9 @@ import {
 } from "@/lib/scoring-map";
 import type { Player, Pos } from "@/lib/players-build";
 import { POSITIONS } from "@/lib/players-build";
+import { fetchNflStateClient } from "@/lib/sleeper-client";
 
 const HOUR = 1000 * 60 * 60;
-
-type WeekState = { season: string; week: number };
 
 export type WeeklyProjRow = {
   stats: Record<string, number>;
@@ -77,24 +76,13 @@ export type SleeperWeeklyRanks = {
   pos: number | null;
 };
 
-async function fetchState(): Promise<WeekState> {
-  const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
-    headers: { accept: "application/json" },
-  }).catch(() => null);
-  const json = res && res.ok ? ((await res.json()) as Record<string, unknown>) : null;
-  return {
-    season: String(json?.["season"] ?? new Date().getUTCFullYear()),
-    week: Math.max(1, Number(json?.["week"] ?? 1) || 1),
-  };
-}
-
-/** Shared NFL calendar state — one network hit across Weekly Projections + scoring. */
+/** Shared NFL calendar state — RQ + IndexedDB via sleeper-client (browser pool). */
 export function useNflState() {
   return useQuery({
     queryKey: ["nfl-state", "v3-week"],
     staleTime: 30 * 60 * 1000,
     retry: false,
-    queryFn: fetchState,
+    queryFn: fetchNflStateClient,
   });
 }
 

@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -19,6 +18,7 @@ import {
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueActivity } from "@/hooks/useLeagueActivity";
+import { useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player, Pos } from "@/lib/draft";
@@ -385,20 +385,8 @@ function PressRoomPage() {
   const { events } = useLeagueActivity();
   const modalRef = useRef<PlayerModalHandle>(null);
 
-  const nflWeek = useQuery({
-    queryKey: ["nfl-state-week"],
-    staleTime: 30 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
-        headers: { accept: "application/json" },
-      }).catch(() => null);
-      const json = res && res.ok ? ((await res.json()) as Record<string, unknown>) : null;
-      return Math.max(1, Number(json?.["week"] ?? 1) || 1);
-    },
-  });
-
-  const currentWeek = nflWeek.data ?? null;
+  const nflWeek = useNflState();
+  const currentWeek = nflWeek.data?.week ?? null;
   const finalizedWeeks = useMemo(() => {
     if (currentWeek == null) return [1];
     if (currentWeek <= 1) return [1];

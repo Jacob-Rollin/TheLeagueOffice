@@ -47,7 +47,7 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos } from "@/lib/draft";
-import { fetchResearchFantasyLeaders } from "@/lib/research-cdn";
+import { fetchResearchFantasyLeaders, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import type { ScoringFormat } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
@@ -178,7 +178,7 @@ function FantasyLeadersPage() {
 
   const query = useQuery({
     queryKey: ["fantasy-leaders", season],
-    staleTime: 10 * 60 * 1000,
+    staleTime: RESEARCH_CLIENT_STALE_MS,
     retry: 1,
     placeholderData: (prev) => prev,
     queryFn: () => fetchResearchFantasyLeaders(season),

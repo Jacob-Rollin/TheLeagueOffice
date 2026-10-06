@@ -18,7 +18,7 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useLeagueActivity } from "@/hooks/useLeagueActivity";
-import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
@@ -945,20 +945,8 @@ function PlaybookDashboardPage() {
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
 
-  const nflWeek = useQuery({
-    queryKey: ["nfl-state-week"],
-    staleTime: 30 * 60 * 1000,
-    retry: false,
-    queryFn: async () => {
-      const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
-        headers: { accept: "application/json" },
-      }).catch(() => null);
-      const json = res && res.ok ? ((await res.json()) as Record<string, unknown>) : null;
-      return Math.max(1, Number(json?.["week"] ?? 1) || 1);
-    },
-  });
-
-  const currentWeek = nflWeek.data ?? null;
+  const nflWeek = useNflState();
+  const currentWeek = nflWeek.data?.week ?? null;
   const { matchups, loading: matchupsLoading } = useActiveMatchups(currentWeek);
   const { progressByNflTeam } = useNflGameProgress(currentWeek);
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);

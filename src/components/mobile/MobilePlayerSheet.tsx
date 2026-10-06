@@ -16,17 +16,16 @@ import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections"
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import type { Pos } from "@/lib/draft";
 import { teamFullName } from "@/lib/nfl-teams";
-import {
-  getGameLogs,
-  getNextGame,
-  getPlayerBio,
-  getPlayerDetail,
-  getPlayerNews,
-} from "@/lib/players.functions";
+import { getPlayerDetail, getPlayerNews } from "@/lib/players.functions";
 import type { SeasonLine } from "@/lib/players.server";
 import { fetchResearchFpa } from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { projectionPoints } from "@/lib/scoring-map";
+import {
+  fetchGameLogsClient,
+  fetchNextGameClient,
+  fetchPlayerBioClient,
+} from "@/lib/sleeper-client";
 import { cn } from "@/lib/utils";
 
 /** Pointy-top hexagon for the raised position-rank badge. */
@@ -92,7 +91,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   });
   const { data: bio } = useQuery({
     queryKey: ["player-bio", id],
-    queryFn: () => getPlayerBio({ data: { id } }),
+    queryFn: () => fetchPlayerBioClient(id),
     staleTime: 12 * HOUR,
   });
   const player = detail.data?.player ?? null;
@@ -100,7 +99,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   const { data: nextGame } = useQuery({
     queryKey: ["player-next-game", team],
     enabled: Boolean(team),
-    queryFn: () => getNextGame({ data: { team: team! } }),
+    queryFn: () => fetchNextGameClient(team!),
     staleTime: HOUR,
   });
 
@@ -262,6 +261,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             ) : tab === "stats" ? (
               <StatsTab
                 id={id}
+                team={team}
                 pos={player.pos}
                 format={format}
                 seasonToDate={detail.data?.seasonToDate ?? null}
@@ -269,7 +269,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 history={detail.data?.history ?? []}
               />
             ) : (
-              <GameLogTab id={id} pos={player.pos} format={format} />
+              <GameLogTab id={id} team={team} pos={player.pos} format={format} />
             )}
           </>
         ) : null}
@@ -316,7 +316,7 @@ function Overview({
   id: string;
   pos: string;
   team: string | null;
-  nextGame: Awaited<ReturnType<typeof getNextGame>> | null;
+  nextGame: Awaited<ReturnType<typeof fetchNextGameClient>> | null;
   projected: number | null;
   sosGrade: string | null;
 }) {
@@ -539,6 +539,7 @@ type SeasonRow = { label: string; line: SeasonLine };
 
 function StatsTab({
   id,
+  team,
   pos,
   format,
   seasonToDate,
@@ -546,6 +547,7 @@ function StatsTab({
   history,
 }: {
   id: string;
+  team: string | null;
   pos: string;
   format: Format;
   seasonToDate: SeasonLine | null;
@@ -585,22 +587,33 @@ function StatsTab({
           rowKey={(r) => r.label}
         />
       ) : null}
-      <WeeklyProjections id={id} pos={pos} format={format} />
+      <WeeklyProjections id={id} team={team} pos={pos} format={format} />
     </>
   );
 }
 
-function usePlayerLogs(id: string) {
+function usePlayerLogs(id: string, team: string | null | undefined, pos: string | null | undefined) {
   return useQuery({
-    queryKey: ["player-logs", id, "current"],
-    queryFn: () => getGameLogs({ data: { id } }),
+    queryKey: ["player-logs", id, "current", team ?? "FA", pos ?? ""],
+    enabled: Boolean(id && pos),
+    queryFn: () => fetchGameLogsClient(id, team ?? "FA", pos ?? "WR"),
     staleTime: 30 * 60 * 1000,
   });
 }
 
 /** Upcoming weeks with Sleeper's projected stat line, from the current NFL week on. */
-function WeeklyProjections({ id, pos, format }: { id: string; pos: string; format: Format }) {
-  const { data, isLoading } = usePlayerLogs(id);
+function WeeklyProjections({
+  id,
+  team,
+  pos,
+  format,
+}: {
+  id: string;
+  team: string | null;
+  pos: string;
+  format: Format;
+}) {
+  const { data, isLoading } = usePlayerLogs(id, team, pos);
   const { data: nfl } = useNflState();
   const currentWeek = nfl?.week ?? 1;
   const weeks = (data?.logs ?? []).filter((l) => l.week >= currentWeek && !l.played);
@@ -636,8 +649,18 @@ function WeeklyProjections({ id, pos, format }: { id: string; pos: string; forma
   );
 }
 
-function GameLogTab({ id, pos, format }: { id: string; pos: string; format: Format }) {
-  const { data, isLoading } = usePlayerLogs(id);
+function GameLogTab({
+  id,
+  team,
+  pos,
+  format,
+}: {
+  id: string;
+  team: string | null;
+  pos: string;
+  format: Format;
+}) {
+  const { data, isLoading } = usePlayerLogs(id, team, pos);
   const { data: nfl } = useNflState();
   const currentWeek = nfl?.week ?? 1;
   const logs = (data?.logs ?? []).filter((l) => l.played || (l.isBye && l.week < currentWeek));

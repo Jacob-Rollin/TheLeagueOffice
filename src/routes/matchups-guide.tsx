@@ -29,7 +29,7 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos } from "@/lib/draft";
-import { fetchResearchMatchupsGuide } from "@/lib/research-cdn";
+import { fetchResearchMatchupsGuide, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import type { MatchupDefenseCell } from "@/lib/players.server";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import {
@@ -156,7 +156,7 @@ function MatchupsGuidePage() {
 
   const query = useQuery({
     queryKey: ["matchups-guide", week, scoringFormat],
-    staleTime: 10 * 60 * 1000,
+    staleTime: RESEARCH_CLIENT_STALE_MS,
     retry: 1,
     placeholderData: (prev) => prev,
     queryFn: () => fetchResearchMatchupsGuide(week, scoringFormat),
