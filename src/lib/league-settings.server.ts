@@ -366,7 +366,9 @@ async function loadEspnSettings(
     if (key) out.roster[key] += c;
   }
 
-  const scoring = await loadLeagueScoring(id, "espn", s2, swid);
+  // Reuse scoringItems from the settings payload — avoid a second mSettings ESPN hit.
+  const fromView = mapFromEspnScoringItems(set.scoringSettings?.scoringItems);
+  const scoring = fromView ?? (await loadLeagueScoring(id, "espn", s2, swid));
   out.scoring = { ...scoring.map };
 
   const teamById = new Map(teams.map((t) => [t.id, t]));

@@ -8,6 +8,11 @@ import { authorizeCronRequest } from "@/lib/cron-auth.server";
  * Upserts current (+ prior) week matchups so page loads read CDN/TiDB instead
  * of Fluid. Optional fillSeason backfills missing weeks 1–17 for schedule
  * surfaces (My Team / Matchup week picker).
+ *
+ * Observability note: outbound `api.sleeper.app` from this route shows up on
+ * Vercel as Sleeper traffic — it is cron warm, not playbook browse (browse is
+ * browser→Sleeper + CDN). Empty-cache detection must include TiDB or mid-week
+ * runs accidentally full-backfill weeks 1–17 every pass.
  */
 export const Route = createFileRoute("/api/cron/league-delta-sync")({
   server: {

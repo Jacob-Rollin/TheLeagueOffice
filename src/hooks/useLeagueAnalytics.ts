@@ -13,7 +13,7 @@ import {
 } from "@/lib/completed-weeks";
 import { boardHasUsableScores, fetchLeagueMatchupsHistory } from "@/lib/league-matchups-cdn";
 import { fetchLeagueSettingsForConnection } from "@/lib/league-settings-fetch";
-import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
+import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { fetchSnapRestOfSeason, fetchSnapStartingSlotRanks } from "@/lib/snap-cdn";
 import { computeStandingsAnalytics, type TeamAnalytics } from "@/lib/standings-analytics";
 
@@ -128,10 +128,9 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
     refetchIntervalInBackground: false,
     queryFn: () => {
       const platform = (activeLeague?.platform ?? "sleeper").trim().toLowerCase();
-      // ESPN/Yahoo: cron + switch-time delta own host pulls. Browse history must
-      // not N× Fluid-backfill completed weeks (same rule as production Sleeper).
-      const allowFluid =
-        platform !== "espn" && platform !== "yahoo" ? isPageVisible() : false;
+      // Cron owns host→TiDB warm for every platform. Browse history must not
+      // Fluid-backfill (Sleeper used to set allowFluid=true when the tab was
+      // visible — production still blocked it, but keep the door closed).
       return fetchLeagueMatchupsHistory({
         leagueId: platformLeagueId,
         platform,
@@ -141,7 +140,7 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
         ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
         ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
         ...(leagueId ? { connectionId: leagueId } : {}),
-        allowFluid,
+        allowFluid: false,
       });
     },
   });

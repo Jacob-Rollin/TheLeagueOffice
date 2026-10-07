@@ -1587,6 +1587,11 @@ export type LoadMatchupsOptions = {
   preferCache?: boolean;
   /** When true (default), write-through live/upstream boards into Supabase. */
   persist?: boolean;
+  /**
+   * Cron/CDN warm: skip past-week IR reconstruct + late-acquisition txn fan-out.
+   * Matchup points/starters still come from the host matchup payload.
+   */
+  lite?: boolean;
 };
 
 /**
@@ -1611,9 +1616,10 @@ export async function loadConnectionMatchups(
   const plat = platform.trim().toLowerCase();
   const preferCache = options?.preferCache !== false;
   const persist = options?.persist !== false;
+  const lite = options?.lite === true;
   // Credentials are part of the key so a private ESPN league is never served
   // to a caller who could not fetch it themselves.
-  const key = `matchups|${plat}|${identifier.trim()}|${safeWeek}|${s2 ?? ""}|${swid ?? ""}`;
+  const key = `matchups|${plat}|${identifier.trim()}|${safeWeek}|${s2 ?? ""}|${swid ?? ""}|${lite ? "lite" : "full"}`;
   const nflState = await cachedJson<{ week?: number }>(NFL_STATE_URL, 5 * 60 * 1000);
   const currentNflWeek = Math.max(0, Number(nflState?.week ?? 0) || 0);
   const isFinalWeek = currentNflWeek > 0 && safeWeek < currentNflWeek;
@@ -1663,7 +1669,7 @@ export async function loadConnectionMatchups(
   }
 
   const fetchBoard = () =>
-    fetchConnectionMatchups(identifier, platform, safeWeek, s2, swid, connectionId);
+    fetchConnectionMatchups(identifier, platform, safeWeek, s2, swid, connectionId, { lite });
 
   // Cron / explicit ingest must not reuse an in-process midweek freeze.
   if (!preferCache) {
@@ -1727,10 +1733,12 @@ async function fetchConnectionMatchups(
   s2?: string | null,
   swid?: string | null,
   _connectionId?: string | null,
+  options?: { lite?: boolean },
 ): Promise<LeagueWeekMatchups | null> {
   const clean = identifier.trim().replace(/^@/, "");
   const safeWeek = Math.max(1, Math.floor(Number(week) || 1));
   const plat = platform.trim().toLowerCase();
+  const lite = options?.lite === true;
   if (!clean) return null;
 
   // No Supabase writes for live scoreboard shifts — client caches handle refresh.
@@ -2054,13 +2062,15 @@ async function fetchConnectionMatchups(
   const currentNflWeek = Math.max(1, Number(nflState?.week ?? 0) || 0);
   // Current + future weeks: Sleeper matchups reuse the live roster, so attach
   // current reserve. Past weeks: reconstruct IR from slot transactions.
+  // Lite (cron CDN warm): skip txn fan-out — scores/starters are on the matchup row.
   const attachLiveReserve = currentNflWeek > 0 && Number(safeWeek) >= currentNflWeek;
-  const [historicalIrByRoster, lateAddsByRoster] = attachLiveReserve
-    ? [new Map<number, string[]>(), new Map<number, Set<string>>()]
-    : await Promise.all([
-        reconstructSleeperIrByRoster(leagueId, safeWeek),
-        sleeperLateAcquisitionsByRoster(leagueId, safeWeek),
-      ]);
+  const [historicalIrByRoster, lateAddsByRoster] =
+    attachLiveReserve || lite
+      ? [new Map<number, string[]>(), new Map<number, Set<string>>()]
+      : await Promise.all([
+          reconstructSleeperIrByRoster(leagueId, safeWeek),
+          sleeperLateAcquisitionsByRoster(leagueId, safeWeek),
+        ]);
 
   const reserveByRoster = new Map<number, string[]>();
   for (const r of rosters ?? []) {
