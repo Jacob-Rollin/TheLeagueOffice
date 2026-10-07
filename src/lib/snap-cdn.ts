@@ -115,7 +115,9 @@ export async function fetchSnapRosterNews(ids: string[]) {
 
 /**
  * League-scoped snaps: CDN first when the identifier is a numeric host league id.
- * Production soft-empties on miss (same free-tier policy as research-cdn).
+ * On miss (or username / ESPN identifiers), fall through to Fluid — soft-emptying
+ * these blanked playoff odds and Starting Slot Ranks for real leagues. Public
+ * research snaps above still soft-empty in production.
  */
 export async function fetchSnapRestOfSeason(input: {
   identifier: string;
@@ -126,7 +128,6 @@ export async function fetchSnapRestOfSeason(input: {
   swid?: string;
 }) {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
-  const empty = { weeks: [] as number[], byWeek: [] as Record<string, number>[] };
   if (platform === "sleeper" && /^\d{6,}$/.test(input.identifier)) {
     const qs = new URLSearchParams({
       league: input.identifier,
@@ -137,9 +138,6 @@ export async function fetchSnapRestOfSeason(input: {
       Awaited<ReturnType<typeof import("./standings-projections.server").loadRestOfSeasonProjections>>
     >(`/api/data/snap/ros?${qs}`);
     if (hit && Array.isArray(hit.weeks) && hit.weeks.length > 0) return hit;
-    if (!allowFluidFallback()) return hit ?? empty;
-  } else if (!allowFluidFallback()) {
-    return empty;
   }
   const { getRestOfSeasonProjections } = await import("./league.functions");
   return getRestOfSeasonProjections({
@@ -164,7 +162,6 @@ export async function fetchSnapStartingSlotRanks(input: {
 }) {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
   const toWeek = input.toWeek ?? input.fromWeek;
-  const empty = { seats: [] as string[], teams: [] };
   if (platform === "sleeper" && /^\d{6,}$/.test(input.identifier)) {
     const qs = new URLSearchParams({
       league: input.identifier,
@@ -175,9 +172,6 @@ export async function fetchSnapStartingSlotRanks(input: {
       Awaited<ReturnType<typeof import("./standings-projections.server").loadStartingSlotRanks>>
     >(`/api/data/snap/slot-ranks?${qs}`);
     if (hit && Array.isArray(hit.teams) && hit.teams.length > 0) return hit;
-    if (!allowFluidFallback()) return hit ?? empty;
-  } else if (!allowFluidFallback()) {
-    return empty;
   }
   const { getStartingSlotRanks } = await import("./league.functions");
   return getStartingSlotRanks({
