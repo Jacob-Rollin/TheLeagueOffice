@@ -10,8 +10,12 @@ export function playerImage(id: string, pos: Pos, team: string): string {
 }
 
 export function teamLogo(team: string | null | undefined) {
-  if (!team) return null;
-  return `https://sleepercdn.com/images/team_logos/nfl/${team.toLowerCase()}.png`;
+  const clean = String(team ?? "")
+    .trim()
+    .toUpperCase();
+  // Free agents / empty teams have no Sleeper logo asset — avoid a broken <img>.
+  if (!clean || clean === "FA" || clean === "FREE AGENT" || clean === "NONE") return null;
+  return `https://sleepercdn.com/images/team_logos/nfl/${clean.toLowerCase()}.png`;
 }
 
 /** Sleeper-style headshot with the team logo tucked in the corner. */

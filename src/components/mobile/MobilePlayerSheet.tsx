@@ -12,7 +12,7 @@ import {
 } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
-import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
+import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import type { Pos } from "@/lib/draft";
 import { teamFullName } from "@/lib/nfl-teams";
@@ -248,8 +248,8 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                   </span>
                 </div>
               </div>
-              <StatCell label="Own %" value={ownedPct != null ? Number(ownedPct).toFixed(1) : "-"} />
-              <StatCell label="Start %" value={startedPct != null ? String(Math.round(Number(startedPct))) : "-"} />
+              <StatCell label="Own %" value={ownedPct != null ? `${Math.round(Number(ownedPct))}` : "-"} />
+              <StatCell label="Start %" value={startedPct != null ? `${Math.round(Number(startedPct))}` : "-"} />
             </div>
 
             <div className="grid grid-cols-3 border-b border-m-border bg-m-card">
@@ -691,9 +691,8 @@ function GameLogTab({
   format: Format;
 }) {
   const { data, isLoading } = usePlayerLogs(id, team, pos);
-  const { data: nfl } = useNflState();
-  const currentWeek = nfl?.week ?? 1;
-  const logs = (data?.logs ?? []).filter((l) => l.played || (l.isBye && l.week < currentWeek));
+  // Full 1–18 season board; unplayed weeks stay as "-" until the game is final.
+  const logs = data?.logs ?? [];
 
   if (isLoading) return <p className="px-4 py-8 text-center text-sm text-m-muted">Loading game log...</p>;
   if (!logs.length) return <p className="px-4 py-8 text-center text-sm text-m-muted">No games played yet this season.</p>;
@@ -702,7 +701,12 @@ function GameLogTab({
   const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
   const cols: TableCol<Log>[] = [
     { key: "opp", label: "Opp", render: (l) => (l.isBye ? "BYE" : (l.opp ?? "-")) },
-    { key: "fpts", label: "Fpts", highlight: true, render: (l) => (l.isBye ? "-" : l.points[format].toFixed(1)) },
+    {
+      key: "fpts",
+      label: "Fpts",
+      highlight: true,
+      render: (l) => (l.isBye || !l.played ? "-" : l.points[format].toFixed(1)),
+    },
     {
       key: "proj",
       label: "Proj",
@@ -711,7 +715,7 @@ function GameLogTab({
     ...statCols.map((c) => ({
       key: c.key,
       label: c.label,
-      render: (l: Log) => (l.isBye ? "-" : statValue(l.raw, c.key)),
+      render: (l: Log) => (l.isBye || !l.played ? "-" : statValue(l.raw, c.key)),
     })),
   ];
 

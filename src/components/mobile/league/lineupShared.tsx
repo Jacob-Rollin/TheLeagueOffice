@@ -57,9 +57,36 @@ function hostAsPlayer(id: string, meta: HostPlayerMeta): Player {
   };
 }
 
-/** League-scored points for a lineup player, including host-only athletes. */
+/**
+ * League-scored points for a lineup player, including host-only athletes.
+ * Prefer non-zero host metadata when `playerPoints` stored an explicit 0
+ * (common for ESPN D/ST id remaps on past weeks).
+ */
 export function entryPoints(entry: WeeklyMatchupEntry, playerId: string): number {
-  return Number(entry.playerPoints[playerId] ?? entry.hostPlayers?.[playerId]?.points ?? 0) || 0;
+  const clean = String(playerId ?? "").trim();
+  if (!clean) return 0;
+  const fromMap = entry.playerPoints[clean];
+  const fromHost = entry.hostPlayers?.[clean]?.points;
+  const mapped = fromMap != null && Number.isFinite(Number(fromMap)) ? Number(fromMap) : null;
+  const hosted = fromHost != null && Number.isFinite(Number(fromHost)) ? Number(fromHost) : null;
+  if (mapped != null && mapped !== 0) return mapped;
+  if (hosted != null && hosted !== 0) return hosted;
+
+  // DEF / unmatched ESPN rows: host may key points under `espn:…` while the
+  // card resolved a Sleeper team-abbr id (or the reverse).
+  const host = entry.hostPlayers ?? {};
+  for (const [key, meta] of Object.entries(host)) {
+    if (!meta) continue;
+    const pts = Number(meta.points);
+    if (!Number.isFinite(pts) || pts === 0) continue;
+    if (key === clean) return pts;
+    const pos = (meta.pos ?? "").toUpperCase();
+    if (pos === "DEF" || pos === "DST") {
+      const team = (meta.team ?? "").toUpperCase();
+      if (team && (team === clean.toUpperCase() || clean.toUpperCase() === team)) return pts;
+    }
+  }
+  return mapped ?? hosted ?? 0;
 }
 
 /**
@@ -221,19 +248,78 @@ export function scheduleOpponent(schedule: ScheduleGame[], week: number, team: s
 /** Left / right labels for the game strip under a player card. */
 export function gameStripLabels(
   progress: NflGameProgress | undefined,
-  opts: { bye: boolean; opponent: string | null },
-): { game: string; status: string } {
-  if (opts.bye) return { game: "BYE", status: "" };
-  if (progress?.phase === "post") return { game: progress.boxScoreLabel || "Final", status: "Final" };
+  opts: { bye: boolean; opponent: string | null; team?: string | null },
+): {
+  game: string;
+  status: string;
+  /** Player's NFL team currently has possession. */
+  hasBall: boolean;
+  /** Possession drive is in the red zone. */
+  redZone: boolean;
+} {
+  if (opts.bye) return { game: "BYE", status: "", hasBall: false, redZone: false };
+  const teamHasBall =
+    progress?.phase === "in" &&
+    Boolean(progress.possessionAbbr) &&
+    Boolean(opts.team) &&
+    teamKeys(opts.team!).includes(progress.possessionAbbr!.toUpperCase());
+  const redZone = Boolean(progress?.isRedZone && teamHasBall);
+  if (progress?.phase === "post") {
+    return { game: progress.boxScoreLabel || "Final", status: "Final", hasBall: false, redZone: false };
+  }
   if (progress?.phase === "in") {
     const period = progress.period ?? 1;
     const quarter = period > 4 ? "OT" : `Q${period}`;
     return {
       game: progress.boxScoreLabel || "Live",
       status: `${quarter} ${progress.displayClock ?? ""}`.trim(),
+      hasBall: teamHasBall,
+      redZone,
     };
   }
-  return { game: formatNflKickoffLabel(progress?.kickoffIso) || "", status: opts.opponent ?? "" };
+  return {
+    game: formatNflKickoffLabel(progress?.kickoffIso) || "",
+    status: opts.opponent ?? "",
+    hasBall: false,
+    redZone: false,
+  };
+}
+
+/** Ruled-out / inactive designations that should always show Sideline. */
+export function isRuledOut(status: string | null | undefined): boolean {
+  const s = String(status ?? "")
+    .trim()
+    .toUpperCase();
+  if (!s) return false;
+  return (
+    s === "O" ||
+    s === "OUT" ||
+    s === "IR" ||
+    s === "PUP" ||
+    s === "SUS" ||
+    s === "SUSPENDED" ||
+    s === "NA" ||
+    s === "INACTIVE" ||
+    s === "DNR" ||
+    /^out\b/i.test(String(status))
+  );
+}
+
+/**
+ * Live possession pill. Public ESPN scoreboard cannot tell which skill players
+ * are in a given package, so "Possession" means the NFL team has the ball
+ * (Sideline otherwise / when ruled out). DEF inverts: active when the offense
+ * (opponent) has the ball.
+ */
+export function possessionPill(
+  player: Player,
+  progress: NflGameProgress | undefined,
+): "possession" | "sideline" | null {
+  if (progress?.phase !== "in" || !progress.possessionAbbr) return null;
+  if (isRuledOut(player.injury_status ?? player.injury)) return "sideline";
+  const hasBall = teamKeys(player.team).includes(progress.possessionAbbr.toUpperCase());
+  const active = player.pos === "DEF" ? !hasBall : hasBall;
+  return active ? "possession" : "sideline";
 }
 
 /** Regulation minutes a player's game has left: 60 before kickoff, 0 once final or on bye. */
@@ -242,4 +328,46 @@ export function minutesLeft(progress: NflGameProgress | undefined): number {
   if (progress.phase === "pre") return 60;
   if (progress.phase === "post") return 0;
   return Math.max(0, Math.min(60, progress.minutesRemaining));
+}
+
+/** Compact football glyph for possession on the game strip. */
+export function FootballIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden
+      className={cn("inline-block shrink-0", className)}
+      fill="currentColor"
+    >
+      <ellipse cx="8" cy="8" rx="6.5" ry="4.2" transform="rotate(-35 8 8)" />
+      <path
+        d="M5.2 7.2h5.6M6.1 5.9l1.9 2.2M9.9 5.9L8 8.1M6.1 10.1L8 7.9M9.9 10.1L8 7.9"
+        fill="none"
+        stroke="var(--m-row-alt, #f6f5f2)"
+        strokeWidth="0.9"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** Football / RZ badges beside the live clock on a player card strip. */
+export function PossessionStripBadges({
+  hasBall,
+  redZone,
+}: {
+  hasBall: boolean;
+  redZone: boolean;
+}) {
+  if (!hasBall && !redZone) return null;
+  return (
+    <span className="inline-flex items-center gap-1">
+      {hasBall ? <FootballIcon className="size-3 text-m-accent" /> : null}
+      {redZone ? (
+        <span className="rounded-[3px] bg-orange-500 px-1 py-px text-[8px] font-bold leading-none tracking-wide text-white">
+          RZ
+        </span>
+      ) : null}
+    </span>
+  );
 }

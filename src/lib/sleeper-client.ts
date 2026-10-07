@@ -234,7 +234,8 @@ type WeekProjBundle = Record<
   }
 >;
 
-async function weekProjectionBundle(season: string, week: number): Promise<WeekProjBundle> {
+/** Shared IndexedDB week projection bundle (game logs + matchup proj fill). */
+export async function weekProjectionBundle(season: string, week: number): Promise<WeekProjBundle> {
   // v2: includes injury fields so ATP overlay reuses the same download.
   // Past weeks are immutable — hold longer so game-log Proj columns stay warm
   // without re-hitting Sleeper after the first visitor download.

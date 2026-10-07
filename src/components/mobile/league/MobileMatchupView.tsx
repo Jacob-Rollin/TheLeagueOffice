@@ -3,28 +3,31 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
 import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
-import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useLeagueProjections, useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { StandingRow, WeeklyMatchupEntry } from "@/lib/league.server";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
+import { scoreActualLine } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
 import {
   HEX_CLIP,
+  PossessionStripBadges,
   REGULAR_SEASON_WEEKS,
   Score,
   entryPoints,
   gameStripLabels,
   minutesLeft,
+  possessionPill,
   progressFor,
   resolveEntryLineup,
   scheduleOpponent,
   shortName,
   slotLabels,
-  teamKeys,
   useNflSchedule,
   type LineupRow,
 } from "./lineupShared";
@@ -52,8 +55,11 @@ export function MobileMatchupView() {
   const activeWeek = week ?? nflWeek ?? 1;
 
   const { matchups, loading } = useActiveMatchups(activeWeek);
-  const { progressByNflTeam } = useNflGameProgress(activeWeek);
+  const { progressByNflTeam, currentWeek } = useNflGameProgress(activeWeek);
   const { data: schedule = [] } = useNflSchedule();
+  const { scoringMap } = useLeagueScoringMeta();
+  const { statsFor } = useWeeklyActualStats(activeWeek);
+  const isPastWeek = currentWeek != null && activeWeek < currentWeek;
 
   const [view, setView] = useState<"matchup" | "scoreboard">("matchup");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -118,13 +124,39 @@ export function MobileMatchupView() {
     return { remaining: Math.round(remaining), total };
   };
 
+  const pointsFor = (entry: WeeklyMatchupEntry, player: Player): number => {
+    const host = entryPoints(entry, player.id);
+    if (host !== 0) return host;
+    // Host/CDN often stores 0 for remapped DEF — score the Sleeper box line
+    // with league settings (same path as desktop My Team / player popup).
+    const scored = scoreActualLine(statsFor(sleeperIdFor(player)), scoringMap);
+    return scored ?? host;
+  };
+
+  const teamProjected = (entry: WeeklyMatchupEntry): number => {
+    if (entry.projectedPoints > 0) return entry.projectedPoints;
+    const { starters } = slotsFor(entry);
+    let sum = 0;
+    let any = false;
+    for (const row of starters) {
+      if (!row.player) continue;
+      const p = projectFor(sleeperIdFor(row.player));
+      if (p == null || !Number.isFinite(p)) continue;
+      sum += p;
+      any = true;
+    }
+    return any ? Math.round(sum * 100) / 100 : entry.projectedPoints;
+  };
+
   const cardHelpers: CardHelpers = {
+    pointsFor,
     projectedFor: (p) => projectFor(sleeperIdFor(p)),
     posRankFor: (p) => rankFor(sleeperIdFor(p)).pos,
     progressOf: (p) => progressFor(p.team, progressByNflTeam),
     opponentFor: (p) => scheduleOpponent(schedule, activeWeek, p.team),
     byeWeek: (p) => p.bye === activeWeek,
     playerIdFor: (p) => sleeperIdFor(p),
+    showActuals: isPastWeek,
   };
 
   return (
@@ -154,6 +186,7 @@ export function MobileMatchupView() {
           pairs={pairs}
           activeIndex={activeIndex}
           standingByRoster={standingByRoster}
+          projectedFor={teamProjected}
           onSelect={(i) => {
             setActiveIndex(i);
             pendingScroll.current = i;
@@ -179,6 +212,8 @@ export function MobileMatchupView() {
                   standingByRoster={standingByRoster}
                   homeMinutes={minutesFor(pair.home)}
                   awayMinutes={minutesFor(pair.away)}
+                  homeProjected={teamProjected(pair.home)}
+                  awayProjected={teamProjected(pair.away)}
                 />
               </div>
             ))}
@@ -239,12 +274,16 @@ function MatchupCard({
   standingByRoster,
   homeMinutes,
   awayMinutes,
+  homeProjected,
+  awayProjected,
 }: {
   pair: Pair;
   title: string;
   standingByRoster: Map<number, { row: StandingRow; rank: number }>;
   homeMinutes: { remaining: number; total: number };
   awayMinutes: { remaining: number; total: number };
+  homeProjected: number;
+  awayProjected: number;
 }) {
   const { home, away } = pair;
   const homeStanding = standingByRoster.get(Number(home.rosterId));
@@ -261,8 +300,8 @@ function MatchupCard({
             <RankedLogo name={home.teamName} logo={home.logo} rank={homeStanding?.rank ?? null} />
             <div className="pt-2 text-right">
               <Score value={home.points} className="font-display text-[30px] font-extrabold italic leading-none" />
-              <p className={cn("mt-1 text-sm font-semibold tabnum", projTone(home.projectedPoints, away.projectedPoints))}>
-                {home.projectedPoints.toFixed(2)}
+              <p className={cn("mt-1 text-sm font-semibold tabnum", projTone(homeProjected, awayProjected))}>
+                {homeProjected.toFixed(2)}
               </p>
             </div>
           </div>
@@ -284,8 +323,8 @@ function MatchupCard({
             <RankedLogo name={away.teamName} logo={away.logo} rank={awayStanding?.rank ?? null} />
             <div className="pt-2">
               <Score value={away.points} className="font-display text-[30px] font-extrabold italic leading-none" />
-              <p className={cn("mt-1 text-sm font-semibold tabnum", projTone(away.projectedPoints, home.projectedPoints))}>
-                {away.projectedPoints.toFixed(2)}
+              <p className={cn("mt-1 text-sm font-semibold tabnum", projTone(awayProjected, homeProjected))}>
+                {awayProjected.toFixed(2)}
               </p>
             </div>
           </div>
@@ -319,11 +358,13 @@ function Scoreboard({
   pairs,
   activeIndex,
   standingByRoster,
+  projectedFor,
   onSelect,
 }: {
   pairs: Pair[];
   activeIndex: number;
   standingByRoster: Map<number, { row: StandingRow; rank: number }>;
+  projectedFor: (entry: WeeklyMatchupEntry) => number;
   onSelect: (index: number) => void;
 }) {
   return (
@@ -355,7 +396,7 @@ function Scoreboard({
                     value={side.points}
                     className={cn("font-display text-xl font-bold italic leading-none", !leading && "text-m-muted")}
                   />
-                  <span className="block text-xs text-m-muted tabnum">{side.projectedPoints.toFixed(2)}</span>
+                  <span className="block text-xs text-m-muted tabnum">{projectedFor(side).toFixed(2)}</span>
                 </span>
               </div>
             );
@@ -367,12 +408,15 @@ function Scoreboard({
 }
 
 type CardHelpers = {
+  pointsFor: (entry: WeeklyMatchupEntry, player: Player) => number;
   projectedFor: (p: Player) => number | null;
   posRankFor: (p: Player) => number | null;
   progressOf: (p: Player) => NflGameProgress | undefined;
   opponentFor: (p: Player) => string | null;
   byeWeek: (p: Player) => boolean;
   playerIdFor: (p: Player) => string;
+  /** Past weeks always show scored actuals even if progress map is empty. */
+  showActuals: boolean;
 };
 
 function HeadToHead({
@@ -420,12 +464,6 @@ function HeadToHead({
   );
 }
 
-function fieldStatus(player: Player, progress: NflGameProgress | undefined): "on" | "off" | null {
-  if (progress?.phase !== "in" || !progress.possessionAbbr) return null;
-  const hasBall = teamKeys(player.team).includes(progress.possessionAbbr.toUpperCase());
-  return (player.pos === "DEF" ? !hasBall : hasBall) ? "on" : "off";
-}
-
 function HalfCard({
   slot,
   slotLabel,
@@ -459,13 +497,17 @@ function HalfCard({
   }
 
   const progress = helpers.progressOf(player);
-  const started = progress?.phase === "in" || progress?.phase === "post";
-  const points = started ? entryPoints(entry, player.id) : null;
+  const started = helpers.showActuals || progress?.phase === "in" || progress?.phase === "post";
+  const points = started ? helpers.pointsFor(entry, player) : null;
   const projected = helpers.projectedFor(player);
   const posRank = helpers.posRankFor(player);
   const logo = teamLogo(player.team);
-  const status = fieldStatus(player, progress);
-  const strip = gameStripLabels(progress, { bye: helpers.byeWeek(player), opponent: helpers.opponentFor(player) });
+  const status = possessionPill(player, progress);
+  const strip = gameStripLabels(progress, {
+    bye: helpers.byeWeek(player),
+    opponent: helpers.opponentFor(player),
+    team: player.team,
+  });
 
   return (
     <article
@@ -502,16 +544,21 @@ function HalfCard({
             ) : null}
           </div>
           {logo ? <img src={logo} alt="" className="mt-1.5 size-7 shrink-0 rounded-full bg-m-chip object-contain p-1" /> : null}
-          <div className={cn("min-w-0 flex-1", mirror ? "text-left" : "text-right")}>
+          <div
+            className={cn(
+              "flex min-w-0 flex-1 flex-col",
+              mirror ? "items-start text-left" : "items-end text-right",
+            )}
+          >
             <Score value={points} className="font-display text-xl font-bold italic leading-none" />
             {status ? (
               <span
                 className={cn(
                   "mt-1 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide",
-                  status === "on" ? "bg-emerald-500 text-white" : "bg-m-chip text-m-muted",
+                  status === "possession" ? "bg-emerald-500 text-white" : "bg-m-chip text-m-muted",
                 )}
               >
-                {status === "on" ? "On Field" : "Sideline"}
+                {status === "possession" ? "Possession" : "Sideline"}
               </span>
             ) : (
               <p className="mt-1 text-xs italic text-m-muted tabnum">{projected != null ? projected.toFixed(2) : "-"}</p>
@@ -532,14 +579,13 @@ function HalfCard({
           )}
         </p>
       </div>
-      <div
-        className={cn(
-          "flex items-center justify-between gap-1 bg-m-row-alt px-2.5 py-1.5 text-[10px] font-semibold text-m-muted",
-          mirror && "flex-row-reverse",
-        )}
-      >
+      {/* Always game left / clock+badges right — avoid mirror flipping live strips. */}
+      <div className="flex items-center justify-between gap-1 bg-m-row-alt px-2.5 py-1.5 text-[10px] font-semibold text-m-muted">
         <span className="truncate">{strip.game}</span>
-        <span className="shrink-0 uppercase">{strip.status}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 uppercase">
+          <PossessionStripBadges hasBall={strip.hasBall} redZone={strip.redZone} />
+          {strip.status}
+        </span>
       </div>
     </article>
   );

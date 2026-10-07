@@ -329,6 +329,37 @@ export function scoreStats(
   return touched ? total : null;
 }
 
+const PTS_ALLOW_TIERS: ReadonlyArray<readonly [number, string]> = [
+  [0, "pts_allow_0"],
+  [6, "pts_allow_1_6"],
+  [13, "pts_allow_7_13"],
+  [20, "pts_allow_14_20"],
+  [27, "pts_allow_21_27"],
+  [34, "pts_allow_28_34"],
+  [Infinity, "pts_allow_35p"],
+];
+
+/**
+ * Fantasy points for a weekly box-score line in league scoring.
+ * Injects a pts_allow_* tier when Sleeper only shipped the aggregate.
+ * Shared by desktop My Team and mobile matchup cards (DEF remaps, etc.).
+ */
+export function scoreActualLine(
+  stats: Record<string, number> | null | undefined,
+  map: ScoringMap,
+): number | null {
+  if (!stats) return null;
+  let line = stats;
+  const allowed = Number(stats["pts_allow"]);
+  const hasTier = PTS_ALLOW_TIERS.some(([, key]) => Number(stats[key]) > 0);
+  if (Number.isFinite(allowed) && !hasTier) {
+    const tier = PTS_ALLOW_TIERS.find(([max]) => allowed <= max)?.[1];
+    if (tier) line = { ...stats, [tier]: 1 };
+  }
+  const pts = scoreStats(line, map);
+  return pts == null ? null : Math.round(pts * 100) / 100;
+}
+
 /**
  * Weekly fantasy points for a projection row in league scoring.
  * Always applies the league map when present (Sleeper matchup parity).
