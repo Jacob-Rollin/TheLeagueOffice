@@ -13,7 +13,9 @@ Project → **Settings** → **Environment Variables** → **Production**:
 |---|---|
 | `VITE_SNAP_CDN_BASE` | `https://raw.githubusercontent.com/Jacob-Rollin/TheLeagueOffice/snap-cdn` |
 
-No trailing slash. Redeploy after setting it (Vite bakes this at build time).
+No trailing slash. Then redeploy a **`main`** deployment (Vite bakes this at build time).
+
+**Do not** promote / redeploy a deployment from branch `snap-cdn` — that branch is JSON-only and will 404 the whole site. `vercel.json` disables automatic Vercel deploys for `snap-cdn`.
 
 (`APP_URL` + `CRON_SECRET` must already exist as GitHub Actions secrets — same as other warm workflows.)
 
