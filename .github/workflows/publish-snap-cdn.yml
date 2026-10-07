@@ -72,14 +72,7 @@ jobs:
           fetch() {
             local url="$1" dest="$2"
             if curl -fsSL "${AUTH[@]}" "$url" -o "$dest"; then
-              python3 - "$dest" <<'PY'
-import json,sys
-p=sys.argv[1]
-with open(p) as f: d=json.load(f)
-if isinstance(d, dict) and d.get("ok") is False:
-  raise SystemExit(f"error payload {p}")
-print("ok", p)
-PY
+              python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); assert not (isinstance(d, dict) and d.get("ok") is False), f"error payload {p}"; print("ok", p)' "$dest"
             else
               echo "warn: miss $url"
               rm -f "$dest"
