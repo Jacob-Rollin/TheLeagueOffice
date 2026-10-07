@@ -33,7 +33,8 @@
 - Position filter chips: active `border-blue-600 bg-blue-600 text-white`; inactive white / `text-blue-700`.
 - UI label for defense position is **DST** (internal pos remains `DEF`).
 - Market value columns: `ValueTrendCell` + `scaleValue`; column label is **Value/Trend** (never a bare `$` header).
-- Research routes: `ssr: false`. Remount league-dependent boards with `key={activeLeagueId ?? "none"}` when the active league changes.
+- Research routes, Trade Desk (`/trade`), and The Wire (`/waiver`): `ssr: false` (SSR catalog loaders burn Fluid Active CPU).
+- Remount league-dependent boards with `key={activeLeagueId ?? "none"}` when the active league changes.
 - Prefer CDN research helpers (`research-cdn`) with `staleTime: RESEARCH_CLIENT_STALE_MS` and `placeholderData: (prev) => prev` so format toggles do not flash empty.
 
 # Data & AI Logic Constraints
