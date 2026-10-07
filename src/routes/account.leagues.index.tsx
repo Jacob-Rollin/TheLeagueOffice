@@ -18,7 +18,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { getConnectionMeta, getConnectionRosters } from "@/lib/league.functions";
+import { getConnectionMeta } from "@/lib/league.functions";
+import { fetchLeagueRostersForConnection } from "@/lib/league-rosters-fetch";
 import { markRevalidated, writeRosterCache } from "@/lib/roster-cache";
 import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
 
@@ -122,7 +123,12 @@ function LeaguesPage() {
     if (!identifier || refreshingId) return;
     setRefreshingId(row.id);
     try {
-      const rosterData = await getConnectionRosters({ data: { identifier, platform: row.platform, ...(row.espn_s2 ? { s2: row.espn_s2 } : {}), ...(row.swid ? { swid: row.swid } : {}) } });
+      const rosterData = await fetchLeagueRostersForConnection({
+        leagueId: identifier,
+        platform: row.platform,
+        ...(row.espn_s2 ? { s2: row.espn_s2 } : {}),
+        ...(row.swid ? { swid: row.swid } : {}),
+      });
       if (!rosterData) throw new Error("The roster could not be loaded from the league provider.");
       const cacheKey = `${row.id}:all`;
       queryClient.setQueryData(["league-rosters", row.id], rosterData);

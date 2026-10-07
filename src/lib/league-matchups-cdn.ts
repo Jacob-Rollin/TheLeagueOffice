@@ -267,17 +267,24 @@ export async function fetchLeagueMatchupsHistory(input: {
     typeof import.meta.env?.PROD === "boolean" &&
     import.meta.env.PROD === true;
 
-  // Future / current unscored weeks: keep CDN boards that already have pairings,
-  // otherwise fill from the browser (Sleeper) so My Team schedule is not TBD.
-  const missingSchedule = needed.filter((week) => {
-    if (priorWeek > 0 && week <= priorWeek) return false;
+  const platformNorm = String(platform || "sleeper").trim().toLowerCase();
+  const sleeper = platformNorm === "sleeper" && /^\d{6,}$/.test(leagueId);
+
+  // Any hollow week on Sleeper: browser host pull first (visitor IP pool).
+  // Covers future schedule AND completed weeks so browse never needs Fluid.
+  const missingForClient = needed.filter((week) => {
     const hit = out.get(week);
-    return !boardHasSchedulePairings(hit?.board) && !boardHasUsableScores(hit?.board);
+    const scored = boardHasUsableScores(hit?.board);
+    const paired = boardHasSchedulePairings(hit?.board);
+    if (priorWeek > 0 && week <= priorWeek) return !scored;
+    return !scored && !paired;
   });
-  if (missingSchedule.length && leagueId && platform === "sleeper" && /^\d{6,}$/.test(leagueId)) {
+  if (missingForClient.length && sleeper) {
     const { fetchSleeperWeekMatchupsClient } = await import("@/lib/sleeper-matchups-client");
-    await mapPool(missingSchedule, HISTORY_BACKFILL_CONCURRENCY, async (week) => {
-      const board = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek || null);
+    await mapPool(missingForClient, HISTORY_BACKFILL_CONCURRENCY, async (week) => {
+      const board = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek || null, {
+        mode: "warm",
+      });
       if (boardHasSchedulePairings(board) || boardHasUsableScores(board)) {
         out.set(week, { board: board!, syncedAtMs: Date.now() });
       }
@@ -294,8 +301,9 @@ export async function fetchLeagueMatchupsHistory(input: {
 
     if (!hollow && !softFinalStale) return false;
 
-    // Production: Fluid-backfill completed weeks only (≤ priorWeek).
-    if (isProd && (priorWeek <= 0 || week > priorWeek)) return false;
+    // Production: never Fluid-backfill Sleeper from browse (client + cron own it).
+    // ESPN/Yahoo may still use throttled Fluid for completed weeks.
+    if (isProd && (sleeper || priorWeek <= 0 || week > priorWeek)) return false;
 
     return hollow || softFinalStale;
   });
@@ -307,7 +315,7 @@ export async function fetchLeagueMatchupsHistory(input: {
     const board = await maybeRefreshMatchupsViaFluid({
       leagueId,
       week,
-      platform,
+      platform: platformNorm,
       ...(input.s2 ? { s2: input.s2 } : {}),
       ...(input.swid ? { swid: input.swid } : {}),
       ...(input.connectionId ? { connectionId: input.connectionId } : {}),

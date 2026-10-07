@@ -3,19 +3,33 @@ name: League Delta Sync
 # Invokes the Vercel cron endpoint so synced league caches stay warm without
 # every page load wiping/re-pulling host platforms. Requires CRON_SECRET +
 # APP_URL repository secrets.
-# Cadence kept lean for Vercel Hobby Fluid CPU (4 hrs/mo) — gameday every 30m,
-# small batch limit so each run finishes under the 300s Hobby wall clock.
+#
+# Free-tier ops (~20 users): browse reads CDN/TiDB + browser Sleeper; this job
+# is the only Fluid writer for Sleeper matchups. Cadence kept lean for Vercel
+# Hobby Fluid CPU (4 hrs/mo) — gameday every 30m with a small batch, plus a
+# daily fillSeason pass so schedule/week pickers stay complete.
 # Webhooks MUST hit Vercel /api/webhooks/sync — never repository_dispatch.
 
 on:
   schedule:
-    # Mid-week (Tue–Wed): every 6 hours.
+    # Mid-week (Tue–Wed): every 6 hours — current + prior week.
     - cron: "0 */6 * * 2,3"
     # Gameday windows (Thu–Mon): every 30 minutes during active NFL blocks (UTC).
     - cron: "*/30 12-23 * * 0,1,4"
     - cron: "*/30 0-5 * * 1,2,5"
     - cron: "*/30 16-23 * * 6"
+    # Daily season fill (06:20 UTC): backfill any missing weeks 1–17.
+    - cron: "20 6 * * *"
   workflow_dispatch:
+    inputs:
+      fillSeason:
+        description: "Backfill missing weeks 1–17"
+        type: boolean
+        default: false
+      sleeperOnly:
+        description: "Only sync Sleeper connections"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -33,6 +47,9 @@ jobs:
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SCHEDULE: ${{ github.event.schedule }}
+          FILL_INPUT: ${{ inputs.fillSeason }}
+          SLEEPER_INPUT: ${{ inputs.sleeperOnly }}
         run: |
           if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
             echo "APP_URL / CRON_SECRET not configured — skipping."
@@ -43,8 +60,31 @@ jobs:
             http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
             http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
           esac
+
+          FILL=0
+          SLEEPER=1
+          RECENT=0
+          LIMIT=12
+
+          if [ "$SCHEDULE" = "20 6 * * *" ] || [ "$FILL_INPUT" = "true" ]; then
+            FILL=1
+            LIMIT=20
+          fi
+          # Gameday 30m windows: prefer recently touched leagues.
+          case "$SCHEDULE" in
+            "*/30 12-23 * * 0,1,4"|"*/30 0-5 * * 1,2,5"|"*/30 16-23 * * 6")
+              RECENT=1
+              LIMIT=15
+              ;;
+          esac
+          if [ "$SLEEPER_INPUT" = "false" ]; then
+            SLEEPER=0
+          fi
+
+          QS="limit=${LIMIT}&sleeperOnly=${SLEEPER}&recentFirst=${RECENT}&fillSeason=${FILL}"
+          echo "Calling league-delta-sync?${QS}"
           curl -fsSL -H "Authorization: Bearer $CRON_SECRET" \
-            "$BASE/api/cron/league-delta-sync?limit=12"
+            "$BASE/api/cron/league-delta-sync?${QS}"
 
       - name: Log Success to Axiom
         if: success()

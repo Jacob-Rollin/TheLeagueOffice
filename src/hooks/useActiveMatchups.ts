@@ -38,7 +38,7 @@ function isSleeperLeague(platform: string, leagueId: string): boolean {
   return platform === "sleeper" && /^\d{6,}$/.test(leagueId);
 }
 
-/** Resolve one week: live Sleeper (current) → CDN → warm Sleeper → Fluid. */
+/** Resolve one week: live Sleeper (current) → CDN → warm Sleeper; Fluid only for ESPN/Yahoo. */
 async function loadWeekMatchups(input: {
   leagueId: string;
   week: number;
@@ -83,28 +83,25 @@ async function loadWeekMatchups(input: {
       mode: "warm",
     });
     if (boardIsDisplayable(warm)) return warm;
-  }
-
-  // Fluid only for non-live holes (past weeks / ESPN). Never on a successful
-  // current-week path — that stays browser → Sleeper.
-  if (!isCurrent || !sleeper) {
-    const refreshed = await maybeRefreshMatchupsViaFluid({
-      leagueId,
-      week,
-      platform,
-      ...(input.s2 ? { s2: input.s2 } : {}),
-      ...(input.swid ? { swid: input.swid } : {}),
-      ...(input.connectionId ? { connectionId: input.connectionId } : {}),
-      allow: isPageVisible(),
-      force: past && currentWeek != null && week === currentWeek - 1,
-    });
-    if (boardIsDisplayable(refreshed)) return refreshed;
+    // Sleeper browse never uses Fluid — cron + visitor IP own the warm path.
     if (cdnDisplayable && cdn) return cdn.board;
-    return refreshed?.entries?.length ? refreshed : null;
+    return null;
   }
 
+  // ESPN/Yahoo: throttled Fluid for past / unscored holes only.
+  const refreshed = await maybeRefreshMatchupsViaFluid({
+    leagueId,
+    week,
+    platform,
+    ...(input.s2 ? { s2: input.s2 } : {}),
+    ...(input.swid ? { swid: input.swid } : {}),
+    ...(input.connectionId ? { connectionId: input.connectionId } : {}),
+    allow: isPageVisible(),
+    force: past && currentWeek != null && week === currentWeek - 1,
+  });
+  if (boardIsDisplayable(refreshed)) return refreshed;
   if (cdnDisplayable && cdn) return cdn.board;
-  return null;
+  return refreshed?.entries?.length ? refreshed : null;
 }
 
 function liveMatchupPollMs(

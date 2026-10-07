@@ -1,0 +1,80 @@
+name: League Planning Snaps
+
+# Warms ROS + Starting Slot Ranks for active Sleeper leagues via the Vercel
+# cron endpoint, then seeds /api/data/snap/* CDN. Browse paths read CDN/client
+# only — this job is the Fluid compute for Recommendation / Bye Planner /
+# Standings slot ranks. Requires CRON_SECRET + APP_URL repository secrets.
+
+on:
+  schedule:
+    # Twice daily (off peak UTC) so ROS stays current without gameday CPU.
+    - cron: "40 7 * * *"
+    - cron: "40 19 * * *"
+    # Extra Tuesday morning pass after week roll (scores finalize).
+    - cron: "10 6 * * 2"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max Sleeper leagues to warm"
+        type: string
+        default: "30"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: league-planning-snaps
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Warm ROS + slot-rank snaps
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          LIMIT_INPUT: ${{ inputs.limit }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL / CRON_SECRET not configured — skipping."
+            exit 0
+          fi
+          BASE="${APP_URL%/}"
+          case "$BASE" in
+            http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+            http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+          esac
+          LIMIT="${LIMIT_INPUT:-30}"
+          echo "Calling league-planning-snaps?limit=${LIMIT}"
+          curl -fsSL -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE/api/cron/league-planning-snaps?limit=${LIMIT}"
+
+      - name: Log Success to Axiom
+        if: success()
+        run: |
+          curl -X POST "https://api.axiom.co/v1/datasets/the-league-office/ingest" \
+            -H "Authorization: Bearer ${{ secrets.AXIOM_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '[{
+              "event_source": "github_actions",
+              "workflow": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "status": "success",
+              "msg": "League planning snaps (ROS + slot ranks) warmed successfully."
+            }]'
+
+      - name: Log Failure to Axiom
+        if: failure()
+        run: |
+          curl -X POST "https://api.axiom.co/v1/datasets/the-league-office/ingest" \
+            -H "Authorization: Bearer ${{ secrets.AXIOM_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '[{
+              "event_source": "github_actions",
+              "workflow": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "status": "failed",
+              "msg": "League planning snaps warm failed. Check runner logs."
+            }]'

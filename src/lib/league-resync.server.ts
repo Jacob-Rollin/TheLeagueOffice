@@ -16,6 +16,11 @@ export type ForceResyncInput = {
   swid?: string | null | undefined;
   /** Inclusive week range to re-hydrate into weekly_matchups (defaults 1..current). */
   throughWeek?: number | undefined;
+  /**
+   * When true, also backfill any missing weeks 1..throughWeek (schedule holes)
+   * in addition to refreshing current + prior. Used by the daily season-fill cron.
+   */
+  fillSeason?: boolean | undefined;
 };
 
 export type ForceResyncResult = {
@@ -452,6 +457,49 @@ async function countCachedMatchups(
   }
 }
 
+/** Distinct weeks already present in the durable matchup cache. */
+async function listCachedMatchupWeeks(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  leagueId: string,
+  connectionId: string,
+): Promise<Set<number>> {
+  const out = new Set<number>();
+  try {
+    const { data, error } = await db
+      .from("weekly_matchups")
+      .select("week")
+      .eq("league_id", leagueId)
+      .eq("connection_id", connectionId)
+      .limit(500);
+    if (error || !Array.isArray(data)) return out;
+    for (const row of data) {
+      const w = Math.floor(Number((row as { week?: number }).week) || 0);
+      if (w >= 1 && w <= 18) out.add(w);
+    }
+  } catch {
+    /* ignore */
+  }
+  // TiDB may be ahead of Supabase on some deploys — merge distinct weeks.
+  try {
+    const { tidbConfigured, tidbExecute } = await import("@/lib/tidb");
+    if (!tidbConfigured()) return out;
+    const rows = await tidbExecute<{ week: number }>(
+      `SELECT DISTINCT week FROM synced_matchups
+       WHERE league_id = ? AND (connection_id = ? OR connection_id IS NULL)
+       LIMIT 32`,
+      [leagueId, connectionId],
+    );
+    for (const row of rows) {
+      const w = Math.floor(Number(row.week) || 0);
+      if (w >= 1 && w <= 18) out.add(w);
+    }
+  } catch {
+    /* ignore */
+  }
+  return out;
+}
+
 async function ingestTransactions(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
@@ -609,7 +657,8 @@ export async function forceClearAndReSyncLeague(
 /**
  * Lightweight sync for routine page loads / cron:
  * - If cache is empty → full backfill (no wipe needed)
- * - Else → upsert current + previous week only, refresh transactions once
+ * - Else → upsert current + previous week, refresh transactions
+ * - Optional fillSeason → also ingest any missing weeks 1..throughWeek
  */
 export async function deltaSyncLeague(input: ForceResyncInput): Promise<ForceResyncResult> {
   const connectionId = String(input.connectionId ?? "").trim();
@@ -619,6 +668,7 @@ export async function deltaSyncLeague(input: ForceResyncInput): Promise<ForceRes
     .toLowerCase();
   const s2 = input.s2 ?? null;
   const swid = input.swid ?? null;
+  const fillSeason = Boolean(input.fillSeason);
 
   if (!connectionId || !leagueId) {
     return {
@@ -643,7 +693,7 @@ export async function deltaSyncLeague(input: ForceResyncInput): Promise<ForceRes
     const currentWeek = await resolveCurrentNflWeek();
     const throughWeek = Math.max(
       1,
-      Math.min(18, Math.floor(Number(input.throughWeek ?? 0) || 0) || currentWeek),
+      Math.min(18, Math.floor(Number(input.throughWeek ?? 0) || 0) || Math.max(currentWeek, 17)),
     );
     const insertedTransactions = await ingestTransactions(
       db,
@@ -677,7 +727,20 @@ export async function deltaSyncLeague(input: ForceResyncInput): Promise<ForceRes
   const currentWeek = await resolveCurrentNflWeek();
   // Always re-pull current + prior. Prior week is soft-final through Tuesday
   // morning — ingest uses preferCache:false so midweek scores are replaced.
-  const weeks = [...new Set([currentWeek, Math.max(1, currentWeek - 1)])].sort((a, b) => a - b);
+  const weeks = new Set<number>([currentWeek, Math.max(1, currentWeek - 1)]);
+
+  if (fillSeason) {
+    const throughWeek = Math.max(
+      1,
+      Math.min(18, Math.floor(Number(input.throughWeek ?? 0) || 0) || Math.max(currentWeek, 17)),
+    );
+    const present = await listCachedMatchupWeeks(db, leagueId, connectionId);
+    for (let w = 1; w <= throughWeek; w += 1) {
+      if (!present.has(w)) weeks.add(w);
+    }
+  }
+
+  const weekList = [...weeks].sort((a, b) => a - b);
 
   const insertedTransactions = await ingestTransactions(
     db,
@@ -694,7 +757,7 @@ export async function deltaSyncLeague(input: ForceResyncInput): Promise<ForceRes
     platform,
     s2,
     swid,
-    weeks,
+    weekList,
   );
 
   return {
@@ -704,30 +767,60 @@ export async function deltaSyncLeague(input: ForceResyncInput): Promise<ForceRes
     insertedTransactions,
     insertedMatchups,
     weeksSynced,
-    mode: "delta",
+    mode: fillSeason ? "full" : "delta",
   };
 }
 
-/** Cron helper: delta-sync every row in synced_leagues (service role). */
-export async function deltaSyncAllConnections(limit = 50): Promise<{
+export type DeltaSyncAllOptions = {
+  limit?: number;
+  /** Backfill missing weeks 1..17 for each league. */
+  fillSeason?: boolean;
+  /** Prefer recently touched leagues (gameday). Default rotates oldest-first. */
+  recentFirst?: boolean;
+  /** Only Sleeper connections (skip ESPN credential work on free warm passes). */
+  sleeperOnly?: boolean;
+};
+
+/** Cron helper: delta-sync synced_leagues rows (service role). */
+export async function deltaSyncAllConnections(
+  limitOrOpts: number | DeltaSyncAllOptions = 50,
+): Promise<{
   ok: boolean;
   processed: number;
-  results: { id: string; ok: boolean; mode?: string; error?: string }[];
+  fillSeason: boolean;
+  results: { id: string; ok: boolean; mode?: string; error?: string; weeks?: number[] }[];
 }> {
+  const opts: DeltaSyncAllOptions =
+    typeof limitOrOpts === "number" ? { limit: limitOrOpts } : (limitOrOpts ?? {});
+  const limit = Math.max(1, Math.min(200, Math.floor(Number(opts.limit ?? 50)) || 50));
+  const fillSeason = Boolean(opts.fillSeason);
+  const recentFirst = Boolean(opts.recentFirst);
+  const sleeperOnly = Boolean(opts.sleeperOnly);
+
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabaseAdmin as any;
-  const { data, error } = await db
+  let query = db
     .from("synced_leagues")
     .select("id, league_id, platform, espn_s2, swid, updated_at")
-    .order("updated_at", { ascending: true })
-    .limit(Math.max(1, Math.min(200, limit)));
+    .order("updated_at", { ascending: !recentFirst })
+    .limit(limit);
+  if (sleeperOnly) {
+    query = query.eq("platform", "sleeper");
+  }
+  const { data, error } = await query;
 
   if (error || !Array.isArray(data)) {
-    return { ok: false, processed: 0, results: [{ id: "-", ok: false, error: error?.message }] };
+    return {
+      ok: false,
+      processed: 0,
+      fillSeason,
+      results: [{ id: "-", ok: false, error: error?.message }],
+    };
   }
 
-  const results: { id: string; ok: boolean; mode?: string; error?: string }[] = [];
+  const results: { id: string; ok: boolean; mode?: string; error?: string; weeks?: number[] }[] =
+    [];
   for (const row of data) {
     const result = await deltaSyncLeague({
       connectionId: String(row.id),
@@ -735,12 +828,15 @@ export async function deltaSyncAllConnections(limit = 50): Promise<{
       platform: String(row.platform ?? "sleeper"),
       s2: row.espn_s2 ?? null,
       swid: row.swid ?? null,
+      fillSeason,
+      ...(fillSeason ? { throughWeek: 17 } : {}),
     });
     results.push({
       id: String(row.id),
       ok: result.ok,
       ...(result.mode ? { mode: result.mode } : {}),
       ...(result.error ? { error: result.error } : {}),
+      ...(result.weeksSynced?.length ? { weeks: result.weeksSynced } : {}),
     });
     // Touch updated_at so the next cron pass rotates fairly.
     try {
@@ -753,5 +849,27 @@ export async function deltaSyncAllConnections(limit = 50): Promise<{
     }
   }
 
-  return { ok: true, processed: results.length, results };
+  return { ok: true, processed: results.length, fillSeason, results };
+}
+
+/** Active Sleeper league ids for planning-snap / CDN warm jobs. */
+export async function listActiveSleeperLeagueIds(limit = 40): Promise<
+  { connectionId: string; leagueId: string }[]
+> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabaseAdmin as any;
+  const { data, error } = await db
+    .from("synced_leagues")
+    .select("id, league_id, platform, updated_at")
+    .eq("platform", "sleeper")
+    .order("updated_at", { ascending: false })
+    .limit(Math.max(1, Math.min(100, limit)));
+  if (error || !Array.isArray(data)) return [];
+  return data
+    .map((row: { id?: string; league_id?: string }) => ({
+      connectionId: String(row.id ?? ""),
+      leagueId: String(row.league_id ?? "").trim(),
+    }))
+    .filter((r: { leagueId: string }) => /^\d{6,}$/.test(r.leagueId));
 }
