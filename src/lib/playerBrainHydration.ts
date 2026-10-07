@@ -13,7 +13,7 @@
 import localforage from "localforage";
 
 import type { PlayersPayload } from "@/lib/players-build";
-import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
+import { R2_SNAP_KEYS, r2Url } from "@/lib/r2-public";
 import { fetchResearchSosBoard } from "@/lib/research-cdn";
 import type { SosBoard } from "@/lib/players.server";
 import type { PlayerSos, SosMatchup } from "@/lib/sos-presentation";
@@ -312,15 +312,15 @@ async function matrixFromExportUrl(url: string): Promise<BrainMatrix | null> {
 }
 
 /**
- * Prefer GitHub snap-cdn warehouse export (zero Vercel). Fall back to
- * `/api/data/players-export` only when no public snap base is configured.
+ * Prefer GitHub snap-cdn warehouse export (zero Vercel). Unlike cron-only snap
+ * routes, `/api/data/players-export` is a real cached browse endpoint — keep it
+ * as fallback until Publish Snap CDN has seeded `snap/players-export.json`.
  */
 async function loadTidbWarehouseMatrix(): Promise<BrainMatrix | null> {
   const snap = r2Url(R2_SNAP_KEYS.playersExport());
   if (snap) {
     const fromSnap = await matrixFromExportUrl(snap);
     if (fromSnap) return fromSnap;
-    if (snapCdnPublicBase()) return null;
   }
   return matrixFromExportUrl("/api/data/players-export");
 }
