@@ -12,7 +12,7 @@ export function useActiveStandings() {
     queryKey: ["active-standings", id],
     enabled: Boolean(activeLeague?.leagueId),
     retry: false,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 15 * 60 * 1000,
     queryFn: async () =>
       await getConnectionStandings({
         data: {

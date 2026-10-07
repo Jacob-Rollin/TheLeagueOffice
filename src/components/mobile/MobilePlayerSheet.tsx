@@ -16,7 +16,8 @@ import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections"
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import type { Pos } from "@/lib/draft";
 import { teamFullName } from "@/lib/nfl-teams";
-import { getPlayerDetail, getPlayerNews } from "@/lib/players.functions";
+import { getPlayerDetail } from "@/lib/players.functions";
+import { fetchPlayerNewsClient } from "@/lib/player-news-client";
 import type { SeasonLine } from "@/lib/players.server";
 import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
 import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
@@ -402,9 +403,10 @@ function newsDate(iso: string) {
 
 function PlayerNews({ id }: { id: string }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["player-news", id],
-    queryFn: () => getPlayerNews({ data: { id } }),
+    queryKey: ["player-news", id, "cdn-v1"],
+    queryFn: () => fetchPlayerNewsClient(id),
     staleTime: 10 * 60 * 1000,
+    retry: false,
   });
   const items = (data?.items ?? []).slice(0, 6);
 

@@ -12,7 +12,7 @@ export function useLeagueActivity() {
     queryKey: ["league-activity", id],
     enabled: Boolean(activeLeague?.leagueId),
     retry: false,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
     queryFn: async (): Promise<LeagueActivityEvent[]> =>
       (await getConnectionTransactions({
         data: {
