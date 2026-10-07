@@ -83,12 +83,23 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
       });
 
 
+      const { canFetchMetaClient, fetchSleeperMetaClient } = await import("@/lib/sleeper-meta-client");
       const { getConnectionMeta } = await import("@/lib/league.functions");
       return await Promise.all(
         rows.map(async ({ s2, swid, ...row }) => {
           const base = { ...row, s2, swid };
           if ((row.platform !== "sleeper" && row.platform !== "espn") || !row.leagueId) return base;
           try {
+            // Sleeper: browser meta (no Fluid). ESPN still needs credential Fluid.
+            if (canFetchMetaClient(row.platform, row.leagueId)) {
+              const meta = await fetchSleeperMetaClient(row.leagueId, row.name);
+              return {
+                ...base,
+                name: meta?.leagueName ?? row.name,
+                teamName: meta?.teamName ?? null,
+                avatar: meta?.avatar ?? null,
+              };
+            }
             const meta = await getConnectionMeta({
               data: {
                 identifier: row.leagueId,

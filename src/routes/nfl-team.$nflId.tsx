@@ -66,6 +66,11 @@ const defDetailQuery = (id: string | null) =>
       const brain = await hydratePlayerBrain().catch(() => null);
       const client = await fetchPlayerDetailClient(id!, brain);
       if (client) return client;
+      try {
+        if (import.meta.env.PROD) return null;
+      } catch {
+        /* ignore */
+      }
       return getPlayerDetail({ data: { id: id! } });
     },
     enabled: Boolean(id),

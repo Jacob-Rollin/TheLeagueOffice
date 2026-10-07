@@ -25,7 +25,7 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/draft";
-import { getConnectionSettings } from "@/lib/league.functions";
+import { fetchLeagueSettingsForConnection } from "@/lib/league-settings-fetch";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import type { RosterNews, RosterNewsItem } from "@/lib/players.server";
 import { fetchSnapRosterNews } from "@/lib/snap-cdn";
@@ -1851,13 +1851,12 @@ function PlaybookDashboardPage() {
     retry: false,
     staleTime: 60 * 60 * 1000,
     queryFn: async () =>
-      await getConnectionSettings({
-        data: {
-          identifier: activeLeague?.leagueId ?? "",
-          platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      fetchLeagueSettingsForConnection({
+        leagueId: activeLeague?.leagueId ?? "",
+        platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
+        teamName: activeLeague?.teamName,
+        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
       }),
   });
 

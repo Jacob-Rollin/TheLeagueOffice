@@ -1,22 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
-import { useActiveLeague, type ActiveLeagueToken } from "@/context/ActiveLeagueContext";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
-import {
-  getConnectionSettings,
-  getConnectionTransactionLog,
-  type LeagueTransactionLog,
-} from "@/lib/league.functions";
-
-function connectionArgs(league: ActiveLeagueToken | null) {
-  return {
-    identifier: league?.leagueId ?? "",
-    platform: league?.platform ?? "sleeper",
-    ...(league?.s2 ? { s2: league.s2 } : {}),
-    ...(league?.swid ? { swid: league.swid } : {}),
-  };
-}
+import { fetchLeagueTransactionLogForConnection } from "@/lib/league-activity-fetch";
+import { fetchLeagueSettingsForConnection } from "@/lib/league-settings-fetch";
+import type { LeagueTransactionLog } from "@/lib/league.functions";
 
 /** Host league settings (playoffs, waivers, trades) for the active league. */
 export function useMobileLeagueSettings() {
@@ -26,7 +15,14 @@ export function useMobileLeagueSettings() {
     enabled: Boolean(activeLeague?.leagueId),
     retry: false,
     staleTime: 60 * 60 * 1000,
-    queryFn: async () => await getConnectionSettings({ data: connectionArgs(activeLeague) }),
+    queryFn: async () =>
+      fetchLeagueSettingsForConnection({
+        leagueId: activeLeague?.leagueId ?? "",
+        platform: activeLeague?.platform ?? "sleeper",
+        teamName: activeLeague?.teamName,
+        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+      }),
   });
 }
 
@@ -76,7 +72,12 @@ export function useMobileLeagueActivity() {
     retry: false,
     staleTime: 2 * 60 * 1000,
     queryFn: async (): Promise<LeagueTransactionLog> =>
-      await getConnectionTransactionLog({ data: connectionArgs(activeLeague) }),
+      fetchLeagueTransactionLogForConnection({
+        leagueId: activeLeague?.leagueId ?? "",
+        platform: activeLeague?.platform ?? "sleeper",
+        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+      }),
   });
 
   return {

@@ -2,13 +2,13 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 
-import { getHallOfFame } from "@/lib/hof.functions";
-import type { HofYear } from "@/lib/hof.server";
+import { loadHallOfFame, type HofYear } from "@/lib/hof.server";
 import { cn } from "@/lib/utils";
 
 const hofQuery = queryOptions({
   queryKey: ["hall-of-fame"],
-  queryFn: () => getHallOfFame(),
+  // Browser → Supabase anon (same as Fluid handler). Avoid createServerFn CPU.
+  queryFn: () => loadHallOfFame(),
   staleTime: 1000 * 60 * 10,
 });
 

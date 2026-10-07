@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
-import { getConnectionTransactions, type LeagueActivityEvent } from "@/lib/league.functions";
+import { fetchLeagueActivityForConnection } from "@/lib/league-activity-fetch";
+import type { LeagueActivityEvent } from "@/lib/league.functions";
 
 /** Recent host-platform transactions for the active synced league. */
 export function useLeagueActivity() {
@@ -14,14 +15,12 @@ export function useLeagueActivity() {
     retry: false,
     staleTime: 10 * 60 * 1000,
     queryFn: async (): Promise<LeagueActivityEvent[]> =>
-      (await getConnectionTransactions({
-        data: {
-          identifier: activeLeague?.leagueId ?? "",
-          platform: activeLeague?.platform ?? "sleeper",
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
-      })) ?? [],
+      fetchLeagueActivityForConnection({
+        leagueId: activeLeague?.leagueId ?? "",
+        platform: activeLeague?.platform ?? "sleeper",
+        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+      }),
   });
 
   return {

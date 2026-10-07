@@ -89,6 +89,14 @@ export async function fetchSleeperLeagueScoringClient(
   }
 }
 
+function allowFluidFallback(): boolean {
+  try {
+    return import.meta.env.DEV === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchLeagueScoringPreferred(input: {
   identifier: string;
   platform: string;
@@ -100,6 +108,10 @@ export async function fetchLeagueScoringPreferred(input: {
     const client = await fetchSleeperLeagueScoringClient(input.identifier).catch(() => null);
     if (client?.source === "sleeper" && client.map && Object.keys(client.map).length > 0) {
       return client;
+    }
+    // Production: soft-empty half-PPR rather than Fluid for public Sleeper scoring.
+    if (!allowFluidFallback()) {
+      return client ?? { format: "half", map: defaultScoringMap("half"), source: "default" };
     }
   }
   const { getLeagueScoring } = await import("@/lib/scoring.functions");

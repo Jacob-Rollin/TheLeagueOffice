@@ -23,13 +23,13 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
-import {
-  getConnectionTransactionLog,
-  type LeagueActivityEvent,
-  type LeagueActivityMove,
-  type LeagueTransactionLog,
+import { fetchLeagueTransactionLogForConnection } from "@/lib/league-activity-fetch";
+import type {
+  LeagueActivityEvent,
+  LeagueActivityMove,
+  LeagueTransactionLog,
 } from "@/lib/league.functions";
-import { getPickupResults } from "@/lib/players.functions";
+import { fetchPickupResultsPreferred } from "@/lib/pickup-results-client";
 import { fetchSnapTradeValueBasis } from "@/lib/snap-cdn";
 import { fetchTrendingAddsClient } from "@/lib/sleeper-trending";
 import { packageScore } from "@/lib/trade-engine";
@@ -296,13 +296,11 @@ function PlaybookTransactionsPage() {
     retry: false,
     staleTime: 2 * 60 * 1000,
     queryFn: async (): Promise<LeagueTransactionLog> =>
-      await getConnectionTransactionLog({
-        data: {
-          identifier: activeLeague?.leagueId ?? "",
-          platform: activeLeague?.platform ?? "sleeper",
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      fetchLeagueTransactionLogForConnection({
+        leagueId: activeLeague?.leagueId ?? "",
+        platform: activeLeague?.platform ?? "sleeper",
+        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
       }),
   });
 
@@ -376,14 +374,17 @@ function PlaybookTransactionsPage() {
     retry: false,
     staleTime: 5 * 60 * 1000,
     queryFn: () =>
-      getPickupResults({
-        data: {
-          identifier: activeLeague?.leagueId ?? "",
-          platform: activeLeague?.platform ?? "sleeper",
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-          requests: pickupRequests.map(({ key, playerId, fromWeek, toWeek }) => ({ key, playerId, fromWeek, toWeek })),
-        },
+      fetchPickupResultsPreferred({
+        identifier: activeLeague?.leagueId ?? "",
+        platform: activeLeague?.platform ?? "sleeper",
+        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+        requests: pickupRequests.map(({ key, playerId, fromWeek, toWeek }) => ({
+          key,
+          playerId,
+          fromWeek,
+          toWeek,
+        })),
       }),
   });
 
