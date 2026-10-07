@@ -3,7 +3,7 @@ import { ExternalLink } from "lucide-react";
 
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { cn } from "@/lib/utils";
-import { getPlayerNews } from "@/lib/players.functions";
+import { fetchPlayerNewsClient } from "@/lib/player-news-client";
 
 /** Format the raw FantasyCalc 7-day trend into a market percentage move. */
 function formatTrendPct(raw: number): string {
@@ -91,9 +91,10 @@ function classify(headline: string, description: string, aboutPlayer: boolean): 
 
 export function PlayerNews({ id, pos }: { id: string; pos?: string }) {
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["player-news", id],
-    queryFn: () => getPlayerNews({ data: { id } }),
+    queryKey: ["player-news", id, "cdn-v1"],
+    queryFn: () => fetchPlayerNewsClient(id),
     staleTime: 1000 * 60 * 10,
+    retry: false,
   });
   const brain = usePlayerBrain();
   const brainEntry = brain?.[id] ?? null;

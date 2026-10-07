@@ -994,13 +994,13 @@ function PlaybookDashboardPage() {
     enabled: Boolean(activeLeague?.leagueId && completedWeekNumbers.length > 0),
     retry: false,
     staleTime: 10 * 60 * 1000,
-    // Keep pulling the just-completed slate until TiDB/host returns usable scores
-    // (coaching efficiency needs week boards; avg PF uses standings as fallback).
+    // Soft-poll CDN for a hollow completed slate — do not 15s-storm Fluid.
+    // Host backfill is rate-limited inside fetchLeagueMatchupsHistory.
     refetchInterval: visibleRefetchInterval((query) => {
       const map = query.state.data as Map<number, { board: unknown }> | undefined;
       if (completedThrough <= 0) return false;
       const hit = map?.get(completedThrough) as { board?: Parameters<typeof boardHasUsableScores>[0] } | undefined;
-      return boardHasUsableScores(hit?.board) ? false : 15_000;
+      return boardHasUsableScores(hit?.board) ? false : 120_000;
     }),
     refetchIntervalInBackground: false,
     queryFn: () =>

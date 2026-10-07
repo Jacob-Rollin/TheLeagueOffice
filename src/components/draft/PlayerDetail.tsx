@@ -17,7 +17,8 @@ import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Scoring } from "@/lib/draft";
 import type { Pos } from "@/lib/draft";
 import { getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
-import { getPlayerDetail, getPlayerNews } from "@/lib/players.functions";
+import { getPlayerDetail } from "@/lib/players.functions";
+import { fetchPlayerNewsClient } from "@/lib/player-news-client";
 import type { CareerSeasonRow, GameLog } from "@/lib/players.server";
 import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
 import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
@@ -2187,9 +2188,10 @@ function EditorialNewsPanel({
   injuryNotes?: string;
 }) {
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["player-news", id],
-    queryFn: () => getPlayerNews({ data: { id } }),
+    queryKey: ["player-news", id, "cdn-v1"],
+    queryFn: () => fetchPlayerNewsClient(id),
     staleTime: 1000 * 60 * 10,
+    retry: false,
   });
 
   const statusUpper = (injuryStatus ?? "").toUpperCase().trim();

@@ -27,9 +27,14 @@ export type LeagueMatchupsCdnHit = {
   syncedAtMs: number;
 };
 
-const LIVE_MAX_AGE_MS = 90 * 1000;
+/** Trust CDN/TiDB live boards longer — 90s was re-hitting Fluid on rapid nav. */
+const LIVE_MAX_AGE_MS = 4 * 60 * 1000;
 const lastFluidRefresh = new Map<string, number>();
-const FLUID_REFRESH_MIN_MS = 60 * 1000;
+const fluidInflight = new Map<string, Promise<LeagueWeekMatchups | null>>();
+/** Live / optional refresh throttle. */
+const FLUID_REFRESH_MIN_MS = 3 * 60 * 1000;
+/** Even forced prior-week backfill must not storm (dashboard used to poll 15s). */
+const FLUID_FORCE_MIN_MS = 5 * 60 * 1000;
 
 export function boardHasUsableScores(board: LeagueWeekMatchups | null | undefined): boolean {
   const entries = board?.entries ?? [];
@@ -239,19 +244,31 @@ export async function fetchLeagueMatchupsHistory(input: {
   // Soft-final target is the latest completed slate (often display_week / games played).
   const priorWeek = completedThrough > 0 ? completedThrough : 0;
 
+  const isProd =
+    typeof import.meta !== "undefined" &&
+    typeof import.meta.env?.PROD === "boolean" &&
+    import.meta.env.PROD === true;
+
   const missing = needed.filter((week) => {
     const hit = out.get(week);
-    if (!boardHasUsableScores(hit?.board)) return true;
-    // Soft-final prior week: force host refresh when CDN still has a midweek board.
-    if (priorWeek > 0 && week === priorWeek && !isPriorWeekBoardFresh(hit!.syncedAtMs)) {
-      return true;
-    }
-    return false;
+    const hollow = !boardHasUsableScores(hit?.board);
+    const softFinalStale =
+      priorWeek > 0 && week === priorWeek && hit != null && !isPriorWeekBoardFresh(hit.syncedAtMs);
+
+    if (!hollow && !softFinalStale) return false;
+
+    // Production: only Fluid-backfill the latest completed slate. Older hollow
+    // weeks and future schedule weeks wait for cron/TiDB — N-week host pulls
+    // were the main /__server → api.sleeper.app fan-out under rapid clicking.
+    if (isProd && priorWeek > 0 && week !== priorWeek) return false;
+    if (isProd && priorWeek <= 0) return false;
+
+    return hollow || softFinalStale;
   });
   if (!missing.length || input.allowFluid === false || !leagueId) return out;
 
-  // Latest completed slate is product-critical (avg PF / coaching) — always force
-  // host pull even if a recent Fluid attempt throttled/failed.
+  // Latest completed slate is product-critical (avg PF / coaching) — force host
+  // pull, but maybeRefreshMatchupsViaFluid still single-flights + rate-limits.
   await mapPool(missing, HISTORY_BACKFILL_CONCURRENCY, async (week) => {
     const board = await maybeRefreshMatchupsViaFluid({
       leagueId,
@@ -299,32 +316,44 @@ export async function maybeRefreshMatchupsViaFluid(input: {
   swid?: string;
   connectionId?: string;
   allow: boolean;
-  /** Bypass in-tab throttle (history backfill for the just-completed week). */
+  /** Prefer host over TiDB freeze (still rate-limited — does not storm). */
   force?: boolean;
 }): Promise<LeagueWeekMatchups | null> {
   if (!input.allow) return null;
   const key = `${input.leagueId}|${input.week}`;
+  const pending = fluidInflight.get(key);
+  if (pending) return pending;
+
   const now = Date.now();
   const prev = lastFluidRefresh.get(key) ?? 0;
-  if (!input.force && now - prev < FLUID_REFRESH_MIN_MS) return null;
-  try {
-    const { getConnectionMatchups } = await import("@/lib/league.functions");
-    const board = await getConnectionMatchups({
-      data: {
-        identifier: input.leagueId,
-        platform: input.platform,
-        week: input.week,
-        ...(input.s2 ? { s2: input.s2 } : {}),
-        ...(input.swid ? { swid: input.swid } : {}),
-        ...(input.connectionId ? { connectionId: input.connectionId } : {}),
-        // Forced history backfill must hit host, not a midweek TiDB freeze.
-        ...(input.force ? { preferCache: false } : {}),
-      },
-    });
-    // Only throttle after a usable board — failed/empty pulls must retry.
-    if (boardHasUsableScores(board)) lastFluidRefresh.set(key, Date.now());
-    return board;
-  } catch {
-    return null;
-  }
+  const minGap = input.force ? FLUID_FORCE_MIN_MS : FLUID_REFRESH_MIN_MS;
+  if (prev > 0 && now - prev < minGap) return null;
+
+  const run = (async (): Promise<LeagueWeekMatchups | null> => {
+    // Record attempt immediately so parallel dashboard/analytics mounts and
+    // 15s-style refetch loops cannot stack host pulls.
+    lastFluidRefresh.set(key, Date.now());
+    try {
+      const { getConnectionMatchups } = await import("@/lib/league.functions");
+      const board = await getConnectionMatchups({
+        data: {
+          identifier: input.leagueId,
+          platform: input.platform,
+          week: input.week,
+          ...(input.s2 ? { s2: input.s2 } : {}),
+          ...(input.swid ? { swid: input.swid } : {}),
+          ...(input.connectionId ? { connectionId: input.connectionId } : {}),
+          // Forced history backfill must hit host, not a midweek TiDB freeze.
+          ...(input.force ? { preferCache: false } : {}),
+        },
+      });
+      return board;
+    } catch {
+      return null;
+    } finally {
+      fluidInflight.delete(key);
+    }
+  })();
+  fluidInflight.set(key, run);
+  return run;
 }
