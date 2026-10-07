@@ -1,9 +1,10 @@
 /**
  * Shared roster loader for hooks that share the `["league-rosters", id]` RQ key.
- * Sleeper → browser; ESPN/Yahoo → Fluid credentials.
+ * Sleeper → browser; ESPN/Yahoo → Fluid credentials (memoized in-tab).
  * Production never falls through to Fluid for Sleeper (cron + client own it).
  */
 
+import { espnFluidCacheKey, espnFluidMemo, ESPN_FLUID_TTL_MS } from "@/lib/espn-fluid-cache";
 import { getConnectionRosters } from "@/lib/league.functions";
 import type { LeagueRosters } from "@/lib/league.server";
 import {
@@ -60,12 +61,15 @@ export async function fetchLeagueRostersForConnection(input: {
 
   if (platform === "sleeper" && !allowSleeperFluidFallback()) return null;
 
-  return getConnectionRosters({
-    data: {
-      identifier: leagueId,
-      platform,
-      ...(input.s2 ? { s2: input.s2 } : {}),
-      ...(input.swid ? { swid: input.swid } : {}),
-    },
-  });
+  const fluidKey = espnFluidCacheKey("rosters", leagueId, platform, input.teamName?.trim() ?? "");
+  return espnFluidMemo(fluidKey, ESPN_FLUID_TTL_MS, () =>
+    getConnectionRosters({
+      data: {
+        identifier: leagueId,
+        platform,
+        ...(input.s2 ? { s2: input.s2 } : {}),
+        ...(input.swid ? { swid: input.swid } : {}),
+      },
+    }),
+  );
 }

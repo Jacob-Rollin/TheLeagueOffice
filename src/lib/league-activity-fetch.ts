@@ -1,7 +1,9 @@
 /**
- * Shared activity / transaction-log loader — Sleeper client-first.
+ * Shared activity / transaction-log loader — Sleeper client-first;
+ * ESPN/Yahoo Fluid memoized in-tab.
  */
 
+import { espnFluidCacheKey, espnFluidMemo, ESPN_FLUID_TTL_MS } from "@/lib/espn-fluid-cache";
 import {
   getConnectionTransactionLog,
   getConnectionTransactions,
@@ -48,15 +50,18 @@ export async function fetchLeagueActivityForConnection(input: {
 
   if (platform === "sleeper" && !allowFluidFallback()) return [];
 
+  const fluidKey = espnFluidCacheKey("activity", leagueId, platform);
   return (
-    (await getConnectionTransactions({
-      data: {
-        identifier: leagueId,
-        platform,
-        ...(input.s2 ? { s2: input.s2 } : {}),
-        ...(input.swid ? { swid: input.swid } : {}),
-      },
-    })) ?? []
+    (await espnFluidMemo(fluidKey, ESPN_FLUID_TTL_MS, () =>
+      getConnectionTransactions({
+        data: {
+          identifier: leagueId,
+          platform,
+          ...(input.s2 ? { s2: input.s2 } : {}),
+          ...(input.swid ? { swid: input.swid } : {}),
+        },
+      }),
+    )) ?? []
   );
 }
 
@@ -81,12 +86,15 @@ export async function fetchLeagueTransactionLogForConnection(input: {
 
   if (platform === "sleeper" && !allowFluidFallback()) return empty;
 
-  return getConnectionTransactionLog({
-    data: {
-      identifier: leagueId,
-      platform,
-      ...(input.s2 ? { s2: input.s2 } : {}),
-      ...(input.swid ? { swid: input.swid } : {}),
-    },
-  });
+  const fluidKey = espnFluidCacheKey("txn-log", leagueId, platform);
+  return espnFluidMemo(fluidKey, ESPN_FLUID_TTL_MS, () =>
+    getConnectionTransactionLog({
+      data: {
+        identifier: leagueId,
+        platform,
+        ...(input.s2 ? { s2: input.s2 } : {}),
+        ...(input.swid ? { swid: input.swid } : {}),
+      },
+    }),
+  );
 }

@@ -90,12 +90,16 @@ async function loadWeekMatchups(input: {
   if (cdnDisplayable && cdn) {
     if (isCurrent) {
       // Live path missed (budget/429): serve CDN rather than Fluid-storm.
+      // ESPN/Yahoo: always prefer a warm CDN board — Fluid burns host + Active CPU.
       return cdn.board;
     }
     const pastNeedsRefresh =
       past && !boardHasUsableScores(cdn.board) && isPageVisible();
     if (!pastNeedsRefresh) {
-      if (isPastWeekMatchupFresh(week, currentWeek, cdn.syncedAtMs) || !isPageVisible()) {
+      if (
+        isPastWeekMatchupFresh(week, currentWeek, cdn.syncedAtMs, platform) ||
+        !isPageVisible()
+      ) {
         return cdn.board;
       }
     }
@@ -134,13 +138,17 @@ function liveMatchupPollMs(
   week: number | null,
   currentWeek: number | null,
   liveMs: number | false,
+  platform: string,
 ): number | false {
   if (week == null || currentWeek == null || week !== currentWeek) return false;
   if (liveMs === false) return false;
-  // Cap in-game polls at 30s; between games / finals follow nfl progress helper.
-  if (typeof liveMs === "number" && liveMs <= 30_000) return LIVE_POLL_MS;
+  const espnish = platform === "espn" || platform === "yahoo";
+  // ESPN/Yahoo polls also hit our CDN route (and sometimes Fluid). Keep them
+  // calmer than Sleeper's browser→api.sleeper.app live path.
+  const inGame = espnish ? BETWEEN_GAMES_POLL_MS : LIVE_POLL_MS;
+  if (typeof liveMs === "number" && liveMs <= 30_000) return inGame;
   if (typeof liveMs === "number" && liveMs >= ALL_FINAL_POLL_MS) return ALL_FINAL_POLL_MS;
-  return Math.max(LIVE_POLL_MS, Math.min(BETWEEN_GAMES_POLL_MS, liveMs));
+  return Math.max(inGame, Math.min(BETWEEN_GAMES_POLL_MS, liveMs));
 }
 
 /** Weekly host matchup rows for the active synced league. */
@@ -154,7 +162,7 @@ export function useActiveMatchups(week: number | null | undefined) {
   const isPastWeek = safeWeek != null && currentWeek != null && safeWeek < currentWeek;
   const isCurrentWeek = safeWeek != null && currentWeek != null && safeWeek === currentWeek;
   const liveMs = liveRefreshMs(safeWeek, currentWeek, progressByNflTeam);
-  const pollMs = liveMatchupPollMs(safeWeek, currentWeek, liveMs);
+  const pollMs = liveMatchupPollMs(safeWeek, currentWeek, liveMs, platform);
 
   const query = useQuery({
     queryKey: [...activeMatchupsQueryKey(id, safeWeek ?? 0), currentWeek ?? "na"],

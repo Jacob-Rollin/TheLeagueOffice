@@ -1,7 +1,13 @@
 /**
- * Shared settings loader — Sleeper client-first; ESPN/Yahoo Fluid credentials.
+ * Shared settings loader — Sleeper client-first; ESPN/Yahoo Fluid credentials
+ * (in-tab memo so playbook clicks do not re-pull).
  */
 
+import {
+  espnFluidCacheKey,
+  espnFluidMemo,
+  ESPN_FLUID_SETTINGS_TTL_MS,
+} from "@/lib/espn-fluid-cache";
 import { getConnectionSettings } from "@/lib/league.functions";
 import type { LeagueSettingsDetail } from "@/lib/league-settings";
 import {
@@ -54,12 +60,15 @@ export async function fetchLeagueSettingsForConnection(input: {
   // Production Sleeper: never Fluid-fallthrough (username rows soft-empty above).
   if (platform === "sleeper" && !allowFluidFallback()) return null;
 
-  return getConnectionSettings({
-    data: {
-      identifier: leagueId,
-      platform,
-      ...(input.s2 ? { s2: input.s2 } : {}),
-      ...(input.swid ? { swid: input.swid } : {}),
-    },
-  });
+  const fluidKey = espnFluidCacheKey("settings", leagueId, platform);
+  return espnFluidMemo(fluidKey, ESPN_FLUID_SETTINGS_TTL_MS, () =>
+    getConnectionSettings({
+      data: {
+        identifier: leagueId,
+        platform,
+        ...(input.s2 ? { s2: input.s2 } : {}),
+        ...(input.swid ? { swid: input.swid } : {}),
+      },
+    }),
+  );
 }

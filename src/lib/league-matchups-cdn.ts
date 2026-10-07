@@ -29,14 +29,24 @@ export type LeagueMatchupsCdnHit = {
 
 /** Trust CDN/TiDB live boards longer — 90s was re-hitting Fluid on rapid nav. */
 const LIVE_MAX_AGE_MS = 4 * 60 * 1000;
+/** ESPN/Yahoo: prefer CDN longer — each Fluid hit also burns host ESPN quota. */
+const LIVE_MAX_AGE_ESPN_MS = 6 * 60 * 1000;
 const lastFluidRefresh = new Map<string, number>();
 const fluidInflight = new Map<string, Promise<LeagueWeekMatchups | null>>();
 /** Live / optional refresh throttle. */
 const FLUID_REFRESH_MIN_MS = 3 * 60 * 1000;
+/** ESPN credentialed pulls: wider gap so playbook clicks share one warm. */
+const FLUID_REFRESH_ESPN_MIN_MS = 5 * 60 * 1000;
 /** Even forced prior-week backfill must not storm (dashboard used to poll 15s). */
 const FLUID_FORCE_MIN_MS = 5 * 60 * 1000;
+const FLUID_FORCE_ESPN_MIN_MS = 8 * 60 * 1000;
 /** Hollow/failed Fluid pulls may retry sooner than a successful warm. */
 const FLUID_FAIL_RETRY_MS = 45 * 1000;
+
+function isCredentialedHost(platform: string): boolean {
+  const p = platform.trim().toLowerCase();
+  return p === "espn" || p === "yahoo";
+}
 
 export function boardHasUsableScores(board: LeagueWeekMatchups | null | undefined): boolean {
   const entries = board?.entries ?? [];
@@ -346,8 +356,13 @@ export async function fetchLeagueMatchupsHistory(input: {
   return out;
 }
 
-export function isLiveMatchupFresh(syncedAtMs: number, now = Date.now()): boolean {
-  return syncedAtMs > 0 && now - syncedAtMs <= LIVE_MAX_AGE_MS;
+export function isLiveMatchupFresh(
+  syncedAtMs: number,
+  now = Date.now(),
+  platform?: string,
+): boolean {
+  const maxAge = isCredentialedHost(platform ?? "") ? LIVE_MAX_AGE_ESPN_MS : LIVE_MAX_AGE_MS;
+  return syncedAtMs > 0 && now - syncedAtMs <= maxAge;
 }
 
 /** True when a past-week CDN board is safe to trust without a Fluid refresh. */
@@ -355,9 +370,10 @@ export function isPastWeekMatchupFresh(
   week: number,
   currentWeek: number | null | undefined,
   syncedAtMs: number,
+  platform?: string,
 ): boolean {
   const cur = Math.max(0, Math.floor(Number(currentWeek ?? 0)) || 0);
-  if (cur <= 0 || week >= cur) return isLiveMatchupFresh(syncedAtMs);
+  if (cur <= 0 || week >= cur) return isLiveMatchupFresh(syncedAtMs, Date.now(), platform);
   if (week === cur - 1) return isPriorWeekBoardFresh(syncedAtMs);
   return syncedAtMs > 0;
 }
@@ -384,7 +400,14 @@ export async function maybeRefreshMatchupsViaFluid(input: {
 
   const now = Date.now();
   const prev = lastFluidRefresh.get(key) ?? 0;
-  const minGap = input.force ? FLUID_FORCE_MIN_MS : FLUID_REFRESH_MIN_MS;
+  const espnish = isCredentialedHost(input.platform);
+  const minGap = input.force
+    ? espnish
+      ? FLUID_FORCE_ESPN_MIN_MS
+      : FLUID_FORCE_MIN_MS
+    : espnish
+      ? FLUID_REFRESH_ESPN_MIN_MS
+      : FLUID_REFRESH_MIN_MS;
   if (prev > 0 && now - prev < minGap) return null;
 
   const run = (async (): Promise<LeagueWeekMatchups | null> => {
