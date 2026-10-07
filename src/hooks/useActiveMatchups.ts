@@ -3,12 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { liveRefreshMs, useNflGameProgress } from "@/hooks/useNflGameProgress";
 import {
+  boardHasSchedulePairings,
+  boardHasUsableScores,
   fetchLeagueWeekMatchupsCdn,
   isLiveMatchupFresh,
   isPastWeekMatchupFresh,
   maybeRefreshMatchupsViaFluid,
 } from "@/lib/league-matchups-cdn";
 import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
+import { fetchSleeperWeekMatchupsClient } from "@/lib/sleeper-matchups-client";
 
 /**
  * During live games, keep a 45s ceiling so lineup/score shifts show quickly.
@@ -43,9 +46,13 @@ export function useActiveMatchups(week: number | null | undefined) {
     refetchIntervalInBackground: false,
     queryFn: async () => {
       const week = safeWeek ?? 1;
+      const platform = (activeLeague?.platform ?? "sleeper").trim().toLowerCase();
       const cdn = await fetchLeagueWeekMatchupsCdn(leagueId, week);
       const past = currentWeek != null && week < currentWeek;
-      if (cdn?.board.entries.length) {
+      const cdnUsable =
+        cdn != null &&
+        (past ? boardHasUsableScores(cdn.board) : boardHasSchedulePairings(cdn.board) || boardHasUsableScores(cdn.board));
+      if (cdnUsable && cdn) {
         // Live current week: short freshness so lineups/scoring stay snappy.
         // Past weeks: hard-final trust CDN; soft-final prior week may refresh
         // once after the early-Tuesday analytics finalize (not a live poll).
@@ -55,11 +62,23 @@ export function useActiveMatchups(week: number | null | undefined) {
           return cdn.board;
         }
       }
+
+      // Sleeper: browser host pull before Fluid (future weeks + cold TiDB).
+      if (platform === "sleeper" && /^\d{6,}$/.test(leagueId)) {
+        const client = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek);
+        if (
+          client &&
+          (past ? boardHasUsableScores(client) : boardHasSchedulePairings(client) || boardHasUsableScores(client))
+        ) {
+          return client;
+        }
+      }
+
       // Cold/stale live board (or soft-final prior week): throttled Fluid refresh.
       const refreshed = await maybeRefreshMatchupsViaFluid({
         leagueId,
         week,
-        platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
+        platform,
         ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
         ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
         ...(id ? { connectionId: id } : {}),
