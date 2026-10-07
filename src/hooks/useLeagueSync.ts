@@ -7,12 +7,13 @@ import { deltaSyncLeague } from "@/lib/league.functions";
 import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
 
 /** Versioned key — bump to force every client through a fresh delta pass. */
-const SESSION_KEY_PREFIX = "tlo.league-delta-sync.v1:";
+const SESSION_KEY_PREFIX = "tlo.league-delta-sync.v2:";
 /**
  * Skip re-syncing the same connection within this window. Background cron
- * owns frequent refreshes; page loads only top up stale sessions.
+ * (GitHub Actions → /api/cron/league-delta-sync) owns frequent refreshes for
+ * Sleeper; page loads must not burn Fluid for every visitor.
  */
-/** Background cron owns frequent refreshes; page loads only top up stale sessions. */
+/** ESPN/Yahoo credential leagues only — Sleeper is cron + browser. */
 const RESYNC_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
 export function useLeagueSync() {
@@ -28,6 +29,10 @@ export function useLeagueSync() {
     const leagueId = activeLeague?.leagueId?.trim() || "";
     const platform = (activeLeague?.platform ?? "sleeper").trim().toLowerCase();
     if (!connectionId || !leagueId) return;
+
+    // Sleeper: Actions warm TiDB + browser reads host APIs. Skip Fluid delta
+    // on browse so ~20 concurrent free users do not each spend Active CPU.
+    if (platform === "sleeper") return;
 
     try {
       const last = Number(sessionStorage.getItem(`${SESSION_KEY_PREFIX}${connectionId}`) ?? 0);

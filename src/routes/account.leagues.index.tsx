@@ -18,7 +18,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { getConnectionMeta, getConnectionRosters } from "@/lib/league.functions";
+import { fetchLeagueRostersForConnection } from "@/lib/league-rosters-fetch";
+import { canFetchMetaClient, fetchSleeperMetaClient } from "@/lib/sleeper-meta-client";
 import { markRevalidated, writeRosterCache } from "@/lib/roster-cache";
 import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
 
@@ -122,7 +123,12 @@ function LeaguesPage() {
     if (!identifier || refreshingId) return;
     setRefreshingId(row.id);
     try {
-      const rosterData = await getConnectionRosters({ data: { identifier, platform: row.platform, ...(row.espn_s2 ? { s2: row.espn_s2 } : {}), ...(row.swid ? { swid: row.swid } : {}) } });
+      const rosterData = await fetchLeagueRostersForConnection({
+        leagueId: identifier,
+        platform: row.platform,
+        ...(row.espn_s2 ? { s2: row.espn_s2 } : {}),
+        ...(row.swid ? { swid: row.swid } : {}),
+      });
       if (!rosterData) throw new Error("The roster could not be loaded from the league provider.");
       const cacheKey = `${row.id}:all`;
       queryClient.setQueryData(["league-rosters", row.id], rosterData);
@@ -213,7 +219,7 @@ function LeagueRow({
   onRefresh: (row: ConnectionRow) => void;
   onViewPlaybook: (id: string) => void;
 }) {
-  const label = (row.metadata as Record<string, unknown> | null)?.label as string | undefined;
+  const label = (row.metadata as Record<string, unknown> | null)?.["label"] as string | undefined;
   const identifier = row.league_id ?? label ?? "";
   const platformKey = row.platform ?? "sleeper";
   const platform = PLATFORM_LABEL[platformKey] ?? platformKey;
@@ -222,7 +228,20 @@ function LeagueRow({
     enabled: (platformKey === "sleeper" || platformKey === "espn") && identifier.length > 0,
     staleTime: 5 * 60 * 1000,
     retry: false,
-    queryFn: () => getConnectionMeta({ data: { identifier, platform: platformKey, ...(row.espn_s2 ? { s2: row.espn_s2 } : {}), ...(row.swid ? { swid: row.swid } : {}) } }),
+    queryFn: async () => {
+      if (canFetchMetaClient(platformKey, identifier)) {
+        return fetchSleeperMetaClient(identifier, label);
+      }
+      const { getConnectionMeta } = await import("@/lib/league.functions");
+      return getConnectionMeta({
+        data: {
+          identifier,
+          platform: platformKey,
+          ...(row.espn_s2 ? { s2: row.espn_s2 } : {}),
+          ...(row.swid ? { swid: row.swid } : {}),
+        },
+      });
+    },
   });
   const leagueName = meta?.leagueName ?? label ?? "League";
   const teamName = meta?.teamName ?? null;

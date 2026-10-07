@@ -78,7 +78,14 @@
 - Do not assemble player detail via Fluid `getPlayerDetail` when catalog is warm — use `fetchPlayerDetailClient`.
 - Do not shorten CDN TTLs or remove `processMemo` coalescing on TiDB-backed data routes without a clear freshness need (RU burn).
 - Do not lower league sync cooldown below the intentional long window (cron owns frequent refresh; page loads only top up stale sessions).
+- Do not call Fluid `deltaSyncLeague` on Sleeper browse page loads — GitHub Actions → `/api/cron/league-delta-sync` (+ daily `fillSeason`) owns the warm; browsers read CDN/client.
+- Do not call Fluid `getConnectionStandings` for public Sleeper leagues — use `fetchSleeperStandingsClient` (`sleeper-standings-client`).
+- Do not call Fluid `getConnectionMeta` / `getConnectionSettings` / `getConnectionTransactions` / `getConnectionTransactionLog` for Sleeper — use `sleeper-meta-client`, `league-settings-fetch`, `league-activity-fetch`.
+- Do not call Fluid `getHallOfFame` — use `loadHallOfFame` (browser → Supabase anon).
+- Do not fall back to Fluid `getPlayerDetail` in production when the catalog client misses — soft-empty instead.
+- Do not call Fluid `getPickupResults` for Sleeper — use `fetchPickupResultsPreferred` (`pickup-results-client`).
 - Do not move heavy work onto GitHub raw/nflverse downloads on the request path (prefer cron → TiDB/CDN). Matchup replay PBP is an exception — do not expand that pattern.
+- Keep Actions warm jobs: `league-delta-sync.yml` (gameday + daily fillSeason) and `league-planning-snaps.yml` (ROS / slot ranks). Do not reintroduce per-visitor Fluid for those surfaces.
 
 ## When Fluid is allowed
 - ESPN/Yahoo paths that require `s2` / `swid` / OAuth tokens.
@@ -96,8 +103,8 @@
 
 ## Key modules to reuse (do not reinvent)
 - `src/lib/page-visibility.ts` — pause polls when hidden
-- `src/lib/sleeper-cache.ts` / `sleeper-client.ts` / `sleeper-rosters-client.ts` / `scoring-client.ts` / `sleeper-trending.ts`
-- `src/lib/research-cdn.ts` / `snap-cdn.ts` / `league-matchups-cdn.ts` / `league-rosters-fetch.ts`
+- `src/lib/sleeper-cache.ts` / `sleeper-client.ts` / `sleeper-rosters-client.ts` / `sleeper-standings-client.ts` / `sleeper-meta-client.ts` / `sleeper-settings-client.ts` / `sleeper-activity-client.ts` / `scoring-client.ts` / `sleeper-trending.ts`
+- `src/lib/research-cdn.ts` / `snap-cdn.ts` / `league-matchups-cdn.ts` / `league-rosters-fetch.ts` / `league-settings-fetch.ts` / `league-activity-fetch.ts`
 - `src/lib/player-detail-client.ts` / `sos-from-board.ts` / `players-catalog.ts`
 - `src/lib/process-memo.ts` / `api-cache.ts` (`dataCacheControl`, `leagueHistoryCacheControl`, `researchCacheControl`, `warehouseCacheControl`)
 - `src/components/research/*`, `PlaybookShell`, `PlayerModalHost`, `ActiveLeagueLabel`

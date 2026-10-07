@@ -63,6 +63,11 @@ const detailQuery = (id: string) =>
       const brain = await hydratePlayerBrain().catch(() => null);
       const client = await fetchPlayerDetailClient(id, brain);
       if (client) return client;
+      try {
+        if (import.meta.env.PROD) return null;
+      } catch {
+        /* ignore */
+      }
       return getPlayerDetail({ data: { id } });
     },
     staleTime: 1000 * 60 * 30,

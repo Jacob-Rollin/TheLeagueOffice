@@ -60,6 +60,7 @@ import { Route as AccountLeaguesConnectionIdRouteImport } from './routes/account
 import { Route as ApiAdminSeedPlayerWarehouseRouteImport } from './routes/api/admin/seed-player-warehouse'
 import { Route as ApiAdminTidbMigrateRouteImport } from './routes/api/admin/tidb-migrate'
 import { Route as ApiCronLeagueDeltaSyncRouteImport } from './routes/api/cron/league-delta-sync'
+import { Route as ApiCronLeaguePlanningSnapsRouteImport } from './routes/api/cron/league-planning-snaps'
 import { Route as ApiCronResearchAggregatesRouteImport } from './routes/api/cron/research-aggregates'
 import { Route as ApiCronWarehouseIngestRouteImport } from './routes/api/cron/warehouse-ingest'
 import { Route as ApiDataPlayersRouteImport } from './routes/api/data/players'
@@ -339,6 +340,12 @@ const ApiCronLeagueDeltaSyncRoute = ApiCronLeagueDeltaSyncRouteImport.update({
   path: '/api/cron/league-delta-sync',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronLeaguePlanningSnapsRoute =
+  ApiCronLeaguePlanningSnapsRouteImport.update({
+    id: '/api/cron/league-planning-snaps',
+    path: '/api/cron/league-planning-snaps',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiCronResearchAggregatesRoute =
   ApiCronResearchAggregatesRouteImport.update({
     id: '/api/cron/research-aggregates',
@@ -492,6 +499,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
+  '/api/cron/league-planning-snaps': typeof ApiCronLeaguePlanningSnapsRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/data/players': typeof ApiDataPlayersRoute
@@ -563,6 +571,7 @@ export interface FileRoutesByTo {
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
+  '/api/cron/league-planning-snaps': typeof ApiCronLeaguePlanningSnapsRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/data/players': typeof ApiDataPlayersRoute
@@ -636,6 +645,7 @@ export interface FileRoutesById {
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
+  '/api/cron/league-planning-snaps': typeof ApiCronLeaguePlanningSnapsRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/data/players': typeof ApiDataPlayersRoute
@@ -711,6 +721,7 @@ export interface FileRouteTypes {
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
+    | '/api/cron/league-planning-snaps'
     | '/api/cron/research-aggregates'
     | '/api/cron/warehouse-ingest'
     | '/api/data/players'
@@ -782,6 +793,7 @@ export interface FileRouteTypes {
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
+    | '/api/cron/league-planning-snaps'
     | '/api/cron/research-aggregates'
     | '/api/cron/warehouse-ingest'
     | '/api/data/players'
@@ -854,6 +866,7 @@ export interface FileRouteTypes {
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
+    | '/api/cron/league-planning-snaps'
     | '/api/cron/research-aggregates'
     | '/api/cron/warehouse-ingest'
     | '/api/data/players'
@@ -919,6 +932,7 @@ export interface RootRouteChildren {
   ApiAdminSeedPlayerWarehouseRoute: typeof ApiAdminSeedPlayerWarehouseRoute
   ApiAdminTidbMigrateRoute: typeof ApiAdminTidbMigrateRoute
   ApiCronLeagueDeltaSyncRoute: typeof ApiCronLeagueDeltaSyncRoute
+  ApiCronLeaguePlanningSnapsRoute: typeof ApiCronLeaguePlanningSnapsRoute
   ApiCronResearchAggregatesRoute: typeof ApiCronResearchAggregatesRoute
   ApiCronWarehouseIngestRoute: typeof ApiCronWarehouseIngestRoute
   ApiDataPlayersRoute: typeof ApiDataPlayersRoute
@@ -1293,6 +1307,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCronLeagueDeltaSyncRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/league-planning-snaps': {
+      id: '/api/cron/league-planning-snaps'
+      path: '/api/cron/league-planning-snaps'
+      fullPath: '/api/cron/league-planning-snaps'
+      preLoaderRoute: typeof ApiCronLeaguePlanningSnapsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/cron/research-aggregates': {
       id: '/api/cron/research-aggregates'
       path: '/api/cron/research-aggregates'
@@ -1540,6 +1561,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminSeedPlayerWarehouseRoute: ApiAdminSeedPlayerWarehouseRoute,
   ApiAdminTidbMigrateRoute: ApiAdminTidbMigrateRoute,
   ApiCronLeagueDeltaSyncRoute: ApiCronLeagueDeltaSyncRoute,
+  ApiCronLeaguePlanningSnapsRoute: ApiCronLeaguePlanningSnapsRoute,
   ApiCronResearchAggregatesRoute: ApiCronResearchAggregatesRoute,
   ApiCronWarehouseIngestRoute: ApiCronWarehouseIngestRoute,
   ApiDataPlayersRoute: ApiDataPlayersRoute,

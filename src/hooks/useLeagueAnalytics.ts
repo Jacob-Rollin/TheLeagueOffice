@@ -11,8 +11,8 @@ import {
   completedWeeksThrough,
   standingsGamesPlayed,
 } from "@/lib/completed-weeks";
-import { getConnectionSettings } from "@/lib/league.functions";
 import { boardHasUsableScores, fetchLeagueMatchupsHistory } from "@/lib/league-matchups-cdn";
+import { fetchLeagueSettingsForConnection } from "@/lib/league-settings-fetch";
 import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
 import { fetchSnapRestOfSeason, fetchSnapStartingSlotRanks } from "@/lib/snap-cdn";
 import { computeStandingsAnalytics, type TeamAnalytics } from "@/lib/standings-analytics";
@@ -82,7 +82,14 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
     retry: false,
     staleTime: 60 * 60 * 1000,
     refetchIntervalInBackground: false,
-    queryFn: async () => await getConnectionSettings({ data: connectionArgs(activeLeague) }),
+    queryFn: async () =>
+      fetchLeagueSettingsForConnection({
+        leagueId: connectionArgs(activeLeague).identifier,
+        platform: connectionArgs(activeLeague).platform,
+        teamName: activeLeague?.teamName,
+        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+      }),
   });
   const playoffStartWeek = settingsQuery.data?.playoffStartWeek ?? 15;
   const playoffTeams = settingsQuery.data?.playoffTeams ?? ((standings?.rows.length ?? 0) >= 10 ? 6 : 4);

@@ -1,6 +1,7 @@
 /**
  * Shared roster loader for hooks that share the `["league-rosters", id]` RQ key.
  * Sleeper → browser; ESPN/Yahoo → Fluid credentials.
+ * Production never falls through to Fluid for Sleeper (cron + client own it).
  */
 
 import { getConnectionRosters } from "@/lib/league.functions";
@@ -9,6 +10,14 @@ import {
   canFetchRostersClient,
   fetchSleeperLeagueRostersClient,
 } from "@/lib/sleeper-rosters-client";
+
+function allowSleeperFluidFallback(): boolean {
+  try {
+    return import.meta.env.DEV === true;
+  } catch {
+    return false;
+  }
+}
 
 export async function fetchLeagueRostersForConnection(input: {
   leagueId: string;
@@ -24,10 +33,12 @@ export async function fetchLeagueRostersForConnection(input: {
   if (canFetchRostersClient(platform)) {
     const client = await fetchSleeperLeagueRostersClient(leagueId, input.teamName).catch(() => null);
     if (client?.teams?.length) {
-      // If we expected a "mine" team and none matched, fall through to Fluid
-      // (authoritative owner_id resolution) instead of leaving every team as opponent.
+      // Prefer client even when mine-matching is fuzzy — production must not
+      // pay Fluid to re-resolve owner_id for every visitor.
       const mineOk = !input.teamName?.trim() || client.teams.some((t) => t.isMine);
-      if (mineOk) return client;
+      if (mineOk || !allowSleeperFluidFallback()) return client;
+    } else if (!allowSleeperFluidFallback()) {
+      return client;
     }
   }
 

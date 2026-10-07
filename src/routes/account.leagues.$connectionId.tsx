@@ -138,15 +138,19 @@ function LeagueSettingsPage() {
     retry: false,
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<LeagueSettingsDetail> => {
-      const { getConnectionSettings } = await import("@/lib/league.functions");
-      return await getConnectionSettings({
-        data: {
-          identifier,
-          platform,
-          ...(row?.espn_s2 ? { s2: row.espn_s2 } : {}),
-          ...(row?.swid ? { swid: row.swid } : {}),
-        },
+      const { fetchLeagueSettingsForConnection } = await import("@/lib/league-settings-fetch");
+      const metaLabel = (row?.metadata as Record<string, unknown> | null)?.["label"] as
+        | string
+        | undefined;
+      const hit = await fetchLeagueSettingsForConnection({
+        leagueId: identifier,
+        platform,
+        teamName: metaLabel,
+        ...(row?.espn_s2 ? { s2: row.espn_s2 } : {}),
+        ...(row?.swid ? { swid: row.swid } : {}),
       });
+      if (!hit) throw new Error("Could not load league settings.");
+      return hit;
     },
   });
 
