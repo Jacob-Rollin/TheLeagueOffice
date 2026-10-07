@@ -1,4 +1,5 @@
 import type { Player, Pos } from "@/lib/draft";
+import { injuryBadgeInfo } from "@/lib/injury-badge";
 
 /**
  * Shared sandbox/demo roster sourcing.
@@ -13,15 +14,13 @@ import type { Player, Pos } from "@/lib/draft";
 export function injuryMicroBadge(
   status: string | null | undefined,
 ): { label: string; className: string } | null {
-  const currentStatus = (status ?? "").trim().toLowerCase();
-  if (!currentStatus || currentStatus === "healthy") return null;
-  if (currentStatus === "out") return { label: "O", className: "bg-rose-600" };
-  if (currentStatus === "ir" || currentStatus === "injured reserve")
-    return { label: "IR", className: "bg-rose-600" };
-  if (currentStatus === "questionable") return { label: "Q", className: "bg-amber-500" };
-  if (currentStatus === "doubtful") return { label: "D", className: "bg-rose-600" };
-  if (currentStatus === "na" || currentStatus === "not active" || currentStatus === "suspended") return { label: "NA", className: "bg-red-500" };
-  return null;
+  // Shared letter/tone map (amber Q, rose otherwise) — desktop + mobile parity.
+  const info = injuryBadgeInfo(status);
+  if (!info) return null;
+  return {
+    label: info.letter,
+    className: info.tone === "amber" ? "bg-amber-500" : "bg-rose-600",
+  };
 }
 
 type InjuryCarrier = {

@@ -16,6 +16,7 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Scoring } from "@/lib/draft";
 import type { Pos } from "@/lib/draft";
+import { injuryBadgeInfo } from "@/lib/injury-badge";
 import { getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
 import { getPlayerDetail } from "@/lib/players.functions";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
@@ -75,68 +76,13 @@ function injuryLetter(injury: string | null | undefined): "Q" | "O" | "D" | "IR"
 
 /** Full-text header injury capsule with high-contrast broadcast colors. */
 function getFullInjuryBadgeDetails(status?: string | null) {
-  const cleanStatus = status?.toUpperCase()?.trim();
-  if (
-    !cleanStatus ||
-    cleanStatus === "NONE" ||
-    cleanStatus === "HEALTHY" ||
-    cleanStatus === "ACTIVE"
-  ) {
-    return null;
-  }
-  if (cleanStatus === "Q" || cleanStatus === "QUESTIONABLE") {
-    return {
-      text: "Questionable",
-      classes:
-        "bg-amber-500 text-slate-950 border-none font-black text-[10px] shadow-sm shadow-amber-500/10",
-      tone: "amber" as const,
-    };
-  }
-  if (cleanStatus === "O" || cleanStatus === "OUT") {
-    return {
-      text: "Out",
-      classes:
-        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
-      tone: "rose" as const,
-    };
-  }
-  if (cleanStatus === "D" || cleanStatus === "DOUBTFUL") {
-    return {
-      text: "Doubtful",
-      classes:
-        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
-      tone: "rose" as const,
-    };
-  }
-  if (
-    cleanStatus === "IR" ||
-    cleanStatus === "INJURED_RESERVE" ||
-    cleanStatus === "INJURED RESERVE"
-  ) {
-    return {
-      text: "Injured Reserve",
-      classes:
-        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
-      tone: "rose" as const,
-    };
-  }
-  // ESPN compliance: NA is an active non-football roster restriction.
-  if (
-    cleanStatus === "NA" ||
-    cleanStatus === "NOT_ACTIVE" ||
-    cleanStatus === "NOT ACTIVE" ||
-    cleanStatus === "EXEMPT" ||
-    cleanStatus === "INACTIVE"
-  ) {
-    return {
-      text: "Not Active",
-      classes:
-        "bg-rose-600 text-white border-none font-black text-[10px] shadow-sm shadow-rose-600/10",
-      tone: "rose" as const,
-    };
-  }
-  // Healthy / unrecognized statuses stay badge-free.
-  return null;
+  const info = injuryBadgeInfo(status);
+  if (!info) return null;
+  return {
+    text: info.text,
+    classes: `${info.className} text-[10px]`,
+    tone: info.tone,
+  };
 }
 
 const MEDICAL_NOTES_FALLBACK =

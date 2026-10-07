@@ -29,9 +29,9 @@ import {
   type InjuryReportLine,
 } from "@/lib/are-they-playing";
 import { currentSeason, fetchSchedule, type Player } from "@/lib/players-build";
-import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
+import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { fetchResearchAreTheyPlaying, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
-import { fetchLiveInjuryStatusesClient } from "@/lib/sleeper-client";
+import { useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 import { buildScheduleByTeam, formatOppLabel } from "@/lib/wire-matchups";
@@ -135,23 +135,8 @@ function AreTheyPlayingPage() {
     queryFn: () => fetchResearchAreTheyPlaying(week ?? 1),
   });
 
-  const liveInjuries = useQuery({
-    queryKey: ["live-injury-statuses"],
-    staleTime: 10 * 60 * 1000,
-    refetchInterval: visibleRefetchInterval(10 * 60 * 1000),
-    refetchIntervalInBackground: false,
-    // Soft-empty inside client helper — do not retry-storm Sleeper.
-    retry: false,
-    // Public Sleeper projections — browser pool, not Fluid.
-    queryFn: () => {
-      if (!isPageVisible()) {
-        return Promise.resolve(
-          {} as Record<string, { status: string | null; bodyPart: string | null }>,
-        );
-      }
-      return fetchLiveInjuryStatusesClient();
-    },
-  });
+  // Shared RQ key + IndexedDB week-proj overlay (also used by useSleeperPlayers).
+  const liveInjuries = useLiveInjuryStatuses();
 
   const schedule = useQuery({
     queryKey: ["wire-schedule-sos", "v2-no-def-proj", currentSeason()],

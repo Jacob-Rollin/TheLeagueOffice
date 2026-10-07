@@ -94,16 +94,29 @@ export async function fetchPlayerDetailClient(
 
   const { player: base, season, all } = catalog;
   const brainEntry = brain?.[clean] ?? null;
-  const ownership = await import("@/lib/sleeper-ownership-client")
-    .then((m) => m.ownershipForPlayerClient(clean))
-    .catch(() => null);
-  // Prefer Sleeper catalog designation (same source as table badges). Brain
-  // defaults to "Healthy" which is truthy and was clobbering real Q/O/IR.
+  const [ownership, liveInjuries] = await Promise.all([
+    import("@/lib/sleeper-ownership-client")
+      .then((m) => m.ownershipForPlayerClient(clean))
+      .catch(() => null),
+    // Shared IndexedDB week-proj overlay (same key as ATP / useLiveInjuryStatuses).
+    import("@/lib/sleeper-client")
+      .then((m) => m.fetchLiveInjuryStatusesClient())
+      .catch(() => null),
+  ]);
+  const live = liveInjuries?.[clean];
+  const injuryStatus =
+    live !== undefined ? live.status?.trim() || null : (base.injury_status ?? base.injury ?? null);
+  const injuryBody =
+    (live !== undefined ? live.bodyPart?.trim() || null : null) ||
+    base.injury_body_part ||
+    brainEntry?.injuryType ||
+    null;
+  // Prefer live Sleeper projection injury over daily catalog / brain "Healthy".
   const player = {
     ...base,
-    injury: base.injury ?? null,
-    injury_status: base.injury_status ?? null,
-    injury_body_part: base.injury_body_part || brainEntry?.injuryType || null,
+    injury: injuryStatus,
+    injury_status: injuryStatus,
+    injury_body_part: injuryBody,
     injury_notes: base.injury_notes || brainEntry?.injuryNotes || null,
     // Browser → Sleeper research (shared IndexedDB); same source desktop Fluid used.
     rostered_pct: ownership?.owned ?? null,
