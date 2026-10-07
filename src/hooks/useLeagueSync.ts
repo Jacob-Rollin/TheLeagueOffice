@@ -17,9 +17,19 @@ const SESSION_KEY_PREFIX = "tlo.league-delta-sync.v2:";
 /** ESPN/Yahoo credential leagues only — Sleeper is cron + browser. */
 const RESYNC_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
-/** Admin tools (e.g. Projection Analytics) never need a league warm. */
-function isAdminPath(pathname: string): boolean {
-  return pathname === "/admin" || pathname.startsWith("/admin/");
+/**
+ * ESPN/Yahoo browse delta only on surfaces that read live league boards.
+ * Research, injury, Projection Analytics, Account, HOF, home, etc. must not
+ * spend Fluid on `deltaSyncLeague` — cron owns the warm (`sleeperOnly=0`).
+ */
+function needsLeagueWarmPath(pathname: string): boolean {
+  if (pathname.startsWith("/playbook") || pathname.startsWith("/m/")) return true;
+  if (pathname === "/m") return true;
+  if (pathname === "/trade" || pathname.startsWith("/trade/")) return true;
+  if (pathname === "/waiver" || pathname.startsWith("/waiver/")) return true;
+  if (pathname === "/standings" || pathname.startsWith("/standings/")) return true;
+  if (pathname === "/top-available") return true;
+  return false;
 }
 
 export function useLeagueSync() {
@@ -32,9 +42,7 @@ export function useLeagueSync() {
 
   useEffect(() => {
     if (sandboxMode) return;
-    // Opening /admin/projection-analytics with an ESPN league selected must not
-    // spend Fluid on delta sync — that page only reads a public Gist client-side.
-    if (isAdminPath(pathname)) return;
+    if (!needsLeagueWarmPath(pathname)) return;
     const connectionId = activeLeague?.id?.trim() || "";
     const leagueId = activeLeague?.leagueId?.trim() || "";
     const platform = (activeLeague?.platform ?? "sleeper").trim().toLowerCase();

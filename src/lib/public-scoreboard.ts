@@ -13,7 +13,8 @@ const ESPN_SCOREBOARD =
 /** In-tab coalescing so remounts / dual hooks do not double-hit ESPN. */
 const memory = new Map<string, { at: number; live: boolean; value: unknown }>();
 const LIVE_MEMORY_TTL_MS = 15_000;
-const IDLE_MEMORY_TTL_MS = 2 * 60_000;
+/** Align with mid-week quiet poll so remounts do not re-hit ESPN every 2m. */
+const IDLE_MEMORY_TTL_MS = 5 * 60_000;
 
 export function scoreboardQueryKey(week?: number | null, seasontype?: number | null) {
   return ["nfl-public-scoreboard", week ?? null, seasontype ?? null] as const;

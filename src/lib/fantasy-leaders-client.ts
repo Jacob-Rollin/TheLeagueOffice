@@ -17,18 +17,12 @@ import {
   type SleeperRow,
 } from "@/lib/players-build";
 import { fetchNflStateClient } from "@/lib/sleeper-client";
+import { sleeperFetchJson } from "@/lib/sleeper-http";
 import type { FantasyLeaderRow, FantasyLeaders } from "@/lib/players.server";
 
 const HOUR = 60 * 60 * 1000;
 /** Keep week-stat fan-out polite (same spirit as projection week bundles). */
 const WEEK_STATS_CONCURRENCY = 2;
-
-async function sleeperFetch(url: string): Promise<Response> {
-  const res = await fetch(url, { headers: { accept: "application/json" } });
-  if (res.status !== 429) return res;
-  await new Promise((r) => setTimeout(r, 1200));
-  return fetch(url, { headers: { accept: "application/json" } });
-}
 
 async function mapPool<T, R>(
   items: T[],
@@ -52,9 +46,7 @@ async function weekStatRows(season: string, week: number): Promise<SleeperRow[]>
   const safeWeek = Math.min(18, Math.max(1, week));
   return getCached(`leaders-week-stats-v1:${season}|${safeWeek}`, 30 * 60 * 1000, async () => {
     const url = `${SLEEPER_BASE}/stats/nfl/${season}/${safeWeek}?season_type=regular&${positionsQuery()}`;
-    const res = await sleeperFetch(url);
-    if (!res.ok) return [] as SleeperRow[];
-    const json = (await res.json()) as unknown;
+    const json = await sleeperFetchJson<unknown>(url, "warm");
     return Array.isArray(json) ? (json as SleeperRow[]) : [];
   });
 }

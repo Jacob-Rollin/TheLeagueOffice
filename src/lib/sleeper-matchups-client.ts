@@ -9,7 +9,7 @@
 
 import type { LeagueWeekMatchups, WeeklyMatchupEntry } from "@/lib/league.server";
 import { getCached, writeCache } from "@/lib/sleeper-cache";
-import { acquireSleeperPermit, waitForSleeperPermit } from "@/lib/sleeper-rate-budget";
+import { sleeperFetchJson, type SleeperFetchKind } from "@/lib/sleeper-http";
 
 const SLEEPER = "https://api.sleeper.app/v1";
 /** In-memory ceiling for live score polls (network floor). */
@@ -23,24 +23,8 @@ function sleeperAvatar(id: string | null | undefined): string | null {
   return `https://sleepercdn.com/avatars/thumbs/${clean}`;
 }
 
-async function sleeperJson<T>(url: string, kind: "live" | "warm" | "default"): Promise<T | null> {
-  const ok =
-    kind === "live" ? acquireSleeperPermit("live") : await waitForSleeperPermit(kind, 4_000);
-  if (!ok) return null;
-  try {
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 1500));
-      if (!acquireSleeperPermit(kind === "live" ? "live" : "warm")) return null;
-      const retry = await fetch(url, { headers: { accept: "application/json" } });
-      if (!retry.ok) return null;
-      return (await retry.json()) as T;
-    }
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+async function sleeperJson<T>(url: string, kind: SleeperFetchKind): Promise<T | null> {
+  return sleeperFetchJson<T>(url, kind);
 }
 
 type RosterRow = {

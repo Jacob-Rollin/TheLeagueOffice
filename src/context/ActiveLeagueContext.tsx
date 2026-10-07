@@ -88,6 +88,11 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
         "@/lib/sleeper-resolve-client"
       );
       const { getConnectionMeta } = await import("@/lib/league.functions");
+      const {
+        espnFluidCacheKey,
+        espnFluidMemo,
+        ESPN_FLUID_SETTINGS_TTL_MS,
+      } = await import("@/lib/espn-fluid-cache");
       const allowFluid =
         typeof import.meta !== "undefined" && import.meta.env?.DEV === true;
       return await Promise.all(
@@ -119,14 +124,17 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
             }
             // ESPN (or rare Sleeper resolve miss in DEV) may still use Fluid.
             if (row.platform === "sleeper" && !allowFluid) return base;
-            const meta = await getConnectionMeta({
-              data: {
-                identifier: sleeperId,
-                platform: row.platform,
-                ...(s2 ? { s2 } : {}),
-                ...(swid ? { swid } : {}),
-              },
-            });
+            const fluidKey = espnFluidCacheKey("meta", sleeperId, row.platform);
+            const meta = await espnFluidMemo(fluidKey, ESPN_FLUID_SETTINGS_TTL_MS, () =>
+              getConnectionMeta({
+                data: {
+                  identifier: sleeperId,
+                  platform: row.platform,
+                  ...(s2 ? { s2 } : {}),
+                  ...(swid ? { swid } : {}),
+                },
+              }),
+            );
             return {
               ...base,
               leagueId: sleeperId,

@@ -3,7 +3,13 @@
  * ESPN/Yahoo stay on Fluid (credentials).
  */
 
+import {
+  espnFluidCacheKey,
+  espnFluidMemo,
+  ESPN_FLUID_SETTINGS_TTL_MS,
+} from "@/lib/espn-fluid-cache";
 import { getCached } from "@/lib/sleeper-cache";
+import { sleeperFetchJson } from "@/lib/sleeper-http";
 import {
   defaultScoringMap,
   type ScoringFormat,
@@ -51,19 +57,7 @@ function mapFromSleeperSettings(
 }
 
 async function sleeperJson<T>(url: string): Promise<T | null> {
-  try {
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 1200));
-      const retry = await fetch(url, { headers: { accept: "application/json" } });
-      if (!retry.ok) return null;
-      return (await retry.json()) as T;
-    }
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  return sleeperFetchJson<T>(url, "warm");
 }
 
 /** Public Sleeper league scoring for a known league id. */
@@ -119,13 +113,17 @@ export async function fetchLeagueScoringPreferred(input: {
       return client ?? { format: "half", map: defaultScoringMap("half"), source: "default" };
     }
   }
+  const identifier = String(input.identifier ?? "").trim();
+  const fluidKey = espnFluidCacheKey("scoring", identifier, platform);
   const { getLeagueScoring } = await import("@/lib/scoring.functions");
-  return getLeagueScoring({
-    data: {
-      identifier: input.identifier,
-      platform,
-      ...(input.s2 ? { s2: input.s2 } : {}),
-      ...(input.swid ? { swid: input.swid } : {}),
-    },
-  });
+  return espnFluidMemo(fluidKey, ESPN_FLUID_SETTINGS_TTL_MS, () =>
+    getLeagueScoring({
+      data: {
+        identifier,
+        platform,
+        ...(input.s2 ? { s2: input.s2 } : {}),
+        ...(input.swid ? { swid: input.swid } : {}),
+      },
+    }),
+  );
 }

@@ -10,6 +10,7 @@ import {
   type RosterSlotKey,
 } from "@/lib/league-settings";
 import { getCached } from "@/lib/sleeper-cache";
+import { sleeperFetchJson } from "@/lib/sleeper-http";
 
 const SLEEPER = "https://api.sleeper.app/v1";
 const SETTINGS_TTL_MS = 30 * 60 * 1000;
@@ -60,19 +61,7 @@ function titleCase(raw: string | null | undefined): string | null {
 }
 
 async function sleeperJson<T>(url: string): Promise<T | null> {
-  try {
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 1200));
-      const retry = await fetch(url, { headers: { accept: "application/json" } });
-      if (!retry.ok) return null;
-      return (await retry.json()) as T;
-    }
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  return sleeperFetchJson<T>(url, "warm");
 }
 
 function emptyDetail(): LeagueSettingsDetail {
