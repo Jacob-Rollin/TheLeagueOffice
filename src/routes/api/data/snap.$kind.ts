@@ -1,11 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { jsonResponse, researchCacheControl } from "@/lib/api-cache";
+import { authorizeCronRequest } from "@/lib/cron-auth.server";
 import { processMemo } from "@/lib/process-memo";
 
 /**
  * Edge-cached snapshots for heavy Fluid loaders that are not yet TiDB-backed.
- * First miss after CDN TTL pays one compute; everyone else hits the edge.
+ *
+ * Browse requests never compute — they only return process-memo / prior CDN
+ * warm data. Cron / Publish Snap CDN (Bearer CRON_SECRET) may compute on miss
+ * so the edge can be seeded without homepage traffic paying Active CPU.
  *
  * Kinds: trade-basis | injury-reports | injury-wire | fantasy-news |
  * trade-market | roster-news | ros | slot-ranks
@@ -18,9 +22,20 @@ export const Route = createFileRoute("/api/data/snap/$kind")({
         const url = new URL(request.url);
         const format = url.searchParams.get("format");
         const limit = Math.max(1, Math.min(60, Number(url.searchParams.get("limit") ?? 40) || 40));
+        const allowCompute = authorizeCronRequest(request);
 
         try {
           if (kind === "trade-basis") {
+            if (!allowCompute) {
+              const empty = {
+                season: "",
+                week: 0,
+                remainingWeeks: 0,
+                rosAvailable: false,
+                players: {} as Record<string, never>,
+              };
+              return jsonResponse(empty, { cache: "no-store" });
+            }
             const payload = await processMemo("snap:trade-basis", 30 * 60 * 1000, async () => {
               const { loadTradeValueBasis } = await import("@/lib/players.server");
               return loadTradeValueBasis();
@@ -30,6 +45,9 @@ export const Route = createFileRoute("/api/data/snap/$kind")({
           }
 
           if (kind === "injury-reports") {
+            if (!allowCompute) {
+              return jsonResponse({ updatedAt: "", items: [] }, { cache: "no-store" });
+            }
             const payload = await processMemo("snap:injury-reports", 10 * 60 * 1000, async () => {
               const { loadInjuryReports } = await import("@/lib/players.server");
               return loadInjuryReports();
@@ -39,15 +57,23 @@ export const Route = createFileRoute("/api/data/snap/$kind")({
           }
 
           if (kind === "injury-wire") {
+            if (!allowCompute) {
+              return jsonResponse([], { cache: "no-store" });
+            }
             const payload = await processMemo(`snap:injury-wire:${limit}`, 10 * 60 * 1000, async () => {
               const { loadInjuryWire } = await import("@/lib/players.server");
               return loadInjuryWire(limit);
             });
-            const warm = Array.isArray(payload) ? payload.length > 0 : Array.isArray((payload as { items?: unknown[] })?.items);
+            const warm = Array.isArray(payload)
+              ? payload.length > 0
+              : Array.isArray((payload as { items?: unknown[] })?.items);
             return jsonResponse(payload, { cache: warm ? researchCacheControl() : "no-store" });
           }
 
           if (kind === "fantasy-news") {
+            if (!allowCompute) {
+              return jsonResponse([], { cache: "no-store" });
+            }
             const payload = await processMemo(`snap:fantasy-news:${limit}`, 15 * 60 * 1000, async () => {
               const { loadFantasyNewsFeed } = await import("@/lib/players.server");
               return loadFantasyNewsFeed(limit);
@@ -58,11 +84,16 @@ export const Route = createFileRoute("/api/data/snap/$kind")({
 
           if (kind === "trade-market") {
             const fmt = format === "std" || format === "ppr" ? format : "half";
+            if (!allowCompute) {
+              return jsonResponse({ format: fmt, season: "", rows: [], opportunity: [] }, { cache: "no-store" });
+            }
             const payload = await processMemo(`snap:trade-market:${fmt}`, 30 * 60 * 1000, async () => {
               const { loadTradeMarket } = await import("@/lib/trade-market.server");
               return loadTradeMarket(fmt);
             });
-            const warm = Array.isArray((payload as { rows?: unknown[] })?.rows) && (payload as { rows: unknown[] }).rows.length > 0;
+            const warm =
+              Array.isArray((payload as { rows?: unknown[] })?.rows) &&
+              (payload as { rows: unknown[] }).rows.length > 0;
             return jsonResponse(payload, { cache: warm ? researchCacheControl() : "no-store" });
           }
 
@@ -72,6 +103,9 @@ export const Route = createFileRoute("/api/data/snap/$kind")({
               .map((id) => id.trim().slice(0, 32))
               .filter(Boolean)
               .slice(0, 30);
+            if (!allowCompute) {
+              return jsonResponse({ season: "", week: 0, players: [] }, { cache: "no-store" });
+            }
             const key = ids.slice().sort().join(",");
             const payload = await processMemo(`snap:roster-news:${key || "empty"}`, 5 * 60 * 1000, async () => {
               const { loadRosterNews } = await import("@/lib/players.server");
@@ -88,6 +122,12 @@ export const Route = createFileRoute("/api/data/snap/$kind")({
             if (!/^\d{6,}$/.test(league)) {
               return jsonResponse({ ok: false, error: "invalid league" }, { status: 400, cache: "no-store" });
             }
+            if (!allowCompute) {
+              return jsonResponse(
+                kind === "ros" ? { weeks: [], byWeek: [] } : { seats: [], teams: [] },
+                { cache: "no-store" },
+              );
+            }
             const memoKey = `snap:${kind}:${league}:${from}:${to}`;
             const payload = await processMemo(memoKey, 15 * 60 * 1000, async () => {
               const mod = await import("@/lib/standings-projections.server");
@@ -99,9 +139,9 @@ export const Route = createFileRoute("/api/data/snap/$kind")({
             const warm =
               kind === "ros"
                 ? Array.isArray((payload as { weeks?: unknown[] })?.weeks) &&
-                  ((payload as { weeks: unknown[] }).weeks.length > 0)
+                  (payload as { weeks: unknown[] }).weeks.length > 0
                 : Array.isArray((payload as { teams?: unknown[] })?.teams) &&
-                  ((payload as { teams: unknown[] }).teams.length > 0);
+                  (payload as { teams: unknown[] }).teams.length > 0;
             return jsonResponse(payload, { cache: warm ? researchCacheControl() : "no-store" });
           }
 

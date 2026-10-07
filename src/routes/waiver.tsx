@@ -229,6 +229,8 @@ function PosFilterToolbar<T extends string>({
 }
 
 export const Route = createFileRoute("/waiver")({
+  // Client catalog only — SSR ensureQueryData was burning Fluid Active CPU on every visit.
+  ssr: false,
   head: () => ({
     meta: [
       { title: "The Wire — The League Office" },

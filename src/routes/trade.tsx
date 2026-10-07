@@ -75,6 +75,8 @@ const detailQuery = (id: string) =>
   });
 
 export const Route = createFileRoute("/trade")({
+  // Client catalog only — SSR ensureQueryData was burning Fluid Active CPU on every visit.
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Trade Analyzer — The League Office" },

@@ -6,7 +6,7 @@ import {
   type Pick,
   type Settings,
 } from "@/lib/draft";
-import { getLeagueSync } from "@/lib/league.functions";
+import { fetchLeagueSyncPreferred } from "@/lib/sleeper-league-sync-client";
 import {
   clearLeagueLink,
   getLeagueLink,
@@ -328,7 +328,8 @@ export function useDraft() {
     if (localKey === globalKey || autoSyncKey === globalKey) return;
     autoSyncKey = globalKey;
     const username = globalLink.username ?? "";
-    void getLeagueSync({ data: { leagueId: globalLink.leagueId, username } })
+    // Browser → Sleeper (no Fluid). Same data as former getLeagueSync.
+    void fetchLeagueSyncPreferred({ leagueId: globalLink.leagueId, username })
       .then((res) => {
         if (!res || autoSyncKey !== globalKey) return;
         applyLeague(res, {

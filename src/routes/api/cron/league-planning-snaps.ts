@@ -22,7 +22,8 @@ export const Route = createFileRoute("/api/cron/league-planning-snaps")({
         }
 
         const url = new URL(request.url);
-        const limit = Math.max(1, Math.min(60, Number(url.searchParams.get("limit") ?? 30) || 30));
+        // Free-tier default: small batch. Browse uses client ROS when CDN/API is cold.
+        const limit = Math.max(1, Math.min(60, Number(url.searchParams.get("limit") ?? 12) || 12));
 
         try {
           const stateRes = await fetch("https://api.sleeper.app/v1/state/nfl", {
@@ -50,6 +51,7 @@ export const Route = createFileRoute("/api/cron/league-planning-snaps")({
 
           for (const { leagueId } of leagues) {
             try {
+              // Compute once in this isolate — do not re-hit /api/data/snap/* (doubled Fluid).
               const [ros, slots] = await Promise.all([
                 loadRestOfSeasonProjections(leagueId, "sleeper", fromWeek, toWeek),
                 loadStartingSlotRanks(leagueId, "sleeper", fromWeek, toWeek),
@@ -59,20 +61,6 @@ export const Route = createFileRoute("/api/cron/league-planning-snaps")({
                 rosWeeks: Array.isArray(ros?.weeks) ? ros.weeks.length : 0,
                 slotTeams: Array.isArray(slots?.teams) ? slots.teams.length : 0,
               });
-
-              // Seed CDN by fetching the public snap routes when APP_URL is set.
-              const appUrl = process.env["APP_URL"]?.trim().replace(/\/$/, "");
-              if (appUrl) {
-                const qs = `league=${encodeURIComponent(leagueId)}&from=${fromWeek}&to=${toWeek}`;
-                await Promise.all([
-                  fetch(`${appUrl}/api/data/snap/ros?${qs}`, {
-                    headers: { accept: "application/json" },
-                  }).catch(() => null),
-                  fetch(`${appUrl}/api/data/snap/slot-ranks?${qs}`, {
-                    headers: { accept: "application/json" },
-                  }).catch(() => null),
-                ]);
-              }
             } catch (error) {
               const message = error instanceof Error ? error.message : "warm failed";
               results.push({ leagueId, rosWeeks: 0, slotTeams: 0, error: message });

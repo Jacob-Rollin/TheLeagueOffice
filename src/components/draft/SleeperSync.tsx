@@ -4,7 +4,10 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { LeagueLink, LeagueSyncInput } from "@/hooks/use-draft";
-import { getLeagueSync, getUserLeagues } from "@/lib/league.functions";
+import {
+  fetchLeagueSyncPreferred,
+  fetchUserLeaguesPreferred,
+} from "@/lib/sleeper-league-sync-client";
 import type { LeagueSummary } from "@/lib/league.server";
 import { clearLeagueLink, getLeagueLink, saveLeagueLink } from "@/lib/league-link";
 
@@ -22,10 +25,10 @@ export function SleeperSync({
   const [error, setError] = useState<string | null>(null);
 
   const leaguesM = useMutation({
-    mutationFn: (name: string) => getUserLeagues({ data: { username: name } }),
+    mutationFn: (name: string) => fetchUserLeaguesPreferred(name),
   });
   const syncM = useMutation({
-    mutationFn: (vars: { leagueId: string; username: string }) => getLeagueSync({ data: vars }),
+    mutationFn: (vars: { leagueId: string; username: string }) => fetchLeagueSyncPreferred(vars),
   });
 
   const apply = async (leagueId: string, name: string) => {
