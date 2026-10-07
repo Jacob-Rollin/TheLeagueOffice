@@ -52,27 +52,32 @@ export async function resolveSleeperLeagueIdClient(
     .replace(/^@/, "");
   if (!clean) return null;
 
-  if (/^\d{6,}$/.test(clean)) {
-    return getCached(`sleeper-resolve-v1:${clean}`, RESOLVE_TTL_MS, async () => {
-      const direct = await sleeperJson<{ league_id?: string }>(`${SLEEPER}/league/${clean}`);
-      if (direct?.league_id) {
-        return { leagueId: clean, userId: null, username: null };
-      }
-      const leagueId = await firstLeagueForUser(clean);
-      if (!leagueId) return null;
-      return { leagueId, userId: clean, username: null };
-    });
-  }
+  try {
+    if (/^\d{6,}$/.test(clean)) {
+      return await getCached(`sleeper-resolve-v1:${clean}`, RESOLVE_TTL_MS, async () => {
+        const direct = await sleeperJson<{ league_id?: string }>(`${SLEEPER}/league/${clean}`);
+        if (direct?.league_id) {
+          return { leagueId: clean, userId: null, username: null };
+        }
+        const leagueId = await firstLeagueForUser(clean);
+        // Throw so we do not IndexedDB-cache a miss for 30 minutes.
+        if (!leagueId) throw new Error("sleeper league unresolved");
+        return { leagueId, userId: clean, username: null };
+      });
+    }
 
-  return getCached(`sleeper-resolve-v1:u:${clean.toLowerCase()}`, RESOLVE_TTL_MS, async () => {
-    const user = await sleeperJson<{ user_id?: string }>(
-      `${SLEEPER}/user/${encodeURIComponent(clean)}`,
-    );
-    if (!user?.user_id) return null;
-    const leagueId = await firstLeagueForUser(user.user_id);
-    if (!leagueId) return null;
-    return { leagueId, userId: user.user_id, username: clean };
-  });
+    return await getCached(`sleeper-resolve-v1:u:${clean.toLowerCase()}`, RESOLVE_TTL_MS, async () => {
+      const user = await sleeperJson<{ user_id?: string }>(
+        `${SLEEPER}/user/${encodeURIComponent(clean)}`,
+      );
+      if (!user?.user_id) throw new Error("sleeper user not found");
+      const leagueId = await firstLeagueForUser(user.user_id);
+      if (!leagueId) throw new Error("sleeper league unresolved");
+      return { leagueId, userId: user.user_id, username: clean };
+    });
+  } catch {
+    return null;
+  }
 }
 
 /** Numeric host league id, or null when the identifier cannot be resolved. */
