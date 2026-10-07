@@ -22,7 +22,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { MatchupBoardRecap } from "@/components/playbook/MatchupBoardRecap";
 import { getMatchupReplay } from "@/lib/matchup-replay.functions";
+import type { MatchupBoardRecapInput } from "@/lib/matchup-board-recap";
 import type {
   MatchupReplayPayload,
   MatchupReplayRequest,
@@ -485,10 +487,16 @@ export function MatchupReplayModal({
   open,
   onOpenChange,
   request,
+  board,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   request: MatchupReplayRequest | null;
+  /**
+   * Board-built recap (lineups / points already on the page). Used when Fluid
+   * PBP is empty or errors — no extra network beyond the optional replay call.
+   */
+  board?: MatchupBoardRecapInput | null;
 }) {
   const [phase, setPhase] = useState<ReplayPhase>("idle");
   const [playheadX, setPlayheadX] = useState(0);
@@ -520,6 +528,12 @@ export function MatchupReplayModal({
   });
 
   const payload = query.data ?? null;
+  /** Hybrid C: real PBP when warm; board story+recap when cold/error. */
+  const useBoardFallback =
+    Boolean(board) &&
+    !query.isLoading &&
+    (query.isError || Boolean(payload?.empty));
+  const showPbp = Boolean(payload) && !payload?.empty && !query.isError;
   const chartData: ChartRow[] = useMemo(() => {
     if (!payload) return [];
     return payload.points.map((p) => ({
@@ -565,6 +579,8 @@ export function MatchupReplayModal({
       setActiveTd(null);
       return;
     }
+    // Board fallback has its own animation — don't run PBP playback.
+    if (useBoardFallback || !showPbp) return;
     if (!chartData.length || !payload) return;
 
     let cancelled = false;
@@ -646,7 +662,7 @@ export function MatchupReplayModal({
       clearTimer();
       clearRaf();
     };
-  }, [open, payload, chartData, playbackGen]);
+  }, [open, payload, chartData, playbackGen, useBoardFallback, showPbp]);
 
   const showEndCard = phase === "endcard";
 
@@ -691,7 +707,7 @@ export function MatchupReplayModal({
         <div className="border-b border-border px-5 pb-3 pt-5">
           <DialogHeader className="pr-10">
             <DialogTitle className="text-base font-bold tracking-tight text-slate-900">
-              Matchup Replay
+              {useBoardFallback ? "Matchup Recap" : "Matchup Replay"}
             </DialogTitle>
           </DialogHeader>
         </div>
@@ -701,11 +717,21 @@ export function MatchupReplayModal({
             <p className="py-16 text-center text-sm text-muted-foreground">
               Building replay from play-by-play…
             </p>
+          ) : useBoardFallback && board ? (
+            <MatchupBoardRecap
+              input={board}
+              active={open}
+              banner={
+                query.isError
+                  ? "Play-by-play unavailable — showing board recap instead."
+                  : "Play-by-play not ready for this week — showing board recap instead."
+              }
+            />
           ) : query.isError ? (
             <p className="py-16 text-center text-sm text-rose-600">
               Could not load play-by-play for this week. Try again in a moment.
             </p>
-          ) : payload && displayRow ? (
+          ) : showPbp && payload && displayRow ? (
             <>
               <div className="flex items-center gap-2 sm:gap-3">
                 <TeamChip

@@ -21,6 +21,7 @@ import {
 } from "@/components/playbook/MatchupSidebar";
 import { playbookCardClass, resolveAvatarUrl } from "@/components/playbook/panels";
 import { SosStars } from "@/components/sos/SosStars";
+import type { MatchupBoardRecapInput } from "@/lib/matchup-board-recap";
 import type { MatchupReplayRequest } from "@/lib/matchup-replay";
 import {
   Select,
@@ -2015,6 +2016,72 @@ function PlaybookMatchupPage() {
     oppTeam?.logo,
   ]);
 
+  /** Board-only recap input for hybrid Watch Replay fallback (no extra APIs). */
+  const boardRecap = useMemo((): MatchupBoardRecapInput | null => {
+    if (!matchupFinal) return null;
+    const toPlayer = (
+      p: Player | null,
+      pointsMap: Record<string, number>,
+    ): MatchupBoardRecapInput["left"]["starters"][number] => {
+      if (!p) return null;
+      const proj = projectFor(p.id);
+      return {
+        id: p.id,
+        name: p.name,
+        pos: p.pos,
+        team: p.team,
+        points: Math.round((Number(pointsMap[p.id] ?? 0) || 0) * 100) / 100,
+        projected: proj,
+      };
+    };
+    const slots = starterRows.map((r) => r.slot);
+    return {
+      week: activeWeek,
+      slots,
+      left: {
+        name: myName,
+        record: myRecord,
+        logo: leftTeam?.logo ?? null,
+        finalScore: headerLivePoints.mine,
+        projectedScore: teamOrigProj.mine,
+        starters: starterRows.map((r) => toPlayer(r.mine, weeklyPair.myPlayerPoints)),
+        bench: benchRows
+          .map((r) => toPlayer(r.mine, weeklyPair.myPlayerPoints))
+          .filter((p): p is NonNullable<typeof p> => Boolean(p)),
+      },
+      right: {
+        name: oppName,
+        record: oppRecord,
+        logo: weeklyPair.oppLogo || oppTeam?.logo || null,
+        finalScore: headerLivePoints.opp,
+        projectedScore: teamOrigProj.opp,
+        starters: starterRows.map((r) => toPlayer(r.opp, weeklyPair.oppPlayerPoints)),
+        bench: benchRows
+          .map((r) => toPlayer(r.opp, weeklyPair.oppPlayerPoints))
+          .filter((p): p is NonNullable<typeof p> => Boolean(p)),
+      },
+    };
+  }, [
+    matchupFinal,
+    starterRows,
+    benchRows,
+    projectFor,
+    activeWeek,
+    myName,
+    myRecord,
+    leftTeam?.logo,
+    headerLivePoints.mine,
+    headerLivePoints.opp,
+    teamOrigProj.mine,
+    teamOrigProj.opp,
+    oppName,
+    oppRecord,
+    weeklyPair.myPlayerPoints,
+    weeklyPair.oppPlayerPoints,
+    weeklyPair.oppLogo,
+    oppTeam?.logo,
+  ]);
+
   const currentNflWeek = nflWeek.data?.week ?? null;
   const isCurrentWeek = currentNflWeek != null && Number(activeWeek) === Number(currentNflWeek);
 
@@ -2603,6 +2670,7 @@ function PlaybookMatchupPage() {
         open={replayOpen}
         onOpenChange={setReplayOpen}
         request={replayRequest}
+        board={boardRecap}
       />
       </section>
 
