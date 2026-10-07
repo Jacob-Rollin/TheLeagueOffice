@@ -204,6 +204,28 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
     return set;
   }, [teams]);
 
+  /**
+   * Fantasy team name by host/Sleeper player id — built from raw roster ids so
+   * callers don't need the player catalog resolved (mobile player popup).
+   */
+  const ownerByPlayerId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of query.data?.teams ?? []) {
+      const name = String(t?.team ?? "").trim() || "Team";
+      for (const id of t?.playerIds ?? []) {
+        const clean = String(id ?? "").trim();
+        if (clean) map.set(clean, name);
+      }
+    }
+    // Also index resolved players (covers name-only ESPN rows once catalog is warm).
+    for (const t of teams) {
+      for (const p of t.players) {
+        if (!map.has(p.id)) map.set(p.id, t.team);
+      }
+    }
+    return map;
+  }, [query.data, teams]);
+
   return {
     synced: Boolean(activeLeague) && teams.length > 0,
     loading: query.isLoading,
@@ -214,5 +236,6 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
     myTeamName: query.data?.myTeamName ?? activeLeague?.teamName ?? null,
     rosterPositions,
     rosteredIds,
+    ownerByPlayerId,
   };
 }
