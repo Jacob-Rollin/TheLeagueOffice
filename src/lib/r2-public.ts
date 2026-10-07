@@ -51,4 +51,6 @@ export const R2_SNAP_KEYS = {
   injuryWire: () => `snap/injury-wire.json`,
   fantasyNews: () => `snap/fantasy-news.json`,
   tradeBasis: () => `snap/trade-basis.json`,
+  /** Compact warehouse dump for player-brain hydration (replaces Vercel /api/data/players-export). */
+  playersExport: () => `snap/players-export.json`,
 } as const;

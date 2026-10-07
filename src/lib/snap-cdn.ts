@@ -4,7 +4,7 @@
  * (browse soft-empty — no Fluid compute). Dev may fall back to createServerFn.
  */
 
-import { R2_SNAP_KEYS, r2Url } from "@/lib/r2-public";
+import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
 
 function allowFluidFallback(): boolean {
   try {
@@ -30,6 +30,8 @@ async function fetchSnapPreferR2<T>(r2Path: string | null, apiPath: string): Pro
     if (r2) {
       const hit = await fetchSnapJson<T>(r2);
       if (hit != null) return hit;
+      // snap-cdn / R2 base is configured — skip Vercel empty `no-store` probes.
+      if (snapCdnPublicBase()) return null;
     }
   }
   return fetchSnapJson<T>(apiPath);

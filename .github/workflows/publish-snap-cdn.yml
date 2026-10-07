@@ -102,6 +102,8 @@ jobs:
           fetch "$BASE/api/data/snap/injury-wire?limit=8" out/snap/injury-wire.json
           fetch "$BASE/api/data/snap/fantasy-news?limit=80" out/snap/fantasy-news.json
           fetch "$BASE/api/data/snap/trade-basis" out/snap/trade-basis.json
+          # Player-brain warehouse — browse reads snap-cdn instead of Vercel /api/data/players-export.
+          fetch "$BASE/api/data/players-export" out/snap/players-export.json
 
           count=$(find out -type f -name '*.json' | wc -l | tr -d ' ')
           echo "Downloaded $count JSON files"
