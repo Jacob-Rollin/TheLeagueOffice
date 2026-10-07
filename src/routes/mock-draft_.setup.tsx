@@ -9,7 +9,7 @@ import { SyncLock } from "@/components/league/SyncLock";
 import { useActiveLeague, type ActiveLeagueToken } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { rosterSize } from "@/lib/draft";
-import { getConnectionSync } from "@/lib/league.functions";
+import { fetchConnectionSyncPreferred } from "@/lib/sleeper-sync-client";
 import { platformLabel } from "@/lib/league-link";
 import {
   DEFAULT_MOCK_CONFIG,
@@ -64,13 +64,13 @@ function MockDraftSetupPage() {
     retry: false,
     staleTime: 5 * 60 * 1000,
     queryFn: async () =>
-      await getConnectionSync({
-        data: {
-          identifier: activeLeague?.leagueId ?? "",
-          platform: activeLeague?.platform ?? "sleeper",
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      fetchConnectionSyncPreferred({
+        leagueId: activeLeague?.leagueId ?? "",
+        platform: activeLeague?.platform ?? "sleeper",
+        teamName: activeLeague?.teamName ?? activeLeague?.name,
+        connectionId: activeLeague?.id,
+        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
       }),
   });
 

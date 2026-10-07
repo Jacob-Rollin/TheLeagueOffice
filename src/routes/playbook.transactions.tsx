@@ -417,7 +417,7 @@ function PlaybookTransactionsPage() {
     if (!valueBasis) return undefined;
     const weekly = (id: string) =>
       inSeasonWeeklyValue(
-        valueBasis.players[id],
+        valueBasis?.players?.[id],
         valueBasis,
         playerById.get(id)?.proj?.[valueScoring] ?? 0,
         valueScoring,

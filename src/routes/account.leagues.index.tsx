@@ -230,13 +230,13 @@ function LeagueRow({
     retry: false,
     queryFn: async () => {
       let hostId = identifier;
-      if (platformKey === "sleeper" && !canFetchMetaClient(platformKey, hostId)) {
+      if (platformKey === "sleeper") {
         const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
           "@/lib/sleeper-resolve-client"
         );
         const resolved = await ensureSleeperNumericLeagueId(hostId).catch(() => null);
         if (resolved) {
-          void persistResolvedSleeperLeagueId(row.id, resolved);
+          if (resolved !== hostId) void persistResolvedSleeperLeagueId(row.id, resolved);
           hostId = resolved;
         } else {
           try {

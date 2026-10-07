@@ -80,16 +80,17 @@ export async function resolveSleeperLeagueIdClient(
   }
 }
 
-/** Numeric host league id, or null when the identifier cannot be resolved. */
+/**
+ * Numeric host league id, or null when the identifier cannot be resolved.
+ * Always verifies via resolve — a 6+ digit string may be a Sleeper user id.
+ */
 export async function ensureSleeperNumericLeagueId(identifier: string): Promise<string | null> {
-  const clean = String(identifier ?? "").trim();
-  if (/^\d{6,}$/.test(clean)) return clean;
-  const hit = await resolveSleeperLeagueIdClient(clean).catch(() => null);
+  const hit = await resolveSleeperLeagueIdClient(identifier).catch(() => null);
   return hit?.leagueId ?? null;
 }
 
 /**
- * Persist a healed numeric league_id for legacy username rows.
+ * Persist a healed numeric league_id for legacy username / numeric-user-id rows.
  * Best-effort — RLS / network failures must not break browse.
  */
 export async function persistResolvedSleeperLeagueId(
@@ -105,12 +106,20 @@ export async function persistResolvedSleeperLeagueId(
       .select("league_id, metadata")
       .eq("id", connectionId)
       .maybeSingle();
-    if (!row || /^\d{6,}$/.test(String(row.league_id ?? "").trim())) return;
+    if (!row) return;
+    const stored = String(row.league_id ?? "").trim();
+    // Skip only when already pointing at the resolved host league id.
+    if (stored === leagueId) return;
     const prev = (row.metadata as Record<string, unknown> | null) ?? {};
+    const priorLabel = stored || String(prev["label"] ?? "").trim();
     const metadata = {
       ...prev,
       ...extraMeta,
-      sleeper_username: String(row.league_id ?? prev["label"] ?? "").trim() || undefined,
+      ...(priorLabel && !/^\d{6,}$/.test(priorLabel)
+        ? { sleeper_username: priorLabel }
+        : priorLabel
+          ? { sleeper_prior_id: priorLabel }
+          : {}),
     };
     await supabase
       .from("synced_leagues")

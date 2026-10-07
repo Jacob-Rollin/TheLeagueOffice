@@ -95,12 +95,13 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
           const base = { ...row, s2, swid };
           if ((row.platform !== "sleeper" && row.platform !== "espn") || !row.leagueId) return base;
           try {
-            // Sleeper: browser meta (no Fluid). Heal legacy username league_id rows.
+            // Sleeper: browser meta (no Fluid). Always resolve — a 6+ digit
+            // string may be a numeric user id that fails /league/{id}.
             let sleeperId = row.leagueId;
-            if (row.platform === "sleeper" && !canFetchMetaClient(row.platform, sleeperId)) {
+            if (row.platform === "sleeper") {
               const resolved = await ensureSleeperNumericLeagueId(sleeperId).catch(() => null);
               if (resolved) {
-                void persistResolvedSleeperLeagueId(row.id, resolved);
+                if (resolved !== sleeperId) void persistResolvedSleeperLeagueId(row.id, resolved);
                 sleeperId = resolved;
               } else if (!allowFluid) {
                 return base;

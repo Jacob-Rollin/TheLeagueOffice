@@ -24,7 +24,7 @@ function allowFluidFallback(): boolean {
 }
 
 async function sleeperLeagueId(platform: string, leagueId: string): Promise<string> {
-  if (platform !== "sleeper" || canFetchActivityClient(platform, leagueId)) return leagueId;
+  if (platform !== "sleeper") return leagueId;
   return (await ensureSleeperNumericLeagueId(leagueId).catch(() => null)) ?? leagueId;
 }
 

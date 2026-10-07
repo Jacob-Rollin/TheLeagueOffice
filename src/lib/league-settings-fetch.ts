@@ -30,10 +30,10 @@ export async function fetchLeagueSettingsForConnection(input: {
   let leagueId = String(input.leagueId ?? "").trim();
   if (!leagueId) return null;
 
-  if (platform === "sleeper" && !canFetchSettingsClient(platform, leagueId)) {
+  if (platform === "sleeper") {
     const resolved = await ensureSleeperNumericLeagueId(leagueId).catch(() => null);
     if (resolved) {
-      if (input.connectionId) {
+      if (resolved !== leagueId && input.connectionId) {
         const { persistResolvedSleeperLeagueId } = await import("@/lib/sleeper-resolve-client");
         void persistResolvedSleeperLeagueId(input.connectionId, resolved);
       }

@@ -325,7 +325,7 @@ function TradePage() {
   const valueOf = useCallback(
     (p: Player): InSeasonValue =>
       inSeasonWeeklyValue(
-        valueBasis?.players[p.id],
+        valueBasis?.players?.[p.id],
         valueBasis ?? null,
         p.proj?.[valueScoring] ?? 0,
         valueScoring,

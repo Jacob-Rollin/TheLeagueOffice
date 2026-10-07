@@ -1,5 +1,5 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
-import { Link, createFileRoute, notFound } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -190,6 +190,8 @@ function injuryLetter(injury: string | null | undefined): "Q" | "O" | "D" | "IR"
 }
 
 export const Route = createFileRoute("/player/$id")({
+  // Catalog lives in IndexedDB — SSR soft-empty must not 404 the hub.
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Player profile — The League Office" },
@@ -209,8 +211,7 @@ export const Route = createFileRoute("/player/$id")({
     ],
   }),
   loader: async ({ context, params }) => {
-    const data = await context.queryClient.ensureQueryData(profileQuery(params.id));
-    if (!data) throw notFound();
+    await context.queryClient.ensureQueryData(profileQuery(params.id));
   },
   component: PlayerHubPage,
 });

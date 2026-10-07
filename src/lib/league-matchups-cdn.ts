@@ -245,13 +245,15 @@ export async function fetchLeagueMatchupsHistory(input: {
   let hostLeagueId = String(input.leagueId ?? "").trim();
   const platformNorm = String(input.platform ?? "sleeper").trim().toLowerCase();
 
-  if (platformNorm === "sleeper" && hostLeagueId && !/^\d{6,}$/.test(hostLeagueId)) {
+  if (platformNorm === "sleeper" && hostLeagueId) {
     const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
       "@/lib/sleeper-resolve-client"
     );
     const resolved = await ensureSleeperNumericLeagueId(hostLeagueId).catch(() => null);
     if (resolved) {
-      if (input.connectionId) void persistResolvedSleeperLeagueId(input.connectionId, resolved);
+      if (resolved !== hostLeagueId && input.connectionId) {
+        void persistResolvedSleeperLeagueId(input.connectionId, resolved);
+      }
       hostLeagueId = resolved;
     }
   }

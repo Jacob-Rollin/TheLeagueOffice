@@ -31,13 +31,15 @@ export async function fetchLeagueRostersForConnection(input: {
   let leagueId = String(input.leagueId ?? "").trim();
   if (!leagueId) return null;
 
-  if (platform === "sleeper" && !/^\d{6,}$/.test(leagueId)) {
+  if (platform === "sleeper") {
     const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
       "@/lib/sleeper-resolve-client"
     );
     const resolved = await ensureSleeperNumericLeagueId(leagueId).catch(() => null);
     if (resolved) {
-      if (input.connectionId) void persistResolvedSleeperLeagueId(input.connectionId, resolved);
+      if (resolved !== leagueId && input.connectionId) {
+        void persistResolvedSleeperLeagueId(input.connectionId, resolved);
+      }
       leagueId = resolved;
     } else if (!allowSleeperFluidFallback()) {
       return null;

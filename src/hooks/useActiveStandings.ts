@@ -22,7 +22,7 @@ export function useActiveStandings() {
     staleTime: 15 * 60 * 1000,
     queryFn: async () => {
       let hostId = leagueId;
-      if (platform === "sleeper" && !canFetchStandingsClient(platform, hostId)) {
+      if (platform === "sleeper") {
         hostId = (await ensureSleeperNumericLeagueId(hostId).catch(() => null)) ?? hostId;
       }
       if (canFetchStandingsClient(platform, hostId)) {

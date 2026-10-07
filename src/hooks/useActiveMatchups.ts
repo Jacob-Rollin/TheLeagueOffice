@@ -54,17 +54,19 @@ async function loadWeekMatchups(input: {
   const isCurrent = currentWeek != null && week === currentWeek;
   const sleeperPlatform = isSleeperPlatform(platform);
 
-  // Heal legacy username league_id so live/CDN paths can run.
-  if (sleeperPlatform && !/^\d{6,}$/.test(leagueId)) {
+  // Always resolve Sleeper ids — numeric user ids fail /league/{id} otherwise.
+  if (sleeperPlatform) {
     const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
       "@/lib/sleeper-resolve-client"
     );
     const resolved = await ensureSleeperNumericLeagueId(leagueId).catch(() => null);
     if (resolved) {
-      if (input.connectionId) void persistResolvedSleeperLeagueId(input.connectionId, resolved);
+      if (resolved !== leagueId && input.connectionId) {
+        void persistResolvedSleeperLeagueId(input.connectionId, resolved);
+      }
       leagueId = resolved;
     } else {
-      // Production: never Fluid-fallthrough for unresolved Sleeper usernames.
+      // Production: never Fluid-fallthrough for unresolved Sleeper ids.
       try {
         if (import.meta.env.PROD) return null;
       } catch {
