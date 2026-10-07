@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { LeagueAvatar } from "@/components/league/LeagueAvatar";
 import type { ActiveLeagueToken } from "@/context/ActiveLeagueContext";
 import { listPublishedArticles } from "@/lib/articles";
+import { fetchEspnNflNewsJson } from "@/lib/espn-public-client";
 
 import { MobileCard, MobileSectionTitle } from "./MobileShell";
 
@@ -131,13 +132,10 @@ type EspnNewsItem = {
   categories?: { description?: string }[];
 };
 
-const ESPN_NEWS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50";
-
 async function loadTrending(): Promise<TrendingItem[]> {
   const [articles, news] = await Promise.all([
     listPublishedArticles(4).catch(() => []),
-    fetch(ESPN_NEWS_URL)
-      .then((r) => (r.ok ? r.json() : { articles: [] }))
+    fetchEspnNflNewsJson(50)
       .then((d) => (d.articles ?? []) as EspnNewsItem[])
       .catch(() => [] as EspnNewsItem[]),
   ]);

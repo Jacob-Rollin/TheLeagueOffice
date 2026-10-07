@@ -118,17 +118,18 @@ async function espnAthleteIdClient(name: string): Promise<string | null> {
 }
 
 async function espnPlayerFeedClient(athleteId: string): Promise<EspnFeedItem[]> {
-  const json = await fetchJson<{ feed?: EspnFeedItem[] }>(
-    `https://site.web.api.espn.com/apis/fantasy/v2/games/ffl/news/players?playerId=${encodeURIComponent(athleteId)}&limit=15`,
-  );
-  return Array.isArray(json?.feed) ? json.feed : [];
+  const { fetchEspnPlayerFeedJson } = await import("@/lib/espn-public-client");
+  const json = await fetchEspnPlayerFeedJson(athleteId);
+  return Array.isArray(json?.feed) ? (json.feed as EspnFeedItem[]) : [];
 }
 
 async function espnNewsClient(query = ""): Promise<EspnArticle[]> {
-  const json = await fetchJson<{ articles?: EspnArticle[] }>(
-    `https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50${query}`,
-  );
-  return Array.isArray(json?.articles) ? json.articles : [];
+  const { fetchEspnNflNewsJson, fetchEspnTeamNewsJson } = await import("@/lib/espn-public-client");
+  const teamMatch = /(?:^|&)team=([^&]+)/.exec(query);
+  const json = teamMatch?.[1]
+    ? await fetchEspnTeamNewsJson(decodeURIComponent(teamMatch[1]))
+    : await fetchEspnNflNewsJson(50);
+  return Array.isArray(json?.articles) ? (json.articles as EspnArticle[]) : [];
 }
 
 function blurbTitle(name: string, blurb: string): string {

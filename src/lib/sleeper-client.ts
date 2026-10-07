@@ -19,6 +19,7 @@ import {
   type Pos,
 } from "@/lib/players-build";
 import type { CareerSeasonRow, GameLog, NextGame, PlayerBio } from "@/lib/players.server";
+import { acquireSleeperPermit, waitForSleeperPermit } from "@/lib/sleeper-rate-budget";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -26,6 +27,9 @@ const DAY = 24 * HOUR;
 const PROJ_WEEK_CONCURRENCY = 2;
 
 async function sleeperFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (!(await waitForSleeperPermit("warm", 4_000))) {
+    return new Response(null, { status: 429, statusText: "budget" });
+  }
   const res = await fetch(url, {
     ...init,
     headers: { accept: "application/json", ...(init?.headers ?? {}) },
@@ -33,6 +37,9 @@ async function sleeperFetch(url: string, init?: RequestInit): Promise<Response> 
   if (res.status !== 429) return res;
   // One polite backoff — do not retry storms; caller soft-fails or uses stale.
   await new Promise((r) => setTimeout(r, 1200));
+  if (!acquireSleeperPermit("warm")) {
+    return new Response(null, { status: 429, statusText: "budget" });
+  }
   return fetch(url, {
     ...init,
     headers: { accept: "application/json", ...(init?.headers ?? {}) },

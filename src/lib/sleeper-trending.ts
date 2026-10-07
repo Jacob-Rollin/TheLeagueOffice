@@ -2,6 +2,7 @@
  * Shared client trending helper — one IndexedDB key + one RQ key family.
  */
 import { getCached } from "@/lib/sleeper-cache";
+import { sleeperFetchJson } from "@/lib/sleeper-http";
 
 export type TrendingRow = { player_id: string; count: number };
 
@@ -12,12 +13,10 @@ async function sleeperTrending(
   lookbackHours: number,
   limit: number,
 ): Promise<TrendingRow[]> {
-  const res = await fetch(
+  const json = await sleeperFetchJson<{ player_id?: string; count?: number }[]>(
     `https://api.sleeper.app/v1/players/nfl/trending/${type}?lookback_hours=${lookbackHours}&limit=${limit}`,
-    { headers: { accept: "application/json" } },
-  ).catch(() => null);
-  if (!res || !res.ok) return [];
-  const json = (await res.json()) as { player_id?: string; count?: number }[];
+    "warm",
+  );
   return (Array.isArray(json) ? json : [])
     .map((row) => ({
       player_id: String(row?.player_id ?? ""),

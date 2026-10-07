@@ -4,6 +4,11 @@
  * (browse soft-empty — no Fluid compute). Dev may fall back to createServerFn.
  */
 
+import {
+  espnFluidCacheKey,
+  espnFluidMemo,
+  ESPN_FLUID_TTL_MS,
+} from "@/lib/espn-fluid-cache";
 import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
 
 function allowFluidFallback(): boolean {
@@ -243,17 +248,25 @@ export async function fetchSnapRestOfSeason(input: {
     if (!allowFluidFallback()) return empty;
   }
 
+  const fluidKey = espnFluidCacheKey(
+    "ros",
+    input.identifier,
+    platform,
+    `${input.fromWeek}-${input.toWeek}`,
+  );
   const { getRestOfSeasonProjections } = await import("./league.functions");
-  return getRestOfSeasonProjections({
-    data: {
-      identifier: input.identifier,
-      platform,
-      fromWeek: input.fromWeek,
-      toWeek: input.toWeek,
-      ...(input.s2 ? { s2: input.s2 } : {}),
-      ...(input.swid ? { swid: input.swid } : {}),
-    },
-  });
+  return espnFluidMemo(fluidKey, ESPN_FLUID_TTL_MS, () =>
+    getRestOfSeasonProjections({
+      data: {
+        identifier: input.identifier,
+        platform,
+        fromWeek: input.fromWeek,
+        toWeek: input.toWeek,
+        ...(input.s2 ? { s2: input.s2 } : {}),
+        ...(input.swid ? { swid: input.swid } : {}),
+      },
+    }),
+  );
 }
 
 export async function fetchSnapStartingSlotRanks(input: {
@@ -284,15 +297,23 @@ export async function fetchSnapStartingSlotRanks(input: {
     if (!allowFluidFallback()) return empty;
   }
 
+  const fluidKey = espnFluidCacheKey(
+    "slots",
+    input.identifier,
+    platform,
+    `${input.fromWeek}-${toWeek}`,
+  );
   const { getStartingSlotRanks } = await import("./league.functions");
-  return getStartingSlotRanks({
-    data: {
-      identifier: input.identifier,
-      platform,
-      fromWeek: input.fromWeek,
-      toWeek,
-      ...(input.s2 ? { s2: input.s2 } : {}),
-      ...(input.swid ? { swid: input.swid } : {}),
-    },
-  });
+  return espnFluidMemo(fluidKey, ESPN_FLUID_TTL_MS, () =>
+    getStartingSlotRanks({
+      data: {
+        identifier: input.identifier,
+        platform,
+        fromWeek: input.fromWeek,
+        toWeek,
+        ...(input.s2 ? { s2: input.s2 } : {}),
+        ...(input.swid ? { swid: input.swid } : {}),
+      },
+    }),
+  );
 }

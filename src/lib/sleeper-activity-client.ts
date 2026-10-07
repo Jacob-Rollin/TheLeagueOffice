@@ -7,6 +7,7 @@
 import type { LeagueActivityEvent, LeagueActivityMove, LeagueTransactionLog } from "@/lib/league.server";
 import { readCache, getCached } from "@/lib/sleeper-cache";
 import type { PlayersPayload } from "@/lib/players-build";
+import { sleeperFetchJson } from "@/lib/sleeper-http";
 
 const SLEEPER = "https://api.sleeper.app/v1";
 const ACTIVITY_TTL_MS = 5 * 60 * 1000;
@@ -25,19 +26,7 @@ type SleeperTxn = {
 };
 
 async function sleeperJson<T>(url: string): Promise<T | null> {
-  try {
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 1200));
-      const retry = await fetch(url, { headers: { accept: "application/json" } });
-      if (!retry.ok) return null;
-      return (await retry.json()) as T;
-    }
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  return sleeperFetchJson<T>(url, "warm");
 }
 
 export function canFetchActivityClient(platform: string, leagueId: string): boolean {

@@ -3,9 +3,15 @@
  * Prefer over Fluid getPickupResults for Sleeper so that page stays off Active CPU.
  */
 
+import {
+  espnFluidCacheKey,
+  espnFluidMemo,
+  ESPN_FLUID_TTL_MS,
+} from "@/lib/espn-fluid-cache";
 import { fetchLeagueScoringPreferred } from "@/lib/scoring-client";
 import { scoreStats } from "@/lib/scoring-map";
 import { getCached } from "@/lib/sleeper-cache";
+import { sleeperFetchJson } from "@/lib/sleeper-http";
 
 const SLEEPER = "https://api.sleeper.app/v1";
 const STATS_TTL_MS = 30 * 60 * 1000;
@@ -14,19 +20,7 @@ export type PickupRequest = { key: string; playerId: string; fromWeek: number; t
 export type PickupResult = { pts: number; games: number };
 
 async function sleeperJson<T>(url: string): Promise<T | null> {
-  try {
-    const res = await fetch(url, { headers: { accept: "application/json" } });
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 1200));
-      const retry = await fetch(url, { headers: { accept: "application/json" } });
-      if (!retry.ok) return null;
-      return (await retry.json()) as T;
-    }
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  return sleeperFetchJson<T>(url, "warm");
 }
 
 async function weekStatMap(season: string, week: number): Promise<Map<string, Record<string, number>>> {
@@ -116,14 +110,22 @@ export async function fetchPickupResultsPreferred(input: {
 
   if (!allowFluidFallback() && platform === "sleeper") return {};
 
+  const identifier = String(input.identifier ?? "").trim();
+  const fingerprint = requests
+    .map((r) => `${r.key}:${r.playerId}:${r.fromWeek}-${r.toWeek}`)
+    .sort()
+    .join("|");
+  const fluidKey = espnFluidCacheKey("pickup", identifier, platform, fingerprint);
   const { getPickupResults } = await import("@/lib/players.functions");
-  return getPickupResults({
-    data: {
-      identifier: input.identifier,
-      platform,
-      ...(input.s2 ? { s2: input.s2 } : {}),
-      ...(input.swid ? { swid: input.swid } : {}),
-      requests,
-    },
-  });
+  return espnFluidMemo(fluidKey, ESPN_FLUID_TTL_MS, () =>
+    getPickupResults({
+      data: {
+        identifier,
+        platform,
+        ...(input.s2 ? { s2: input.s2 } : {}),
+        ...(input.swid ? { swid: input.swid } : {}),
+        requests,
+      },
+    }),
+  );
 }

@@ -91,6 +91,13 @@ export function currentSeason(): string {
 }
 
 export async function fetchRows(url: string): Promise<SleeperRow[]> {
+  // Browser catalog builds share the soft Sleeper budget; server keep raw fetch.
+  if (typeof window !== "undefined") {
+    const { sleeperFetchJson } = await import("./sleeper-http");
+    const json = await sleeperFetchJson<SleeperRow[]>(url, "warm");
+    if (!json) throw new Error("Upstream budget/empty");
+    return Array.isArray(json) ? json : [];
+  }
   const res = await fetch(url, { headers: { accept: "application/json" } });
   if (!res.ok) throw new Error(`Upstream ${res.status}`);
   const json = (await res.json()) as SleeperRow[];
@@ -269,7 +276,13 @@ export async function fetchSeasonStats(season: string): Promise<Map<string, Stat
 }
 
 export async function fetchSchedule(season: string, type = "regular"): Promise<ScheduleGame[]> {
-  const res = await fetch(`${SLEEPER_BASE}/schedule/nfl/${type}/${season}`, {
+  const url = `${SLEEPER_BASE}/schedule/nfl/${type}/${season}`;
+  if (typeof window !== "undefined") {
+    const { sleeperFetchJson } = await import("./sleeper-http");
+    const json = await sleeperFetchJson<ScheduleGame[]>(url, "warm");
+    return Array.isArray(json) ? json : [];
+  }
+  const res = await fetch(url, {
     headers: { accept: "application/json" },
   }).catch(() => null);
   if (!res || !res.ok) return [];

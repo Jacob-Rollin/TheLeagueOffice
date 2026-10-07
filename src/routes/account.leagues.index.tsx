@@ -257,14 +257,22 @@ function LeagueRow({
         }
       }
       const { getConnectionMeta } = await import("@/lib/league.functions");
-      return getConnectionMeta({
-        data: {
-          identifier: hostId,
-          platform: platformKey,
-          ...(row.espn_s2 ? { s2: row.espn_s2 } : {}),
-          ...(row.swid ? { swid: row.swid } : {}),
-        },
-      });
+      const {
+        espnFluidCacheKey,
+        espnFluidMemo,
+        ESPN_FLUID_SETTINGS_TTL_MS,
+      } = await import("@/lib/espn-fluid-cache");
+      const fluidKey = espnFluidCacheKey("meta", hostId, platformKey);
+      return espnFluidMemo(fluidKey, ESPN_FLUID_SETTINGS_TTL_MS, () =>
+        getConnectionMeta({
+          data: {
+            identifier: hostId,
+            platform: platformKey,
+            ...(row.espn_s2 ? { s2: row.espn_s2 } : {}),
+            ...(row.swid ? { swid: row.swid } : {}),
+          },
+        }),
+      );
     },
   });
   const leagueName = meta?.leagueName ?? label ?? "League";

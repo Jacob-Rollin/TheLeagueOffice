@@ -6,6 +6,7 @@
 import { currentSeason, positionsQuery, SLEEPER_BASE } from "@/lib/players-build";
 import { getCached } from "@/lib/sleeper-cache";
 import { fetchNflStateClient } from "@/lib/sleeper-client";
+import { sleeperFetchJson } from "@/lib/sleeper-http";
 import { fetchSleeperLeagueRostersClient } from "@/lib/sleeper-rosters-client";
 import { fetchLeagueScoringPreferred } from "@/lib/scoring-client";
 import { projectionPoints, type ScoringFormat, type ScoringMap } from "@/lib/scoring-map";
@@ -132,12 +133,11 @@ async function loadClientContext(input: {
     fetchNflStateClient().catch(() => null),
     // Keep SUPER_FLEX / raw seat tokens — roster client collapses SFLEX → FLEX.
     getCached(`sleeper-league-positions-v1:${identifier}`, 60 * 60 * 1000, async () => {
-      const res = await fetch(`https://api.sleeper.app/v1/league/${identifier}`, {
-        headers: { accept: "application/json" },
-      }).catch(() => null);
-      if (!res?.ok) return [] as string[];
-      const json = (await res.json()) as { roster_positions?: string[] };
-      return Array.isArray(json.roster_positions) ? json.roster_positions.map(String) : [];
+      const json = await sleeperFetchJson<{ roster_positions?: string[] }>(
+        `https://api.sleeper.app/v1/league/${identifier}`,
+        "warm",
+      );
+      return Array.isArray(json?.roster_positions) ? json.roster_positions.map(String) : [];
     }).catch(() => [] as string[]),
   ]);
   if (!rosters?.teams?.length) return null;

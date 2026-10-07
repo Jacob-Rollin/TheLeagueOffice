@@ -417,18 +417,30 @@ export async function maybeRefreshMatchupsViaFluid(input: {
   const run = (async (): Promise<LeagueWeekMatchups | null> => {
     try {
       const { getConnectionMatchups } = await import("@/lib/league.functions");
-      const board = await getConnectionMatchups({
-        data: {
-          identifier: input.leagueId,
-          platform: input.platform,
-          week: input.week,
-          ...(input.s2 ? { s2: input.s2 } : {}),
-          ...(input.swid ? { swid: input.swid } : {}),
-          ...(input.connectionId ? { connectionId: input.connectionId } : {}),
-          // Forced history backfill must hit host, not a midweek TiDB freeze.
-          ...(input.force ? { preferCache: false } : {}),
-        },
-      });
+      const { espnFluidCacheKey, espnFluidMemo, ESPN_FLUID_TTL_MS } = await import(
+        "@/lib/espn-fluid-cache"
+      );
+      const load = () =>
+        getConnectionMatchups({
+          data: {
+            identifier: input.leagueId,
+            platform: input.platform,
+            week: input.week,
+            ...(input.s2 ? { s2: input.s2 } : {}),
+            ...(input.swid ? { swid: input.swid } : {}),
+            ...(input.connectionId ? { connectionId: input.connectionId } : {}),
+            // Forced history backfill must hit host, not a midweek TiDB freeze.
+            ...(input.force ? { preferCache: false } : {}),
+          },
+        });
+      // ESPN/Yahoo: share one Fluid pull across Dashboard/Matchup remounts.
+      const board = espnish
+        ? await espnFluidMemo(
+            espnFluidCacheKey("matchups", input.leagueId, input.platform, String(input.week)),
+            ESPN_FLUID_TTL_MS,
+            load,
+          )
+        : await load();
       if (boardHasUsableScores(board)) {
         lastFluidRefresh.set(key, Date.now());
       } else {
