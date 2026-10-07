@@ -80,7 +80,7 @@
 - Do not fall back to Fluid in **production** when research/snap-cdn / `/api/data/*` misses — soft-empty instead (`allowFluidFallback` only when `import.meta.env.DEV`). Align new helpers with `research-cdn` / `snap-cdn`.
 - Do not let browse `/api/data/snap/*` **compute** on miss — soft-empty unless `authorizeCronRequest` (Publish Snap CDN / Vercel cron with `CRON_SECRET`). Research `/api/data/research/*` stays TiDB SELECT-only (`allowCompute` only from research cron).
 - Do not load full career game-log years on player popup open — use `fetchGameLogsClient(..., { includeCareer: false })` until Game Logs needs career.
-- Do not re-download week projection bundles for ATP injuries — reuse `weekProjectionBundle` / live-injury overlay in `sleeper-client`.
+- Do not re-download week projection bundles for ATP / injury badges — reuse `weekProjectionBundle` via `fetchLiveInjuryStatusesClient` / `useLiveInjuryStatuses` (`["live-injury-statuses"]`). Overlay through `useSleeperPlayers` (and `fetchPlayerDetailClient`); never N per-row injury fetches or Fluid.
 - Do not bypass shared roster loaders: use `fetchLeagueRostersForConnection` (Sleeper client-first) for any `["league-rosters", …]` queryFn (Global Search, fantasy team name, playbook).
 - Do not use playbook dashboard history via N× Fluid matchups — use `fetchLeagueAllMatchupsCdn` (same key as analytics).
 - Do not wire Top Available / list headlines through N× `getPlayerNews` — use `fetchSnapFantasyNews` (or another single snap).
