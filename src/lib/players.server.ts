@@ -2198,7 +2198,13 @@ function wireHeadline(tag: string, short: string, status: string, details: EspnI
   }
 }
 
-/** Most recent fantasy-relevant NFL injury designations, enriched with RotoWire blurbs. */
+/**
+ * Most recent fantasy-relevant NFL injury designations, enriched with RotoWire blurbs.
+ *
+ * ESPN's injury `date` often bumps on batch refreshes even when nothing new
+ * happened — so we prefer RotoWire / Sleeper news timestamps for "xx ago" and
+ * for picking the top N cards (not ESPN's designation refresh time).
+ */
 export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
   const [rows, built, sleeperInjuries] = await Promise.all([
     espnInjuryFeed("all"),
@@ -2215,18 +2221,36 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
   const candidates = rows
     .map((r) => {
       const pos = WIRE_POSITIONS[r.athlete?.position?.abbreviation ?? ""];
-      const at = Date.parse(r.date ?? "");
+      const espnAt = Date.parse(r.date ?? "");
       const espnId = /\/(\d+)\.png/.exec(r.athlete?.headshot?.href ?? "")?.[1] ?? null;
       const sleeperId = espnId ? (sleeperByEspn.get(espnId) ?? null) : null;
       const player = sleeperId ? byId.get(sleeperId) : undefined;
       const sleeper = sleeperId ? sleeperInjuries.get(sleeperId) : undefined;
       const status = sleeper ? (sleeperDesignation(sleeper)?.status ?? "Active") : (r.status ?? "").trim();
-      return { r, pos, at, status, espnId, sleeperId, player };
+      // Prefer Sleeper news_updated when present — less noisy than ESPN designation bumps.
+      const sleeperAt =
+        sleeper?.newsUpdated != null && Number.isFinite(sleeper.newsUpdated)
+          ? sleeper.newsUpdated < 1e12
+            ? sleeper.newsUpdated * 1000
+            : sleeper.newsUpdated
+          : NaN;
+      const sortAt = Number.isFinite(sleeperAt) ? sleeperAt : espnAt;
+      return { r, pos, espnAt, sortAt, status, espnId, sleeperId, player, sleeper };
     })
-    .filter((c) => c.pos && Number.isFinite(c.at) && c.status && !/^active$/i.test(c.status) && c.r.athlete?.displayName)
-    // ESPN refreshes many designations in one batch, so ties go to the more fantasy-relevant player.
-    .sort((a, b) => b.at - a.at || (a.player?.rank.half ?? 999) - (b.player?.rank.half ?? 999));
+    .filter(
+      (c) =>
+        c.pos &&
+        Number.isFinite(c.espnAt) &&
+        c.status &&
+        !/^active$/i.test(c.status) &&
+        c.r.athlete?.displayName,
+    )
+    .sort(
+      (a, b) => b.sortAt - a.sortAt || (a.player?.rank.half ?? 999) - (b.player?.rank.half ?? 999),
+    );
 
+  // Over-fetch then trim after real news timestamps are applied.
+  const pickBudget = Math.max(limit * 4, 20);
   const picked: typeof candidates = [];
   const seen = new Set<string>();
   for (const c of candidates) {
@@ -2234,11 +2258,11 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
     if (seen.has(key)) continue;
     seen.add(key);
     picked.push(c);
-    if (picked.length >= limit) break;
+    if (picked.length >= pickBudget) break;
   }
 
   const now = Date.now();
-  return Promise.all(
+  const items = await Promise.all(
     picked.map(async (c): Promise<InjuryWireItem> => {
       const name = c.player?.name ?? c.r.athlete!.displayName!;
       const lastName = c.r.athlete?.lastName ?? name.split(" ").slice(-1)[0] ?? name;
@@ -2253,6 +2277,7 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
       let body = stripTags(c.r.longComment ?? "");
       let source: InjuryWireItem["source"] = "ESPN";
       let link = espnNewsLink;
+      let newsAt = Number.isFinite(c.sortAt) ? c.sortAt : c.espnAt;
 
       if (body.length < 40) {
         body = "";
@@ -2267,6 +2292,8 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
           body = story ? `${headline} ${story}` : headline;
           source = "RotoWire";
           link = f.links?.web?.href ?? link;
+          // Honest "xx ago" — not ESPN's refreshed designation date.
+          newsAt = at;
           break;
         }
       }
@@ -2293,7 +2320,7 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
       }
 
       return {
-        id: String(c.r.id ?? `${name}-${c.at}`),
+        id: String(c.r.id ?? `${name}-${c.espnAt}`),
         playerName: name,
         sleeperId: c.sleeperId,
         pos: c.pos!,
@@ -2303,13 +2330,17 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
         statusShort: short,
         headline: wireHeadline(tag, short, c.status, c.r.details),
         body,
-        published: new Date(c.at).toISOString(),
+        published: new Date(newsAt).toISOString(),
         returnDate,
         source,
         link,
       };
     }),
   );
+
+  return items
+    .sort((a, b) => Date.parse(b.published) - Date.parse(a.published))
+    .slice(0, limit);
 }
 
 /* ---------- injury reports page ---------- */
