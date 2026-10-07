@@ -3,6 +3,7 @@ import { ArrowLeftRight, ChevronRight, Lock, Timer, UserPlus } from "lucide-reac
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
+import { InjuryAvatarBadge } from "@/components/injury/InjuryAvatarBadge";
 import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueProjections, useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
@@ -29,7 +30,6 @@ import {
   scheduleOpponent,
   shortName,
   slotLabels,
-  injuryAbbrev,
   useNflSchedule,
   type LineupRow,
 } from "./lineupShared";
@@ -357,19 +357,13 @@ function LineupCard({
               {posRank}
             </span>
           ) : null}
+          <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
         </div>
         {logo ? (
           <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-1" />
         ) : null}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[17px] font-semibold leading-tight">
-            {shortName(player)}
-            {player.injury_status ? (
-              <span className="ml-1.5 align-middle text-[11px] font-bold uppercase text-red-500">
-                {injuryAbbrev(player.injury_status)}
-              </span>
-            ) : null}
-          </p>
+          <p className="truncate text-[17px] font-semibold leading-tight">{shortName(player)}</p>
           <p className="truncate text-xs text-m-muted">
             {player.team || "FA"} - {player.pos}
           </p>

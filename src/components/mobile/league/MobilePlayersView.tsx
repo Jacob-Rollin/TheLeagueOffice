@@ -4,6 +4,7 @@ import { ArrowLeftRight, ChevronDown, Minus, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
+import { InjuryAvatarBadge } from "@/components/injury/InjuryAvatarBadge";
 import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import {
   useLeagueProjections,
@@ -22,7 +23,12 @@ import { cn } from "@/lib/utils";
 import {
   HEX_CLIP,
   REGULAR_SEASON_WEEKS,
-  gameStripLabels, injuryAbbrev, progressFor, scheduleOpponent, shortName, useNflSchedule } from "./lineupShared";
+  gameStripLabels,
+  progressFor,
+  scheduleOpponent,
+  shortName,
+  useNflSchedule,
+} from "./lineupShared";
 
 type PosFilter = "ALL" | "QB" | "RB" | "WR" | "TE" | "FLEX" | "K" | "DEF";
 type Mode = "projections" | "stats" | "trends";
@@ -554,16 +560,10 @@ function PlayerRow({
               logoClassName="hidden"
             />
             <RankHex rank={badge} className="-left-1.5 -top-1.5 size-6 text-[11px]" />
+            <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[15px] font-semibold leading-tight">
-              {shortName(player)}
-              {player.injury_status ? (
-                <span className="ml-1 align-middle text-[10px] font-bold uppercase text-red-500">
-                  {injuryAbbrev(player.injury_status)}
-                </span>
-              ) : null}
-            </p>
+            <p className="truncate text-[15px] font-semibold leading-tight">{shortName(player)}</p>
             <p className="truncate text-xs text-m-muted">
               {player.team || "FA"} - {player.pos}
             </p>

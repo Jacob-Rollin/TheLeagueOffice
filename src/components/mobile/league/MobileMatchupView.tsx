@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
+import { InjuryAvatarBadge } from "@/components/injury/InjuryAvatarBadge";
 import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueProjections, useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
@@ -542,6 +543,10 @@ function HalfCard({
                 {posRank}
               </span>
             ) : null}
+            <InjuryAvatarBadge
+              status={player.injury_status ?? player.injury}
+              className={mirror ? "-right-0.5 left-auto" : undefined}
+            />
           </div>
           {logo ? <img src={logo} alt="" className="mt-1.5 size-7 shrink-0 rounded-full bg-m-chip object-contain p-1" /> : null}
           <div

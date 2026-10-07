@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { applyLiveInjuryOverlay, useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
 import { buildPlayersPayload, type PlayersPayload } from "@/lib/players-build";
 import { clearCache, getCached, readCache } from "@/lib/sleeper-cache";
 
@@ -21,14 +22,19 @@ export type SleeperPlayersState = {
  * most once per day, filters it to active fantasy assets, and persists it
  * locally. Search / filtering / scrolling then run entirely over this array
  * with zero network calls.
+ *
+ * Live injury designations are overlaid from the shared week projection
+ * bundle (`useLiveInjuryStatuses`) so badges stay fresh without a second
+ * Sleeper download when ATP / game logs already warmed the cache.
  */
 export function useSleeperPlayers(fallback?: PlayersPayload | null): SleeperPlayersState {
-  const [data, setData] = useState<PlayersPayload | null>(fallback ?? null);
+  const [raw, setRaw] = useState<PlayersPayload | null>(fallback ?? null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(!fallback);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
   const alive = useRef(true);
+  const liveInjuries = useLiveInjuryStatuses();
 
   useEffect(() => {
     alive.current = true;
@@ -43,7 +49,7 @@ export function useSleeperPlayers(fallback?: PlayersPayload | null): SleeperPlay
       setError(null);
       const hit = await readCache<PlayersPayload>(CACHE_KEY);
       if (!cancelled && hit && Date.now() - hit.fetchedAt < DAY) {
-        setData(hit.data);
+        setRaw(hit.data);
         setFetchedAt(hit.fetchedAt);
         setLoading(false);
         return;
@@ -52,7 +58,7 @@ export function useSleeperPlayers(fallback?: PlayersPayload | null): SleeperPlay
       try {
         const fresh = await getCached(CACHE_KEY, DAY, buildPlayersPayload);
         if (cancelled) return;
-        setData(fresh);
+        setRaw(fresh);
         setFetchedAt(Date.now());
       } catch (err) {
         if (cancelled) return;
@@ -65,6 +71,13 @@ export function useSleeperPlayers(fallback?: PlayersPayload | null): SleeperPlay
       cancelled = true;
     };
   }, [nonce]);
+
+  const data = useMemo(() => {
+    if (!raw) return null;
+    const players = applyLiveInjuryOverlay(raw.players, liveInjuries.data);
+    if (players === raw.players) return raw;
+    return { ...raw, players };
+  }, [raw, liveInjuries.data]);
 
   const resync = useCallback(() => {
     void (async () => {
