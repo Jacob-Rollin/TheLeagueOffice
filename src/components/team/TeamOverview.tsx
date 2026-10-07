@@ -474,7 +474,7 @@ export function TeamOverview({
       .sort((a, b) => b.ppg - a.ppg);
     const byeWeeks = [
       ...new Set(
-        players
+        team.players
           .map((p) => p.bye)
           .filter((w): w is number => w != null && w >= currentWeek && w <= 17),
       ),
@@ -501,7 +501,7 @@ export function TeamOverview({
             : "thin";
       return { week, swaps, available, status } as const;
     });
-  }, [slotTeam, team, players, playersById, currentWeek]);
+  }, [slotTeam, team, playersById, currentWeek]);
   const selectedBye =
     byePlan.find((b) => b.week === byeWeekPick) ??
     byePlan.find((b) => b.swaps.length) ??
@@ -1281,7 +1281,11 @@ export function TeamOverview({
           </div>
         ) : (
           <div className={cn(boxClass, "p-5 text-sm text-muted-foreground")}>
-            {slotRanks.isLoading ? "Planning bye weeks…" : "No remaining bye weeks."}
+            {slotRanks.isLoading
+              ? "Planning bye weeks…"
+              : !slotRanks.data?.teams?.length
+                ? "Starting lineup projections aren't available for this league yet."
+                : "No remaining bye weeks."}
           </div>
         )}
       </section>

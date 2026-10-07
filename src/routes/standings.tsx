@@ -1,12 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { StreakIndicator } from "@/components/league/StreakIndicator";
 import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import {
   playbookPanelTitleClass,
   powerRankMovementDelta,
-  resolvePowerRankDisplayBaseline,
   TeamAvatarBadge,
   TruePowerRankingsPanel,
 } from "@/components/playbook/panels";
@@ -15,6 +14,11 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { type RowAnalytics, useLeagueAnalytics, useStartingSlotRanks } from "@/hooks/useLeagueAnalytics";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
+import {
+  allPlayRankMapThroughWeek,
+  h2hRankMapThroughWeek,
+  type TrendWeekBoard,
+} from "@/lib/standings-trend";
 import { cn } from "@/lib/utils";
 
 type StandingsTab = "actual" | "all-play" | "power";
@@ -565,24 +569,31 @@ function StandingsHub() {
     [actualRows],
   );
 
-  const [actualBaseline, setActualBaseline] = useState<Record<string, number> | null>(null);
-  const [allPlayBaseline, setAllPlayBaseline] = useState<Record<string, number> | null>(null);
+  /** Prior completed week — Trend compares current rank vs end of this week. */
+  const priorCompletedWeek = completedThrough > 1 ? completedThrough - 1 : 0;
 
-  useEffect(() => {
-    const ranked = actualRows.map((row, index) => ({
-      slot: row.rosterId,
-      rank: index + 1,
+  const weekBoards = useMemo((): TrendWeekBoard[] => {
+    return completedWeekNumbers.map((week, index) => ({
+      week,
+      entries: (historyMatchupQueries[index]?.data?.entries ?? []).map((entry) => ({
+        rosterId: Number(entry.rosterId),
+        matchupId: entry.matchupId == null ? null : Number(entry.matchupId),
+        points: Number(entry.points) || 0,
+      })),
     }));
-    setActualBaseline(resolvePowerRankDisplayBaseline(`${leagueKey}.actual`, ranked));
-  }, [leagueKey, actualRows]);
+    // historyStamp tracks fetch completion; query array identity is unstable each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- historyStamp
+  }, [historyStamp, completedWeekNumbers]);
 
-  useEffect(() => {
-    const ranked = allPlayRows.map((row, index) => ({
-      slot: row.rosterId,
-      rank: index + 1,
-    }));
-    setAllPlayBaseline(resolvePowerRankDisplayBaseline(`${leagueKey}.all-play`, ranked));
-  }, [leagueKey, allPlayRows]);
+  const actualBaseline = useMemo(() => {
+    if (priorCompletedWeek < 1 || league.historyLoading) return null;
+    return h2hRankMapThroughWeek(weekBoards, priorCompletedWeek);
+  }, [priorCompletedWeek, league.historyLoading, weekBoards]);
+
+  const allPlayBaseline = useMemo(() => {
+    if (priorCompletedWeek < 1 || league.historyLoading) return null;
+    return allPlayRankMapThroughWeek(weekBoards, priorCompletedWeek);
+  }, [priorCompletedWeek, league.historyLoading, weekBoards]);
 
   const setTab = (next: StandingsTab) => {
     void navigate({

@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
-import { useActiveMatchups } from "@/hooks/useActiveMatchups";
+import { useActiveMatchups, usePrefetchLeagueMatchupWeeks } from "@/hooks/useActiveMatchups";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRosters";
@@ -1233,7 +1233,7 @@ function buildScheduleOppByTeam(games: ScheduleGame[]): Map<string, SosMatchup[]
 
 function PlaybookMatchupPage() {
   const { activeLeague, activeLeagueId } = useActiveLeague();
-  const { data: playersPayload, loading: playersLoading } = useSleeperPlayers();
+  const { data: playersPayload } = useSleeperPlayers();
   const players = playersPayload?.players ?? [];
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const { teams, myTeam, rosterPositions, loading: rostersLoading } = useLeagueRosters(players);
@@ -1274,9 +1274,11 @@ function PlaybookMatchupPage() {
   }, [nflWeek.data?.week, activeLeagueId]);
 
   const activeWeek = selectedWeek ?? nflWeek.data?.week ?? 1;
-  const { projectFor, scoringMap, loading: projectionsLoading } = useLeagueProjections(activeWeek);
+  const { projectFor, scoringMap } = useLeagueProjections(activeWeek);
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
+  // Warm weeks 1–17 so the week picker is not blank for cold TiDB weeks.
+  usePrefetchLeagueMatchupWeeks(Boolean(activeLeague?.leagueId));
 
   // Reset viewed matchup when week or league changes.
   useEffect(() => {
@@ -1340,12 +1342,12 @@ function PlaybookMatchupPage() {
     setViewMatchupId(mine?.id ?? matchupOptions[0]!.id);
   }, [matchupOptions, viewMatchupId]);
 
-  const loading =
-    playersLoading ||
-    rostersLoading ||
-    projectionsLoading ||
+  // Board pairings must not wait on weekly projections / season stats — that
+  // made every week look empty while Sleeper projection bundles were cold.
+  const boardLoading =
     matchupsLoading ||
-    nflWeek.isLoading;
+    nflWeek.isLoading ||
+    (rostersLoading && teams.length === 0);
 
   const weeklyPair = useMemo(() => {
     const empty = {
@@ -2325,8 +2327,10 @@ function PlaybookMatchupPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <section className={cn(playbookCardClass, "min-w-0 lg:col-span-2")}>
-      {loading ? (
+      {boardLoading ? (
         <p className="text-sm text-muted-foreground">Loading matchup board…</p>
+      ) : !matchups?.entries?.length ? (
+        <p className="text-sm text-muted-foreground">No matchups for Week {activeWeek} yet.</p>
       ) : (
         <>
           {/* FantasyPros-style header: avatars outward, scores tucked beside vs */}
@@ -2636,7 +2640,7 @@ function PlaybookMatchupPage() {
             </span>
           }
         >
-          {loading ? (
+          {boardLoading ? (
             <p className="text-sm text-muted-foreground">Loading matchups…</p>
           ) : aroundLeague.length ? (
             <div className="space-y-3">

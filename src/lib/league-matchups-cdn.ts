@@ -45,6 +45,20 @@ export function boardHasUsableScores(board: LeagueWeekMatchups | null | undefine
   return scored >= Math.ceil(entries.length * 0.4);
 }
 
+/** Future / unscored weeks only need H2H pairings for schedule surfaces. */
+export function boardHasSchedulePairings(board: LeagueWeekMatchups | null | undefined): boolean {
+  const entries = board?.entries ?? [];
+  if (entries.length < 2) return false;
+  const byMatchup = new Map<number, number>();
+  for (const entry of entries) {
+    if (entry.matchupId == null) continue;
+    const id = Number(entry.matchupId);
+    if (!Number.isFinite(id)) continue;
+    byMatchup.set(id, (byMatchup.get(id) ?? 0) + 1);
+  }
+  return [...byMatchup.values()].some((n) => n >= 2);
+}
+
 function parseJson<T>(raw: unknown, fallback: T): T {
   if (raw == null) return fallback;
   if (typeof raw === "string") {
@@ -207,9 +221,10 @@ async function mapPool<T, R>(
 }
 
 /**
- * CDN/TiDB first for all weeks, then Fluid backfill only for weeks the caller
- * needs that are missing/empty — or the just-completed prior week whose board
- * is still a midweek snapshot (pre–Tuesday morning finalize).
+ * CDN/TiDB first for all weeks, then:
+ * - Completed weeks: Fluid backfill when scores are hollow / soft-final stale
+ * - Future schedule weeks: browser Sleeper fetch (no Fluid fan-out). Unscored
+ *   boards are valid once they have H2H pairings.
  *
  * Use this for dashboard coaching metrics + standings analytics — CDN-only left
  * those surfaces on placeholder zeros when TiDB had not been warmed yet.
@@ -228,6 +243,7 @@ export async function fetchLeagueMatchupsHistory(input: {
   allowFluid?: boolean;
 }): Promise<Map<number, LeagueMatchupsCdnHit>> {
   const leagueId = String(input.leagueId ?? "").trim();
+  const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
   const out = leagueId ? await fetchLeagueAllMatchupsCdn(leagueId) : new Map<number, LeagueMatchupsCdnHit>();
   const needed = Array.from(
     new Set(
@@ -251,18 +267,34 @@ export async function fetchLeagueMatchupsHistory(input: {
     typeof import.meta.env?.PROD === "boolean" &&
     import.meta.env.PROD === true;
 
+  // Future / current unscored weeks: keep CDN boards that already have pairings,
+  // otherwise fill from the browser (Sleeper) so My Team schedule is not TBD.
+  const missingSchedule = needed.filter((week) => {
+    if (priorWeek > 0 && week <= priorWeek) return false;
+    const hit = out.get(week);
+    return !boardHasSchedulePairings(hit?.board) && !boardHasUsableScores(hit?.board);
+  });
+  if (missingSchedule.length && leagueId && platform === "sleeper" && /^\d{6,}$/.test(leagueId)) {
+    const { fetchSleeperWeekMatchupsClient } = await import("@/lib/sleeper-matchups-client");
+    await mapPool(missingSchedule, HISTORY_BACKFILL_CONCURRENCY, async (week) => {
+      const board = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek || null);
+      if (boardHasSchedulePairings(board) || boardHasUsableScores(board)) {
+        out.set(week, { board: board!, syncedAtMs: Date.now() });
+      }
+    });
+  }
+
   const missing = needed.filter((week) => {
     const hit = out.get(week);
+    // Completed weeks need real scores; schedule weeks are done above.
+    if (priorWeek > 0 && week > priorWeek) return false;
     const hollow = !boardHasUsableScores(hit?.board);
     const softFinalStale =
       priorWeek > 0 && week === priorWeek && hit != null && !isPriorWeekBoardFresh(hit.syncedAtMs);
 
     if (!hollow && !softFinalStale) return false;
 
-    // Production: Fluid-backfill completed weeks only (≤ priorWeek). Future
-    // schedule weeks wait for cron — that was the analytics fan-out. Older
-    // completed weeks still need a one-shot host pull for coaching efficiency
-    // / WoW % when TiDB is hollow (rate-limited below).
+    // Production: Fluid-backfill completed weeks only (≤ priorWeek).
     if (isProd && (priorWeek <= 0 || week > priorWeek)) return false;
 
     return hollow || softFinalStale;
@@ -275,14 +307,14 @@ export async function fetchLeagueMatchupsHistory(input: {
     const board = await maybeRefreshMatchupsViaFluid({
       leagueId,
       week,
-      platform: input.platform,
+      platform,
       ...(input.s2 ? { s2: input.s2 } : {}),
       ...(input.swid ? { swid: input.swid } : {}),
       ...(input.connectionId ? { connectionId: input.connectionId } : {}),
       allow: true,
       force: priorWeek > 0 && week === priorWeek,
     });
-    if (boardHasUsableScores(board)) {
+    if (boardHasUsableScores(board) || boardHasSchedulePairings(board)) {
       out.set(week, { board: board!, syncedAtMs: Date.now() });
     }
   });

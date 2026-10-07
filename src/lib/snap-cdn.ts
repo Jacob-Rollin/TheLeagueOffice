@@ -115,7 +115,9 @@ export async function fetchSnapRosterNews(ids: string[]) {
 
 /**
  * League-scoped snaps: CDN first when the identifier is a numeric host league id.
- * Production soft-empties on miss (same free-tier policy as research-cdn).
+ * Sleeper misses prefer browser projections (visitor rate-limit pool) before Fluid
+ * so Recommendation / Slot Ranks stay populated without burning Active CPU.
+ * ESPN/Yahoo still use Fluid. Public research snaps above soft-empty in production.
  */
 export async function fetchSnapRestOfSeason(input: {
   identifier: string;
@@ -124,6 +126,7 @@ export async function fetchSnapRestOfSeason(input: {
   toWeek: number;
   s2?: string;
   swid?: string;
+  teamName?: string | null;
 }) {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
   const empty = { weeks: [] as number[], byWeek: [] as Record<string, number>[] };
@@ -137,10 +140,22 @@ export async function fetchSnapRestOfSeason(input: {
       Awaited<ReturnType<typeof import("./standings-projections.server").loadRestOfSeasonProjections>>
     >(`/api/data/snap/ros?${qs}`);
     if (hit && Array.isArray(hit.weeks) && hit.weeks.length > 0) return hit;
-    if (!allowFluidFallback()) return hit ?? empty;
-  } else if (!allowFluidFallback()) {
-    return empty;
+
+    const { computeRestOfSeasonClient } = await import("./standings-projections-client");
+    const client = await computeRestOfSeasonClient({
+      identifier: input.identifier,
+      platform,
+      fromWeek: input.fromWeek,
+      toWeek: input.toWeek,
+      ...(input.s2 ? { s2: input.s2 } : {}),
+      ...(input.swid ? { swid: input.swid } : {}),
+      ...(input.teamName ? { teamName: input.teamName } : {}),
+    }).catch(() => null);
+    if (client && Array.isArray(client.weeks) && client.weeks.length > 0) return client;
   }
+
+  if (!allowFluidFallback() && platform === "sleeper") return empty;
+
   const { getRestOfSeasonProjections } = await import("./league.functions");
   return getRestOfSeasonProjections({
     data: {
@@ -161,6 +176,7 @@ export async function fetchSnapStartingSlotRanks(input: {
   toWeek?: number;
   s2?: string;
   swid?: string;
+  teamName?: string | null;
 }) {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
   const toWeek = input.toWeek ?? input.fromWeek;
@@ -175,10 +191,22 @@ export async function fetchSnapStartingSlotRanks(input: {
       Awaited<ReturnType<typeof import("./standings-projections.server").loadStartingSlotRanks>>
     >(`/api/data/snap/slot-ranks?${qs}`);
     if (hit && Array.isArray(hit.teams) && hit.teams.length > 0) return hit;
-    if (!allowFluidFallback()) return hit ?? empty;
-  } else if (!allowFluidFallback()) {
-    return empty;
+
+    const { computeStartingSlotRanksClient } = await import("./standings-projections-client");
+    const client = await computeStartingSlotRanksClient({
+      identifier: input.identifier,
+      platform,
+      fromWeek: input.fromWeek,
+      toWeek,
+      ...(input.s2 ? { s2: input.s2 } : {}),
+      ...(input.swid ? { swid: input.swid } : {}),
+      ...(input.teamName ? { teamName: input.teamName } : {}),
+    }).catch(() => null);
+    if (client && Array.isArray(client.teams) && client.teams.length > 0) return client;
   }
+
+  if (!allowFluidFallback() && platform === "sleeper") return empty;
+
   const { getStartingSlotRanks } = await import("./league.functions");
   return getStartingSlotRanks({
     data: {
