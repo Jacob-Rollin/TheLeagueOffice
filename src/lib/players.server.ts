@@ -2041,8 +2041,6 @@ const espnInjuryFeed = memo<EspnInjuryRow[]>(1000 * 60 * 10, async () => {
 const WIRE_POSITIONS: Record<string, string> = { QB: "QB", RB: "RB", WR: "WR", TE: "TE", PK: "K", K: "K" };
 const ESPN_TEAM_FIX: Record<string, string> = { WSH: "WAS" };
 const WIRE_BLURB_WINDOW_MS = 7 * 24 * HOUR;
-/** Homepage wire: drop cards whose real news time is older than this (ESPN often refreshes designation `date` without new news). */
-const WIRE_DISPLAY_MAX_AGE_MS = 5 * 24 * HOUR;
 
 type SleeperInjury = {
   /** Sleeper `injury_status` (IR, Out, Doubtful, Questionable, PUP, Sus, NA, DNR, COV); null when healthy. */
@@ -2205,7 +2203,7 @@ function wireHeadline(tag: string, short: string, status: string, details: EspnI
  *
  * ESPN's injury `date` often bumps on batch refreshes even when nothing new
  * happened — so we prefer RotoWire / Sleeper news timestamps for "xx ago" and
- * drop cards whose real news time is older than {@link WIRE_DISPLAY_MAX_AGE_MS}.
+ * for picking the top N cards (not ESPN's designation refresh time).
  */
 export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
   const [rows, built, sleeperInjuries] = await Promise.all([
@@ -2341,10 +2339,6 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
   );
 
   return items
-    .filter((item) => {
-      const at = Date.parse(item.published);
-      return Number.isFinite(at) && now - at <= WIRE_DISPLAY_MAX_AGE_MS;
-    })
     .sort((a, b) => Date.parse(b.published) - Date.parse(a.published))
     .slice(0, limit);
 }
