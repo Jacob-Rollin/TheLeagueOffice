@@ -91,7 +91,7 @@ function classify(headline: string, description: string, aboutPlayer: boolean): 
 
 export function PlayerNews({ id, pos }: { id: string; pos?: string }) {
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["player-news", id, "cdn-v1"],
+    queryKey: ["player-news", id, "cdn-v2"],
     queryFn: () => fetchPlayerNewsClient(id),
     staleTime: 1000 * 60 * 10,
     retry: false,

@@ -417,7 +417,7 @@ function newsDate(iso: string) {
 
 function PlayerNews({ id }: { id: string }) {
   const { data, isLoading } = useQuery({
-    queryKey: ["player-news", id, "cdn-v1"],
+    queryKey: ["player-news", id, "cdn-v2"],
     queryFn: () => fetchPlayerNewsClient(id),
     staleTime: 10 * 60 * 1000,
     retry: false,
