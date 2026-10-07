@@ -127,20 +127,18 @@ PY
           cp -a out/. "$WORK/"
           # Marker so GitHub Pages (optional) serves JSON as-is.
           touch "$WORK/.nojekyll"
-          cat > "$WORK/README.md" <<EOF
-          # Snap CDN (generated)
-
-          Auto-published research/snap JSON for The League Office browse path.
-          Do not edit by hand — overwritten by **Publish Snap CDN** Actions.
-
-          Public base (recommended):
-
-          \`https://raw.githubusercontent.com/${REPO}/snap-cdn\`
-
-          Example: \`…/research/fpa-half.json\`
-          EOF
-          # Strip leading spaces from heredoc indent.
-          sed -i 's/^          //' "$WORK/README.md"
+          {
+            echo "# Snap CDN (generated)"
+            echo
+            echo "Auto-published research/snap JSON for The League Office browse path."
+            echo "Do not edit by hand — overwritten by **Publish Snap CDN** Actions."
+            echo
+            echo "Public base (recommended):"
+            echo
+            echo "\`https://raw.githubusercontent.com/${REPO}/snap-cdn\`"
+            echo
+            echo "Example: \`…/research/fpa-half.json\`"
+          } > "$WORK/README.md"
 
           cd "$WORK"
           git init -q
