@@ -1233,6 +1233,19 @@ function PlaybookDashboardPage() {
         const prior = completedWeekStats.slice(0, -1);
         const priorAvg = prior.reduce((sum, w) => sum + w.scored, 0) / prior.length;
         avgPointsDeltaPct = ((calculatedAvgPoints - priorAvg) / calculatedAvgPoints) * 100;
+      } else if (
+        hostAvg != null &&
+        hostGames >= 2 &&
+        completedWeekStats.length === 1 &&
+        hostPf > completedWeekStats[0]!.scored
+      ) {
+        // Partial history: derive prior avg from host PF minus the latest board week.
+        const priorGames = hostGames - 1;
+        const priorPf = hostPf - completedWeekStats[0]!.scored;
+        if (priorGames > 0 && priorPf > 0) {
+          const priorAvg = priorPf / priorGames;
+          avgPointsDeltaPct = ((calculatedAvgPoints - priorAvg) / calculatedAvgPoints) * 100;
+        }
       }
     }
 

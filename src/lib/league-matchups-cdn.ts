@@ -35,6 +35,8 @@ const fluidInflight = new Map<string, Promise<LeagueWeekMatchups | null>>();
 const FLUID_REFRESH_MIN_MS = 3 * 60 * 1000;
 /** Even forced prior-week backfill must not storm (dashboard used to poll 15s). */
 const FLUID_FORCE_MIN_MS = 5 * 60 * 1000;
+/** Hollow/failed Fluid pulls may retry sooner than a successful warm. */
+const FLUID_FAIL_RETRY_MS = 45 * 1000;
 
 export function boardHasUsableScores(board: LeagueWeekMatchups | null | undefined): boolean {
   const entries = board?.entries ?? [];
@@ -257,18 +259,18 @@ export async function fetchLeagueMatchupsHistory(input: {
 
     if (!hollow && !softFinalStale) return false;
 
-    // Production: only Fluid-backfill the latest completed slate. Older hollow
-    // weeks and future schedule weeks wait for cron/TiDB — N-week host pulls
-    // were the main /__server → api.sleeper.app fan-out under rapid clicking.
-    if (isProd && priorWeek > 0 && week !== priorWeek) return false;
-    if (isProd && priorWeek <= 0) return false;
+    // Production: Fluid-backfill completed weeks only (≤ priorWeek). Future
+    // schedule weeks wait for cron — that was the analytics fan-out. Older
+    // completed weeks still need a one-shot host pull for coaching efficiency
+    // / WoW % when TiDB is hollow (rate-limited below).
+    if (isProd && (priorWeek <= 0 || week > priorWeek)) return false;
 
     return hollow || softFinalStale;
   });
   if (!missing.length || input.allowFluid === false || !leagueId) return out;
 
-  // Latest completed slate is product-critical (avg PF / coaching) — force host
-  // pull, but maybeRefreshMatchupsViaFluid still single-flights + rate-limits.
+  // Soft-final completed slate may force host; older completed weeks prefer
+  // cache then host once. Single-flight + rate limits prevent /__server storms.
   await mapPool(missing, HISTORY_BACKFILL_CONCURRENCY, async (week) => {
     const board = await maybeRefreshMatchupsViaFluid({
       leagueId,
@@ -330,9 +332,6 @@ export async function maybeRefreshMatchupsViaFluid(input: {
   if (prev > 0 && now - prev < minGap) return null;
 
   const run = (async (): Promise<LeagueWeekMatchups | null> => {
-    // Record attempt immediately so parallel dashboard/analytics mounts and
-    // 15s-style refetch loops cannot stack host pulls.
-    lastFluidRefresh.set(key, Date.now());
     try {
       const { getConnectionMatchups } = await import("@/lib/league.functions");
       const board = await getConnectionMatchups({
@@ -347,8 +346,15 @@ export async function maybeRefreshMatchupsViaFluid(input: {
           ...(input.force ? { preferCache: false } : {}),
         },
       });
+      if (boardHasUsableScores(board)) {
+        lastFluidRefresh.set(key, Date.now());
+      } else {
+        // Hollow result: allow a quicker retry without reopening the 15s storm.
+        lastFluidRefresh.set(key, Date.now() - minGap + FLUID_FAIL_RETRY_MS);
+      }
       return board;
     } catch {
+      lastFluidRefresh.set(key, Date.now() - minGap + FLUID_FAIL_RETRY_MS);
       return null;
     } finally {
       fluidInflight.delete(key);
