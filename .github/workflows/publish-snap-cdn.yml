@@ -1,0 +1,154 @@
+name: Publish Snap CDN
+
+# Pulls warm research/snap JSON from the live app and force-pushes an orphan
+# `snap-cdn` branch. Browsers read via raw.githubusercontent.com (no card,
+# free for a public repo) instead of TiDB via Vercel Fluid.
+#
+# Requires: APP_URL + CRON_SECRET (existing). No R2 / Cloudflare secrets.
+
+on:
+  schedule:
+    # After research-aggregates (08:15) and Vercel 07:00 backup.
+    - cron: "45 8 * * *"
+    # Evening gameday refresh (after research 19:15).
+    - cron: "45 19 * * 0,1,4"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-snap-cdn
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check secrets
+        id: creds
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          missing=0
+          for v in APP_URL CRON_SECRET; do
+            if [ -z "${!v}" ]; then
+              echo "::warning::$v not configured — skipping snap CDN publish."
+              missing=1
+            fi
+          done
+          if [ "$missing" = "1" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch NFL week
+        if: steps.creds.outputs.available == 'true'
+        id: week
+        run: |
+          WEEK=$(curl -fsSL "https://api.sleeper.app/v1/state/nfl" | python3 -c "import sys,json; print(max(1,int(json.load(sys.stdin).get('week') or 1)))")
+          echo "week=$WEEK" >> "$GITHUB_OUTPUT"
+          echo "NFL week=$WEEK"
+
+      - name: Download warm snaps
+        if: steps.creds.outputs.available == 'true'
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          WEEK: ${{ steps.week.outputs.week }}
+        run: |
+          set -euo pipefail
+          BASE="${APP_URL%/}"
+          case "$BASE" in
+            http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+            http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+          esac
+          mkdir -p out/research out/snap
+          AUTH=(-H "Authorization: Bearer $CRON_SECRET" -H "accept: application/json")
+
+          fetch() {
+            local url="$1" dest="$2"
+            if curl -fsSL "${AUTH[@]}" "$url" -o "$dest"; then
+              python3 - "$dest" <<'PY'
+import json,sys
+p=sys.argv[1]
+with open(p) as f: d=json.load(f)
+if isinstance(d, dict) and d.get("ok") is False:
+  raise SystemExit(f"error payload {p}")
+print("ok", p)
+PY
+            else
+              echo "warn: miss $url"
+              rm -f "$dest"
+            fi
+          }
+
+          for fmt in std half ppr; do
+            fetch "$BASE/api/data/research/fpa?format=$fmt" "out/research/fpa-$fmt.json"
+            fetch "$BASE/api/data/research/sos-analysis?format=$fmt" "out/research/sos-analysis-$fmt.json"
+            fetch "$BASE/api/data/snap/trade-market?format=$fmt" "out/snap/trade-market-$fmt.json"
+            fetch "$BASE/api/data/research/matchups-guide?week=$WEEK&format=$fmt" \
+              "out/research/matchups-guide-w${WEEK}-$fmt.json"
+          done
+
+          fetch "$BASE/api/data/research/fantasy-leaders" out/research/fantasy-leaders.json
+          fetch "$BASE/api/data/research/sos-board" out/research/sos-board.json
+          fetch "$BASE/api/data/research/targets" out/research/targets.json
+          fetch "$BASE/api/data/research/are-they-playing?week=$WEEK" \
+            "out/research/are-they-playing-w${WEEK}.json"
+
+          for yl in 5 10 15 20; do
+            fetch "$BASE/api/data/research/redzone?yardline=$yl" "out/research/redzone-$yl.json"
+          done
+
+          fetch "$BASE/api/data/snap/injury-reports" out/snap/injury-reports.json
+          fetch "$BASE/api/data/snap/fantasy-news?limit=80" out/snap/fantasy-news.json
+          fetch "$BASE/api/data/snap/trade-basis" out/snap/trade-basis.json
+
+          count=$(find out -type f -name '*.json' | wc -l | tr -d ' ')
+          echo "Downloaded $count JSON files"
+          if [ "$count" = "0" ]; then
+            echo "::error::No snaps downloaded — aborting publish."
+            exit 1
+          fi
+          find out -type f -name '*.json' | sort
+
+      - name: Force-push orphan snap-cdn branch
+        if: steps.creds.outputs.available == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          WORK=$(mktemp -d)
+          cp -a out/. "$WORK/"
+          # Marker so GitHub Pages (optional) serves JSON as-is.
+          touch "$WORK/.nojekyll"
+          {
+            echo "# Snap CDN (generated)"
+            echo
+            echo "Auto-published research/snap JSON for The League Office browse path."
+            echo "Do not edit by hand — overwritten by **Publish Snap CDN** Actions."
+            echo
+            echo "Public base (recommended):"
+            echo
+            echo "\`https://raw.githubusercontent.com/${REPO}/snap-cdn\`"
+            echo
+            echo "Example: \`…/research/fpa-half.json\`"
+          } > "$WORK/README.md"
+
+          cd "$WORK"
+          git init -q
+          git checkout -q -b snap-cdn
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publish research/snap CDN $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" snap-cdn
+
+          BASE="https://raw.githubusercontent.com/${REPO}/snap-cdn"
+          echo "Public base: $BASE"
+          echo "Smoke: ${BASE}/research/fpa-half.json"

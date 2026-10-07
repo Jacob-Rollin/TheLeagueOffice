@@ -1,10 +1,9 @@
 /**
- * Client helpers for edge-cached Fluid snapshots (`/api/data/snap/*`).
- * Prefer these over createServerFn so concurrent visitors share CDN.
- *
- * Production: never fall back to createServerFn — a CDN miss must soft-empty
- * so we do not burn Fluid CPU. Dev/local may still use Fluid when snaps are absent.
+ * Client helpers for edge-cached snapshots.
+ * Prefer public Cloudflare R2, then `/api/data/snap/*`, never Fluid in prod.
  */
+
+import { R2_SNAP_KEYS, r2Url } from "@/lib/r2-public";
 
 function allowFluidFallback(): boolean {
   try {
@@ -24,10 +23,21 @@ async function fetchSnapJson<T>(url: string): Promise<T | null> {
   }
 }
 
+async function fetchSnapPreferR2<T>(r2Path: string | null, apiPath: string): Promise<T | null> {
+  if (r2Path) {
+    const r2 = r2Url(r2Path);
+    if (r2) {
+      const hit = await fetchSnapJson<T>(r2);
+      if (hit != null) return hit;
+    }
+  }
+  return fetchSnapJson<T>(apiPath);
+}
+
 export async function fetchSnapTradeValueBasis() {
-  const hit = await fetchSnapJson<Awaited<ReturnType<typeof import("./players.server").loadTradeValueBasis>>>(
-    "/api/data/snap/trade-basis",
-  );
+  const hit = await fetchSnapPreferR2<
+    Awaited<ReturnType<typeof import("./players.server").loadTradeValueBasis>>
+  >(R2_SNAP_KEYS.tradeBasis(), "/api/data/snap/trade-basis");
   if (hit?.players && Object.keys(hit.players).length > 0) return hit;
   if (!allowFluidFallback()) {
     return (
@@ -45,9 +55,9 @@ export async function fetchSnapTradeValueBasis() {
 }
 
 export async function fetchSnapInjuryReports() {
-  const hit = await fetchSnapJson<Awaited<ReturnType<typeof import("./players.server").loadInjuryReports>>>(
-    "/api/data/snap/injury-reports",
-  );
+  const hit = await fetchSnapPreferR2<
+    Awaited<ReturnType<typeof import("./players.server").loadInjuryReports>>
+  >(R2_SNAP_KEYS.injuryReports(), "/api/data/snap/injury-reports");
   if (hit && Array.isArray(hit.items)) return hit;
   if (!allowFluidFallback()) return { updatedAt: "", items: [] };
   const { getInjuryReports } = await import("./players.functions");
@@ -65,9 +75,9 @@ export async function fetchSnapInjuryWire(limit = 5) {
 }
 
 export async function fetchSnapFantasyNews(limit = 40) {
-  const hit = await fetchSnapJson<Awaited<ReturnType<typeof import("./players.server").loadFantasyNewsFeed>>>(
-    `/api/data/snap/fantasy-news?limit=${limit}`,
-  );
+  const hit = await fetchSnapPreferR2<
+    Awaited<ReturnType<typeof import("./players.server").loadFantasyNewsFeed>>
+  >(R2_SNAP_KEYS.fantasyNews(), `/api/data/snap/fantasy-news?limit=${limit}`);
   if (Array.isArray(hit)) return hit;
   if (!allowFluidFallback()) return [];
   const { getFantasyNewsFeed } = await import("./players.functions");
@@ -75,9 +85,9 @@ export async function fetchSnapFantasyNews(limit = 40) {
 }
 
 export async function fetchSnapTradeMarket(format: "std" | "half" | "ppr" = "half") {
-  const hit = await fetchSnapJson<Awaited<ReturnType<typeof import("./trade-market.server").loadTradeMarket>>>(
-    `/api/data/snap/trade-market?format=${format}`,
-  );
+  const hit = await fetchSnapPreferR2<
+    Awaited<ReturnType<typeof import("./trade-market.server").loadTradeMarket>>
+  >(R2_SNAP_KEYS.tradeMarket(format), `/api/data/snap/trade-market?format=${format}`);
   if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
   if (!allowFluidFallback()) return { format, season: "", rows: [], opportunity: [] };
   const { getTradeMarket } = await import("./players.functions");

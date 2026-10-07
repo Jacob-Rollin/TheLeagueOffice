@@ -46,9 +46,12 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
           const { currentSeason } = await import("@/lib/players-build");
           const season = currentSeason();
 
-          // allowCompute: cron is the only path that may gunzip PBP / scrape clubs / fan out SOS.
-          const { applyTidbSchema } = await import("@/lib/tidb-migrate.server");
-          await applyTidbSchema().catch(() => undefined);
+          // Schema migrate only on explicit ?migrate=1 — daily apply was burning TiDB RUs.
+          const url = new URL(request.url);
+          if (url.searchParams.get("migrate") === "1") {
+            const { applyTidbSchema } = await import("@/lib/tidb-migrate.server");
+            await applyTidbSchema().catch(() => undefined);
+          }
 
           const stateRes = await fetch("https://api.sleeper.app/v1/state/nfl", {
             headers: { accept: "application/json" },
