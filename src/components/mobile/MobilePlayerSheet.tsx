@@ -23,6 +23,7 @@ import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
 import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import { fetchResearchFpa } from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
+import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { projectionPoints } from "@/lib/scoring-map";
 import {
   fetchGameLogsClient,
@@ -139,7 +140,13 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   const startedPct = ownership?.started_pct ?? ownership?.started ?? null;
 
   const [first, ...rest] = (player?.name ?? "").split(" ");
-  const injury = player?.injury_status?.trim() || null;
+  const injury = player ? resolveInjuryStatus(player) ?? null : null;
+  const injuryTone =
+    injury && /questionable|^q$/i.test(injury)
+      ? "amber"
+      : injury
+        ? "rose"
+        : "healthy";
   const logo = teamLogo(team);
   const image = player ? playerImage(player.id, AVATAR_POS.has(pos) ? pos : "WR", player.team) : null;
 
@@ -195,7 +202,9 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 <span
                   className={cn(
                     "mt-4 inline-block rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide text-white",
-                    injury ? "bg-red-500" : "bg-emerald-500",
+                    injuryTone === "amber" && "bg-amber-500 text-slate-950",
+                    injuryTone === "rose" && "bg-rose-600",
+                    injuryTone === "healthy" && "bg-emerald-500",
                   )}
                 >
                   {injury ?? "Healthy"}
