@@ -6,8 +6,9 @@ import { liveRefreshMs, useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { getCached } from "@/lib/sleeper-cache";
 import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
 import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
+import { acquireSleeperPermit } from "@/lib/sleeper-rate-budget";
 
-/** Floor live box-score polls so visitor IPs are not hit every 20s. */
+/** Floor live box-score polls so visitor IPs stay far under Sleeper's ~1000/min. */
 const LIVE_STATS_FLOOR_MS = 45 * 1000;
 
 async function fetchWeeklyActualStats(
@@ -15,10 +16,12 @@ async function fetchWeeklyActualStats(
   week: number,
 ): Promise<Map<string, Record<string, number>>> {
   return getCached(`weekly-actual-stats-v1:${season}|${week}`, 30 * 1000, async () => {
+    if (!acquireSleeperPermit("live")) return new Map();
     const url = `${SLEEPER_BASE}/stats/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`;
     const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
     if (res?.status === 429) {
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, 1500));
+      if (!acquireSleeperPermit("live")) return new Map();
       const retry = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
       if (!retry?.ok) return new Map();
       return parseStats(await retry.json());
