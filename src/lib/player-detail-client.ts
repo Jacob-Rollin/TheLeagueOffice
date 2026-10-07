@@ -94,6 +94,9 @@ export async function fetchPlayerDetailClient(
 
   const { player: base, season, all } = catalog;
   const brainEntry = brain?.[clean] ?? null;
+  const ownership = await import("@/lib/sleeper-ownership-client")
+    .then((m) => m.ownershipForPlayerClient(clean))
+    .catch(() => null);
   // Prefer Sleeper catalog designation (same source as table badges). Brain
   // defaults to "Healthy" which is truthy and was clobbering real Q/O/IR.
   const player = {
@@ -102,9 +105,9 @@ export async function fetchPlayerDetailClient(
     injury_status: base.injury_status ?? null,
     injury_body_part: base.injury_body_part || brainEntry?.injuryType || null,
     injury_notes: base.injury_notes || brainEntry?.injuryNotes || null,
-    // Ownership research stays off the request path — null until a CDN snap exists.
-    rostered_pct: null as number | null,
-    started_pct: null as number | null,
+    // Browser → Sleeper research (shared IndexedDB); same source desktop Fluid used.
+    rostered_pct: ownership?.owned ?? null,
+    started_pct: ownership?.started ?? null,
   };
 
   const fantasyDepthPositions: Pos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];

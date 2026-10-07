@@ -5,21 +5,25 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
 import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
-import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useLeagueProjections, useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { WeeklyMatchupEntry } from "@/lib/league.server";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
+import { scoreActualLine } from "@/lib/scoring-map";
 
 import {
   HEX_CLIP,
+  PossessionStripBadges,
   REGULAR_SEASON_WEEKS,
   Score,
   entryPoints,
   gameStripLabels,
   ordinal,
+  possessionPill,
   progressFor,
   resolveEntryLineup,
   scheduleOpponent,
@@ -47,8 +51,11 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const activeWeek = week ?? nflWeek ?? 1;
 
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
-  const { progressByNflTeam } = useNflGameProgress(activeWeek);
+  const { progressByNflTeam, currentWeek } = useNflGameProgress(activeWeek);
   const { data: schedule = [] } = useNflSchedule();
+  const { scoringMap } = useLeagueScoringMeta();
+  const { statsFor } = useWeeklyActualStats(activeWeek);
+  const isPastWeek = currentWeek != null && activeWeek < currentWeek;
 
   const standingIndex = standingsRows.findIndex(
     (r) => myTeam != null && Number(r.rosterId) === Number(myTeam.slot),
@@ -85,16 +92,38 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     return <p className="px-5 py-16 text-center text-sm text-m-muted">We could not find your team in this league.</p>;
   }
 
-  const myProjected = mine?.projectedPoints ?? null;
-  const oppProjected = opponent?.projectedPoints ?? null;
+  const sumStarterProj = (entry: WeeklyMatchupEntry | null): number | null => {
+    if (!entry) return null;
+    if (entry.projectedPoints > 0) return entry.projectedPoints;
+    const { starters } = resolveEntryLineup(entry, slotLabels(rosterPositions), playersById);
+    let sum = 0;
+    let any = false;
+    for (const row of starters) {
+      if (!row.player) continue;
+      const p = projectFor(sleeperIdFor(row.player));
+      if (p == null || !Number.isFinite(p)) continue;
+      sum += p;
+      any = true;
+    }
+    return any ? Math.round(sum * 100) / 100 : entry.projectedPoints;
+  };
+  const myProjected = sumStarterProj(mine);
+  const oppProjected = sumStarterProj(opponent);
   const rowProps: RowHelpers = {
-    pointsFor: (p) => (mine ? entryPoints(mine, p.id) : null),
+    pointsFor: (p) => {
+      if (!mine) return null;
+      const host = entryPoints(mine, p.id);
+      if (host !== 0) return host;
+      const scored = scoreActualLine(statsFor(sleeperIdFor(p)), scoringMap);
+      return scored ?? host;
+    },
     projectedFor: (p) => projectFor(sleeperIdFor(p)),
     posRankFor: (p) => rankFor(sleeperIdFor(p)).pos,
     progressFor: (p) => progressFor(p.team, progressByNflTeam),
     opponentFor: (p) => scheduleOpponent(schedule, activeWeek, p.team),
     byeWeek: (p) => p.bye === activeWeek,
     playerIdFor: (p) => sleeperIdFor(p),
+    showActuals: isPastWeek,
   };
 
   return (
@@ -248,6 +277,7 @@ type RowHelpers = {
   opponentFor: (p: Player) => string | null;
   byeWeek: (p: Player) => boolean;
   playerIdFor: (p: Player) => string;
+  showActuals: boolean;
 };
 
 function LineupSection({ title, rows, ...helpers }: { title: string; rows: LineupRow[] } & RowHelpers) {
@@ -276,6 +306,7 @@ function LineupCard({
   opponentFor,
   byeWeek,
   playerIdFor,
+  showActuals,
 }: { row: LineupRow } & RowHelpers) {
   const openPlayer = useOpenMobilePlayer();
   const player = row.player;
@@ -289,12 +320,17 @@ function LineupCard({
   }
 
   const progress = progressOf(player);
-  const locked = progress?.phase === "in" || progress?.phase === "post";
+  const locked = showActuals || progress?.phase === "in" || progress?.phase === "post";
   const points = locked ? pointsFor(player) : null;
   const projected = projectedFor(player);
   const posRank = posRankFor(player);
   const logo = teamLogo(player.team);
-  const strip = gameStripLabels(progress, { bye: byeWeek(player), opponent: opponentFor(player) });
+  const status = possessionPill(player, progress);
+  const strip = gameStripLabels(progress, {
+    bye: byeWeek(player),
+    opponent: opponentFor(player),
+    team: player.team,
+  });
 
   return (
     <article className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
@@ -338,14 +374,29 @@ function LineupCard({
             {player.team || "FA"} - {player.pos}
           </p>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="flex shrink-0 flex-col items-end text-right">
           <Score value={points} className="font-display text-xl font-bold italic leading-none" />
-          <p className="mt-1 text-xs italic text-m-muted tabnum">{projected != null ? projected.toFixed(2) : "-"}</p>
+          {status ? (
+            <span
+              className={
+                status === "possession"
+                  ? "mt-1 inline-block rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
+                  : "mt-1 inline-block rounded-full bg-m-chip px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-m-muted"
+              }
+            >
+              {status === "possession" ? "Possession" : "Sideline"}
+            </span>
+          ) : (
+            <p className="mt-1 text-xs italic text-m-muted tabnum">{projected != null ? projected.toFixed(2) : "-"}</p>
+          )}
         </div>
       </div>
       <div className="flex items-center justify-between gap-2 bg-m-row-alt px-3 py-1.5 text-[11px] font-semibold text-m-muted">
         <span className="truncate">{strip.game}</span>
-        <span className="shrink-0 uppercase">{strip.status}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 uppercase">
+          <PossessionStripBadges hasBall={strip.hasBall} redZone={strip.redZone} />
+          {strip.status}
+        </span>
       </div>
     </article>
   );

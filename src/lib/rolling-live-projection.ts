@@ -14,6 +14,8 @@ export type NflGameProgress = {
   shortDetail?: string;
   /** Uppercase NFL team abbreviation currently with possession, when known. */
   possessionAbbr?: string;
+  /** True when ESPN reports the possession team is in the red zone. */
+  isRedZone?: boolean;
   /** Final / live box score label, e.g. "SEA 13 - NE 10". */
   boxScoreLabel?: string;
   /** Uppercase NFL opponent abbreviation for this team's game, when known. */
@@ -60,7 +62,13 @@ export function buildNflGameProgressMap(scoreboard: unknown): Map<string, NflGam
             displayClock?: string;
             clock?: number;
           };
-          situation?: { possession?: string };
+          situation?: {
+            possession?: string;
+            isRedZone?: boolean;
+            /** Yard line 0–100; ≤20 (or ≥80 depending on polarity) ≈ red zone. */
+            yardLine?: number;
+            ballsInRedZone?: boolean;
+          };
           competitors?: {
             id?: string;
             homeAway?: string;
@@ -117,6 +125,13 @@ export function buildNflGameProgressMap(scoreboard: unknown): Map<string, NflGam
       );
       possessionAbbr = holder?.team?.abbreviation?.trim().toUpperCase() || undefined;
     }
+    const sit = competition.situation;
+    const yardLine = Number(sit?.yardLine);
+    const isRedZone = Boolean(
+      sit?.isRedZone ||
+        sit?.ballsInRedZone ||
+        (Number.isFinite(yardLine) && yardLine > 0 && yardLine <= 20),
+    );
 
     const away = (competition.competitors ?? []).find((c) => c.homeAway === "away");
     const home = (competition.competitors ?? []).find((c) => c.homeAway === "home");
@@ -158,6 +173,7 @@ export function buildNflGameProgressMap(scoreboard: unknown): Map<string, NflGam
       ...(kickoffIso ? { kickoffIso } : {}),
       ...(shortDetail ? { shortDetail } : {}),
       ...(possessionAbbr ? { possessionAbbr } : {}),
+      ...(isRedZone ? { isRedZone: true } : {}),
       ...(boxScoreLabel ? { boxScoreLabel } : {}),
     };
 

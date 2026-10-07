@@ -161,7 +161,8 @@
   --m-tab-active-border: #2d6573;
   --m-nav: #121212;
   --m-nav-fg: #c9c9c9;
-  --m-nav-active: #f7d117;
+  /* Match light-theme blue active tabs (not yellow/gold). */
+  --m-nav-active: #0f8fb0;
   --m-sheet: #2a2a2a;
   --m-row-alt: #2e2e2e;
   --m-rank-col: #173238;

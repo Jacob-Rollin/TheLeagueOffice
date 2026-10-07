@@ -145,6 +145,41 @@ function buildEntries(
 
 const liveMemory = new Map<string, { at: number; board: LeagueWeekMatchups }>();
 
+/** Fill team projected totals from league scoring + week projection bundle. */
+async function enrichProjectedPointsClient(
+  leagueId: string,
+  week: number,
+  entries: WeeklyMatchupEntry[],
+): Promise<void> {
+  const needs = entries.some((e) => e.projectedPoints <= 0 && e.starters.some(Boolean));
+  if (!needs) return;
+  try {
+    const { fetchNflStateClient, weekProjectionBundle } = await import("@/lib/sleeper-client");
+    const { fetchLeagueScoringPreferred } = await import("@/lib/scoring-client");
+    const { projectionPoints } = await import("@/lib/scoring-map");
+    const state = await fetchNflStateClient().catch(() => null);
+    const season = state?.season ?? String(new Date().getUTCFullYear());
+    const [scoring, bundle] = await Promise.all([
+      fetchLeagueScoringPreferred({ identifier: leagueId, platform: "sleeper" }),
+      weekProjectionBundle(season, week),
+    ]);
+    for (const entry of entries) {
+      if (entry.projectedPoints > 0) continue;
+      let sum = 0;
+      for (const starterId of entry.starters) {
+        if (!starterId) continue;
+        const row = bundle[starterId];
+        if (!row?.raw) continue;
+        const scored = projectionPoints(row.raw, scoring.map, scoring.format);
+        if (scored != null) sum += scored;
+      }
+      entry.projectedPoints = roundHundredths(sum);
+    }
+  } catch {
+    /* keep zeros — headers still show actuals */
+  }
+}
+
 async function buildBoard(
   leagueId: string,
   safeWeek: number,
@@ -159,6 +194,7 @@ async function buildBoard(
   const attachLiveReserve = currentWeek == null || safeWeek >= currentWeek;
   const entries = buildEntries(rows, meta.metaByRoster, meta.reserveByRoster, attachLiveReserve);
   if (entries.length < 2) return null;
+  await enrichProjectedPointsClient(leagueId, safeWeek, entries);
   return { week: safeWeek, entries, source: "sleeper" as const };
 }
 
