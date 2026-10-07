@@ -33,7 +33,8 @@
 - Position filter chips: active `border-blue-600 bg-blue-600 text-white`; inactive white / `text-blue-700`.
 - UI label for defense position is **DST** (internal pos remains `DEF`).
 - Market value columns: `ValueTrendCell` + `scaleValue`; column label is **Value/Trend** (never a bare `$` header).
-- Research routes: `ssr: false`. Remount league-dependent boards with `key={activeLeagueId ?? "none"}` when the active league changes.
+- Research routes, Trade Desk (`/trade`), and The Wire (`/waiver`): `ssr: false` (SSR catalog loaders burn Fluid Active CPU).
+- Remount league-dependent boards with `key={activeLeagueId ?? "none"}` when the active league changes.
 - Prefer CDN research helpers (`research-cdn`) with `staleTime: RESEARCH_CLIENT_STALE_MS` and `placeholderData: (prev) => prev` so format toggles do not flash empty.
 
 # Data & AI Logic Constraints
@@ -47,36 +48,47 @@
 # onto TiDB RUs, GitHub raw, or visitor Sleeper/ESPN rate limits.
 
 ## Default data path (prefer in this order)
-1. Browser → public APIs with IndexedDB (`getCached` in `sleeper-cache`, helpers in `sleeper-client`, `sleeper-rosters-client`, `scoring-client`, `sleeper-trending`).
-2. Browser → edge-cached routes: `/api/data/research/*` (`research-cdn`), `/api/data/snap/*` (`snap-cdn`), `/api/data/league/$id` (`league-matchups-cdn`), `/api/data/players-export`.
-3. Fluid `createServerFn` only for credentials/secrets/writes (ESPN s2/swid, Yahoo OAuth, league sync writes, account delete) or true last-resort misses in **dev**.
+1. Browser → public APIs with IndexedDB (`getCached` in `sleeper-cache`, helpers in `sleeper-client`, `sleeper-rosters-client`, `sleeper-league-sync-client`, `scoring-client`, `sleeper-trending`).
+2. Browser → **GitHub `snap-cdn` branch** via `VITE_SNAP_CDN_BASE` / `r2-public.ts` (research + public snap JSON; no Fluid). Actions workflow **Publish Snap CDN** force-pushes the orphan branch.
+3. Browser → `/api/data/research/*` (`research-cdn`, TiDB SELECT-only), `/api/data/league/$id` (`league-matchups-cdn`), `/api/data/players-export`. Browse `/api/data/snap/*` soft-empties — **no compute** (see below).
+4. Fluid `createServerFn` only for credentials/secrets/writes (ESPN s2/swid, Yahoo OAuth, league sync writes, account delete) or true last-resort misses in **dev**.
+
+## GitHub snap-cdn (no-card public JSON)
+- Client helpers in `research-cdn` / `snap-cdn` call `r2Url(...)` first (`VITE_SNAP_CDN_BASE`, legacy alias `VITE_R2_PUBLIC_BASE`).
+- Object keys: `R2_RESEARCH_KEYS` / `R2_SNAP_KEYS` in `r2-public.ts` (includes `injury-wire.json`).
+- **Never promote / redeploy the `snap-cdn` branch on Vercel** — it is JSON-only and will 404 Production. `vercel.json` sets `git.deploymentEnabled.snap-cdn: false`.
+- Warm shared snaps with Actions → **Publish Snap CDN** (uses `CRON_SECRET` so `/api/data/snap/*` may compute for the publish fetch only).
 
 ## Client-first caching without burning visitor IPs
-- Prefer client/public fetches **and** CDN snaps, but never unbounded fan-out from the browser.
+- Prefer client/public fetches **and** snap-cdn / CDN, but never unbounded fan-out from the browser.
 - Always wrap public Sleeper (and similar) fetches in `getCached(key, ttlMs, fetcher)` so IndexedDB/localStorage + in-flight dedupe share one download per visitor.
 - Cap concurrency when a week/player fan-out is unavoidable (existing pattern: projection weeks `PROJ_WEEK_CONCURRENCY = 2` in `sleeper-client`; do not raise without cause). Prefer shared week bundles over per-player downloads.
-- Reuse shared React Query keys instead of inventing parallel caches: `["players-catalog"]`, `["player", id, "client-v1"]`, `["nfl-state", …]`, `["league-scoring", "v5", …]`, `["league-rosters", connectionId]`, `["league-matchups-cdn-all", …]`, `["injury-reports"]`, `["trade-value-basis"]`, `["fantasy-news-feed", limit]`, etc.
+- Reuse shared React Query keys instead of inventing parallel caches: `["players-catalog"]`, `["player", id, "client-v1"]`, `["nfl-state", …]`, `["league-scoring", "v5", …]`, `["league-rosters", connectionId]`, `["league-matchups-cdn-all", …]`, `["injury-reports"]`, `["injury-wire", limit]`, `["trade-value-basis"]`, `["fantasy-news-feed", limit]`, etc.
 - Global RQ defaults (`router.tsx`): `staleTime` 5m, `gcTime` 30m, `refetchOnWindowFocus: false`, `refetchIntervalInBackground: false` — do not override these to be more aggressive for heavy queries.
 - Soft-empty / stale-on-error for public reads — do not retry storms on 429; one polite backoff then stop (see `sleeper-client`).
 - ESPN athlete/news feeds are especially ban-prone: batch via snaps (`fetchSnapFantasyNews`, `fetchSnapRosterNews`, injury snaps) — never N concurrent Fluid or browser ESPN calls per visible row.
-- When data is identical for every visitor, put it on CDN (`research` / `snap` / cron-warmed TiDB) so each client hits the edge once, not upstream APIs.
+- When data is identical for every visitor, publish to **snap-cdn** (and/or cron → TiDB for research SELECTs) so each client hits GitHub/edge once, not Fluid.
 
 ## Never do these (regressions we already fixed)
 - Do not call Fluid `createServerFn` for public Sleeper reads (state, projections, stats, game logs, bio, next game, trending, Sleeper rosters/scoring when league id is known).
 - Do not fan out N Fluid calls per page (e.g. one `getConnectionMatchups` / `getPlayerNews` per week or per visible row). Use one CDN/all-weeks fetch or one shared snap.
 - Do not add `refetchOnWindowFocus: true` for heavy Sleeper/projection queries — IndexedDB TTL owns freshness.
 - Do not poll while the tab is hidden. Use `visibleRefetchInterval` / `isPageVisible` from `page-visibility.ts`, and keep `refetchIntervalInBackground: false`.
-- Do not fall back to Fluid in **production** when research/snap CDN misses — soft-empty instead (`allowFluidFallback` only when `import.meta.env.DEV`). Align new CDN helpers with `research-cdn` / `snap-cdn`.
+- Do not fall back to Fluid in **production** when research/snap-cdn / `/api/data/*` misses — soft-empty instead (`allowFluidFallback` only when `import.meta.env.DEV`). Align new helpers with `research-cdn` / `snap-cdn`.
+- Do not let browse `/api/data/snap/*` **compute** on miss — soft-empty unless `authorizeCronRequest` (Publish Snap CDN / Vercel cron with `CRON_SECRET`). Research `/api/data/research/*` stays TiDB SELECT-only (`allowCompute` only from research cron).
 - Do not load full career game-log years on player popup open — use `fetchGameLogsClient(..., { includeCareer: false })` until Game Logs needs career.
 - Do not re-download week projection bundles for ATP injuries — reuse `weekProjectionBundle` / live-injury overlay in `sleeper-client`.
 - Do not bypass shared roster loaders: use `fetchLeagueRostersForConnection` (Sleeper client-first) for any `["league-rosters", …]` queryFn (Global Search, fantasy team name, playbook).
 - Do not use playbook dashboard history via N× Fluid matchups — use `fetchLeagueAllMatchupsCdn` (same key as analytics).
 - Do not wire Top Available / list headlines through N× `getPlayerNews` — use `fetchSnapFantasyNews` (or another single snap).
 - Do not call `getRosterNews` Fluid directly from UI — use `fetchSnapRosterNews`.
-- Do not call trade basis / injury reports / injury wire / fantasy news / trade market / Sleeper ROS / slot ranks via Fluid first — use the matching `fetchSnap*` helper in `snap-cdn.ts`.
-- Do not call research aggregates (FPA, SOS, leaders, red zone, targets, ATP, matchups guide) via Fluid first — use `research-cdn` helpers.
+- Do not call trade basis / injury reports / injury wire / fantasy news / trade market / Sleeper ROS / slot ranks via Fluid first — use the matching `fetchSnap*` helper in `snap-cdn.ts` (snap-cdn branch first).
+- Do not call research aggregates (FPA, SOS, leaders, red zone, targets, ATP, matchups guide) via Fluid first — use `research-cdn` helpers (snap-cdn branch first).
 - Do not assemble player detail via Fluid `getPlayerDetail` when catalog is warm — use `fetchPlayerDetailClient`.
-- Do not shorten CDN TTLs or remove `processMemo` coalescing on TiDB-backed data routes without a clear freshness need (RU burn).
+- Do not call Fluid `getUserLeagues` / `getLeagueSync` for War Room / Draft — use `fetchUserLeaguesPreferred` / `fetchLeagueSyncPreferred` (`sleeper-league-sync-client`).
+- Do not call Fluid `getConnectionSync` for public Sleeper draft setup — use `fetchConnectionSyncPreferred` (`sleeper-sync-client`).
+- Do not stamp homepage Injury Wire `published` from ESPN designation `date` when the copy is RotoWire — use the RotoWire/Sleeper news time; show the top N by that real news time (`loadInjuryWire`).
+- Do not shorten CDN TTLs or remove `processMemo` coalescing on TiDB-backed **research/league** data routes without a clear freshness need (RU burn).
 - Do not lower league sync cooldown below the intentional long window (cron owns frequent refresh; page loads only top up stale sessions).
 - Do not call Fluid `deltaSyncLeague` on Sleeper browse page loads — GitHub Actions → `/api/cron/league-delta-sync` (+ daily `fillSeason`) owns the warm; browsers read CDN/client.
 - Do not call Fluid `getConnectionStandings` for public Sleeper leagues — use `fetchSleeperStandingsClient` (`sleeper-standings-client`).
@@ -84,31 +96,33 @@
 - Do not call Fluid `getHallOfFame` — use `loadHallOfFame` (browser → Supabase anon).
 - Do not fall back to Fluid `getPlayerDetail` in production when the catalog client misses — soft-empty instead.
 - Do not call Fluid `getPickupResults` for Sleeper — use `fetchPickupResultsPreferred` (`pickup-results-client`).
-- Do not move heavy work onto GitHub raw/nflverse downloads on the request path (prefer cron → TiDB/CDN). Matchup replay PBP is an exception — do not expand that pattern.
-- Keep Actions warm jobs: `league-delta-sync.yml` (gameday + daily fillSeason) and `league-planning-snaps.yml` (ROS / slot ranks). Do not reintroduce per-visitor Fluid for those surfaces.
+- Do not move heavy work onto GitHub raw/nflverse downloads on the **app request** path (prefer cron → TiDB / Publish Snap CDN). Serving published JSON from the `snap-cdn` branch is intentional.
+- Keep Actions warm jobs lean: `league-delta-sync.yml` (gameday **hourly**, daily fillSeason), `league-planning-snaps.yml` (once daily + Tue, small limit), `research-aggregates.yml` (GH owns research warm — no duplicate Vercel daily), `publish-snap-cdn.yml`. Do not reintroduce per-visitor Fluid or 30m gameday delta storms.
 
 ## When Fluid is allowed
 - ESPN/Yahoo paths that require `s2` / `swid` / OAuth tokens.
 - League sync writes: `deltaSyncLeague`, `forceClearAndReSyncLeague`, cron host→TiDB upserts.
 - Admin / account / secret-gated operations.
-- CDN **origin** handlers on `/api/data/*` (shared edge miss is OK; per-visitor `createServerFn` is not).
+- Cron-authenticated snap **compute** for Publish Snap CDN / planning warm (`CRON_SECRET` / `x-vercel-cron`). Anonymous browse must soft-empty.
+- Research/league `/api/data/*` TiDB SELECT origins (shared; not per-visitor `createServerFn`).
 - Dev-only Fluid fallback when local snaps are cold.
 
 ## When adding a new data surface
 - Ask: can the browser fetch this publicly with `getCached` (and a concurrency cap if fan-out is needed)?
-- If shared across visitors: add or extend `/api/data/research/*` or `/api/data/snap/*` with `processMemo` + long `researchCacheControl` / appropriate cache helper; wire a client helper that soft-empties in prod.
+- If shared across visitors: publish via **Publish Snap CDN** (`r2-public` keys + `research-cdn` / `snap-cdn` client) and/or TiDB research SELECT routes; wire soft-empty in prod. Do not rely on anonymous `/api/data/snap/*` compute-on-miss.
 - If league-scoped synced data: prefer `/api/data/league/$id` CDN (TiDB) over Fluid host pulls; Fluid refresh only when snap is cold/stale **and** the tab is visible (see `league-matchups-cdn`).
 - If credentials required: keep Fluid, but cache aggressively client-side and avoid polling when hidden.
 - Never “fix” Fluid burn by blasting TiDB on every page load without CDN/`processMemo`, or by unbounded concurrent Sleeper/ESPN calls from the browser.
 
 ## Key modules to reuse (do not reinvent)
 - `src/lib/page-visibility.ts` — pause polls when hidden
-- `src/lib/sleeper-cache.ts` / `sleeper-client.ts` / `sleeper-rosters-client.ts` / `sleeper-standings-client.ts` / `sleeper-meta-client.ts` / `sleeper-settings-client.ts` / `sleeper-activity-client.ts` / `scoring-client.ts` / `sleeper-trending.ts`
-- `src/lib/research-cdn.ts` / `snap-cdn.ts` / `league-matchups-cdn.ts` / `league-rosters-fetch.ts` / `league-settings-fetch.ts` / `league-activity-fetch.ts`
+- `src/lib/sleeper-cache.ts` / `sleeper-client.ts` / `sleeper-rosters-client.ts` / `sleeper-standings-client.ts` / `sleeper-meta-client.ts` / `sleeper-settings-client.ts` / `sleeper-activity-client.ts` / `sleeper-league-sync-client.ts` / `sleeper-sync-client.ts` / `scoring-client.ts` / `sleeper-trending.ts`
+- `src/lib/r2-public.ts` / `research-cdn.ts` / `snap-cdn.ts` / `league-matchups-cdn.ts` / `league-rosters-fetch.ts` / `league-settings-fetch.ts` / `league-activity-fetch.ts`
 - `src/lib/player-detail-client.ts` / `sos-from-board.ts` / `players-catalog.ts`
-- `src/lib/process-memo.ts` / `api-cache.ts` (`dataCacheControl`, `leagueHistoryCacheControl`, `researchCacheControl`, `warehouseCacheControl`)
+- `src/lib/process-memo.ts` / `cron-auth.server.ts` / `api-cache.ts` (`dataCacheControl`, `leagueHistoryCacheControl`, `researchCacheControl`, `warehouseCacheControl`)
 - `src/components/research/*`, `PlaybookShell`, `PlayerModalHost`, `ActiveLeagueLabel`
 - Routes: `api/data/research.$kind.ts`, `api/data/snap.$kind.ts`, `api/data/league.$id.ts`, `api/data/players-export.ts`
+- Docs: `docs/snap-cdn-setup.md`
 
 # Strict Schema Utilization Instructions
 - Always use these exact active tables and property data types when writing TypeScript functions, UI layout components, or custom Supabase mutations.
