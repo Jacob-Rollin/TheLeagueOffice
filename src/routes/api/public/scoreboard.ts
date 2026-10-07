@@ -4,7 +4,7 @@ const ESPN = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scorebo
 
 /** In-process dedupe for concurrent visitors on the same instance. */
 const LIVE_TTL_MS = 15 * 1000;
-const IDLE_TTL_MS = 60 * 1000;
+const IDLE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { expires: number; body: Promise<string | null>; live: boolean }>();
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
