@@ -31,7 +31,9 @@ function cacheControlFor(live: boolean): string {
   if (live) {
     return "public, s-maxage=15, stale-while-revalidate=60, max-age=10";
   }
-  return "public, s-maxage=300, stale-while-revalidate=600, max-age=60";
+  // max-age must cover quiet browser polls or every tab revalidates through CDN
+  // even when React Query waits 10m (Hobby counts CDN HITs).
+  return "public, s-maxage=600, stale-while-revalidate=600, max-age=300";
 }
 
 function loadScoreboard(target: string): Promise<{ body: string | null; live: boolean }> {

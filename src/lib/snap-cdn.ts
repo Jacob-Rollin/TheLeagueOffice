@@ -130,31 +130,79 @@ export async function fetchSnapTradeMarket(format: "std" | "half" | "ppr" = "hal
   return getTradeMarket({ data: { format } });
 }
 
+/**
+ * Roster news for dashboard / My Team.
+ *
+ * Browse must NOT hit `/api/data/snap/roster-news` — that route soft-empties with
+ * `no-store` for anonymous traffic (cron-only compute), so every playbook load
+ * was a Vercel CDN miss. Compose from GitHub snap-cdn injury + fantasy feeds
+ * instead (zero Vercel). DEV may still Fluid-backfill.
+ */
 export async function fetchSnapRosterNews(ids: string[]) {
+  type RosterNews = Awaited<ReturnType<typeof import("./players.server").loadRosterNews>>;
+  const empty: RosterNews = { season: "", week: 0, players: [] };
   const clean = Array.from(new Set(ids.map((id) => String(id).slice(0, 32)).filter(Boolean)))
     .sort()
     .slice(0, 30);
-  if (!clean.length) {
-    return {
-      season: "",
-      week: 0,
-      players: [] as Awaited<ReturnType<typeof import("./players.server").loadRosterNews>>["players"],
-    };
-  }
-  const qs = new URLSearchParams({ ids: clean.join(",") });
-  const hit = await fetchSnapJson<Awaited<ReturnType<typeof import("./players.server").loadRosterNews>>>(
-    `/api/data/snap/roster-news?${qs}`,
+  if (!clean.length) return empty;
+
+  const [reports, feed] = await Promise.all([
+    fetchSnapInjuryReports().catch(() => null),
+    fetchSnapFantasyNews(80).catch(() => null),
+  ]);
+  const want = new Set(clean);
+  const reportById = new Map(
+    (reports?.items ?? [])
+      .filter((r) => r.sleeperId && want.has(r.sleeperId))
+      .map((r) => [r.sleeperId as string, r]),
   );
-  if (hit && Array.isArray(hit.players) && hit.players.length > 0) return hit;
-  if (!allowFluidFallback()) {
-    return (
-      hit ?? {
-        season: "",
-        week: 0,
-        players: [] as Awaited<ReturnType<typeof import("./players.server").loadRosterNews>>["players"],
-      }
-    );
+  const newsById = new Map<string, NonNullable<RosterNews["players"][number]["news"]>>();
+  const injuryCopy =
+    /\binjur|\bquestionable\b|\bdoubtful\b|\bruled out\b|\binactive\b|\bIR\b|\bsurgery\b/i;
+  for (const row of feed ?? []) {
+    const pid = row.player?.id;
+    if (!pid || !want.has(pid) || newsById.has(pid)) continue;
+    const headline = row.headline ?? "";
+    const body = row.body || "";
+    newsById.set(pid, {
+      headline,
+      analysis: body,
+      published: row.published ?? "",
+      link: row.link,
+      injury: injuryCopy.test(`${headline} ${body}`),
+    });
   }
+
+  const players: RosterNews["players"] = clean.map((id) => {
+    const report = reportById.get(id);
+    const status = report?.status?.trim() || null;
+    const statusShort = report?.statusShort?.trim() || null;
+    const onIr = statusShort === "IR" || /^injured reserve$/i.test(status ?? "");
+    return {
+      id,
+      status,
+      bodyPart: report?.injury?.trim() || null,
+      reserve: onIr,
+      // Official practice-report rows aren't on the public snap — map what we have
+      // so designation/injury labels still populate from the injury-reports feed.
+      report: report
+        ? {
+            week: 0,
+            status: statusShort || status,
+            injury: report.injury?.trim() || null,
+            practice: null,
+          }
+        : null,
+      news: newsById.get(id) ?? null,
+    };
+  });
+
+  if (players.some((p) => p.news || p.report || p.status)) {
+    return { season: "", week: 0, players };
+  }
+
+  if (!allowFluidFallback()) return { season: "", week: 0, players };
+
   const { getRosterNews } = await import("./players.functions");
   return getRosterNews({ data: { ids: clean } });
 }
@@ -177,16 +225,8 @@ export async function fetchSnapRestOfSeason(input: {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
   const empty = { weeks: [] as number[], byWeek: [] as Record<string, number>[] };
   if (platform === "sleeper" && /^\d{6,}$/.test(input.identifier)) {
-    const qs = new URLSearchParams({
-      league: input.identifier,
-      from: String(input.fromWeek),
-      to: String(input.toWeek),
-    });
-    const hit = await fetchSnapJson<
-      Awaited<ReturnType<typeof import("./standings-projections.server").loadRestOfSeasonProjections>>
-    >(`/api/data/snap/ros?${qs}`);
-    if (hit && Array.isArray(hit.weeks) && hit.weeks.length > 0) return hit;
-
+    // Browse `/api/data/snap/ros` is cron-compute-only and returns empty
+    // `no-store` for visitors — skip that Vercel CDN miss and compute in-browser.
     const { computeRestOfSeasonClient } = await import("./standings-projections-client");
     const client = await computeRestOfSeasonClient({
       identifier: input.identifier,
@@ -198,9 +238,8 @@ export async function fetchSnapRestOfSeason(input: {
       ...(input.teamName ? { teamName: input.teamName } : {}),
     }).catch(() => null);
     if (client && Array.isArray(client.weeks) && client.weeks.length > 0) return client;
+    if (!allowFluidFallback()) return empty;
   }
-
-  if (!allowFluidFallback() && platform === "sleeper") return empty;
 
   const { getRestOfSeasonProjections } = await import("./league.functions");
   return getRestOfSeasonProjections({
@@ -228,16 +267,7 @@ export async function fetchSnapStartingSlotRanks(input: {
   const toWeek = input.toWeek ?? input.fromWeek;
   const empty = { seats: [] as string[], teams: [] };
   if (platform === "sleeper" && /^\d{6,}$/.test(input.identifier)) {
-    const qs = new URLSearchParams({
-      league: input.identifier,
-      from: String(input.fromWeek),
-      to: String(toWeek),
-    });
-    const hit = await fetchSnapJson<
-      Awaited<ReturnType<typeof import("./standings-projections.server").loadStartingSlotRanks>>
-    >(`/api/data/snap/slot-ranks?${qs}`);
-    if (hit && Array.isArray(hit.teams) && hit.teams.length > 0) return hit;
-
+    // Same as ROS: anonymous snap route is empty no-store — browser compute only.
     const { computeStartingSlotRanksClient } = await import("./standings-projections-client");
     const client = await computeStartingSlotRanksClient({
       identifier: input.identifier,
@@ -249,9 +279,8 @@ export async function fetchSnapStartingSlotRanks(input: {
       ...(input.teamName ? { teamName: input.teamName } : {}),
     }).catch(() => null);
     if (client && Array.isArray(client.teams) && client.teams.length > 0) return client;
+    if (!allowFluidFallback()) return empty;
   }
-
-  if (!allowFluidFallback() && platform === "sleeper") return empty;
 
   const { getStartingSlotRanks } = await import("./league.functions");
   return getStartingSlotRanks({

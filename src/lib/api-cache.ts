@@ -70,10 +70,11 @@ export function isPriorWeekBoardFresh(syncedAtMs: number, date = new Date()): bo
 /** Default for live-ish /api/data routes (league boards, etc.). */
 export function dataCacheControl(date = new Date()): string {
   // Live matchups stay on the fast path — do not tie them to week-roll analytics.
+  // Browser max-age must not undercut poll cadence or every HIT still revalidates.
   if (isGamedayUtc(date)) {
-    return "public, s-maxage=30, stale-while-revalidate=10, max-age=15";
+    return "public, s-maxage=30, stale-while-revalidate=10, max-age=20";
   }
-  return "public, s-maxage=300, stale-while-revalidate=60, max-age=60";
+  return "public, s-maxage=300, stale-while-revalidate=120, max-age=180";
 }
 
 /**
@@ -108,10 +109,12 @@ export function researchCacheControl(date = new Date()): string {
  * as session count grows (every client hydrates this).
  */
 export function warehouseCacheControl(date = new Date()): string {
+  // Player brain heartbeat is 30m — keep browser cache at least that long so
+  // popup opens do not re-pull the export through Vercel CDN.
   if (isGamedayUtc(date)) {
-    return "public, s-maxage=600, stale-while-revalidate=300, max-age=120";
+    return "public, s-maxage=1800, stale-while-revalidate=600, max-age=900";
   }
-  return "public, s-maxage=3600, stale-while-revalidate=600, max-age=300";
+  return "public, s-maxage=3600, stale-while-revalidate=1800, max-age=1800";
 }
 
 export function jsonResponse(data: unknown, init?: { status?: number; cache?: string }): Response {
