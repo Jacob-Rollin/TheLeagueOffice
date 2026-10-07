@@ -191,7 +191,8 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
     if (loadHistory && historyLoading) return null;
     if (forecast && scheduleLoading) return null;
     const posById = new Map(playersPayload.players.map((p) => [p.id, p.pos]));
-    const posOf = (id: string) => posById.get(id) ?? (/^[A-Z]{2,3}$/.test(id) ? "DEF" : null);
+    // Catalog lookup only — weeklyOptimalPoints applies team-abbr DEF fallback.
+    const posOf = (id: string) => posById.get(id) ?? null;
 
     const base = computeStandingsAnalytics({
       teams: rows,

@@ -169,6 +169,24 @@ function normalizePos(pos: string | null | undefined): string | null {
 }
 
 /**
+ * Resolve a rostered player id to a fantasy position for Max PF.
+ * Catalog miss fallback: Sleeper team defenses use the NFL abbrev as the id.
+ */
+export function resolveAnalyticsPos(
+  playerId: string,
+  posOf: (playerId: string) => string | null,
+): string | null {
+  const direct = normalizePos(posOf(playerId));
+  if (direct) return direct;
+  const abbr = String(playerId ?? "")
+    .trim()
+    .toUpperCase();
+  // Sleeper D/ST ids are team abbreviations (e.g. "PHI", "WSH").
+  if (/^[A-Z]{2,3}$/.test(abbr)) return "DEF";
+  return null;
+}
+
+/**
  * One team's best possible lineup for a finished week, shared by the dashboard's Coaching
  * Efficiency and the standings so every page shows the same number. The pool is everyone who
  * scored for the team that week (IR included, matching StatChaser / FantasyPros), minus players
@@ -184,7 +202,7 @@ export function weeklyOptimalPoints(
   const candidates: { id: string; pos: string; points: number }[] = [];
   for (const [id, pts] of Object.entries(entry.playerPoints ?? {})) {
     if (!started.has(id) && unstartable.has(id)) continue;
-    const pos = normalizePos(posOf(id));
+    const pos = resolveAnalyticsPos(id, posOf);
     if (!pos) continue;
     candidates.push({ id, pos, points: Number(pts) || 0 });
   }
@@ -381,13 +399,20 @@ export function computeStandingsAnalytics(input: {
   const simulated = playoffTeams > 0 && ids.length > 1;
   const record = new Map(teams.map((t) => [t.rosterId, t]));
   for (const id of ids) {
-    const total = pf.get(id)!;
+    const matchupPf = pf.get(id)!;
     const max = completedWeeks.length ? (maxPf.get(id) ?? null) : null;
     const t = record.get(id)!;
+    // Sleeper start/sit % uses standings PF ÷ Max PF. Prefer host PF when it
+    // lines up with the matchup slate we optimized (rounding noise only); if a
+    // full week is missing from history, keep the matched matchup sum.
+    const standingsPf = Number(t.pointsFor) || 0;
+    const pfAligned =
+      standingsPf > 0 && matchupPf > 0 && Math.abs(standingsPf - matchupPf) < 1;
+    const effPf = pfAligned ? standingsPf : matchupPf;
     out.set(id, {
-      pf: total,
+      pf: matchupPf,
       maxPf: max,
-      efficiency: max && max > 0 ? Math.min(100, (total / max) * 100) : null,
+      efficiency: max && max > 0 ? Math.min(100, (effPf / max) * 100) : null,
       playoffPct: simulated ? (madePlayoffs.get(id)! / simCount) * 100 : null,
       titlePct: simulated ? (wonTitle.get(id)! / simCount) * 100 : null,
       byePct: simulated && byes > 0 ? (gotBye.get(id)! / simCount) * 100 : null,
