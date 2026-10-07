@@ -4,7 +4,8 @@ import { useNflState } from "@/hooks/useLeagueProjections";
 import { usePublicScoreboard } from "@/hooks/usePublicScoreboard";
 import { buildNflGameProgressMap, type NflGameProgress } from "@/lib/rolling-live-projection";
 
-const LIVE_MS = 20 * 1000;
+/** In-game floor for live-week polls — keep ≥30s so visitor Sleeper IPs stay under ~1000/min. */
+const LIVE_MS = 30 * 1000;
 const BETWEEN_GAMES_MS = 2 * 60 * 1000;
 const ALL_FINAL_MS = 10 * 60 * 1000;
 

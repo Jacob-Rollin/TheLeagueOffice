@@ -2,12 +2,18 @@
  * Browser → Sleeper public league matchup boards (schedule + scores).
  * Prefer this over Fluid for Sleeper so future-week schedules and cold
  * TiDB weeks use the visitor's rate-limit pool instead of Vercel CPU.
+ *
+ * Live current-week polls bypass the long IndexedDB TTL so scores move
+ * every ~30–45s without burning Fluid.
  */
 
 import type { LeagueWeekMatchups, WeeklyMatchupEntry } from "@/lib/league.server";
-import { getCached } from "@/lib/sleeper-cache";
+import { getCached, writeCache } from "@/lib/sleeper-cache";
+import { acquireSleeperPermit, waitForSleeperPermit } from "@/lib/sleeper-rate-budget";
 
 const SLEEPER = "https://api.sleeper.app/v1";
+/** In-memory ceiling for live score polls (network floor). */
+const LIVE_MEMORY_TTL_MS = 20 * 1000;
 
 function sleeperAvatar(id: string | null | undefined): string | null {
   const clean = id?.trim();
@@ -17,11 +23,15 @@ function sleeperAvatar(id: string | null | undefined): string | null {
   return `https://sleepercdn.com/avatars/thumbs/${clean}`;
 }
 
-async function sleeperJson<T>(url: string): Promise<T | null> {
+async function sleeperJson<T>(url: string, kind: "live" | "warm" | "default"): Promise<T | null> {
+  const ok =
+    kind === "live" ? acquireSleeperPermit("live") : await waitForSleeperPermit(kind, 4_000);
+  if (!ok) return null;
   try {
     const res = await fetch(url, { headers: { accept: "application/json" } });
     if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, 1500));
+      if (!acquireSleeperPermit(kind === "live" ? "live" : "warm")) return null;
       const retry = await fetch(url, { headers: { accept: "application/json" } });
       if (!retry.ok) return null;
       return (await retry.json()) as T;
@@ -66,8 +76,8 @@ async function loadLeagueMeta(leagueId: string): Promise<{
 } | null> {
   return getCached(`sleeper-matchup-meta-v1:${leagueId}`, 10 * 60 * 1000, async () => {
     const [rosters, users] = await Promise.all([
-      sleeperJson<RosterRow[]>(`${SLEEPER}/league/${leagueId}/rosters`),
-      sleeperJson<UserRow[]>(`${SLEEPER}/league/${leagueId}/users`),
+      sleeperJson<RosterRow[]>(`${SLEEPER}/league/${leagueId}/rosters`, "warm"),
+      sleeperJson<UserRow[]>(`${SLEEPER}/league/${leagueId}/users`, "warm"),
     ]);
     if (!rosters?.length) return null;
     const byUser = new Map((users ?? []).map((u) => [u.user_id, u]));
@@ -149,6 +159,33 @@ function buildEntries(
     .filter((e) => e.rosterId > 0);
 }
 
+const liveMemory = new Map<string, { at: number; board: LeagueWeekMatchups }>();
+
+async function buildBoard(
+  leagueId: string,
+  safeWeek: number,
+  currentWeek: number | null | undefined,
+  kind: "live" | "warm",
+): Promise<LeagueWeekMatchups | null> {
+  const [meta, rows] = await Promise.all([
+    loadLeagueMeta(leagueId),
+    sleeperJson<MatchupRow[]>(`${SLEEPER}/league/${leagueId}/matchups/${safeWeek}`, kind),
+  ]);
+  if (!meta || !rows?.length) return null;
+  const attachLiveReserve = currentWeek == null || safeWeek >= currentWeek;
+  const entries = buildEntries(rows, meta.metaByRoster, meta.reserveByRoster, attachLiveReserve);
+  if (entries.length < 2) return null;
+  return { week: safeWeek, entries, source: "sleeper" as const };
+}
+
+export type SleeperMatchupsClientOpts = {
+  /**
+   * `live` — network fetch for current-week scores (≤20s memory cache).
+   * `warm` — IndexedDB-backed schedule/history fill (minutes TTL).
+   */
+  mode?: "live" | "warm";
+};
+
 /**
  * One week of public Sleeper matchups for a numeric league id.
  * Works for completed (scored) and future (schedule-only) weeks.
@@ -157,10 +194,26 @@ export async function fetchSleeperWeekMatchupsClient(
   leagueId: string,
   week: number,
   currentWeek?: number | null,
+  opts?: SleeperMatchupsClientOpts,
 ): Promise<LeagueWeekMatchups | null> {
   const clean = String(leagueId ?? "").trim();
   const safeWeek = Math.max(1, Math.min(18, Math.floor(Number(week) || 0)));
   if (!/^\d{6,}$/.test(clean) || safeWeek < 1) return null;
+
+  const mode = opts?.mode ?? "warm";
+  const memKey = `${clean}|${safeWeek}`;
+
+  if (mode === "live") {
+    const hit = liveMemory.get(memKey);
+    if (hit && Date.now() - hit.at < LIVE_MEMORY_TTL_MS) return hit.board;
+
+    const board = await buildBoard(clean, safeWeek, currentWeek, "live");
+    if (!board) return hit?.board ?? null;
+    liveMemory.set(memKey, { at: Date.now(), board });
+    // Refresh the warm cache so other surfaces see fresher scores.
+    void writeCache(`sleeper-matchups-v1:${clean}|${safeWeek}`, board).catch(() => undefined);
+    return board;
+  }
 
   const ttlMs =
     currentWeek != null && safeWeek < currentWeek ? 30 * 60 * 1000 : 5 * 60 * 1000;
@@ -169,15 +222,9 @@ export async function fetchSleeperWeekMatchupsClient(
     `sleeper-matchups-v1:${clean}|${safeWeek}`,
     ttlMs,
     async () => {
-      const [meta, rows] = await Promise.all([
-        loadLeagueMeta(clean),
-        sleeperJson<MatchupRow[]>(`${SLEEPER}/league/${clean}/matchups/${safeWeek}`),
-      ]);
-      if (!meta || !rows?.length) return { empty: true as const };
-      const attachLiveReserve = currentWeek == null || safeWeek >= currentWeek;
-      const entries = buildEntries(rows, meta.metaByRoster, meta.reserveByRoster, attachLiveReserve);
-      if (entries.length < 2) return { empty: true as const };
-      return { week: safeWeek, entries, source: "sleeper" as const };
+      const board = await buildBoard(clean, safeWeek, currentWeek, "warm");
+      if (!board) return { empty: true as const };
+      return board;
     },
   ).then((hit) => (hit && !("empty" in hit) ? hit : null));
 }
