@@ -1,7 +1,9 @@
 {
   "git": {
     "deploymentEnabled": {
-      "snap-cdn": false
+      "main": true,
+      "snap-cdn": false,
+      "cursor/*": false
     }
   },
   "crons": [
