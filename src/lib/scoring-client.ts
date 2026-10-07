@@ -105,7 +105,12 @@ export async function fetchLeagueScoringPreferred(input: {
 }): Promise<LeagueScoring> {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
   if (platform === "sleeper") {
-    const client = await fetchSleeperLeagueScoringClient(input.identifier).catch(() => null);
+    let leagueId = String(input.identifier ?? "").trim();
+    if (!/^\d{6,}$/.test(leagueId)) {
+      const { ensureSleeperNumericLeagueId } = await import("@/lib/sleeper-resolve-client");
+      leagueId = (await ensureSleeperNumericLeagueId(leagueId).catch(() => null)) ?? leagueId;
+    }
+    const client = await fetchSleeperLeagueScoringClient(leagueId).catch(() => null);
     if (client?.source === "sleeper" && client.map && Object.keys(client.map).length > 0) {
       return client;
     }

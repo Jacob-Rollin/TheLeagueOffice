@@ -8,6 +8,7 @@ import {
   canFetchSettingsClient,
   fetchSleeperSettingsClient,
 } from "@/lib/sleeper-settings-client";
+import { ensureSleeperNumericLeagueId } from "@/lib/sleeper-resolve-client";
 
 function allowFluidFallback(): boolean {
   try {
@@ -23,10 +24,24 @@ export async function fetchLeagueSettingsForConnection(input: {
   teamName?: string | null | undefined;
   s2?: string | null | undefined;
   swid?: string | null | undefined;
+  connectionId?: string | null | undefined;
 }): Promise<LeagueSettingsDetail | null> {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
-  const leagueId = String(input.leagueId ?? "").trim();
+  let leagueId = String(input.leagueId ?? "").trim();
   if (!leagueId) return null;
+
+  if (platform === "sleeper" && !canFetchSettingsClient(platform, leagueId)) {
+    const resolved = await ensureSleeperNumericLeagueId(leagueId).catch(() => null);
+    if (resolved) {
+      if (input.connectionId) {
+        const { persistResolvedSleeperLeagueId } = await import("@/lib/sleeper-resolve-client");
+        void persistResolvedSleeperLeagueId(input.connectionId, resolved);
+      }
+      leagueId = resolved;
+    } else if (!allowFluidFallback()) {
+      return null;
+    }
+  }
 
   if (canFetchSettingsClient(platform, leagueId)) {
     const client = await fetchSleeperSettingsClient(leagueId, input.teamName).catch(() => null);
@@ -35,6 +50,9 @@ export async function fetchLeagueSettingsForConnection(input: {
     }
     if (!allowFluidFallback()) return client;
   }
+
+  // Production Sleeper: never Fluid-fallthrough (username rows soft-empty above).
+  if (platform === "sleeper" && !allowFluidFallback()) return null;
 
   return getConnectionSettings({
     data: {

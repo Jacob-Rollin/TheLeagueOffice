@@ -137,20 +137,20 @@ function LeagueSettingsPage() {
     enabled: Boolean(row && identifier),
     retry: false,
     staleTime: 5 * 60 * 1000,
-    queryFn: async (): Promise<LeagueSettingsDetail> => {
+    queryFn: async (): Promise<LeagueSettingsDetail | null> => {
       const { fetchLeagueSettingsForConnection } = await import("@/lib/league-settings-fetch");
       const metaLabel = (row?.metadata as Record<string, unknown> | null)?.["label"] as
         | string
         | undefined;
-      const hit = await fetchLeagueSettingsForConnection({
+      // Soft-empty on miss — do not mark the query as error (empty UI already handles null).
+      return fetchLeagueSettingsForConnection({
         leagueId: identifier,
         platform,
         teamName: metaLabel,
+        connectionId,
         ...(row?.espn_s2 ? { s2: row.espn_s2 } : {}),
         ...(row?.swid ? { swid: row.swid } : {}),
       });
-      if (!hit) throw new Error("Could not load league settings.");
-      return hit;
     },
   });
 

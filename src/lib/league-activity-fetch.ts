@@ -13,6 +13,7 @@ import {
   fetchSleeperActivityClient,
   fetchSleeperTransactionLogClient,
 } from "@/lib/sleeper-activity-client";
+import { ensureSleeperNumericLeagueId } from "@/lib/sleeper-resolve-client";
 
 function allowFluidFallback(): boolean {
   try {
@@ -22,6 +23,11 @@ function allowFluidFallback(): boolean {
   }
 }
 
+async function sleeperLeagueId(platform: string, leagueId: string): Promise<string> {
+  if (platform !== "sleeper" || canFetchActivityClient(platform, leagueId)) return leagueId;
+  return (await ensureSleeperNumericLeagueId(leagueId).catch(() => null)) ?? leagueId;
+}
+
 export async function fetchLeagueActivityForConnection(input: {
   leagueId: string;
   platform: string;
@@ -29,14 +35,18 @@ export async function fetchLeagueActivityForConnection(input: {
   swid?: string | null | undefined;
 }): Promise<LeagueActivityEvent[]> {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
-  const leagueId = String(input.leagueId ?? "").trim();
+  let leagueId = String(input.leagueId ?? "").trim();
   if (!leagueId) return [];
+
+  leagueId = await sleeperLeagueId(platform, leagueId);
 
   if (canFetchActivityClient(platform, leagueId)) {
     const client = await fetchSleeperActivityClient(leagueId).catch(() => null);
     if (client) return client;
     if (!allowFluidFallback()) return [];
   }
+
+  if (platform === "sleeper" && !allowFluidFallback()) return [];
 
   return (
     (await getConnectionTransactions({
@@ -57,15 +67,19 @@ export async function fetchLeagueTransactionLogForConnection(input: {
   swid?: string | null | undefined;
 }): Promise<LeagueTransactionLog> {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
-  const leagueId = String(input.leagueId ?? "").trim();
+  let leagueId = String(input.leagueId ?? "").trim();
   const empty: LeagueTransactionLog = { events: [], teams: [], currentWeek: 1 };
   if (!leagueId) return empty;
+
+  leagueId = await sleeperLeagueId(platform, leagueId);
 
   if (canFetchActivityClient(platform, leagueId)) {
     const client = await fetchSleeperTransactionLogClient(leagueId).catch(() => null);
     if (client) return client;
     if (!allowFluidFallback()) return empty;
   }
+
+  if (platform === "sleeper" && !allowFluidFallback()) return empty;
 
   return getConnectionTransactionLog({
     data: {
