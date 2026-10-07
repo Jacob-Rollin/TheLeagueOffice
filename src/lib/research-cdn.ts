@@ -6,7 +6,7 @@
  * so we do not burn Fluid CPU. Dev/local may still use Fluid when snaps are absent.
  */
 
-import { R2_RESEARCH_KEYS, r2Url } from "@/lib/r2-public";
+import { R2_RESEARCH_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
 
 export type ResearchFormat = "std" | "half" | "ppr";
 
@@ -35,7 +35,7 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
-/** R2 first (free egress), then Vercel `/api/data/research/*` (TiDB). */
+/** snap-cdn / R2 first; Vercel only when no public base is configured. */
 async function fetchResearchPreferR2<T>(
   r2Path: string | null,
   apiPath: string,
@@ -45,6 +45,7 @@ async function fetchResearchPreferR2<T>(
     if (r2) {
       const hit = await fetchJson<T>(r2);
       if (hit != null) return hit;
+      if (snapCdnPublicBase()) return null;
     }
   }
   return fetchJson<T>(apiPath);

@@ -66,15 +66,13 @@ export function useLeagueSync() {
 
         if (result.ok) {
           await touchLeagueSyncTimestamp(connectionId, queryClient, userId);
-          queryClient.removeQueries({ queryKey: ["league-activity"] });
-          queryClient.removeQueries({ queryKey: ["active-matchups"] });
-          queryClient.removeQueries({ queryKey: ["active-standings"] });
-          queryClient.removeQueries({ queryKey: ["league-rosters"] });
+          // Delta already paid Fluid for ESPN matchups + transactions → TiDB.
+          // Do NOT wipe standings/rosters/activity — that forced a second Fluid
+          // storm on every league switch. Soft-refresh matchups so CDN/TiDB is
+          // re-read; leave in-flight espnFluidMemo / RQ caches intact.
           await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ["league-activity"] }),
             queryClient.invalidateQueries({ queryKey: ["active-matchups"] }),
-            queryClient.invalidateQueries({ queryKey: ["active-standings"] }),
-            queryClient.invalidateQueries({ queryKey: ["league-rosters"] }),
+            queryClient.invalidateQueries({ queryKey: ["league-matchups-history"] }),
             queryClient.invalidateQueries({ queryKey: ["league-connections"] }),
           ]);
         }

@@ -87,6 +87,8 @@
 - Do not assemble player detail via Fluid `getPlayerDetail` when catalog is warm — use `fetchPlayerDetailClient`.
 - Do not call Fluid `getUserLeagues` / `getLeagueSync` for War Room / Draft — use `fetchUserLeaguesPreferred` / `fetchLeagueSyncPreferred` (`sleeper-league-sync-client`).
 - Do not call Fluid `getConnectionSync` for public Sleeper draft setup — use `fetchConnectionSyncPreferred` (`sleeper-sync-client`).
+- ESPN/Yahoo playbook browse must go through `espnFluidMemo` (`espn-fluid-cache.ts`) for standings/rosters/settings/activity — never re-hit Fluid on every Dashboard/Matchup/My Team mount. Prefer TiDB/CDN matchups; delta-sync must warm ESPN on gameday + daily fill (`sleeperOnly=0`).
+- After ESPN `deltaSyncLeague`, do not `removeQueries` / invalidate standings/rosters/activity (double Fluid storm). Soft-invalidate matchups/history only. Dashboard history `allowFluid` is false for ESPN/Yahoo.
 - Do not stamp homepage Injury Wire `published` from ESPN designation `date` when the copy is RotoWire — use the RotoWire/Sleeper news time; show the top N by that real news time (`loadInjuryWire`).
 - Do not shorten CDN TTLs or remove `processMemo` coalescing on TiDB-backed **research/league** data routes without a clear freshness need (RU burn).
 - Do not lower league sync cooldown below the intentional long window (cron owns frequent refresh; page loads only top up stale sessions).

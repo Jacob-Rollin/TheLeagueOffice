@@ -24,7 +24,9 @@ import type { LeagueWeekMatchups } from "@/lib/league.server";
  */
 const LIVE_POLL_MS = 30 * 1000;
 const BETWEEN_GAMES_POLL_MS = 2 * 60 * 1000;
-const ALL_FINAL_POLL_MS = 10 * 60 * 1000;
+/** ESPN/Yahoo polls hit our `/api/data/league` CDN — keep quieter between games. */
+const ESPN_BETWEEN_GAMES_POLL_MS = 5 * 60 * 1000;
+const ALL_FINAL_POLL_MS = 15 * 60 * 1000;
 
 function boardIsDisplayable(board: LeagueWeekMatchups | null | undefined): boolean {
   return boardHasUsableScores(board) || boardHasSchedulePairings(board);
@@ -38,7 +40,12 @@ function isSleeperPlatform(platform: string): boolean {
   return platform === "sleeper";
 }
 
-/** Resolve one week: live Sleeper (current) → CDN → warm Sleeper; Fluid only for ESPN/Yahoo. */
+/**
+ * Resolve one week:
+ * - Sleeper: visitor→api.sleeper.app first (IndexedDB + rate budget), TiDB CDN only
+ *   as fallback — keeps Hobby CDN Requests off the live path.
+ * - ESPN/Yahoo: CDN first, throttled Fluid for holes.
+ */
 async function loadWeekMatchups(input: {
   leagueId: string;
   week: number;
@@ -76,43 +83,48 @@ async function loadWeekMatchups(input: {
   }
   const sleeper = sleeperPlatform && /^\d{6,}$/.test(leagueId);
 
-  // Current week + Sleeper: browser live poll first (fresh scores, no Fluid).
-  if (sleeper && isCurrent && isPageVisible()) {
-    const live = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek, {
-      mode: "live",
+  // Sleeper: burn the visitor IP pool before our Vercel CDN.
+  if (sleeper && isPageVisible()) {
+    if (isCurrent) {
+      const live = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek, {
+        mode: "live",
+      });
+      if (boardIsDisplayable(live)) return live;
+    }
+    const warm = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek, {
+      mode: "warm",
     });
-    if (boardIsDisplayable(live)) return live;
+    if (boardIsDisplayable(warm)) return warm;
   }
 
   const cdn = await fetchLeagueWeekMatchupsCdn(leagueId, week);
   const cdnDisplayable = cdn != null && boardIsDisplayable(cdn.board);
 
-  if (cdnDisplayable && cdn) {
-    if (isCurrent) {
-      // Live path missed (budget/429): serve CDN rather than Fluid-storm.
-      return cdn.board;
-    }
-    const pastNeedsRefresh =
-      past && !boardHasUsableScores(cdn.board) && isPageVisible();
-    if (!pastNeedsRefresh) {
-      if (isPastWeekMatchupFresh(week, currentWeek, cdn.syncedAtMs) || !isPageVisible()) {
-        return cdn.board;
-      }
-    }
-  }
-
   if (sleeper) {
-    const warm = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek, {
-      mode: "warm",
-    });
-    if (boardIsDisplayable(warm)) return warm;
-    // Sleeper browse never uses Fluid — cron + visitor IP own the warm path.
+    // Client miss/429 — TiDB CDN is the soft fallback (never Fluid).
     if (cdnDisplayable && cdn) return cdn.board;
     return null;
   }
 
   // Unresolved Sleeper username: soft-empty (never Fluid).
   if (sleeperPlatform) return cdnDisplayable && cdn ? cdn.board : null;
+
+  if (cdnDisplayable && cdn) {
+    if (isCurrent) {
+      // ESPN/Yahoo: prefer warm CDN — Fluid burns host + Active CPU.
+      return cdn.board;
+    }
+    const pastNeedsRefresh =
+      past && !boardHasUsableScores(cdn.board) && isPageVisible();
+    if (!pastNeedsRefresh) {
+      if (
+        isPastWeekMatchupFresh(week, currentWeek, cdn.syncedAtMs, platform) ||
+        !isPageVisible()
+      ) {
+        return cdn.board;
+      }
+    }
+  }
 
   // ESPN/Yahoo: throttled Fluid for past / unscored holes only.
   const refreshed = await maybeRefreshMatchupsViaFluid({
@@ -134,13 +146,18 @@ function liveMatchupPollMs(
   week: number | null,
   currentWeek: number | null,
   liveMs: number | false,
+  platform: string,
 ): number | false {
   if (week == null || currentWeek == null || week !== currentWeek) return false;
   if (liveMs === false) return false;
-  // Cap in-game polls at 30s; between games / finals follow nfl progress helper.
-  if (typeof liveMs === "number" && liveMs <= 30_000) return LIVE_POLL_MS;
+  const espnish = platform === "espn" || platform === "yahoo";
+  // ESPN/Yahoo polls also hit our CDN route (and sometimes Fluid). Keep them
+  // calmer than Sleeper's browser→api.sleeper.app live path.
+  const inGame = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : LIVE_POLL_MS;
+  const between = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : BETWEEN_GAMES_POLL_MS;
+  if (typeof liveMs === "number" && liveMs <= 30_000) return inGame;
   if (typeof liveMs === "number" && liveMs >= ALL_FINAL_POLL_MS) return ALL_FINAL_POLL_MS;
-  return Math.max(LIVE_POLL_MS, Math.min(BETWEEN_GAMES_POLL_MS, liveMs));
+  return Math.max(inGame, Math.min(between, liveMs));
 }
 
 /** Weekly host matchup rows for the active synced league. */
@@ -154,7 +171,7 @@ export function useActiveMatchups(week: number | null | undefined) {
   const isPastWeek = safeWeek != null && currentWeek != null && safeWeek < currentWeek;
   const isCurrentWeek = safeWeek != null && currentWeek != null && safeWeek === currentWeek;
   const liveMs = liveRefreshMs(safeWeek, currentWeek, progressByNflTeam);
-  const pollMs = liveMatchupPollMs(safeWeek, currentWeek, liveMs);
+  const pollMs = liveMatchupPollMs(safeWeek, currentWeek, liveMs, platform);
 
   const query = useQuery({
     queryKey: [...activeMatchupsQueryKey(id, safeWeek ?? 0), currentWeek ?? "na"],

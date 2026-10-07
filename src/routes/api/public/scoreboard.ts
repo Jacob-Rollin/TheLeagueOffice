@@ -4,7 +4,7 @@ const ESPN = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scorebo
 
 /** In-process dedupe for concurrent visitors on the same instance. */
 const LIVE_TTL_MS = 15 * 1000;
-const IDLE_TTL_MS = 60 * 1000;
+const IDLE_TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { expires: number; body: Promise<string | null>; live: boolean }>();
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -25,12 +25,15 @@ function responseHasLiveGame(text: string): boolean {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 function cacheControlFor(live: boolean): string {
-  // CDN (s-maxage) is what collapses Fluid CPU: browsers may revalidate sooner,
-  // but Vercel Edge serves the shared copy without reopening a serverless wait.
+  // CDN (s-maxage) collapses Fluid CPU across visitors. Browser poll cadence
+  // (usePublicScoreboard) still counts each hit toward Hobby CDN Requests —
+  // idle boards stay longer so mid-week tabs do not revalidate every minute.
   if (live) {
     return "public, s-maxage=15, stale-while-revalidate=60, max-age=10";
   }
-  return "public, s-maxage=60, stale-while-revalidate=300, max-age=30";
+  // max-age must cover quiet browser polls or every tab revalidates through CDN
+  // even when React Query waits 10m (Hobby counts CDN HITs).
+  return "public, s-maxage=600, stale-while-revalidate=600, max-age=300";
 }
 
 function loadScoreboard(target: string): Promise<{ body: string | null; live: boolean }> {
@@ -59,7 +62,11 @@ function loadScoreboard(target: string): Promise<{ body: string | null; live: bo
   });
 }
 
-/** Same-origin proxy for the ESPN scoreboard (ESPN sends no CORS headers). */
+/**
+ * Same-origin scoreboard proxy — fallback only.
+ * Browse prefers visitor→site.api.espn.com (CORS *). Keep this warm for
+ * environments that block the direct host.
+ */
 export const Route = createFileRoute("/api/public/scoreboard")({
   server: {
     handlers: {

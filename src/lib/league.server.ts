@@ -431,31 +431,37 @@ function espnSwidCookie(swid: string | null | undefined): string | null {
   return `{${bare.toUpperCase()}}`;
 }
 
+/** Coalesce identical ESPN league reads across concurrent Fluid handlers (2–3 min). */
+const ESPN_JSON_TTL_MS = 2.5 * 60 * 1000;
+
 export async function espnJson<T>(
   url: string,
   s2?: string | null,
   swid?: string | null,
   extraHeaders?: Record<string, string>,
 ): Promise<T | null> {
-  try {
-    const headers: Record<string, string> = {
-      "User-Agent": "Mozilla/5.0",
-      Accept: "application/json",
-      ...(extraHeaders ?? {}),
-    };
-    const cookieSwid = espnSwidCookie(swid);
-    if (s2 || cookieSwid) {
-      const parts: string[] = [];
-      if (s2) parts.push(`espn_s2=${s2.trim()}`);
-      if (cookieSwid) parts.push(`SWID=${cookieSwid}`);
-      headers["Cookie"] = `${parts.join("; ")};`;
+  const cookieSwid = espnSwidCookie(swid);
+  const cacheKey = `espnJson|${url}|${s2?.trim() ?? ""}|${cookieSwid ?? ""}|${JSON.stringify(extraHeaders ?? {})}`;
+  return cachedUpstream(cacheKey, ESPN_JSON_TTL_MS, async () => {
+    try {
+      const headers: Record<string, string> = {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "application/json",
+        ...(extraHeaders ?? {}),
+      };
+      if (s2 || cookieSwid) {
+        const parts: string[] = [];
+        if (s2) parts.push(`espn_s2=${s2.trim()}`);
+        if (cookieSwid) parts.push(`SWID=${cookieSwid}`);
+        headers["Cookie"] = `${parts.join("; ")};`;
+      }
+      const res = await fetch(url, { headers });
+      if (!res.ok) return null;
+      return (await res.json()) as T;
+    } catch {
+      return null;
     }
-    const res = await fetch(url, { headers });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
-  } catch {
-    return null;
-  }
+  });
 }
 
 export async function loadEspnConnectionMeta(
@@ -601,61 +607,11 @@ export async function loadConnectionStandings(
   if (platform === "espn") {
     const season = new Date().getFullYear();
     if (!/^\d+$/.test(clean)) return null;
-    for (const year of [season, season - 1]) {
-      type EspnRecordTeam = EspnTeam & {
-        record?: {
-          overall?: {
-            wins?: number;
-            losses?: number;
-            ties?: number;
-            pointsFor?: number;
-            pointsAgainst?: number;
-            streakLength?: number;
-            streakType?: string;
-          };
-        };
-      };
-      const league = await espnJson<{
-        settings?: EspnLeagueView["settings"];
-        teams?: EspnRecordTeam[];
-      }>(
-        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mSettings&view=mTeam`,
-        s2,
-        swid,
-      );
-      const teams = league?.teams ?? [];
-      if (!league?.settings || teams.length === 0) continue;
-      const rows: StandingRow[] = teams.map((t, i) => {
-        const o = t.record?.overall ?? {};
-        return {
-          rosterId: t.id ?? i + 1,
-          team: espnTeamName(t) ?? `Team ${i + 1}`,
-          owner: t.abbrev ?? "",
-          avatar: t.logo ?? null,
-          wins: Number(o.wins ?? 0),
-          losses: Number(o.losses ?? 0),
-          ties: Number(o.ties ?? 0),
-          pointsFor: Math.round(Number(o.pointsFor ?? 0) * 10) / 10,
-          pointsAgainst: Math.round(Number(o.pointsAgainst ?? 0) * 10) / 10,
-          streak: normalizeStreak(
-            o.streakLength ? `${o.streakLength}${(o.streakType ?? "").charAt(0)}` : null,
-          ),
-        };
-      });
-      rows.sort((a, b) => b.wins - a.wins || a.losses - b.losses || b.pointsFor - a.pointsFor);
-      return {
-        league: {
-          id: clean,
-          name: league.settings?.name ?? "ESPN League",
-          season: String(year),
-          teams: league.settings?.size ?? teams.length,
-          status: "in_season",
-          scoring: "",
-        },
-        rows,
-      };
-    }
-    return null;
+    return cachedUpstream(
+      `espnStandings|${clean}|${s2 ?? ""}|${swid ?? ""}`,
+      5 * 60 * 1000,
+      () => loadEspnStandingsUncached(clean, season, s2, swid),
+    );
   }
 
   // Sleeper: identifier may be a league id or a user id / username.
@@ -671,6 +627,69 @@ export async function loadConnectionStandings(
   const leagues = await loadUserLeagues(clean);
   const first = leagues[0]?.id;
   return first ? await loadStandings(first) : null;
+}
+
+async function loadEspnStandingsUncached(
+  clean: string,
+  season: number,
+  s2?: string | null,
+  swid?: string | null,
+): Promise<Standings | null> {
+  for (const year of [season, season - 1]) {
+    type EspnRecordTeam = EspnTeam & {
+      record?: {
+        overall?: {
+          wins?: number;
+          losses?: number;
+          ties?: number;
+          pointsFor?: number;
+          pointsAgainst?: number;
+          streakLength?: number;
+          streakType?: string;
+        };
+      };
+    };
+    const league = await espnJson<{
+      settings?: EspnLeagueView["settings"];
+      teams?: EspnRecordTeam[];
+    }>(
+      `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mSettings&view=mTeam`,
+      s2,
+      swid,
+    );
+    const teams = league?.teams ?? [];
+    if (!league?.settings || teams.length === 0) continue;
+    const rows: StandingRow[] = teams.map((t, i) => {
+      const o = t.record?.overall ?? {};
+      return {
+        rosterId: t.id ?? i + 1,
+        team: espnTeamName(t) ?? `Team ${i + 1}`,
+        owner: t.abbrev ?? "",
+        avatar: t.logo ?? null,
+        wins: Number(o.wins ?? 0),
+        losses: Number(o.losses ?? 0),
+        ties: Number(o.ties ?? 0),
+        pointsFor: Math.round(Number(o.pointsFor ?? 0) * 10) / 10,
+        pointsAgainst: Math.round(Number(o.pointsAgainst ?? 0) * 10) / 10,
+        streak: normalizeStreak(
+          o.streakLength ? `${o.streakLength}${(o.streakType ?? "").charAt(0)}` : null,
+        ),
+      };
+    });
+    rows.sort((a, b) => b.wins - a.wins || a.losses - b.losses || b.pointsFor - a.pointsFor);
+    return {
+      league: {
+        id: clean,
+        name: league.settings?.name ?? "ESPN League",
+        season: String(year),
+        teams: league.settings?.size ?? teams.length,
+        status: "in_season",
+        scoring: "",
+      },
+      rows,
+    };
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -978,68 +997,84 @@ export async function loadConnectionRosters(
 
   if (platform === "espn") {
     if (!/^\d+$/.test(clean)) return null;
-    const season = new Date().getFullYear();
-    const swidGuid = swid?.trim().replace(/[{}]/g, "").toUpperCase() ?? null;
-    for (const year of [season, season - 1]) {
-      const league = await espnJson<EspnRosterView>(
-        `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mRoster&view=mTeam&view=mSettings`,
-        s2,
-        swid,
-      );
-      const rows = league?.teams ?? [];
-      if (!rows.length) continue;
-      const matchesSwid = (t: EspnTeam) => {
-        if (!swidGuid) return false;
-        const candidates: (string | undefined)[] = [...(t.owners ?? []), t.primaryOwner, t.swid];
-        return candidates.some((c) => c && c.replace(/[{}]/g, "").toUpperCase() === swidGuid);
-      };
-      const mineId = (rows.find(matchesSwid) ?? rows[0])?.id;
-      // Build the starting-slot template from ESPN's lineup slot counts
-      // (RB/WR, WR/TE and OP collapse into FLEX), in Sleeper-style display order.
-      const rosterPositions = espnStarterTemplate(
-        league?.settings?.rosterSettings?.lineupSlotCounts,
-      );
-      const teams: LeagueRosterTeam[] = rows.map((t, i) => {
-        const entries = t.roster?.entries ?? [];
-        const nameOf = (e: (typeof entries)[number]) => e.playerPoolEntry?.player?.fullName ?? "";
-        const logoRaw = t.logo?.trim() || null;
-        return {
-          slot: t.id ?? i + 1,
-          team: espnTeamName(t) ?? `Team ${i + 1}`,
-          owner: t.abbrev ?? "",
-          isMine: (t.id ?? i + 1) === mineId,
-          logo: logoRaw,
-          playerIds: [],
-          playerNames: entries.map(nameOf).filter(Boolean),
-          starterIds: [],
-          // One name per template slot ("" for empty slots or missing names) so
-          // index alignment with rosterPositions never shifts.
-          starterNames: alignEspnStarters(
-            entries.flatMap((e, order) => {
-              const token = ESPN_SLOT_TOKEN[e.lineupSlotId ?? -1];
-              return token
-                ? [{ token, slotId: e.lineupSlotId ?? 0, order, value: nameOf(e) || "" }]
-                : [];
-            }),
-            rosterPositions,
-            "",
-          ),
-          irIds: [],
-          irNames: entries
-            .filter((e) => e.lineupSlotId === 21)
-            .map(nameOf)
-            .filter(Boolean),
-        };
-      });
-      return {
-        myTeamName: teams.find((t) => t.isMine)?.team ?? null,
-        teams,
-        rosterPositions,
-      };
-    }
-    return null;
+    return cachedUpstream(
+      `espnRosters|${clean}|${s2 ?? ""}|${swid ?? ""}`,
+      3 * 60 * 1000,
+      () => loadEspnRostersUncached(clean, s2, swid),
+    );
   }
 
+  return loadNonEspnRosters(clean, platform);
+}
+
+async function loadEspnRostersUncached(
+  clean: string,
+  s2?: string | null,
+  swid?: string | null,
+): Promise<LeagueRosters | null> {
+  const season = new Date().getFullYear();
+  const swidGuid = swid?.trim().replace(/[{}]/g, "").toUpperCase() ?? null;
+  for (const year of [season, season - 1]) {
+    const league = await espnJson<EspnRosterView>(
+      `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mRoster&view=mTeam&view=mSettings`,
+      s2,
+      swid,
+    );
+    const rows = league?.teams ?? [];
+    if (!rows.length) continue;
+    const matchesSwid = (t: EspnTeam) => {
+      if (!swidGuid) return false;
+      const candidates: (string | undefined)[] = [...(t.owners ?? []), t.primaryOwner, t.swid];
+      return candidates.some((c) => c && c.replace(/[{}]/g, "").toUpperCase() === swidGuid);
+    };
+    const mineId = (rows.find(matchesSwid) ?? rows[0])?.id;
+    // Build the starting-slot template from ESPN's lineup slot counts
+    // (RB/WR, WR/TE and OP collapse into FLEX), in Sleeper-style display order.
+    const rosterPositions = espnStarterTemplate(
+      league?.settings?.rosterSettings?.lineupSlotCounts,
+    );
+    const teams: LeagueRosterTeam[] = rows.map((t, i) => {
+      const entries = t.roster?.entries ?? [];
+      const nameOf = (e: (typeof entries)[number]) => e.playerPoolEntry?.player?.fullName ?? "";
+      const logoRaw = t.logo?.trim() || null;
+      return {
+        slot: t.id ?? i + 1,
+        team: espnTeamName(t) ?? `Team ${i + 1}`,
+        owner: t.abbrev ?? "",
+        isMine: (t.id ?? i + 1) === mineId,
+        logo: logoRaw,
+        playerIds: [],
+        playerNames: entries.map(nameOf).filter(Boolean),
+        starterIds: [],
+        // One name per template slot ("" for empty slots or missing names) so
+        // index alignment with rosterPositions never shifts.
+        starterNames: alignEspnStarters(
+          entries.flatMap((e, order) => {
+            const token = ESPN_SLOT_TOKEN[e.lineupSlotId ?? -1];
+            return token
+              ? [{ token, slotId: e.lineupSlotId ?? 0, order, value: nameOf(e) || "" }]
+              : [];
+          }),
+          rosterPositions,
+          "",
+        ),
+        irIds: [],
+        irNames: entries
+          .filter((e) => e.lineupSlotId === 21)
+          .map(nameOf)
+          .filter(Boolean),
+      };
+    });
+    return {
+      myTeamName: teams.find((t) => t.isMine)?.team ?? null,
+      teams,
+      rosterPositions,
+    };
+  }
+  return null;
+}
+
+async function loadNonEspnRosters(clean: string, _platform: string): Promise<LeagueRosters | null> {
   // Sleeper: identifier may be a league id, a user id, or a username.
   let leagueId: string | null = null;
   let userId: string | null = null;
@@ -1521,6 +1556,8 @@ async function reconstructSleeperIrByRoster(
 
 /** Load host-platform weekly matchup rows keyed by roster + matchup_id. */
 const LIVE_MATCHUP_TTL_MS = 60 * 1000;
+/** ESPN boxscores are heavier — keep a longer in-process freeze for live week. */
+const LIVE_MATCHUP_ESPN_TTL_MS = 3 * 60 * 1000;
 const FINAL_MATCHUP_TTL_MS = 10 * 60 * 1000;
 /**
  * Serve current-week boards from TiDB when fresher than this (avoids host wait).
@@ -1529,6 +1566,8 @@ const FINAL_MATCHUP_TTL_MS = 10 * 60 * 1000;
  * serving multi-minute-stale scoreboards.
  */
 const TIDB_LIVE_MATCHUP_MAX_AGE_MS = 90 * 1000;
+/** ESPN credentialed host pulls are expensive — trust TiDB a bit longer. */
+const TIDB_LIVE_MATCHUP_ESPN_MAX_AGE_MS = 4 * 60 * 1000;
 
 /** Reject hollow or mid-game past-week caches so we don't freeze incomplete scores as final. */
 function isUsableFinalBoard(board: LeagueWeekMatchups): boolean {
@@ -1548,6 +1587,11 @@ export type LoadMatchupsOptions = {
   preferCache?: boolean;
   /** When true (default), write-through live/upstream boards into Supabase. */
   persist?: boolean;
+  /**
+   * Cron/CDN warm: skip past-week IR reconstruct + late-acquisition txn fan-out.
+   * Matchup points/starters still come from the host matchup payload.
+   */
+  lite?: boolean;
 };
 
 /**
@@ -1572,9 +1616,10 @@ export async function loadConnectionMatchups(
   const plat = platform.trim().toLowerCase();
   const preferCache = options?.preferCache !== false;
   const persist = options?.persist !== false;
+  const lite = options?.lite === true;
   // Credentials are part of the key so a private ESPN league is never served
   // to a caller who could not fetch it themselves.
-  const key = `matchups|${plat}|${identifier.trim()}|${safeWeek}|${s2 ?? ""}|${swid ?? ""}`;
+  const key = `matchups|${plat}|${identifier.trim()}|${safeWeek}|${s2 ?? ""}|${swid ?? ""}|${lite ? "lite" : "full"}`;
   const nflState = await cachedJson<{ week?: number }>(NFL_STATE_URL, 5 * 60 * 1000);
   const currentNflWeek = Math.max(0, Number(nflState?.week ?? 0) || 0);
   const isFinalWeek = currentNflWeek > 0 && safeWeek < currentNflWeek;
@@ -1607,10 +1652,14 @@ export async function loadConnectionMatchups(
     try {
       const { loadTidbWeekMatchups } = await import("./league-resync.server");
       const tidb = await loadTidbWeekMatchups(identifier.trim(), safeWeek, connectionId);
+      const tidbMaxAge =
+        plat === "espn" || plat === "yahoo"
+          ? TIDB_LIVE_MATCHUP_ESPN_MAX_AGE_MS
+          : TIDB_LIVE_MATCHUP_MAX_AGE_MS;
       if (
         tidb?.board.entries.length &&
         tidb.syncedAtMs > 0 &&
-        Date.now() - tidb.syncedAtMs <= TIDB_LIVE_MATCHUP_MAX_AGE_MS
+        Date.now() - tidb.syncedAtMs <= tidbMaxAge
       ) {
         return tidb.board;
       }
@@ -1620,7 +1669,7 @@ export async function loadConnectionMatchups(
   }
 
   const fetchBoard = () =>
-    fetchConnectionMatchups(identifier, platform, safeWeek, s2, swid, connectionId);
+    fetchConnectionMatchups(identifier, platform, safeWeek, s2, swid, connectionId, { lite });
 
   // Cron / explicit ingest must not reuse an in-process midweek freeze.
   if (!preferCache) {
@@ -1644,7 +1693,9 @@ export async function loadConnectionMatchups(
   // so Sunday boards cannot ride FINAL_MATCHUP_TTL past the early-Tuesday finalize.
   // Current-week live boards keep the normal short LIVE TTL path above.
   let upstreamKey = key;
-  let upstreamTtl = isFinalWeek ? FINAL_MATCHUP_TTL_MS : LIVE_MATCHUP_TTL_MS;
+  const liveTtl =
+    plat === "espn" || plat === "yahoo" ? LIVE_MATCHUP_ESPN_TTL_MS : LIVE_MATCHUP_TTL_MS;
+  let upstreamTtl = isFinalWeek ? FINAL_MATCHUP_TTL_MS : liveTtl;
   if (isPriorWeek && isFinalWeek) {
     const { WEEK_ROLL_CRON_UTC_HOUR, mostRecentWeekRollUtcMs } = await import("./api-cache");
     const now = new Date();
@@ -1654,7 +1705,7 @@ export async function loadConnectionMatchups(
       (day === 2 && now.getUTCHours() < WEEK_ROLL_CRON_UTC_HOUR);
     const bucket = overnight ? Math.floor(now.getTime() / (60 * 60 * 1000)) : 0;
     upstreamKey = `${key}|prior:${mostRecentWeekRollUtcMs(now)}:${bucket}`;
-    upstreamTtl = LIVE_MATCHUP_TTL_MS;
+    upstreamTtl = liveTtl;
   }
 
   const board = await cachedUpstream(upstreamKey, upstreamTtl, fetchBoard);
@@ -1682,10 +1733,12 @@ async function fetchConnectionMatchups(
   s2?: string | null,
   swid?: string | null,
   _connectionId?: string | null,
+  options?: { lite?: boolean },
 ): Promise<LeagueWeekMatchups | null> {
   const clean = identifier.trim().replace(/^@/, "");
   const safeWeek = Math.max(1, Math.floor(Number(week) || 1));
   const plat = platform.trim().toLowerCase();
+  const lite = options?.lite === true;
   if (!clean) return null;
 
   // No Supabase writes for live scoreboard shifts — client caches handle refresh.
@@ -2009,13 +2062,15 @@ async function fetchConnectionMatchups(
   const currentNflWeek = Math.max(1, Number(nflState?.week ?? 0) || 0);
   // Current + future weeks: Sleeper matchups reuse the live roster, so attach
   // current reserve. Past weeks: reconstruct IR from slot transactions.
+  // Lite (cron CDN warm): skip txn fan-out — scores/starters are on the matchup row.
   const attachLiveReserve = currentNflWeek > 0 && Number(safeWeek) >= currentNflWeek;
-  const [historicalIrByRoster, lateAddsByRoster] = attachLiveReserve
-    ? [new Map<number, string[]>(), new Map<number, Set<string>>()]
-    : await Promise.all([
-        reconstructSleeperIrByRoster(leagueId, safeWeek),
-        sleeperLateAcquisitionsByRoster(leagueId, safeWeek),
-      ]);
+  const [historicalIrByRoster, lateAddsByRoster] =
+    attachLiveReserve || lite
+      ? [new Map<number, string[]>(), new Map<number, Set<string>>()]
+      : await Promise.all([
+          reconstructSleeperIrByRoster(leagueId, safeWeek),
+          sleeperLateAcquisitionsByRoster(leagueId, safeWeek),
+        ]);
 
   const reserveByRoster = new Map<number, string[]>();
   for (const r of rosters ?? []) {

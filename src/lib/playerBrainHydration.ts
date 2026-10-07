@@ -13,6 +13,7 @@
 import localforage from "localforage";
 
 import type { PlayersPayload } from "@/lib/players-build";
+import { R2_SNAP_KEYS, r2Url } from "@/lib/r2-public";
 import { fetchResearchSosBoard } from "@/lib/research-cdn";
 import type { SosBoard } from "@/lib/players.server";
 import type { PlayerSos, SosMatchup } from "@/lib/sos-presentation";
@@ -24,7 +25,8 @@ const FILE = "master_player_brain.json";
 const HEARTBEAT_KEY = "player-brain:last-sync:v7-tidb";
 const MATRIX_KEY = "player-brain:matrix";
 const META_KEY = "player-brain:meta";
-const HEARTBEAT_MS = 30 * 60 * 1000;
+/** Local IDB is enough between Publish Snap CDN runs; avoid Vercel every 30m. */
+const HEARTBEAT_MS = 6 * 60 * 60 * 1000;
 
 export interface MasterPlayerBrainPayload {
   v: number;
@@ -284,7 +286,7 @@ let inFlight: Promise<BrainMatrix | null> | null = null;
 
 /**
  * Background hydration entry point. Resolves to the local matrix; performs a
- * network download only when the 30-minute heartbeat has cleared.
+ * network download only when the heartbeat has cleared (6h).
  */
 export function hydratePlayerBrain(options?: { force?: boolean }): Promise<BrainMatrix | null> {
   if (typeof window === "undefined") return Promise.resolve(null);
@@ -296,19 +298,31 @@ export function hydratePlayerBrain(options?: { force?: boolean }): Promise<Brain
   return inFlight;
 }
 
-/** Prefer CDN-cached TiDB warehouse export over Supabase brain download when seeded. */
-async function loadTidbWarehouseMatrix(): Promise<BrainMatrix | null> {
+async function matrixFromExportUrl(url: string): Promise<BrainMatrix | null> {
   try {
-    const res = await fetch("/api/data/players-export", {
-      headers: { accept: "application/json" },
-    });
+    const res = await fetch(url, { headers: { accept: "application/json" } });
     if (!res.ok) return null;
     const brain = (await res.json()) as MasterPlayerBrainPayload & { ok?: boolean };
-    if (!brain.ok || !Array.isArray(brain.ids) || brain.ids.length < 100) return null;
+    if (brain.ok === false) return null;
+    if (!Array.isArray(brain.ids) || brain.ids.length < 100) return null;
     return compileMatrix(brain);
   } catch {
     return null;
   }
+}
+
+/**
+ * Prefer GitHub snap-cdn warehouse export (zero Vercel). Unlike cron-only snap
+ * routes, `/api/data/players-export` is a real cached browse endpoint — keep it
+ * as fallback until Publish Snap CDN has seeded `snap/players-export.json`.
+ */
+async function loadTidbWarehouseMatrix(): Promise<BrainMatrix | null> {
+  const snap = r2Url(R2_SNAP_KEYS.playersExport());
+  if (snap) {
+    const fromSnap = await matrixFromExportUrl(snap);
+    if (fromSnap) return fromSnap;
+  }
+  return matrixFromExportUrl("/api/data/players-export");
 }
 
 async function loadBrainMatrix(options?: { force?: boolean }): Promise<BrainMatrix | null> {

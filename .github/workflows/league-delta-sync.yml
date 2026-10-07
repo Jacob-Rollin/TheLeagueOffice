@@ -8,6 +8,8 @@ name: League Delta Sync
 # is the only Fluid writer for Sleeper matchups. Cadence kept lean for Vercel
 # Hobby Fluid CPU (4 hrs/mo) — gameday hourly (not every 30m), plus a daily
 # fillSeason pass so schedule/week pickers stay complete.
+# ESPN leagues are included on gameday + daily fill (small limit) so playbook
+# clicks can hit TiDB/CDN instead of Fluid→ESPN on every navigation.
 # Webhooks MUST hit Vercel /api/webhooks/sync — never repository_dispatch.
 
 on:
@@ -62,6 +64,8 @@ jobs:
           esac
 
           FILL=0
+          # Mid-week default: Sleeper-only (cheapest warm). Gameday + daily fill
+          # include ESPN so credentialed leagues stay on CDN for browse.
           SLEEPER=1
           RECENT=0
           LIMIT=12
@@ -69,16 +73,21 @@ jobs:
           if [ "$SCHEDULE" = "20 6 * * *" ] || [ "$FILL_INPUT" = "true" ]; then
             FILL=1
             LIMIT=20
+            SLEEPER=0
           fi
-          # Gameday hourly windows: prefer recently touched leagues.
+          # Gameday hourly windows: prefer recently touched leagues; include ESPN.
           case "$SCHEDULE" in
             "0 12-23 * * 0,1,4"|"0 0-5 * * 1,2,5"|"0 16-23 * * 6")
               RECENT=1
               LIMIT=15
+              SLEEPER=0
               ;;
           esac
           if [ "$SLEEPER_INPUT" = "false" ]; then
             SLEEPER=0
+          fi
+          if [ "$SLEEPER_INPUT" = "true" ]; then
+            SLEEPER=1
           fi
 
           QS="limit=${LIMIT}&sleeperOnly=${SLEEPER}&recentFirst=${RECENT}&fillSeason=${FILL}"

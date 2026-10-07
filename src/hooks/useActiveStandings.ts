@@ -1,6 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import {
+  espnFluidCacheKey,
+  espnFluidMemo,
+  ESPN_FLUID_STANDINGS_TTL_MS,
+} from "@/lib/espn-fluid-cache";
 import { getConnectionStandings } from "@/lib/league.functions";
 import {
   canFetchStandingsClient,
@@ -20,6 +25,8 @@ export function useActiveStandings() {
     enabled: Boolean(leagueId),
     retry: false,
     staleTime: 15 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       let hostId = leagueId;
       if (platform === "sleeper") {
@@ -42,14 +49,17 @@ export function useActiveStandings() {
           /* ignore */
         }
       }
-      return await getConnectionStandings({
-        data: {
-          identifier: hostId,
-          platform,
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
-      });
+      const fluidKey = espnFluidCacheKey("standings", hostId, platform);
+      return espnFluidMemo(fluidKey, ESPN_FLUID_STANDINGS_TTL_MS, () =>
+        getConnectionStandings({
+          data: {
+            identifier: hostId,
+            platform,
+            ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+            ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
+          },
+        }),
+      );
     },
   });
 

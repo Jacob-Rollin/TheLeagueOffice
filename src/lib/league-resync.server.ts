@@ -438,26 +438,7 @@ export async function resolveCurrentNflWeek(): Promise<number> {
   }
 }
 
-async function countCachedMatchups(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
-  leagueId: string,
-  connectionId: string,
-): Promise<number> {
-  try {
-    const { count, error } = await db
-      .from("weekly_matchups")
-      .select("id", { count: "exact", head: true })
-      .eq("league_id", leagueId)
-      .eq("connection_id", connectionId);
-    if (error) return 0;
-    return Number(count ?? 0) || 0;
-  } catch {
-    return 0;
-  }
-}
-
-/** Distinct weeks already present in the durable matchup cache. */
+/** Distinct weeks already present in the durable matchup cache (Supabase + TiDB). */
 async function listCachedMatchupWeeks(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
@@ -554,10 +535,12 @@ async function ingestMatchupWeeks(
   s2: string | null,
   swid: string | null,
   weeks: number[],
+  opts?: { lite?: boolean },
 ): Promise<{ insertedMatchups: number; weeksSynced: number[] }> {
   const { loadConnectionMatchups } = await import("./league.server");
   const weeksSynced: number[] = [];
   let insertedMatchups = 0;
+  const lite = opts?.lite === true;
 
   for (const week of weeks) {
     // Bypass cache-first for the weeks we are actively refreshing by fetching
@@ -570,6 +553,7 @@ async function ingestMatchupWeeks(
     const board = await loadConnectionMatchups(leagueId, platform, week, s2, swid, connectionId, {
       preferCache: false,
       persist: true,
+      lite,
     });
     if (!board?.entries?.length) continue;
     weeksSynced.push(week);
@@ -687,70 +671,45 @@ export async function deltaSyncLeague(input: ForceResyncInput): Promise<ForceRes
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabaseAdmin as any;
 
-  const cachedCount = await countCachedMatchups(db, leagueId, connectionId);
-  if (cachedCount <= 0) {
-    // First sync: backfill without a wipe (nothing durable yet).
-    const currentWeek = await resolveCurrentNflWeek();
-    const throughWeek = Math.max(
-      1,
-      Math.min(18, Math.floor(Number(input.throughWeek ?? 0) || 0) || Math.max(currentWeek, 17)),
-    );
-    const insertedTransactions = await ingestTransactions(
-      db,
-      leagueId,
-      connectionId,
-      platform,
-      s2,
-      swid,
-      { replaceExisting: false },
-    );
-    const weeks = Array.from({ length: throughWeek }, (_, i) => i + 1);
-    const { insertedMatchups, weeksSynced } = await ingestMatchupWeeks(
-      leagueId,
-      connectionId,
-      platform,
-      s2,
-      swid,
-      weeks,
-    );
-    return {
-      ok: true,
-      clearedTransactions: 0,
-      clearedMatchups: 0,
-      insertedTransactions,
-      insertedMatchups,
-      weeksSynced,
-      mode: "full",
-    };
-  }
-
+  // TiDB is the browse CDN source — do NOT decide "empty cache" from Supabase
+  // alone. Mid-week cron was full-backfilling weeks 1–17 for every Sleeper
+  // league whenever `weekly_matchups` counted 0 (even with warm TiDB).
+  const present = await listCachedMatchupWeeks(db, leagueId, connectionId);
   const currentWeek = await resolveCurrentNflWeek();
-  // Always re-pull current + prior. Prior week is soft-final through Tuesday
-  // morning — ingest uses preferCache:false so midweek scores are replaced.
-  const weeks = new Set<number>([currentWeek, Math.max(1, currentWeek - 1)]);
+  const throughWeek = Math.max(
+    1,
+    Math.min(18, Math.floor(Number(input.throughWeek ?? 0) || 0) || Math.max(currentWeek, 17)),
+  );
 
-  if (fillSeason) {
-    const throughWeek = Math.max(
-      1,
-      Math.min(18, Math.floor(Number(input.throughWeek ?? 0) || 0) || Math.max(currentWeek, 17)),
-    );
-    const present = await listCachedMatchupWeeks(db, leagueId, connectionId);
-    for (let w = 1; w <= throughWeek; w += 1) {
-      if (!present.has(w)) weeks.add(w);
+  // Sleeper activity is browser→api.sleeper.app; skip Fluid txn ingest on
+  // routine cron. ESPN/Yahoo still need durable txn cache for playbook.
+  const skipTxnIngest = platform === "sleeper";
+  // Cron warm: lite matchup pull (no past-week IR/txn fan-out per week).
+  const liteMatchups = true;
+
+  const weeks = new Set<number>();
+  if (present.size <= 0 && fillSeason) {
+    // Explicit season fill with nothing durable yet.
+    for (let w = 1; w <= throughWeek; w += 1) weeks.add(w);
+  } else {
+    // Lean warm (also used for true first sync without fillSeason): current +
+    // prior only. Daily fillSeason cron owns weeks 1..17 holes.
+    weeks.add(currentWeek);
+    weeks.add(Math.max(1, currentWeek - 1));
+    if (fillSeason) {
+      for (let w = 1; w <= throughWeek; w += 1) {
+        if (!present.has(w)) weeks.add(w);
+      }
     }
   }
 
   const weekList = [...weeks].sort((a, b) => a - b);
 
-  const insertedTransactions = await ingestTransactions(
-    db,
-    leagueId,
-    connectionId,
-    platform,
-    s2,
-    swid,
-    { replaceExisting: true },
-  );
+  const insertedTransactions = skipTxnIngest
+    ? 0
+    : await ingestTransactions(db, leagueId, connectionId, platform, s2, swid, {
+        replaceExisting: present.size > 0,
+      });
   const { insertedMatchups, weeksSynced } = await ingestMatchupWeeks(
     leagueId,
     connectionId,
@@ -758,6 +717,7 @@ export async function deltaSyncLeague(input: ForceResyncInput): Promise<ForceRes
     s2,
     swid,
     weekList,
+    { lite: liteMatchups },
   );
 
   return {
@@ -767,7 +727,7 @@ export async function deltaSyncLeague(input: ForceResyncInput): Promise<ForceRes
     insertedTransactions,
     insertedMatchups,
     weeksSynced,
-    mode: fillSeason ? "full" : "delta",
+    mode: fillSeason && (present.size <= 0 || weekList.length > 2) ? "full" : "delta",
   };
 }
 
