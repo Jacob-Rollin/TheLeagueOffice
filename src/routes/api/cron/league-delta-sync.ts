@@ -25,14 +25,16 @@ export const Route = createFileRoute("/api/cron/league-delta-sync")({
         const fillSeason =
           url.searchParams.get("fillSeason") === "1" ||
           url.searchParams.get("fillSeason") === "true";
+        // Bare Vercel cron hits (no query string) must stay lean — week-roll
+        // used to default limit=80 and pull every platform, burning Sleeper + TiDB overnight.
         const recentFirst =
           url.searchParams.get("recentFirst") === "1" ||
           url.searchParams.get("recentFirst") === "true" ||
-          weekRoll;
+          (weekRoll && url.searchParams.get("recentFirst") !== "0");
         const sleeperOnly =
-          url.searchParams.get("sleeperOnly") === "1" ||
-          url.searchParams.get("sleeperOnly") === "true";
-        const defaultLimit = fillSeason ? 25 : weekRoll ? 80 : 40;
+          url.searchParams.get("sleeperOnly") !== "0" &&
+          url.searchParams.get("sleeperOnly") !== "false";
+        const defaultLimit = fillSeason ? 20 : weekRoll ? 15 : 12;
         const limit = Math.max(
           1,
           Math.min(200, Number(url.searchParams.get("limit") ?? defaultLimit) || defaultLimit),
