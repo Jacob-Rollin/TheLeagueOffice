@@ -83,6 +83,7 @@
 - Do not call Fluid `getConnectionMeta` / `getConnectionSettings` / `getConnectionTransactions` / `getConnectionTransactionLog` for Sleeper — use `sleeper-meta-client`, `league-settings-fetch`, `league-activity-fetch`.
 - Do not call Fluid `getHallOfFame` — use `loadHallOfFame` (browser → Supabase anon).
 - Do not fall back to Fluid `getPlayerDetail` in production when the catalog client misses — soft-empty instead.
+- Do not call Fluid `getPickupResults` for Sleeper — use `fetchPickupResultsPreferred` (`pickup-results-client`).
 - Do not move heavy work onto GitHub raw/nflverse downloads on the request path (prefer cron → TiDB/CDN). Matchup replay PBP is an exception — do not expand that pattern.
 - Keep Actions warm jobs: `league-delta-sync.yml` (gameday + daily fillSeason) and `league-planning-snaps.yml` (ROS / slot ranks). Do not reintroduce per-visitor Fluid for those surfaces.
 
