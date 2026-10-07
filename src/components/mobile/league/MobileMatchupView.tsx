@@ -32,6 +32,7 @@ import {
   useNflSchedule,
   type LineupRow,
 } from "./lineupShared";
+import { MobileMatchupRecap } from "./MobileMatchupRecap";
 import { MobileTeamLogo } from "./MobileStandings";
 import { MobileWeekSelect } from "./MobileWeekSelect";
 import { useMobileLeagueStandings } from "./useMobileLeague";
@@ -64,6 +65,7 @@ export function MobileMatchupView() {
 
   const [view, setView] = useState<"matchup" | "scoreboard">("matchup");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [recapOpen, setRecapOpen] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<number | null>(null);
 
@@ -99,6 +101,7 @@ export function MobileMatchupView() {
 
   useEffect(() => {
     setActiveIndex(0);
+    setRecapOpen(false);
     scrollTo(0, false);
   }, [activeWeek]);
 
@@ -215,6 +218,8 @@ export function MobileMatchupView() {
                   awayMinutes={minutesFor(pair.away)}
                   homeProjected={teamProjected(pair.home)}
                   awayProjected={teamProjected(pair.away)}
+                  showRecap={isPastWeek && i === activeIndex}
+                  onRecap={() => setRecapOpen(true)}
                 />
               </div>
             ))}
@@ -247,6 +252,22 @@ export function MobileMatchupView() {
               helpers={cardHelpers}
             />
           ) : null}
+
+          {recapOpen && current ? (
+            <MobileMatchupRecap
+              week={activeWeek}
+              home={current.home}
+              away={current.away}
+              homeLineup={slotsFor(current.home)}
+              awayLineup={slotsFor(current.away)}
+              labels={labels}
+              homeProjected={teamProjected(current.home)}
+              awayProjected={teamProjected(current.away)}
+              pointsFor={pointsFor}
+              projectedFor={cardHelpers.projectedFor}
+              onClose={() => setRecapOpen(false)}
+            />
+          ) : null}
         </>
       )}
     </main>
@@ -277,6 +298,8 @@ function MatchupCard({
   awayMinutes,
   homeProjected,
   awayProjected,
+  showRecap,
+  onRecap,
 }: {
   pair: Pair;
   title: string;
@@ -285,6 +308,8 @@ function MatchupCard({
   awayMinutes: { remaining: number; total: number };
   homeProjected: number;
   awayProjected: number;
+  showRecap?: boolean;
+  onRecap?: () => void;
 }) {
   const { home, away } = pair;
   const homeStanding = standingByRoster.get(Number(home.rosterId));
@@ -310,7 +335,7 @@ function MatchupCard({
           <p className="truncate text-xs text-m-muted">
             {[home.owner, record(homeStanding?.row)].filter(Boolean).join(" | ")}
           </p>
-          <MinutesBar {...homeMinutes} />
+          {!showRecap ? <MinutesBar {...homeMinutes} /> : null}
         </div>
 
         <div className="flex flex-col items-center">
@@ -333,9 +358,19 @@ function MatchupCard({
           <p className="truncate text-right text-xs text-m-muted">
             {[record(awayStanding?.row), away.owner].filter(Boolean).join(" | ")}
           </p>
-          <MinutesBar {...awayMinutes} mirror />
+          {!showRecap ? <MinutesBar {...awayMinutes} mirror /> : null}
         </div>
       </div>
+
+      {showRecap && onRecap ? (
+        <button
+          type="button"
+          onClick={onRecap}
+          className="mt-4 w-full rounded-lg bg-m-accent px-4 py-3.5 font-display text-base font-bold text-m-accent-fg"
+        >
+          View Matchup Recap
+        </button>
+      ) : null}
     </article>
   );
 }

@@ -149,12 +149,13 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
     <div role="dialog" aria-modal="true" aria-label={player?.name ?? "Player"} className="fixed inset-0 z-50 overflow-y-auto bg-m-bg">
       <div className="mx-auto w-full max-w-md pb-10">
         <section className="relative overflow-hidden bg-m-card text-m-card-fg">
+          {/* Faded team mark: centered in the header, behind name + headshot. */}
           {logo ? (
             <img
               src={logo}
               alt=""
               aria-hidden="true"
-              className="pointer-events-none absolute -right-16 -top-6 size-80 object-contain opacity-[0.07]"
+              className="pointer-events-none absolute left-1/2 top-[48%] z-0 size-[22rem] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.1]"
             />
           ) : null}
           <button
@@ -167,12 +168,12 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
           </button>
 
           {detail.isLoading ? (
-            <p className="px-5 py-24 text-center text-sm text-m-muted">Loading player...</p>
+            <p className="relative z-[1] px-5 py-24 text-center text-sm text-m-muted">Loading player...</p>
           ) : !player ? (
-            <p className="px-5 py-24 text-center text-sm text-m-muted">Player details are unavailable.</p>
+            <p className="relative z-[1] px-5 py-24 text-center text-sm text-m-muted">Player details are unavailable.</p>
           ) : (
-            <div className="relative flex min-h-[220px] items-end">
-              <div className="relative z-[1] min-w-0 flex-1 py-6 pl-5 pr-2">
+            <div className="relative z-[1] flex min-h-[220px] items-end">
+              <div className="min-w-0 flex-1 py-6 pl-5 pr-2">
                 <h2 className="font-display text-[34px] font-bold leading-[1.02]">
                   {first}
                   {rest.length ? (
@@ -210,7 +211,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                   src={image}
                   alt=""
                   className={cn(
-                    "relative z-[1] shrink-0 object-contain object-bottom",
+                    "shrink-0 object-contain object-bottom",
                     pos === "DEF" ? "mb-6 mr-6 size-28" : "h-48 w-44 object-cover",
                   )}
                   onError={(e) => {
