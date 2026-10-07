@@ -268,9 +268,6 @@ export async function fetchLeagueMatchupsHistory(input: {
     }
   }
 
-  const out = hostLeagueId
-    ? await fetchLeagueAllMatchupsCdn(hostLeagueId)
-    : new Map<number, LeagueMatchupsCdnHit>();
   const needed = Array.from(
     new Set(
       input.weeks
@@ -295,8 +292,15 @@ export async function fetchLeagueMatchupsHistory(input: {
 
   const sleeper = platformNorm === "sleeper" && /^\d{6,}$/.test(hostLeagueId);
 
-  // Any hollow week on Sleeper: browser host pull first (visitor IP pool).
-  // Covers future schedule AND completed weeks so browse never needs Fluid.
+  // Sleeper history: skip Vercel `/api/data/league` — fill from visitor→Sleeper
+  // (IndexedDB TTL + rate budget). ESPN/Yahoo still warm from TiDB CDN first.
+  const out =
+    hostLeagueId && !sleeper
+      ? await fetchLeagueAllMatchupsCdn(hostLeagueId)
+      : new Map<number, LeagueMatchupsCdnHit>();
+
+  // Any hollow week on Sleeper: browser host pull (visitor IP pool).
+  // Covers future schedule AND completed weeks so browse never needs Fluid/CDN.
   const missingForClient = needed.filter((week) => {
     const hit = out.get(week);
     const scored = boardHasUsableScores(hit?.board);

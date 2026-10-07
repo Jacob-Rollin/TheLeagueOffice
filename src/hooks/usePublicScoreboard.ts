@@ -41,8 +41,8 @@ function scoreboardPollMs(json: unknown): number {
 }
 
 /**
- * Shared CDN-backed ESPN scoreboard query. ScoreTicker and live-matchup
- * progress both use this key so one browser tab only pays for one poll.
+ * Shared ESPN scoreboard query (browser→ESPN; Vercel proxy only on failure).
+ * ScoreTicker and live-matchup progress share one React Query key per tab.
  */
 export function usePublicScoreboard(week?: number | null, seasontype?: number | null) {
   const safeWeek = week != null && week > 0 ? week : null;
