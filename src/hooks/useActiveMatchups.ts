@@ -24,7 +24,9 @@ import type { LeagueWeekMatchups } from "@/lib/league.server";
  */
 const LIVE_POLL_MS = 30 * 1000;
 const BETWEEN_GAMES_POLL_MS = 2 * 60 * 1000;
-const ALL_FINAL_POLL_MS = 10 * 60 * 1000;
+/** ESPN/Yahoo polls hit our `/api/data/league` CDN — keep quieter between games. */
+const ESPN_BETWEEN_GAMES_POLL_MS = 5 * 60 * 1000;
+const ALL_FINAL_POLL_MS = 15 * 60 * 1000;
 
 function boardIsDisplayable(board: LeagueWeekMatchups | null | undefined): boolean {
   return boardHasUsableScores(board) || boardHasSchedulePairings(board);
@@ -145,10 +147,11 @@ function liveMatchupPollMs(
   const espnish = platform === "espn" || platform === "yahoo";
   // ESPN/Yahoo polls also hit our CDN route (and sometimes Fluid). Keep them
   // calmer than Sleeper's browser→api.sleeper.app live path.
-  const inGame = espnish ? BETWEEN_GAMES_POLL_MS : LIVE_POLL_MS;
+  const inGame = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : LIVE_POLL_MS;
+  const between = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : BETWEEN_GAMES_POLL_MS;
   if (typeof liveMs === "number" && liveMs <= 30_000) return inGame;
   if (typeof liveMs === "number" && liveMs >= ALL_FINAL_POLL_MS) return ALL_FINAL_POLL_MS;
-  return Math.max(inGame, Math.min(BETWEEN_GAMES_POLL_MS, liveMs));
+  return Math.max(inGame, Math.min(between, liveMs));
 }
 
 /** Weekly host matchup rows for the active synced league. */

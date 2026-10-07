@@ -43,4 +43,22 @@ export function scoreboardHasLiveGame(json: any): boolean {
     return state.toLowerCase() === "in";
   });
 }
+
+/** Earliest upcoming kickoff (ms), or null when none are still pre-game. */
+export function scoreboardNextKickoffMs(json: any, now = Date.now()): number | null {
+  const events: any[] = Array.isArray(json?.events) ? json.events : [];
+  let next: number | null = null;
+  for (const ev of events) {
+    const state = String(
+      ev?.competitions?.[0]?.status?.type?.state ?? ev?.status?.type?.state ?? "",
+    ).toLowerCase();
+    if (state !== "pre") continue;
+    const raw =
+      ev?.competitions?.[0]?.date ?? ev?.date ?? ev?.competitions?.[0]?.startDate ?? null;
+    const at = raw ? Date.parse(String(raw)) : NaN;
+    if (!Number.isFinite(at) || at < now - 5 * 60 * 1000) continue;
+    next = next == null ? at : Math.min(next, at);
+  }
+  return next;
+}
 /* eslint-enable @typescript-eslint/no-explicit-any */

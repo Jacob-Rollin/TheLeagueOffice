@@ -25,12 +25,13 @@ function responseHasLiveGame(text: string): boolean {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 function cacheControlFor(live: boolean): string {
-  // CDN (s-maxage) is what collapses Fluid CPU: browsers may revalidate sooner,
-  // but Vercel Edge serves the shared copy without reopening a serverless wait.
+  // CDN (s-maxage) collapses Fluid CPU across visitors. Browser poll cadence
+  // (usePublicScoreboard) still counts each hit toward Hobby CDN Requests —
+  // idle boards stay longer so mid-week tabs do not revalidate every minute.
   if (live) {
     return "public, s-maxage=15, stale-while-revalidate=60, max-age=10";
   }
-  return "public, s-maxage=60, stale-while-revalidate=300, max-age=30";
+  return "public, s-maxage=300, stale-while-revalidate=600, max-age=60";
 }
 
 function loadScoreboard(target: string): Promise<{ body: string | null; live: boolean }> {
