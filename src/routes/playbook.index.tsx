@@ -18,6 +18,7 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useLeagueActivity } from "@/hooks/useLeagueActivity";
+import { useLeagueAnalytics } from "@/hooks/useLeagueAnalytics";
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
@@ -25,13 +26,6 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/draft";
 import { getConnectionSettings } from "@/lib/league.functions";
-import {
-  completedWeekNumberList,
-  completedWeeksThrough,
-  standingsGamesPlayed,
-} from "@/lib/completed-weeks";
-import { boardHasUsableScores, fetchLeagueMatchupsHistory } from "@/lib/league-matchups-cdn";
-import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import type { RosterNews, RosterNewsItem } from "@/lib/players.server";
 import { fetchSnapRosterNews } from "@/lib/snap-cdn";
@@ -954,70 +948,16 @@ function PlaybookDashboardPage() {
 
   const nflWeek = useNflState();
   const currentWeek = nflWeek.data?.week ?? null;
-  const displayWeek = nflWeek.data?.displayWeek ?? null;
   const { matchups, loading: matchupsLoading } = useActiveMatchups(currentWeek);
   const { progressByNflTeam } = useNflGameProgress(currentWeek);
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
 
-  /** Completed slates for coaching / avg PF — standings + Sleeper display_week aware. */
+  /** Shared with My Team / Standings — one history fetch, same Max PF / efficiency math. */
+  const leagueAnalytics = useLeagueAnalytics({ history: true, forecast: false });
+  const completedThrough = leagueAnalytics.completedThrough;
+  const completedWeekNumbers = leagueAnalytics.completedWeekNumbers;
+  const historyStamp = leagueAnalytics.historyStamp;
   const optimalSlots = useMemo(() => starterSlots(rosterPositions), [rosterPositions]);
-  const gamesPlayed = useMemo(() => standingsGamesPlayed(standings?.rows), [standings?.rows]);
-  const completedThrough = useMemo(
-    () =>
-      completedWeeksThrough({
-        nflWeek: currentWeek,
-        displayWeek,
-        gamesPlayed,
-      }),
-    [currentWeek, displayWeek, gamesPlayed],
-  );
-
-  const completedWeekNumbers = useMemo(
-    () =>
-      completedWeekNumberList({
-        nflWeek: currentWeek,
-        displayWeek,
-        gamesPlayed,
-      }),
-    [currentWeek, displayWeek, gamesPlayed],
-  );
-
-  // CDN/TiDB first; Fluid backfill for completed weeks still missing (cold TiDB).
-  const historyAllQuery = useQuery({
-    queryKey: [
-      "league-matchups-history",
-      activeLeague?.id ?? null,
-      completedWeekNumbers.join(","),
-      currentWeek,
-      completedThrough,
-    ],
-    enabled: Boolean(activeLeague?.leagueId && completedWeekNumbers.length > 0),
-    retry: false,
-    staleTime: 10 * 60 * 1000,
-    // Soft-poll CDN for a hollow completed slate — do not 15s-storm Fluid.
-    // Host backfill is rate-limited inside fetchLeagueMatchupsHistory.
-    refetchInterval: visibleRefetchInterval((query) => {
-      const map = query.state.data as Map<number, { board: unknown }> | undefined;
-      if (completedThrough <= 0) return false;
-      const hit = map?.get(completedThrough) as { board?: Parameters<typeof boardHasUsableScores>[0] } | undefined;
-      return boardHasUsableScores(hit?.board) ? false : 120_000;
-    }),
-    refetchIntervalInBackground: false,
-    queryFn: () =>
-      fetchLeagueMatchupsHistory({
-        leagueId: activeLeague!.leagueId,
-        platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
-        weeks: completedWeekNumbers,
-        currentWeek,
-        completedThrough,
-        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        ...(activeLeague?.id ? { connectionId: activeLeague.id } : {}),
-        allowFluid: isPageVisible(),
-      }),
-  });
-
-  const historyStamp = `${historyAllQuery.dataUpdatedAt}:${historyAllQuery.data?.size ?? 0}`;
 
   const weeklyMatchups = useMemo((): CoachingWeekData[] => {
     const mySlot = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
@@ -1039,7 +979,7 @@ function PlaybookDashboardPage() {
       const week = completedWeekNumbers[index] ?? index + 1;
       // Use standings/display-aware ceiling — not only `week < nfl.week`.
       const isCompleted = week <= completedThrough;
-      const entries = historyAllQuery.data?.get(week)?.board.entries ?? [];
+      const entries = leagueAnalytics.historyQueries[index]?.data?.entries ?? [];
       const mine =
         entries.find((row) => Number(row.rosterId) === Number(mySlot)) ?? null;
       const optimal = mine
@@ -1118,7 +1058,17 @@ function PlaybookDashboardPage() {
     return out;
     // historyStamp tracks fetch completion; query array identity is unstable each render.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- historyStamp
-  }, [historyStamp, completedWeekNumbers, completedThrough, myTeam, teams, playersById, currentWeek, optimalSlots]);
+  }, [
+    historyStamp,
+    completedWeekNumbers,
+    completedThrough,
+    myTeam,
+    teams,
+    playersById,
+    currentWeek,
+    optimalSlots,
+    leagueAnalytics.historyQueries,
+  ]);
 
   const synchronizedWeeklyMetrics = useMemo(() => {
     const empty = {
@@ -1135,11 +1085,9 @@ function PlaybookDashboardPage() {
     const mySlot = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
     const standingRows = standings?.rows ?? [];
     const myStanding =
-      (mySlot != null
-        ? standingRows.find((r) => Number(r.rosterId) === Number(mySlot))
-        : null) ??
-      standingRows.find((r) => r.isMine) ??
-      null;
+      mySlot != null
+        ? standingRows.find((r) => Number(r.rosterId) === Number(mySlot)) ?? null
+        : null;
     const hostGames =
       myStanding != null
         ? (Number(myStanding.wins) || 0) +
@@ -1203,26 +1151,40 @@ function PlaybookDashboardPage() {
         ? totalUserScored / completedWeeksCount
         : null;
     const calculatedAvgPoints = hostAvg ?? historyAvg;
-    if (calculatedAvgPoints == null) return empty;
 
-    // Coaching Efficiency still needs weekly boards (optimal lineup). Use every
-    // completed week we have — do not pretend missing week 4 is 0.
-    const effWeeks = completedWeekStats.filter((w) => w.optimal > 0);
+    // Same Max PF / efficiency as My Team + Standings Actual (shared analytics).
+    const myAnalytics =
+      mySlot != null ? leagueAnalytics.analytics?.get(Number(mySlot)) ?? null : null;
     const seasonEff = (weeks: { scored: number; optimal: number }[]): number | null => {
       const optimal = weeks.reduce((sum, w) => sum + w.optimal, 0);
       if (optimal <= 0) return null;
       const scored = weeks.reduce((sum, w) => sum + w.scored, 0);
       return Math.min(100, (scored / optimal) * 100);
     };
-    const currentEff = seasonEff(effWeeks);
+    const effWeeks = completedWeekStats.filter((w) => w.optimal > 0);
+    const currentEff =
+      myAnalytics?.efficiency != null && Number.isFinite(myAnalytics.efficiency)
+        ? Math.min(100, myAnalytics.efficiency)
+        : seasonEff(effWeeks);
     const priorEff = effWeeks.length >= 2 ? seasonEff(effWeeks.slice(0, -1)) : null;
+
+    if (calculatedAvgPoints == null && currentEff == null) {
+      if (leagueAnalytics.analyticsLoading || leagueAnalytics.historyLoading) {
+        return {
+          ...empty,
+          efficiency: "…",
+          avgPoints: standingsLoading ? "…" : empty.avgPoints,
+        };
+      }
+      return empty;
+    }
 
     // WoW % — prefer host avg vs history-through-(n-1) when host has the extra week.
     let avgPointsDeltaPct: number | null = null;
     const efficiencyDeltaPct: number | null =
       currentEff != null && priorEff != null ? currentEff - priorEff : null;
     const deltaWeeks = Math.max(completedWeeksCount, hostGames);
-    if (deltaWeeks >= 2 && calculatedAvgPoints > 0.05) {
+    if (calculatedAvgPoints != null && deltaWeeks >= 2 && calculatedAvgPoints > 0.05) {
       if (hostAvg != null && completedWeekStats.length >= hostGames - 1 && hostGames >= 2) {
         const prior = completedWeekStats.slice(0, hostGames - 1);
         if (prior.length) {
@@ -1252,12 +1214,31 @@ function PlaybookDashboardPage() {
     return {
       position: finalPosition,
       record: finalRecord,
-      avgPoints: calculatedAvgPoints.toFixed(1),
-      efficiency: currentEff != null ? `${currentEff.toFixed(1)}%` : "—",
+      avgPoints:
+        calculatedAvgPoints != null
+          ? calculatedAvgPoints.toFixed(1)
+          : leagueAnalytics.analyticsLoading || standingsLoading
+            ? "…"
+            : "—",
+      efficiency:
+        currentEff != null
+          ? `${currentEff.toFixed(1)}%`
+          : leagueAnalytics.analyticsLoading || leagueAnalytics.historyLoading
+            ? "…"
+            : "—",
       avgPointsDeltaPct,
       efficiencyDeltaPct,
     };
-  }, [weeklyMatchups, standings, myTeam, teams]);
+  }, [
+    weeklyMatchups,
+    standings,
+    standingsLoading,
+    myTeam,
+    teams,
+    leagueAnalytics.analytics,
+    leagueAnalytics.analyticsLoading,
+    leagueAnalytics.historyLoading,
+  ]);
 
   const sleeperTrending = useQuery({
     queryKey: ["sleeper-trending-add", "v1", 24, 50],
@@ -1885,8 +1866,8 @@ function PlaybookDashboardPage() {
     if (!rows.length) return null;
 
     const results = new Map<number, ("W" | "L" | "T")[]>();
-    for (const week of completedWeekNumbers) {
-      const entries = historyAllQuery.data?.get(week)?.board.entries ?? [];
+    for (let index = 0; index < completedWeekNumbers.length; index += 1) {
+      const entries = leagueAnalytics.historyQueries[index]?.data?.entries ?? [];
       const byMatchup = new Map<number, typeof entries>();
       for (const entry of entries) {
         if (entry.matchupId == null) continue;
@@ -1949,7 +1930,7 @@ function PlaybookDashboardPage() {
 
     return { rows: out, cut, summary };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- historyStamp
-  }, [standings, historyStamp, leagueSettingsQuery.data, myTeam, teams]);
+  }, [standings, historyStamp, leagueSettingsQuery.data, myTeam, teams, completedWeekNumbers.length]);
 
   const [rankBaseline, setRankBaseline] = useState<Record<string, number> | null>(null);
 

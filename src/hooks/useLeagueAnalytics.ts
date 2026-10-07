@@ -12,8 +12,8 @@ import {
   standingsGamesPlayed,
 } from "@/lib/completed-weeks";
 import { getConnectionSettings } from "@/lib/league.functions";
-import { fetchLeagueMatchupsHistory } from "@/lib/league-matchups-cdn";
-import { isPageVisible } from "@/lib/page-visibility";
+import { boardHasUsableScores, fetchLeagueMatchupsHistory } from "@/lib/league-matchups-cdn";
+import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
 import { fetchSnapRestOfSeason, fetchSnapStartingSlotRanks } from "@/lib/snap-cdn";
 import { computeStandingsAnalytics, type TeamAnalytics } from "@/lib/standings-analytics";
 
@@ -107,6 +107,16 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
     enabled: hasLeague && loadHistory && historyWeeks.length > 0,
     retry: false,
     staleTime: 10 * 60 * 1000,
+    // Soft-poll CDN when the latest completed slate is still hollow — rate-limited
+    // Fluid backfill lives inside fetchLeagueMatchupsHistory (no 15s storms).
+    refetchInterval: visibleRefetchInterval((query) => {
+      if (!history || completedThrough <= 0) return false;
+      const map = query.state.data as Map<number, { board: unknown }> | undefined;
+      const hit = map?.get(completedThrough) as
+        | { board?: Parameters<typeof boardHasUsableScores>[0] }
+        | undefined;
+      return boardHasUsableScores(hit?.board) ? false : 120_000;
+    }),
     refetchIntervalInBackground: false,
     queryFn: () =>
       fetchLeagueMatchupsHistory({
@@ -162,23 +172,32 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
 
   const analytics = useMemo((): Map<number, RowAnalytics> | null => {
     const rows = standings?.rows ?? [];
-    if (!forecast || !rows.length || !playersPayload || currentWeek == null) return null;
-    if (historyLoading || scheduleLoading) return null;
+    // Max PF / coaching efficiency only need completed-week boards — do not
+    // require forecast/ROS (that gated dashboard efficiency behind a heavier path).
+    if (!rows.length || !playersPayload || currentWeek == null) return null;
+    if (loadHistory && historyLoading) return null;
+    if (forecast && scheduleLoading) return null;
     const posById = new Map(playersPayload.players.map((p) => [p.id, p.pos]));
     const posOf = (id: string) => posById.get(id) ?? (/^[A-Z]{2,3}$/.test(id) ? "DEF" : null);
 
     const base = computeStandingsAnalytics({
       teams: rows,
-      completedWeeks: historyQueries.map((q) => q.data?.entries ?? []).filter((entries) => entries.length >= 2),
-      remainingWeeks: scheduleQueries.map((q) => q.data?.entries ?? []),
+      completedWeeks: historyQueries
+        .map((q) => q.data?.entries ?? [])
+        .filter((entries) => entries.length >= 2),
+      remainingWeeks: forecast ? scheduleQueries.map((q) => q.data?.entries ?? []) : [],
       rosterPositions,
       posOf,
       playoffTeams,
-      projectedByWeek: remainingWeekNumbers.map((week) => {
-        const index = rosProjections.data?.weeks.indexOf(week) ?? -1;
-        const row = index >= 0 ? rosProjections.data?.byWeek[index] : undefined;
-        return new Map(Object.entries(row ?? {}).map(([slot, pts]) => [Number(slot), pts as number]));
-      }),
+      projectedByWeek: forecast
+        ? remainingWeekNumbers.map((week) => {
+            const index = rosProjections.data?.weeks.indexOf(week) ?? -1;
+            const row = index >= 0 ? rosProjections.data?.byWeek[index] : undefined;
+            return new Map(
+              Object.entries(row ?? {}).map(([slot, pts]) => [Number(slot), pts as number]),
+            );
+          })
+        : [],
     });
 
     const list = rows.map((r) => ({ id: r.rosterId, pf: r.pointsFor, a: base.get(r.rosterId) }));
@@ -199,6 +218,7 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
     // eslint-disable-next-line react-hooks/exhaustive-deps -- query stamps track fetch completion
   }, [
     forecast,
+    loadHistory,
     standings,
     playersPayload,
     currentWeek,
@@ -229,7 +249,9 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
     playoffTeamsSetting: settingsQuery.data?.playoffTeams ?? null,
     analytics,
     analyticsLoading:
-      forecast && analytics == null && (nflWeek.isLoading || historyLoading || scheduleLoading || !playersPayload),
+      loadHistory &&
+      analytics == null &&
+      (nflWeek.isLoading || historyLoading || !playersPayload || (forecast && scheduleLoading)),
   };
 }
 
