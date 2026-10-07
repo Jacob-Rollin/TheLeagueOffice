@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { StandingsPanel } from "@/components/league/StandingsPanel";
 import { InjuryWire } from "@/components/news/InjuryWire";
 import { listPublishedArticles, type ArticleRow } from "@/lib/articles";
+import { fetchEspnNflNewsJson } from "@/lib/espn-public-client";
 import { cn } from "@/lib/utils";
 
 
@@ -23,7 +24,6 @@ const relativeTime = (iso?: string) => {
 };
 
 
-const NEWS_BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news";
 type LinkNode = { web?: { href?: string }; href?: string };
 type NewsItem = {
   headline: string;
@@ -78,9 +78,7 @@ function Home() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const fetchNews = (limit: number) =>
-    fetch(`${NEWS_BASE_URL}?limit=${limit}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("news"))))
-      .then((d) => ((d.articles ?? []) as NewsItem[]).filter(isFantasy));
+    fetchEspnNflNewsJson(limit).then((d) => ((d.articles ?? []) as NewsItem[]).filter(isFantasy));
 
   useEffect(() => {
     fetchNews(50)

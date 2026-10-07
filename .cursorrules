@@ -62,7 +62,8 @@
 
 ## Client-first caching without burning visitor IPs
 - Prefer client/public fetches **and** snap-cdn / CDN, but never unbounded fan-out from the browser.
-- All browser → `api.sleeper.app` calls must go through `sleeperFetchJson` (`sleeper-http.ts`) or `acquireSleeperPermit` / `waitForSleeperPermit` (`sleeper-rate-budget.ts`). Soft ceiling **180/min/tab** with a live reserve — stay well under Sleeper’s ~1000/min IP limit (multi-tab households). Do not raise without cause.
+- All browser → `api.sleeper.app` calls must go through `sleeperFetchJson` (`sleeper-http.ts`) or `acquireSleeperPermit` / `waitForSleeperPermit` (`sleeper-rate-budget.ts`). Soft ceiling **180/min/tab** with a live reserve — stay well under Sleeper’s ~1000/min IP limit (multi-tab households). Do not raise without cause. Browser catalog builds (`players-build.fetchRows` / `fetchSchedule`) must also take the budgeted path.
+- Public ESPN news/feeds use `espn-public-client` (`getCached`) — do not raw-fetch `site.api.espn.com` news from homepage/mobile/player popup without that shared cache. FantasyCalc history uses `getCached` in `market-history-client`.
 - Always wrap public Sleeper (and similar) fetches in `getCached(key, ttlMs, fetcher)` so IndexedDB/localStorage + in-flight dedupe share one download per visitor.
 - Cap concurrency when a week/player fan-out is unavoidable (existing pattern: projection weeks `PROJ_WEEK_CONCURRENCY = 2` in `sleeper-client`; do not raise without cause). Prefer shared week bundles over per-player downloads.
 - Reuse shared React Query keys instead of inventing parallel caches: `["players-catalog"]`, `["player", id, "client-v1"]`, `["nfl-state", …]`, `["league-scoring", "v5", …]`, `["league-rosters", connectionId]`, `["league-matchups-cdn-all", …]`, `["injury-reports"]`, `["injury-wire", limit]`, `["trade-value-basis"]`, `["fantasy-news-feed", limit]`, etc.
@@ -123,7 +124,7 @@
 
 ## Key modules to reuse (do not reinvent)
 - `src/lib/page-visibility.ts` — pause polls when hidden
-- `src/lib/sleeper-cache.ts` / `sleeper-http.ts` / `sleeper-rate-budget.ts` / `sleeper-client.ts` / `sleeper-rosters-client.ts` / `sleeper-standings-client.ts` / `sleeper-meta-client.ts` / `sleeper-settings-client.ts` / `sleeper-activity-client.ts` / `sleeper-league-sync-client.ts` / `sleeper-sync-client.ts` / `scoring-client.ts` / `sleeper-trending.ts` / `public-scoreboard.ts`
+- `src/lib/sleeper-cache.ts` / `sleeper-http.ts` / `sleeper-rate-budget.ts` / `sleeper-client.ts` / `sleeper-rosters-client.ts` / `sleeper-standings-client.ts` / `sleeper-meta-client.ts` / `sleeper-settings-client.ts` / `sleeper-activity-client.ts` / `sleeper-league-sync-client.ts` / `sleeper-sync-client.ts` / `scoring-client.ts` / `sleeper-trending.ts` / `public-scoreboard.ts` / `espn-public-client.ts` / `market-history-client.ts`
 - `src/lib/r2-public.ts` / `research-cdn.ts` / `snap-cdn.ts` / `league-matchups-cdn.ts` / `league-rosters-fetch.ts` / `league-settings-fetch.ts` / `league-activity-fetch.ts` / `espn-fluid-cache.ts` / `playerBrainHydration.ts`
 - `src/lib/player-detail-client.ts` / `sos-from-board.ts` / `players-catalog.ts` / `projection-analytics.ts` (admin Gist trial only)
 - `src/lib/process-memo.ts` / `cron-auth.server.ts` / `api-cache.ts` (`dataCacheControl`, `leagueHistoryCacheControl`, `researchCacheControl`, `warehouseCacheControl`)

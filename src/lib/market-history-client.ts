@@ -3,10 +3,12 @@
  * Soft-empty on miss / CORS / rate limit so sparklines stay cheap.
  */
 
+import { getCached } from "@/lib/sleeper-cache";
 import type { MarketFormat, MarketHistoryPoint } from "@/lib/trade-market";
 
 const FC_BASE = "https://api.fantasycalc.com";
 const HISTORY_DAYS = 30;
+const HISTORY_TTL_MS = 30 * 60 * 1000;
 const PPR_PARAM: Record<MarketFormat, string> = { std: "0", half: "0.5", ppr: "1" };
 
 function allowFluidFallback(): boolean {
@@ -49,13 +51,18 @@ export async function fetchMarketHistoryClient(
   const ppr = PPR_PARAM[fmt];
   const url = `${FC_BASE}/trades/implied/${encodeURIComponent(String(id))}?isDynasty=false&numQbs=1&numTeams=12&ppr=${ppr}`;
 
-  const first = await fetchJson<FcImplied>(url);
-  if (first) return mapHistory(first);
-  await new Promise((r) => setTimeout(r, 750));
-  const second = await fetchJson<FcImplied>(url);
-  if (second) return mapHistory(second);
-
-  if (!allowFluidFallback()) return [];
-  const { getMarketHistory } = await import("@/lib/players.functions");
-  return getMarketHistory({ data: { fcId: id, format: fmt } });
+  try {
+    return await getCached(`fc-implied-history-v1:${id}|${fmt}`, HISTORY_TTL_MS, async () => {
+      const first = await fetchJson<FcImplied>(url);
+      if (first) return mapHistory(first);
+      await new Promise((r) => setTimeout(r, 750));
+      const second = await fetchJson<FcImplied>(url);
+      if (second) return mapHistory(second);
+      throw new Error("fantasycalc history miss");
+    });
+  } catch {
+    if (!allowFluidFallback()) return [];
+    const { getMarketHistory } = await import("@/lib/players.functions");
+    return getMarketHistory({ data: { fcId: id, format: fmt } });
+  }
 }
