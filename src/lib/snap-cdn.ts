@@ -66,16 +66,48 @@ export async function fetchSnapInjuryReports() {
 }
 
 export async function fetchSnapInjuryWire(limit = 5) {
+  const safeLimit = Math.max(1, Math.min(60, limit));
   const hit = await fetchSnapPreferR2<Awaited<ReturnType<typeof import("./players.server").loadInjuryWire>>>(
     R2_SNAP_KEYS.injuryWire(),
-    `/api/data/snap/injury-wire?limit=${limit}`,
+    `/api/data/snap/injury-wire?limit=${safeLimit}`,
   );
   if (Array.isArray(hit) && hit.length > 0) {
-    return hit.slice(0, Math.max(1, Math.min(60, limit)));
+    return hit.slice(0, safeLimit);
   }
+
+  // Until Publish Snap CDN seeds injury-wire.json, reuse injury-reports (already on snap-cdn).
+  const reports = await fetchSnapInjuryReports().catch(() => null);
+  if (reports?.items?.length) {
+    type Wire = Awaited<ReturnType<typeof import("./players.server").loadInjuryWire>>[number];
+    const mapped: Wire[] = reports.items
+      .filter((item) => item.statusShort && !/^active$/i.test(item.status))
+      .map((item) => {
+        const source: Wire["source"] = /rotowire/i.test(item.source) ? "RotoWire" : "ESPN";
+        return {
+          id: item.id,
+          playerName: item.playerName,
+          sleeperId: item.sleeperId,
+          pos: item.pos,
+          team: item.team,
+          headshot: item.headshot,
+          status: item.status,
+          statusShort: item.statusShort,
+          headline: item.headline,
+          body: item.news,
+          published: item.published,
+          returnDate: item.returnDate,
+          source,
+          link: item.link,
+        };
+      })
+      .sort((a, b) => (Date.parse(b.published) || 0) - (Date.parse(a.published) || 0))
+      .slice(0, safeLimit);
+    if (mapped.length > 0) return mapped;
+  }
+
   if (!allowFluidFallback()) return [];
   const { getInjuryWire } = await import("./players.functions");
-  return getInjuryWire({ data: { limit } });
+  return getInjuryWire({ data: { limit: safeLimit } });
 }
 
 export async function fetchSnapFantasyNews(limit = 40) {

@@ -2490,12 +2490,17 @@ const injuryReportsMemo = memo<InjuryReports>(5 * 60 * 1000, async () => {
   const items: Draft[] = [];
   const seen = new Set<string>();
   const covered = new Set<string>();
+  const sleeperNewsMs = (raw: number | null | undefined): number => {
+    if (raw == null || !Number.isFinite(raw) || raw <= 0) return NaN;
+    return raw < 1e12 ? raw * 1000 : raw;
+  };
+
   for (const r of rows) {
     const pos = WIRE_POSITIONS[r.athlete?.position?.abbreviation ?? ""];
-    const at = Date.parse(r.date ?? "");
+    const espnAt = Date.parse(r.date ?? "");
     const displayName = r.athlete?.displayName?.trim();
     const espnStatus = (r.status ?? "").trim();
-    if (!pos || !Number.isFinite(at) || !displayName || !espnStatus) continue;
+    if (!pos || !Number.isFinite(espnAt) || !displayName || !espnStatus) continue;
 
     const espnId = /\/(\d+)\.png/.exec(r.athlete?.headshot?.href ?? "")?.[1] ?? null;
     const key = espnId ?? displayName;
@@ -2525,6 +2530,9 @@ const injuryReportsMemo = memo<InjuryReports>(5 * 60 * 1000, async () => {
     const lastName = r.athlete?.lastName?.trim() || lastNameOf(displayName);
     const tagged = new RegExp(`\\b${escapeRegExp(lastName)} \\(([a-z][a-z /-]{2,24})\\)`, "i").exec(news);
     const active = !designation;
+    // Prefer Sleeper news time over ESPN designation bumps for "xx ago" / sort.
+    const sleeperAt = sleeperNewsMs(sleeper?.newsUpdated);
+    const at = Number.isFinite(sleeperAt) ? sleeperAt : espnAt;
     if (active && (!tagged || now - at > INJURY_UPDATE_WINDOW_MS)) continue;
     if (sleeperId) covered.add(sleeperId);
 
@@ -2544,7 +2552,7 @@ const injuryReportsMemo = memo<InjuryReports>(5 * 60 * 1000, async () => {
     const sourceShort = weak ? short : /^active$/i.test(espnStatus) ? "" : wireStatusShort(espnStatus);
 
     items.push({
-      id: String(r.id ?? `${key}-${at}`),
+      id: String(r.id ?? `${key}-${espnAt}`),
       sleeperId,
       playerName: name,
       pos,
@@ -2579,7 +2587,7 @@ const injuryReportsMemo = memo<InjuryReports>(5 * 60 * 1000, async () => {
     if (!designation) continue;
     const injury = sleeperInjuryLabel(entry.bodyPart);
     const espnId = espnBySleeper.get(sleeperId) ?? null;
-    const at = entry.newsUpdated ?? 0;
+    const at = sleeperNewsMs(entry.newsUpdated);
     items.push({
       id: `sleeper-${sleeperId}`,
       sleeperId,
@@ -2593,13 +2601,13 @@ const injuryReportsMemo = memo<InjuryReports>(5 * 60 * 1000, async () => {
       headline: injuryReportHeadline(player.name, injury, designation.short, ""),
       news: injuryNote(lastNameOf(player.name), designation.short, injury, /surgery/i.test(entry.notes ?? "")),
       analysis: null,
-      published: at ? new Date(at).toISOString() : "",
+      published: Number.isFinite(at) ? new Date(at).toISOString() : "",
       returnDate: null,
       link: espnId ? `https://www.espn.com/nfl/player/_/id/${espnId}` : null,
       source: "Sleeper Injury Report",
       sourceStatusShort: designation.short,
       sourceStatus: designation.status,
-      at,
+      at: Number.isFinite(at) ? at : 0,
       rank: player.rank.half,
       espnId,
       weak: true,
@@ -2631,13 +2639,16 @@ const injuryReportsMemo = memo<InjuryReports>(5 * 60 * 1000, async () => {
           item.source = "RotoWire";
           item.sourceStatusShort = stated;
           item.sourceStatus = stated ? (STATUS_LONG[stated] ?? stated) : null;
+          // Honest "xx ago" — not ESPN designation refresh time.
+          item.at = at;
+          item.published = new Date(at).toISOString();
           break;
         }
       }),
     );
   }
 
-  // ESPN refreshes many notes in one batch, so ties go to the more fantasy-relevant player.
+  // Sort by real news time (RotoWire / Sleeper), not ESPN designation bumps.
   items.sort((a, b) => b.at - a.at || a.rank - b.rank);
   return {
     updatedAt: new Date().toISOString(),
