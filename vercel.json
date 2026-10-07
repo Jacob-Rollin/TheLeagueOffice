@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "snap-cdn": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/league-delta-sync",
