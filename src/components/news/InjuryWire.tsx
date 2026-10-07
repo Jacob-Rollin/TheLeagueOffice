@@ -1,7 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { useRef, useState, type ReactNode } from "react";
+import { UserRound } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 
+import { playerImage } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import type { Pos } from "@/lib/draft";
 import type { InjuryWireItem } from "@/lib/players.server";
 import { cn } from "@/lib/utils";
 
@@ -32,26 +35,40 @@ function timeAgo(iso: string): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-function Headshot({ src, name }: { src: string | null; name: string }) {
-  const [failed, setFailed] = useState(false);
-  const initials = name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("");
+function Headshot({
+  src,
+  sleeperId,
+  pos,
+  team,
+  name,
+}: {
+  src: string | null;
+  sleeperId: string | null;
+  pos: string;
+  team: string | null;
+  name: string;
+}) {
+  const sources = useMemo(() => {
+    const list: string[] = [];
+    if (sleeperId && pos) list.push(playerImage(sleeperId, pos as Pos, team ?? ""));
+    if (src) list.push(src);
+    return list.filter(Boolean);
+  }, [sleeperId, pos, team, src]);
+  const [attempt, setAttempt] = useState(0);
+  const imageSrc = sources[attempt];
+
   return (
-    <span className="flex size-14 shrink-0 items-end justify-center overflow-hidden rounded-full bg-slate-100">
-      {src && !failed ? (
+    <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-50">
+      {imageSrc ? (
         <img
-          src={src}
+          src={imageSrc}
           alt={name}
           loading="lazy"
-          onError={() => setFailed(true)}
+          onError={() => setAttempt((n) => n + 1)}
           className="h-full w-full object-cover"
         />
       ) : (
-        <span className="mb-auto mt-auto text-sm font-semibold text-slate-500">{initials}</span>
+        <UserRound className="size-8 translate-y-[6%] text-slate-300" strokeWidth={1.75} aria-hidden="true" />
       )}
     </span>
   );
@@ -133,7 +150,13 @@ export function InjuryWire({ limit = 5 }: { limit?: number }) {
           {data.map((item) => (
             <CardShell key={item.id} item={item} onOpenPlayer={openPlayer}>
               <div className="flex gap-3">
-                <Headshot src={item.headshot} name={item.playerName} />
+                <Headshot
+                  src={item.headshot}
+                  sleeperId={item.sleeperId}
+                  pos={item.pos}
+                  team={item.team}
+                  name={item.playerName}
+                />
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-bold leading-snug text-zinc-950 transition-colors group-hover:text-blue-600">
                     {item.headline}

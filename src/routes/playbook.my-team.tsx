@@ -663,7 +663,14 @@ function SidebarPlayerThumb({
   }, [isDefensiveOrMissing, headshotCandidate, logo]);
 
   if (!src) {
-    return <span className="h-7 w-7 flex-shrink-0 rounded-full bg-slate-50" aria-hidden="true" />;
+    return (
+      <span
+        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50"
+        aria-hidden="true"
+      >
+        <UserRound className="h-4 w-4 text-slate-300" strokeWidth={1.75} />
+      </span>
+    );
   }
 
   return (

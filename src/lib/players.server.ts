@@ -2041,6 +2041,64 @@ const espnInjuryFeed = memo<EspnInjuryRow[]>(1000 * 60 * 10, async () => {
 const WIRE_POSITIONS: Record<string, string> = { QB: "QB", RB: "RB", WR: "WR", TE: "TE", PK: "K", K: "K" };
 const ESPN_TEAM_FIX: Record<string, string> = { WSH: "WAS" };
 const WIRE_BLURB_WINDOW_MS = 7 * 24 * HOUR;
+/** Game-day inactive/active/Q tags for a specific kickoff stop being news after ~2 days. */
+const GAME_DAY_STATUS_STALE_MS = 48 * HOUR;
+
+function etWeekday(now: number): number {
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+  })
+    .formatToParts(new Date(now))
+    .find((p) => p.type === "weekday")?.value;
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekday ?? "");
+}
+
+/**
+ * RotoWire "inactive for Sunday's game against X" (and similar kickoff designations)
+ * stays in the player feed all week. Once that game is over, skip it so a fresh
+ * ESPN/Sleeper designation bump cannot resurface last week's inactive note.
+ */
+function isStaleGameDayStatusBlurb(text: string, publishedAt: number, now: number): boolean {
+  const inactiveList =
+    /\bis inactive\b/i.test(text) ||
+    /\binactive for\b/i.test(text) ||
+    /\bwas a (?:healthy )?scratch\b/i.test(text);
+  const kickoffDesignation =
+    /\b(?:is )?active (?:against|for)\b/i.test(text) ||
+    /\b(?:questionable|doubtful|ruled out) for (?:sunday|monday|thursday|saturday)'?s game\b/i.test(text) ||
+    /\bdoes not carry an injury designation into\b/i.test(text) ||
+    /\bcleared (?:to play|for) (?:sunday|monday|thursday|saturday)'?s game\b/i.test(text);
+  if (!inactiveList && !kickoffDesignation) return false;
+
+  // Honest article time: expire ~2 days after publish.
+  if (Number.isFinite(publishedAt) && now - publishedAt > GAME_DAY_STATUS_STALE_MS) return true;
+
+  // Inactive lists are Sun/Mon artifacts. From Wednesday ET onward they are last week's
+  // news even when ESPN refreshes the designation `date` on the injury report.
+  if (inactiveList && etWeekday(now) >= 3) return true;
+
+  return false;
+}
+
+/** Pick the newest usable RotoWire injury blurb; skips stale game-day status notes. */
+function pickFreshRotowireBlurb(
+  feed: EspnFeedItem[],
+  now: number,
+): { headline: string; story: string; at: number; link: string | null } | null {
+  for (const f of feed) {
+    const headline = stripTags(f.headline ?? "");
+    if (!headline || (f.type && f.type !== "Rotowire")) continue;
+    const at = Date.parse(f.published ?? f.lastModified ?? "");
+    if (!Number.isFinite(at) || now - at > WIRE_BLURB_WINDOW_MS) continue;
+    const story = stripTags(f.story ?? f.description ?? "");
+    const combined = `${headline} ${story}`;
+    if (!ROSTER_INJURY_RE.test(combined)) continue;
+    if (isStaleGameDayStatusBlurb(combined, at, now)) continue;
+    return { headline, story, at, link: f.links?.web?.href ?? null };
+  }
+  return null;
+}
 
 type SleeperInjury = {
   /** Sleeper `injury_status` (IR, Out, Doubtful, Questionable, PUP, Sus, NA, DNR, COV); null when healthy. */
@@ -2277,26 +2335,29 @@ export async function loadInjuryWire(limit = 5): Promise<InjuryWireItem[]> {
       let body = stripTags(c.r.longComment ?? "");
       let source: InjuryWireItem["source"] = "ESPN";
       let link = espnNewsLink;
-      let newsAt = Number.isFinite(c.sortAt) ? c.sortAt : c.espnAt;
+      // Prefer Sleeper/RotoWire news time — never promote on ESPN designation refresh alone.
+      const sleeperAt =
+        c.sleeper?.newsUpdated != null && Number.isFinite(c.sleeper.newsUpdated)
+          ? c.sleeper.newsUpdated < 1e12
+            ? c.sleeper.newsUpdated * 1000
+            : c.sleeper.newsUpdated
+          : NaN;
+      let newsAt = Number.isFinite(sleeperAt) ? sleeperAt : NaN;
 
-      if (body.length < 40) {
+      const espnBodyUnusable =
+        body.length < 40 || isStaleGameDayStatusBlurb(body, Number.isFinite(newsAt) ? newsAt : c.espnAt, now);
+      if (espnBodyUnusable) {
         body = "";
         const feed = c.espnId ? await espnPlayerFeed(c.espnId).catch(() => [] as EspnFeedItem[]) : [];
-        for (const f of feed) {
-          const headline = (f.headline ?? "").trim();
-          if (!headline || (f.type && f.type !== "Rotowire")) continue;
-          const at = Date.parse(f.published ?? f.lastModified ?? "");
-          if (!Number.isFinite(at) || now - at > WIRE_BLURB_WINDOW_MS) continue;
-          const story = stripTags(f.story ?? f.description ?? "");
-          if (!ROSTER_INJURY_RE.test(`${headline} ${story}`)) continue;
-          body = story ? `${headline} ${story}` : headline;
+        const blurb = pickFreshRotowireBlurb(feed, now);
+        if (blurb) {
+          body = blurb.story ? `${blurb.headline} ${blurb.story}` : blurb.headline;
           source = "RotoWire";
-          link = f.links?.web?.href ?? link;
-          // Honest "xx ago" — not ESPN's refreshed designation date.
-          newsAt = at;
-          break;
+          link = blurb.link ?? link;
+          newsAt = blurb.at;
         }
       }
+      if (!Number.isFinite(newsAt)) newsAt = c.espnAt;
 
       const returnDate = c.r.details?.returnDate ?? null;
       if (!body) {
@@ -2614,36 +2675,59 @@ const injuryReportsMemo = memo<InjuryReports>(5 * 60 * 1000, async () => {
     });
   }
 
-  const toEnrich = items.filter((item) => item.weak && item.espnId && now - item.at <= WIRE_BLURB_WINDOW_MS);
+  const toEnrich = items.filter((item) => {
+    if (!item.espnId) return false;
+    const copy = `${item.news} ${item.analysis ?? ""}`;
+    // Always re-check game-day inactive copy (even when ESPN bumped `date` / item.at).
+    if (isStaleGameDayStatusBlurb(copy, item.at, now)) return true;
+    return item.weak && now - item.at <= WIRE_BLURB_WINDOW_MS;
+  });
   for (let i = 0; i < toEnrich.length; i += 12) {
     await Promise.all(
       toEnrich.slice(i, i + 12).map(async (item) => {
         const feed = await espnPlayerFeed(item.espnId!).catch(() => [] as EspnFeedItem[]);
-        for (const f of feed) {
-          const headline = stripTags(f.headline ?? "");
-          if (!headline || (f.type && f.type !== "Rotowire")) continue;
-          const at = Date.parse(f.published ?? f.lastModified ?? "");
-          if (!Number.isFinite(at) || now - at > WIRE_BLURB_WINDOW_MS) continue;
-          const story = stripTags(f.story ?? f.description ?? "");
-          if (!ROSTER_INJURY_RE.test(`${headline} ${story}`)) continue;
-          item.news = headline.endsWith(".") ? headline : `${headline}.`;
-          item.analysis = story.length > 40 ? story : item.analysis;
-          item.link = f.links?.web?.href ?? item.link;
-          const stated = statusFromText(`${headline} ${story}`);
-          item.headline = injuryReportHeadline(
-            item.playerName,
-            item.injury,
-            stated ?? "",
-            stated ? `${headline} ${story}` : headline,
-          );
-          item.source = "RotoWire";
-          item.sourceStatusShort = stated;
-          item.sourceStatus = stated ? (STATUS_LONG[stated] ?? stated) : null;
-          // Honest "xx ago" — not ESPN designation refresh time.
-          item.at = at;
-          item.published = new Date(at).toISOString();
-          break;
+        const blurb = pickFreshRotowireBlurb(feed, now);
+        if (!blurb) {
+          // Drop stale game-day copy so designation bumps cannot resurrect last week's inactive.
+          if (isStaleGameDayStatusBlurb(`${item.news} ${item.analysis ?? ""}`, item.at, now)) {
+            const last = lastNameOf(item.playerName);
+            item.news = injuryNote(last, item.statusShort, item.injury, false);
+            item.analysis = null;
+            item.headline = injuryReportHeadline(item.playerName, item.injury, item.statusShort, item.news);
+            item.source = "Sleeper Injury Report";
+            item.sourceStatusShort = item.statusShort;
+            item.sourceStatus = item.status;
+            // Discarded kickoff copy — don't keep a refreshed ESPN designation time as "news".
+            const sleeperAt = sleeperNewsMs(
+              item.sleeperId ? sleeperInjuries.get(item.sleeperId)?.newsUpdated : null,
+            );
+            if (Number.isFinite(sleeperAt)) {
+              item.at = sleeperAt;
+              item.published = new Date(sleeperAt).toISOString();
+            } else {
+              item.at = 0;
+              item.published = "";
+            }
+          }
+          return;
         }
+        const { headline, story, at } = blurb;
+        item.news = headline.endsWith(".") ? headline : `${headline}.`;
+        item.analysis = story.length > 40 ? story : item.analysis;
+        item.link = blurb.link ?? item.link;
+        const stated = statusFromText(`${headline} ${story}`);
+        item.headline = injuryReportHeadline(
+          item.playerName,
+          item.injury,
+          stated ?? "",
+          stated ? `${headline} ${story}` : headline,
+        );
+        item.source = "RotoWire";
+        item.sourceStatusShort = stated;
+        item.sourceStatus = stated ? (STATUS_LONG[stated] ?? stated) : null;
+        // Honest "xx ago" — not ESPN designation refresh time.
+        item.at = at;
+        item.published = new Date(at).toISOString();
       }),
     );
   }

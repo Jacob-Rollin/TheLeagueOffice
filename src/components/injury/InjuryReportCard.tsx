@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
@@ -69,9 +70,16 @@ function ReportHeadshot({ item }: { item: InjuryReportItem }) {
   }, [item.sleeperId, item.pos, item.team, item.headshot]);
   const [attempt, setAttempt] = useState(0);
   const src = sources[attempt];
-  const frame = "relative z-20 size-16 flex-shrink-0 rounded-full border-2 border-white/40 shadow-sm";
+  const frame =
+    "relative z-20 flex size-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-white/40 shadow-sm";
 
-  if (!src) return <span className={cn(frame, "bg-white/20")} />;
+  if (!src) {
+    return (
+      <span className={cn(frame, "bg-white/20")} aria-hidden="true">
+        <UserRound className="size-9 translate-y-[6%] text-white/70" strokeWidth={1.75} />
+      </span>
+    );
+  }
   return (
     <img
       src={src}
