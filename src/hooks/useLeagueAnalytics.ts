@@ -35,6 +35,7 @@ function connectionArgs(league: ReturnType<typeof useActiveLeague>["activeLeague
     platform: (league?.platform ?? "sleeper").trim().toLowerCase(),
     ...(league?.s2 ? { s2: league.s2 } : {}),
     ...(league?.swid ? { swid: league.swid } : {}),
+    ...(league?.teamName ? { teamName: league.teamName } : {}),
   };
 }
 
