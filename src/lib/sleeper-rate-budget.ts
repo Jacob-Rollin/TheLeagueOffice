@@ -2,17 +2,21 @@
  * Per-tab Sleeper request budget.
  *
  * Sleeper's public ceiling is ~1000 req/min per IP. Each visitor uses their own
- * browser IP, but one tab can still stampede (live poll + prefetch + stats +
- * projections). Keep a soft cap well under 1000 and prefer live scoring.
+ * browser IP — we intentionally lean on that pool so Vercel CDN/Fluid stay lean.
+ * Soft-cap per tab still leaves headroom for 2–3 tabs on one household IP and
+ * prefers live scoring over warm/prefetch.
  */
 
 type Kind = "live" | "warm" | "default";
 
 const WINDOW_MS = 60_000;
-/** Soft ceiling per tab — leaves headroom under Sleeper's ~1000/min IP limit. */
-const SOFT_LIMIT_PER_MIN = 90;
+/**
+ * Soft ceiling per tab. ~1000/min IP limit; 180 leaves room for ~5 busy tabs
+ * before approaching the ceiling, while allowing history warm + live polls.
+ */
+const SOFT_LIMIT_PER_MIN = 180;
 /** Reserved slots so live matchup polls are not starved by warm/prefetch. */
-const LIVE_RESERVE = 24;
+const LIVE_RESERVE = 36;
 
 const stamps: number[] = [];
 

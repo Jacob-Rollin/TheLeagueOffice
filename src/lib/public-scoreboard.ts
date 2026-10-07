@@ -1,13 +1,26 @@
 /**
  * Shared ESPN NFL scoreboard fetch helpers.
- * Browser clients hit the same-origin proxy so CDN Cache-Control can coalesce
- * ScoreTicker + live-matchup progress polls onto one upstream ESPN call.
+ *
+ * Prefer visitor→ESPN directly (CORS allows *). That keeps ScoreTicker off the
+ * Hobby CDN Request meter. Fall back to same-origin `/api/public/scoreboard`
+ * only when the direct pull fails (extension blocks, flaky network).
  */
 
 export const SCOREBOARD_PROXY_URL = "/api/public/scoreboard";
+const ESPN_SCOREBOARD =
+  "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
+
+/** In-tab coalescing so remounts / dual hooks do not double-hit ESPN. */
+const memory = new Map<string, { at: number; live: boolean; value: unknown }>();
+const LIVE_MEMORY_TTL_MS = 15_000;
+const IDLE_MEMORY_TTL_MS = 2 * 60_000;
 
 export function scoreboardQueryKey(week?: number | null, seasontype?: number | null) {
   return ["nfl-public-scoreboard", week ?? null, seasontype ?? null] as const;
+}
+
+function scoreboardKey(week?: number | null, seasontype?: number | null): string {
+  return `${week ?? ""}|${seasontype ?? ""}`;
 }
 
 export function scoreboardProxyUrl(week?: number | null, seasontype?: number | null): string {
@@ -18,12 +31,15 @@ export function scoreboardProxyUrl(week?: number | null, seasontype?: number | n
   return qs ? `${SCOREBOARD_PROXY_URL}?${qs}` : SCOREBOARD_PROXY_URL;
 }
 
-/** Fetch scoreboard JSON via the CDN-cached same-origin proxy. */
-export async function fetchPublicScoreboard(
-  week?: number | null,
-  seasontype?: number | null,
-): Promise<unknown | null> {
-  const url = scoreboardProxyUrl(week, seasontype);
+function espnScoreboardUrl(week?: number | null, seasontype?: number | null): string {
+  const params = new URLSearchParams();
+  if (week != null && week > 0) params.set("week", String(week));
+  if (seasontype != null && seasontype > 0) params.set("seasontype", String(seasontype));
+  const qs = params.toString();
+  return qs ? `${ESPN_SCOREBOARD}?${qs}` : ESPN_SCOREBOARD;
+}
+
+async function readJson(url: string): Promise<unknown | null> {
   const res = await fetch(url, { headers: { accept: "application/json" } }).catch(() => null);
   if (!res || !res.ok) return null;
   try {
@@ -31,6 +47,29 @@ export async function fetchPublicScoreboard(
   } catch {
     return null;
   }
+}
+
+/** Fetch scoreboard JSON — browser→ESPN first, Vercel proxy only as fallback. */
+export async function fetchPublicScoreboard(
+  week?: number | null,
+  seasontype?: number | null,
+): Promise<unknown | null> {
+  const key = scoreboardKey(week, seasontype);
+  const now = Date.now();
+  const hit = memory.get(key);
+  if (hit) {
+    const ttl = hit.live ? LIVE_MEMORY_TTL_MS : IDLE_MEMORY_TTL_MS;
+    if (now - hit.at < ttl) return hit.value;
+  }
+
+  let json = await readJson(espnScoreboardUrl(week, seasontype));
+  if (json == null) {
+    json = await readJson(scoreboardProxyUrl(week, seasontype));
+  }
+  if (json == null) return null;
+
+  memory.set(key, { at: now, live: scoreboardHasLiveGame(json), value: json });
+  return json;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

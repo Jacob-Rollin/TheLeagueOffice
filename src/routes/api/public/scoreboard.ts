@@ -62,7 +62,11 @@ function loadScoreboard(target: string): Promise<{ body: string | null; live: bo
   });
 }
 
-/** Same-origin proxy for the ESPN scoreboard (ESPN sends no CORS headers). */
+/**
+ * Same-origin scoreboard proxy — fallback only.
+ * Browse prefers visitor→site.api.espn.com (CORS *). Keep this warm for
+ * environments that block the direct host.
+ */
 export const Route = createFileRoute("/api/public/scoreboard")({
   server: {
     handlers: {

@@ -40,7 +40,12 @@ function isSleeperPlatform(platform: string): boolean {
   return platform === "sleeper";
 }
 
-/** Resolve one week: live Sleeper (current) → CDN → warm Sleeper; Fluid only for ESPN/Yahoo. */
+/**
+ * Resolve one week:
+ * - Sleeper: visitor→api.sleeper.app first (IndexedDB + rate budget), TiDB CDN only
+ *   as fallback — keeps Hobby CDN Requests off the live path.
+ * - ESPN/Yahoo: CDN first, throttled Fluid for holes.
+ */
 async function loadWeekMatchups(input: {
   leagueId: string;
   week: number;
@@ -78,21 +83,35 @@ async function loadWeekMatchups(input: {
   }
   const sleeper = sleeperPlatform && /^\d{6,}$/.test(leagueId);
 
-  // Current week + Sleeper: browser live poll first (fresh scores, no Fluid).
-  if (sleeper && isCurrent && isPageVisible()) {
-    const live = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek, {
-      mode: "live",
+  // Sleeper: burn the visitor IP pool before our Vercel CDN.
+  if (sleeper && isPageVisible()) {
+    if (isCurrent) {
+      const live = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek, {
+        mode: "live",
+      });
+      if (boardIsDisplayable(live)) return live;
+    }
+    const warm = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek, {
+      mode: "warm",
     });
-    if (boardIsDisplayable(live)) return live;
+    if (boardIsDisplayable(warm)) return warm;
   }
 
   const cdn = await fetchLeagueWeekMatchupsCdn(leagueId, week);
   const cdnDisplayable = cdn != null && boardIsDisplayable(cdn.board);
 
+  if (sleeper) {
+    // Client miss/429 — TiDB CDN is the soft fallback (never Fluid).
+    if (cdnDisplayable && cdn) return cdn.board;
+    return null;
+  }
+
+  // Unresolved Sleeper username: soft-empty (never Fluid).
+  if (sleeperPlatform) return cdnDisplayable && cdn ? cdn.board : null;
+
   if (cdnDisplayable && cdn) {
     if (isCurrent) {
-      // Live path missed (budget/429): serve CDN rather than Fluid-storm.
-      // ESPN/Yahoo: always prefer a warm CDN board — Fluid burns host + Active CPU.
+      // ESPN/Yahoo: prefer warm CDN — Fluid burns host + Active CPU.
       return cdn.board;
     }
     const pastNeedsRefresh =
@@ -106,19 +125,6 @@ async function loadWeekMatchups(input: {
       }
     }
   }
-
-  if (sleeper) {
-    const warm = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek, {
-      mode: "warm",
-    });
-    if (boardIsDisplayable(warm)) return warm;
-    // Sleeper browse never uses Fluid — cron + visitor IP own the warm path.
-    if (cdnDisplayable && cdn) return cdn.board;
-    return null;
-  }
-
-  // Unresolved Sleeper username: soft-empty (never Fluid).
-  if (sleeperPlatform) return cdnDisplayable && cdn ? cdn.board : null;
 
   // ESPN/Yahoo: throttled Fluid for past / unscored holes only.
   const refreshed = await maybeRefreshMatchupsViaFluid({
