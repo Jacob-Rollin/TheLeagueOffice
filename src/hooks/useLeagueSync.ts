@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouterState } from "@tanstack/react-router";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,15 +17,24 @@ const SESSION_KEY_PREFIX = "tlo.league-delta-sync.v2:";
 /** ESPN/Yahoo credential leagues only — Sleeper is cron + browser. */
 const RESYNC_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
+/** Admin tools (e.g. Projection Analytics) never need a league warm. */
+function isAdminPath(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
 export function useLeagueSync() {
   const { activeLeague, sandboxMode } = useActiveLeague();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const inFlightRef = useRef<string | null>(null);
   const userId = user?.id ?? null;
 
   useEffect(() => {
     if (sandboxMode) return;
+    // Opening /admin/projection-analytics with an ESPN league selected must not
+    // spend Fluid on delta sync — that page only reads a public Gist client-side.
+    if (isAdminPath(pathname)) return;
     const connectionId = activeLeague?.id?.trim() || "";
     const leagueId = activeLeague?.leagueId?.trim() || "";
     const platform = (activeLeague?.platform ?? "sleeper").trim().toLowerCase();
@@ -93,6 +103,7 @@ export function useLeagueSync() {
     activeLeague?.s2,
     activeLeague?.swid,
     sandboxMode,
+    pathname,
     queryClient,
     userId,
   ]);

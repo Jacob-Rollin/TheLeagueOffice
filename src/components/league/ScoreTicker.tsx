@@ -200,7 +200,7 @@ export function ScoreTicker() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
 
-  // Shares React Query cache + CDN proxy with useNflGameProgress.
+  // Shares React Query cache with useNflGameProgress (browser→ESPN).
   const scoreboard = usePublicScoreboard(selectedWeek, seasonType);
 
   useEffect(() => {
