@@ -590,8 +590,11 @@ export function TeamOverview({
     standing && rows.length
       ? standing.pointsFor - rows.reduce((s, r) => s + r.pointsFor, 0) / rows.length
       : null;
+  // Same coaching efficiency as dashboard / Standings Actual (board PF ÷ Max PF).
   const efficiency =
-    standing && stats?.maxPf ? Math.round((standing.pointsFor / stats.maxPf) * 100) : null;
+    stats?.efficiency != null && Number.isFinite(stats.efficiency)
+      ? Math.min(100, stats.efficiency)
+      : null;
   const valueTotal = valueBoard.mine?.total ?? 0;
   const pending = league.analyticsLoading ? "…" : "—";
   const pct = (v: number | null | undefined) => (v == null ? pending : `${Math.round(v)}%`);
@@ -684,7 +687,7 @@ export function TeamOverview({
                 pts
                 {efficiency != null ? (
                   <span className="ml-1.5 font-semibold tabular-nums text-slate-600">
-                    {efficiency}% lineup efficiency
+                    {efficiency.toFixed(1)}% lineup efficiency
                   </span>
                 ) : null}
               </>
