@@ -84,15 +84,17 @@ export async function fetchResearchFantasyLeaders(season?: string) {
     const hit = await fetchJson<Awaited<ReturnType<typeof import("./players.functions").getFantasyLeaders>>>(
       `/api/data/research/fantasy-leaders${qs}`,
     );
-    // Empty rows are a cold snap (API returns no-store) — do not treat as warm.
+    // Warm CDN/TiDB snap — shared across visitors, no Sleeper fan-out.
     if (hit && Array.isArray((hit as { rows?: unknown[] }).rows) && (hit as { rows: unknown[] }).rows.length > 0) {
       return hit;
     }
-    if (!allowFluidFallback()) {
-      return hit && typeof hit === "object"
-        ? hit
-        : { season: season ?? "", maxWeek: 0, rows: [] };
-    }
+    // Cold snap: assemble from public Sleeper in the browser (visitor IP / IndexedDB).
+    // Never Fluid-recompute — that was burning Active CPU on every empty hit.
+    const { fetchFantasyLeadersClient } = await import("./fantasy-leaders-client");
+    return fetchFantasyLeadersClient(season);
+  }
+  if (!allowFluidFallback()) {
+    return { season: season ?? "", maxWeek: 0, rows: [] };
   }
   const { getFantasyLeaders } = await import("./players.functions");
   return getFantasyLeaders({ data: season ? { season } : {} });
