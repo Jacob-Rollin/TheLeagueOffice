@@ -1,23 +1,20 @@
 name: League Planning Snaps
 
-# Warms ROS + Starting Slot Ranks for active Sleeper leagues via the Vercel
-# cron endpoint, then seeds /api/data/snap/* CDN. Browse paths read CDN/client
-# only — this job is the Fluid compute for Recommendation / Bye Planner /
-# Standings slot ranks. Requires CRON_SECRET + APP_URL repository secrets.
+# Warms ROS + Starting Slot Ranks for a small batch of active Sleeper leagues.
+# Browse prefers client ROS when cold — keep this lean for Hobby Fluid CPU.
+# Requires CRON_SECRET + APP_URL repository secrets.
 
 on:
   schedule:
-    # Twice daily (off peak UTC) so ROS stays current without gameday CPU.
+    # Once daily off-peak (UTC). Extra Tuesday pass after week roll.
     - cron: "40 7 * * *"
-    - cron: "40 19 * * *"
-    # Extra Tuesday morning pass after week roll (scores finalize).
     - cron: "10 6 * * 2"
   workflow_dispatch:
     inputs:
       limit:
         description: "Max Sleeper leagues to warm"
         type: string
-        default: "30"
+        default: "12"
 
 permissions:
   contents: read
@@ -46,7 +43,7 @@ jobs:
             http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
             http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
           esac
-          LIMIT="${LIMIT_INPUT:-30}"
+          LIMIT="${LIMIT_INPUT:-12}"
           echo "Calling league-planning-snaps?limit=${LIMIT}"
           curl -fsSL -H "Authorization: Bearer $CRON_SECRET" \
             "$BASE/api/cron/league-planning-snaps?limit=${LIMIT}"

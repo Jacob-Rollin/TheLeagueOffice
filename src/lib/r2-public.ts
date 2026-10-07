@@ -48,6 +48,7 @@ export const R2_RESEARCH_KEYS = {
 export const R2_SNAP_KEYS = {
   tradeMarket: (format: string) => `snap/trade-market-${format}.json`,
   injuryReports: () => `snap/injury-reports.json`,
+  injuryWire: () => `snap/injury-wire.json`,
   fantasyNews: () => `snap/fantasy-news.json`,
   tradeBasis: () => `snap/trade-basis.json`,
 } as const;

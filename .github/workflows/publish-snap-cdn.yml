@@ -98,6 +98,8 @@ jobs:
           done
 
           fetch "$BASE/api/data/snap/injury-reports" out/snap/injury-reports.json
+          # Homepage InjuryWire — compute allowed via CRON_SECRET on this fetch.
+          fetch "$BASE/api/data/snap/injury-wire?limit=8" out/snap/injury-wire.json
           fetch "$BASE/api/data/snap/fantasy-news?limit=80" out/snap/fantasy-news.json
           fetch "$BASE/api/data/snap/trade-basis" out/snap/trade-basis.json
 

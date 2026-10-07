@@ -1,6 +1,7 @@
 /**
  * Client helpers for edge-cached snapshots.
- * Prefer public Cloudflare R2, then `/api/data/snap/*`, never Fluid in prod.
+ * Prefer GitHub snap-cdn (`VITE_SNAP_CDN_BASE`), then `/api/data/snap/*`
+ * (browse soft-empty — no Fluid compute). Dev may fall back to createServerFn.
  */
 
 import { R2_SNAP_KEYS, r2Url } from "@/lib/r2-public";
@@ -65,10 +66,13 @@ export async function fetchSnapInjuryReports() {
 }
 
 export async function fetchSnapInjuryWire(limit = 5) {
-  const hit = await fetchSnapJson<Awaited<ReturnType<typeof import("./players.server").loadInjuryWire>>>(
+  const hit = await fetchSnapPreferR2<Awaited<ReturnType<typeof import("./players.server").loadInjuryWire>>>(
+    R2_SNAP_KEYS.injuryWire(),
     `/api/data/snap/injury-wire?limit=${limit}`,
   );
-  if (Array.isArray(hit)) return hit;
+  if (Array.isArray(hit) && hit.length > 0) {
+    return hit.slice(0, Math.max(1, Math.min(60, limit)));
+  }
   if (!allowFluidFallback()) return [];
   const { getInjuryWire } = await import("./players.functions");
   return getInjuryWire({ data: { limit } });

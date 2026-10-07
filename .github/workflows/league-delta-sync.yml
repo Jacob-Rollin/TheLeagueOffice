@@ -6,18 +6,18 @@ name: League Delta Sync
 #
 # Free-tier ops (~20 users): browse reads CDN/TiDB + browser Sleeper; this job
 # is the only Fluid writer for Sleeper matchups. Cadence kept lean for Vercel
-# Hobby Fluid CPU (4 hrs/mo) — gameday every 30m with a small batch, plus a
-# daily fillSeason pass so schedule/week pickers stay complete.
+# Hobby Fluid CPU (4 hrs/mo) — gameday hourly (not every 30m), plus a daily
+# fillSeason pass so schedule/week pickers stay complete.
 # Webhooks MUST hit Vercel /api/webhooks/sync — never repository_dispatch.
 
 on:
   schedule:
     # Mid-week (Tue–Wed): every 6 hours — current + prior week.
     - cron: "0 */6 * * 2,3"
-    # Gameday windows (Thu–Mon): every 30 minutes during active NFL blocks (UTC).
-    - cron: "*/30 12-23 * * 0,1,4"
-    - cron: "*/30 0-5 * * 1,2,5"
-    - cron: "*/30 16-23 * * 6"
+    # Gameday windows (Thu–Mon): hourly during active NFL blocks (UTC).
+    - cron: "0 12-23 * * 0,1,4"
+    - cron: "0 0-5 * * 1,2,5"
+    - cron: "0 16-23 * * 6"
     # Daily season fill (06:20 UTC): backfill any missing weeks 1–17.
     - cron: "20 6 * * *"
   workflow_dispatch:
@@ -70,9 +70,9 @@ jobs:
             FILL=1
             LIMIT=20
           fi
-          # Gameday 30m windows: prefer recently touched leagues.
+          # Gameday hourly windows: prefer recently touched leagues.
           case "$SCHEDULE" in
-            "*/30 12-23 * * 0,1,4"|"*/30 0-5 * * 1,2,5"|"*/30 16-23 * * 6")
+            "0 12-23 * * 0,1,4"|"0 0-5 * * 1,2,5"|"0 16-23 * * 6")
               RECENT=1
               LIMIT=15
               ;;

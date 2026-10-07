@@ -1,9 +1,8 @@
 name: Research Aggregates Warm
 
 # Precomputes nflverse / club-scrape research payloads into TiDB so request
-# paths never gunzip PBP or crawl 32 club sites. Hits Vercel cron only.
-# Kept to 1–2 runs/day to protect Vercel Hobby Fluid CPU; daily Vercel cron
-# at 07:00 remains the backup.
+# paths never gunzip PBP or crawl 32 club sites. This Actions schedule is the
+# only research warm (Vercel 07:00 duplicate removed to cut Fluid Active CPU).
 
 on:
   schedule:

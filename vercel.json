@@ -7,19 +7,11 @@
   "crons": [
     {
       "path": "/api/cron/league-delta-sync",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/league-delta-sync",
       "schedule": "0 5 * * 2"
     },
     {
       "path": "/api/cron/warehouse-ingest",
       "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/research-aggregates",
-      "schedule": "0 7 * * *"
     }
   ]
 }
