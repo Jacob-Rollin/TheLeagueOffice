@@ -29,6 +29,41 @@ function formatFromRec(rec: number): ScoringFormat {
   return rec >= 1 ? "ppr" : rec > 0 ? "half" : "std";
 }
 
+/** Build a LeagueScoring map from ESPN `scoringSettings.scoringItems` (no host fetch). */
+export function mapFromEspnScoringItems(
+  items: { statId?: number; points?: number }[] | null | undefined,
+): LeagueScoring | null {
+  if (!items?.length) return null;
+  const map: ScoringMap = {};
+  for (const item of items) {
+    const key = ESPN_STAT_MAP[Number(item?.statId)];
+    const pts = Number(item?.points);
+    if (key && Number.isFinite(pts)) map[key] = pts;
+  }
+  if (!Object.keys(map).length) return null;
+  const format = formatFromRec(Number(map["rec"] ?? 0));
+  // ESPN settings are sparse — fill missing core offense only (never flat
+  // fgm when distance buckets may also be present).
+  const baseline = defaultScoringMap(format);
+  for (const key of [
+    "pass_yd",
+    "pass_td",
+    "pass_int",
+    "pass_2pt",
+    "rush_yd",
+    "rush_td",
+    "rush_2pt",
+    "rec",
+    "rec_yd",
+    "rec_td",
+    "rec_2pt",
+    "fum_lost",
+  ] as const) {
+    if (map[key] == null && baseline[key] != null) map[key] = baseline[key]!;
+  }
+  return { format, map, source: "espn" };
+}
+
 /**
  * Synced connections may store a Sleeper league id, user id, or username.
  * `/league/{username}` 404s — without resolution we silently fall back to
@@ -154,36 +189,8 @@ export async function loadLeagueScoring(
       `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${encodeURIComponent(identifier)}?view=mSettings`,
       { headers },
     );
-    const items = view?.settings?.scoringSettings?.scoringItems ?? [];
-    if (items.length) {
-      const map: ScoringMap = {};
-      for (const item of items) {
-        const key = ESPN_STAT_MAP[Number(item?.statId)];
-        const pts = Number(item?.points);
-        if (key && Number.isFinite(pts)) map[key] = pts;
-      }
-      const format = formatFromRec(Number(map["rec"] ?? 0));
-      // ESPN settings are sparse — fill missing core offense only (never flat
-      // fgm when distance buckets may also be present).
-      const baseline = defaultScoringMap(format);
-      for (const key of [
-        "pass_yd",
-        "pass_td",
-        "pass_int",
-        "pass_2pt",
-        "rush_yd",
-        "rush_td",
-        "rush_2pt",
-        "rec",
-        "rec_yd",
-        "rec_td",
-        "rec_2pt",
-        "fum_lost",
-      ] as const) {
-        if (map[key] == null && baseline[key] != null) map[key] = baseline[key]!;
-      }
-      return { format, map, source: "espn" };
-    }
+    const mapped = mapFromEspnScoringItems(view?.settings?.scoringSettings?.scoringItems);
+    if (mapped) return mapped;
   }
 
   // Yahoo (and any silent host) falls back to the standard half-PPR baseline.

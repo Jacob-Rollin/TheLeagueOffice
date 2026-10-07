@@ -126,18 +126,24 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
       return boardHasUsableScores(hit?.board) ? false : 120_000;
     }),
     refetchIntervalInBackground: false,
-    queryFn: () =>
-      fetchLeagueMatchupsHistory({
+    queryFn: () => {
+      const platform = (activeLeague?.platform ?? "sleeper").trim().toLowerCase();
+      // ESPN/Yahoo: cron + switch-time delta own host pulls. Browse history must
+      // not N× Fluid-backfill completed weeks (same rule as production Sleeper).
+      const allowFluid =
+        platform !== "espn" && platform !== "yahoo" ? isPageVisible() : false;
+      return fetchLeagueMatchupsHistory({
         leagueId: platformLeagueId,
-        platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
+        platform,
         weeks: historyWeeks,
         currentWeek,
         completedThrough,
         ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
         ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
         ...(leagueId ? { connectionId: leagueId } : {}),
-        allowFluid: isPageVisible(),
-      }),
+        allowFluid,
+      });
+    },
   });
   const historyLoading = allMatchups.isLoading;
   const historyStamp = `${allMatchups.dataUpdatedAt}:${allMatchups.data?.size ?? 0}`;

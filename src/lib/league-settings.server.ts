@@ -5,7 +5,7 @@ import {
   type RosterSlotKey,
 } from "./league-settings";
 import { espnJson, espnTeamName, loadUserLeagues, sleeperAvatar, type EspnTeam } from "./league.server";
-import { loadLeagueScoring } from "./scoring.server";
+import { loadLeagueScoring, mapFromEspnScoringItems } from "./scoring.server";
 
 const SLEEPER = "https://api.sleeper.app/v1";
 
@@ -277,6 +277,7 @@ type EspnSettingsView = {
       waiverHours?: number;
     };
     tradeSettings?: { deadlineDate?: number; max?: number; revisionHours?: number; vetoVotesRequired?: number };
+    scoringSettings?: { scoringItems?: { statId?: number; points?: number }[] };
   };
   teams?: EspnTeam[];
 };
