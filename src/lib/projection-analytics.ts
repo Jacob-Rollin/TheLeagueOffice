@@ -1,6 +1,11 @@
 /**
  * Read-only client for the projection engine's public Gist (scripts/projection-engine).
  * Only /admin/projection-analytics uses this; the rest of the site still runs on Sleeper projections.
+ *
+ * Browser → gist.githubusercontent.com only. Never calls ESPN, Sleeper, TiDB, or
+ * FantasyCalc, and never creates Fluid invocations. The engine itself runs on
+ * GitHub Actions (not Vercel). Observability spikes while this page is open come
+ * from the shared root layout (ESPN league delta, CDN warm, cron) — not this module.
  */
 
 const GIST_RAW = "https://gist.githubusercontent.com/Jacob-Rollin/7cfcd891dc32297b05b3b6b29a73c443/raw";
