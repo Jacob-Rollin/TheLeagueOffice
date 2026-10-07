@@ -242,9 +242,25 @@ export async function fetchLeagueMatchupsHistory(input: {
   connectionId?: string;
   allowFluid?: boolean;
 }): Promise<Map<number, LeagueMatchupsCdnHit>> {
-  const leagueId = String(input.leagueId ?? "").trim();
-  const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
-  const out = leagueId ? await fetchLeagueAllMatchupsCdn(leagueId) : new Map<number, LeagueMatchupsCdnHit>();
+  let hostLeagueId = String(input.leagueId ?? "").trim();
+  const platformNorm = String(input.platform ?? "sleeper").trim().toLowerCase();
+
+  if (platformNorm === "sleeper" && hostLeagueId) {
+    const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
+      "@/lib/sleeper-resolve-client"
+    );
+    const resolved = await ensureSleeperNumericLeagueId(hostLeagueId).catch(() => null);
+    if (resolved) {
+      if (resolved !== hostLeagueId && input.connectionId) {
+        void persistResolvedSleeperLeagueId(input.connectionId, resolved);
+      }
+      hostLeagueId = resolved;
+    }
+  }
+
+  const out = hostLeagueId
+    ? await fetchLeagueAllMatchupsCdn(hostLeagueId)
+    : new Map<number, LeagueMatchupsCdnHit>();
   const needed = Array.from(
     new Set(
       input.weeks
@@ -267,8 +283,7 @@ export async function fetchLeagueMatchupsHistory(input: {
     typeof import.meta.env?.PROD === "boolean" &&
     import.meta.env.PROD === true;
 
-  const platformNorm = String(platform || "sleeper").trim().toLowerCase();
-  const sleeper = platformNorm === "sleeper" && /^\d{6,}$/.test(leagueId);
+  const sleeper = platformNorm === "sleeper" && /^\d{6,}$/.test(hostLeagueId);
 
   // Any hollow week on Sleeper: browser host pull first (visitor IP pool).
   // Covers future schedule AND completed weeks so browse never needs Fluid.
@@ -282,7 +297,7 @@ export async function fetchLeagueMatchupsHistory(input: {
   if (missingForClient.length && sleeper) {
     const { fetchSleeperWeekMatchupsClient } = await import("@/lib/sleeper-matchups-client");
     await mapPool(missingForClient, HISTORY_BACKFILL_CONCURRENCY, async (week) => {
-      const board = await fetchSleeperWeekMatchupsClient(leagueId, week, currentWeek || null, {
+      const board = await fetchSleeperWeekMatchupsClient(hostLeagueId, week, currentWeek || null, {
         mode: "warm",
       });
       if (boardHasSchedulePairings(board) || boardHasUsableScores(board)) {
@@ -301,19 +316,20 @@ export async function fetchLeagueMatchupsHistory(input: {
 
     if (!hollow && !softFinalStale) return false;
 
-    // Production: never Fluid-backfill Sleeper from browse (client + cron own it).
+    // Production: never Fluid-backfill Sleeper from browse (client + cron own it),
+    // including legacy username league_id rows that never resolved.
     // ESPN/Yahoo may still use throttled Fluid for completed weeks.
-    if (isProd && (sleeper || priorWeek <= 0 || week > priorWeek)) return false;
+    if (isProd && (platformNorm === "sleeper" || priorWeek <= 0 || week > priorWeek)) return false;
 
     return hollow || softFinalStale;
   });
-  if (!missing.length || input.allowFluid === false || !leagueId) return out;
+  if (!missing.length || input.allowFluid === false || !hostLeagueId) return out;
 
   // Soft-final completed slate may force host; older completed weeks prefer
   // cache then host once. Single-flight + rate limits prevent /__server storms.
   await mapPool(missing, HISTORY_BACKFILL_CONCURRENCY, async (week) => {
     const board = await maybeRefreshMatchupsViaFluid({
-      leagueId,
+      leagueId: hostLeagueId,
       week,
       platform: platformNorm,
       ...(input.s2 ? { s2: input.s2 } : {}),

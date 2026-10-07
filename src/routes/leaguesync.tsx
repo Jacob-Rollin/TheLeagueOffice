@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/leaguesync")({
   ssr: false,
@@ -74,13 +75,43 @@ function LeagueSyncPage() {
     }
     setIsSyncing(true);
     setStatus(null);
+
+    let leagueId = label;
+    let metadata: {
+      label: string;
+      platform: Platform;
+      teams: unknown[];
+      rules: Record<string, never>;
+      sleeper_username?: string;
+      sleeper_user_id?: string | null;
+    } = { label, platform: next, teams: [], rules: {} };
+
+    // Sleeper sync accepts a username — resolve to a numeric host league id so
+    // browse stays on browser/CDN gates (canFetch*Client) instead of Fluid.
+    if (next === "sleeper") {
+      const { resolveSleeperLeagueIdClient } = await import("@/lib/sleeper-resolve-client");
+      const resolved = await resolveSleeperLeagueIdClient(label).catch(() => null);
+      if (!resolved?.leagueId) {
+        setIsSyncing(false);
+        setStatus("Could not find a Sleeper league for that username.");
+        return;
+      }
+      leagueId = resolved.leagueId;
+      metadata = {
+        ...metadata,
+        label: resolved.username ?? label,
+        sleeper_username: resolved.username ?? label,
+        sleeper_user_id: resolved.userId,
+      };
+    }
+
     const { error } = await supabase.from("synced_leagues").insert({
       user_id: userId,
       platform: next,
-      league_id: label,
+      league_id: leagueId,
       espn_s2: extra?.["espn_s2"] ?? null,
       swid: extra?.["espn_swid"] ?? null,
-      metadata: { label, platform: next, teams: [], rules: {} },
+      metadata: metadata as Json,
     });
     if (error) {
       setIsSyncing(false);

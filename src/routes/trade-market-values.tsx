@@ -37,7 +37,7 @@ import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import { getMarketHistory } from "@/lib/players.functions";
+import { fetchMarketHistoryClient } from "@/lib/market-history-client";
 import { fetchSnapTradeMarket } from "@/lib/snap-cdn";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { scaleValue } from "@/lib/trade-engine";
@@ -665,7 +665,7 @@ function MarketSparkline({ fcId, format }: { fcId: number; format: MarketFormat 
     staleTime: 6 * 60 * 60 * 1000,
     retry: 2,
     retryDelay: (attempt) => 1000 * (attempt + 1),
-    queryFn: () => getMarketHistory({ data: { fcId, format } }),
+    queryFn: () => fetchMarketHistoryClient(fcId, format),
   });
 
   const points = history.data ?? [];

@@ -25,10 +25,26 @@ export async function fetchLeagueRostersForConnection(input: {
   teamName?: string | null | undefined;
   s2?: string | null | undefined;
   swid?: string | null | undefined;
+  connectionId?: string | null | undefined;
 }): Promise<LeagueRosters | null> {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
-  const leagueId = String(input.leagueId ?? "").trim();
+  let leagueId = String(input.leagueId ?? "").trim();
   if (!leagueId) return null;
+
+  if (platform === "sleeper") {
+    const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
+      "@/lib/sleeper-resolve-client"
+    );
+    const resolved = await ensureSleeperNumericLeagueId(leagueId).catch(() => null);
+    if (resolved) {
+      if (resolved !== leagueId && input.connectionId) {
+        void persistResolvedSleeperLeagueId(input.connectionId, resolved);
+      }
+      leagueId = resolved;
+    } else if (!allowSleeperFluidFallback()) {
+      return null;
+    }
+  }
 
   if (canFetchRostersClient(platform)) {
     const client = await fetchSleeperLeagueRostersClient(leagueId, input.teamName).catch(() => null);
@@ -41,6 +57,8 @@ export async function fetchLeagueRostersForConnection(input: {
       return client;
     }
   }
+
+  if (platform === "sleeper" && !allowSleeperFluidFallback()) return null;
 
   return getConnectionRosters({
     data: {

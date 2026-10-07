@@ -229,13 +229,37 @@ function LeagueRow({
     staleTime: 5 * 60 * 1000,
     retry: false,
     queryFn: async () => {
-      if (canFetchMetaClient(platformKey, identifier)) {
-        return fetchSleeperMetaClient(identifier, label);
+      let hostId = identifier;
+      if (platformKey === "sleeper") {
+        const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
+          "@/lib/sleeper-resolve-client"
+        );
+        const resolved = await ensureSleeperNumericLeagueId(hostId).catch(() => null);
+        if (resolved) {
+          if (resolved !== hostId) void persistResolvedSleeperLeagueId(row.id, resolved);
+          hostId = resolved;
+        } else {
+          try {
+            if (import.meta.env.PROD) return null;
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      if (canFetchMetaClient(platformKey, hostId)) {
+        return fetchSleeperMetaClient(hostId, label);
+      }
+      if (platformKey === "sleeper") {
+        try {
+          if (import.meta.env.PROD) return null;
+        } catch {
+          /* ignore */
+        }
       }
       const { getConnectionMeta } = await import("@/lib/league.functions");
       return getConnectionMeta({
         data: {
-          identifier,
+          identifier: hostId,
           platform: platformKey,
           ...(row.espn_s2 ? { s2: row.espn_s2 } : {}),
           ...(row.swid ? { swid: row.swid } : {}),
@@ -245,8 +269,7 @@ function LeagueRow({
   });
   const leagueName = meta?.leagueName ?? label ?? "League";
   const teamName = meta?.teamName ?? null;
-  // Sleeper connections store a username in league_id — deep-link with the
-  // resolved numeric hostLeagueId from connection meta when available.
+  // Prefer resolved numeric hostLeagueId (heals legacy username league_id rows).
   const linkId =
     platformKey === "sleeper"
       ? (meta?.hostLeagueId ?? (/^\d{6,}$/.test(identifier) ? identifier : null))

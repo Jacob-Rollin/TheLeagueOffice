@@ -35,7 +35,7 @@ function SettingRow({ label, value }: { label: string; value: string }) {
 
 const days = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)} day${n === 1 ? "" : "s"}`;
 
-function waiverTypeLabel(s: LeagueSettingsDetail | undefined) {
+function waiverTypeLabel(s: LeagueSettingsDetail | null | undefined) {
   if (!s?.waiverType) return "Unavailable";
   if (s.waiverType === "FAAB") return s.waiverBudget ? `FAAB, ${s.waiverBudget} budget` : "FAAB";
   if (s.waiverType === "Reverse Standings") return "Resets to Inverse Standings Order";
@@ -148,7 +148,7 @@ export function MobileWaiversView({ leagueId }: { leagueId: string }) {
 
 /* ---------------- Trades ---------------- */
 
-function deadlineLabel(s: LeagueSettingsDetail | undefined) {
+function deadlineLabel(s: LeagueSettingsDetail | null | undefined) {
   if (s?.tradeDeadlineDate) {
     return new Date(s.tradeDeadlineDate).toLocaleDateString(undefined, {
       weekday: "long",

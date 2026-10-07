@@ -802,7 +802,7 @@ export async function deltaSyncAllConnections(
   const db = supabaseAdmin as any;
   let query = db
     .from("synced_leagues")
-    .select("id, league_id, platform, espn_s2, swid, updated_at")
+    .select("id, league_id, platform, espn_s2, swid, metadata, updated_at")
     .order("updated_at", { ascending: !recentFirst })
     .limit(limit);
   if (sleeperOnly) {
@@ -822,17 +822,51 @@ export async function deltaSyncAllConnections(
   const results: { id: string; ok: boolean; mode?: string; error?: string; weeks?: number[] }[] =
     [];
   for (const row of data) {
+    const connectionId = String(row.id);
+    const platform = String(row.platform ?? "sleeper").trim().toLowerCase();
+    let leagueId = String(row.league_id ?? "").trim();
+
+    // Heal legacy Sleeper username / numeric-user-id rows so matchups land
+    // under the same host key browse/CDN expect.
+    if (platform === "sleeper" && leagueId) {
+      const resolved = await resolveSleeperHostLeagueId(leagueId).catch(() => null);
+      if (resolved && resolved !== leagueId) {
+        const prevMeta =
+          typeof row.metadata === "object" && row.metadata ? (row.metadata as Record<string, unknown>) : {};
+        const priorLabel = !/^\d{6,}$/.test(leagueId) ? { sleeper_username: leagueId } : { sleeper_prior_id: leagueId };
+        try {
+          await db
+            .from("synced_leagues")
+            .update({
+              league_id: resolved,
+              metadata: { ...prevMeta, ...priorLabel },
+            })
+            .eq("id", connectionId);
+        } catch {
+          /* persist best-effort; still sync under resolved id */
+        }
+        leagueId = resolved;
+      } else if (!resolved && !/^\d{6,}$/.test(leagueId)) {
+        results.push({
+          id: connectionId,
+          ok: false,
+          error: "Sleeper league_id is not numeric and could not be resolved.",
+        });
+        continue;
+      }
+    }
+
     const result = await deltaSyncLeague({
-      connectionId: String(row.id),
-      leagueId: String(row.league_id),
-      platform: String(row.platform ?? "sleeper"),
+      connectionId,
+      leagueId,
+      platform,
       s2: row.espn_s2 ?? null,
       swid: row.swid ?? null,
       fillSeason,
       ...(fillSeason ? { throughWeek: 17 } : {}),
     });
     results.push({
-      id: String(row.id),
+      id: connectionId,
       ok: result.ok,
       ...(result.mode ? { mode: result.mode } : {}),
       ...(result.error ? { error: result.error } : {}),
@@ -843,13 +877,55 @@ export async function deltaSyncAllConnections(
       await db
         .from("synced_leagues")
         .update({ updated_at: new Date().toISOString() })
-        .eq("id", row.id);
+        .eq("id", connectionId);
     } catch {
       /* ignore */
     }
   }
 
   return { ok: true, processed: results.length, fillSeason, results };
+}
+
+/** Resolve username / numeric user id / league id → host league id for cron heals. */
+async function resolveSleeperHostLeagueId(identifier: string): Promise<string | null> {
+  const clean = String(identifier ?? "")
+    .trim()
+    .replace(/^@/, "");
+  if (!clean) return null;
+  const SLEEPER = "https://api.sleeper.app/v1";
+  const json = async <T>(url: string): Promise<T | null> => {
+    try {
+      const res = await fetch(url, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as T;
+    } catch {
+      return null;
+    }
+  };
+  const firstLeague = async (userKey: string): Promise<string | null> => {
+    const year = new Date().getFullYear();
+    for (const season of [year, year - 1]) {
+      const leagues = await json<{ league_id: string }[]>(
+        `${SLEEPER}/user/${encodeURIComponent(userKey)}/leagues/nfl/${season}`,
+      );
+      const id = leagues?.[0]?.league_id?.trim();
+      if (id && /^\d{6,}$/.test(id)) return id;
+    }
+    return null;
+  };
+
+  if (/^\d{6,}$/.test(clean)) {
+    const direct = await json<{ league_id?: string }>(`${SLEEPER}/league/${clean}`);
+    if (direct?.league_id) return clean;
+    return firstLeague(clean);
+  }
+
+  const user = await json<{ user_id?: string }>(`${SLEEPER}/user/${encodeURIComponent(clean)}`);
+  if (!user?.user_id) return null;
+  return firstLeague(user.user_id);
 }
 
 /** Active Sleeper league ids for planning-snap / CDN warm jobs. */

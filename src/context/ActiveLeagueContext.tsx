@@ -84,25 +84,44 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
 
 
       const { canFetchMetaClient, fetchSleeperMetaClient } = await import("@/lib/sleeper-meta-client");
+      const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
+        "@/lib/sleeper-resolve-client"
+      );
       const { getConnectionMeta } = await import("@/lib/league.functions");
+      const allowFluid =
+        typeof import.meta !== "undefined" && import.meta.env?.DEV === true;
       return await Promise.all(
         rows.map(async ({ s2, swid, ...row }) => {
           const base = { ...row, s2, swid };
           if ((row.platform !== "sleeper" && row.platform !== "espn") || !row.leagueId) return base;
           try {
-            // Sleeper: browser meta (no Fluid). ESPN still needs credential Fluid.
-            if (canFetchMetaClient(row.platform, row.leagueId)) {
-              const meta = await fetchSleeperMetaClient(row.leagueId, row.name);
+            // Sleeper: browser meta (no Fluid). Always resolve — a 6+ digit
+            // string may be a numeric user id that fails /league/{id}.
+            let sleeperId = row.leagueId;
+            if (row.platform === "sleeper") {
+              const resolved = await ensureSleeperNumericLeagueId(sleeperId).catch(() => null);
+              if (resolved) {
+                if (resolved !== sleeperId) void persistResolvedSleeperLeagueId(row.id, resolved);
+                sleeperId = resolved;
+              } else if (!allowFluid) {
+                return base;
+              }
+            }
+            if (canFetchMetaClient(row.platform, sleeperId)) {
+              const meta = await fetchSleeperMetaClient(sleeperId, row.name);
               return {
                 ...base,
+                leagueId: sleeperId,
                 name: meta?.leagueName ?? row.name,
                 teamName: meta?.teamName ?? null,
                 avatar: meta?.avatar ?? null,
               };
             }
+            // ESPN (or rare Sleeper resolve miss in DEV) may still use Fluid.
+            if (row.platform === "sleeper" && !allowFluid) return base;
             const meta = await getConnectionMeta({
               data: {
-                identifier: row.leagueId,
+                identifier: sleeperId,
                 platform: row.platform,
                 ...(s2 ? { s2 } : {}),
                 ...(swid ? { swid } : {}),
@@ -110,6 +129,7 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
             });
             return {
               ...base,
+              leagueId: sleeperId,
               name: meta?.leagueName ?? row.name,
               teamName: meta?.teamName ?? null,
               avatar: meta?.avatar ?? null,

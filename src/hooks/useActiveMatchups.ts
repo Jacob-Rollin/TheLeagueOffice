@@ -34,8 +34,8 @@ export function activeMatchupsQueryKey(connectionId: string | null, week: number
   return ["active-matchups", connectionId, week] as const;
 }
 
-function isSleeperLeague(platform: string, leagueId: string): boolean {
-  return platform === "sleeper" && /^\d{6,}$/.test(leagueId);
+function isSleeperPlatform(platform: string): boolean {
+  return platform === "sleeper";
 }
 
 /** Resolve one week: live Sleeper (current) → CDN → warm Sleeper; Fluid only for ESPN/Yahoo. */
@@ -48,10 +48,33 @@ async function loadWeekMatchups(input: {
   s2?: string;
   swid?: string;
 }): Promise<LeagueWeekMatchups | null> {
-  const { leagueId, week, currentWeek, platform } = input;
+  let { leagueId } = input;
+  const { week, currentWeek, platform } = input;
   const past = currentWeek != null && week < currentWeek;
   const isCurrent = currentWeek != null && week === currentWeek;
-  const sleeper = isSleeperLeague(platform, leagueId);
+  const sleeperPlatform = isSleeperPlatform(platform);
+
+  // Always resolve Sleeper ids — numeric user ids fail /league/{id} otherwise.
+  if (sleeperPlatform) {
+    const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
+      "@/lib/sleeper-resolve-client"
+    );
+    const resolved = await ensureSleeperNumericLeagueId(leagueId).catch(() => null);
+    if (resolved) {
+      if (resolved !== leagueId && input.connectionId) {
+        void persistResolvedSleeperLeagueId(input.connectionId, resolved);
+      }
+      leagueId = resolved;
+    } else {
+      // Production: never Fluid-fallthrough for unresolved Sleeper ids.
+      try {
+        if (import.meta.env.PROD) return null;
+      } catch {
+        return null;
+      }
+    }
+  }
+  const sleeper = sleeperPlatform && /^\d{6,}$/.test(leagueId);
 
   // Current week + Sleeper: browser live poll first (fresh scores, no Fluid).
   if (sleeper && isCurrent && isPageVisible()) {
@@ -87,6 +110,9 @@ async function loadWeekMatchups(input: {
     if (cdnDisplayable && cdn) return cdn.board;
     return null;
   }
+
+  // Unresolved Sleeper username: soft-empty (never Fluid).
+  if (sleeperPlatform) return cdnDisplayable && cdn ? cdn.board : null;
 
   // ESPN/Yahoo: throttled Fluid for past / unscored holes only.
   const refreshed = await maybeRefreshMatchupsViaFluid({
@@ -201,7 +227,7 @@ export function usePrefetchLeagueMatchupWeeks(enabled = true) {
         }
       }
 
-      if (!isSleeperLeague(platform, leagueId)) return;
+      if (!isSleeperPlatform(platform)) return;
 
       // During live games, only fill missing weeks if budget remains; never
       // compete with the 30s scoreboard poll.

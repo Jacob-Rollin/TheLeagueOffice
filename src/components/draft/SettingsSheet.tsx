@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { SyncLock } from "@/components/league/SyncLock";
-import { getConnectionSync } from "@/lib/league.functions";
+import { fetchConnectionSyncPreferred } from "@/lib/sleeper-sync-client";
 import { platformLabel } from "@/lib/league-link";
 import { Button } from "@/components/ui/button";
 import {
@@ -93,13 +93,13 @@ export function SettingsSheet({
     retry: false,
     staleTime: 5 * 60 * 1000,
     queryFn: async () =>
-      await getConnectionSync({
-        data: {
-          identifier: activeLeague?.leagueId ?? "",
-          platform: activeLeague?.platform ?? "sleeper",
-          ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
-          ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
-        },
+      fetchConnectionSyncPreferred({
+        leagueId: activeLeague?.leagueId ?? "",
+        platform: activeLeague?.platform ?? "sleeper",
+        teamName: activeLeague?.teamName ?? activeLeague?.name,
+        connectionId: activeLeague?.id,
+        ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
+        ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
       }),
   });
 
