@@ -1,26 +1,39 @@
 /**
- * Public Cloudflare R2 base for research/snap JSON.
- * Set VITE_R2_PUBLIC_BASE at build time (e.g. https://cdn.theleagueoffice.app
- * or https://pub-xxxxx.r2.dev). Empty = R2 disabled; clients use /api/data/*.
+ * Public snap CDN base for research/snap JSON (no Fluid / TiDB on hit).
+ *
+ * Preferred (no card): GitHub `snap-cdn` branch via
+ *   VITE_SNAP_CDN_BASE=https://raw.githubusercontent.com/<owner>/<repo>/snap-cdn
+ *
+ * Legacy alias: VITE_R2_PUBLIC_BASE (Cloudflare R2) still works if set.
+ * Empty = CDN disabled; clients use /api/data/*.
  */
 
-export function r2PublicBase(): string {
+function readPublicBase(): string {
   try {
-    const raw = String(import.meta.env["VITE_R2_PUBLIC_BASE"] ?? "").trim().replace(/\/$/, "");
-    return raw;
+    const snap = String(import.meta.env["VITE_SNAP_CDN_BASE"] ?? "").trim();
+    const r2 = String(import.meta.env["VITE_R2_PUBLIC_BASE"] ?? "").trim();
+    return (snap || r2).replace(/\/$/, "");
   } catch {
     return "";
   }
 }
 
+export function r2PublicBase(): string {
+  return readPublicBase();
+}
+
+export function snapCdnPublicBase(): string {
+  return readPublicBase();
+}
+
 export function r2Url(path: string): string | null {
-  const base = r2PublicBase();
+  const base = readPublicBase();
   if (!base) return null;
   const clean = path.replace(/^\//, "");
   return `${base}/${clean}`;
 }
 
-/** Stable object keys for research aggregates published by Actions → R2. */
+/** Stable object keys for research aggregates published by Actions → snap-cdn. */
 export const R2_RESEARCH_KEYS = {
   fpa: (format: string) => `research/fpa-${format}.json`,
   matchupsGuide: (week: number, format: string) => `research/matchups-guide-w${week}-${format}.json`,

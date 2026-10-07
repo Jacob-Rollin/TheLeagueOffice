@@ -1,11 +1,10 @@
-name: Publish R2 Research Snaps
+name: Publish Snap CDN
 
-# Pulls warm research/snap JSON from the live app and uploads to Cloudflare R2.
-# Browse then reads R2 directly (free egress) instead of TiDB via Vercel.
+# Pulls warm research/snap JSON from the live app and force-pushes an orphan
+# `snap-cdn` branch. Browsers read via raw.githubusercontent.com (no card,
+# free for a public repo) instead of TiDB via Vercel Fluid.
 #
-# Requires GitHub secrets:
-#   APP_URL, CRON_SECRET (existing)
-#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_BASE
+# Requires: APP_URL + CRON_SECRET (existing). No R2 / Cloudflare secrets.
 
 on:
   schedule:
@@ -16,10 +15,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: publish-r2-snaps
+  group: publish-snap-cdn
   cancel-in-progress: true
 
 jobs:
@@ -32,15 +31,11 @@ jobs:
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           missing=0
-          for v in APP_URL CRON_SECRET R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+          for v in APP_URL CRON_SECRET; do
             if [ -z "${!v}" ]; then
-              echo "::warning::$v not configured — skipping R2 publish."
+              echo "::warning::$v not configured — skipping snap CDN publish."
               missing=1
             fi
           done
@@ -77,7 +72,6 @@ jobs:
           fetch() {
             local url="$1" dest="$2"
             if curl -fsSL "${AUTH[@]}" "$url" -o "$dest"; then
-              # Reject empty / error JSON shells so we do not publish cold misses.
               python3 - "$dest" <<'PY'
 import json,sys
 p=sys.argv[1]
@@ -114,42 +108,49 @@ PY
           fetch "$BASE/api/data/snap/fantasy-news?limit=80" out/snap/fantasy-news.json
           fetch "$BASE/api/data/snap/trade-basis" out/snap/trade-basis.json
 
-          echo "Downloaded:"
+          count=$(find out -type f -name '*.json' | wc -l | tr -d ' ')
+          echo "Downloaded $count JSON files"
+          if [ "$count" = "0" ]; then
+            echo "::error::No snaps downloaded — aborting publish."
+            exit 1
+          fi
           find out -type f -name '*.json' | sort
 
-      - name: Upload to Cloudflare R2
+      - name: Force-push orphan snap-cdn branch
         if: steps.creds.outputs.available == 'true'
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_PUBLIC_BASE: ${{ secrets.R2_PUBLIC_BASE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          # Research/snaps refresh on cron — 1h browser, long edge via CF if proxied.
-          CACHE="public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
+          REPO="${{ github.repository }}"
+          WORK=$(mktemp -d)
+          cp -a out/. "$WORK/"
+          # Marker so GitHub Pages (optional) serves JSON as-is.
+          touch "$WORK/.nojekyll"
+          cat > "$WORK/README.md" <<EOF
+          # Snap CDN (generated)
 
-          upload_dir() {
-            local dir="$1" prefix="$2"
-            if [ ! -d "$dir" ]; then return 0; fi
-            for f in "$dir"/*.json; do
-              [ -f "$f" ] || continue
-              key="${prefix}/$(basename "$f")"
-              aws s3 cp "$f" "s3://${R2_BUCKET}/${key}" \
-                --endpoint-url "$ENDPOINT" \
-                --content-type "application/json; charset=utf-8" \
-                --cache-control "$CACHE" \
-                --no-progress
-              echo "uploaded $key"
-            done
-          }
+          Auto-published research/snap JSON for The League Office browse path.
+          Do not edit by hand — overwritten by **Publish Snap CDN** Actions.
 
-          upload_dir out/research research
-          upload_dir out/snap snap
+          Public base (recommended):
 
-          if [ -n "${R2_PUBLIC_BASE:-}" ]; then
-            echo "Public base: ${R2_PUBLIC_BASE%/}/research/fpa-half.json"
-          fi
+          \`https://raw.githubusercontent.com/${REPO}/snap-cdn\`
+
+          Example: \`…/research/fpa-half.json\`
+          EOF
+          # Strip leading spaces from heredoc indent.
+          sed -i 's/^          //' "$WORK/README.md"
+
+          cd "$WORK"
+          git init -q
+          git checkout -q -b snap-cdn
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publish research/snap CDN $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" snap-cdn
+
+          BASE="https://raw.githubusercontent.com/${REPO}/snap-cdn"
+          echo "Public base: $BASE"
+          echo "Smoke: ${BASE}/research/fpa-half.json"
