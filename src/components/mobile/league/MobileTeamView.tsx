@@ -119,6 +119,8 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     const reserve = (myTeam.ir ?? []).map((p) => ({ slot: "IR", player: p }));
     return {
       gain,
+      optimalTotal: optimal.total,
+      currentTotal,
       lineup: { starters: optimal.starters, bench, reserve },
     };
     // projectFor / sleeperIdFor are stable enough via projectPlayer closure on week hooks
@@ -162,7 +164,9 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     }
     return any ? Math.round(sum * 100) / 100 : entry.projectedPoints;
   };
-  const myProjected = sumStarterProj(mine);
+  const myProjectedBase = sumStarterProj(mine);
+  const myProjected =
+    showOptimized && optimizePlan ? optimizePlan.optimalTotal : myProjectedBase;
   const oppProjected = sumStarterProj(opponent);
   const rowProps: RowHelpers = {
     pointsFor: (p) => {
@@ -253,13 +257,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
         <div className="mt-3 h-[8.5rem]" aria-hidden="true" />
       </section>
 
-      <div
-        className={
-          "relative z-10 -mt-[8.5rem] px-4" +
-          // Optimize badge is absolutely half-below the card; Optimized + hint need more room.
-          (optimizePlan ? (showOptimized ? " mb-28" : " mb-12") : " mb-2")
-        }
-      >
+      <div className="relative z-10 -mt-[8.5rem] px-4 mb-2">
         <div className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_4px_16px_rgba(0,0,0,0.12)]">
           <MobileWeekSelect
             week={activeWeek}
@@ -280,7 +278,14 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
                 <div className="flex flex-1 items-center justify-center gap-3">
                   <div className="text-right">
                     <Score value={mine?.points ?? null} className="font-display text-[34px] font-extrabold italic leading-none" />
-                    <p className="mt-1 text-sm text-m-muted tabnum">{myProjected != null ? myProjected.toFixed(2) : "-"}</p>
+                    <p
+                      className={
+                        "mt-1 text-sm tabnum " +
+                        (showOptimized && optimizePlan ? "font-semibold text-emerald-600" : "text-m-muted")
+                      }
+                    >
+                      {myProjected != null ? myProjected.toFixed(2) : "-"}
+                    </p>
                   </div>
                   <span className="font-display text-sm font-bold text-m-muted">vs</span>
                   <div>
@@ -311,43 +316,52 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
         </div>
 
         {optimizePlan ? (
-          <div className="pointer-events-none absolute left-1/2 top-full z-20 flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center px-4">
-            <button
-              type="button"
-              onClick={() => setShowOptimized((v) => !v)}
-              aria-pressed={showOptimized}
-              aria-label={
-                showOptimized
-                  ? "Show your current set lineup"
-                  : `Preview optimized lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
-              }
-              className={
-                "pointer-events-auto inline-flex items-stretch overflow-hidden rounded-[14px] " +
-                "shadow-[0_3px_0_0_#1a3d2e,0_6px_12px_rgba(0,0,0,0.18)] " +
-                "active:translate-y-px active:shadow-[0_2px_0_0_#1a3d2e,0_3px_8px_rgba(0,0,0,0.16)]"
-              }
-            >
-              {showOptimized ? (
-                <span className="bg-[#2d5a47] px-7 py-[11px] font-display text-[17px] font-extrabold italic uppercase tracking-wide text-white">
-                  Optimized
-                </span>
-              ) : (
-                <>
-                  <span className="flex items-center bg-[#76c78c] px-4 py-[9px] font-display text-[22px] font-extrabold italic leading-none tabular-nums text-white">
-                    + {optimizePlan.gain.toFixed(2)}
+          <>
+            {/*
+              Fixed offset from card bottom (not -50% of the whole column) so the
+              hint text cannot pull the badge upward when Optimized. Slight drop
+              clears "Nth in league" while still overlapping the card edge.
+            */}
+            <div className="pointer-events-none absolute left-1/2 top-full z-20 -translate-x-1/2 -translate-y-[18px]">
+              <button
+                type="button"
+                onClick={() => setShowOptimized((v) => !v)}
+                aria-pressed={showOptimized}
+                aria-label={
+                  showOptimized
+                    ? "Show your current set lineup"
+                    : `Preview optimized lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
+                }
+                className={
+                  "pointer-events-auto inline-flex h-[44px] items-stretch overflow-hidden rounded-[14px] " +
+                  "shadow-[0_3px_0_0_#1a3d2e,0_6px_12px_rgba(0,0,0,0.18)] " +
+                  "active:translate-y-px active:shadow-[0_2px_0_0_#1a3d2e,0_3px_8px_rgba(0,0,0,0.16)]"
+                }
+              >
+                {showOptimized ? (
+                  <span className="flex h-full items-center bg-[#2d5a47] px-7 font-display text-[15px] font-extrabold italic uppercase tracking-wide text-white">
+                    Optimized
                   </span>
-                  <span className="flex items-center bg-[#2d5a47] px-5 py-[11px] font-display text-[15px] font-extrabold italic uppercase tracking-wide text-white">
-                    Optimize
-                  </span>
-                </>
-              )}
-            </button>
+                ) : (
+                  <>
+                    <span className="flex h-full items-center bg-[#76c78c] px-4 font-display text-[22px] font-extrabold italic leading-none tabular-nums text-white">
+                      + {optimizePlan.gain.toFixed(2)}
+                    </span>
+                    <span className="flex h-full items-center bg-[#2d5a47] px-5 font-display text-[15px] font-extrabold italic uppercase tracking-wide text-white">
+                      Optimize
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+            {/* Reserve space under the card for the protruding badge (+ hint when open). */}
+            <div className={showOptimized ? "h-[4.25rem]" : "h-7"} aria-hidden="true" />
             {showOptimized ? (
-              <p className="mt-7 text-center text-xs text-m-muted">
+              <p className="-mt-5 mb-1 text-center text-xs text-m-muted">
                 Preview only — tap again for your set lineup
               </p>
             ) : null}
-          </div>
+          </>
         ) : null}
       </div>
 
