@@ -152,15 +152,18 @@ function NativeLeagueSettingsPage() {
               </span>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
+              <Link to="/league/$linkId" params={{ linkId }} className={buttonClass}>
+                Open League
+              </Link>
               <button
                 type="button"
-                className={buttonClass}
+                className={outlineClass}
                 onClick={() => {
                   setActiveLeagueId(summary.linkId);
                   void navigate({ to: "/playbook" });
                 }}
               >
-                Open Tools
+                Research Tools
               </button>
             </div>
           </section>

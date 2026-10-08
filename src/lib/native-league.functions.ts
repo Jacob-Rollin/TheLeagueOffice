@@ -179,3 +179,102 @@ export const updateNativeInviteCode = createServerFn({ method: "POST" })
     const { updateNativeInviteCodeForUser } = await import("@/lib/native-league-ops.server");
     return await updateNativeInviteCodeForUser(context.userId, data.linkId, data.inviteCode);
   });
+
+export const getNativeLeagueBoard = createServerFn({ method: "GET" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+  }))
+  .handler(async ({ context, data }) => {
+    const { getNativeLeagueBoardForLink } = await import("@/lib/native-league-ops.server");
+    return await getNativeLeagueBoardForLink(context.userId, data.linkId);
+  });
+
+export const renameNativeTeam = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; teamId: number; teamName: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    teamId: Number(input.teamId),
+    teamName: String(input.teamName ?? "").slice(0, 64),
+  }))
+  .handler(async ({ context, data }) => {
+    const { renameNativeTeamForUser } = await import("@/lib/native-league-ops.server");
+    return await renameNativeTeamForUser(context.userId, data.linkId, data.teamId, data.teamName);
+  });
+
+export const kickNativeTeamMember = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; teamId: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    teamId: Number(input.teamId),
+  }))
+  .handler(async ({ context, data }) => {
+    const { kickNativeTeamMemberForUser } = await import("@/lib/native-league-ops.server");
+    return await kickNativeTeamMemberForUser(context.userId, data.linkId, data.teamId);
+  });
+
+export const updateNativeLeagueBasics = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator(
+    (input: { linkId: string; name?: string; scoringPreset?: NativeScoringPreset; draftMode?: NativeDraftMode }) => ({
+      linkId: String(input.linkId ?? "").trim().slice(0, 36),
+      name: input.name != null ? String(input.name).slice(0, 128) : undefined,
+      scoringPreset: input.scoringPreset
+        ? (String(input.scoringPreset).slice(0, 16) as NativeScoringPreset)
+        : undefined,
+      draftMode: input.draftMode ? (String(input.draftMode).slice(0, 16) as NativeDraftMode) : undefined,
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const { updateNativeLeagueBasicsForUser } = await import("@/lib/native-league-ops.server");
+    return await updateNativeLeagueBasicsForUser(context.userId, data.linkId, {
+      ...(data.name != null ? { name: data.name } : {}),
+      ...(data.scoringPreset ? { scoringPreset: data.scoringPreset } : {}),
+      ...(data.draftMode ? { draftMode: data.draftMode } : {}),
+    });
+  });
+
+export const getNativeDraftState = createServerFn({ method: "GET" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+  }))
+  .handler(async ({ context, data }) => {
+    const { getNativeDraftStateForLink } = await import("@/lib/native-league-ops.server");
+    return await getNativeDraftStateForLink(context.userId, data.linkId);
+  });
+
+export const assignNativeOfflinePick = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; teamId: number; playerId: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    teamId: Number(input.teamId),
+    playerId: String(input.playerId ?? "").trim().slice(0, 32),
+  }))
+  .handler(async ({ context, data }) => {
+    const { assignNativeOfflinePickForUser } = await import("@/lib/native-league-ops.server");
+    return await assignNativeOfflinePickForUser(context.userId, data.linkId, {
+      teamId: data.teamId,
+      playerId: data.playerId,
+    });
+  });
+
+export const undoNativeOfflinePick = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+  }))
+  .handler(async ({ context, data }) => {
+    const { undoNativeOfflinePickForUser } = await import("@/lib/native-league-ops.server");
+    return await undoNativeOfflinePickForUser(context.userId, data.linkId);
+  });
+
+export const completeNativeDraft = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+  }))
+  .handler(async ({ context, data }) => {
+    const { completeNativeDraftForUser } = await import("@/lib/native-league-ops.server");
+    return await completeNativeDraftForUser(context.userId, data.linkId);
+  });

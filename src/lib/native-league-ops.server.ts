@@ -4,12 +4,19 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  defaultNativeScoringSettings,
   generateNativeInviteCode,
   NATIVE_MAX_COMMISSIONER_LEAGUES,
   normalizeNativeLeagueSettings,
+  type NativeDraftMode,
   type NativeLeagueSettingsInput,
+  type NativeScoringPreset,
 } from "@/lib/native-league-settings";
 import { NATIVE_LEAGUE_TABLE_NAMES } from "@/lib/native-league-ddl.server";
+import {
+  buildNativeRoundRobinSchedule,
+  countDraftableRosterSpots,
+} from "@/lib/native-league-schedule";
 import { getNativeLeagueByInviteCode, countCommissionerNativeLeagues } from "@/lib/native-league.server";
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
 
@@ -498,6 +505,432 @@ export async function adminDeleteNativeLeague(leagueId: string): Promise<AdminDe
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Delete league failed";
+    return { ok: false, error: message };
+  }
+}
+
+function isCommishRole(role: string): boolean {
+  return role === "commissioner" || role === "co_commish";
+}
+
+export type NativeTeamRow = {
+  id: number;
+  teamName: string;
+  userId: string | null;
+  draftSlot: number;
+  waiverPriority: number;
+  avatarUrl: string | null;
+};
+
+export type NativeLeagueBoard = {
+  summary: NativeMemberLeagueSummary;
+  teams: NativeTeamRow[];
+  picksPerTeam: number;
+  canManage: boolean;
+  settingsLocked: boolean;
+};
+
+async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLeagueBoard | null> {
+  const summary = await getNativeLeagueSummaryForLink(userId, linkId);
+  if (!summary) return null;
+
+  const teamRows = await tidbExecute<{
+    id: number;
+    team_name: string;
+    user_id: string | null;
+    draft_slot: number;
+    waiver_priority: number;
+    avatar_url: string | null;
+  }>(
+    `SELECT id, team_name, user_id, draft_slot, waiver_priority, avatar_url
+     FROM native_teams WHERE league_id = ? ORDER BY draft_slot ASC`,
+    [summary.leagueId],
+  );
+
+  const leagueMeta = await tidbExecute<{ roster_slots: string | Record<string, unknown> | null }>(
+    `SELECT roster_slots FROM native_leagues WHERE id = ? LIMIT 1`,
+    [summary.leagueId],
+  );
+  let rosterSlots: Record<string, unknown> | null = null;
+  const raw = leagueMeta[0]?.roster_slots;
+  if (typeof raw === "string") {
+    try {
+      rosterSlots = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      rosterSlots = null;
+    }
+  } else if (raw && typeof raw === "object") {
+    rosterSlots = raw as Record<string, unknown>;
+  }
+
+  const settingsLocked = summary.draftStatus !== "not_started" && summary.draftStatus !== "scheduled";
+  return {
+    summary,
+    teams: teamRows.map((t) => ({
+      id: Number(t.id),
+      teamName: t.team_name,
+      userId: t.user_id,
+      draftSlot: Number(t.draft_slot),
+      waiverPriority: Number(t.waiver_priority),
+      avatarUrl: t.avatar_url,
+    })),
+    picksPerTeam: countDraftableRosterSpots(rosterSlots),
+    canManage: isCommishRole(summary.role),
+    settingsLocked,
+  };
+}
+
+export async function getNativeLeagueBoardForLink(
+  userId: string,
+  linkId: string,
+): Promise<NativeLeagueBoard | null> {
+  if (!tidbConfigured()) return null;
+  return loadLeagueBoard(userId, linkId);
+}
+
+export type NativeMutationResult = { ok: true } | { ok: false; error: string };
+
+export async function renameNativeTeamForUser(
+  userId: string,
+  linkId: string,
+  teamId: number,
+  teamName: string,
+): Promise<NativeMutationResult> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const membership = await assertMembershipLink(userId, linkId);
+  if (!membership) return { ok: false, error: "League not found" };
+  const name = String(teamName ?? "").trim().slice(0, 64);
+  if (name.length < 1) return { ok: false, error: "Team name is required" };
+
+  const team = await tidbExecute<{ id: number; user_id: string | null }>(
+    `SELECT id, user_id FROM native_teams WHERE id = ? AND league_id = ? LIMIT 1`,
+    [teamId, membership.leagueId],
+  );
+  const row = team[0];
+  if (!row) return { ok: false, error: "Team not found" };
+  const owns = row.user_id === userId;
+  if (!owns && !isCommishRole(membership.role)) {
+    return { ok: false, error: "You can only rename your own team" };
+  }
+
+  await tidbExecute(`UPDATE native_teams SET team_name = ? WHERE id = ? AND league_id = ?`, [
+    name,
+    teamId,
+    membership.leagueId,
+  ]);
+  return { ok: true };
+}
+
+export async function kickNativeTeamMemberForUser(
+  userId: string,
+  linkId: string,
+  teamId: number,
+): Promise<NativeMutationResult> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const board = await loadLeagueBoard(userId, linkId);
+  if (!board) return { ok: false, error: "League not found" };
+  if (!board.canManage) return { ok: false, error: "Only commissioners can open seats" };
+  if (board.settingsLocked) return { ok: false, error: "Seats are locked after the draft starts" };
+
+  const team = board.teams.find((t) => t.id === teamId);
+  if (!team) return { ok: false, error: "Team not found" };
+  if (!team.userId) return { ok: true };
+  if (team.userId === userId && board.summary.role === "commissioner") {
+    return { ok: false, error: "Commissioner cannot leave their own seat this way" };
+  }
+
+  await tidbExecute(`UPDATE native_teams SET user_id = NULL WHERE id = ? AND league_id = ?`, [
+    teamId,
+    board.summary.leagueId,
+  ]);
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  await supabaseAdmin
+    .from("native_league_links")
+    .delete()
+    .eq("native_league_id", board.summary.leagueId)
+    .eq("user_id", team.userId);
+  return { ok: true };
+}
+
+export async function updateNativeLeagueBasicsForUser(
+  userId: string,
+  linkId: string,
+  input: { name?: string; scoringPreset?: NativeScoringPreset; draftMode?: NativeDraftMode },
+): Promise<NativeMutationResult> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const board = await loadLeagueBoard(userId, linkId);
+  if (!board) return { ok: false, error: "League not found" };
+  if (!board.canManage) return { ok: false, error: "Only commissioners can edit league settings" };
+  if (board.settingsLocked) {
+    return { ok: false, error: "Structural settings lock after the draft starts" };
+  }
+
+  const name = input.name != null ? String(input.name).trim().slice(0, 128) : null;
+  if (name != null && name.length < 1) return { ok: false, error: "League name is required" };
+
+  const scoringPreset = input.scoringPreset;
+  let scoringSettings: Record<string, number> | null = null;
+  if (scoringPreset === "ppr") scoringSettings = { ...defaultNativeScoringSettings(), rec: 1 };
+  else if (scoringPreset === "std") scoringSettings = { ...defaultNativeScoringSettings(), rec: 0 };
+  else if (scoringPreset === "half") scoringSettings = defaultNativeScoringSettings();
+
+  const draftMode =
+    input.draftMode === "live" || input.draftMode === "offline" ? input.draftMode : null;
+
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  if (name != null) {
+    sets.push("name = ?");
+    params.push(name);
+  }
+  if (scoringPreset && scoringSettings) {
+    sets.push("scoring_preset = ?", "scoring_settings = ?");
+    params.push(scoringPreset, JSON.stringify(scoringSettings));
+  }
+  if (draftMode) {
+    sets.push("draft_mode = ?");
+    params.push(draftMode);
+  }
+  if (!sets.length) return { ok: true };
+
+  params.push(board.summary.leagueId);
+  await tidbExecute(`UPDATE native_leagues SET ${sets.join(", ")} WHERE id = ?`, params);
+
+  if (name != null) {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin
+      .from("native_league_links")
+      .update({ label: name })
+      .eq("native_league_id", board.summary.leagueId);
+  }
+  return { ok: true };
+}
+
+export type NativeDraftPickRow = {
+  pickNumber: number;
+  round: number;
+  teamId: number;
+  playerId: string | null;
+  pickedAt: string | null;
+  source: string | null;
+};
+
+export type NativeDraftState = {
+  board: NativeLeagueBoard;
+  picks: NativeDraftPickRow[];
+  draftedPlayerIds: string[];
+  nextPickNumber: number;
+  totalPicks: number;
+  canAssign: boolean;
+  liveDraftDeferred: boolean;
+};
+
+export async function getNativeDraftStateForLink(
+  userId: string,
+  linkId: string,
+): Promise<NativeDraftState | null> {
+  if (!tidbConfigured()) return null;
+  const board = await loadLeagueBoard(userId, linkId);
+  if (!board) return null;
+
+  const pickRows = await tidbExecute<{
+    pick_number: number;
+    round: number;
+    team_id: number;
+    player_id: string | null;
+    picked_at: string | null;
+    source: string | null;
+  }>(
+    `SELECT pick_number, round, team_id, player_id, picked_at, source
+     FROM native_draft_picks WHERE league_id = ? ORDER BY pick_number ASC`,
+    [board.summary.leagueId],
+  );
+
+  const picks = pickRows.map((p) => ({
+    pickNumber: Number(p.pick_number),
+    round: Number(p.round),
+    teamId: Number(p.team_id),
+    playerId: p.player_id,
+    pickedAt: p.picked_at,
+    source: p.source,
+  }));
+  const draftedPlayerIds = picks.map((p) => p.playerId).filter((id): id is string => Boolean(id));
+  const nextPickNumber = picks.length + 1;
+  const totalPicks = board.picksPerTeam * board.teams.length;
+  const drafting =
+    board.summary.draftStatus === "not_started" ||
+    board.summary.draftStatus === "live" ||
+    board.summary.draftStatus === "paused" ||
+    board.summary.draftStatus === "scheduled";
+  const liveDraftDeferred = board.summary.draftMode === "live";
+
+  return {
+    board,
+    picks,
+    draftedPlayerIds,
+    nextPickNumber,
+    totalPicks,
+    canAssign: board.canManage && drafting && board.summary.draftStatus !== "complete",
+    liveDraftDeferred,
+  };
+}
+
+export async function assignNativeOfflinePickForUser(
+  userId: string,
+  linkId: string,
+  input: { teamId: number; playerId: string },
+): Promise<NativeMutationResult & { pickNumber?: number }> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const state = await getNativeDraftStateForLink(userId, linkId);
+  if (!state) return { ok: false, error: "League not found" };
+  if (!state.canAssign) return { ok: false, error: "You cannot assign picks right now" };
+  if (state.board.summary.draftStatus === "complete") {
+    return { ok: false, error: "Draft is already complete" };
+  }
+
+  const teamId = Number(input.teamId);
+  const playerId = String(input.playerId ?? "").trim().slice(0, 32);
+  if (!teamId || !playerId) return { ok: false, error: "Team and player are required" };
+  if (!state.board.teams.some((t) => t.id === teamId)) return { ok: false, error: "Invalid team" };
+  if (state.draftedPlayerIds.includes(playerId)) {
+    return { ok: false, error: "Player already drafted" };
+  }
+
+  const teamPickCount = state.picks.filter((p) => p.teamId === teamId).length;
+  if (teamPickCount >= state.board.picksPerTeam) {
+    return { ok: false, error: "That team already has a full draft roster" };
+  }
+
+  const pickNumber = state.nextPickNumber;
+  const round = Math.floor((pickNumber - 1) / state.board.teams.length) + 1;
+  const leagueId = state.board.summary.leagueId;
+
+  try {
+    if (state.board.summary.draftStatus === "not_started") {
+      await tidbExecute(
+        `UPDATE native_leagues SET draft_status = 'live', status = 'drafting', current_draft_pick = ? WHERE id = ?`,
+        [pickNumber, leagueId],
+      );
+    } else {
+      await tidbExecute(`UPDATE native_leagues SET current_draft_pick = ? WHERE id = ?`, [
+        pickNumber,
+        leagueId,
+      ]);
+    }
+
+    await tidbExecute(
+      `INSERT INTO native_draft_picks (league_id, pick_number, round, team_id, player_id, picked_at, source)
+       VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(), 'commissioner')`,
+      [leagueId, pickNumber, round, teamId, playerId],
+    );
+    return { ok: true, pickNumber };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not assign pick";
+    if (/uq_native_draft_player|Duplicate/i.test(message)) {
+      return { ok: false, error: "Player already drafted" };
+    }
+    return { ok: false, error: message };
+  }
+}
+
+export async function undoNativeOfflinePickForUser(
+  userId: string,
+  linkId: string,
+): Promise<NativeMutationResult> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const state = await getNativeDraftStateForLink(userId, linkId);
+  if (!state) return { ok: false, error: "League not found" };
+  if (!state.canAssign) return { ok: false, error: "You cannot undo picks right now" };
+  if (state.picks.length === 0) return { ok: false, error: "No picks to undo" };
+
+  const last = state.picks[state.picks.length - 1]!;
+  const leagueId = state.board.summary.leagueId;
+  await tidbExecute(`DELETE FROM native_draft_picks WHERE league_id = ? AND pick_number = ?`, [
+    leagueId,
+    last.pickNumber,
+  ]);
+  const remaining = state.picks.length - 1;
+  if (remaining === 0) {
+    await tidbExecute(
+      `UPDATE native_leagues SET draft_status = 'not_started', status = 'setup', current_draft_pick = 0 WHERE id = ?`,
+      [leagueId],
+    );
+  } else {
+    await tidbExecute(`UPDATE native_leagues SET current_draft_pick = ? WHERE id = ?`, [
+      remaining,
+      leagueId,
+    ]);
+  }
+  return { ok: true };
+}
+
+export async function completeNativeDraftForUser(
+  userId: string,
+  linkId: string,
+): Promise<NativeMutationResult> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const state = await getNativeDraftStateForLink(userId, linkId);
+  if (!state) return { ok: false, error: "League not found" };
+  if (!state.board.canManage) return { ok: false, error: "Only commissioners can complete the draft" };
+  if (state.board.summary.draftStatus === "complete") return { ok: true };
+  if (state.picks.length === 0) return { ok: false, error: "Assign at least one pick before completing" };
+
+  const leagueId = state.board.summary.leagueId;
+  const byTeam = new Map<number, string[]>();
+  for (const team of state.board.teams) byTeam.set(team.id, []);
+  for (const pick of state.picks) {
+    if (!pick.playerId) continue;
+    const list = byTeam.get(pick.teamId) ?? [];
+    list.push(pick.playerId);
+    byTeam.set(pick.teamId, list);
+  }
+
+  try {
+    for (const [teamId, playerIds] of byTeam) {
+      await tidbExecute(
+        `INSERT INTO native_rosters (league_id, team_id, player_ids, reserve_ir, version)
+         VALUES (?, ?, ?, NULL, 1)
+         ON DUPLICATE KEY UPDATE player_ids = VALUES(player_ids), version = version + 1`,
+        [leagueId, teamId, JSON.stringify(playerIds)],
+      );
+      for (const playerId of playerIds) {
+        await tidbExecute(
+          `INSERT INTO native_player_locks (league_id, player_id, held_by_team_id, lock_reason)
+           VALUES (?, ?, ?, 'roster')
+           ON DUPLICATE KEY UPDATE held_by_team_id = VALUES(held_by_team_id), lock_reason = 'roster'`,
+          [leagueId, playerId, teamId],
+        );
+      }
+    }
+
+    const playoffRows = await tidbExecute<{ playoff_start_week: number; season_year: number }>(
+      `SELECT playoff_start_week, season_year FROM native_leagues WHERE id = ? LIMIT 1`,
+      [leagueId],
+    );
+    const playoffStart = Number(playoffRows[0]?.playoff_start_week ?? 15);
+    const seasonYear = Number(playoffRows[0]?.season_year ?? new Date().getUTCFullYear());
+    const weekCount = Math.max(1, playoffStart - 1);
+    const teamIds = state.board.teams.map((t) => t.id);
+    const schedule = buildNativeRoundRobinSchedule(teamIds, weekCount);
+
+    await tidbExecute(`DELETE FROM native_schedules WHERE league_id = ?`, [leagueId]);
+    for (const m of schedule) {
+      await tidbExecute(
+        `INSERT INTO native_schedules (league_id, season_year, week, matchup_id, home_team_id, away_team_id)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [leagueId, seasonYear, m.week, m.matchupId, m.homeTeamId, m.awayTeamId],
+      );
+    }
+
+    await tidbExecute(
+      `UPDATE native_leagues
+       SET draft_status = 'complete', status = 'in_season', current_draft_pick = ?, current_week = 1
+       WHERE id = ?`,
+      [state.picks.length, leagueId],
+    );
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not complete draft";
     return { ok: false, error: message };
   }
 }

@@ -421,7 +421,7 @@ function NativeLeagueRow({
       </div>
       <div className="flex items-center gap-2 md:justify-self-end">
         <Link
-          to="/account/leagues/native/$linkId"
+          to="/league/$linkId/settings"
           params={{ linkId: row.id }}
           className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
         >
@@ -436,7 +436,12 @@ function NativeLeagueRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem asChild className="font-medium">
-              <Link to="/account/leagues/native/$linkId" params={{ linkId: row.id }}>
+              <Link to="/league/$linkId" params={{ linkId: row.id }}>
+                Open League
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="font-medium">
+              <Link to="/league/$linkId/settings" params={{ linkId: row.id }}>
                 League Settings
               </Link>
             </DropdownMenuItem>

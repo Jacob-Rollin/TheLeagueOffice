@@ -437,16 +437,16 @@ Deprecate unused Supabase `leagues` / `lineups` / … for new work (leave tables
 1. UI: Create League wizard (name, teams, roster, scoring preset → custom editor using `SCORING_GROUPS`, waivers, trades, playoffs, draft mode). **MVP landed** on **My Leagues** as two sections — **Native Leagues** (list + Create/Join buttons) and **Synced Leagues** (host list + Sync New League). Create → `/account/leagues/setup`; Join → `/account/leagues/join`. Legacy `/account/leagues/native` redirects to setup.
 2. Generate league `invite_code`; share link `/join/:code`. **Invite code shown after create**; deep-link `/join/:code` still TODO.
 3. Join flow: auth required → claim open seat → write TiDB team + Supabase link. **Landed** (`joinNativeLeague` server fn).
-4. Commissioner: rename teams, kick/open seat, edit settings until `draft_status` leaves `not_started` (then lock scoring/roster structure for the season; allow cosmetic edits). **TODO**
+4. Commissioner: rename teams, kick/open seat, edit settings until `draft_status` leaves `not_started` (then lock scoring/roster structure for the season; allow cosmetic edits). **Landed (MVP)** on `/league/$linkId/teams` + `/league/$linkId/settings` (name/scoring/draft mode + invite code).
 5. Wire Active League switcher to accept `platform: 'native'` tokens alongside synced connections. **Landed** (`native_league_links` merged into ActiveLeagueContext; host Fluid paths short-circuit for native so Playbook/tools do not burn Sleeper/ESPN when native is selected).
-6. **IA lock:** native ops live on **dedicated routes** (desktop + mobile). Do **not** retrofit `/playbook/*` Dashboard / My Team / Matchup / Transactions into the native management UX. Those pages stay synced-league tools and may remain navigable with a native league selected (soft-empty / tool context only).
+6. **IA lock:** native ops live on **dedicated routes** (desktop + mobile). Do **not** retrofit `/playbook/*` Dashboard / My Team / Matchup / Transactions into the native management UX. Those pages stay synced-league tools and may remain navigable with a native league selected (soft-empty / tool context only). **Shell landed:** `/league/$linkId` (Dashboard / Teams / Draft / Settings).
 
 ### Phase 2 — Draft (native routes)
 
-1. **Offline:** commissioner draft board on native draft routes — search players, assign to team, undo last pick; marks players owned; completes → season start.
-2. **Live snake:** schedule `draft_scheduled_at`; lobby; server-authoritative pick endpoint with row lock on `native_leagues` draft cursor; timer via cron tick or pick-time check on read; autopick from queue / ADP fallback; commissioner pause/force-pick.
-3. Reuse War Room UI patterns where useful; **persist to TiDB**, not `localStorage`. Do not hitch live draft to Mock Draft / War Room host flows.
-4. On complete: populate `native_rosters`, set `status=in_season`, generate `native_schedules`.
+1. **Offline:** commissioner draft board on native draft routes — search players, assign to team, undo last pick; marks players owned; completes → season start. **Landed** at `/league/$linkId/draft` (works for external drafts too).
+2. **Live snake:** schedule `draft_scheduled_at`; lobby; server-authoritative pick endpoint with row lock on `native_leagues` draft cursor; timer via cron tick or pick-time check on read; autopick from queue / ADP fallback; commissioner pause/force-pick. **Deferred** — live mode still uses the offline entry board until the clock ships.
+3. Reuse War Room UI patterns where useful; **persist to TiDB**, not `localStorage`. Do not hitch live draft to Mock Draft / War Room host flows. **Landed** (catalog search + TiDB picks).
+4. On complete: populate `native_rosters`, set `status=in_season`, generate `native_schedules`. **Landed**.
 
 ### Phase 3 — In-season ops (native dashboards)
 
