@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { authorizeCronRequest } from "@/lib/cron-auth.server";
+import { tidbNativeLeagueStatus } from "@/lib/native-league.server";
 import {
   applyTidbSchema,
   loadSeedRowsFromSupabase,
@@ -26,7 +27,8 @@ export const Route = createFileRoute("/api/admin/tidb-migrate")({
         }
         try {
           const status = await tidbWarehouseStatus();
-          return new Response(JSON.stringify({ ok: true, ...status }), {
+          const nativeLeagues = await tidbNativeLeagueStatus();
+          return new Response(JSON.stringify({ ok: true, ...status, nativeLeagues }), {
             status: 200,
             headers: { "content-type": "application/json", "cache-control": "no-store" },
           });
@@ -91,6 +93,7 @@ export const Route = createFileRoute("/api/admin/tidb-migrate")({
           }
 
           report["status"] = await tidbWarehouseStatus();
+          report["nativeLeagues"] = await tidbNativeLeagueStatus();
           return new Response(JSON.stringify(report), {
             status: 200,
             headers: { "content-type": "application/json", "cache-control": "no-store" },

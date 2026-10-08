@@ -1,151 +1,11 @@
--- TiDB Serverless schema for The League Office (league-office-native).
--- MySQL-compatible DDL. Run once against DATABASE_URL (or via /api/admin/tidb-migrate).
--- Supabase A retains auth, profiles, and native_league_links (membership index).
--- Native league ops tables (native_*) live here — see end of this file.
+/**
+ * TiDB DDL for native custom fantasy leagues (ops data).
+ * Keep in sync with scripts/tidb/schema.sql (native_* section).
+ * Applied via applyTidbSchema() — CREATE IF NOT EXISTS only; safe on existing clusters.
+ */
 
-CREATE TABLE IF NOT EXISTS player_warehouse (
-  sleeper_id VARCHAR(32) NOT NULL,
-  player_name VARCHAR(128) NULL,
-  position VARCHAR(8) NULL,
-  team VARCHAR(8) NULL,
-  fantasycalc_value DECIMAL(12, 2) NULL,
-  leaguelogs_status VARCHAR(64) NULL,
-  injury_type VARCHAR(64) NULL,
-  injury_notes TEXT NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (sleeper_id),
-  INDEX idx_pw_position (position),
-  INDEX idx_pw_player_name (player_name),
-  INDEX idx_pw_team (team),
-  INDEX idx_pw_pos_name (position, player_name)
-);
-
--- Analytics copy of synced host leagues (ownership still gated via Supabase Auth).
-CREATE TABLE IF NOT EXISTS synced_leagues (
-  league_id VARCHAR(64) NOT NULL,
-  user_id VARCHAR(64) NOT NULL,
-  platform ENUM('sleeper', 'espn') NOT NULL,
-  name VARCHAR(255) NULL,
-  total_teams INT NULL,
-  total_rounds INT NULL,
-  playoff_start_week INT NULL,
-  scoring_settings JSON NULL,
-  synced_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (league_id),
-  INDEX idx_sl_user_id (user_id),
-  INDEX idx_sl_platform (platform)
-);
-
-CREATE TABLE IF NOT EXISTS synced_rosters (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  league_id VARCHAR(64) NOT NULL,
-  team_id INT NOT NULL,
-  owner_name VARCHAR(255) NULL,
-  players JSON NULL,
-  starters JSON NULL,
-  bench JSON NULL,
-  synced_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_league_team (league_id, team_id),
-  INDEX idx_sr_league_id (league_id)
-);
-
--- Aligned with supabase weekly_matchups so league-resync can retarget without feature loss.
-CREATE TABLE IF NOT EXISTS synced_matchups (
-  id BIGINT NOT NULL AUTO_INCREMENT,
-  league_id VARCHAR(64) NOT NULL,
-  connection_id VARCHAR(64) NULL,
-  platform VARCHAR(16) NOT NULL DEFAULT 'espn',
-  week INT NOT NULL,
-  team_id INT NOT NULL,
-  matchup_id INT NULL,
-  roster_points DECIMAL(8, 2) NOT NULL DEFAULT 0,
-  projected_points DECIMAL(8, 2) NOT NULL DEFAULT 0,
-  opponent_team_id INT NULL,
-  team_name VARCHAR(255) NULL,
-  owner_name VARCHAR(255) NULL,
-  starters JSON NULL,
-  player_points JSON NULL,
-  synced_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_league_week_team (league_id, week, team_id),
-  INDEX idx_sm_league_week (league_id, week),
-  INDEX idx_sm_league_id (league_id)
-);
-
--- Pre-aggregated research snapshots (written by cron; request path only SELECTs).
--- season may hold composite keys (e.g. redzone "2025:20:d:d").
-CREATE TABLE IF NOT EXISTS agg_redzone (
-  season VARCHAR(64) NOT NULL,
-  payload JSON NOT NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (season)
-);
-
-CREATE TABLE IF NOT EXISTS agg_targets (
-  season VARCHAR(64) NOT NULL,
-  payload JSON NOT NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (season)
-);
-
-CREATE TABLE IF NOT EXISTS agg_sos (
-  season VARCHAR(16) NOT NULL,
-  payload JSON NOT NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (season)
-);
-
-CREATE TABLE IF NOT EXISTS agg_fpa (
-  season VARCHAR(64) NOT NULL,
-  payload JSON NOT NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (season)
-);
-
-CREATE TABLE IF NOT EXISTS agg_matchups_guide (
-  season VARCHAR(64) NOT NULL,
-  payload JSON NOT NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (season)
-);
-
-CREATE TABLE IF NOT EXISTS agg_sos_analysis (
-  season VARCHAR(64) NOT NULL,
-  payload JSON NOT NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (season)
-);
-
-CREATE TABLE IF NOT EXISTS agg_are_they_playing (
-  snapshot_key VARCHAR(32) NOT NULL DEFAULT 'latest',
-  payload JSON NOT NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (snapshot_key)
-);
-
-CREATE TABLE IF NOT EXISTS agg_week_plays_meta (
-  season VARCHAR(16) NOT NULL,
-  week INT NOT NULL,
-  payload JSON NOT NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (season, week)
-);
-
-CREATE TABLE IF NOT EXISTS agg_fantasy_leaders (
-  season VARCHAR(16) NOT NULL,
-  payload JSON NOT NULL,
-  updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (season)
-);
-
--- ---------------------------------------------------------------------------
--- Native custom fantasy leagues (ops). Auth stays on Supabase A; membership
--- index is native_league_links there. Keep DDL in sync with
--- src/lib/native-league-ddl.server.ts (applied by /api/admin/tidb-migrate).
--- ---------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS native_leagues (
+export const NATIVE_LEAGUE_SCHEMA_STATEMENTS: string[] = [
+  `CREATE TABLE IF NOT EXISTS native_leagues (
   id CHAR(36) NOT NULL,
   season_year SMALLINT NOT NULL,
   name VARCHAR(128) NOT NULL,
@@ -207,9 +67,9 @@ CREATE TABLE IF NOT EXISTS native_leagues (
   INDEX idx_native_leagues_commish (commissioner_user_id),
   INDEX idx_native_leagues_season (season_year),
   INDEX idx_native_leagues_status (status)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_teams (
+  `CREATE TABLE IF NOT EXISTS native_teams (
   id BIGINT NOT NULL AUTO_INCREMENT,
   league_id CHAR(36) NOT NULL,
   user_id VARCHAR(36) NULL,
@@ -228,9 +88,9 @@ CREATE TABLE IF NOT EXISTS native_teams (
   UNIQUE KEY uq_native_teams_league_user (league_id, user_id),
   INDEX idx_native_teams_user (user_id),
   INDEX idx_native_teams_league (league_id)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_rosters (
+  `CREATE TABLE IF NOT EXISTS native_rosters (
   league_id CHAR(36) NOT NULL,
   team_id BIGINT NOT NULL,
   player_ids JSON NOT NULL,
@@ -239,9 +99,9 @@ CREATE TABLE IF NOT EXISTS native_rosters (
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (league_id, team_id),
   INDEX idx_native_rosters_team (team_id)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_lineups (
+  `CREATE TABLE IF NOT EXISTS native_lineups (
   id BIGINT NOT NULL AUTO_INCREMENT,
   league_id CHAR(36) NOT NULL,
   team_id BIGINT NOT NULL,
@@ -256,9 +116,9 @@ CREATE TABLE IF NOT EXISTS native_lineups (
   PRIMARY KEY (id),
   UNIQUE KEY uq_native_lineups_week (league_id, team_id, season_year, week),
   INDEX idx_native_lineups_league_week (league_id, season_year, week)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_schedules (
+  `CREATE TABLE IF NOT EXISTS native_schedules (
   id BIGINT NOT NULL AUTO_INCREMENT,
   league_id CHAR(36) NOT NULL,
   season_year SMALLINT NOT NULL,
@@ -272,9 +132,9 @@ CREATE TABLE IF NOT EXISTS native_schedules (
   INDEX idx_native_sched_league_week (league_id, season_year, week),
   INDEX idx_native_sched_home (league_id, home_team_id),
   INDEX idx_native_sched_away (league_id, away_team_id)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_transactions (
+  `CREATE TABLE IF NOT EXISTS native_transactions (
   id BIGINT NOT NULL AUTO_INCREMENT,
   league_id CHAR(36) NOT NULL,
   team_id BIGINT NULL,
@@ -287,9 +147,9 @@ CREATE TABLE IF NOT EXISTS native_transactions (
   PRIMARY KEY (id),
   INDEX idx_native_tx_league_created (league_id, created_at),
   INDEX idx_native_tx_team (league_id, team_id)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_waiver_claims (
+  `CREATE TABLE IF NOT EXISTS native_waiver_claims (
   id BIGINT NOT NULL AUTO_INCREMENT,
   league_id CHAR(36) NOT NULL,
   team_id BIGINT NOT NULL,
@@ -305,9 +165,9 @@ CREATE TABLE IF NOT EXISTS native_waiver_claims (
   INDEX idx_native_claims_pending (league_id, status, created_at),
   INDEX idx_native_claims_team (league_id, team_id, status),
   INDEX idx_native_claims_player (league_id, player_to_add, status)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_player_locks (
+  `CREATE TABLE IF NOT EXISTS native_player_locks (
   league_id CHAR(36) NOT NULL,
   player_id VARCHAR(32) NOT NULL,
   held_by_team_id BIGINT NULL,
@@ -315,9 +175,9 @@ CREATE TABLE IF NOT EXISTS native_player_locks (
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (league_id, player_id),
   INDEX idx_native_locks_team (league_id, held_by_team_id)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_trades (
+  `CREATE TABLE IF NOT EXISTS native_trades (
   id BIGINT NOT NULL AUTO_INCREMENT,
   league_id CHAR(36) NOT NULL,
   proposer_team_id BIGINT NOT NULL,
@@ -332,9 +192,9 @@ CREATE TABLE IF NOT EXISTS native_trades (
   INDEX idx_native_trades_league_status (league_id, status),
   INDEX idx_native_trades_proposer (league_id, proposer_team_id),
   INDEX idx_native_trades_acceptor (league_id, acceptor_team_id)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_draft_picks (
+  `CREATE TABLE IF NOT EXISTS native_draft_picks (
   league_id CHAR(36) NOT NULL,
   pick_number INT NOT NULL,
   round TINYINT NOT NULL,
@@ -345,18 +205,18 @@ CREATE TABLE IF NOT EXISTS native_draft_picks (
   PRIMARY KEY (league_id, pick_number),
   UNIQUE KEY uq_native_draft_player (league_id, player_id),
   INDEX idx_native_draft_team (league_id, team_id)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_draft_queues (
+  `CREATE TABLE IF NOT EXISTS native_draft_queues (
   league_id CHAR(36) NOT NULL,
   team_id BIGINT NOT NULL,
   player_id VARCHAR(32) NOT NULL,
   rank INT NOT NULL,
   PRIMARY KEY (league_id, team_id, player_id),
   INDEX idx_native_queue_order (league_id, team_id, rank)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_matchup_results (
+  `CREATE TABLE IF NOT EXISTS native_matchup_results (
   id BIGINT NOT NULL AUTO_INCREMENT,
   league_id CHAR(36) NOT NULL,
   season_year SMALLINT NOT NULL,
@@ -373,18 +233,18 @@ CREATE TABLE IF NOT EXISTS native_matchup_results (
   PRIMARY KEY (id),
   UNIQUE KEY uq_native_matchup_team_week (league_id, season_year, week, team_id),
   INDEX idx_native_matchup_league_week (league_id, season_year, week)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_season_standings_snap (
+  `CREATE TABLE IF NOT EXISTS native_season_standings_snap (
   league_id CHAR(36) NOT NULL,
   season_year SMALLINT NOT NULL,
   as_of_week TINYINT NOT NULL,
   standings JSON NOT NULL,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (league_id, season_year, as_of_week)
-);
+)`,
 
-CREATE TABLE IF NOT EXISTS native_season_archive (
+  `CREATE TABLE IF NOT EXISTS native_season_archive (
   league_id CHAR(36) NOT NULL,
   season_year SMALLINT NOT NULL,
   champion_team_id BIGINT NULL,
@@ -392,4 +252,23 @@ CREATE TABLE IF NOT EXISTS native_season_archive (
   awards JSON NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (league_id, season_year)
-);
+)`,
+];
+
+/** Tables created by NATIVE_LEAGUE_SCHEMA_STATEMENTS (for status probes). */
+export const NATIVE_LEAGUE_TABLE_NAMES = [
+  "native_leagues",
+  "native_teams",
+  "native_rosters",
+  "native_lineups",
+  "native_schedules",
+  "native_transactions",
+  "native_waiver_claims",
+  "native_player_locks",
+  "native_trades",
+  "native_draft_picks",
+  "native_draft_queues",
+  "native_matchup_results",
+  "native_season_standings_snap",
+  "native_season_archive",
+] as const;

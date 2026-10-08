@@ -425,11 +425,11 @@ Deprecate unused Supabase `leagues` / `lineups` / … for new work (leave tables
 
 ### Phase 0 — Foundations (schema + auth glue)
 
-1. TiDB migrate: create `native_*` tables ([`tidb-migrate.server.ts`](../src/lib/tidb-migrate.server.ts) + [`scripts/tidb/schema.sql`](../scripts/tidb/schema.sql)).
-2. Supabase migration: `native_league_links` + RLS (user reads own links; writes via service role / server only).
-3. Server module `native-league.server.ts`: JWT verify → membership check → TiDB pool.
-4. Settings Zod schema shared with UI (extend `LeagueSettingsDetail`).
-5. Cap: max 3 native leagues per user as commissioner in v1 (tunable).
+1. TiDB migrate: create `native_*` tables ([`tidb-migrate.server.ts`](../src/lib/tidb-migrate.server.ts) + [`native-league-ddl.server.ts`](../src/lib/native-league-ddl.server.ts) + [`scripts/tidb/schema.sql`](../scripts/tidb/schema.sql)). **Landed** — applied on next `/api/admin/tidb-migrate` schema/migrate (CREATE IF NOT EXISTS).
+2. Supabase migration: `native_league_links` + RLS (user reads own links; writes via service role / server only). **Landed** in `supabase/migrations/20261008170000_native_league_links.sql` (apply via Supabase migrate).
+3. Server module [`native-league.server.ts`](../src/lib/native-league.server.ts): status + read helpers (no UI wiring yet).
+4. Settings normalize helpers [`native-league-settings.ts`](../src/lib/native-league-settings.ts) (defaults, caps, v1 locks).
+5. Cap: max 3 native leagues per user as commissioner in v1 (tunable) — encoded in settings helpers.
 
 ### Phase 1 — Create / invite / join / setup
 

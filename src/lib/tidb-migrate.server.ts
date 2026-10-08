@@ -1,6 +1,7 @@
 /**
  * TiDB schema apply + warehouse seed helpers (server-only).
  */
+import { NATIVE_LEAGUE_SCHEMA_STATEMENTS } from "@/lib/native-league-ddl.server";
 import { buildUpsertSql, chunkRows, tidbConfigured, tidbExecute } from "@/lib/tidb";
 
 const SCHEMA_STATEMENTS = [
@@ -129,6 +130,8 @@ const SCHEMA_STATEMENTS = [
   `ALTER TABLE agg_fpa MODIFY season VARCHAR(64) NOT NULL`,
   `ALTER TABLE agg_matchups_guide MODIFY season VARCHAR(64) NOT NULL`,
   `ALTER TABLE agg_sos_analysis MODIFY season VARCHAR(64) NOT NULL`,
+  // Native custom leagues (ops). CREATE IF NOT EXISTS — no-op when already present.
+  ...NATIVE_LEAGUE_SCHEMA_STATEMENTS,
 ];
 
 export type WarehouseSeedRow = {
