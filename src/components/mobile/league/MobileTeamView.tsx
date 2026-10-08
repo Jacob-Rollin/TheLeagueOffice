@@ -268,7 +268,8 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
               week={activeWeek}
               onChange={setWeek}
               centered
-              className="rounded-none bg-transparent"
+              // Match the card face (no m-select gray strip) — same as pre-center look in-card.
+              className="rounded-none bg-m-card"
             />
 
             <div className="px-4 pb-4 pt-3">
@@ -310,7 +311,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
               to="/m/league/$leagueId/matchup"
               params={{ leagueId }}
               search={{ week: activeWeek }}
-              className="relative z-0 flex items-center justify-between border-t border-m-border px-4 py-3.5 font-display text-base font-semibold"
+              className="relative z-0 flex items-center justify-between border-t border-m-border px-4 pb-4 pt-3.5 font-display text-base font-semibold"
             >
               <span className="min-w-0 truncate pr-2">View Matchup</span>
               <span className="flex shrink-0 items-center gap-1 text-m-muted">
@@ -321,7 +322,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
           </div>
 
           {optimizePlan ? (
-            <div className="pointer-events-none absolute left-1/2 top-full z-20 -translate-x-1/2 -translate-y-[22px]">
+            <div className="pointer-events-none absolute left-1/2 top-full z-20 -translate-x-1/2 -translate-y-[14px]">
               <button
                 type="button"
                 onClick={() => setShowOptimized((v) => !v)}
