@@ -102,15 +102,15 @@ jobs:
           echo ""
           echo "GET $BASE/api/data/players-export (first 240 bytes)"
           EXPORT_CODE="$(curl -sS -L -o /tmp/export-body.txt -w "%{http_code}" "$BASE/api/data/players-export")"
-          EXPORT="$(cat /tmp/export-body.txt)"
           echo "HTTP $EXPORT_CODE"
-          echo "$EXPORT" | head -c 240
+          # Read from file — do not pipe a huge JSON body through head (pipefail → false failure).
+          head -c 240 /tmp/export-body.txt || true
           echo ""
-          echo "$EXPORT" | grep -q '"ok":true' || {
+          grep -q '"ok":true' /tmp/export-body.txt || {
             echo "::error::players-export did not return ok:true — migrate may have failed; see JSON above"
             exit 1
           }
-          COUNT="$(echo "$EXPORT" | sed -n 's/.*"count":\([0-9]*\).*/\1/p' | head -1)"
+          COUNT="$(sed -n 's/.*"count":\([0-9]*\).*/\1/p' /tmp/export-body.txt | head -n 1 || true)"
           echo "players-export count=${COUNT:-unknown}"
           if [ -n "${COUNT:-}" ] && [ "$COUNT" -lt 100 ]; then
             echo "::error::warehouse count too low ($COUNT)"
