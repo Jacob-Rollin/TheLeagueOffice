@@ -61,6 +61,29 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
             : { week: 1 };
           const week = Math.max(1, Number(state.week) || 1);
 
+          // Lightweight Mon–Fri practice refresh: scrape ATP only (no redzone /
+          // nflverse / SOS). Keeps Fluid Active CPU bounded while practice marks
+          // still update after afternoon club reports.
+          const only = (url.searchParams.get("only") ?? "").toLowerCase();
+          const onlyAtp = only === "are-they-playing" || only === "atp";
+
+          const { loadAreTheyPlaying } = await import("@/lib/are-they-playing.server");
+          const atp = await section(report, "areTheyPlaying", () =>
+            loadAreTheyPlaying(week, { allowCompute: true }),
+          );
+          if (atp) {
+            report["areTheyPlaying"] = { week: atp.week, lines: atp.lines.length };
+          }
+          if (onlyAtp) {
+            const partial = (report["partialErrors"] as string[]) ?? [];
+            report["ok"] = partial.length === 0;
+            report["only"] = "are-they-playing";
+            return new Response(JSON.stringify(report), {
+              status: 200,
+              headers: { "content-type": "application/json", "cache-control": "no-store" },
+            });
+          }
+
           const { loadRedZoneStats } = await import("@/lib/redzone.server");
           const redzoneByYl: Record<string, unknown> = {};
           for (const yl of REDZONE_YARDLINES) {
@@ -87,14 +110,6 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
               maxWeek: targets.maxWeek,
               players: targets.rows.length,
             };
-          }
-
-          const { loadAreTheyPlaying } = await import("@/lib/are-they-playing.server");
-          const atp = await section(report, "areTheyPlaying", () =>
-            loadAreTheyPlaying(week, { allowCompute: true }),
-          );
-          if (atp) {
-            report["areTheyPlaying"] = { week: atp.week, lines: atp.lines.length };
           }
 
           const {

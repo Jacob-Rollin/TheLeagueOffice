@@ -90,8 +90,9 @@ jobs:
           fetch "$BASE/api/data/research/fantasy-leaders" out/research/fantasy-leaders.json
           fetch "$BASE/api/data/research/sos-board" out/research/sos-board.json
           fetch "$BASE/api/data/research/targets" out/research/targets.json
+          mkdir -p out/research/are-they-playing
           fetch "$BASE/api/data/research/are-they-playing?week=$WEEK" \
-            "out/research/are-they-playing-w${WEEK}.json"
+            "out/research/are-they-playing/week-${WEEK}.json"
 
           for yl in 5 10 15 20; do
             fetch "$BASE/api/data/research/redzone?yardline=$yl" "out/research/redzone-$yl.json"

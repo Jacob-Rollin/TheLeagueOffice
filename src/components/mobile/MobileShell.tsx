@@ -2,6 +2,7 @@ import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { ChevronLeft, House, Monitor, Settings } from "lucide-react";
 import { useCallback, useState, type ReactNode } from "react";
 
+import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,8 @@ function MobileFrame({ children }: { children: ReactNode }) {
   const { data: isAdmin, isFetched, isError } = useIsAdmin(user?.id ?? null);
 
   const checking = !ready || (Boolean(user) && !isFetched);
-  const allowed = Boolean(user) && !isError && isAdmin === true;
+  const signedIn = Boolean(user);
+  const allowed = signedIn && !isError && isAdmin === true;
 
   return (
     <div
@@ -43,6 +45,8 @@ function MobileFrame({ children }: { children: ReactNode }) {
           <MobileNotice>Checking access...</MobileNotice>
         ) : allowed ? (
           <MobilePlayerSheetProvider>{children}</MobilePlayerSheetProvider>
+        ) : !signedIn ? (
+          <MobileSignInGate />
         ) : (
           <MobileNotice>Admin access required. Mobile pages are in preview.</MobileNotice>
         )}
@@ -67,30 +71,35 @@ function MobileHeader() {
       <Settings className="size-5" strokeWidth={2.5} />
     </button>
   );
-  const headerClass = cn(
-    "sticky top-0 z-20 flex items-center justify-between bg-m-header px-4 py-3 text-m-header-fg",
+  // Safe-area sits outside the content row so the logo stays truly centered.
+  const headerShellClass = cn(
+    "sticky top-0 z-20 bg-m-header text-m-header-fg",
     theme === "dark" ? "border-b border-m-border" : "shadow-[0_2px_6px_rgba(0,0,0,0.18)]",
   );
+  const headerShellStyle = { paddingTop: "env(safe-area-inset-top, 0px)" } as const;
+  const headerRowClass = "relative flex items-center justify-between px-4 py-3";
 
   if (subpageTitle && leagueId) {
     return (
-      <header className={headerClass}>
-        <button
-          type="button"
-          aria-label="Back"
-          className={iconButtonClass}
-          onClick={() =>
-            router.history.canGoBack()
-              ? router.history.back()
-              : void router.navigate({ to: "/m/league/$leagueId/team", params: { leagueId } })
-          }
-        >
-          <ChevronLeft className="size-6" strokeWidth={2.5} />
-        </button>
-        <h1 className="absolute left-1/2 -translate-x-1/2 font-display text-xl font-semibold tracking-wide">
-          {subpageTitle}
-        </h1>
-        <span className="size-11" aria-hidden="true" />
+      <header className={headerShellClass} style={headerShellStyle}>
+        <div className={headerRowClass}>
+          <button
+            type="button"
+            aria-label="Back"
+            className={iconButtonClass}
+            onClick={() =>
+              router.history.canGoBack()
+                ? router.history.back()
+                : void router.navigate({ to: "/m/league/$leagueId/team", params: { leagueId } })
+            }
+          >
+            <ChevronLeft className="size-6" strokeWidth={2.5} />
+          </button>
+          <h1 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-display text-xl font-semibold tracking-wide">
+            {subpageTitle}
+          </h1>
+          <span className="size-11" aria-hidden="true" />
+        </div>
       </header>
     );
   }
@@ -98,32 +107,32 @@ function MobileHeader() {
   return (
     <>
       {settingsOpen ? <MobileSettingsOverlay onClose={closeSettings} /> : null}
-      <header
-        className={headerClass}
-      >
-        {inLeague ? (
-          <Link to="/m" aria-label="Home" className={iconButtonClass}>
-            <House className="size-5" strokeWidth={2.5} />
-          </Link>
-        ) : (
-          settingsButton
-        )}
+      <header className={headerShellClass} style={headerShellStyle}>
+        <div className={headerRowClass}>
+          {inLeague ? (
+            <Link to="/m" aria-label="Home" className={iconButtonClass}>
+              <House className="size-5" strokeWidth={2.5} />
+            </Link>
+          ) : (
+            settingsButton
+          )}
 
-        <Link
-          to="/m"
-          aria-label="The League Office home"
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-        >
-          <img src="/the-league-logo.png" alt="" className="h-12 w-auto" />
-        </Link>
-
-        {inLeague ? (
-          settingsButton
-        ) : (
-          <Link to="/" aria-label="Open desktop site" className={iconButtonClass}>
-            <Monitor className="size-5" strokeWidth={2.5} />
+          <Link
+            to="/m"
+            aria-label="The League Office home"
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+          >
+            <img src="/the-league-logo.png" alt="" className="h-12 w-auto" />
           </Link>
-        )}
+
+          {inLeague ? (
+            settingsButton
+          ) : (
+            <Link to="/" aria-label="Open desktop site" className={iconButtonClass}>
+              <Monitor className="size-5" strokeWidth={2.5} />
+            </Link>
+          )}
+        </div>
       </header>
     </>
   );
@@ -134,6 +143,59 @@ function MobileNotice({ children }: { children: ReactNode }) {
     <div className="px-5 py-16 text-center font-display text-sm font-semibold uppercase tracking-widest text-m-muted">
       {children}
     </div>
+  );
+}
+
+/** Signed-out home: same auth dialog as desktop, mobile-sized CTAs. */
+function MobileSignInGate() {
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
+
+  const openAuth = (mode: AuthMode) => {
+    setAuthMode(mode);
+    setAuthOpen(true);
+  };
+
+  return (
+    <main className="px-5 pb-10 pt-10">
+      <div className="mx-auto flex max-w-sm flex-col items-center text-center">
+        <img src="/the-league-logo.png" alt="" className="h-16 w-auto" />
+        <h1 className="mt-6 font-display text-[28px] font-bold leading-tight tracking-wide text-m-card-fg">
+          Sign in to continue
+        </h1>
+        <p className="mt-2 text-sm text-m-muted">
+          Use your League Office account to open the mobile league experience.
+        </p>
+        <button
+          type="button"
+          onClick={() => openAuth("signin")}
+          className={
+            "mt-8 w-full rounded-lg bg-m-cta px-4 py-3.5 font-display text-lg font-extrabold italic " +
+            "uppercase tracking-wider text-m-cta-fg shadow-[0_3px_0_rgba(0,0,0,0.25)] " +
+            "transition-transform active:translate-y-px"
+          }
+        >
+          Sign In
+        </button>
+        <button
+          type="button"
+          onClick={() => openAuth("signup")}
+          className={
+            "mt-3 w-full rounded-lg bg-m-chip px-4 py-3.5 font-display text-lg font-semibold " +
+            "tracking-wide text-m-chip-fg transition-opacity hover:opacity-90"
+          }
+        >
+          Create Account
+        </button>
+        <Link
+          to="/"
+          className="mt-6 text-sm font-semibold text-m-accent underline-offset-2 hover:underline"
+        >
+          Open desktop site
+        </Link>
+      </div>
+      <AuthDialog open={authOpen} mode={authMode} onOpenChange={setAuthOpen} />
+    </main>
   );
 }
 
