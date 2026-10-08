@@ -15,6 +15,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   sleeper: "Sleeper",
   espn: "ESPN",
   yahoo: "Yahoo",
+  native: "Native",
 };
 
 export function MobileJoinHero() {

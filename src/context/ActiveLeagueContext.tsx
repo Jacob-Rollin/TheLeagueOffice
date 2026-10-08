@@ -4,11 +4,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
-/** Compact identifier tokens for a synced league — the only thing we keep in memory. */
+/** Compact identifier tokens for a synced or native league — the only thing we keep in memory. */
 export type ActiveLeagueToken = {
   id: string;
   platform: string;
   leagueId: string;
+  /** TiDB native league id when platform === "native" (same as leagueId). */
+  nativeLeagueId?: string;
   name: string;
   teamName: string | null;
   avatar: string | null;
@@ -63,11 +65,33 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
     retry: false,
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<ActiveLeagueToken[]> => {
-      const { data, error } = await supabase
-        .from("synced_leagues")
-        .select("id, platform, league_id, espn_s2, swid, metadata")
-        .order("created_at", { ascending: false });
+      const [{ data, error }, nativeRes] = await Promise.all([
+        supabase
+          .from("synced_leagues")
+          .select("id, platform, league_id, espn_s2, swid, metadata")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("native_league_links")
+          .select("id, native_league_id, role, season_year, label, team_id")
+          .order("created_at", { ascending: false }),
+      ]);
       if (error) throw error;
+      // Native membership table may be missing on older envs — soft-empty.
+      const nativeRows = nativeRes.error ? [] : (nativeRes.data ?? []);
+
+      const nativeTokens: ActiveLeagueToken[] = nativeRows.map((row) => {
+        const leagueId = String(row?.native_league_id ?? "");
+        return {
+          id: String(row?.id ?? ""),
+          platform: "native",
+          leagueId,
+          nativeLeagueId: leagueId,
+          name: (row?.label as string | null | undefined)?.trim() || "Native League",
+          teamName: null,
+          avatar: null,
+        };
+      });
+
       const rows = (data ?? []).map((row) => {
         const meta = (row?.metadata ?? {}) as Record<string, unknown>;
         return {
@@ -82,7 +106,6 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
         };
       });
 
-
       const { canFetchMetaClient, fetchSleeperMetaClient } = await import("@/lib/sleeper-meta-client");
       const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
         "@/lib/sleeper-resolve-client"
@@ -95,7 +118,7 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
       } = await import("@/lib/espn-fluid-cache");
       const allowFluid =
         typeof import.meta !== "undefined" && import.meta.env?.DEV === true;
-      return await Promise.all(
+      const syncedTokens = await Promise.all(
         rows.map(async ({ s2, swid, ...row }) => {
           const base = { ...row, s2, swid };
           if ((row.platform !== "sleeper" && row.platform !== "espn") || !row.leagueId) return base;
@@ -147,6 +170,8 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
           }
         }),
       );
+
+      return [...nativeTokens, ...syncedTokens];
     },
 
   });

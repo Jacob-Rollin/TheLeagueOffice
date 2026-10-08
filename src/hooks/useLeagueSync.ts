@@ -50,7 +50,8 @@ export function useLeagueSync() {
 
     // Sleeper: Actions warm TiDB + browser reads host APIs. Skip Fluid delta
     // on browse so ~20 concurrent free users do not each spend Active CPU.
-    if (platform === "sleeper") return;
+    // Native leagues are TiDB-backed — never delta-sync to a host platform.
+    if (platform === "sleeper" || platform === "native") return;
 
     try {
       const last = Number(sessionStorage.getItem(`${SESSION_KEY_PREFIX}${connectionId}`) ?? 0);

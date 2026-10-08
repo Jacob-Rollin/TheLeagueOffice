@@ -41,7 +41,21 @@ export type ConnectionRow = {
   updated_at: string;
 };
 
-const PLATFORM_LABEL: Record<string, string> = { sleeper: "Sleeper", espn: "ESPN", yahoo: "Yahoo" };
+const PLATFORM_LABEL: Record<string, string> = {
+  sleeper: "Sleeper",
+  espn: "ESPN",
+  yahoo: "Yahoo",
+  native: "Native",
+};
+
+type NativeLinkRow = {
+  id: string;
+  native_league_id: string;
+  role: string;
+  season_year: number;
+  label: string | null;
+  created_at: string;
+};
 
 function formatRelativeTime(value: string): string {
   const timestamp = new Date(value).getTime();
@@ -93,6 +107,20 @@ function LeaguesPage() {
       const { data, error } = await supabase.from("synced_leagues").select("id, platform, league_id, espn_s2, swid, metadata, updated_at").order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ConnectionRow[];
+    },
+  });
+
+  const { data: nativeLinks } = useQuery({
+    queryKey: ["native-league-links", userId],
+    enabled: Boolean(userId),
+    retry: false,
+    queryFn: async (): Promise<NativeLinkRow[]> => {
+      const { data, error } = await supabase
+        .from("native_league_links")
+        .select("id, native_league_id, role, season_year, label, created_at")
+        .order("created_at", { ascending: false });
+      if (error) return [];
+      return (data ?? []) as NativeLinkRow[];
     },
   });
 
@@ -148,13 +176,31 @@ function LeaguesPage() {
     void navigate({ to: "/playbook" });
   };
   const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
+  const nativeRows = (nativeLinks ?? []).filter((row): row is NativeLinkRow => Boolean(row?.id));
+  const empty = rows.length === 0 && nativeRows.length === 0;
 
   return (
-    <AccountShell title="My Leagues" active="leagues" action={<Link to="/leaguesync" className={buttonClass}>Sync New League</Link>}>
-      {rows.length === 0 ? (
+    <AccountShell
+      title="My Leagues"
+      active="leagues"
+      action={
+        <div className="flex flex-wrap gap-2">
+          <Link to="/account/leagues/native" className={buttonClass}>
+            Native League
+          </Link>
+          <Link to="/leaguesync" className={buttonClass}>
+            Sync New League
+          </Link>
+        </div>
+      }
+    >
+      {empty ? (
         <div className="flex items-center justify-center rounded-xl border border-border bg-card px-4 py-16"><p className="font-display text-sm font-semibold uppercase tracking-widest text-black">No Active Leagues</p></div>
       ) : (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-[auto_auto_minmax(10rem,1fr)_10rem_auto_auto]">
+          {nativeRows.map((row) => (
+            <NativeLeagueRow key={row.id} row={row} onViewPlaybook={viewPlaybook} />
+          ))}
           {rows.map((row) => (
             <LeagueRow
               key={row.id}
@@ -203,6 +249,41 @@ function LeaguesPage() {
         </AlertDialogContent>
       </AlertDialog>
     </AccountShell>
+  );
+}
+
+function NativeLeagueRow({
+  row,
+  onViewPlaybook,
+}: {
+  row: NativeLinkRow;
+  onViewPlaybook: (id: string) => void;
+}) {
+  const label = row.label?.trim() || "Native League";
+  const role = row.role === "commissioner" ? "Commissioner" : row.role === "co_commish" ? "Co-Commish" : "Member";
+  return (
+    <li className="col-span-full grid grid-cols-1 items-center gap-x-4 gap-y-3 rounded-xl border border-border bg-card px-4 py-4 md:grid-cols-subgrid">
+      <span
+        aria-label="Native"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full border border-primary text-[10px] font-bold text-primary"
+      >
+        N
+      </span>
+      <LeagueAvatar platform="native" alt={label} />
+      <div className="min-w-0">
+        <p className="text-base font-semibold leading-tight text-black">{label}</p>
+        <p className="text-sm font-medium leading-tight text-black">
+          Native · {role} · {row.season_year}
+        </p>
+      </div>
+      <p className="text-sm text-black/70">Updated {formatRelativeTime(row.created_at)}</p>
+      <button type="button" className={buttonClass} onClick={() => onViewPlaybook(row.id)}>
+        Playbook
+      </button>
+      <Link to="/account/leagues/native" className="text-sm font-medium text-primary hover:underline">
+        Invite / Join
+      </Link>
+    </li>
   );
 }
 

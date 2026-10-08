@@ -433,11 +433,11 @@ Deprecate unused Supabase `leagues` / `lineups` / … for new work (leave tables
 
 ### Phase 1 — Create / invite / join / setup
 
-1. UI: Create League wizard (name, teams, roster, scoring preset → custom editor using `SCORING_GROUPS`, waivers, trades, playoffs, draft mode).
-2. Generate league `invite_code`; share link `/join/:code`.
-3. Join flow: auth required → claim open seat → write TiDB team + Supabase link.
-4. Commissioner: rename teams, kick/open seat, edit settings until `draft_status` leaves `not_started` (then lock scoring/roster structure for the season; allow cosmetic edits).
-5. Wire Active League / PlaybookShell to accept `platform: 'native'` tokens alongside synced connections.
+1. UI: Create League wizard (name, teams, roster, scoring preset → custom editor using `SCORING_GROUPS`, waivers, trades, playoffs, draft mode). **MVP landed** at `/account/leagues/native` (name, teams, scoring preset, draft mode, team name) + join by invite code.
+2. Generate league `invite_code`; share link `/join/:code`. **Invite code shown after create**; deep-link `/join/:code` still TODO.
+3. Join flow: auth required → claim open seat → write TiDB team + Supabase link. **Landed** (`joinNativeLeague` server fn).
+4. Commissioner: rename teams, kick/open seat, edit settings until `draft_status` leaves `not_started` (then lock scoring/roster structure for the season; allow cosmetic edits). **TODO**
+5. Wire Active League / PlaybookShell to accept `platform: 'native'` tokens alongside synced connections. **Landed** (`native_league_links` merged into ActiveLeagueContext; host Fluid paths short-circuit for native).
 
 ### Phase 2 — Draft
 

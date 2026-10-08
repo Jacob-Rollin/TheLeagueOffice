@@ -57,6 +57,7 @@ async function loadWeekMatchups(input: {
 }): Promise<LeagueWeekMatchups | null> {
   let { leagueId } = input;
   const { week, currentWeek, platform } = input;
+  if (platform === "native") return null;
   const past = currentWeek != null && week < currentWeek;
   const isCurrent = currentWeek != null && week === currentWeek;
   const sleeperPlatform = isSleeperPlatform(platform);
