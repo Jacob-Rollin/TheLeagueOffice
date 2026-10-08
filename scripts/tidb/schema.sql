@@ -351,9 +351,9 @@ CREATE TABLE IF NOT EXISTS native_draft_queues (
   league_id CHAR(36) NOT NULL,
   team_id BIGINT NOT NULL,
   player_id VARCHAR(32) NOT NULL,
-  rank INT NOT NULL,
+  queue_rank INT NOT NULL,
   PRIMARY KEY (league_id, team_id, player_id),
-  INDEX idx_native_queue_order (league_id, team_id, rank)
+  INDEX idx_native_queue_order (league_id, team_id, queue_rank)
 );
 
 CREATE TABLE IF NOT EXISTS native_matchup_results (
