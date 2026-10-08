@@ -249,84 +249,92 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
           </Link>
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-xl bg-m-card text-m-card-fg">
-          <MobileWeekSelect week={activeWeek} onChange={setWeek} className="rounded-none" />
+        <div className={`relative mt-4${optimizePlan ? (showOptimized ? " mb-14" : " mb-8") : ""}`}>
+          <div className="overflow-hidden rounded-xl bg-m-card text-m-card-fg">
+            <MobileWeekSelect week={activeWeek} onChange={setWeek} className="rounded-none" />
 
-          <div className="px-4 pb-4 pt-3">
-            <p className="text-center font-display text-lg font-bold">
-              {opponent ? `vs. ${opponent.teamName}` : mine ? "Bye Week" : "Matchup"}
-            </p>
-            {matchupsLoading ? (
-              <p className="py-4 text-center text-sm text-m-muted">Loading matchup...</p>
-            ) : (
-              <div className="mt-2 flex items-center gap-3">
-                <MobileTeamLogo name={myTeam.team} logo={myTeam.logo} className="size-14" />
-                <div className="flex flex-1 items-center justify-center gap-3">
-                  <div className="text-right">
-                    <Score value={mine?.points ?? null} className="font-display text-[34px] font-extrabold italic leading-none" />
-                    <p className="mt-1 text-sm text-m-muted tabnum">{myProjected != null ? myProjected.toFixed(2) : "-"}</p>
+            <div className="px-4 pb-4 pt-3">
+              <p className="text-center font-display text-lg font-bold">
+                {opponent ? `vs. ${opponent.teamName}` : mine ? "Bye Week" : "Matchup"}
+              </p>
+              {matchupsLoading ? (
+                <p className="py-4 text-center text-sm text-m-muted">Loading matchup...</p>
+              ) : (
+                <div className="mt-2 flex items-center gap-3">
+                  <MobileTeamLogo name={myTeam.team} logo={myTeam.logo} className="size-14" />
+                  <div className="flex flex-1 items-center justify-center gap-3">
+                    <div className="text-right">
+                      <Score value={mine?.points ?? null} className="font-display text-[34px] font-extrabold italic leading-none" />
+                      <p className="mt-1 text-sm text-m-muted tabnum">{myProjected != null ? myProjected.toFixed(2) : "-"}</p>
+                    </div>
+                    <span className="font-display text-sm font-bold text-m-muted">vs</span>
+                    <div>
+                      <Score
+                        value={opponent?.points ?? null}
+                        className="font-display text-[34px] font-extrabold italic leading-none text-m-muted"
+                      />
+                      <p className="mt-1 text-sm text-m-muted tabnum">{oppProjected != null ? oppProjected.toFixed(2) : "-"}</p>
+                    </div>
                   </div>
-                  <span className="font-display text-sm font-bold text-m-muted">vs</span>
-                  <div>
-                    <Score
-                      value={opponent?.points ?? null}
-                      className="font-display text-[34px] font-extrabold italic leading-none text-m-muted"
-                    />
-                    <p className="mt-1 text-sm text-m-muted tabnum">{oppProjected != null ? oppProjected.toFixed(2) : "-"}</p>
-                  </div>
+                  <MobileTeamLogo name={opponent?.teamName ?? "?"} logo={opponent?.logo ?? null} className="size-14" />
                 </div>
-                <MobileTeamLogo name={opponent?.teamName ?? "?"} logo={opponent?.logo ?? null} className="size-14" />
-              </div>
-            )}
+              )}
+            </div>
+
+            <Link
+              to="/m/league/$leagueId/matchup"
+              params={{ leagueId }}
+              className="flex items-center justify-between border-t border-m-border px-4 py-3.5 font-display text-base font-semibold"
+            >
+              View Matchup
+              <span className="flex items-center gap-1 text-m-muted">
+                {standingIndex >= 0 ? `${ordinal(standingIndex + 1)} in league` : ""}
+                <ChevronRight className="size-5" />
+              </span>
+            </Link>
           </div>
 
-          <Link
-            to="/m/league/$leagueId/matchup"
-            params={{ leagueId }}
-            className="flex items-center justify-between border-t border-m-border px-4 py-3.5 font-display text-base font-semibold"
-          >
-            View Matchup
-            <span className="flex items-center gap-1 text-m-muted">
-              {standingIndex >= 0 ? `${ordinal(standingIndex + 1)} in league` : ""}
-              <ChevronRight className="size-5" />
-            </span>
-          </Link>
-        </div>
-      </section>
-
-      {optimizePlan ? (
-        <div className="relative z-10 -mt-4 flex flex-col items-center gap-2 px-4">
-          <button
-            type="button"
-            onClick={() => setShowOptimized((v) => !v)}
-            aria-pressed={showOptimized}
-            aria-label={
-              showOptimized
-                ? "Show your current set lineup"
-                : `Preview optimized lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
-            }
-            className="inline-flex overflow-hidden rounded-full shadow-[0_4px_14px_rgba(16,185,129,0.35)]"
-          >
-            <span className="bg-emerald-400 px-4 py-2.5 font-display text-base font-extrabold tabular-nums text-white">
-              + {optimizePlan.gain.toFixed(2)}
-            </span>
-            <span
-              className={
-                showOptimized
-                  ? "bg-emerald-800 px-5 py-2.5 font-display text-base font-extrabold uppercase tracking-wide text-white"
-                  : "bg-emerald-600 px-5 py-2.5 font-display text-base font-extrabold uppercase tracking-wide text-white"
-              }
-            >
-              {showOptimized ? "Optimized" : "Optimize"}
-            </span>
-          </button>
-          {showOptimized ? (
-            <p className="text-center text-xs text-m-muted">
-              Preview only — tap again for your set lineup
-            </p>
+          {optimizePlan ? (
+            <div className="pointer-events-none absolute left-1/2 top-full z-20 flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center px-4">
+              <button
+                type="button"
+                onClick={() => setShowOptimized((v) => !v)}
+                aria-pressed={showOptimized}
+                aria-label={
+                  showOptimized
+                    ? "Show your current set lineup"
+                    : `Preview optimized lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
+                }
+                className={
+                  "pointer-events-auto inline-flex items-stretch overflow-hidden rounded-[14px] " +
+                  "shadow-[0_3px_0_0_#1a3d2e,0_6px_12px_rgba(0,0,0,0.18)] " +
+                  "active:translate-y-px active:shadow-[0_2px_0_0_#1a3d2e,0_3px_8px_rgba(0,0,0,0.16)]"
+                }
+              >
+                {showOptimized ? (
+                  <span className="bg-[#2d5a47] px-7 py-[11px] font-display text-[17px] font-extrabold italic uppercase tracking-wide text-white">
+                    Optimized
+                  </span>
+                ) : (
+                  <>
+                    <span className="flex items-center bg-[#76c78c] px-4 py-[9px] font-display text-[22px] font-extrabold italic leading-none tabular-nums text-white">
+                      + {optimizePlan.gain.toFixed(2)}
+                    </span>
+                    <span className="flex items-center bg-[#2d5a47] px-5 py-[11px] font-display text-[15px] font-extrabold italic uppercase tracking-wide text-white">
+                      Optimize
+                    </span>
+                  </>
+                )}
+              </button>
+              {showOptimized ? (
+                <p className="mt-7 text-center text-xs text-white/85">
+                  Preview only — tap again for your set lineup
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </div>
-      ) : null}
+      </section>
 
       <LineupSection title="Starters" rows={lineup.starters} {...rowProps} />
       <LineupSection title="Bench" rows={lineup.bench} {...rowProps} />
