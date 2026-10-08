@@ -1,6 +1,5 @@
 /**
- * Server-only TiDB helpers for native leagues.
- * No UI routes or createServerFn wiring yet — schema + read/status only.
+ * Server-only TiDB helpers for native leagues (reads + admin list).
  */
 import {
   NATIVE_LEAGUE_TABLE_NAMES,
@@ -99,4 +98,37 @@ export async function countCommissionerNativeLeagues(userId: string): Promise<nu
     [uid],
   );
   return Number(rows[0]?.c ?? 0);
+}
+
+export type NativeLeagueAdminListRow = {
+  id: string;
+  season_year: number;
+  name: string;
+  invite_code: string;
+  commissioner_user_id: string;
+  status: string;
+  league_type: string;
+  team_count: number;
+  filled_teams: number;
+  current_week: number;
+  scoring_preset: string;
+  draft_mode: string;
+  draft_status: string;
+  created_at: string;
+};
+
+/** Admin dashboard listing — capped to keep Fluid/TiDB light. */
+export async function listNativeLeaguesForAdmin(limit = 500): Promise<NativeLeagueAdminListRow[]> {
+  if (!tidbConfigured()) return [];
+  const cap = Math.min(Math.max(Number(limit) || 500, 1), 1000);
+  return await tidbExecute<NativeLeagueAdminListRow>(
+    `SELECT l.id, l.season_year, l.name, l.invite_code, l.commissioner_user_id, l.status,
+            l.league_type, l.team_count, l.current_week, l.scoring_preset, l.draft_mode,
+            l.draft_status, l.created_at,
+            (SELECT COUNT(*) FROM native_teams t
+             WHERE t.league_id = l.id AND t.user_id IS NOT NULL) AS filled_teams
+     FROM native_leagues l
+     ORDER BY l.created_at DESC
+     LIMIT ${cap}`,
+  );
 }

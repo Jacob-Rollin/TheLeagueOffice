@@ -35,10 +35,15 @@ import {
   type ArticleRow,
 } from "@/lib/articles";
 import { generateInviteCode, listInviteCodes, type InviteCodeRow } from "@/lib/inviteCodes";
+import {
+  adminDeleteNativeLeague,
+  adminListNativeLeagues,
+  type AdminNativeLeagueRow,
+} from "@/lib/native-league.functions";
 import { cn } from "@/lib/utils";
 
 type AdminSearch = {
-  tab?: "invites" | "articles" | "users" | undefined;
+  tab?: "invites" | "articles" | "users" | "leagues" | undefined;
   edit?: string | undefined;
 };
 
@@ -50,9 +55,11 @@ export const Route = createFileRoute("/account/admin")({
         ? "articles"
         : search["tab"] === "users"
           ? "users"
-          : search["tab"] === "invites"
-            ? "invites"
-            : undefined,
+          : search["tab"] === "leagues"
+            ? "leagues"
+            : search["tab"] === "invites"
+              ? "invites"
+              : undefined,
     edit: typeof search["edit"] === "string" ? search["edit"] : undefined,
   }),
   head: () => ({
@@ -79,7 +86,7 @@ const buttonClass =
 const blueButton =
   "rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-60";
 
-type SubTab = "invites" | "articles" | "users";
+type SubTab = "invites" | "articles" | "users" | "leagues";
 
 type ProfileAdminRow = {
   id: string;
@@ -137,6 +144,9 @@ function AdminPage() {
         <button type="button" className={tabClass("users")} onClick={() => setTab("users")}>
           Users
         </button>
+        <button type="button" className={tabClass("leagues")} onClick={() => setTab("leagues")}>
+          Leagues
+        </button>
         <Link
           to="/admin/projection-analytics"
           className="border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -158,6 +168,8 @@ function AdminPage() {
           authorName={user?.email ?? "The League Office"}
           initialEditId={search.edit ?? null}
         />
+      ) : tab === "leagues" ? (
+        <LeaguesManager currentUserId={user?.id ?? null} />
       ) : (
         <UsersManager currentUserId={user?.id ?? null} currentUserEmail={user?.email ?? null} />
       )}
@@ -428,6 +440,217 @@ function UsersManager({
               }}
             >
               {removing ? "Removing…" : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
+  );
+}
+
+function LeaguesManager({ currentUserId }: { currentUserId: string | null }) {
+  const { data: isAdmin, isFetched, isError } = useIsAdmin(currentUserId);
+  const queryClient = useQueryClient();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AdminNativeLeagueRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const authorized = isFetched && !isError && isAdmin === true && Boolean(currentUserId);
+
+  const { data: leagues, isLoading, error } = useQuery({
+    queryKey: ["admin-native-leagues"],
+    enabled: authorized,
+    retry: false,
+    queryFn: async (): Promise<AdminNativeLeagueRow[]> => adminListNativeLeagues(),
+  });
+
+  const rows = leagues ?? [];
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ["admin-native-leagues"] });
+  };
+
+  const requestDeleteLeague = (row: AdminNativeLeagueRow) => {
+    setPendingDelete(row);
+  };
+
+  const deleteLeague = async (row: AdminNativeLeagueRow) => {
+    setDeleting(true);
+    setBusyId(row.id);
+    try {
+      const result = await adminDeleteNativeLeague({ data: { leagueId: row.id } });
+      if (!result.ok) throw new Error(result.error);
+      toast.success("Native league deleted.");
+      setPendingDelete(null);
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete native league.");
+    } finally {
+      setBusyId(null);
+      setDeleting(false);
+    }
+  };
+
+  if (!isFetched) {
+    return (
+      <section className={cardClass}>
+        <p className="text-sm text-muted-foreground">Loading authorization…</p>
+      </section>
+    );
+  }
+
+  if (!authorized) {
+    return (
+      <section className={cardClass}>
+        <p className="font-display text-sm uppercase tracking-wide text-destructive">
+          Access denied. Admin privileges are required to manage native leagues.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className={cardClass}>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Leagues</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Review native League Office leagues and permanently delete them when needed.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 overflow-x-auto rounded-lg border border-border">
+        <table className="w-full min-w-[720px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/40">
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                League
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Invite
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Season
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Status
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Teams
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Commissioner
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={7} className="px-3 py-6 text-muted-foreground">
+                  Loading leagues…
+                </td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={7} className="px-3 py-6 text-destructive">
+                  {error instanceof Error ? error.message : "Could not load native leagues."}
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-3 py-6 text-muted-foreground">
+                  No native leagues created yet.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row) => {
+                const commissioner =
+                  row.commissionerName?.trim() || row.commissionerEmail || "Unknown commissioner";
+                return (
+                  <tr key={row.id} className="border-t border-border">
+                    <td className="px-3 py-2">
+                      <div className="min-w-0">
+                        <span className="block truncate font-medium text-foreground">{row.name}</span>
+                        <span className="block truncate text-xs capitalize text-muted-foreground">
+                          {row.leagueType} · {row.scoringPreset} · {row.draftMode}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs tracking-wide text-muted-foreground">
+                      {row.inviteCode}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{row.seasonYear}</td>
+                    <td className="px-3 py-2">
+                      <span className="inline-flex rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium capitalize text-muted-foreground">
+                        {row.status}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {row.filledTeams}/{row.teamCount}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      <span className="block truncate" title={row.commissionerEmail ?? undefined}>
+                        {commissioner}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          disabled={busyId === row.id}
+                          className={cn(blueButton, "px-3 py-1.5 text-xs")}
+                        >
+                          {busyId === row.id ? "Working…" : "Actions"}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem
+                            className="font-medium text-red-600 focus:text-red-700"
+                            onSelect={() => {
+                              requestDeleteLeague(row);
+                            }}
+                          >
+                            Delete League
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <AlertDialog
+        open={pendingDelete != null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this league?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `Are you sure you want to delete "${pendingDelete.name}"? All teams, rosters, drafts, and membership links will be permanently removed. This cannot be undone.`
+                : "Are you sure you want to delete this native league? This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting || !pendingDelete}
+              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
+              onClick={(event) => {
+                event.preventDefault();
+                if (pendingDelete) void deleteLeague(pendingDelete);
+              }}
+            >
+              {deleting ? "Deleting…" : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

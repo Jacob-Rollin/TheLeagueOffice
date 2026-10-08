@@ -1,5 +1,5 @@
 /**
- * Server-only native league create / join mutations (TiDB + Supabase links).
+ * Server-only native league create / join / admin mutations (TiDB + Supabase links).
  */
 import { randomUUID } from "node:crypto";
 
@@ -9,8 +9,15 @@ import {
   normalizeNativeLeagueSettings,
   type NativeLeagueSettingsInput,
 } from "@/lib/native-league-settings";
+import { NATIVE_LEAGUE_TABLE_NAMES } from "@/lib/native-league-ddl.server";
 import { getNativeLeagueByInviteCode, countCommissionerNativeLeagues } from "@/lib/native-league.server";
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
+
+/** Child tables first; `native_leagues` last. No FKs in DDL, but keep a stable order. */
+const NATIVE_LEAGUE_DELETE_TABLES = [
+  ...NATIVE_LEAGUE_TABLE_NAMES.filter((name) => name !== "native_leagues"),
+  "native_leagues",
+] as const;
 
 export type NativeLeagueMutationResult =
   | {
@@ -308,6 +315,43 @@ export async function joinNativeLeagueForUser(
       /* ignore */
     }
     const message = error instanceof Error ? error.message : "Join league failed";
+    return { ok: false, error: message };
+  }
+}
+
+export type AdminDeleteNativeLeagueResult = { ok: true } | { ok: false; error: string };
+
+/** Cascading admin delete: all TiDB `native_*` rows for the league + Supabase membership links. */
+export async function adminDeleteNativeLeague(leagueId: string): Promise<AdminDeleteNativeLeagueResult> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const id = String(leagueId ?? "").trim();
+  if (!id) return { ok: false, error: "Missing league id" };
+
+  const existing = await tidbExecute<{ id: string }>(
+    `SELECT id FROM native_leagues WHERE id = ? LIMIT 1`,
+    [id],
+  );
+  if (!existing[0]) return { ok: false, error: "League not found" };
+
+  try {
+    for (const table of NATIVE_LEAGUE_DELETE_TABLES) {
+      if (table === "native_leagues") {
+        await tidbExecute(`DELETE FROM native_leagues WHERE id = ?`, [id]);
+      } else {
+        await tidbExecute(`DELETE FROM \`${table}\` WHERE league_id = ?`, [id]);
+      }
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error: linkError } = await supabaseAdmin
+      .from("native_league_links")
+      .delete()
+      .eq("native_league_id", id);
+    if (linkError) throw new Error(linkError.message);
+
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Delete league failed";
     return { ok: false, error: message };
   }
 }
