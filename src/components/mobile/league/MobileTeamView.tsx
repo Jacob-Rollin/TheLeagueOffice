@@ -268,8 +268,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
               week={activeWeek}
               onChange={setWeek}
               centered
-              // Match the card face (no m-select gray strip) — same as pre-center look in-card.
-              className="rounded-none bg-m-card"
+              className="rounded-none"
             />
 
             <div className="px-4 pb-4 pt-3">
