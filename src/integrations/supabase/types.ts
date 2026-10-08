@@ -691,6 +691,47 @@ export type Database = {
           },
         ]
       }
+      native_league_links: {
+        Row: {
+          created_at: string
+          id: string
+          label: string | null
+          native_league_id: string
+          role: string
+          season_year: number
+          team_id: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          native_league_id: string
+          role?: string
+          season_year: number
+          team_id?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          native_league_id?: string
+          role?: string
+          season_year?: number
+          team_id?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "native_league_links_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
