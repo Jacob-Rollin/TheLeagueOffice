@@ -63,7 +63,13 @@ export CRON_SECRET="paste-from-vercel-here"
 
 # Row count / health
 curl -fsSL -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/admin/tidb-migrate"
-# expect: "playerWarehouseCount": 4000+ 
+# expect: "playerWarehouseCount": 4000+
+# expect (after native leagues DDL ships): "nativeLeagues": { "tablesReady": true, ... }
+
+# Schema-only (creates warehouse + native_* tables; no seed):
+# curl -fsSL -X POST "$APP_URL/api/admin/tidb-migrate" \
+#   -H "Authorization: Bearer $CRON_SECRET" -H "Content-Type: application/json" \
+#   -d '{"action":"schema"}' 
 
 # Public CDN export (no auth)
 curl -fsSL "$APP_URL/api/data/players-export" | head -c 200
