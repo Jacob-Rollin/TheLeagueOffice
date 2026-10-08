@@ -42,15 +42,25 @@ type Pair = { home: WeeklyMatchupEntry; away: WeeklyMatchupEntry; mine: boolean 
 const record = (r: StandingRow | undefined) =>
   r ? `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ""}` : "";
 
-export function MobileMatchupView() {
+export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}) {
   const { data: playersPayload } = useSleeperPlayers();
   const players = useMemo(() => playersPayload?.players ?? [], [playersPayload]);
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const { myTeam, rosterPositions } = useLeagueRosters(players);
   const { rows: standingsRows } = useMobileLeagueStandings();
 
-  const [week, setWeek] = useState<number | null>(null);
+  const [week, setWeek] = useState<number | null>(() =>
+    initialWeek != null && initialWeek >= 1
+      ? Math.min(initialWeek, REGULAR_SEASON_WEEKS)
+      : null,
+  );
   const { nflWeek, projectFor, rankFor, sleeperIdFor } = useLeagueProjections(week);
+  // Apply week from Team → Matchup (?week=) when the search param changes.
+  useEffect(() => {
+    if (initialWeek != null && initialWeek >= 1) {
+      setWeek(Math.min(initialWeek, REGULAR_SEASON_WEEKS));
+    }
+  }, [initialWeek]);
   useEffect(() => {
     if (week == null && nflWeek != null) setWeek(Math.min(nflWeek, REGULAR_SEASON_WEEKS));
   }, [nflWeek, week]);

@@ -256,7 +256,8 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
       <div
         className={
           "relative z-10 -mt-[8.5rem] px-4" +
-          (optimizePlan ? (showOptimized ? " mb-12" : " mb-8") : " mb-2")
+          // Optimize badge is absolutely half-below the card; Optimized + hint need more room.
+          (optimizePlan ? (showOptimized ? " mb-28" : " mb-12") : " mb-2")
         }
       >
         <div className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_4px_16px_rgba(0,0,0,0.12)]">
@@ -298,6 +299,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
           <Link
             to="/m/league/$leagueId/matchup"
             params={{ leagueId }}
+            search={{ week: activeWeek }}
             className="flex items-center justify-between border-t border-m-border px-4 py-3.5 font-display text-base font-semibold"
           >
             View Matchup
