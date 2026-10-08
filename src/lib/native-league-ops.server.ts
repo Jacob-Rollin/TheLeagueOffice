@@ -10,11 +10,14 @@ import {
   normalizeNativeLeagueSettings,
   packRosterSlotsJson,
   parseIrEligibility,
+  type NativeCommissionerSettings,
   type NativeDraftMode,
   type NativeIrEligibility,
   type NativeLeagueSettingsInput,
   type NativeScoringPreset,
 } from "@/lib/native-league-settings";
+
+export type { NativeCommissionerSettings };
 import { NATIVE_LEAGUE_TABLE_NAMES } from "@/lib/native-league-ddl.server";
 import {
   buildNativeRoundRobinSchedule,
@@ -404,7 +407,120 @@ type LeagueCoreRow = {
   updated_at: string | null;
   roster_slots?: string | Record<string, unknown> | null;
   playoff_start_week?: number;
+  season_start_week?: number;
+  is_public?: number | boolean;
+  auto_activate_next_year?: number | boolean;
+  playoff_teams?: number;
+  playoff_matchup_length?: string;
+  playoff_week_pair?: string;
+  standings_tiebreaker?: string;
+  allow_matchup_ties?: number | boolean;
+  matchup_tiebreaker_slot?: string;
+  divisions_enabled?: number | boolean;
+  waiver_type?: string;
+  waiver_budget?: number | null;
+  waiver_period_days?: number;
+  post_draft_player_status?: string;
+  lock_fa_on_gametime?: number | boolean;
+  max_adds_per_week?: number | null;
+  max_adds_per_season?: number | null;
+  undroppable_top_players?: number | boolean;
+  roster_lock_type?: string;
+  trade_deadline_week?: number | null;
+  trade_review_hours?: number;
+  trade_veto_mode?: string;
+  max_trades_per_season?: number | null;
+  draft_format?: string;
+  draft_order_type?: string;
+  draft_pick_time_limit_sec?: number;
+  keepers_per_team?: number;
+  keeper_note?: string | null;
+  scoring_settings?: string | Record<string, unknown> | null;
 };
+
+function asBool(v: unknown, fallback = false): boolean {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  return fallback;
+}
+
+function parseScoringSettingsJson(raw: unknown): Record<string, number> {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return defaultNativeScoringSettings();
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return defaultNativeScoringSettings();
+  }
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    const n = Number(v);
+    if (Number.isFinite(n)) out[k] = n;
+  }
+  return Object.keys(out).length ? out : defaultNativeScoringSettings();
+}
+
+function commissionerSettingsFromLeague(
+  league: LeagueCoreRow,
+  canManage: boolean,
+): NativeCommissionerSettings {
+  const rosterSlotsRaw = parseRosterSlots(league.roster_slots);
+  const slotCounts = parseRosterSlotCounts(rosterSlotsRaw ?? undefined);
+  const rosterSlots: Record<string, number> = {};
+  for (const [k, v] of Object.entries(slotCounts)) {
+    if (v != null && v > 0) rosterSlots[k] = v;
+  }
+  const draftStatus = String(league.draft_status ?? "");
+  return {
+    name: league.name,
+    inviteCode: league.invite_code,
+    leagueId: league.id,
+    seasonYear: Number(league.season_year),
+    teamCount: Number(league.team_count),
+    seasonStartWeek: Math.max(1, Number(league.season_start_week ?? 1) || 1),
+    isPublic: asBool(league.is_public, false),
+    autoActivateNextYear: asBool(league.auto_activate_next_year, true),
+    scoringPreset: String(league.scoring_preset ?? "half"),
+    scoringSettings: parseScoringSettingsJson(league.scoring_settings),
+    playoffTeams: Number(league.playoff_teams ?? 4) || 4,
+    playoffMatchupLength: String(league.playoff_matchup_length ?? "one"),
+    playoffWeekPair: String(league.playoff_week_pair ?? "15-17"),
+    standingsTiebreaker: String(league.standings_tiebreaker ?? "points_for"),
+    allowMatchupTies: asBool(league.allow_matchup_ties, false),
+    matchupTiebreakerSlot: String(league.matchup_tiebreaker_slot ?? "Bench"),
+    divisionsEnabled: asBool(league.divisions_enabled, false),
+    waiverType: String(league.waiver_type ?? "rolling"),
+    waiverBudget: league.waiver_budget == null ? null : Number(league.waiver_budget),
+    waiverPeriodDays: Number(league.waiver_period_days ?? 1) || 1,
+    postDraftPlayerStatus: String(league.post_draft_player_status ?? "free_agents"),
+    lockFaOnGametime: asBool(league.lock_fa_on_gametime, true),
+    maxAddsPerWeek: league.max_adds_per_week == null ? null : Number(league.max_adds_per_week),
+    maxAddsPerSeason: league.max_adds_per_season == null ? null : Number(league.max_adds_per_season),
+    undroppableTopPlayers: asBool(league.undroppable_top_players, false),
+    rosterLockType: String(league.roster_lock_type ?? "game_time"),
+    tradeDeadlineWeek:
+      league.trade_deadline_week == null ? null : Number(league.trade_deadline_week),
+    tradeReviewHours: Number(league.trade_review_hours ?? 24) || 24,
+    tradeVetoMode: String(league.trade_veto_mode ?? "commissioner"),
+    maxTradesPerSeason:
+      league.max_trades_per_season == null ? null : Number(league.max_trades_per_season),
+    draftMode: String(league.draft_mode ?? "offline"),
+    draftFormat: String(league.draft_format ?? "standard"),
+    draftOrderType: String(league.draft_order_type ?? "snake"),
+    draftPickTimeLimitSec: Number(league.draft_pick_time_limit_sec ?? 90) || 90,
+    keepersPerTeam: Number(league.keepers_per_team ?? 0) || 0,
+    keeperNote: league.keeper_note == null ? null : String(league.keeper_note),
+    rosterSlots,
+    irEligibility: parseIrEligibility(rosterSlotsRaw),
+    rosterCapacity: countActiveRosterCapacity(slotCounts),
+    settingsLocked: draftStatus !== "not_started" && draftStatus !== "scheduled",
+    canManage,
+  };
+}
 
 function parseRosterSlots(raw: string | Record<string, unknown> | null | undefined): Record<string, unknown> | null {
   if (typeof raw === "string") {
@@ -445,7 +561,14 @@ function summaryFromParts(
 }
 
 const LEAGUE_CORE_SELECT = `id, name, invite_code, season_year, status, league_type, team_count, current_week,
-            scoring_preset, draft_mode, draft_status, created_at, updated_at, roster_slots, playoff_start_week`;
+            scoring_preset, draft_mode, draft_status, created_at, updated_at, roster_slots, playoff_start_week,
+            season_start_week, is_public, auto_activate_next_year, playoff_teams, playoff_matchup_length,
+            playoff_week_pair, standings_tiebreaker, allow_matchup_ties, matchup_tiebreaker_slot,
+            divisions_enabled, waiver_type, waiver_budget, waiver_period_days, post_draft_player_status,
+            lock_fa_on_gametime, max_adds_per_week, max_adds_per_season, undroppable_top_players,
+            roster_lock_type, trade_deadline_week, trade_review_hours, trade_veto_mode, max_trades_per_season,
+            draft_format, draft_order_type, draft_pick_time_limit_sec, keepers_per_team, keeper_note,
+            scoring_settings`;
 
 function parsePlayerIdList(raw: unknown): string[] {
   let value: unknown = raw;
@@ -669,6 +792,8 @@ export type NativeLeagueBoard = {
   /** Active roster capacity (excludes IR). */
   rosterCapacity: number;
   irEligibility: NativeIrEligibility;
+  /** Full commissioner settings snapshot for mobile / desktop tools. */
+  commissioner: NativeCommissionerSettings;
 };
 
 type TeamDbRow = {
@@ -777,6 +902,7 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
     rosterSlots,
     rosterCapacity: countActiveRosterCapacity(slotCounts),
     irEligibility: parseIrEligibility(rosterSlotsRaw),
+    commissioner: commissionerSettingsFromLeague(league, isCommishRole(summary.role)),
   };
 }
 
@@ -865,17 +991,49 @@ export async function kickNativeTeamMemberForUser(
   return { ok: true };
 }
 
+export type NativeCommissionerPatch = {
+  name?: string;
+  scoringPreset?: NativeScoringPreset;
+  scoringSettings?: Record<string, number>;
+  draftMode?: NativeDraftMode;
+  draftFormat?: string;
+  draftOrderType?: string;
+  draftPickTimeLimitSec?: number;
+  benchSpots?: number;
+  irSpots?: number;
+  irEligibility?: NativeIrEligibility;
+  seasonStartWeek?: number;
+  isPublic?: boolean;
+  autoActivateNextYear?: boolean;
+  playoffTeams?: number;
+  playoffMatchupLength?: string;
+  playoffWeekPair?: string;
+  standingsTiebreaker?: string;
+  allowMatchupTies?: boolean;
+  matchupTiebreakerSlot?: string;
+  divisionsEnabled?: boolean;
+  waiverType?: string;
+  waiverBudget?: number | null;
+  waiverPeriodDays?: number;
+  postDraftPlayerStatus?: string;
+  lockFaOnGametime?: boolean;
+  maxAddsPerWeek?: number | null;
+  maxAddsPerSeason?: number | null;
+  undroppableTopPlayers?: boolean;
+  rosterLockType?: string;
+  tradeDeadlineWeek?: number | null;
+  tradeReviewHours?: number;
+  tradeVetoMode?: string;
+  maxTradesPerSeason?: number | null;
+  keepersPerTeam?: number;
+  keeperNote?: string | null;
+  teamCount?: number;
+};
+
 export async function updateNativeLeagueBasicsForUser(
   userId: string,
   linkId: string,
-  input: {
-    name?: string;
-    scoringPreset?: NativeScoringPreset;
-    draftMode?: NativeDraftMode;
-    benchSpots?: number;
-    irSpots?: number;
-    irEligibility?: NativeIrEligibility;
-  },
+  input: NativeCommissionerPatch,
 ): Promise<NativeMutationResult> {
   if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
   const membership = await assertMembershipLink(userId, linkId);
@@ -900,7 +1058,9 @@ export async function updateNativeLeagueBasicsForUser(
 
   const scoringPreset = input.scoringPreset;
   let scoringSettings: Record<string, number> | null = null;
-  if (scoringPreset === "ppr") scoringSettings = { ...defaultNativeScoringSettings(), rec: 1 };
+  if (input.scoringSettings && typeof input.scoringSettings === "object") {
+    scoringSettings = { ...defaultNativeScoringSettings(), ...input.scoringSettings };
+  } else if (scoringPreset === "ppr") scoringSettings = { ...defaultNativeScoringSettings(), rec: 1 };
   else if (scoringPreset === "std") scoringSettings = { ...defaultNativeScoringSettings(), rec: 0 };
   else if (scoringPreset === "half") scoringSettings = defaultNativeScoringSettings();
 
@@ -909,17 +1069,119 @@ export async function updateNativeLeagueBasicsForUser(
 
   const sets: string[] = [];
   const params: unknown[] = [];
-  if (name != null) {
-    sets.push("name = ?");
-    params.push(name);
-  }
+  const push = (col: string, value: unknown) => {
+    sets.push(`${col} = ?`);
+    params.push(value);
+  };
+
+  if (name != null) push("name", name);
   if (scoringPreset && scoringSettings) {
-    sets.push("scoring_preset = ?", "scoring_settings = ?");
-    params.push(scoringPreset, JSON.stringify(scoringSettings));
+    push("scoring_preset", scoringPreset);
+    push("scoring_settings", JSON.stringify(scoringSettings));
+  } else if (scoringSettings && !scoringPreset) {
+    push("scoring_preset", "custom");
+    push("scoring_settings", JSON.stringify(scoringSettings));
   }
-  if (draftMode) {
-    sets.push("draft_mode = ?");
-    params.push(draftMode);
+  if (draftMode) push("draft_mode", draftMode);
+  if (input.draftFormat === "standard" || input.draftFormat === "salary_cap") {
+    if (input.draftFormat === "salary_cap") {
+      return { ok: false, error: "Salary Cap draft is not available in v1" };
+    }
+    push("draft_format", input.draftFormat);
+  }
+  if (input.draftOrderType === "snake" || input.draftOrderType === "linear") {
+    push("draft_order_type", input.draftOrderType);
+  }
+  if (input.draftPickTimeLimitSec != null) {
+    push(
+      "draft_pick_time_limit_sec",
+      Math.max(15, Math.min(600, Math.floor(Number(input.draftPickTimeLimitSec) || 90))),
+    );
+  }
+  if (input.seasonStartWeek != null) {
+    push("season_start_week", Math.max(1, Math.min(5, Math.floor(Number(input.seasonStartWeek) || 1))));
+  }
+  if (input.isPublic != null) push("is_public", input.isPublic ? 1 : 0);
+  if (input.autoActivateNextYear != null) {
+    push("auto_activate_next_year", input.autoActivateNextYear ? 1 : 0);
+  }
+  if (input.playoffTeams != null) {
+    push("playoff_teams", Math.max(0, Math.min(8, Math.floor(Number(input.playoffTeams) || 0))));
+  }
+  if (input.playoffMatchupLength != null) {
+    push("playoff_matchup_length", String(input.playoffMatchupLength).slice(0, 32));
+  }
+  if (input.playoffWeekPair != null) {
+    push("playoff_week_pair", String(input.playoffWeekPair).slice(0, 16));
+  }
+  if (input.standingsTiebreaker != null) {
+    push("standings_tiebreaker", String(input.standingsTiebreaker).slice(0, 32));
+  }
+  if (input.allowMatchupTies != null) push("allow_matchup_ties", input.allowMatchupTies ? 1 : 0);
+  if (input.matchupTiebreakerSlot != null) {
+    push("matchup_tiebreaker_slot", String(input.matchupTiebreakerSlot).slice(0, 8));
+  }
+  if (input.divisionsEnabled != null) push("divisions_enabled", input.divisionsEnabled ? 1 : 0);
+  if (input.waiverType != null) push("waiver_type", String(input.waiverType).slice(0, 16));
+  if (input.waiverBudget !== undefined) {
+    push("waiver_budget", input.waiverBudget == null ? null : Math.max(0, Math.floor(Number(input.waiverBudget))));
+  }
+  if (input.waiverPeriodDays != null) {
+    push("waiver_period_days", Math.max(0, Math.min(4, Math.floor(Number(input.waiverPeriodDays) || 0))));
+  }
+  if (input.postDraftPlayerStatus != null) {
+    push("post_draft_player_status", String(input.postDraftPlayerStatus).slice(0, 32));
+  }
+  if (input.lockFaOnGametime != null) push("lock_fa_on_gametime", input.lockFaOnGametime ? 1 : 0);
+  if (input.maxAddsPerWeek !== undefined) {
+    push(
+      "max_adds_per_week",
+      input.maxAddsPerWeek == null ? null : Math.max(0, Math.floor(Number(input.maxAddsPerWeek))),
+    );
+  }
+  if (input.maxAddsPerSeason !== undefined) {
+    push(
+      "max_adds_per_season",
+      input.maxAddsPerSeason == null ? null : Math.max(0, Math.floor(Number(input.maxAddsPerSeason))),
+    );
+  }
+  if (input.undroppableTopPlayers != null) {
+    push("undroppable_top_players", input.undroppableTopPlayers ? 1 : 0);
+  }
+  if (input.rosterLockType != null) push("roster_lock_type", String(input.rosterLockType).slice(0, 16));
+  if (input.tradeDeadlineWeek !== undefined) {
+    push(
+      "trade_deadline_week",
+      input.tradeDeadlineWeek == null
+        ? null
+        : Math.max(1, Math.min(18, Math.floor(Number(input.tradeDeadlineWeek)))),
+    );
+  }
+  if (input.tradeReviewHours != null) {
+    push("trade_review_hours", Math.max(0, Math.min(168, Math.floor(Number(input.tradeReviewHours) || 0))));
+  }
+  if (input.tradeVetoMode != null) push("trade_veto_mode", String(input.tradeVetoMode).slice(0, 16));
+  if (input.maxTradesPerSeason !== undefined) {
+    push(
+      "max_trades_per_season",
+      input.maxTradesPerSeason == null ? null : Math.max(0, Math.floor(Number(input.maxTradesPerSeason))),
+    );
+  }
+  if (input.keepersPerTeam != null) {
+    const k = Math.floor(Number(input.keepersPerTeam) || 0);
+    if (k > 0) return { ok: false, error: "Keepers are not enabled in v1 (must be 0)" };
+    push("keepers_per_team", 0);
+  }
+  if (input.keeperNote !== undefined) {
+    push("keeper_note", input.keeperNote == null ? null : String(input.keeperNote).slice(0, 2000));
+  }
+  if (input.teamCount != null) {
+    const nextCount = Math.max(4, Math.min(20, Math.floor(Number(input.teamCount) || 10)));
+    const current = Number(league.team_count);
+    if (nextCount !== current) {
+      // Seat resize is a separate flow; reject size changes here for safety.
+      return { ok: false, error: "Changing team count is not supported from this screen yet" };
+    }
   }
 
   const touchRoster =
@@ -934,10 +1196,8 @@ export async function updateNativeLeagueBasicsForUser(
     if (input.irSpots != null) {
       merged.IR = Math.max(0, Math.min(5, Math.floor(Number(input.irSpots) || 0)));
     }
-    const irEligibility =
-      input.irEligibility ?? parseIrEligibility(raw);
-    sets.push("roster_slots = ?");
-    params.push(JSON.stringify(packRosterSlotsJson(merged, irEligibility)));
+    const irEligibility = input.irEligibility ?? parseIrEligibility(raw);
+    push("roster_slots", JSON.stringify(packRosterSlotsJson(merged, irEligibility)));
   }
 
   if (!sets.length) return { ok: true };

@@ -1,10 +1,12 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
+import { MobileCommissionerTools } from "./commissioner/MobileCommissionerTools";
 import { useMobileTheme, type MobileThemePreference } from "./MobileThemeContext";
 
 const THEME_OPTIONS: { value: MobileThemePreference; label: string }[] = [
@@ -65,59 +67,78 @@ function SettingsCard({ title, action, children }: { title: string; action?: Rea
 function MobileSettingsContent({ onNavigate }: { onNavigate: () => void }) {
   const { preference, setPreference } = useMobileTheme();
   const { user, signOut } = useAuth();
+  const { activeLeague } = useActiveLeague();
   const navigate = useNavigate();
+  const [commishOpen, setCommishOpen] = useState(false);
   const current = THEME_OPTIONS.find((o) => o.value === preference) ?? THEME_OPTIONS[0]!;
 
   return (
-    <main className="space-y-3 px-2.5 py-3 pb-10">
-      <SettingsCard
-        title="Account"
-        action={
-          <button
-            type="button"
-            className={outlineButton}
-            onClick={async () => {
-              await signOut();
-              onNavigate();
-              void navigate({ to: "/" });
-            }}
-          >
-            Log Out
-          </button>
-        }
-      >
-        <Link to="/account" onClick={onNavigate} className="flex items-center justify-between gap-3 py-1">
-          <span className="truncate text-base">{user?.email ?? "Signed in"}</span>
-          <ChevronRight className="size-5 shrink-0" />
-        </Link>
-      </SettingsCard>
-
-      <SettingsCard title="App Settings">
-        <div className="flex items-center justify-between gap-4">
-          <span className="text-base">Theme</span>
-          <label
-            className={cn(
-              outlineButton,
-              "relative flex w-48 items-center justify-between font-sans text-base font-normal",
-            )}
-          >
-            {current.label}
-            <ChevronDown className="size-5" />
-            <select
-              aria-label="Theme"
-              value={preference}
-              onChange={(e) => setPreference(e.target.value as MobileThemePreference)}
-              className="absolute inset-0 cursor-pointer opacity-0"
+    <>
+      {commishOpen ? <MobileCommissionerTools onClose={() => setCommishOpen(false)} /> : null}
+      <main className="space-y-3 px-2.5 py-3 pb-10">
+        <SettingsCard
+          title="Account"
+          action={
+            <button
+              type="button"
+              className={outlineButton}
+              onClick={async () => {
+                await signOut();
+                onNavigate();
+                void navigate({ to: "/" });
+              }}
             >
-              {THEME_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </SettingsCard>
-    </main>
+              Log Out
+            </button>
+          }
+        >
+          <Link to="/account" onClick={onNavigate} className="flex items-center justify-between gap-3 py-1">
+            <span className="truncate text-base">{user?.email ?? "Signed in"}</span>
+            <ChevronRight className="size-5 shrink-0" />
+          </Link>
+        </SettingsCard>
+
+        {activeLeague ? (
+          <SettingsCard title="League">
+            <p className="mb-2 truncate text-sm text-m-muted">{activeLeague.name}</p>
+            <button
+              type="button"
+              onClick={() => setCommishOpen(true)}
+              className="flex w-full items-center justify-between gap-3 py-1 text-left"
+            >
+              <span className="text-base">Commissioner Tools</span>
+              <ChevronRight className="size-5 shrink-0" />
+            </button>
+          </SettingsCard>
+        ) : null}
+
+        <SettingsCard title="App Settings">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-base">Theme</span>
+            <label
+              className={cn(
+                outlineButton,
+                "relative flex w-48 items-center justify-between font-sans text-base font-normal",
+              )}
+            >
+              {current.label}
+              <ChevronDown className="size-5" />
+              <select
+                aria-label="Theme"
+                value={preference}
+                onChange={(e) => setPreference(e.target.value as MobileThemePreference)}
+                className="absolute inset-0 cursor-pointer opacity-0"
+              >
+                {THEME_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </SettingsCard>
+      </main>
+    </>
   );
 }

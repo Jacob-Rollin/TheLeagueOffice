@@ -74,6 +74,51 @@ export const NATIVE_LEAGUE_MIN_TEAMS = 4;
 export const NATIVE_LEAGUE_MAX_TEAMS = 20;
 export const NATIVE_MAX_COMMISSIONER_LEAGUES = 3;
 
+/** Snapshot used by mobile/desktop Commissioner Tools (client-safe). */
+export type NativeCommissionerSettings = {
+  name: string;
+  inviteCode: string;
+  leagueId: string;
+  seasonYear: number;
+  teamCount: number;
+  seasonStartWeek: number;
+  isPublic: boolean;
+  autoActivateNextYear: boolean;
+  scoringPreset: string;
+  scoringSettings: Record<string, number>;
+  playoffTeams: number;
+  playoffMatchupLength: string;
+  playoffWeekPair: string;
+  standingsTiebreaker: string;
+  allowMatchupTies: boolean;
+  matchupTiebreakerSlot: string;
+  divisionsEnabled: boolean;
+  waiverType: string;
+  waiverBudget: number | null;
+  waiverPeriodDays: number;
+  postDraftPlayerStatus: string;
+  lockFaOnGametime: boolean;
+  maxAddsPerWeek: number | null;
+  maxAddsPerSeason: number | null;
+  undroppableTopPlayers: boolean;
+  rosterLockType: string;
+  tradeDeadlineWeek: number | null;
+  tradeReviewHours: number;
+  tradeVetoMode: string;
+  maxTradesPerSeason: number | null;
+  draftMode: string;
+  draftFormat: string;
+  draftOrderType: string;
+  draftPickTimeLimitSec: number;
+  keepersPerTeam: number;
+  keeperNote: string | null;
+  rosterSlots: Record<string, number>;
+  irEligibility: NativeIrEligibility;
+  rosterCapacity: number;
+  settingsLocked: boolean;
+  canManage: boolean;
+};
+
 /** Half-PPR default scoring (Sleeper keys). */
 export function defaultNativeScoringSettings(): Record<string, number> {
   return {

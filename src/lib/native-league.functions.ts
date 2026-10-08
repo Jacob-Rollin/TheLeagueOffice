@@ -244,39 +244,68 @@ export const kickNativeTeamMember = createServerFn({ method: "POST" })
 
 export const updateNativeLeagueBasics = createServerFn({ method: "POST" })
   .middleware([attachSupabaseAuth, requireSupabaseAuth])
-  .inputValidator(
-    (input: {
-      linkId: string;
-      name?: string;
-      scoringPreset?: NativeScoringPreset;
-      draftMode?: NativeDraftMode;
-      benchSpots?: number;
-      irSpots?: number;
-      irEligibility?: NativeIrEligibility;
-    }) => ({
-      linkId: String(input.linkId ?? "").trim().slice(0, 36),
-      name: input.name != null ? String(input.name).slice(0, 128) : undefined,
-      scoringPreset: input.scoringPreset
-        ? (String(input.scoringPreset).slice(0, 16) as NativeScoringPreset)
-        : undefined,
-      draftMode: input.draftMode ? (String(input.draftMode).slice(0, 16) as NativeDraftMode) : undefined,
-      benchSpots: input.benchSpots != null ? Number(input.benchSpots) : undefined,
-      irSpots: input.irSpots != null ? Number(input.irSpots) : undefined,
-      irEligibility: input.irEligibility
-        ? (String(input.irEligibility).slice(0, 32) as NativeIrEligibility)
-        : undefined,
-    }),
-  )
+  .inputValidator((input: { linkId: string } & Record<string, unknown>) => {
+    const linkId = String(input.linkId ?? "").trim().slice(0, 36);
+    const patch: Record<string, unknown> = { linkId };
+    const copy = (key: string) => {
+      if (input[key] !== undefined) patch[key] = input[key];
+    };
+    for (const key of [
+      "name",
+      "scoringPreset",
+      "scoringSettings",
+      "draftMode",
+      "draftFormat",
+      "draftOrderType",
+      "draftPickTimeLimitSec",
+      "benchSpots",
+      "irSpots",
+      "irEligibility",
+      "seasonStartWeek",
+      "isPublic",
+      "autoActivateNextYear",
+      "playoffTeams",
+      "playoffMatchupLength",
+      "playoffWeekPair",
+      "standingsTiebreaker",
+      "allowMatchupTies",
+      "matchupTiebreakerSlot",
+      "divisionsEnabled",
+      "waiverType",
+      "waiverBudget",
+      "waiverPeriodDays",
+      "postDraftPlayerStatus",
+      "lockFaOnGametime",
+      "maxAddsPerWeek",
+      "maxAddsPerSeason",
+      "undroppableTopPlayers",
+      "rosterLockType",
+      "tradeDeadlineWeek",
+      "tradeReviewHours",
+      "tradeVetoMode",
+      "maxTradesPerSeason",
+      "keepersPerTeam",
+      "keeperNote",
+      "teamCount",
+    ]) {
+      copy(key);
+    }
+    if (typeof patch.name === "string") patch.name = patch.name.slice(0, 128);
+    if (typeof patch.scoringPreset === "string") {
+      patch.scoringPreset = patch.scoringPreset.slice(0, 16) as NativeScoringPreset;
+    }
+    if (typeof patch.draftMode === "string") {
+      patch.draftMode = patch.draftMode.slice(0, 16) as NativeDraftMode;
+    }
+    if (typeof patch.irEligibility === "string") {
+      patch.irEligibility = patch.irEligibility.slice(0, 32) as NativeIrEligibility;
+    }
+    return patch as { linkId: string } & Record<string, unknown>;
+  })
   .handler(async ({ context, data }) => {
     const { updateNativeLeagueBasicsForUser } = await import("@/lib/native-league-ops.server");
-    return await updateNativeLeagueBasicsForUser(context.userId, data.linkId, {
-      ...(data.name != null ? { name: data.name } : {}),
-      ...(data.scoringPreset ? { scoringPreset: data.scoringPreset } : {}),
-      ...(data.draftMode ? { draftMode: data.draftMode } : {}),
-      ...(data.benchSpots != null ? { benchSpots: data.benchSpots } : {}),
-      ...(data.irSpots != null ? { irSpots: data.irSpots } : {}),
-      ...(data.irEligibility ? { irEligibility: data.irEligibility } : {}),
-    });
+    const { linkId, ...patch } = data;
+    return await updateNativeLeagueBasicsForUser(context.userId, linkId, patch);
   });
 
 export const getNativeDraftState = createServerFn({ method: "GET" })
