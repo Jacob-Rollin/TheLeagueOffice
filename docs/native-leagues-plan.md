@@ -8,8 +8,9 @@
 | Draft modes (v1) | **Offline / commissioner-entered** + **scheduled live snake** (auction / salary-cap deferred; NFL “Auto” draft deferred) |
 | Data home | **TiDB for high-churn native league ops**; **Supabase A for auth + thin membership index** |
 | Mobile settings UX | **NFL Fantasy Commissioner Tools IA** (tabs + drill-down lists), styled with our existing `.mobile-theme-light` / `.mobile-theme-dark` tokens — not NFL’s black/gold chrome |
+| Product split | **Do not run native leagues inside current Playbook pages.** Build **new native league dashboards / ops routes** for transactions, players, teams, lineups, draft, commissioner tools. Keep existing Playbook / Trade / Wire / research pages as **user tools** — still viewable with a native league selected (scoring/ownership context), but they are not the native management surface. |
 
-This plan is the blueprint for making “run a league natively” real. Today those tables exist on Supabase A as **schema-only** — no create/join UI, no mutation engine, incomplete settings vs host platforms. Synced Sleeper/ESPN/Yahoo Playbook remains unchanged.
+This plan is the blueprint for making “run a league natively” real. Today those tables exist on Supabase A as **schema-only** — no create/join UI, no mutation engine, incomplete settings vs host platforms. Synced Sleeper/ESPN/Yahoo Playbook remains a **host-synced tool suite**, not the native ops shell.
 
 **Reference:** NFL Fantasy commissioner / league settings screenshots (League Info, Scoring, Waivers/Adds/Trades, Playoffs & Ties, Divisions, Teams, Draft Settings, Keepers) inform the settings catalog and mobile IA below. Source images live in [`docs/references/nfl-fantasy-settings/`](references/nfl-fantasy-settings/). Our mobile Waivers/Trades pages ([`MobileTransactionPages.tsx`](../src/components/mobile/league/MobileTransactionPages.tsx)) already follow that list + empty-state pattern for **synced** leagues.
 
@@ -437,22 +438,23 @@ Deprecate unused Supabase `leagues` / `lineups` / … for new work (leave tables
 2. Generate league `invite_code`; share link `/join/:code`. **Invite code shown after create**; deep-link `/join/:code` still TODO.
 3. Join flow: auth required → claim open seat → write TiDB team + Supabase link. **Landed** (`joinNativeLeague` server fn).
 4. Commissioner: rename teams, kick/open seat, edit settings until `draft_status` leaves `not_started` (then lock scoring/roster structure for the season; allow cosmetic edits). **TODO**
-5. Wire Active League / PlaybookShell to accept `platform: 'native'` tokens alongside synced connections. **Landed** (`native_league_links` merged into ActiveLeagueContext; host Fluid paths short-circuit for native).
+5. Wire Active League switcher to accept `platform: 'native'` tokens alongside synced connections. **Landed** (`native_league_links` merged into ActiveLeagueContext; host Fluid paths short-circuit for native so Playbook/tools do not burn Sleeper/ESPN when native is selected).
+6. **IA lock:** native ops live on **dedicated routes** (desktop + mobile). Do **not** retrofit `/playbook/*` Dashboard / My Team / Matchup / Transactions into the native management UX. Those pages stay synced-league tools and may remain navigable with a native league selected (soft-empty / tool context only).
 
-### Phase 2 — Draft
+### Phase 2 — Draft (native routes)
 
-1. **Offline:** commissioner draft board — search players, assign to team, undo last pick; marks players owned; completes → season start.
+1. **Offline:** commissioner draft board on native draft routes — search players, assign to team, undo last pick; marks players owned; completes → season start.
 2. **Live snake:** schedule `draft_scheduled_at`; lobby; server-authoritative pick endpoint with row lock on `native_leagues` draft cursor; timer via cron tick or pick-time check on read; autopick from queue / ADP fallback; commissioner pause/force-pick.
-3. Reuse War Room UI patterns where possible; **persist to TiDB**, not `localStorage`.
+3. Reuse War Room UI patterns where useful; **persist to TiDB**, not `localStorage`. Do not hitch live draft to Mock Draft / War Room host flows.
 4. On complete: populate `native_rosters`, set `status=in_season`, generate `native_schedules`.
 
-### Phase 3 — In-season ops (lineups, FA, waivers, trades)
+### Phase 3 — In-season ops (native dashboards)
 
-1. Lineup editor → `native_lineups` with version column; lock at player game start (NFL schedule from existing public/snap sources — **no Fluid fan-out**).
-2. Free agent add/drop — transactional lock (§6).
-3. Waiver claims queue + weekly/daily process cron.
-4. Trade propose/accept + commissioner veto window.
-5. Transaction log UI (reuse Playbook Transactions layout).
+1. Native lineup editor routes → `native_lineups` with version column; lock at player game start (NFL schedule from existing public/snap sources — **no Fluid fan-out**).
+2. Free agent add/drop — transactional lock (§6) on native FA / roster pages.
+3. Waiver claims queue + weekly/daily process cron — native waivers UI (not The Wire suggestion board).
+4. Trade propose/accept + commissioner veto window — native trades UI (Trade Desk analyzer remains a separate tool).
+5. Transaction log on native league history pages (may visually echo Playbook Transactions; separate route + TiDB source).
 
 ### Phase 4 — Scoring, matchups, standings, history
 
@@ -460,12 +462,12 @@ Deprecate unused Supabase `leagues` / `lineups` / … for new work (leave tables
 2. Standings materialization → `native_season_standings_snap`.
 3. Playoff bracket seeding from standings.
 4. Season roll → `native_season_archive`; reset or new `season_year` row for following year (redraft redrafts).
-5. CDN route `/api/data/native-league/$id` for history views (member auth or league-private token — prefer auth).
+5. Authenticated CDN/API `/api/data/native-league/$id` for native history views (not `/playbook` loaders).
 
 ### Phase 5 — Mobile commissioner + polish
 
-1. Mobile Commissioner Tools sheet (§8) — League / Draft / Rosters drill-downs with SAVE, light+dark.
-2. Wire native claims/trades into existing Waivers/Trades mobile pages.
+1. Mobile Commissioner Tools sheet (§8) — League / Draft / Rosters drill-downs with SAVE, light+dark — under `/m/league/$leagueId/...` native routes.
+2. Native mobile waivers/trades pages (new or dedicated native variants) — do not overload synced Playbook mobile ops as the write path.
 3. Co-commissioner role, email/link invites, push-less in-app toasts.
 4. Commissioner tools: force drop, reverse transaction, edit scores (audit log).
 5. Export season JSON / CSV.
@@ -614,9 +616,21 @@ Extend patterns already in [`MobileTransactionPages.tsx`](../src/components/mobi
 
 All controls must be theme-token driven (`bg-m-*`, `text-m-*`, `border-m-*`) so light/dark flip with [`MobileThemeContext`](../src/components/mobile/MobileThemeContext.tsx).
 
-### 8.4 Desktop commissioner
+### 8.4 Desktop native league shell (not Playbook)
 
-Desktop Playbook keeps Broadcast chrome (`SiteNav` + `PlaybookShell`). Settings can be a denser form of the same field groups — do **not** port mobile dark-sheet look to desktop research/playbook pages.
+Desktop native management uses Broadcast chrome (`SiteNav` + live ticker) with a **dedicated native league shell** (new nav: Dashboard / My Team / Matchup / Standings / Rosters / Transactions / Draft / Commissioner). Do **not** reuse `PlaybookShell` section routing as the ops home — Playbook stays the synced-league tool entry.
+
+Settings can be a denser form of the same field groups as mobile Commissioner Tools — do **not** port mobile dark-sheet look to desktop research or Playbook pages.
+
+### 8.5 Why separate pages are safe
+
+| Concern | Outcome |
+| --- | --- |
+| Route collision with `/playbook/*` | Avoided — native ops under distinct path prefix (e.g. `/league/$id/...` desktop, `/m/league/$id/...` mobile) |
+| Fluid / Sleeper burn when native selected | Already short-circuited on host loaders; native pages only call native APIs |
+| Research / Trade Desk / Wire with native selected | Still allowed — tools keep working for scoring format, player modal, analyzers; they do not mutate native rosters |
+| Dual maintenance | Prefer shared primitives (`PlayerModalHost`, research cells, scoring helpers) over shared page shells; native pages own TiDB write UX |
+| Active league switcher | One global token list; native home CTA goes to native dashboard, not Playbook |
 
 ---
 
@@ -626,16 +640,17 @@ Desktop Playbook keeps Broadcast chrome (`SiteNav` + `PlaybookShell`). Settings 
 | --- | --- |
 | Create League wizard | Presets mirroring NFL/ESPN/Sleeper redraft defaults |
 | Invite / join | Code + link (+ optional password); open seats |
+| **Native league dashboards** | New desktop + mobile routes for running the league (dashboard, team, matchup, standings, rosters, tx log) — **not** `/playbook/*` |
 | Mobile Commissioner Tools | §8 — NFL IA, our light/dark tokens |
 | League settings | Read-only mid-season for structural fields |
-| Draft room | Offline assign + live snake |
-| Playbook native | Dashboard, My Team, Matchup, Standings, Rosters, Transactions — same chrome as synced |
-| Waivers | Claim UI distinct from The Wire **suggestions** (keep suggestions for synced; native uses real claims) |
-| Trade | Real propose/accept (Trade Desk analyzer can score packages against native rosters later) |
+| Draft room | Offline assign + live snake on native draft routes |
+| Waivers (native) | Real claims UI — distinct from The Wire **suggestions** tool |
+| Trades (native) | Real propose/accept — Trade Desk remains an analyzer tool (can score packages later) |
 | Commissioner console | Scores, force txns, schedule, draft controls |
 | Active league switcher | Native + synced + sandbox coexist |
+| Existing Playbook / research tools | Unchanged product: still usable with a native league selected for context; soft-empty where host data does not apply |
 
-Reuse: `PlaybookShell`, `PlayerModalHost`, `ActiveLeagueLabel`, research boards (scoring format from native `scoring_settings`). Desktop = Broadcast; mobile `/m` = existing mobile themes.
+Reuse: `PlayerModalHost`, `ActiveLeagueLabel`, research boards / scoring helpers (format from native `scoring_settings`). Do **not** require `PlaybookShell` for native ops. Desktop = Broadcast; mobile `/m` = existing mobile themes.
 
 ---
 
@@ -689,7 +704,7 @@ Regenerate code = commissioner action; rate-limit join attempts server-side.
 4. Create/join/settings APIs + shared Zod settings schema  
 5. Mobile Commissioner Tools shell (tabs + nav rows + theme tokens) + desktop wizard  
 6. Offline draft + roster commit  
-7. Schedule generator + Playbook/mobile read surfaces (CDN history stubs)  
+7. Schedule generator + **native** desktop/mobile read dashboards (CDN history stubs) — keep Playbook as synced tools only  
 8. Lineup save + lock (`game_time` / `first_game`)  
 9. FA add/drop with league lock + add caps / undroppable / FA gametime lock  
 10. Waiver claims + cron (rolling / reverse / FAAB)  
@@ -707,5 +722,6 @@ Regenerate code = commissioner action; rate-limit join attempts server-side.
 - Mobile Commissioner Tools mirrors NFL IA (League / Draft / Rosters) and works in both light and dark mobile themes.
 - Managers set lineups; two managers cannot own the same player; waiver/FAAB/trade paths are race-safe.
 - Week scores and matchups persist; prior weeks remain readable without burning Fluid/TiDB on every view.
-- Synced Sleeper/ESPN/Yahoo flows and free-tier guardrails in `.cursorrules` remain intact.
+- Synced Sleeper/ESPN/Yahoo Playbook/tool flows and free-tier guardrails in `.cursorrules` remain intact.
+- Native league management is reachable without using Playbook as the ops shell; research/tools still work with a native league selected.
 - Keeper/Dynasty/Best Ball/IDP/auction explicitly not required for v1 launch.
