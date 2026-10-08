@@ -184,7 +184,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   return (
     <main className="bg-m-bg">
       <section
-        className="px-4 pb-8 pt-5 text-white"
+        className="px-4 pb-0 pt-5 text-white"
         style={{ backgroundImage: "linear-gradient(180deg, var(--m-team-hero-from) 0%, var(--m-team-hero-to) 100%)" }}
       >
         <div className="flex items-center gap-4">
@@ -248,17 +248,24 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
             Add Players
           </Link>
         </div>
+
+        {/* Blue shelf so the matchup card can sit flush under actions and straddle grey. */}
+        <div className="mt-3 h-[8.5rem]" aria-hidden="true" />
       </section>
 
-      {/* Half on hero gradient / half on grey — pull up ~50% of matchup card height. */}
       <div
         className={
-          "relative z-10 -mt-[7.75rem] px-4" +
+          "relative z-10 -mt-[8.5rem] px-4" +
           (optimizePlan ? (showOptimized ? " mb-12" : " mb-8") : " mb-2")
         }
       >
         <div className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_4px_16px_rgba(0,0,0,0.12)]">
-          <MobileWeekSelect week={activeWeek} onChange={setWeek} className="rounded-none" />
+          <MobileWeekSelect
+            week={activeWeek}
+            onChange={setWeek}
+            centered
+            className="rounded-none bg-transparent"
+          />
 
           <div className="px-4 pb-4 pt-3">
             <p className="text-center font-display text-lg font-bold">
