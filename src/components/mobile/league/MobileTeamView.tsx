@@ -258,71 +258,70 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
       </section>
 
       <div className="relative z-10 -mt-[8.5rem] px-4 mb-2">
-        <div className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_4px_16px_rgba(0,0,0,0.12)]">
-          <MobileWeekSelect
-            week={activeWeek}
-            onChange={setWeek}
-            centered
-            className="rounded-none bg-transparent"
-          />
+        {/*
+          Card-scoped relative: badge `top-full` must anchor to the card bottom,
+          not a spacer sibling (that sat the button entirely below the card).
+        */}
+        <div className="relative">
+          <div className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_4px_16px_rgba(0,0,0,0.12)]">
+            <MobileWeekSelect
+              week={activeWeek}
+              onChange={setWeek}
+              centered
+              className="rounded-none bg-transparent"
+            />
 
-          <div className="px-4 pb-4 pt-3">
-            <p className="text-center font-display text-lg font-bold">
-              {opponent ? `vs. ${opponent.teamName}` : mine ? "Bye Week" : "Matchup"}
-            </p>
-            {matchupsLoading ? (
-              <p className="py-4 text-center text-sm text-m-muted">Loading matchup...</p>
-            ) : (
-              <div className="mt-2 flex items-center gap-3">
-                <MobileTeamLogo name={myTeam.team} logo={myTeam.logo} className="size-14" />
-                <div className="flex flex-1 items-center justify-center gap-3">
-                  <div className="text-right">
-                    <Score value={mine?.points ?? null} className="font-display text-[34px] font-extrabold italic leading-none" />
-                    <p
-                      className={
-                        "mt-1 text-sm tabnum " +
-                        (showOptimized && optimizePlan ? "font-semibold text-emerald-600" : "text-m-muted")
-                      }
-                    >
-                      {myProjected != null ? myProjected.toFixed(2) : "-"}
-                    </p>
+            <div className="px-4 pb-4 pt-3">
+              <p className="text-center font-display text-lg font-bold">
+                {opponent ? `vs. ${opponent.teamName}` : mine ? "Bye Week" : "Matchup"}
+              </p>
+              {matchupsLoading ? (
+                <p className="py-4 text-center text-sm text-m-muted">Loading matchup...</p>
+              ) : (
+                <div className="mt-2 flex items-center gap-3">
+                  <MobileTeamLogo name={myTeam.team} logo={myTeam.logo} className="size-14" />
+                  <div className="flex flex-1 items-center justify-center gap-3">
+                    <div className="text-right">
+                      <Score value={mine?.points ?? null} className="font-display text-[34px] font-extrabold italic leading-none" />
+                      <p
+                        className={
+                          "mt-1 text-sm tabnum " +
+                          (showOptimized && optimizePlan ? "font-semibold text-emerald-600" : "text-m-muted")
+                        }
+                      >
+                        {myProjected != null ? myProjected.toFixed(2) : "-"}
+                      </p>
+                    </div>
+                    <span className="font-display text-sm font-bold text-m-muted">vs</span>
+                    <div>
+                      <Score
+                        value={opponent?.points ?? null}
+                        className="font-display text-[34px] font-extrabold italic leading-none text-m-muted"
+                      />
+                      <p className="mt-1 text-sm text-m-muted tabnum">{oppProjected != null ? oppProjected.toFixed(2) : "-"}</p>
+                    </div>
                   </div>
-                  <span className="font-display text-sm font-bold text-m-muted">vs</span>
-                  <div>
-                    <Score
-                      value={opponent?.points ?? null}
-                      className="font-display text-[34px] font-extrabold italic leading-none text-m-muted"
-                    />
-                    <p className="mt-1 text-sm text-m-muted tabnum">{oppProjected != null ? oppProjected.toFixed(2) : "-"}</p>
-                  </div>
+                  <MobileTeamLogo name={opponent?.teamName ?? "?"} logo={opponent?.logo ?? null} className="size-14" />
                 </div>
-                <MobileTeamLogo name={opponent?.teamName ?? "?"} logo={opponent?.logo ?? null} className="size-14" />
-              </div>
-            )}
+              )}
+            </div>
+
+            <Link
+              to="/m/league/$leagueId/matchup"
+              params={{ leagueId }}
+              search={{ week: activeWeek }}
+              className="relative z-0 flex items-center justify-between border-t border-m-border px-4 py-3.5 font-display text-base font-semibold"
+            >
+              <span className="min-w-0 truncate pr-2">View Matchup</span>
+              <span className="flex shrink-0 items-center gap-1 text-m-muted">
+                {standingIndex >= 0 ? `${ordinal(standingIndex + 1)} in league` : ""}
+                <ChevronRight className="size-5" />
+              </span>
+            </Link>
           </div>
 
-          <Link
-            to="/m/league/$leagueId/matchup"
-            params={{ leagueId }}
-            search={{ week: activeWeek }}
-            className="flex items-center justify-between border-t border-m-border px-4 py-3.5 font-display text-base font-semibold"
-          >
-            View Matchup
-            <span className="flex items-center gap-1 text-m-muted">
-              {standingIndex >= 0 ? `${ordinal(standingIndex + 1)} in league` : ""}
-              <ChevronRight className="size-5" />
-            </span>
-          </Link>
-        </div>
-
-        {optimizePlan ? (
-          <>
-            {/*
-              Fixed offset from card bottom (not -50% of the whole column) so the
-              hint text cannot pull the badge upward when Optimized. Slight drop
-              clears "Nth in league" while still overlapping the card edge.
-            */}
-            <div className="pointer-events-none absolute left-1/2 top-full z-20 -translate-x-1/2 -translate-y-[18px]">
+          {optimizePlan ? (
+            <div className="pointer-events-none absolute left-1/2 top-full z-20 -translate-x-1/2 -translate-y-[22px]">
               <button
                 type="button"
                 onClick={() => setShowOptimized((v) => !v)}
@@ -333,31 +332,40 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
                     : `Preview optimized lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
                 }
                 className={
-                  "pointer-events-auto inline-flex h-[44px] items-stretch overflow-hidden rounded-[14px] " +
+                  "pointer-events-auto relative inline-flex h-[44px] items-stretch overflow-hidden rounded-[14px] " +
                   "shadow-[0_3px_0_0_#1a3d2e,0_6px_12px_rgba(0,0,0,0.18)] " +
                   "active:translate-y-px active:shadow-[0_2px_0_0_#1a3d2e,0_3px_8px_rgba(0,0,0,0.16)]"
                 }
               >
-                {showOptimized ? (
-                  <span className="flex h-full items-center bg-[#2d5a47] px-7 font-display text-[15px] font-extrabold italic uppercase tracking-wide text-white">
-                    Optimized
-                  </span>
-                ) : (
-                  <>
-                    <span className="flex h-full items-center bg-[#76c78c] px-4 font-display text-[22px] font-extrabold italic leading-none tabular-nums text-white">
-                      + {optimizePlan.gain.toFixed(2)}
-                    </span>
-                    <span className="flex h-full items-center bg-[#2d5a47] px-5 font-display text-[15px] font-extrabold italic uppercase tracking-wide text-white">
-                      Optimize
-                    </span>
-                  </>
-                )}
+                {/* Invisible +gain keeps full two-tone width when Optimized. */}
+                <span
+                  className={
+                    "flex h-full items-center px-4 font-display text-[22px] font-extrabold italic leading-none tabular-nums " +
+                    (showOptimized ? "invisible" : "bg-[#76c78c] text-white")
+                  }
+                  aria-hidden={showOptimized}
+                >
+                  + {optimizePlan.gain.toFixed(2)}
+                </span>
+                <span
+                  className={
+                    "flex h-full items-center bg-[#2d5a47] font-display text-[15px] font-extrabold italic uppercase tracking-wide text-white " +
+                    (showOptimized ? "absolute inset-0 justify-center px-5" : "px-5")
+                  }
+                >
+                  {showOptimized ? "Optimized" : "Optimize"}
+                </span>
               </button>
             </div>
-            {/* Reserve space under the card for the protruding badge (+ hint when open). */}
-            <div className={showOptimized ? "h-[4.25rem]" : "h-7"} aria-hidden="true" />
+          ) : null}
+        </div>
+
+        {optimizePlan ? (
+          <>
+            {/* Room for the ~22px of badge below the card; fixed so toggle doesn't jump. */}
+            <div className="h-8" aria-hidden="true" />
             {showOptimized ? (
-              <p className="-mt-5 mb-1 text-center text-xs text-m-muted">
+              <p className="mb-1 text-center text-xs text-m-muted">
                 Preview only — tap again for your set lineup
               </p>
             ) : null}
