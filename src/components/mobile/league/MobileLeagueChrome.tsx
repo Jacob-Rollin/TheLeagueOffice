@@ -29,7 +29,7 @@ const PEEK_HEIGHT = "3.75rem";
 const SHEET_TOP_GAP = "4.75rem";
 
 export const mobileLeagueContentPad = (withSheet: boolean) =>
-  `calc(${NAV_HEIGHT}${withSheet ? ` + ${PEEK_HEIGHT}` : ""} + env(safe-area-inset-bottom) + 1rem)`;
+  `calc(${NAV_HEIGHT}${withSheet ? ` + ${PEEK_HEIGHT}` : ""} + env(safe-area-inset-bottom, 0px) + 1rem)`;
 
 type TabPath =
   | "/m/league/$leagueId/feed"
@@ -52,8 +52,11 @@ export function MobileLeagueBottomNav({ leagueId }: { leagueId: string }) {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-m-border bg-m-nav"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-m-border bg-m-nav"
+      style={{
+        // Keep tab icons/labels above the iPhone home indicator (center = Matchup).
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      }}
     >
       <div className="mx-auto grid max-w-md grid-cols-5" style={{ height: NAV_HEIGHT }}>
         {TABS.map((tab) => {
@@ -196,10 +199,18 @@ export function MobileActivityList({
 
 /** Pull-up League Activity sheet pinned above the bottom tab bar. */
 export function MobileLeagueActivitySheet() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { events, teamCount, loading } = useLeagueActivityGroups();
   const [open, setOpen] = useState(false);
   const [dragY, setDragY] = useState(0);
   const drag = useRef<{ startY: number; moved: boolean } | null>(null);
+
+  // Tab changes must dismiss the sheet; otherwise iOS keeps it expanded across navigations.
+  useEffect(() => {
+    setOpen(false);
+    setDragY(0);
+    drag.current = null;
+  }, [pathname]);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -247,12 +258,15 @@ export function MobileLeagueActivitySheet() {
       <section
         aria-label="League Activity"
         className={cn(
+          // Collapsed: only the peek handle receives taps. The translated sheet body
+          // would otherwise sit over the bottom tabs on iOS and steal Link presses.
           "fixed inset-x-0 z-30 mx-auto flex max-w-md flex-col rounded-t-2xl bg-m-sheet text-m-card-fg shadow-[0_-4px_16px_rgba(0,0,0,0.25)]",
+          open ? "pointer-events-auto" : "pointer-events-none",
           !drag.current && "transition-transform duration-300 ease-out",
         )}
         style={{
           top: SHEET_TOP_GAP,
-          bottom: `calc(${NAV_HEIGHT} + env(safe-area-inset-bottom))`,
+          bottom: `calc(${NAV_HEIGHT} + env(safe-area-inset-bottom, 0px))`,
           transform,
         }}
       >
@@ -270,7 +284,7 @@ export function MobileLeagueActivitySheet() {
               setOpen((v) => !v);
             }
           }}
-          className="shrink-0 cursor-grab touch-none select-none px-4 pb-2 pt-2"
+          className="pointer-events-auto shrink-0 cursor-grab touch-none select-none px-4 pb-2 pt-2"
           style={{ minHeight: PEEK_HEIGHT }}
         >
           <div className="mx-auto mb-1.5 h-1 w-10 rounded-full bg-m-muted/50" />
