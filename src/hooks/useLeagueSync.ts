@@ -42,6 +42,7 @@ export function useLeagueSync() {
 
   useEffect(() => {
     if (sandboxMode) return;
+    if (!userId) return;
     if (!needsLeagueWarmPath(pathname)) return;
     const connectionId = activeLeague?.id?.trim() || "";
     const leagueId = activeLeague?.leagueId?.trim() || "";

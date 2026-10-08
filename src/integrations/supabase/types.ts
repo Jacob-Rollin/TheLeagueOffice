@@ -927,6 +927,14 @@ export type Database = {
         Args: { _league_id: string; _user_id: string }
         Returns: boolean
       }
+      verify_invite_code: {
+        Args: { target_code: string }
+        Returns: boolean
+      }
+      consume_invite_code: {
+        Args: { target_code: string }
+        Returns: boolean
+      }
       verify_and_consume_invite_code: {
         Args: { target_code: string }
         Returns: boolean
