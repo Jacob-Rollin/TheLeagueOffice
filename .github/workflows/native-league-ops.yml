@@ -1,0 +1,84 @@
+name: Native League Ops
+
+# Waivers / trade veto windows + scoring + AI managers for native leagues.
+# Requires APP_URL + CRON_SECRET. Browse paths read TiDB snaps only.
+
+on:
+  schedule:
+    # Waivers: Wed 10:00 America/New_York ≈ 14:00 UTC (configurable process slot later).
+    - cron: "0 14 * * 3"
+    # Trade veto settle: every 2h.
+    - cron: "20 */2 * * *"
+    # Scoring: gameday evenings hourly (Thu–Mon UTC blocks).
+    - cron: "30 0-5,16-23 * * 0,1,4,5,6"
+    # Daily scoring catch-up.
+    - cron: "40 7 * * *"
+    # AI draft/lineup tick (Tue–Wed mornings + Thu pre-kickoff).
+    - cron: "15 15 * * 2,3,4"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "waivers | scoring | ai | both | all"
+        type: choice
+        options: [both, waivers, scoring, ai, all]
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-league-ops
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger native league cron endpoints
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          MODE: ${{ inputs.mode || 'both' }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL / CRON_SECRET not configured — skipping."
+            exit 0
+          fi
+          BASE="${APP_URL%/}"
+          AUTH="Authorization: Bearer ${CRON_SECRET}"
+
+          run_waivers() {
+            echo "POST ${BASE}/api/cron/native-waivers"
+            curl -fsS -H "$AUTH" "${BASE}/api/cron/native-waivers?limit=20" | head -c 2000
+            echo
+          }
+          run_scoring() {
+            echo "GET ${BASE}/api/cron/native-scoring"
+            curl -fsS -H "$AUTH" "${BASE}/api/cron/native-scoring?limit=15" | head -c 2000
+            echo
+          }
+          run_ai() {
+            echo "GET ${BASE}/api/cron/native-ai"
+            curl -fsS -H "$AUTH" "${BASE}/api/cron/native-ai?limit=12" | head -c 2000
+            echo
+          }
+
+          # Scheduled veto tick (:*/2) only needs waivers endpoint (includes veto settle).
+          if [ "$SCHEDULE" = "20 */2 * * *" ]; then
+            run_waivers
+            exit 0
+          fi
+          if [ "$SCHEDULE" = "15 15 * * 2,3,4" ]; then
+            run_ai
+            exit 0
+          fi
+
+          case "$MODE" in
+            waivers) run_waivers ;;
+            scoring) run_scoring ;;
+            ai) run_ai ;;
+            all) run_waivers; run_scoring; run_ai ;;
+            *) run_waivers; run_scoring ;;
+          esac

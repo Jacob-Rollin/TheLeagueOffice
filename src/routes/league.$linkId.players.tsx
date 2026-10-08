@@ -60,7 +60,9 @@ function NativeLeaguePlayersPage() {
   const draftDone = board?.summary.draftStatus === "complete";
   const myRoster = board?.rosters.find((r) => r.teamId === myTeamId) ?? null;
   const capacity = board?.rosterCapacity ?? 15;
-  const openSlots = myRoster ? Math.max(0, capacity - myRoster.playerIds.length) : 0;
+  const openSlots = myRoster
+    ? Math.max(0, capacity - (myRoster.activePlayerIds?.length ?? myRoster.playerIds.length))
+    : 0;
   const canAddFa = Boolean(draftDone && myTeamId != null && myRoster);
 
   const nameById = useMemo(() => {
@@ -111,12 +113,14 @@ function NativeLeaguePlayersPage() {
     if (!myRoster || submitting) return;
     setSubmitting(true);
     try {
+      const addMeta = nameById.get(addPlayerId);
       const result = await submitNativeFreeAgentMove({
         data: {
           linkId,
           addPlayerId,
           dropPlayerId,
           rosterVersion: myRoster.version,
+          addPlayerTeam: addMeta?.team ?? null,
         },
       });
       if (!result.ok) {

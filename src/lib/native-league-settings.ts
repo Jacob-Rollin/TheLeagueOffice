@@ -161,6 +161,11 @@ export type NativeCommissionerSettings = {
   rosterCapacity: number;
   settingsLocked: boolean;
   canManage: boolean;
+  /**
+   * When true, commissioner may assign AI managers to open seats.
+   * Used for native-league testing; AI ticks run via Actions cron (not page load).
+   */
+  allowAiTeams: boolean;
 };
 
 /** Half-PPR default scoring (Sleeper keys). */

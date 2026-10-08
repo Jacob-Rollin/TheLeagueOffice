@@ -42,6 +42,7 @@ import { Route as AdminProjectionAnalyticsRouteImport } from './routes/admin.pro
 import { Route as ArticlesSlugRouteImport } from './routes/articles.$slug'
 import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as AuthResetPasswordRouteImport } from './routes/auth_.reset-password'
+import { Route as LeagueLinkIdRouteImport } from './routes/league.$linkId'
 import { Route as MIndexRouteImport } from './routes/m.index'
 import { Route as MSettingsRouteImport } from './routes/m.settings'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
@@ -57,31 +58,35 @@ import { Route as PlayerIdRouteImport } from './routes/player.$id'
 import { Route as TeamTeamIdRouteImport } from './routes/team.$teamId'
 import { Route as AccountLeaguesIndexRouteImport } from './routes/account.leagues.index'
 import { Route as AccountLeaguesConnectionIdRouteImport } from './routes/account.leagues.$connectionId'
+import { Route as AccountLeaguesJoinRouteImport } from './routes/account.leagues.join'
 import { Route as AccountLeaguesNativeRouteImport } from './routes/account.leagues.native'
 import { Route as AccountLeaguesSetupRouteImport } from './routes/account.leagues.setup'
-import { Route as AccountLeaguesJoinRouteImport } from './routes/account.leagues.join'
-import { Route as AccountLeaguesNativeLinkIdRouteImport } from './routes/account.leagues.native.$linkId'
-import { Route as LeagueLinkIdRouteImport } from './routes/league.$linkId'
-import { Route as LeagueLinkIdIndexRouteImport } from './routes/league.$linkId.index'
-import { Route as LeagueLinkIdTeamsRouteImport } from './routes/league.$linkId.teams'
-import { Route as LeagueLinkIdDraftRouteImport } from './routes/league.$linkId.draft'
-import { Route as LeagueLinkIdSettingsRouteImport } from './routes/league.$linkId.settings'
-import { Route as LeagueLinkIdTransactionsRouteImport } from './routes/league.$linkId.transactions'
-import { Route as LeagueLinkIdStandingsRouteImport } from './routes/league.$linkId.standings'
-import { Route as LeagueLinkIdMatchupRouteImport } from './routes/league.$linkId.matchup'
-import { Route as LeagueLinkIdMyTeamRouteImport } from './routes/league.$linkId.my-team'
-import { Route as LeagueLinkIdPlayersRouteImport } from './routes/league.$linkId.players'
 import { Route as ApiAdminSeedPlayerWarehouseRouteImport } from './routes/api/admin/seed-player-warehouse'
 import { Route as ApiAdminTidbMigrateRouteImport } from './routes/api/admin/tidb-migrate'
 import { Route as ApiCronLeagueDeltaSyncRouteImport } from './routes/api/cron/league-delta-sync'
 import { Route as ApiCronLeaguePlanningSnapsRouteImport } from './routes/api/cron/league-planning-snaps'
+import { Route as ApiCronNativeAiRouteImport } from './routes/api/cron/native-ai'
+import { Route as ApiCronNativeScoringRouteImport } from './routes/api/cron/native-scoring'
+import { Route as ApiCronNativeWaiversRouteImport } from './routes/api/cron/native-waivers'
 import { Route as ApiCronResearchAggregatesRouteImport } from './routes/api/cron/research-aggregates'
 import { Route as ApiCronWarehouseIngestRouteImport } from './routes/api/cron/warehouse-ingest'
 import { Route as ApiDataPlayersRouteImport } from './routes/api/data/players'
 import { Route as ApiDataPlayersExportRouteImport } from './routes/api/data/players-export'
 import { Route as ApiPublicScoreboardRouteImport } from './routes/api/public/scoreboard'
 import { Route as ApiWebhooksSyncRouteImport } from './routes/api/webhooks/sync'
+import { Route as LeagueLinkIdIndexRouteImport } from './routes/league.$linkId.index'
+import { Route as LeagueLinkIdDraftRouteImport } from './routes/league.$linkId.draft'
+import { Route as LeagueLinkIdMatchupRouteImport } from './routes/league.$linkId.matchup'
+import { Route as LeagueLinkIdMyTeamRouteImport } from './routes/league.$linkId.my-team'
+import { Route as LeagueLinkIdPlayersRouteImport } from './routes/league.$linkId.players'
+import { Route as LeagueLinkIdSettingsRouteImport } from './routes/league.$linkId.settings'
+import { Route as LeagueLinkIdStandingsRouteImport } from './routes/league.$linkId.standings'
+import { Route as LeagueLinkIdTeamsRouteImport } from './routes/league.$linkId.teams'
+import { Route as LeagueLinkIdTradesRouteImport } from './routes/league.$linkId.trades'
+import { Route as LeagueLinkIdTransactionsRouteImport } from './routes/league.$linkId.transactions'
+import { Route as LeagueLinkIdWaiversRouteImport } from './routes/league.$linkId.waivers'
 import { Route as MLeagueLeagueIdRouteImport } from './routes/m.league.$leagueId'
+import { Route as AccountLeaguesNativeLinkIdRouteImport } from './routes/account.leagues.native.$linkId'
 import { Route as ApiAuthYahooCallbackRouteImport } from './routes/api/auth/yahoo/callback'
 import { Route as ApiAuthYahooConnectRouteImport } from './routes/api/auth/yahoo/connect'
 import { Route as ApiDataLeagueIdRouteImport } from './routes/api/data/league.$id'
@@ -262,6 +267,11 @@ const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
   path: '/auth/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LeagueLinkIdRoute = LeagueLinkIdRouteImport.update({
+  id: '/league/$linkId',
+  path: '/league/$linkId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MIndexRoute = MIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -338,6 +348,11 @@ const AccountLeaguesConnectionIdRoute =
     path: '/account/leagues/$connectionId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AccountLeaguesJoinRoute = AccountLeaguesJoinRouteImport.update({
+  id: '/account/leagues/join',
+  path: '/account/leagues/join',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AccountLeaguesNativeRoute = AccountLeaguesNativeRouteImport.update({
   id: '/account/leagues/native',
   path: '/account/leagues/native',
@@ -348,71 +363,6 @@ const AccountLeaguesSetupRoute = AccountLeaguesSetupRouteImport.update({
   path: '/account/leagues/setup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AccountLeaguesJoinRoute = AccountLeaguesJoinRouteImport.update({
-  id: '/account/leagues/join',
-  path: '/account/leagues/join',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AccountLeaguesNativeLinkIdRoute = AccountLeaguesNativeLinkIdRouteImport.update({
-  id: '/account/leagues/native/$linkId',
-  path: '/account/leagues/native/$linkId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-
-const LeagueLinkIdRoute = LeagueLinkIdRouteImport.update({
-  id: '/league/$linkId',
-  path: '/league/$linkId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LeagueLinkIdIndexRoute = LeagueLinkIdIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => LeagueLinkIdRoute,
-} as any)
-const LeagueLinkIdTeamsRoute = LeagueLinkIdTeamsRouteImport.update({
-  id: '/teams',
-  path: '/teams',
-  getParentRoute: () => LeagueLinkIdRoute,
-} as any)
-const LeagueLinkIdDraftRoute = LeagueLinkIdDraftRouteImport.update({
-  id: '/draft',
-  path: '/draft',
-  getParentRoute: () => LeagueLinkIdRoute,
-} as any)
-const LeagueLinkIdSettingsRoute = LeagueLinkIdSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => LeagueLinkIdRoute,
-} as any)
-const LeagueLinkIdPlayersRoute = LeagueLinkIdPlayersRouteImport.update({
-  id: '/players',
-  path: '/players',
-  getParentRoute: () => LeagueLinkIdRoute,
-} as any)
-const LeagueLinkIdTransactionsRoute = LeagueLinkIdTransactionsRouteImport.update({
-  id: '/transactions',
-  path: '/transactions',
-  getParentRoute: () => LeagueLinkIdRoute,
-} as any)
-
-const LeagueLinkIdStandingsRoute = LeagueLinkIdStandingsRouteImport.update({
-  id: '/standings',
-  path: '/standings',
-  getParentRoute: () => LeagueLinkIdRoute,
-} as any)
-
-const LeagueLinkIdMatchupRoute = LeagueLinkIdMatchupRouteImport.update({
-  id: '/matchup',
-  path: '/matchup',
-  getParentRoute: () => LeagueLinkIdRoute,
-} as any)
-
-const LeagueLinkIdMyTeamRoute = LeagueLinkIdMyTeamRouteImport.update({
-  id: '/my-team',
-  path: '/my-team',
-  getParentRoute: () => LeagueLinkIdRoute,
-} as any)
-
 const ApiAdminSeedPlayerWarehouseRoute =
   ApiAdminSeedPlayerWarehouseRouteImport.update({
     id: '/api/admin/seed-player-warehouse',
@@ -435,6 +385,21 @@ const ApiCronLeaguePlanningSnapsRoute =
     path: '/api/cron/league-planning-snaps',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiCronNativeAiRoute = ApiCronNativeAiRouteImport.update({
+  id: '/api/cron/native-ai',
+  path: '/api/cron/native-ai',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCronNativeScoringRoute = ApiCronNativeScoringRouteImport.update({
+  id: '/api/cron/native-scoring',
+  path: '/api/cron/native-scoring',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCronNativeWaiversRoute = ApiCronNativeWaiversRouteImport.update({
+  id: '/api/cron/native-waivers',
+  path: '/api/cron/native-waivers',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCronResearchAggregatesRoute =
   ApiCronResearchAggregatesRouteImport.update({
     id: '/api/cron/research-aggregates',
@@ -466,11 +431,73 @@ const ApiWebhooksSyncRoute = ApiWebhooksSyncRouteImport.update({
   path: '/api/webhooks/sync',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LeagueLinkIdIndexRoute = LeagueLinkIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
+const LeagueLinkIdDraftRoute = LeagueLinkIdDraftRouteImport.update({
+  id: '/draft',
+  path: '/draft',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
+const LeagueLinkIdMatchupRoute = LeagueLinkIdMatchupRouteImport.update({
+  id: '/matchup',
+  path: '/matchup',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
+const LeagueLinkIdMyTeamRoute = LeagueLinkIdMyTeamRouteImport.update({
+  id: '/my-team',
+  path: '/my-team',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
+const LeagueLinkIdPlayersRoute = LeagueLinkIdPlayersRouteImport.update({
+  id: '/players',
+  path: '/players',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
+const LeagueLinkIdSettingsRoute = LeagueLinkIdSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
+const LeagueLinkIdStandingsRoute = LeagueLinkIdStandingsRouteImport.update({
+  id: '/standings',
+  path: '/standings',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
+const LeagueLinkIdTeamsRoute = LeagueLinkIdTeamsRouteImport.update({
+  id: '/teams',
+  path: '/teams',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
+const LeagueLinkIdTradesRoute = LeagueLinkIdTradesRouteImport.update({
+  id: '/trades',
+  path: '/trades',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
+const LeagueLinkIdTransactionsRoute =
+  LeagueLinkIdTransactionsRouteImport.update({
+    id: '/transactions',
+    path: '/transactions',
+    getParentRoute: () => LeagueLinkIdRoute,
+  } as any)
+const LeagueLinkIdWaiversRoute = LeagueLinkIdWaiversRouteImport.update({
+  id: '/waivers',
+  path: '/waivers',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
 const MLeagueLeagueIdRoute = MLeagueLeagueIdRouteImport.update({
   id: '/league/$leagueId',
   path: '/league/$leagueId',
   getParentRoute: () => MRoute,
 } as any)
+const AccountLeaguesNativeLinkIdRoute =
+  AccountLeaguesNativeLinkIdRouteImport.update({
+    id: '/$linkId',
+    path: '/$linkId',
+    getParentRoute: () => AccountLeaguesNativeRoute,
+  } as any)
 const ApiAuthYahooCallbackRoute = ApiAuthYahooCallbackRouteImport.update({
   id: '/api/auth/yahoo/callback',
   path: '/api/auth/yahoo/callback',
@@ -570,6 +597,7 @@ export interface FileRoutesByFullPath {
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
+  '/league/$linkId': typeof LeagueLinkIdRouteWithChildren
   '/m/settings': typeof MSettingsRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -585,32 +613,36 @@ export interface FileRoutesByFullPath {
   '/m/': typeof MIndexRoute
   '/playbook/': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
-  '/account/leagues/native': typeof AccountLeaguesNativeRoute
-  '/account/leagues/setup': typeof AccountLeaguesSetupRoute
   '/account/leagues/join': typeof AccountLeaguesJoinRoute
-  '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
-  '/league/$linkId': typeof LeagueLinkIdRouteWithChildren
-  '/league/$linkId/': typeof LeagueLinkIdIndexRoute
-  '/league/$linkId/teams': typeof LeagueLinkIdTeamsRoute
-  '/league/$linkId/draft': typeof LeagueLinkIdDraftRoute
-  '/league/$linkId/settings': typeof LeagueLinkIdSettingsRoute
-  '/league/$linkId/players': typeof LeagueLinkIdPlayersRoute
-  '/league/$linkId/transactions': typeof LeagueLinkIdTransactionsRoute
-  '/league/$linkId/standings': typeof LeagueLinkIdStandingsRoute
-  '/league/$linkId/matchup': typeof LeagueLinkIdMatchupRoute
-  '/league/$linkId/my-team': typeof LeagueLinkIdMyTeamRoute
+  '/account/leagues/native': typeof AccountLeaguesNativeRouteWithChildren
+  '/account/leagues/setup': typeof AccountLeaguesSetupRoute
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
   '/api/cron/league-planning-snaps': typeof ApiCronLeaguePlanningSnapsRoute
+  '/api/cron/native-ai': typeof ApiCronNativeAiRoute
+  '/api/cron/native-scoring': typeof ApiCronNativeScoringRoute
+  '/api/cron/native-waivers': typeof ApiCronNativeWaiversRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/data/players': typeof ApiDataPlayersRoute
   '/api/data/players-export': typeof ApiDataPlayersExportRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
   '/api/webhooks/sync': typeof ApiWebhooksSyncRoute
+  '/league/$linkId/draft': typeof LeagueLinkIdDraftRoute
+  '/league/$linkId/matchup': typeof LeagueLinkIdMatchupRoute
+  '/league/$linkId/my-team': typeof LeagueLinkIdMyTeamRoute
+  '/league/$linkId/players': typeof LeagueLinkIdPlayersRoute
+  '/league/$linkId/settings': typeof LeagueLinkIdSettingsRoute
+  '/league/$linkId/standings': typeof LeagueLinkIdStandingsRoute
+  '/league/$linkId/teams': typeof LeagueLinkIdTeamsRoute
+  '/league/$linkId/trades': typeof LeagueLinkIdTradesRoute
+  '/league/$linkId/transactions': typeof LeagueLinkIdTransactionsRoute
+  '/league/$linkId/waivers': typeof LeagueLinkIdWaiversRoute
   '/m/league/$leagueId': typeof MLeagueLeagueIdRouteWithChildren
   '/account/leagues/': typeof AccountLeaguesIndexRoute
+  '/league/$linkId/': typeof LeagueLinkIdIndexRoute
+  '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
   '/api/auth/yahoo/callback': typeof ApiAuthYahooCallbackRoute
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
   '/api/data/league/$id': typeof ApiDataLeagueIdRoute
@@ -671,30 +703,35 @@ export interface FileRoutesByTo {
   '/m': typeof MIndexRoute
   '/playbook': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
-  '/account/leagues/native': typeof AccountLeaguesNativeRoute
-  '/account/leagues/setup': typeof AccountLeaguesSetupRoute
   '/account/leagues/join': typeof AccountLeaguesJoinRoute
-  '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
-  '/league/$linkId': typeof LeagueLinkIdRouteWithChildren
-  '/league/$linkId/teams': typeof LeagueLinkIdTeamsRoute
-  '/league/$linkId/draft': typeof LeagueLinkIdDraftRoute
-  '/league/$linkId/settings': typeof LeagueLinkIdSettingsRoute
-  '/league/$linkId/players': typeof LeagueLinkIdPlayersRoute
-  '/league/$linkId/transactions': typeof LeagueLinkIdTransactionsRoute
-  '/league/$linkId/standings': typeof LeagueLinkIdStandingsRoute
-  '/league/$linkId/matchup': typeof LeagueLinkIdMatchupRoute
-  '/league/$linkId/my-team': typeof LeagueLinkIdMyTeamRoute
+  '/account/leagues/native': typeof AccountLeaguesNativeRouteWithChildren
+  '/account/leagues/setup': typeof AccountLeaguesSetupRoute
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
   '/api/cron/league-planning-snaps': typeof ApiCronLeaguePlanningSnapsRoute
+  '/api/cron/native-ai': typeof ApiCronNativeAiRoute
+  '/api/cron/native-scoring': typeof ApiCronNativeScoringRoute
+  '/api/cron/native-waivers': typeof ApiCronNativeWaiversRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/data/players': typeof ApiDataPlayersRoute
   '/api/data/players-export': typeof ApiDataPlayersExportRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
   '/api/webhooks/sync': typeof ApiWebhooksSyncRoute
+  '/league/$linkId/draft': typeof LeagueLinkIdDraftRoute
+  '/league/$linkId/matchup': typeof LeagueLinkIdMatchupRoute
+  '/league/$linkId/my-team': typeof LeagueLinkIdMyTeamRoute
+  '/league/$linkId/players': typeof LeagueLinkIdPlayersRoute
+  '/league/$linkId/settings': typeof LeagueLinkIdSettingsRoute
+  '/league/$linkId/standings': typeof LeagueLinkIdStandingsRoute
+  '/league/$linkId/teams': typeof LeagueLinkIdTeamsRoute
+  '/league/$linkId/trades': typeof LeagueLinkIdTradesRoute
+  '/league/$linkId/transactions': typeof LeagueLinkIdTransactionsRoute
+  '/league/$linkId/waivers': typeof LeagueLinkIdWaiversRoute
   '/account/leagues': typeof AccountLeaguesIndexRoute
+  '/league/$linkId': typeof LeagueLinkIdIndexRoute
+  '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
   '/api/auth/yahoo/callback': typeof ApiAuthYahooCallbackRoute
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
   '/api/data/league/$id': typeof ApiDataLeagueIdRoute
@@ -743,6 +780,7 @@ export interface FileRoutesById {
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth_/confirmed': typeof AuthConfirmedRoute
   '/auth_/reset-password': typeof AuthResetPasswordRoute
+  '/league/$linkId': typeof LeagueLinkIdRouteWithChildren
   '/m/settings': typeof MSettingsRoute
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -758,31 +796,36 @@ export interface FileRoutesById {
   '/m/': typeof MIndexRoute
   '/playbook/': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
-  '/account/leagues/native': typeof AccountLeaguesNativeRoute
-  '/account/leagues/setup': typeof AccountLeaguesSetupRoute
   '/account/leagues/join': typeof AccountLeaguesJoinRoute
-  '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
-  '/league/$linkId': typeof LeagueLinkIdRouteWithChildren
-  '/league/$linkId/teams': typeof LeagueLinkIdTeamsRoute
-  '/league/$linkId/draft': typeof LeagueLinkIdDraftRoute
-  '/league/$linkId/settings': typeof LeagueLinkIdSettingsRoute
-  '/league/$linkId/players': typeof LeagueLinkIdPlayersRoute
-  '/league/$linkId/transactions': typeof LeagueLinkIdTransactionsRoute
-  '/league/$linkId/standings': typeof LeagueLinkIdStandingsRoute
-  '/league/$linkId/matchup': typeof LeagueLinkIdMatchupRoute
-  '/league/$linkId/my-team': typeof LeagueLinkIdMyTeamRoute
+  '/account/leagues/native': typeof AccountLeaguesNativeRouteWithChildren
+  '/account/leagues/setup': typeof AccountLeaguesSetupRoute
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
   '/api/cron/league-planning-snaps': typeof ApiCronLeaguePlanningSnapsRoute
+  '/api/cron/native-ai': typeof ApiCronNativeAiRoute
+  '/api/cron/native-scoring': typeof ApiCronNativeScoringRoute
+  '/api/cron/native-waivers': typeof ApiCronNativeWaiversRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/data/players': typeof ApiDataPlayersRoute
   '/api/data/players-export': typeof ApiDataPlayersExportRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
   '/api/webhooks/sync': typeof ApiWebhooksSyncRoute
+  '/league/$linkId/draft': typeof LeagueLinkIdDraftRoute
+  '/league/$linkId/matchup': typeof LeagueLinkIdMatchupRoute
+  '/league/$linkId/my-team': typeof LeagueLinkIdMyTeamRoute
+  '/league/$linkId/players': typeof LeagueLinkIdPlayersRoute
+  '/league/$linkId/settings': typeof LeagueLinkIdSettingsRoute
+  '/league/$linkId/standings': typeof LeagueLinkIdStandingsRoute
+  '/league/$linkId/teams': typeof LeagueLinkIdTeamsRoute
+  '/league/$linkId/trades': typeof LeagueLinkIdTradesRoute
+  '/league/$linkId/transactions': typeof LeagueLinkIdTransactionsRoute
+  '/league/$linkId/waivers': typeof LeagueLinkIdWaiversRoute
   '/m/league/$leagueId': typeof MLeagueLeagueIdRouteWithChildren
   '/account/leagues/': typeof AccountLeaguesIndexRoute
+  '/league/$linkId/': typeof LeagueLinkIdIndexRoute
+  '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
   '/api/auth/yahoo/callback': typeof ApiAuthYahooCallbackRoute
   '/api/auth/yahoo/connect': typeof ApiAuthYahooConnectRoute
   '/api/data/league/$id': typeof ApiDataLeagueIdRoute
@@ -832,6 +875,7 @@ export interface FileRouteTypes {
     | '/articles/$slug'
     | '/auth/confirmed'
     | '/auth/reset-password'
+    | '/league/$linkId'
     | '/m/settings'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
@@ -847,32 +891,36 @@ export interface FileRouteTypes {
     | '/m/'
     | '/playbook/'
     | '/account/leagues/$connectionId'
+    | '/account/leagues/join'
     | '/account/leagues/native'
     | '/account/leagues/setup'
-    | '/account/leagues/join'
-    | '/account/leagues/native/$linkId'
-    | '/league/$linkId'
-    | '/league/$linkId/'
-    | '/league/$linkId/teams'
-    | '/league/$linkId/draft'
-    | '/league/$linkId/settings'
-    | '/league/$linkId/players'
-    | '/league/$linkId/transactions'
-    | '/league/$linkId/standings'
-    | '/league/$linkId/matchup'
-    | '/league/$linkId/my-team'
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
     | '/api/cron/league-planning-snaps'
+    | '/api/cron/native-ai'
+    | '/api/cron/native-scoring'
+    | '/api/cron/native-waivers'
     | '/api/cron/research-aggregates'
     | '/api/cron/warehouse-ingest'
     | '/api/data/players'
     | '/api/data/players-export'
     | '/api/public/scoreboard'
     | '/api/webhooks/sync'
+    | '/league/$linkId/draft'
+    | '/league/$linkId/matchup'
+    | '/league/$linkId/my-team'
+    | '/league/$linkId/players'
+    | '/league/$linkId/settings'
+    | '/league/$linkId/standings'
+    | '/league/$linkId/teams'
+    | '/league/$linkId/trades'
+    | '/league/$linkId/transactions'
+    | '/league/$linkId/waivers'
     | '/m/league/$leagueId'
     | '/account/leagues/'
+    | '/league/$linkId/'
+    | '/account/leagues/native/$linkId'
     | '/api/auth/yahoo/callback'
     | '/api/auth/yahoo/connect'
     | '/api/data/league/$id'
@@ -933,31 +981,35 @@ export interface FileRouteTypes {
     | '/m'
     | '/playbook'
     | '/account/leagues/$connectionId'
+    | '/account/leagues/join'
     | '/account/leagues/native'
     | '/account/leagues/setup'
-    | '/account/leagues/join'
-    | '/account/leagues/native/$linkId'
-    | '/league/$linkId'
-    | '/league/$linkId/'
-    | '/league/$linkId/teams'
-    | '/league/$linkId/draft'
-    | '/league/$linkId/settings'
-    | '/league/$linkId/players'
-    | '/league/$linkId/transactions'
-    | '/league/$linkId/standings'
-    | '/league/$linkId/matchup'
-    | '/league/$linkId/my-team'
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
     | '/api/cron/league-planning-snaps'
+    | '/api/cron/native-ai'
+    | '/api/cron/native-scoring'
+    | '/api/cron/native-waivers'
     | '/api/cron/research-aggregates'
     | '/api/cron/warehouse-ingest'
     | '/api/data/players'
     | '/api/data/players-export'
     | '/api/public/scoreboard'
     | '/api/webhooks/sync'
+    | '/league/$linkId/draft'
+    | '/league/$linkId/matchup'
+    | '/league/$linkId/my-team'
+    | '/league/$linkId/players'
+    | '/league/$linkId/settings'
+    | '/league/$linkId/standings'
+    | '/league/$linkId/teams'
+    | '/league/$linkId/trades'
+    | '/league/$linkId/transactions'
+    | '/league/$linkId/waivers'
     | '/account/leagues'
+    | '/league/$linkId'
+    | '/account/leagues/native/$linkId'
     | '/api/auth/yahoo/callback'
     | '/api/auth/yahoo/connect'
     | '/api/data/league/$id'
@@ -1005,6 +1057,7 @@ export interface FileRouteTypes {
     | '/articles/$slug'
     | '/auth_/confirmed'
     | '/auth_/reset-password'
+    | '/league/$linkId'
     | '/m/settings'
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
@@ -1020,32 +1073,36 @@ export interface FileRouteTypes {
     | '/m/'
     | '/playbook/'
     | '/account/leagues/$connectionId'
+    | '/account/leagues/join'
     | '/account/leagues/native'
     | '/account/leagues/setup'
-    | '/account/leagues/join'
-    | '/account/leagues/native/$linkId'
-    | '/league/$linkId'
-    | '/league/$linkId/'
-    | '/league/$linkId/teams'
-    | '/league/$linkId/draft'
-    | '/league/$linkId/settings'
-    | '/league/$linkId/players'
-    | '/league/$linkId/transactions'
-    | '/league/$linkId/standings'
-    | '/league/$linkId/matchup'
-    | '/league/$linkId/my-team'
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
     | '/api/cron/league-planning-snaps'
+    | '/api/cron/native-ai'
+    | '/api/cron/native-scoring'
+    | '/api/cron/native-waivers'
     | '/api/cron/research-aggregates'
     | '/api/cron/warehouse-ingest'
     | '/api/data/players'
     | '/api/data/players-export'
     | '/api/public/scoreboard'
     | '/api/webhooks/sync'
+    | '/league/$linkId/draft'
+    | '/league/$linkId/matchup'
+    | '/league/$linkId/my-team'
+    | '/league/$linkId/players'
+    | '/league/$linkId/settings'
+    | '/league/$linkId/standings'
+    | '/league/$linkId/teams'
+    | '/league/$linkId/trades'
+    | '/league/$linkId/transactions'
+    | '/league/$linkId/waivers'
     | '/m/league/$leagueId'
     | '/account/leagues/'
+    | '/league/$linkId/'
+    | '/account/leagues/native/$linkId'
     | '/api/auth/yahoo/callback'
     | '/api/auth/yahoo/connect'
     | '/api/data/league/$id'
@@ -1094,26 +1151,23 @@ export interface RootRouteChildren {
   ArticlesSlugRoute: typeof ArticlesSlugRoute
   AuthConfirmedRoute: typeof AuthConfirmedRoute
   AuthResetPasswordRoute: typeof AuthResetPasswordRoute
+  LeagueLinkIdRoute: typeof LeagueLinkIdRouteWithChildren
   MockDraftSetupRoute: typeof MockDraftSetupRoute
   NflTeamNflIdRoute: typeof NflTeamNflIdRoute
   PlayerIdRoute: typeof PlayerIdRoute
   TeamTeamIdRoute: typeof TeamTeamIdRoute
   AccountIndexRoute: typeof AccountIndexRoute
   AccountLeaguesConnectionIdRoute: typeof AccountLeaguesConnectionIdRoute
-  AccountLeaguesNativeRoute: typeof AccountLeaguesNativeRoute
-  AccountLeaguesSetupRoute: typeof AccountLeaguesSetupRoute
   AccountLeaguesJoinRoute: typeof AccountLeaguesJoinRoute
-  AccountLeaguesNativeLinkIdRoute: typeof AccountLeaguesNativeLinkIdRoute
-  LeagueLinkIdRoute: typeof LeagueLinkIdRouteWithChildren
-  LeagueLinkIdIndexRoute: typeof LeagueLinkIdIndexRoute
-  LeagueLinkIdTeamsRoute: typeof LeagueLinkIdTeamsRoute
-  LeagueLinkIdDraftRoute: typeof LeagueLinkIdDraftRoute
-  LeagueLinkIdSettingsRoute: typeof LeagueLinkIdSettingsRoute
-  LeagueLinkIdPlayersRoute: typeof LeagueLinkIdPlayersRoute
+  AccountLeaguesNativeRoute: typeof AccountLeaguesNativeRouteWithChildren
+  AccountLeaguesSetupRoute: typeof AccountLeaguesSetupRoute
   ApiAdminSeedPlayerWarehouseRoute: typeof ApiAdminSeedPlayerWarehouseRoute
   ApiAdminTidbMigrateRoute: typeof ApiAdminTidbMigrateRoute
   ApiCronLeagueDeltaSyncRoute: typeof ApiCronLeagueDeltaSyncRoute
   ApiCronLeaguePlanningSnapsRoute: typeof ApiCronLeaguePlanningSnapsRoute
+  ApiCronNativeAiRoute: typeof ApiCronNativeAiRoute
+  ApiCronNativeScoringRoute: typeof ApiCronNativeScoringRoute
+  ApiCronNativeWaiversRoute: typeof ApiCronNativeWaiversRoute
   ApiCronResearchAggregatesRoute: typeof ApiCronResearchAggregatesRoute
   ApiCronWarehouseIngestRoute: typeof ApiCronWarehouseIngestRoute
   ApiDataPlayersRoute: typeof ApiDataPlayersRoute
@@ -1362,6 +1416,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/league/$linkId': {
+      id: '/league/$linkId'
+      path: '/league/$linkId'
+      fullPath: '/league/$linkId'
+      preLoaderRoute: typeof LeagueLinkIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/m/': {
       id: '/m/'
       path: '/'
@@ -1467,6 +1528,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountLeaguesConnectionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account/leagues/join': {
+      id: '/account/leagues/join'
+      path: '/account/leagues/join'
+      fullPath: '/account/leagues/join'
+      preLoaderRoute: typeof AccountLeaguesJoinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/account/leagues/native': {
       id: '/account/leagues/native'
       path: '/account/leagues/native'
@@ -1480,91 +1548,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/account/leagues/setup'
       preLoaderRoute: typeof AccountLeaguesSetupRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/account/leagues/join': {
-      id: '/account/leagues/join'
-      path: '/account/leagues/join'
-      fullPath: '/account/leagues/join'
-      preLoaderRoute: typeof AccountLeaguesJoinRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/account/leagues/native/$linkId': {
-      id: '/account/leagues/native/$linkId'
-      path: '/account/leagues/native/$linkId'
-      fullPath: '/account/leagues/native/$linkId'
-      preLoaderRoute: typeof AccountLeaguesNativeLinkIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-
-    '/league/$linkId': {
-      id: '/league/$linkId'
-      path: '/league/$linkId'
-      fullPath: '/league/$linkId'
-      preLoaderRoute: typeof LeagueLinkIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/league/$linkId/': {
-      id: '/league/$linkId/'
-      path: '/'
-      fullPath: '/league/$linkId/'
-      preLoaderRoute: typeof LeagueLinkIdIndexRouteImport
-      parentRoute: typeof LeagueLinkIdRoute
-    }
-    '/league/$linkId/teams': {
-      id: '/league/$linkId/teams'
-      path: '/teams'
-      fullPath: '/league/$linkId/teams'
-      preLoaderRoute: typeof LeagueLinkIdTeamsRouteImport
-      parentRoute: typeof LeagueLinkIdRoute
-    }
-    '/league/$linkId/draft': {
-      id: '/league/$linkId/draft'
-      path: '/draft'
-      fullPath: '/league/$linkId/draft'
-      preLoaderRoute: typeof LeagueLinkIdDraftRouteImport
-      parentRoute: typeof LeagueLinkIdRoute
-    }
-    '/league/$linkId/settings': {
-      id: '/league/$linkId/settings'
-      path: '/settings'
-      fullPath: '/league/$linkId/settings'
-      preLoaderRoute: typeof LeagueLinkIdSettingsRouteImport
-      parentRoute: typeof LeagueLinkIdRoute
-    }
-    '/league/$linkId/players': {
-      id: '/league/$linkId/players'
-      path: '/players'
-      fullPath: '/league/$linkId/players'
-      preLoaderRoute: typeof LeagueLinkIdPlayersRouteImport
-      parentRoute: typeof LeagueLinkIdRoute
-    }
-    '/league/$linkId/transactions': {
-      id: '/league/$linkId/transactions'
-      path: '/transactions'
-      fullPath: '/league/$linkId/transactions'
-      preLoaderRoute: typeof LeagueLinkIdTransactionsRouteImport
-      parentRoute: typeof LeagueLinkIdRoute
-    }
-    '/league/$linkId/standings': {
-      id: '/league/$linkId/standings'
-      path: '/standings'
-      fullPath: '/league/$linkId/standings'
-      preLoaderRoute: typeof LeagueLinkIdStandingsRouteImport
-      parentRoute: typeof LeagueLinkIdRoute
-    }
-    '/league/$linkId/matchup': {
-      id: '/league/$linkId/matchup'
-      path: '/matchup'
-      fullPath: '/league/$linkId/matchup'
-      preLoaderRoute: typeof LeagueLinkIdMatchupRouteImport
-      parentRoute: typeof LeagueLinkIdRoute
-    }
-    '/league/$linkId/my-team': {
-      id: '/league/$linkId/my-team'
-      path: '/my-team'
-      fullPath: '/league/$linkId/my-team'
-      preLoaderRoute: typeof LeagueLinkIdMyTeamRouteImport
-      parentRoute: typeof LeagueLinkIdRoute
     }
     '/api/admin/seed-player-warehouse': {
       id: '/api/admin/seed-player-warehouse'
@@ -1592,6 +1575,27 @@ declare module '@tanstack/react-router' {
       path: '/api/cron/league-planning-snaps'
       fullPath: '/api/cron/league-planning-snaps'
       preLoaderRoute: typeof ApiCronLeaguePlanningSnapsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cron/native-ai': {
+      id: '/api/cron/native-ai'
+      path: '/api/cron/native-ai'
+      fullPath: '/api/cron/native-ai'
+      preLoaderRoute: typeof ApiCronNativeAiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cron/native-scoring': {
+      id: '/api/cron/native-scoring'
+      path: '/api/cron/native-scoring'
+      fullPath: '/api/cron/native-scoring'
+      preLoaderRoute: typeof ApiCronNativeScoringRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cron/native-waivers': {
+      id: '/api/cron/native-waivers'
+      path: '/api/cron/native-waivers'
+      fullPath: '/api/cron/native-waivers'
+      preLoaderRoute: typeof ApiCronNativeWaiversRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/cron/research-aggregates': {
@@ -1636,12 +1640,96 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWebhooksSyncRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/league/$linkId/': {
+      id: '/league/$linkId/'
+      path: '/'
+      fullPath: '/league/$linkId/'
+      preLoaderRoute: typeof LeagueLinkIdIndexRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
+    '/league/$linkId/draft': {
+      id: '/league/$linkId/draft'
+      path: '/draft'
+      fullPath: '/league/$linkId/draft'
+      preLoaderRoute: typeof LeagueLinkIdDraftRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
+    '/league/$linkId/matchup': {
+      id: '/league/$linkId/matchup'
+      path: '/matchup'
+      fullPath: '/league/$linkId/matchup'
+      preLoaderRoute: typeof LeagueLinkIdMatchupRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
+    '/league/$linkId/my-team': {
+      id: '/league/$linkId/my-team'
+      path: '/my-team'
+      fullPath: '/league/$linkId/my-team'
+      preLoaderRoute: typeof LeagueLinkIdMyTeamRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
+    '/league/$linkId/players': {
+      id: '/league/$linkId/players'
+      path: '/players'
+      fullPath: '/league/$linkId/players'
+      preLoaderRoute: typeof LeagueLinkIdPlayersRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
+    '/league/$linkId/settings': {
+      id: '/league/$linkId/settings'
+      path: '/settings'
+      fullPath: '/league/$linkId/settings'
+      preLoaderRoute: typeof LeagueLinkIdSettingsRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
+    '/league/$linkId/standings': {
+      id: '/league/$linkId/standings'
+      path: '/standings'
+      fullPath: '/league/$linkId/standings'
+      preLoaderRoute: typeof LeagueLinkIdStandingsRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
+    '/league/$linkId/teams': {
+      id: '/league/$linkId/teams'
+      path: '/teams'
+      fullPath: '/league/$linkId/teams'
+      preLoaderRoute: typeof LeagueLinkIdTeamsRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
+    '/league/$linkId/trades': {
+      id: '/league/$linkId/trades'
+      path: '/trades'
+      fullPath: '/league/$linkId/trades'
+      preLoaderRoute: typeof LeagueLinkIdTradesRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
+    '/league/$linkId/transactions': {
+      id: '/league/$linkId/transactions'
+      path: '/transactions'
+      fullPath: '/league/$linkId/transactions'
+      preLoaderRoute: typeof LeagueLinkIdTransactionsRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
+    '/league/$linkId/waivers': {
+      id: '/league/$linkId/waivers'
+      path: '/waivers'
+      fullPath: '/league/$linkId/waivers'
+      preLoaderRoute: typeof LeagueLinkIdWaiversRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
     '/m/league/$leagueId': {
       id: '/m/league/$leagueId'
       path: '/league/$leagueId'
       fullPath: '/m/league/$leagueId'
       preLoaderRoute: typeof MLeagueLeagueIdRouteImport
       parentRoute: typeof MRoute
+    }
+    '/account/leagues/native/$linkId': {
+      id: '/account/leagues/native/$linkId'
+      path: '/$linkId'
+      fullPath: '/account/leagues/native/$linkId'
+      preLoaderRoute: typeof AccountLeaguesNativeLinkIdRouteImport
+      parentRoute: typeof AccountLeaguesNativeRoute
     }
     '/api/auth/yahoo/callback': {
       id: '/api/auth/yahoo/callback'
@@ -1799,34 +1887,48 @@ const PlaybookRouteWithChildren = PlaybookRoute._addFileChildren(
   PlaybookRouteChildren,
 )
 
-
 interface LeagueLinkIdRouteChildren {
-
-  LeagueLinkIdIndexRoute: typeof LeagueLinkIdIndexRoute
-  LeagueLinkIdTeamsRoute: typeof LeagueLinkIdTeamsRoute
   LeagueLinkIdDraftRoute: typeof LeagueLinkIdDraftRoute
-  LeagueLinkIdSettingsRoute: typeof LeagueLinkIdSettingsRoute
-  LeagueLinkIdPlayersRoute: typeof LeagueLinkIdPlayersRoute
-  LeagueLinkIdMyTeamRoute: typeof LeagueLinkIdMyTeamRoute
   LeagueLinkIdMatchupRoute: typeof LeagueLinkIdMatchupRoute
+  LeagueLinkIdMyTeamRoute: typeof LeagueLinkIdMyTeamRoute
+  LeagueLinkIdPlayersRoute: typeof LeagueLinkIdPlayersRoute
+  LeagueLinkIdSettingsRoute: typeof LeagueLinkIdSettingsRoute
   LeagueLinkIdStandingsRoute: typeof LeagueLinkIdStandingsRoute
+  LeagueLinkIdTeamsRoute: typeof LeagueLinkIdTeamsRoute
+  LeagueLinkIdTradesRoute: typeof LeagueLinkIdTradesRoute
   LeagueLinkIdTransactionsRoute: typeof LeagueLinkIdTransactionsRoute
+  LeagueLinkIdWaiversRoute: typeof LeagueLinkIdWaiversRoute
+  LeagueLinkIdIndexRoute: typeof LeagueLinkIdIndexRoute
 }
-const LeagueLinkIdRouteChildren: LeagueLinkIdRouteChildren = {
 
-  LeagueLinkIdIndexRoute: LeagueLinkIdIndexRoute,
-  LeagueLinkIdTeamsRoute: LeagueLinkIdTeamsRoute,
+const LeagueLinkIdRouteChildren: LeagueLinkIdRouteChildren = {
   LeagueLinkIdDraftRoute: LeagueLinkIdDraftRoute,
-  LeagueLinkIdSettingsRoute: LeagueLinkIdSettingsRoute,
-  LeagueLinkIdPlayersRoute: LeagueLinkIdPlayersRoute,
-  LeagueLinkIdMyTeamRoute: LeagueLinkIdMyTeamRoute,
   LeagueLinkIdMatchupRoute: LeagueLinkIdMatchupRoute,
+  LeagueLinkIdMyTeamRoute: LeagueLinkIdMyTeamRoute,
+  LeagueLinkIdPlayersRoute: LeagueLinkIdPlayersRoute,
+  LeagueLinkIdSettingsRoute: LeagueLinkIdSettingsRoute,
   LeagueLinkIdStandingsRoute: LeagueLinkIdStandingsRoute,
+  LeagueLinkIdTeamsRoute: LeagueLinkIdTeamsRoute,
+  LeagueLinkIdTradesRoute: LeagueLinkIdTradesRoute,
   LeagueLinkIdTransactionsRoute: LeagueLinkIdTransactionsRoute,
+  LeagueLinkIdWaiversRoute: LeagueLinkIdWaiversRoute,
+  LeagueLinkIdIndexRoute: LeagueLinkIdIndexRoute,
 }
+
 const LeagueLinkIdRouteWithChildren = LeagueLinkIdRoute._addFileChildren(
   LeagueLinkIdRouteChildren,
 )
+
+interface AccountLeaguesNativeRouteChildren {
+  AccountLeaguesNativeLinkIdRoute: typeof AccountLeaguesNativeLinkIdRoute
+}
+
+const AccountLeaguesNativeRouteChildren: AccountLeaguesNativeRouteChildren = {
+  AccountLeaguesNativeLinkIdRoute: AccountLeaguesNativeLinkIdRoute,
+}
+
+const AccountLeaguesNativeRouteWithChildren =
+  AccountLeaguesNativeRoute._addFileChildren(AccountLeaguesNativeRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -1861,21 +1963,23 @@ const rootRouteChildren: RootRouteChildren = {
   ArticlesSlugRoute: ArticlesSlugRoute,
   AuthConfirmedRoute: AuthConfirmedRoute,
   AuthResetPasswordRoute: AuthResetPasswordRoute,
+  LeagueLinkIdRoute: LeagueLinkIdRouteWithChildren,
   MockDraftSetupRoute: MockDraftSetupRoute,
   NflTeamNflIdRoute: NflTeamNflIdRoute,
   PlayerIdRoute: PlayerIdRoute,
   TeamTeamIdRoute: TeamTeamIdRoute,
   AccountIndexRoute: AccountIndexRoute,
   AccountLeaguesConnectionIdRoute: AccountLeaguesConnectionIdRoute,
-  AccountLeaguesNativeRoute: AccountLeaguesNativeRoute,
-  AccountLeaguesSetupRoute: AccountLeaguesSetupRoute,
   AccountLeaguesJoinRoute: AccountLeaguesJoinRoute,
-  AccountLeaguesNativeLinkIdRoute: AccountLeaguesNativeLinkIdRoute,
-  LeagueLinkIdRoute: LeagueLinkIdRouteWithChildren,
+  AccountLeaguesNativeRoute: AccountLeaguesNativeRouteWithChildren,
+  AccountLeaguesSetupRoute: AccountLeaguesSetupRoute,
   ApiAdminSeedPlayerWarehouseRoute: ApiAdminSeedPlayerWarehouseRoute,
   ApiAdminTidbMigrateRoute: ApiAdminTidbMigrateRoute,
   ApiCronLeagueDeltaSyncRoute: ApiCronLeagueDeltaSyncRoute,
   ApiCronLeaguePlanningSnapsRoute: ApiCronLeaguePlanningSnapsRoute,
+  ApiCronNativeAiRoute: ApiCronNativeAiRoute,
+  ApiCronNativeScoringRoute: ApiCronNativeScoringRoute,
+  ApiCronNativeWaiversRoute: ApiCronNativeWaiversRoute,
   ApiCronResearchAggregatesRoute: ApiCronResearchAggregatesRoute,
   ApiCronWarehouseIngestRoute: ApiCronWarehouseIngestRoute,
   ApiDataPlayersRoute: ApiDataPlayersRoute,
@@ -1893,3 +1997,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

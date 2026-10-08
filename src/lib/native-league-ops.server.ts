@@ -293,12 +293,14 @@ export async function joinNativeLeagueForUser(
 
   const preferredName = String(input.teamName ?? "").trim().slice(0, 64);
 
-  // Claim the lowest open draft slot (serialized by row update).
+  // Claim the lowest open human seat (AI seats stay user_id NULL + is_ai=1).
   await tidbExecute(
     `UPDATE native_teams
      SET user_id = ?,
-         team_name = IF(? <> '', ?, team_name)
-     WHERE league_id = ? AND user_id IS NULL
+         team_name = IF(? <> '', ?, team_name),
+         is_ai = 0,
+         ai_persona = NULL
+     WHERE league_id = ? AND user_id IS NULL AND COALESCE(is_ai, 0) = 0
      ORDER BY draft_slot ASC
      LIMIT 1`,
     [uid, preferredName, preferredName, league.id],
@@ -367,7 +369,7 @@ export type NativeMemberLeagueSummary = {
   canEditInvite: boolean;
 };
 
-async function assertMembershipLink(
+export async function assertMembershipLink(
   userId: string,
   linkId: string,
 ): Promise<{
@@ -437,6 +439,7 @@ type LeagueCoreRow = {
   keepers_per_team?: number;
   keeper_note?: string | null;
   scoring_settings?: string | Record<string, unknown> | null;
+  allow_ai_teams?: number | boolean;
 };
 
 function asBool(v: unknown, fallback = false): boolean {
@@ -445,7 +448,7 @@ function asBool(v: unknown, fallback = false): boolean {
   return fallback;
 }
 
-function parseScoringSettingsJson(raw: unknown): Record<string, number> {
+export function parseScoringSettingsJson(raw: unknown): Record<string, number> {
   let value: unknown = raw;
   if (typeof raw === "string") {
     try {
@@ -520,10 +523,11 @@ function commissionerSettingsFromLeague(
     rosterCapacity: countActiveRosterCapacity(slotCounts),
     settingsLocked: draftStatus !== "not_started" && draftStatus !== "scheduled",
     canManage,
+    allowAiTeams: asBool(league.allow_ai_teams, false),
   };
 }
 
-function parseRosterSlots(raw: string | Record<string, unknown> | null | undefined): Record<string, unknown> | null {
+export function parseRosterSlots(raw: string | Record<string, unknown> | null | undefined): Record<string, unknown> | null {
   if (typeof raw === "string") {
     try {
       return JSON.parse(raw) as Record<string, unknown>;
@@ -561,7 +565,7 @@ function summaryFromParts(
   };
 }
 
-const LEAGUE_CORE_SELECT = `id, name, invite_code, season_year, status, league_type, team_count, current_week,
+export const LEAGUE_CORE_SELECT = `id, name, invite_code, season_year, status, league_type, team_count, current_week,
             scoring_preset, draft_mode, draft_status, created_at, updated_at, roster_slots, playoff_start_week,
             season_start_week, is_public, auto_activate_next_year, playoff_teams, playoff_matchup_length,
             playoff_week_pair, standings_tiebreaker, allow_matchup_ties, matchup_tiebreaker_slot,
@@ -569,9 +573,9 @@ const LEAGUE_CORE_SELECT = `id, name, invite_code, season_year, status, league_t
             lock_fa_on_gametime, max_adds_per_week, max_adds_per_season, undroppable_top_players,
             roster_lock_type, trade_deadline_week, trade_review_hours, trade_veto_mode, max_trades_per_season,
             draft_format, draft_order_type, draft_pick_time_limit_sec, keepers_per_team, keeper_note,
-            scoring_settings`;
+            scoring_settings, allow_ai_teams`;
 
-function parsePlayerIdList(raw: unknown): string[] {
+export function parsePlayerIdList(raw: unknown): string[] {
   let value: unknown = raw;
   if (typeof raw === "string") {
     try {
@@ -748,7 +752,7 @@ export async function adminDeleteNativeLeague(leagueId: string): Promise<AdminDe
   }
 }
 
-function isCommishRole(role: string): boolean {
+export function isCommishRole(role: string): boolean {
   return role === "commissioner" || role === "co_commish";
 }
 
@@ -759,11 +763,18 @@ export type NativeTeamRow = {
   draftSlot: number;
   waiverPriority: number;
   avatarUrl: string | null;
+  /** AI-managed testing seat (no human user_id). */
+  isAi: boolean;
+  aiPersona: string | null;
 };
 
 export type NativeRosterRow = {
   teamId: number;
+  /** Active + IR (for ownership / display). */
   playerIds: string[];
+  /** Active roster only (excludes IR) — use for FA open-slot math. */
+  activePlayerIds: string[];
+  irPlayerIds: string[];
   version: number;
 };
 
@@ -804,6 +815,8 @@ type TeamDbRow = {
   draft_slot: number;
   waiver_priority: number;
   avatar_url: string | null;
+  is_ai?: number | boolean;
+  ai_persona?: string | null;
 };
 
 async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLeagueBoard | null> {
@@ -817,7 +830,7 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
       [membership.leagueId],
     ),
     tidbExecute<TeamDbRow>(
-      `SELECT id, team_name, user_id, draft_slot, waiver_priority, avatar_url
+      `SELECT id, team_name, user_id, draft_slot, waiver_priority, avatar_url, is_ai, ai_persona
        FROM native_teams WHERE league_id = ? ORDER BY draft_slot ASC`,
       [membership.leagueId],
     ),
@@ -851,7 +864,9 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
 
   const currentWeek = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
 
-  const filledTeams = teamRows.filter((t) => t.user_id != null && String(t.user_id).length > 0).length;
+  const filledTeams = teamRows.filter(
+    (t) => (t.user_id != null && String(t.user_id).length > 0) || asBool(t.is_ai, false),
+  ).length;
   const summary = summaryFromParts(membership, league, filledTeams);
   const rosterSlotsRaw = parseRosterSlots(league.roster_slots);
   const slotCounts = parseRosterSlotCounts(rosterSlotsRaw ?? undefined);
@@ -867,6 +882,8 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
     return {
       teamId: Number(r.team_id),
       playerIds: [...active, ...ir.filter((id) => !active.includes(id))],
+      activePlayerIds: active,
+      irPlayerIds: ir,
       version: Number(r.version ?? 1) || 1,
     };
   });
@@ -891,6 +908,8 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
       draftSlot: Number(t.draft_slot),
       waiverPriority: Number(t.waiver_priority),
       avatarUrl: t.avatar_url,
+      isAi: asBool(t.is_ai, false),
+      aiPersona: t.ai_persona == null ? null : String(t.ai_persona),
     })),
     picksPerTeam: countDraftableRosterSpots(rosterSlotsRaw),
     canManage: isCommishRole(summary.role),
@@ -983,10 +1002,10 @@ export async function kickNativeTeamMemberForUser(
     return { ok: false, error: "Commissioner cannot leave their own seat this way" };
   }
 
-  await tidbExecute(`UPDATE native_teams SET user_id = NULL WHERE id = ? AND league_id = ?`, [
-    teamId,
-    membership.leagueId,
-  ]);
+  await tidbExecute(
+    `UPDATE native_teams SET user_id = NULL, is_ai = 0, ai_persona = NULL WHERE id = ? AND league_id = ?`,
+    [teamId, membership.leagueId],
+  );
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   await supabaseAdmin
     .from("native_league_links")
@@ -1033,6 +1052,7 @@ export type NativeCommissionerPatch = {
   keepersPerTeam?: number;
   keeperNote?: string | null;
   teamCount?: number;
+  allowAiTeams?: boolean;
 };
 
 export async function updateNativeLeagueBasicsForUser(
@@ -1187,6 +1207,9 @@ export async function updateNativeLeagueBasicsForUser(
       // Seat resize is a separate flow; reject size changes here for safety.
       return { ok: false, error: "Changing team count is not supported from this screen yet" };
     }
+  }
+  if (input.allowAiTeams != null) {
+    push("allow_ai_teams", input.allowAiTeams ? 1 : 0);
   }
 
   const touchRoster =
@@ -1655,6 +1678,8 @@ export async function saveNativeLineupForUser(
     slots: NativeLineupSlots;
     posById: Record<string, string>;
     injuryById?: Record<string, string | null | undefined>;
+    /** NFL team by player id for roster lock checks. */
+    teamByPlayerId?: Record<string, string | null | undefined>;
   },
 ): Promise<NativeMutationResult & { version?: number }> {
   if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
@@ -1689,8 +1714,26 @@ export async function saveNativeLineupForUser(
   }
 
   const irAllowedStatuses = parseIrAllowedStatuses(rosterSlotsRaw);
+
+  // Preserve locked players (game_time / first_game) before validation.
+  const existingLineup = await tidbExecute<{ slots: unknown }>(
+    `SELECT slots FROM native_lineups
+     WHERE league_id = ? AND team_id = ? AND season_year = ? AND week = ?
+     LIMIT 1`,
+    [membership.leagueId, membership.teamId, seasonYear, week],
+  );
+  const { filterLockedLineupSlots } = await import("@/lib/native-league-gameplay.server");
+  const locked = await filterLockedLineupSlots({
+    league,
+    week,
+    nextSlots: input.slots ?? {},
+    prevSlots: parseSlotsJson(existingLineup[0]?.slots),
+    teamByPlayerId: input.teamByPlayerId ?? {},
+  });
+  if (!locked.ok) return { ok: false, error: locked.error };
+
   const validated = validateNativeLineupSlots({
-    slots: input.slots ?? {},
+    slots: locked.slots ?? input.slots ?? {},
     counts,
     rosterPlayerIds,
     posById: input.posById ?? {},
@@ -1788,7 +1831,7 @@ export type NativeFaMoveResult = NativeMutationResult & {
 };
 
 /** Soft-patch current-week lineup JSON after FA add/drop (best-effort). */
-async function syncLineupAfterRosterChange(input: {
+export async function syncLineupAfterRosterChange(input: {
   leagueId: string;
   teamId: number;
   seasonYear: number;
@@ -1872,7 +1915,13 @@ async function syncLineupAfterRosterChange(input: {
 export async function submitNativeFreeAgentMoveForUser(
   userId: string,
   linkId: string,
-  input: { addPlayerId: string; dropPlayerId?: string | null; rosterVersion: number },
+  input: {
+    addPlayerId: string;
+    dropPlayerId?: string | null;
+    rosterVersion: number;
+    /** NFL team abbrev for gametime FA lock (from client catalog). */
+    addPlayerTeam?: string | null;
+  },
 ): Promise<NativeFaMoveResult> {
   if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
   const membership = await assertMembershipLink(userId, linkId);
@@ -1916,13 +1965,22 @@ export async function submitNativeFreeAgentMoveForUser(
   const seasonYear = Number(league.season_year);
   const week = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
 
+  const { assertFaMoveAllowed } = await import("@/lib/native-league-gameplay.server");
+  const faGate = await assertFaMoveAllowed({
+    league,
+    addPlayerId,
+    addPlayerTeam: input.addPlayerTeam ?? null,
+    week,
+  });
+  if (!faGate.ok) return faGate;
+
   const [rosterRows, lockRows, teamMeta] = await Promise.all([
     tidbExecute<{ player_ids: unknown; reserve_ir: unknown; version: number }>(
       `SELECT player_ids, reserve_ir, version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
       [membership.leagueId, membership.teamId],
     ),
-    tidbExecute<{ player_id: string; held_by_team_id: number | null }>(
-      `SELECT player_id, held_by_team_id FROM native_player_locks
+    tidbExecute<{ player_id: string; held_by_team_id: number | null; lock_reason?: string }>(
+      `SELECT player_id, held_by_team_id, lock_reason FROM native_player_locks
        WHERE league_id = ? AND player_id IN (?, ?)`,
       [membership.leagueId, addPlayerId, dropPlayerId ?? addPlayerId],
     ),
@@ -1950,6 +2008,12 @@ export async function submitNativeFreeAgentMoveForUser(
   const addLock = lockRows.find((r) => String(r.player_id) === addPlayerId);
   if (addLock?.held_by_team_id != null) {
     return { ok: false, error: "That player is already rostered in this league" };
+  }
+  if (dropPlayerId) {
+    const dropHold = lockRows.find((r) => String(r.player_id) === dropPlayerId);
+    if (dropHold && String(dropHold.lock_reason ?? "") === "trade_hold") {
+      return { ok: false, error: "That player is held in a pending trade" };
+    }
   }
 
   // Also verify ownership via any roster (locks can lag).

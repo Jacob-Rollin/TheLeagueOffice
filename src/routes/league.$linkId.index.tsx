@@ -63,12 +63,18 @@ function NativeLeagueDashboard() {
         ) : (
           <>
             <p className="mt-2 text-sm text-slate-600">
-              Draft complete — week {currentWeek} is live. Browse free agents on Players; lineups and
-              waivers land next.
+              Draft complete — week {currentWeek} is live. Set your lineup, claim waivers, and propose
+              trades from the league tabs.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Link to="/league/$linkId/my-team" params={{ linkId }} className={buttonClass}>
                 Set Lineup
+              </Link>
+              <Link to="/league/$linkId/waivers" params={{ linkId }} className={outlineClass}>
+                Waivers
+              </Link>
+              <Link to="/league/$linkId/trades" params={{ linkId }} className={outlineClass}>
+                Trades
               </Link>
               <Link to="/league/$linkId/players" params={{ linkId }} className={outlineClass}>
                 League Players

@@ -287,6 +287,7 @@ export const updateNativeLeagueBasics = createServerFn({ method: "POST" })
       "keepersPerTeam",
       "keeperNote",
       "teamCount",
+      "allowAiTeams",
     ]) {
       copy(key);
     }
@@ -374,6 +375,7 @@ export const saveNativeLineup = createServerFn({ method: "POST" })
       slots: Record<string, Array<string | null>>;
       posById: Record<string, string>;
       injuryById?: Record<string, string | null | undefined>;
+      teamByPlayerId?: Record<string, string | null | undefined>;
     }) => ({
       linkId: String(input.linkId ?? "").trim().slice(0, 36),
       week: Number(input.week),
@@ -381,6 +383,7 @@ export const saveNativeLineup = createServerFn({ method: "POST" })
       slots: input.slots ?? {},
       posById: input.posById ?? {},
       injuryById: input.injuryById ?? {},
+      teamByPlayerId: input.teamByPlayerId ?? {},
     }),
   )
   .handler(async ({ context, data }) => {
@@ -391,6 +394,7 @@ export const saveNativeLineup = createServerFn({ method: "POST" })
       slots: data.slots,
       posById: data.posById,
       injuryById: data.injuryById,
+      teamByPlayerId: data.teamByPlayerId,
     });
   });
 
@@ -402,6 +406,7 @@ export const submitNativeFreeAgentMove = createServerFn({ method: "POST" })
       addPlayerId: string;
       dropPlayerId?: string | null;
       rosterVersion: number;
+      addPlayerTeam?: string | null;
     }) => ({
       linkId: String(input.linkId ?? "").trim().slice(0, 36),
       addPlayerId: String(input.addPlayerId ?? "").trim().slice(0, 32),
@@ -410,6 +415,10 @@ export const submitNativeFreeAgentMove = createServerFn({ method: "POST" })
           ? null
           : String(input.dropPlayerId).trim().slice(0, 32),
       rosterVersion: Number(input.rosterVersion),
+      addPlayerTeam:
+        input.addPlayerTeam == null || input.addPlayerTeam === ""
+          ? null
+          : String(input.addPlayerTeam).trim().slice(0, 8),
     }),
   )
   .handler(async ({ context, data }) => {
@@ -418,6 +427,7 @@ export const submitNativeFreeAgentMove = createServerFn({ method: "POST" })
       addPlayerId: data.addPlayerId,
       dropPlayerId: data.dropPlayerId,
       rosterVersion: data.rosterVersion,
+      addPlayerTeam: data.addPlayerTeam,
     });
   });
 
@@ -459,5 +469,160 @@ export const resolveNativeIrViolation = createServerFn({ method: "POST" })
       action: data.action,
       dropPlayerId: data.dropPlayerId,
       rosterVersion: data.rosterVersion,
+    });
+  });
+
+export const listNativeWaiverClaims = createServerFn({ method: "GET" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+  }))
+  .handler(async ({ context, data }) => {
+    const { listNativeWaiverClaimsForLink } = await import("@/lib/native-league-gameplay.server");
+    return await listNativeWaiverClaimsForLink(context.userId, data.linkId);
+  });
+
+export const submitNativeWaiverClaim = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      linkId: string;
+      playerToAdd: string;
+      playerToDrop?: string | null;
+      bidAmount?: number | null;
+    }) => ({
+      linkId: String(input.linkId ?? "").trim().slice(0, 36),
+      playerToAdd: String(input.playerToAdd ?? "").trim().slice(0, 32),
+      playerToDrop:
+        input.playerToDrop == null || input.playerToDrop === ""
+          ? null
+          : String(input.playerToDrop).trim().slice(0, 32),
+      bidAmount: input.bidAmount == null ? null : Number(input.bidAmount),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const { submitNativeWaiverClaimForUser } = await import("@/lib/native-league-gameplay.server");
+    return await submitNativeWaiverClaimForUser(context.userId, data.linkId, data);
+  });
+
+export const cancelNativeWaiverClaim = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; claimId: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    claimId: Number(input.claimId),
+  }))
+  .handler(async ({ context, data }) => {
+    const { cancelNativeWaiverClaimForUser } = await import("@/lib/native-league-gameplay.server");
+    return await cancelNativeWaiverClaimForUser(context.userId, data.linkId, data.claimId);
+  });
+
+export const listNativeTrades = createServerFn({ method: "GET" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+  }))
+  .handler(async ({ context, data }) => {
+    const { listNativeTradesForLink } = await import("@/lib/native-league-gameplay.server");
+    return await listNativeTradesForLink(context.userId, data.linkId);
+  });
+
+export const proposeNativeTrade = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      linkId: string;
+      acceptorTeamId: number;
+      givePlayerIds: string[];
+      receivePlayerIds: string[];
+    }) => ({
+      linkId: String(input.linkId ?? "").trim().slice(0, 36),
+      acceptorTeamId: Number(input.acceptorTeamId),
+      givePlayerIds: Array.isArray(input.givePlayerIds)
+        ? input.givePlayerIds.map((id) => String(id).trim().slice(0, 32)).filter(Boolean)
+        : [],
+      receivePlayerIds: Array.isArray(input.receivePlayerIds)
+        ? input.receivePlayerIds.map((id) => String(id).trim().slice(0, 32)).filter(Boolean)
+        : [],
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const { proposeNativeTradeForUser } = await import("@/lib/native-league-gameplay.server");
+    return await proposeNativeTradeForUser(context.userId, data.linkId, data);
+  });
+
+export const respondNativeTrade = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator(
+    (input: { linkId: string; tradeId: number; action: "accept" | "reject" | "cancel" | "veto" }) => ({
+      linkId: String(input.linkId ?? "").trim().slice(0, 36),
+      tradeId: Number(input.tradeId),
+      action: (["accept", "reject", "cancel", "veto"] as const).includes(input.action)
+        ? input.action
+        : ("reject" as const),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const { respondNativeTradeForUser } = await import("@/lib/native-league-gameplay.server");
+    return await respondNativeTradeForUser(context.userId, data.linkId, data);
+  });
+
+export const getNativeMatchupWeek = createServerFn({ method: "GET" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; week?: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    week: input.week != null ? Number(input.week) : undefined,
+  }))
+  .handler(async ({ context, data }) => {
+    const { getNativeMatchupWeekForLink } = await import("@/lib/native-league-gameplay.server");
+    return await getNativeMatchupWeekForLink(context.userId, data.linkId, data.week);
+  });
+
+export const getNativeStandings = createServerFn({ method: "GET" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+  }))
+  .handler(async ({ context, data }) => {
+    const { getNativeStandingsForLink } = await import("@/lib/native-league-gameplay.server");
+    return await getNativeStandingsForLink(context.userId, data.linkId);
+  });
+
+export const setNativeTeamAi = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; teamId: number; enabled: boolean }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    teamId: Number(input.teamId),
+    enabled: Boolean(input.enabled),
+  }))
+  .handler(async ({ context, data }) => {
+    const { setNativeTeamAiForUser } = await import("@/lib/native-league-ai.server");
+    return await setNativeTeamAiForUser(context.userId, data.linkId, data);
+  });
+
+/** Commissioner: fill consecutive on-the-clock AI draft picks (bounded). */
+export const runNativeAiDraft = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; maxPicks?: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    maxPicks: input.maxPicks != null ? Number(input.maxPicks) : undefined,
+  }))
+  .handler(async ({ context, data }) => {
+    const { runNativeAiDraftForUser } = await import("@/lib/native-league-ai.server");
+    return await runNativeAiDraftForUser(context.userId, data.linkId, {
+      ...(data.maxPicks != null ? { maxPicks: data.maxPicks } : {}),
+    });
+  });
+
+/** Commissioner: set AI team lineups for the week (bye / Out / IR aware). */
+export const runNativeAiLineups = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; week?: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    week: input.week != null ? Number(input.week) : undefined,
+  }))
+  .handler(async ({ context, data }) => {
+    const { runNativeAiLineupsForUser } = await import("@/lib/native-league-ai.server");
+    return await runNativeAiLineupsForUser(context.userId, data.linkId, {
+      ...(data.week != null ? { week: data.week } : {}),
     });
   });

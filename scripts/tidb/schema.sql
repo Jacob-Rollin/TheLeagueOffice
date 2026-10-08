@@ -199,6 +199,7 @@ CREATE TABLE IF NOT EXISTS native_leagues (
   current_draft_pick INT NOT NULL DEFAULT 0,
   keepers_per_team TINYINT NOT NULL DEFAULT 0,
   keeper_note TEXT NULL,
+  allow_ai_teams TINYINT(1) NOT NULL DEFAULT 0,
   settings_version INT NOT NULL DEFAULT 1,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -221,13 +222,16 @@ CREATE TABLE IF NOT EXISTS native_teams (
   faab_balance INT NULL,
   adds_this_week INT NOT NULL DEFAULT 0,
   adds_this_season INT NOT NULL DEFAULT 0,
+  is_ai TINYINT(1) NOT NULL DEFAULT 0,
+  ai_persona VARCHAR(32) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_native_teams_league_slot (league_id, draft_slot),
   UNIQUE KEY uq_native_teams_league_user (league_id, user_id),
   INDEX idx_native_teams_user (user_id),
-  INDEX idx_native_teams_league (league_id)
+  INDEX idx_native_teams_league (league_id),
+  INDEX idx_native_teams_ai (league_id, is_ai)
 );
 
 CREATE TABLE IF NOT EXISTS native_rosters (

@@ -59,6 +59,8 @@ export const NATIVE_LEAGUE_SCHEMA_STATEMENTS: string[] = [
   current_draft_pick INT NOT NULL DEFAULT 0,
   keepers_per_team TINYINT NOT NULL DEFAULT 0,
   keeper_note TEXT NULL,
+  /** When 1, commissioner may assign AI managers to open seats (testing / bye fillers). */
+  allow_ai_teams TINYINT(1) NOT NULL DEFAULT 0,
   settings_version INT NOT NULL DEFAULT 1,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -81,14 +83,25 @@ export const NATIVE_LEAGUE_SCHEMA_STATEMENTS: string[] = [
   faab_balance INT NULL,
   adds_this_week INT NOT NULL DEFAULT 0,
   adds_this_season INT NOT NULL DEFAULT 0,
+  /** AI-managed seat (user_id stays NULL; excluded from human join). */
+  is_ai TINYINT(1) NOT NULL DEFAULT 0,
+  /** Draft persona key: hero-rb | zero-rb | value | streamer */
+  ai_persona VARCHAR(32) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_native_teams_league_slot (league_id, draft_slot),
   UNIQUE KEY uq_native_teams_league_user (league_id, user_id),
   INDEX idx_native_teams_user (user_id),
-  INDEX idx_native_teams_league (league_id)
+  INDEX idx_native_teams_league (league_id),
+  INDEX idx_native_teams_ai (league_id, is_ai)
 )`,
+
+  // Existing clusters: CREATE IF NOT EXISTS will not add columns — ALTERs are idempotent.
+  `ALTER TABLE native_leagues ADD COLUMN allow_ai_teams TINYINT(1) NOT NULL DEFAULT 0`,
+  `ALTER TABLE native_teams ADD COLUMN is_ai TINYINT(1) NOT NULL DEFAULT 0`,
+  `ALTER TABLE native_teams ADD COLUMN ai_persona VARCHAR(32) NULL`,
+  `ALTER TABLE native_teams ADD INDEX idx_native_teams_ai (league_id, is_ai)`,
 
   `CREATE TABLE IF NOT EXISTS native_rosters (
   league_id CHAR(36) NOT NULL,

@@ -70,6 +70,18 @@ function shuffle<T>(list: T[]): T[] {
   return out;
 }
 
+/** One-off AI seat name for native-league testing managers. */
+export function randomAiTeamName(seed = Math.random()): string {
+  const city = CITIES[Math.floor(seed * CITIES.length) % CITIES.length] ?? "Salem";
+  const mascot =
+    MASCOTS[Math.floor((seed * 9973) % MASCOTS.length) % MASCOTS.length] ?? "Bandits";
+  return `${city} ${mascot}`;
+}
+
+export function randomAiPersona(seed = Math.random()): Personality {
+  return PERSONALITIES[Math.floor(seed * PERSONALITIES.length) % PERSONALITIES.length] ?? "value";
+}
+
 /** Randomized opponent names + strategic profiles for every computer slot. */
 export function generateOpponents(
   teams: number,
