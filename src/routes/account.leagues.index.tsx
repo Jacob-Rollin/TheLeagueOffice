@@ -19,6 +19,13 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchLeagueRostersForConnection } from "@/lib/league-rosters-fetch";
+import { createNativeLeague, joinNativeLeague } from "@/lib/native-league.functions";
+import {
+  NATIVE_LEAGUE_MAX_TEAMS,
+  NATIVE_LEAGUE_MIN_TEAMS,
+  type NativeDraftMode,
+  type NativeScoringPreset,
+} from "@/lib/native-league-settings";
 import { canFetchMetaClient, fetchSleeperMetaClient } from "@/lib/sleeper-meta-client";
 import { markRevalidated, writeRosterCache } from "@/lib/roster-cache";
 import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
@@ -29,7 +36,14 @@ export const Route = createFileRoute("/account/leagues/")({
   component: LeaguesPage,
 });
 
-const buttonClass = "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
+const buttonClass =
+  "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
+const outlineClass =
+  "rounded-md border border-border bg-white px-4 py-2 font-display text-sm uppercase tracking-wide text-slate-800 disabled:opacity-60";
+const fieldClass =
+  "mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary";
+const labelClass = "block text-sm font-medium text-slate-800";
+const cardClass = "rounded-xl border border-border bg-card p-5";
 
 export type ConnectionRow = {
   id: string;
@@ -84,7 +98,7 @@ function hostLeagueUrl(platform: string, leagueId: string | null): string | null
 
 function LeaguesPage() {
   const { user } = useAuth();
-  const { setActiveLeagueId } = useActiveLeague();
+  const { refresh, setActiveLeagueId } = useActiveLeague();
   const navigate = useNavigate();
   const userId = user?.id ?? null;
   const queryClient = useQueryClient();
@@ -104,7 +118,10 @@ function LeaguesPage() {
     enabled: Boolean(userId),
     retry: false,
     queryFn: async (): Promise<ConnectionRow[]> => {
-      const { data, error } = await supabase.from("synced_leagues").select("id, platform, league_id, espn_s2, swid, metadata, updated_at").order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("synced_leagues")
+        .select("id, platform, league_id, espn_s2, swid, metadata, updated_at")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ConnectionRow[];
     },
@@ -171,48 +188,104 @@ function LeaguesPage() {
     }
   };
 
-  const viewPlaybook = (id: string) => {
+  const selectLeague = async (id: string) => {
+    setActiveLeagueId(id);
+  };
+
+  const viewTools = (id: string) => {
     setActiveLeagueId(id);
     void navigate({ to: "/playbook" });
   };
+
+  const invalidateNative = async (linkId: string) => {
+    await queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
+    await queryClient.invalidateQueries({ queryKey: ["native-league-links", userId] });
+    await queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
+    await refresh();
+    setActiveLeagueId(linkId);
+  };
+
   const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
   const nativeRows = (nativeLinks ?? []).filter((row): row is NativeLinkRow => Boolean(row?.id));
-  const empty = rows.length === 0 && nativeRows.length === 0;
 
   return (
     <AccountShell
       title="My Leagues"
       active="leagues"
       action={
-        <div className="flex flex-wrap gap-2">
-          <Link to="/account/leagues/native" className={buttonClass}>
-            Native League
-          </Link>
-          <Link to="/leaguesync" className={buttonClass}>
-            Sync New League
-          </Link>
-        </div>
+        <Link to="/leaguesync" className={buttonClass}>
+          Sync New League
+        </Link>
       }
     >
-      {empty ? (
-        <div className="flex items-center justify-center rounded-xl border border-border bg-card px-4 py-16"><p className="font-display text-sm font-semibold uppercase tracking-widest text-black">No Active Leagues</p></div>
-      ) : (
-        <ul className="grid grid-cols-1 gap-3 md:grid-cols-[auto_auto_minmax(10rem,1fr)_10rem_auto_auto]">
-          {nativeRows.map((row) => (
-            <NativeLeagueRow key={row.id} row={row} onViewPlaybook={viewPlaybook} />
-          ))}
-          {rows.map((row) => (
-            <LeagueRow
-              key={row.id}
-              row={row}
-              isRefreshing={refreshingId === row.id}
-              onDelete={requestDelete}
-              onRefresh={refreshRoster}
-              onViewPlaybook={viewPlaybook}
-            />
-          ))}
-        </ul>
-      )}
+      <div className="space-y-10">
+        <section className="space-y-4">
+          <div>
+            <h2 className="display-title text-2xl text-slate-900">
+              League <span className="text-primary">Office</span>
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Native redraft leagues hosted here. Create a league or join with an invite code.
+            </p>
+          </div>
+
+          {nativeRows.length === 0 ? (
+            <div className="rounded-xl border border-border bg-card px-4 py-8 text-center">
+              <p className="font-display text-sm font-semibold uppercase tracking-widest text-black">
+                No Native Leagues Yet
+              </p>
+            </div>
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-[auto_auto_minmax(10rem,1fr)_10rem_auto]">
+              {nativeRows.map((row) => (
+                <NativeLeagueRow
+                  key={row.id}
+                  row={row}
+                  onSelect={() => void selectLeague(row.id)}
+                  onViewTools={() => viewTools(row.id)}
+                />
+              ))}
+            </ul>
+          )}
+
+          {userId ? <NativeCreateJoinForms onReady={invalidateNative} /> : null}
+        </section>
+
+        <section className="space-y-4">
+          <div>
+            <h2 className="display-title text-2xl text-slate-900">
+              Synced <span className="text-primary">Leagues</span>
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Sleeper, ESPN, and Yahoo leagues connected for research tools and Playbook.
+            </p>
+          </div>
+
+          {rows.length === 0 ? (
+            <div className="rounded-xl border border-border bg-card px-4 py-8 text-center">
+              <p className="font-display text-sm font-semibold uppercase tracking-widest text-black">
+                No Synced Leagues
+              </p>
+              <Link to="/leaguesync" className={`${buttonClass} mt-4 inline-flex`}>
+                Sync New League
+              </Link>
+            </div>
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-[auto_auto_minmax(10rem,1fr)_10rem_auto_auto]">
+              {rows.map((row) => (
+                <LeagueRow
+                  key={row.id}
+                  row={row}
+                  isRefreshing={refreshingId === row.id}
+                  onDelete={requestDelete}
+                  onRefresh={refreshRoster}
+                  onViewPlaybook={viewTools}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
 
       <AlertDialog
         open={pendingDelete != null}
@@ -252,15 +325,224 @@ function LeaguesPage() {
   );
 }
 
+function NativeCreateJoinForms({ onReady }: { onReady: (linkId: string) => Promise<void> }) {
+  const [name, setName] = useState("");
+  const [teamName, setTeamName] = useState("");
+  const [teamCount, setTeamCount] = useState(10);
+  const [scoringPreset, setScoringPreset] = useState<NativeScoringPreset>("half");
+  const [draftMode, setDraftMode] = useState<NativeDraftMode>("offline");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createdInvite, setCreatedInvite] = useState<string | null>(null);
+
+  const [inviteCode, setInviteCode] = useState("");
+  const [joinTeamName, setJoinTeamName] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  const onCreate = async () => {
+    if (creating) return;
+    setCreating(true);
+    setCreateError(null);
+    setCreatedInvite(null);
+    try {
+      const result = await createNativeLeague({
+        data: {
+          name,
+          teamCount,
+          scoringPreset,
+          draftMode: draftMode === "live" ? "live" : "offline",
+          seasonYear: new Date().getUTCFullYear(),
+          ...(teamName.trim() ? { teamName: teamName.trim() } : {}),
+        },
+      });
+      if (!result.ok) {
+        setCreateError(result.error);
+        return;
+      }
+      setCreatedInvite(result.inviteCode);
+      setName("");
+      setTeamName("");
+      await onReady(result.linkId);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Could not create league");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const onJoin = async () => {
+    if (joining) return;
+    setJoining(true);
+    setJoinError(null);
+    try {
+      const result = await joinNativeLeague({
+        data: {
+          inviteCode,
+          ...(joinTeamName.trim() ? { teamName: joinTeamName.trim() } : {}),
+        },
+      });
+      if (!result.ok) {
+        setJoinError(result.error);
+        return;
+      }
+      setInviteCode("");
+      setJoinTeamName("");
+      await onReady(result.linkId);
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : "Could not join league");
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <section className={cardClass}>
+        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">Create League</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Redraft league hosted on The League Office. Share the invite code after create.
+        </p>
+
+        <div className="mt-4 space-y-3">
+          <label className={labelClass}>
+            League name
+            <input
+              className={fieldClass}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={128}
+              placeholder="Thursday Night League"
+            />
+          </label>
+          <label className={labelClass}>
+            Your team name
+            <input
+              className={fieldClass}
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              maxLength={64}
+              placeholder="Team 1"
+            />
+          </label>
+          <label className={labelClass}>
+            Teams ({NATIVE_LEAGUE_MIN_TEAMS}–{NATIVE_LEAGUE_MAX_TEAMS})
+            <select
+              className={fieldClass}
+              value={teamCount}
+              onChange={(e) => setTeamCount(Number(e.target.value))}
+            >
+              {Array.from(
+                { length: NATIVE_LEAGUE_MAX_TEAMS - NATIVE_LEAGUE_MIN_TEAMS + 1 },
+                (_, i) => NATIVE_LEAGUE_MIN_TEAMS + i,
+              ).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={labelClass}>
+            Scoring
+            <select
+              className={fieldClass}
+              value={scoringPreset}
+              onChange={(e) => setScoringPreset(e.target.value as NativeScoringPreset)}
+            >
+              <option value="half">Half PPR</option>
+              <option value="ppr">Full PPR</option>
+              <option value="std">Standard</option>
+            </select>
+          </label>
+          <label className={labelClass}>
+            Draft mode
+            <select
+              className={fieldClass}
+              value={draftMode}
+              onChange={(e) => setDraftMode(e.target.value as NativeDraftMode)}
+            >
+              <option value="offline">Offline / commissioner enter</option>
+              <option value="live">Live snake (scheduled later)</option>
+            </select>
+          </label>
+        </div>
+
+        {createError ? <p className="mt-3 text-sm text-red-600">{createError}</p> : null}
+        {createdInvite ? (
+          <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-slate-800">
+            League created. Invite code:{" "}
+            <span className="font-display text-base font-semibold tracking-wide text-primary">
+              {createdInvite}
+            </span>
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          className={`${buttonClass} mt-4`}
+          disabled={creating || name.trim().length < 1}
+          onClick={() => void onCreate()}
+        >
+          {creating ? "Creating…" : "Create League"}
+        </button>
+      </section>
+
+      <section className={cardClass}>
+        <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">Join League</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Enter the commissioner invite code to claim an open seat.
+        </p>
+
+        <div className="mt-4 space-y-3">
+          <label className={labelClass}>
+            Invite code
+            <input
+              className={`${fieldClass} uppercase tracking-wider`}
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+              maxLength={16}
+              placeholder="ABCD2345"
+            />
+          </label>
+          <label className={labelClass}>
+            Your team name (optional)
+            <input
+              className={fieldClass}
+              value={joinTeamName}
+              onChange={(e) => setJoinTeamName(e.target.value)}
+              maxLength={64}
+              placeholder="Uses the open seat name if blank"
+            />
+          </label>
+        </div>
+
+        {joinError ? <p className="mt-3 text-sm text-red-600">{joinError}</p> : null}
+
+        <button
+          type="button"
+          className={`${buttonClass} mt-4`}
+          disabled={joining || inviteCode.trim().length < 4}
+          onClick={() => void onJoin()}
+        >
+          {joining ? "Joining…" : "Join League"}
+        </button>
+      </section>
+    </div>
+  );
+}
+
 function NativeLeagueRow({
   row,
-  onViewPlaybook,
+  onSelect,
+  onViewTools,
 }: {
   row: NativeLinkRow;
-  onViewPlaybook: (id: string) => void;
+  onSelect: () => void;
+  onViewTools: () => void;
 }) {
   const label = row.label?.trim() || "Native League";
-  const role = row.role === "commissioner" ? "Commissioner" : row.role === "co_commish" ? "Co-Commish" : "Member";
+  const role =
+    row.role === "commissioner" ? "Commissioner" : row.role === "co_commish" ? "Co-Commish" : "Member";
   return (
     <li className="col-span-full grid grid-cols-1 items-center gap-x-4 gap-y-3 rounded-xl border border-border bg-card px-4 py-4 md:grid-cols-subgrid">
       <span
@@ -277,12 +559,14 @@ function NativeLeagueRow({
         </p>
       </div>
       <p className="text-sm text-black/70">Updated {formatRelativeTime(row.created_at)}</p>
-      <button type="button" className={buttonClass} onClick={() => onViewPlaybook(row.id)}>
-        Playbook
-      </button>
-      <Link to="/account/leagues/native" className="text-sm font-medium text-primary hover:underline">
-        Invite / Join
-      </Link>
+      <div className="flex items-center gap-2 md:justify-self-end">
+        <button type="button" className={outlineClass} onClick={onSelect}>
+          Select
+        </button>
+        <button type="button" className={buttonClass} onClick={onViewTools}>
+          Tools
+        </button>
+      </div>
     </li>
   );
 }
@@ -367,7 +651,12 @@ function LeagueRow({
 
   return (
     <li className="col-span-full grid grid-cols-1 items-center gap-x-4 gap-y-3 rounded-xl border border-border bg-card px-4 py-4 md:grid-cols-subgrid">
-      <span aria-label="Synced" className="flex size-6 shrink-0 items-center justify-center rounded-full border border-emerald-500 text-xs font-bold text-emerald-600">✓</span>
+      <span
+        aria-label="Synced"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full border border-emerald-500 text-xs font-bold text-emerald-600"
+      >
+        ✓
+      </span>
       <LeagueAvatar platform={platformKey} src={meta?.avatar ?? null} alt={`${leagueName} team avatar`} />
       <div className="min-w-0">
         <p className="text-base font-semibold leading-tight text-black">{leagueName}</p>
@@ -398,20 +687,42 @@ function LeagueRow({
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         <span className="rounded-md border border-border px-2 py-1">{meta?.scoring ?? "Scoring"}</span>
         <span className="rounded-md border border-border px-2 py-1">Redraft</span>
-        <span className="rounded-md border border-border px-2 py-1">{meta?.teams ? `${meta.teams} Team` : "Teams"}</span>
+        <span className="rounded-md border border-border px-2 py-1">
+          {meta?.teams ? `${meta.teams} Team` : "Teams"}
+        </span>
       </div>
       <div className="flex items-center gap-2 md:justify-self-end">
-        <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }} className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground">Settings</Link>
+        <Link
+          to="/account/leagues/$connectionId"
+          params={{ connectionId: row.id }}
+          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
+        >
+          Settings
+        </Link>
         <DropdownMenu>
-          <DropdownMenuTrigger aria-label="League options" className="rounded-md border border-border px-2 py-1.5 text-xs leading-none text-foreground">⋮</DropdownMenuTrigger>
+          <DropdownMenuTrigger
+            aria-label="League options"
+            className="rounded-md border border-border px-2 py-1.5 text-xs leading-none text-foreground"
+          >
+            ⋮
+          </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem asChild className="font-medium"><Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }}>League Settings</Link></DropdownMenuItem>
-            <DropdownMenuItem className="font-medium" onSelect={() => onViewPlaybook(row.id)}>View Playbook</DropdownMenuItem>
-            <DropdownMenuItem className="font-medium" disabled={isRefreshing || !row.league_id} onSelect={() => void onRefresh(row)}>{isRefreshing ? "Refreshing Roster…" : "Refresh Roster"}</DropdownMenuItem>
+            <DropdownMenuItem asChild className="font-medium">
+              <Link to="/account/leagues/$connectionId" params={{ connectionId: row.id }}>
+                League Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="font-medium" onSelect={() => onViewPlaybook(row.id)}>
+              View Playbook
+            </DropdownMenuItem>
             <DropdownMenuItem
               className="font-medium"
-              onSelect={() => onDelete(row.id, leagueName)}
+              disabled={isRefreshing || !row.league_id}
+              onSelect={() => void onRefresh(row)}
             >
+              {isRefreshing ? "Refreshing Roster…" : "Refresh Roster"}
+            </DropdownMenuItem>
+            <DropdownMenuItem className="font-medium" onSelect={() => onDelete(row.id, leagueName)}>
               Delete League
             </DropdownMenuItem>
           </DropdownMenuContent>
