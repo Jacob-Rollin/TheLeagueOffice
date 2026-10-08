@@ -7,8 +7,11 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/league/$linkId", label: "Dashboard", end: true },
+  { to: "/league/$linkId/my-team", label: "My Team", end: false },
+  { to: "/league/$linkId/matchup", label: "Matchup", end: false },
+  { to: "/league/$linkId/standings", label: "Standings", end: false },
   { to: "/league/$linkId/players", label: "Players", end: false },
-  { to: "/league/$linkId/teams", label: "Teams", end: false },
+  { to: "/league/$linkId/transactions", label: "Transactions", end: false },
   { to: "/league/$linkId/draft", label: "Draft", end: false },
   { to: "/league/$linkId/settings", label: "Settings", end: false },
 ] as const;

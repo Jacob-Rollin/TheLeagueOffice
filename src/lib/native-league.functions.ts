@@ -286,3 +286,41 @@ export const completeNativeDraft = createServerFn({ method: "POST" })
     const { completeNativeDraftForUser } = await import("@/lib/native-league-ops.server");
     return await completeNativeDraftForUser(context.userId, data.linkId);
   });
+
+export const getNativeLineup = createServerFn({ method: "GET" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; week?: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    week: input.week != null ? Number(input.week) : undefined,
+  }))
+  .handler(async ({ context, data }) => {
+    const { getNativeLineupForLink } = await import("@/lib/native-league-ops.server");
+    return await getNativeLineupForLink(context.userId, data.linkId, data.week);
+  });
+
+export const saveNativeLineup = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      linkId: string;
+      week: number;
+      version: number;
+      slots: Record<string, Array<string | null>>;
+      posById: Record<string, string>;
+    }) => ({
+      linkId: String(input.linkId ?? "").trim().slice(0, 36),
+      week: Number(input.week),
+      version: Number(input.version),
+      slots: input.slots ?? {},
+      posById: input.posById ?? {},
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const { saveNativeLineupForUser } = await import("@/lib/native-league-ops.server");
+    return await saveNativeLineupForUser(context.userId, data.linkId, {
+      week: data.week,
+      version: data.version,
+      slots: data.slots,
+      posById: data.posById,
+    });
+  });

@@ -167,7 +167,12 @@ function NativeLeagueSettingsInLeague() {
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Invite Code</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Managers join from My Leagues → Join. Commissioners can customize the code.
+          Managers join from My Leagues → Join. Commissioners can customize the code. Seat management
+          stays on{" "}
+          <Link to="/league/$linkId/teams" params={{ linkId }} className="font-medium text-primary hover:underline">
+            Teams
+          </Link>
+          .
         </p>
         {summary.canEditInvite ? (
           <label className={`${labelClass} mt-4`}>

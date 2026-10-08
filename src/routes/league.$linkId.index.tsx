@@ -67,11 +67,11 @@ function NativeLeagueDashboard() {
               waivers land next.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Link to="/league/$linkId/players" params={{ linkId }} className={buttonClass}>
-                League Players
+              <Link to="/league/$linkId/my-team" params={{ linkId }} className={buttonClass}>
+                Set Lineup
               </Link>
-              <Link to="/league/$linkId/teams" params={{ linkId }} className={outlineClass}>
-                View Teams
+              <Link to="/league/$linkId/players" params={{ linkId }} className={outlineClass}>
+                League Players
               </Link>
             </div>
           </>
@@ -135,11 +135,11 @@ function NativeLeagueDashboard() {
                   {myTeam.teamName} · {myRoster.playerIds.length} players
                 </p>
                 <Link
-                  to="/league/$linkId/players"
+                  to="/league/$linkId/my-team"
                   params={{ linkId }}
                   className={`${outlineClass} mt-4 inline-flex`}
                 >
-                  Open Players
+                  Edit Lineup
                 </Link>
               </>
             ) : (
