@@ -7,9 +7,13 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { createNativeLeague } from "@/lib/native-league.functions";
 import {
+  DEFAULT_IR_ALLOWED_STATUSES,
+  NATIVE_IR_ALLOWED_STATUS_LABELS,
+  NATIVE_IR_ALLOWED_STATUS_OPTIONS,
   NATIVE_LEAGUE_MAX_TEAMS,
   NATIVE_LEAGUE_MIN_TEAMS,
   type NativeDraftMode,
+  type NativeIrAllowedStatus,
   type NativeScoringPreset,
 } from "@/lib/native-league-settings";
 
@@ -41,7 +45,22 @@ function NativeLeagueSetupPage() {
   const [teamCount, setTeamCount] = useState(10);
   const [scoringPreset, setScoringPreset] = useState<NativeScoringPreset>("half");
   const [draftMode, setDraftMode] = useState<NativeDraftMode>("offline");
+  const [benchSpots, setBenchSpots] = useState(6);
+  const [irSpots, setIrSpots] = useState(1);
+  const [irAllowedStatuses, setIrAllowedStatuses] = useState<NativeIrAllowedStatus[]>([
+    ...DEFAULT_IR_ALLOWED_STATUSES,
+  ]);
   const [creating, setCreating] = useState(false);
+
+  const toggleIrStatus = (status: NativeIrAllowedStatus) => {
+    setIrAllowedStatuses((prev) => {
+      if (prev.includes(status)) {
+        const next = prev.filter((s) => s !== status);
+        return next.length > 0 ? next : [...DEFAULT_IR_ALLOWED_STATUSES];
+      }
+      return [...prev, status];
+    });
+  };
   const [createError, setCreateError] = useState<string | null>(null);
   const [createdInvite, setCreatedInvite] = useState<string | null>(null);
 
@@ -58,6 +77,9 @@ function NativeLeagueSetupPage() {
           scoringPreset,
           draftMode: draftMode === "live" ? "live" : "offline",
           seasonYear: new Date().getUTCFullYear(),
+          benchSpots,
+          irSpots,
+          irAllowedStatuses,
           ...(teamName.trim() ? { teamName: teamName.trim() } : {}),
         },
       });
@@ -166,6 +188,49 @@ function NativeLeagueSetupPage() {
               <option value="live">Live snake (scheduled later)</option>
             </select>
           </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={labelClass}>
+              Bench spots
+              <input
+                type="number"
+                min={0}
+                max={20}
+                className={fieldClass}
+                value={benchSpots}
+                onChange={(e) => setBenchSpots(Number(e.target.value))}
+              />
+            </label>
+            <label className={labelClass}>
+              IR spots
+              <input
+                type="number"
+                min={0}
+                max={5}
+                className={fieldClass}
+                value={irSpots}
+                onChange={(e) => setIrSpots(Number(e.target.value))}
+              />
+            </label>
+          </div>
+          <fieldset className="space-y-2">
+            <legend className={labelClass}>IR slot designations</legend>
+            <p className="text-xs text-slate-600">
+              Only selected tags may occupy IR. Questionable, Doubtful, and Out never qualify.
+            </p>
+            <div className="mt-1 space-y-2">
+              {NATIVE_IR_ALLOWED_STATUS_OPTIONS.map((status) => (
+                <label key={status} className="flex items-center gap-2 text-sm text-slate-800">
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    checked={irAllowedStatuses.includes(status)}
+                    onChange={() => toggleIrStatus(status)}
+                  />
+                  {NATIVE_IR_ALLOWED_STATUS_LABELS[status]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
         </div>
 
         {createError ? <p className="mt-3 text-sm text-red-600">{createError}</p> : null}

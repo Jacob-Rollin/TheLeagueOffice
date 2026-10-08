@@ -39,10 +39,129 @@ export type NativePostDraftPlayerStatus = (typeof NATIVE_POST_DRAFT_PLAYER_STATU
 export const NATIVE_MATCHUP_TIEBREAKER_SLOTS = ["Bench", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
 export type NativeMatchupTiebreakerSlot = (typeof NATIVE_MATCHUP_TIEBREAKER_SLOTS)[number];
 
+/**
+ * Commissioner-selectable designations allowed in IR slots.
+ * Questionable / Doubtful / Out are never options.
+ * Default is IR-only.
+ */
+export const NATIVE_IR_ALLOWED_STATUS_OPTIONS = ["IR", "NA", "Suspended"] as const;
+export type NativeIrAllowedStatus = (typeof NATIVE_IR_ALLOWED_STATUS_OPTIONS)[number];
+
+export const DEFAULT_IR_ALLOWED_STATUSES: NativeIrAllowedStatus[] = ["IR"];
+
+/** Short labels for commissioner IR allow-list checkboxes. */
+export const NATIVE_IR_ALLOWED_STATUS_LABELS: Record<NativeIrAllowedStatus, string> = {
+  IR: "IR (Injured Reserve)",
+  NA: "NA (Not Active)",
+  Suspended: "Suspended",
+};
+
+const IR_ALLOWED_STATUSES_KEY = "irAllowedStatuses";
+/** @deprecated legacy key — migrated by parseIrAllowedStatuses */
+const IR_ELIGIBILITY_KEY = "irEligibility";
+
+export function normalizeIrAllowedStatuses(
+  input: unknown,
+): NativeIrAllowedStatus[] {
+  const fromArray = Array.isArray(input)
+    ? input
+        .map((v) => String(v))
+        .filter((v): v is NativeIrAllowedStatus =>
+          (NATIVE_IR_ALLOWED_STATUS_OPTIONS as readonly string[]).includes(v),
+        )
+    : [];
+  const unique = [...new Set(fromArray)];
+  return unique.length > 0 ? unique : [...DEFAULT_IR_ALLOWED_STATUSES];
+}
+
+/** Read IR allow-list from roster_slots JSON (with legacy irEligibility fallback). */
+export function parseIrAllowedStatuses(
+  raw: Record<string, unknown> | null | undefined,
+): NativeIrAllowedStatus[] {
+  if (!raw || typeof raw !== "object") return [...DEFAULT_IR_ALLOWED_STATUSES];
+  if (Array.isArray(raw[IR_ALLOWED_STATUSES_KEY])) {
+    return normalizeIrAllowedStatuses(raw[IR_ALLOWED_STATUSES_KEY]);
+  }
+  // Legacy: "any" → all selectable tags; "injured_only" → IR only (new stricter default).
+  const legacy = raw[IR_ELIGIBILITY_KEY];
+  if (legacy === "any") return [...NATIVE_IR_ALLOWED_STATUS_OPTIONS];
+  return [...DEFAULT_IR_ALLOWED_STATUSES];
+}
+
+/** @deprecated use parseIrAllowedStatuses */
+export function parseIrEligibility(
+  raw: Record<string, unknown> | null | undefined,
+): "injured_only" | "any" {
+  const allowed = parseIrAllowedStatuses(raw);
+  return allowed.length >= NATIVE_IR_ALLOWED_STATUS_OPTIONS.length ? "any" : "injured_only";
+}
+
+/** @deprecated */
+export type NativeIrEligibility = "injured_only" | "any";
+
+/** Merge slot counts + IR allow-list into the JSON blob on native_leagues.roster_slots. */
+export function packRosterSlotsJson(
+  slots: Partial<Record<RosterSlotKey, number>>,
+  irAllowedStatuses: readonly NativeIrAllowedStatus[] = DEFAULT_IR_ALLOWED_STATUSES,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(slots) as RosterSlotKey[]) {
+    const n = Math.floor(Number(slots[key] ?? 0));
+    if (Number.isFinite(n) && n > 0) out[key] = n;
+  }
+  out[IR_ALLOWED_STATUSES_KEY] = normalizeIrAllowedStatuses(irAllowedStatuses);
+  return out;
+}
+
 /** v1 product caps from the native leagues plan. */
 export const NATIVE_LEAGUE_MIN_TEAMS = 4;
 export const NATIVE_LEAGUE_MAX_TEAMS = 20;
 export const NATIVE_MAX_COMMISSIONER_LEAGUES = 3;
+
+/** Snapshot used by mobile/desktop Commissioner Tools (client-safe). */
+export type NativeCommissionerSettings = {
+  name: string;
+  inviteCode: string;
+  leagueId: string;
+  seasonYear: number;
+  teamCount: number;
+  seasonStartWeek: number;
+  isPublic: boolean;
+  autoActivateNextYear: boolean;
+  scoringPreset: string;
+  scoringSettings: Record<string, number>;
+  playoffTeams: number;
+  playoffMatchupLength: string;
+  playoffWeekPair: string;
+  standingsTiebreaker: string;
+  allowMatchupTies: boolean;
+  matchupTiebreakerSlot: string;
+  divisionsEnabled: boolean;
+  waiverType: string;
+  waiverBudget: number | null;
+  waiverPeriodDays: number;
+  postDraftPlayerStatus: string;
+  lockFaOnGametime: boolean;
+  maxAddsPerWeek: number | null;
+  maxAddsPerSeason: number | null;
+  undroppableTopPlayers: boolean;
+  rosterLockType: string;
+  tradeDeadlineWeek: number | null;
+  tradeReviewHours: number;
+  tradeVetoMode: string;
+  maxTradesPerSeason: number | null;
+  draftMode: string;
+  draftFormat: string;
+  draftOrderType: string;
+  draftPickTimeLimitSec: number;
+  keepersPerTeam: number;
+  keeperNote: string | null;
+  rosterSlots: Record<string, number>;
+  irAllowedStatuses: NativeIrAllowedStatus[];
+  rosterCapacity: number;
+  settingsLocked: boolean;
+  canManage: boolean;
+};
 
 /** Half-PPR default scoring (Sleeper keys). */
 export function defaultNativeScoringSettings(): Record<string, number> {
@@ -116,6 +235,9 @@ export type NativeLeagueSettingsInput = {
   matchupTiebreakerSlot?: NativeMatchupTiebreakerSlot;
   divisionsEnabled?: boolean;
   rosterSlots?: Partial<Record<RosterSlotKey, number>>;
+  irAllowedStatuses?: NativeIrAllowedStatus[];
+  /** @deprecated prefer irAllowedStatuses */
+  irEligibility?: NativeIrEligibility;
   scoringPreset?: NativeScoringPreset;
   scoringSettings?: Record<string, number>;
   waiverType?: NativeWaiverType;
@@ -175,6 +297,7 @@ export type NativeLeagueSettingsNormalized = Required<
   >
 > & {
   rosterSlots: Record<RosterSlotKey, number>;
+  irAllowedStatuses: NativeIrAllowedStatus[];
   scoringSettings: Record<string, number>;
   waiverBudget: number | null;
   maxAddsPerWeek: number | null;
@@ -239,6 +362,15 @@ export function normalizeNativeLeagueSettings(
   if (issues.length) return { ok: false, issues };
 
   const rosterSlots = { ...defaultNativeRosterSlots(), ...(input.rosterSlots ?? {}) };
+  // Clamp reserve sizes commissioners care about most.
+  rosterSlots.BN = clampInt(rosterSlots.BN, 6, 0, 20);
+  rosterSlots.IR = clampInt(rosterSlots.IR, 1, 0, 5);
+  rosterSlots.TAXI = clampInt(rosterSlots.TAXI ?? 0, 0, 0, 5);
+  const irAllowedStatuses = input.irAllowedStatuses
+    ? normalizeIrAllowedStatuses(input.irAllowedStatuses)
+    : input.irEligibility === "any"
+      ? [...NATIVE_IR_ALLOWED_STATUS_OPTIONS]
+      : [...DEFAULT_IR_ALLOWED_STATUSES];
   const scoringPreset = (NATIVE_SCORING_PRESETS.includes(input.scoringPreset as NativeScoringPreset)
     ? input.scoringPreset
     : "half") as NativeScoringPreset;
@@ -285,6 +417,7 @@ export function normalizeNativeLeagueSettings(
         : "Bench") as NativeMatchupTiebreakerSlot,
       divisionsEnabled: Boolean(input.divisionsEnabled),
       rosterSlots,
+      irAllowedStatuses,
       scoringPreset,
       scoringSettings,
       waiverType,

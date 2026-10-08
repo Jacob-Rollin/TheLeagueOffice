@@ -4,6 +4,10 @@
  */
 
 import { ROSTER_SLOT_KEYS, type RosterSlotKey } from "@/lib/league-settings";
+import {
+  DEFAULT_IR_ALLOWED_STATUSES,
+  type NativeIrAllowedStatus,
+} from "@/lib/native-league-settings";
 
 export type NativeLineupSlots = Record<string, Array<string | null>>;
 
@@ -19,6 +23,39 @@ const FLEX_ELIGIBLE = new Set(["RB", "WR", "TE"]);
 const WRRB_ELIGIBLE = new Set(["WR", "RB"]);
 const WRTE_ELIGIBLE = new Set(["WR", "TE"]);
 const SFLEX_ELIGIBLE = new Set(["QB", "RB", "WR", "TE"]);
+
+/**
+ * Map a Sleeper/catalog injury string to a commissioner IR allow-list token.
+ * Q / Doubtful / Out intentionally return null (never IR-eligible).
+ */
+export function classifyIrStatus(
+  injuryStatus: string | null | undefined,
+): NativeIrAllowedStatus | null {
+  const raw = String(injuryStatus ?? "").trim();
+  if (!raw) return null;
+  const upper = raw.toUpperCase();
+
+  // Explicitly reject these even when they appear beside other words.
+  if (
+    /\bQUESTIONABLE\b/.test(upper) ||
+    /\bDOUBTFUL\b/.test(upper) ||
+    /(^|[^A-Z])OUT([^A-Z]|$)/.test(upper) ||
+    upper === "Q" ||
+    upper === "D" ||
+    upper === "O"
+  ) {
+    // Suspended / NA / IR take precedence when clearly present.
+    if (/\bSUSPEND/.test(upper) || upper === "SUS") return "Suspended";
+    if (/\bNA\b/.test(upper) || upper === "NA") return "NA";
+    if (/(^|[^A-Z])IR([^A-Z]|$)/.test(upper) || /\bINJURED RESERVE\b/.test(upper)) return "IR";
+    return null;
+  }
+
+  if (/\bSUSPEND/.test(upper) || upper === "SUS") return "Suspended";
+  if (/\bNA\b/.test(upper) || upper === "NA") return "NA";
+  if (/(^|[^A-Z])IR([^A-Z]|$)/.test(upper) || /\bINJURED RESERVE\b/.test(upper)) return "IR";
+  return null;
+}
 
 export function normalizePlayerPos(pos: string | null | undefined): string {
   const p = String(pos ?? "").trim().toUpperCase();
@@ -38,6 +75,33 @@ export function slotAcceptsPos(slot: RosterSlotKey, pos: string): boolean {
   return slot === p;
 }
 
+/** True when the player's designation is in the league's IR allow-list. */
+export function playerEligibleForIr(
+  injuryStatus: string | null | undefined,
+  allowed: readonly NativeIrAllowedStatus[] = DEFAULT_IR_ALLOWED_STATUSES,
+): boolean {
+  const classified = classifyIrStatus(injuryStatus);
+  if (!classified) return false;
+  return allowed.includes(classified);
+}
+
+/** Players currently in IR slots who no longer match commissioner settings. */
+export function findIneligibleIrOccupants(
+  views: NativeLineupSlotView[],
+  injuryById: Record<string, string | null | undefined>,
+  allowed: readonly NativeIrAllowedStatus[],
+): Array<{ playerId: string; injury: string | null; slotIndex: number }> {
+  const out: Array<{ playerId: string; injury: string | null; slotIndex: number }> = [];
+  for (const row of views) {
+    if (row.key !== "IR" || !row.playerId) continue;
+    const injury = injuryById[row.playerId] ?? null;
+    if (!playerEligibleForIr(injury, allowed)) {
+      out.push({ playerId: row.playerId, injury, slotIndex: row.index });
+    }
+  }
+  return out;
+}
+
 export function parseRosterSlotCounts(
   raw: Record<string, unknown> | null | undefined,
 ): Partial<Record<RosterSlotKey, number>> {
@@ -48,6 +112,32 @@ export function parseRosterSlotCounts(
     if (Number.isFinite(n) && n > 0) out[key] = n;
   }
   return out;
+}
+
+/** Active roster capacity (starters + BN + TAXI). IR does not add a free FA spot. */
+export function countActiveRosterCapacity(
+  counts: Partial<Record<RosterSlotKey, number>> | Record<string, unknown> | null | undefined,
+): number {
+  const parsed =
+    counts && typeof counts === "object" && !Array.isArray(counts)
+      ? parseRosterSlotCounts(counts as Record<string, unknown>)
+      : {};
+  let total = 0;
+  for (const [key, n] of Object.entries(parsed)) {
+    if (key === "IR") continue;
+    if (typeof n === "number" && n > 0) total += n;
+  }
+  return total > 0 ? total : 15;
+}
+
+export function countIrSlots(
+  counts: Partial<Record<RosterSlotKey, number>> | Record<string, unknown> | null | undefined,
+): number {
+  const parsed =
+    counts && typeof counts === "object" && !Array.isArray(counts)
+      ? parseRosterSlotCounts(counts as Record<string, unknown>)
+      : {};
+  return Math.max(0, Math.floor(Number(parsed.IR ?? 0)) || 0);
 }
 
 /** Expand slot counts into ordered empty slot rows (starters then BN/IR/TAXI). */
@@ -106,15 +196,25 @@ export function buildDefaultLineupSlots(
   rosterPlayerIds: string[],
   posById: Record<string, string>,
   counts: Partial<Record<RosterSlotKey, number>>,
+  options?: {
+    injuryById?: Record<string, string | null | undefined>;
+    irAllowedStatuses?: readonly NativeIrAllowedStatus[];
+  },
 ): NativeLineupSlots {
   const views = expandLineupSlots(counts);
   const remaining = [...rosterPlayerIds];
+  const allowed = options?.irAllowedStatuses ?? DEFAULT_IR_ALLOWED_STATUSES;
+  const injuryById = options?.injuryById ?? {};
 
-  const place = (pred: (pos: string) => boolean) => {
+  const place = (pred: (key: RosterSlotKey) => boolean) => {
     for (const row of views) {
       if (row.playerId) continue;
       if (!pred(row.key)) continue;
-      const idx = remaining.findIndex((id) => slotAcceptsPos(row.key, posById[id] ?? ""));
+      const idx = remaining.findIndex((id) => {
+        if (!slotAcceptsPos(row.key, posById[id] ?? "")) return false;
+        if (row.key === "IR") return playerEligibleForIr(injuryById[id], allowed);
+        return true;
+      });
       if (idx < 0) continue;
       row.playerId = remaining.splice(idx, 1)[0] ?? null;
     }
@@ -123,7 +223,10 @@ export function buildDefaultLineupSlots(
   place((key) => key === "QB" || key === "RB" || key === "WR" || key === "TE" || key === "K" || key === "DEF");
   place((key) => key === "FLEX" || key === "WRRB" || key === "WRTE" || key === "SFLEX");
   place((key) => key === "BN");
-  place((key) => key === "IR" || key === "TAXI");
+  place((key) => key === "TAXI");
+  place((key) => key === "IR");
+  // Spill leftovers into BN if IR rejected them.
+  place((key) => key === "BN");
 
   return slotsRecordFromViews(views);
 }
@@ -133,10 +236,14 @@ export function validateNativeLineupSlots(input: {
   counts: Partial<Record<RosterSlotKey, number>>;
   rosterPlayerIds: string[];
   posById: Record<string, string>;
+  /** Optional injury map for IR eligibility (catalog / Sleeper tokens). */
+  injuryById?: Record<string, string | null | undefined>;
+  irAllowedStatuses?: readonly NativeIrAllowedStatus[];
 }): { ok: true; slots: NativeLineupSlots } | { ok: false; error: string } {
   const views = viewsFromSlotsRecord(input.counts, input.slots);
   const rosterSet = new Set(input.rosterPlayerIds);
   const seen = new Set<string>();
+  const allowed = input.irAllowedStatuses ?? DEFAULT_IR_ALLOWED_STATUSES;
 
   for (const row of views) {
     const id = row.playerId;
@@ -153,6 +260,16 @@ export function validateNativeLineupSlots(input: {
       const label = row.key === "DEF" ? "DST" : row.key;
       return { ok: false, error: `${pos || "Player"} cannot start in ${label}` };
     }
+    if (row.key === "IR") {
+      const injury = input.injuryById?.[id];
+      if (!playerEligibleForIr(injury, allowed)) {
+        const allowedLabel = allowed.join(", ");
+        return {
+          ok: false,
+          error: `IR is limited to ${allowedLabel}. Move or drop players who no longer qualify.`,
+        };
+      }
+    }
   }
 
   // Every rostered player must appear (no silent drops via lineup save).
@@ -163,4 +280,22 @@ export function validateNativeLineupSlots(input: {
   }
 
   return { ok: true, slots: slotsRecordFromViews(views) };
+}
+
+/** Split validated lineup into active roster ids vs IR reserve. */
+export function splitActiveAndIrFromSlots(slots: NativeLineupSlots): {
+  activePlayerIds: string[];
+  irPlayerIds: string[];
+} {
+  const irPlayerIds: string[] = [];
+  const activePlayerIds: string[] = [];
+  for (const [key, bucket] of Object.entries(slots)) {
+    if (!Array.isArray(bucket)) continue;
+    for (const id of bucket) {
+      if (!id) continue;
+      if (key === "IR") irPlayerIds.push(id);
+      else activePlayerIds.push(id);
+    }
+  }
+  return { activePlayerIds, irPlayerIds };
 }
