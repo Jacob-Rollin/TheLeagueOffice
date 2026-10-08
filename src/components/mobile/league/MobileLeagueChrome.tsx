@@ -29,7 +29,7 @@ const PEEK_HEIGHT = "3.75rem";
 const SHEET_TOP_GAP = "4.75rem";
 
 export const mobileLeagueContentPad = (withSheet: boolean) =>
-  `calc(${NAV_HEIGHT}${withSheet ? ` + ${PEEK_HEIGHT}` : ""} + env(safe-area-inset-bottom) + 1rem)`;
+  `calc(${NAV_HEIGHT}${withSheet ? ` + ${PEEK_HEIGHT}` : ""} + env(safe-area-inset-bottom, 0px) + 1rem)`;
 
 type TabPath =
   | "/m/league/$leagueId/feed"
@@ -53,7 +53,10 @@ export function MobileLeagueBottomNav({ leagueId }: { leagueId: string }) {
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-50 border-t border-m-border bg-m-nav"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      style={{
+        // Keep tab icons/labels above the iPhone home indicator (center = Matchup).
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      }}
     >
       <div className="mx-auto grid max-w-md grid-cols-5" style={{ height: NAV_HEIGHT }}>
         {TABS.map((tab) => {
@@ -263,7 +266,7 @@ export function MobileLeagueActivitySheet() {
         )}
         style={{
           top: SHEET_TOP_GAP,
-          bottom: `calc(${NAV_HEIGHT} + env(safe-area-inset-bottom))`,
+          bottom: `calc(${NAV_HEIGHT} + env(safe-area-inset-bottom, 0px))`,
           transform,
         }}
       >

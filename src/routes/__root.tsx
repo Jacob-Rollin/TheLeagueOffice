@@ -79,7 +79,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      // viewport-fit=cover so env(safe-area-inset-*) works on iPhone PWA/Safari
+      // (otherwise the home indicator sits on top of the mobile tab bar).
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "The League Office — Fantasy Football HQ" },
       {
         name: "description",
