@@ -53,6 +53,7 @@ function NativeLeagueSettingsInLeague() {
     ...DEFAULT_IR_ALLOWED_STATUSES,
   ]);
   const [inviteDraft, setInviteDraft] = useState("");
+  const [allowAiTeams, setAllowAiTeams] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -68,6 +69,7 @@ function NativeLeagueSettingsInLeague() {
         : [...DEFAULT_IR_ALLOWED_STATUSES],
     );
     setInviteDraft(board.summary.inviteCode);
+    setAllowAiTeams(Boolean(board.commissioner.allowAiTeams));
   }, [board]);
 
   const toggleIrStatus = (status: NativeIrAllowedStatus) => {
@@ -104,6 +106,7 @@ function NativeLeagueSettingsInLeague() {
           benchSpots,
           irSpots,
           irAllowedStatuses,
+          allowAiTeams,
         },
       });
       if (!result.ok) {
@@ -238,6 +241,22 @@ function NativeLeagueSettingsInLeague() {
             spot. Capacity: {board.rosterCapacity}. When a player on IR no longer matches these tags,
             their manager must activate them (dropping someone if the roster is full) or drop them.
           </p>
+          <label className="flex items-start gap-2 text-sm text-slate-800">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 rounded border-slate-300 text-primary focus:ring-primary"
+              checked={allowAiTeams}
+              disabled={!canManage || settingsLocked || saving}
+              onChange={(e) => setAllowAiTeams(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">Allow AI managers</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                For testing: assign AI to open seats on Teams. AI drafts by ADP, sets weekly lineups,
+                and sits bye / Out / IR players. Runs via Actions cron — not on every page load.
+              </span>
+            </span>
+          </label>
         </div>
 
         {canManage && !settingsLocked ? (

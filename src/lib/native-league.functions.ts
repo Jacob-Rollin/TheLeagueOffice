@@ -287,6 +287,7 @@ export const updateNativeLeagueBasics = createServerFn({ method: "POST" })
       "keepersPerTeam",
       "keeperNote",
       "teamCount",
+      "allowAiTeams",
     ]) {
       copy(key);
     }
@@ -584,4 +585,44 @@ export const getNativeStandings = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { getNativeStandingsForLink } = await import("@/lib/native-league-gameplay.server");
     return await getNativeStandingsForLink(context.userId, data.linkId);
+  });
+
+export const setNativeTeamAi = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; teamId: number; enabled: boolean }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    teamId: Number(input.teamId),
+    enabled: Boolean(input.enabled),
+  }))
+  .handler(async ({ context, data }) => {
+    const { setNativeTeamAiForUser } = await import("@/lib/native-league-ai.server");
+    return await setNativeTeamAiForUser(context.userId, data.linkId, data);
+  });
+
+/** Commissioner: fill consecutive on-the-clock AI draft picks (bounded). */
+export const runNativeAiDraft = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; maxPicks?: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    maxPicks: input.maxPicks != null ? Number(input.maxPicks) : undefined,
+  }))
+  .handler(async ({ context, data }) => {
+    const { runNativeAiDraftForUser } = await import("@/lib/native-league-ai.server");
+    return await runNativeAiDraftForUser(context.userId, data.linkId, {
+      ...(data.maxPicks != null ? { maxPicks: data.maxPicks } : {}),
+    });
+  });
+
+/** Commissioner: set AI team lineups for the week (bye / Out / IR aware). */
+export const runNativeAiLineups = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; week?: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    week: input.week != null ? Number(input.week) : undefined,
+  }))
+  .handler(async ({ context, data }) => {
+    const { runNativeAiLineupsForUser } = await import("@/lib/native-league-ai.server");
+    return await runNativeAiLineupsForUser(context.userId, data.linkId, {
+      ...(data.week != null ? { week: data.week } : {}),
+    });
   });

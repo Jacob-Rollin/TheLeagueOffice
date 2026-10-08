@@ -293,12 +293,14 @@ export async function joinNativeLeagueForUser(
 
   const preferredName = String(input.teamName ?? "").trim().slice(0, 64);
 
-  // Claim the lowest open draft slot (serialized by row update).
+  // Claim the lowest open human seat (AI seats stay user_id NULL + is_ai=1).
   await tidbExecute(
     `UPDATE native_teams
      SET user_id = ?,
-         team_name = IF(? <> '', ?, team_name)
-     WHERE league_id = ? AND user_id IS NULL
+         team_name = IF(? <> '', ?, team_name),
+         is_ai = 0,
+         ai_persona = NULL
+     WHERE league_id = ? AND user_id IS NULL AND COALESCE(is_ai, 0) = 0
      ORDER BY draft_slot ASC
      LIMIT 1`,
     [uid, preferredName, preferredName, league.id],
@@ -437,6 +439,7 @@ type LeagueCoreRow = {
   keepers_per_team?: number;
   keeper_note?: string | null;
   scoring_settings?: string | Record<string, unknown> | null;
+  allow_ai_teams?: number | boolean;
 };
 
 function asBool(v: unknown, fallback = false): boolean {
@@ -520,6 +523,7 @@ function commissionerSettingsFromLeague(
     rosterCapacity: countActiveRosterCapacity(slotCounts),
     settingsLocked: draftStatus !== "not_started" && draftStatus !== "scheduled",
     canManage,
+    allowAiTeams: asBool(league.allow_ai_teams, false),
   };
 }
 
@@ -569,7 +573,7 @@ export const LEAGUE_CORE_SELECT = `id, name, invite_code, season_year, status, l
             lock_fa_on_gametime, max_adds_per_week, max_adds_per_season, undroppable_top_players,
             roster_lock_type, trade_deadline_week, trade_review_hours, trade_veto_mode, max_trades_per_season,
             draft_format, draft_order_type, draft_pick_time_limit_sec, keepers_per_team, keeper_note,
-            scoring_settings`;
+            scoring_settings, allow_ai_teams`;
 
 export function parsePlayerIdList(raw: unknown): string[] {
   let value: unknown = raw;
@@ -759,6 +763,9 @@ export type NativeTeamRow = {
   draftSlot: number;
   waiverPriority: number;
   avatarUrl: string | null;
+  /** AI-managed testing seat (no human user_id). */
+  isAi: boolean;
+  aiPersona: string | null;
 };
 
 export type NativeRosterRow = {
@@ -808,6 +815,8 @@ type TeamDbRow = {
   draft_slot: number;
   waiver_priority: number;
   avatar_url: string | null;
+  is_ai?: number | boolean;
+  ai_persona?: string | null;
 };
 
 async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLeagueBoard | null> {
@@ -821,7 +830,7 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
       [membership.leagueId],
     ),
     tidbExecute<TeamDbRow>(
-      `SELECT id, team_name, user_id, draft_slot, waiver_priority, avatar_url
+      `SELECT id, team_name, user_id, draft_slot, waiver_priority, avatar_url, is_ai, ai_persona
        FROM native_teams WHERE league_id = ? ORDER BY draft_slot ASC`,
       [membership.leagueId],
     ),
@@ -855,7 +864,9 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
 
   const currentWeek = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
 
-  const filledTeams = teamRows.filter((t) => t.user_id != null && String(t.user_id).length > 0).length;
+  const filledTeams = teamRows.filter(
+    (t) => (t.user_id != null && String(t.user_id).length > 0) || asBool(t.is_ai, false),
+  ).length;
   const summary = summaryFromParts(membership, league, filledTeams);
   const rosterSlotsRaw = parseRosterSlots(league.roster_slots);
   const slotCounts = parseRosterSlotCounts(rosterSlotsRaw ?? undefined);
@@ -897,6 +908,8 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
       draftSlot: Number(t.draft_slot),
       waiverPriority: Number(t.waiver_priority),
       avatarUrl: t.avatar_url,
+      isAi: asBool(t.is_ai, false),
+      aiPersona: t.ai_persona == null ? null : String(t.ai_persona),
     })),
     picksPerTeam: countDraftableRosterSpots(rosterSlotsRaw),
     canManage: isCommishRole(summary.role),
@@ -989,10 +1002,10 @@ export async function kickNativeTeamMemberForUser(
     return { ok: false, error: "Commissioner cannot leave their own seat this way" };
   }
 
-  await tidbExecute(`UPDATE native_teams SET user_id = NULL WHERE id = ? AND league_id = ?`, [
-    teamId,
-    membership.leagueId,
-  ]);
+  await tidbExecute(
+    `UPDATE native_teams SET user_id = NULL, is_ai = 0, ai_persona = NULL WHERE id = ? AND league_id = ?`,
+    [teamId, membership.leagueId],
+  );
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   await supabaseAdmin
     .from("native_league_links")
@@ -1039,6 +1052,7 @@ export type NativeCommissionerPatch = {
   keepersPerTeam?: number;
   keeperNote?: string | null;
   teamCount?: number;
+  allowAiTeams?: boolean;
 };
 
 export async function updateNativeLeagueBasicsForUser(
@@ -1193,6 +1207,9 @@ export async function updateNativeLeagueBasicsForUser(
       // Seat resize is a separate flow; reject size changes here for safety.
       return { ok: false, error: "Changing team count is not supported from this screen yet" };
     }
+  }
+  if (input.allowAiTeams != null) {
+    push("allow_ai_teams", input.allowAiTeams ? 1 : 0);
   }
 
   const touchRoster =

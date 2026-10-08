@@ -65,6 +65,7 @@ import { Route as ApiAdminSeedPlayerWarehouseRouteImport } from './routes/api/ad
 import { Route as ApiAdminTidbMigrateRouteImport } from './routes/api/admin/tidb-migrate'
 import { Route as ApiCronLeagueDeltaSyncRouteImport } from './routes/api/cron/league-delta-sync'
 import { Route as ApiCronLeaguePlanningSnapsRouteImport } from './routes/api/cron/league-planning-snaps'
+import { Route as ApiCronNativeAiRouteImport } from './routes/api/cron/native-ai'
 import { Route as ApiCronNativeScoringRouteImport } from './routes/api/cron/native-scoring'
 import { Route as ApiCronNativeWaiversRouteImport } from './routes/api/cron/native-waivers'
 import { Route as ApiCronResearchAggregatesRouteImport } from './routes/api/cron/research-aggregates'
@@ -384,6 +385,11 @@ const ApiCronLeaguePlanningSnapsRoute =
     path: '/api/cron/league-planning-snaps',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiCronNativeAiRoute = ApiCronNativeAiRouteImport.update({
+  id: '/api/cron/native-ai',
+  path: '/api/cron/native-ai',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCronNativeScoringRoute = ApiCronNativeScoringRouteImport.update({
   id: '/api/cron/native-scoring',
   path: '/api/cron/native-scoring',
@@ -614,6 +620,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
   '/api/cron/league-planning-snaps': typeof ApiCronLeaguePlanningSnapsRoute
+  '/api/cron/native-ai': typeof ApiCronNativeAiRoute
   '/api/cron/native-scoring': typeof ApiCronNativeScoringRoute
   '/api/cron/native-waivers': typeof ApiCronNativeWaiversRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
@@ -703,6 +710,7 @@ export interface FileRoutesByTo {
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
   '/api/cron/league-planning-snaps': typeof ApiCronLeaguePlanningSnapsRoute
+  '/api/cron/native-ai': typeof ApiCronNativeAiRoute
   '/api/cron/native-scoring': typeof ApiCronNativeScoringRoute
   '/api/cron/native-waivers': typeof ApiCronNativeWaiversRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
@@ -795,6 +803,7 @@ export interface FileRoutesById {
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
   '/api/cron/league-planning-snaps': typeof ApiCronLeaguePlanningSnapsRoute
+  '/api/cron/native-ai': typeof ApiCronNativeAiRoute
   '/api/cron/native-scoring': typeof ApiCronNativeScoringRoute
   '/api/cron/native-waivers': typeof ApiCronNativeWaiversRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
@@ -889,6 +898,7 @@ export interface FileRouteTypes {
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
     | '/api/cron/league-planning-snaps'
+    | '/api/cron/native-ai'
     | '/api/cron/native-scoring'
     | '/api/cron/native-waivers'
     | '/api/cron/research-aggregates'
@@ -978,6 +988,7 @@ export interface FileRouteTypes {
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
     | '/api/cron/league-planning-snaps'
+    | '/api/cron/native-ai'
     | '/api/cron/native-scoring'
     | '/api/cron/native-waivers'
     | '/api/cron/research-aggregates'
@@ -1069,6 +1080,7 @@ export interface FileRouteTypes {
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
     | '/api/cron/league-planning-snaps'
+    | '/api/cron/native-ai'
     | '/api/cron/native-scoring'
     | '/api/cron/native-waivers'
     | '/api/cron/research-aggregates'
@@ -1153,6 +1165,7 @@ export interface RootRouteChildren {
   ApiAdminTidbMigrateRoute: typeof ApiAdminTidbMigrateRoute
   ApiCronLeagueDeltaSyncRoute: typeof ApiCronLeagueDeltaSyncRoute
   ApiCronLeaguePlanningSnapsRoute: typeof ApiCronLeaguePlanningSnapsRoute
+  ApiCronNativeAiRoute: typeof ApiCronNativeAiRoute
   ApiCronNativeScoringRoute: typeof ApiCronNativeScoringRoute
   ApiCronNativeWaiversRoute: typeof ApiCronNativeWaiversRoute
   ApiCronResearchAggregatesRoute: typeof ApiCronResearchAggregatesRoute
@@ -1564,6 +1577,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCronLeaguePlanningSnapsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/native-ai': {
+      id: '/api/cron/native-ai'
+      path: '/api/cron/native-ai'
+      fullPath: '/api/cron/native-ai'
+      preLoaderRoute: typeof ApiCronNativeAiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/cron/native-scoring': {
       id: '/api/cron/native-scoring'
       path: '/api/cron/native-scoring'
@@ -1957,6 +1977,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminTidbMigrateRoute: ApiAdminTidbMigrateRoute,
   ApiCronLeagueDeltaSyncRoute: ApiCronLeagueDeltaSyncRoute,
   ApiCronLeaguePlanningSnapsRoute: ApiCronLeaguePlanningSnapsRoute,
+  ApiCronNativeAiRoute: ApiCronNativeAiRoute,
   ApiCronNativeScoringRoute: ApiCronNativeScoringRoute,
   ApiCronNativeWaiversRoute: ApiCronNativeWaiversRoute,
   ApiCronResearchAggregatesRoute: ApiCronResearchAggregatesRoute,
@@ -1976,3 +1997,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

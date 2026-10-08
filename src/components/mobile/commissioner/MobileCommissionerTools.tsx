@@ -209,6 +209,7 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
                       seasonStartWeek: draft.seasonStartWeek,
                       isPublic: draft.isPublic,
                       autoActivateNextYear: draft.autoActivateNextYear,
+                      allowAiTeams: draft.allowAiTeams,
                     });
                   } else if (screen === "scoring") {
                     void savePatch({
@@ -362,6 +363,13 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
               checked={draft.isPublic}
               disabled={!canEdit}
               onChange={(v) => setDraft({ ...draft, isPublic: v })}
+            />
+            <ToggleRow
+              label="Allow AI managers"
+              description="Testing only: assign AI to open seats on desktop Teams. AI drafts by ADP and sets weekly lineups (sits bye / Out / IR). Cron-backed — not on page load."
+              checked={Boolean(draft.allowAiTeams)}
+              disabled={!canEdit}
+              onChange={(v) => setDraft({ ...draft, allowAiTeams: v })}
             />
             <div>
               <p className="text-sm text-m-muted">League ID</p>

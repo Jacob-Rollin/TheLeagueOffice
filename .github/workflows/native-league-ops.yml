@@ -1,6 +1,6 @@
 name: Native League Ops
 
-# Waivers / trade veto windows + scoring apply for native leagues.
+# Waivers / trade veto windows + scoring + AI managers for native leagues.
 # Requires APP_URL + CRON_SECRET. Browse paths read TiDB snaps only.
 
 on:
@@ -13,12 +13,14 @@ on:
     - cron: "30 0-5,16-23 * * 0,1,4,5,6"
     # Daily scoring catch-up.
     - cron: "40 7 * * *"
+    # AI draft/lineup tick (Tue–Wed mornings + Thu pre-kickoff).
+    - cron: "15 15 * * 2,3,4"
   workflow_dispatch:
     inputs:
       mode:
-        description: "waivers | scoring | both"
+        description: "waivers | scoring | ai | both | all"
         type: choice
-        options: [both, waivers, scoring]
+        options: [both, waivers, scoring, ai, all]
         default: both
 
 permissions:
@@ -53,8 +55,13 @@ jobs:
             echo
           }
           run_scoring() {
-            echo "POST ${BASE}/api/cron/native-scoring"
+            echo "GET ${BASE}/api/cron/native-scoring"
             curl -fsS -H "$AUTH" "${BASE}/api/cron/native-scoring?limit=15" | head -c 2000
+            echo
+          }
+          run_ai() {
+            echo "GET ${BASE}/api/cron/native-ai"
+            curl -fsS -H "$AUTH" "${BASE}/api/cron/native-ai?limit=12" | head -c 2000
             echo
           }
 
@@ -63,9 +70,15 @@ jobs:
             run_waivers
             exit 0
           fi
+          if [ "$SCHEDULE" = "15 15 * * 2,3,4" ]; then
+            run_ai
+            exit 0
+          fi
 
           case "$MODE" in
             waivers) run_waivers ;;
             scoring) run_scoring ;;
+            ai) run_ai ;;
+            all) run_waivers; run_scoring; run_ai ;;
             *) run_waivers; run_scoring ;;
           esac

@@ -20,6 +20,7 @@ import {
   assignNativeOfflinePick,
   completeNativeDraft,
   getNativeDraftState,
+  runNativeAiDraft,
   undoNativeOfflinePick,
 } from "@/lib/native-league.functions";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
@@ -153,6 +154,29 @@ function NativeLeagueDraftPage() {
     }
   };
 
+  const runAiPicks = async () => {
+    if (!draft?.board.canManage || busy) return;
+    setBusy(true);
+    try {
+      const result = await runNativeAiDraft({ data: { linkId, maxPicks: 40 } });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      const n = result.picks ?? 0;
+      toast.success(
+        n > 0
+          ? `AI made ${n} pick${n === 1 ? "" : "s"}${result.stoppedReason === "human_on_clock" ? " (stopped on human seat)" : ""}.`
+          : `No AI picks (${result.stoppedReason ?? "idle"}).`,
+      );
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not run AI picks.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (isLoading || !draft) {
     return <p className="text-sm text-muted-foreground">Loading draft board…</p>;
   }
@@ -182,6 +206,16 @@ function NativeLeagueDraftPage() {
           </div>
           {!done && board.canManage ? (
             <div className="flex flex-wrap gap-2">
+              {board.commissioner.allowAiTeams && board.teams.some((t) => t.isAi) ? (
+                <button
+                  type="button"
+                  className={outlineClass}
+                  disabled={busy}
+                  onClick={() => void runAiPicks()}
+                >
+                  Run AI Picks
+                </button>
+              ) : null}
               <button type="button" className={outlineClass} disabled={busy || picks.length === 0} onClick={() => void undo()}>
                 Undo Last
               </button>
