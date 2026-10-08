@@ -42,7 +42,9 @@ export const R2_RESEARCH_KEYS = {
   sosBoard: () => `research/sos-board.json`,
   redzone: (yardline: number) => `research/redzone-${yardline}.json`,
   targets: () => `research/targets.json`,
-  areTheyPlaying: (week: number) => `research/are-they-playing-w${week}.json`,
+  // Path bump (week-N vs are-they-playing-wN) busts raw.githubusercontent.com
+  // edge cache when practice marks refresh midweek on the same snap-cdn branch.
+  areTheyPlaying: (week: number) => `research/are-they-playing/week-${week}.json`,
 } as const;
 
 export const R2_SNAP_KEYS = {
