@@ -1,0 +1,111 @@
+name: Are They Playing Snap
+
+# Mon–Fri afternoon: rebuild ATP practice marks only, then patch that one
+# snap-cdn JSON. Avoids a full research-aggregates + full Publish Snap CDN
+# (those are the Fluid / Actions heavy paths).
+
+on:
+  schedule:
+    # ≈2:20pm Eastern — after typical club practice-report posts.
+    - cron: "20 18 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: are-they-playing-snap
+  cancel-in-progress: true
+
+jobs:
+  warm-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check secrets
+        id: creds
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          missing=0
+          for v in APP_URL CRON_SECRET; do
+            if [ -z "${!v}" ]; then
+              echo "::warning::$v not configured — skipping ATP snap refresh."
+              missing=1
+            fi
+          done
+          if [ "$missing" = "1" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Warm ATP only (no full research)
+        if: steps.creds.outputs.available == 'true'
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          BASE="${APP_URL%/}"
+          case "$BASE" in
+            http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+            http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+          esac
+          curl -fsSL -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE/api/cron/research-aggregates?only=are-they-playing" \
+            | tee /tmp/atp-warm.json
+          python3 -c 'import json,sys; d=json.load(open("/tmp/atp-warm.json")); assert d.get("ok") is not False, d; print(d.get("areTheyPlaying"))'
+
+      - name: Fetch week + ATP JSON (TiDB read)
+        if: steps.creds.outputs.available == 'true'
+        id: atp
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          BASE="${APP_URL%/}"
+          case "$BASE" in
+            http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+            http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+          esac
+          WEEK=$(curl -fsSL "https://api.sleeper.app/v1/state/nfl" | python3 -c "import sys,json; print(max(1,int(json.load(sys.stdin).get('week') or 1)))")
+          echo "week=$WEEK" >> "$GITHUB_OUTPUT"
+          mkdir -p out/research/are-they-playing
+          # Read-only research route (no scrape) — warm step already wrote TiDB.
+          curl -fsSL -H "Authorization: Bearer $CRON_SECRET" -H "accept: application/json" \
+            "$BASE/api/data/research/are-they-playing?week=$WEEK" \
+            -o "out/research/are-they-playing/week-${WEEK}.json"
+          python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); assert isinstance(d.get("lines"), list) and len(d["lines"])>0, d; print("lines", len(d["lines"]))' \
+            "out/research/are-they-playing/week-${WEEK}.json"
+
+      - name: Patch snap-cdn ATP file only
+        if: steps.creds.outputs.available == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WEEK: ${{ steps.atp.outputs.week }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          WORK=$(mktemp -d)
+          git clone --depth 1 --branch snap-cdn \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" "$WORK"
+          mkdir -p "$WORK/research/are-they-playing"
+          cp "out/research/are-they-playing/week-${WEEK}.json" \
+            "$WORK/research/are-they-playing/week-${WEEK}.json"
+          # Legacy path for any old clients still on are-they-playing-wN.json
+          cp "out/research/are-they-playing/week-${WEEK}.json" \
+            "$WORK/research/are-they-playing-w${WEEK}.json"
+          cd "$WORK"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "research/are-they-playing/week-${WEEK}.json" "research/are-they-playing-w${WEEK}.json"
+          if git diff --cached --quiet; then
+            echo "ATP snap unchanged — skip push."
+            exit 0
+          fi
+          git commit -m "Refresh Are They Playing week ${WEEK} practice marks"
+          git push origin snap-cdn
+          echo "Published research/are-they-playing/week-${WEEK}.json"

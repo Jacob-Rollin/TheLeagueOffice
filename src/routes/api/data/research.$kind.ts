@@ -111,6 +111,8 @@ export const Route = createFileRoute("/api/data/research/$kind")({
           }
 
           if (kind === "are-they-playing") {
+            // Read-only TiDB. Practice scrapes stay on `/api/cron/research-aggregates`
+            // (`?only=are-they-playing` Mon–Fri) — never on browse or snap publish.
             const { loadAreTheyPlaying } = await import("@/lib/are-they-playing.server");
             const payload = await loadAreTheyPlaying(week ?? 1);
             return researchOk(payload, payload.lines.length > 0);
