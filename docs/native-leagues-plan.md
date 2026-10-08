@@ -434,7 +434,7 @@ Deprecate unused Supabase `leagues` / `lineups` / … for new work (leave tables
 
 ### Phase 1 — Create / invite / join / setup
 
-1. UI: Create League wizard (name, teams, roster, scoring preset → custom editor using `SCORING_GROUPS`, waivers, trades, playoffs, draft mode). **MVP landed** on **My Leagues** as two page sections — **League Office** (native list + create/join) and **Synced Leagues** (host connections). Legacy `/account/leagues/native` redirects to My Leagues.
+1. UI: Create League wizard (name, teams, roster, scoring preset → custom editor using `SCORING_GROUPS`, waivers, trades, playoffs, draft mode). **MVP landed** on **My Leagues** as two sections — **Native Leagues** (list + Create/Join buttons) and **Synced Leagues** (host list + Sync New League). Create → `/account/leagues/setup`; Join → `/account/leagues/join`. Legacy `/account/leagues/native` redirects to setup.
 2. Generate league `invite_code`; share link `/join/:code`. **Invite code shown after create**; deep-link `/join/:code` still TODO.
 3. Join flow: auth required → claim open seat → write TiDB team + Supabase link. **Landed** (`joinNativeLeague` server fn).
 4. Commissioner: rename teams, kick/open seat, edit settings until `draft_status` leaves `not_started` (then lock scoring/roster structure for the season; allow cosmetic edits). **TODO**
@@ -638,8 +638,8 @@ Settings can be a denser form of the same field groups as mobile Commissioner To
 
 | Surface | Notes |
 | --- | --- |
-| Create League wizard | Presets mirroring NFL/ESPN/Sleeper redraft defaults — **My Leagues → League Office** section (not a separate account page) |
-| Invite / join | Same My Leagues section; code + link (+ optional password); open seats |
+| Create League wizard | Presets mirroring NFL/ESPN/Sleeper redraft defaults — `/account/leagues/setup` (linked from My Leagues → Native Leagues) |
+| Invite / join | `/account/leagues/join`; code + link (+ optional password); open seats |
 | **Native league dashboards** | New desktop + mobile routes for running the league (dashboard, team, matchup, standings, rosters, tx log) — **not** `/playbook/*` |
 | Mobile Commissioner Tools | §8 — NFL IA, our light/dark tokens |
 | League settings | Read-only mid-season for structural fields |
