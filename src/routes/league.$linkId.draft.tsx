@@ -54,6 +54,7 @@ function NativeLeagueDraftPage() {
   const { data: draft, isLoading } = useQuery({
     queryKey: ["native-draft-state", linkId],
     enabled: Boolean(user?.id && linkId),
+    staleTime: 15_000,
     refetchInterval: false,
     queryFn: () => getNativeDraftState({ data: { linkId } }),
   });

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { jsonResponse } from "@/lib/api-cache";
+import { jsonResponse, warehouseCacheControl } from "@/lib/api-cache";
+import { processMemo } from "@/lib/process-memo";
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
 
 type WarehouseRow = {
@@ -35,22 +36,24 @@ export const Route = createFileRoute("/api/data/player/$id")({
         }
 
         try {
-          const rows = await tidbExecute<WarehouseRow>(
-            `SELECT sleeper_id, player_name, position, team, fantasycalc_value,
-                    leaguelogs_status, injury_type, injury_notes, updated_at
-             FROM player_warehouse
-             WHERE sleeper_id = ?
-             LIMIT 1`,
-            [id],
-          );
-          const player = rows[0] ?? null;
+          const player = await processMemo(`warehouse-player:${id}`, 60_000, async () => {
+            const rows = await tidbExecute<WarehouseRow>(
+              `SELECT sleeper_id, player_name, position, team, fantasycalc_value,
+                      leaguelogs_status, injury_type, injury_notes, updated_at
+               FROM player_warehouse
+               WHERE sleeper_id = ?
+               LIMIT 1`,
+              [id],
+            );
+            return rows[0] ?? null;
+          });
           if (!player) {
             return jsonResponse(
               { ok: false, error: "not found", player: null },
               { status: 404, cache: "no-store" },
             );
           }
-          return jsonResponse({ ok: true, player });
+          return jsonResponse({ ok: true, player }, { cache: warehouseCacheControl() });
         } catch (error) {
           const message = error instanceof Error ? error.message : "query failed";
           console.error("[api/data/player]", message);

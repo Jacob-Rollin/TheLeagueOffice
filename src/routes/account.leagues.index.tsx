@@ -28,7 +28,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchLeagueRostersForConnection } from "@/lib/league-rosters-fetch";
 import {
-  getNativeLeagueSummary,
+  listNativeLeagueSummaries,
   updateNativeInviteCode,
   type NativeMemberLeagueSummary,
 } from "@/lib/native-league.functions";
@@ -71,15 +71,6 @@ const PLATFORM_LABEL: Record<string, string> = {
   espn: "ESPN",
   yahoo: "Yahoo",
   native: "Native",
-};
-
-type NativeLinkRow = {
-  id: string;
-  native_league_id: string;
-  role: string;
-  season_year: number;
-  label: string | null;
-  created_at: string;
 };
 
 function formatRelativeTime(value: string): string {
@@ -138,18 +129,12 @@ function LeaguesPage() {
     },
   });
 
-  const { data: nativeLinks } = useQuery({
-    queryKey: ["native-league-links", userId],
+  const { data: nativeSummaries } = useQuery({
+    queryKey: ["native-league-summaries", userId],
     enabled: Boolean(userId),
+    staleTime: 60_000,
     retry: false,
-    queryFn: async (): Promise<NativeLinkRow[]> => {
-      const { data, error } = await supabase
-        .from("native_league_links")
-        .select("id, native_league_id, role, season_year, label, created_at")
-        .order("created_at", { ascending: false });
-      if (error) return [];
-      return (data ?? []) as NativeLinkRow[];
-    },
+    queryFn: (): Promise<NativeMemberLeagueSummary[]> => listNativeLeagueSummaries(),
   });
 
   const requestDelete = (id: string, label: string) => {
@@ -205,7 +190,9 @@ function LeaguesPage() {
   };
 
   const rows = (connections ?? []).filter((row): row is ConnectionRow => Boolean(row?.id));
-  const nativeRows = (nativeLinks ?? []).filter((row): row is NativeLinkRow => Boolean(row?.id));
+  const nativeRows = (nativeSummaries ?? []).filter((row): row is NativeMemberLeagueSummary =>
+    Boolean(row?.linkId),
+  );
 
   return (
     <AccountShell title="My Leagues" active="leagues">
@@ -240,7 +227,11 @@ function LeaguesPage() {
           ) : (
             <ul className="grid grid-cols-1 gap-3 md:grid-cols-[auto_auto_minmax(10rem,1fr)_10rem_auto_auto]">
               {nativeRows.map((row) => (
-                <NativeLeagueRow key={row.id} row={row} onViewTools={() => viewTools(row.id)} />
+                <NativeLeagueRow
+                  key={row.linkId}
+                  summary={row}
+                  onViewTools={() => viewTools(row.linkId)}
+                />
               ))}
             </ul>
           )}
@@ -323,10 +314,10 @@ function LeaguesPage() {
 }
 
 function NativeLeagueRow({
-  row,
+  summary,
   onViewTools,
 }: {
-  row: NativeLinkRow;
+  summary: NativeMemberLeagueSummary;
   onViewTools: () => void;
 }) {
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -334,24 +325,22 @@ function NativeLeagueRow({
   const [inviteSaving, setInviteSaving] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
 
-  const { data: summary } = useQuery({
-    queryKey: ["native-league-summary", row.id],
-    enabled: Boolean(row.id),
-    staleTime: 60_000,
-    retry: false,
-    queryFn: async (): Promise<NativeMemberLeagueSummary | null> =>
-      getNativeLeagueSummary({ data: { linkId: row.id } }),
-  });
-
-  const label = summary?.name?.trim() || row.label?.trim() || "Native League";
+  const label = summary.name?.trim() || "Native League";
   const role =
-    row.role === "commissioner" ? "Commissioner" : row.role === "co_commish" ? "Co-Commish" : "Member";
-  const canEditInvite = summary?.canEditInvite === true;
-  const inviteCode = summary?.inviteCode ?? "";
-  const scoring = nativeScoringLabel(summary?.scoringPreset);
-  const teamCount = summary?.teamCount;
-  const updatedAt = summary?.updatedAt || summary?.createdAt || row.created_at;
+    summary.role === "commissioner"
+      ? "Commissioner"
+      : summary.role === "co_commish"
+        ? "Co-Commish"
+        : "Member";
+  const canEditInvite = summary.canEditInvite === true;
+  const inviteCode = summary.inviteCode ?? "";
+  const scoring = nativeScoringLabel(summary.scoringPreset);
+  const teamCount = summary.teamCount;
+  const updatedAt = summary.updatedAt || summary.createdAt;
+  const linkId = summary.linkId;
 
   const openInvite = () => {
     setInviteError(null);
@@ -376,14 +365,15 @@ function NativeLeagueRow({
     setInviteError(null);
     try {
       const result = await updateNativeInviteCode({
-        data: { linkId: row.id, inviteCode: inviteDraft },
+        data: { linkId, inviteCode: inviteDraft },
       });
       if (!result.ok) {
         setInviteError(result.error);
         return;
       }
       setInviteDraft(result.inviteCode);
-      await queryClient.invalidateQueries({ queryKey: ["native-league-summary", row.id] });
+      await queryClient.invalidateQueries({ queryKey: ["native-league-summaries", userId] });
+      await queryClient.invalidateQueries({ queryKey: ["native-league-summary", linkId] });
       toast.success("Invite code updated.");
     } catch (err) {
       setInviteError(err instanceof Error ? err.message : "Could not update invite code.");
@@ -422,7 +412,7 @@ function NativeLeagueRow({
       <div className="flex items-center gap-2 md:justify-self-end">
         <Link
           to="/league/$linkId/settings"
-          params={{ linkId: row.id }}
+          params={{ linkId }}
           className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
         >
           Settings
@@ -436,12 +426,12 @@ function NativeLeagueRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem asChild className="font-medium">
-              <Link to="/league/$linkId" params={{ linkId: row.id }}>
+              <Link to="/league/$linkId" params={{ linkId }}>
                 Open League
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild className="font-medium">
-              <Link to="/league/$linkId/settings" params={{ linkId: row.id }}>
+              <Link to="/league/$linkId/settings" params={{ linkId }}>
                 League Settings
               </Link>
             </DropdownMenuItem>

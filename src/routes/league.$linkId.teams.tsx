@@ -43,6 +43,7 @@ function NativeLeagueTeamsPage() {
   const { data: board } = useQuery({
     queryKey: ["native-league-board", linkId],
     enabled: Boolean(user?.id && linkId),
+    staleTime: 60_000,
     queryFn: () => getNativeLeagueBoard({ data: { linkId } }),
   });
 
@@ -51,6 +52,7 @@ function NativeLeagueTeamsPage() {
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] });
     void queryClient.invalidateQueries({ queryKey: ["native-league-summary", linkId] });
+    void queryClient.invalidateQueries({ queryKey: ["native-league-summaries"] });
   };
 
   const saveName = async (teamId: number) => {

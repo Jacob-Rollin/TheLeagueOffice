@@ -59,31 +59,34 @@ export const Route = createFileRoute("/api/data/research/$kind")({
           ) {
             const players = await import("@/lib/players.server");
 
+            // Browse path: never allowCompute — cron owns rebuilds.
+            const readOnly = { allowCompute: false } as const;
+
             if (kind === "fpa") {
-              const payload = await players.loadFantasyPointsAllowed(season, format);
+              const payload = await players.loadFantasyPointsAllowed(season, format, readOnly);
               return researchOk(payload, payload.rows.length > 0);
             }
 
             if (kind === "matchups-guide") {
-              const payload = await players.loadMatchupsGuide(week, format);
+              const payload = await players.loadMatchupsGuide(week, format, readOnly);
               const warm =
                 Object.keys(payload.games).length > 0 || Object.keys(payload.defense).length > 0;
               return researchOk(payload, warm);
             }
 
             if (kind === "sos-analysis") {
-              const payload = await players.loadSosAnalysis(format);
+              const payload = await players.loadSosAnalysis(format, readOnly);
               return researchOk(payload, payload.rows.length > 0);
             }
 
             if (kind === "fantasy-leaders") {
               // Read-only: cron (`allowCompute`) rebuilds cold snaps. Request-path
               // recompute was burning Fluid Active CPU on every empty hit.
-              const payload = await players.loadFantasyLeaders(season);
+              const payload = await players.loadFantasyLeaders(season, readOnly);
               return researchOk(payload, payload.rows.length > 0);
             }
 
-            const payload = await players.loadSosBoard(season);
+            const payload = await players.loadSosBoard(season, readOnly);
             return researchOk(payload, payload.schedule.length > 0);
           }
 
@@ -99,6 +102,7 @@ export const Route = createFileRoute("/api/data/research/$kind")({
               yardline,
               parseWeekBound(url.searchParams.get("weekFrom")),
               parseWeekBound(url.searchParams.get("weekTo")),
+              { allowCompute: false },
             );
             const warm = Object.values(payload.rowsByPos).some((rows) => rows.length > 0);
             return researchOk(payload, warm);
@@ -106,7 +110,7 @@ export const Route = createFileRoute("/api/data/research/$kind")({
 
           if (kind === "targets") {
             const { loadMostTargetedPlayers } = await import("@/lib/targets.server");
-            const payload = await loadMostTargetedPlayers(season);
+            const payload = await loadMostTargetedPlayers(season, { allowCompute: false });
             return researchOk(payload, payload.rows.length > 0);
           }
 
@@ -114,7 +118,7 @@ export const Route = createFileRoute("/api/data/research/$kind")({
             // Read-only TiDB. Practice scrapes stay on `/api/cron/research-aggregates`
             // (`?only=are-they-playing` Mon–Fri) — never on browse or snap publish.
             const { loadAreTheyPlaying } = await import("@/lib/are-they-playing.server");
-            const payload = await loadAreTheyPlaying(week ?? 1);
+            const payload = await loadAreTheyPlaying(week ?? 1, { allowCompute: false });
             return researchOk(payload, payload.lines.length > 0);
           }
 
