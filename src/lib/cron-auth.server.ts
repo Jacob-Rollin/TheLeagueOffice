@@ -1,11 +1,10 @@
 /**
  * Auth gate for Vercel Cron / manual ops triggers.
- * Accepts Vercel's cron header or `Authorization: Bearer $CRON_SECRET`.
+ * Requires `Authorization: Bearer $CRON_SECRET` (Vercel Cron sends this when
+ * CRON_SECRET is set; GitHub Actions workflows use the same secret).
+ * Do not trust `x-vercel-cron` alone — that header is spoofable off-Vercel.
  */
 export function authorizeCronRequest(request: Request): boolean {
-  const vercelCron = request.headers.get("x-vercel-cron");
-  if (vercelCron === "1") return true;
-
   // Strip wrapping quotes / whitespace — common when pasting into Vercel/GitHub UIs.
   const secret = process.env["CRON_SECRET"]?.trim().replace(/^["']|["']$/g, "");
   if (!secret) {

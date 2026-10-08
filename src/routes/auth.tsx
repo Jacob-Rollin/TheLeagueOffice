@@ -2,11 +2,12 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { PageTitle } from "@/components/PageTitle";
+import { passwordProblems } from "@/components/auth/AuthDialog";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (search: Record<string, unknown>) => ({
-    mode: search['mode'] === "signup" ? ("signup" as const) : ("signin" as const),
+    mode: search["mode"] === "signup" ? ("signup" as const) : ("signin" as const),
   }),
   head: () => ({
     meta: [
@@ -24,12 +25,16 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+const INVALID_CODE = "Invalid or expired invite code.";
+type RpcFn = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+
 function AuthPage() {
   const { mode } = Route.useSearch();
   const navigate = useNavigate();
   const [isSignup, setIsSignup] = useState(mode === "signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -41,13 +46,38 @@ function AuthPage() {
     setNotice(null);
     try {
       if (isSignup) {
+        const code = inviteCode.trim();
+        if (!code) {
+          setError(INVALID_CODE);
+          return;
+        }
+        const missing = passwordProblems(password);
+        if (missing.length > 0) {
+          setError(`Password must include ${missing.join(", ")}.`);
+          return;
+        }
+
+        const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
+        const { data: valid, error: verifyError } = await rpc("verify_invite_code", { target_code: code });
+        if (verifyError || valid !== true) {
+          setError(INVALID_CODE);
+          return;
+        }
+
         const { error: err } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${window.location.origin}/` },
+          options: { emailRedirectTo: `${window.location.origin}/auth/confirmed` },
         });
         if (err) throw err;
-        setNotice("Account created. You can sign in now.");
+
+        const { data: consumed, error: consumeError } = await rpc("consume_invite_code", { target_code: code });
+        if (consumeError || consumed !== true) {
+          console.warn("[auth] invite consume after signup failed", consumeError);
+        }
+
+        setNotice("Account created. Check your email to confirm, then sign in.");
+        setIsSignup(false);
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password });
         if (err) throw err;
@@ -64,7 +94,7 @@ function AuthPage() {
     <main className="mx-auto w-full max-w-md px-4 py-16">
       <PageTitle>{isSignup ? "Create Account" : "Sign In"}</PageTitle>
       <p className="mt-1 text-sm text-muted-foreground">
-        {isSignup ? "Register to run your leagues." : "Welcome back to the front office."}
+        {isSignup ? "Register with a valid invite code." : "Welcome back to the front office."}
       </p>
 
       <form onSubmit={submit} className="mt-6 space-y-3 rounded-xl border border-border bg-card p-5">
@@ -83,12 +113,25 @@ function AuthPage() {
           <input
             type="password"
             required
-            minLength={6}
+            minLength={isSignup ? 8 : 6}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring"
           />
         </label>
+        {isSignup ? (
+          <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Invite code
+            <input
+              type="text"
+              required
+              autoComplete="off"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring"
+            />
+          </label>
+        ) : null}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
         {notice && <p className="text-sm text-success">{notice}</p>}

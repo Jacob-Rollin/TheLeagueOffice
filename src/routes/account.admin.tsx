@@ -34,6 +34,7 @@ import {
   type ArticleInput,
   type ArticleRow,
 } from "@/lib/articles";
+import { adminDeleteUser, setProfileRole } from "@/lib/admin.functions";
 import { generateInviteCode, listInviteCodes, type InviteCodeRow } from "@/lib/inviteCodes";
 import {
   adminDeleteNativeLeague,
@@ -235,15 +236,7 @@ function UsersManager({
     const nextRole: "admin" | "user" = currentRole === "admin" ? "user" : "admin";
     setBusyId(row.id);
     try {
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ role: nextRole })
-        .eq("id", row.id);
-      if (updateError) {
-        console.error("[toggleAdmin]", updateError);
-        toast.error(updateError.message);
-        return;
-      }
+      await setProfileRole({ data: { userId: row.id, role: nextRole } });
       toast.success(nextRole === "admin" ? "Admin role granted." : "Admin role removed.");
       refresh();
     } catch (err) {
@@ -266,8 +259,7 @@ function UsersManager({
     setRemoving(true);
     setBusyId(row.id);
     try {
-      const { error: deleteError } = await supabase.from("profiles").delete().eq("id", row.id);
-      if (deleteError) throw new Error(deleteError.message);
+      await adminDeleteUser({ data: { userId: row.id } });
       toast.success("User account removed.");
       setPendingRemove(null);
       refresh();

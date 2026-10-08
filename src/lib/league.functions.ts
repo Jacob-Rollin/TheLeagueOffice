@@ -1,10 +1,26 @@
 import { createServerFn } from "@tanstack/react-start";
 
+import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+
 export type {
   LeagueActivityEvent,
   LeagueActivityMove,
   LeagueTransactionLog,
 } from "./league.server";
+
+/** Ensure the signed-in user owns this synced_leagues row before service-role resync. */
+async function assertOwnsSyncedLeague(userId: string, connectionId: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
+    .from("synced_leagues")
+    .select("id")
+    .eq("id", connectionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Unauthorized: league connection not found for this account.");
+}
 
 export const getUserLeagues = createServerFn({ method: "GET" })
   .inputValidator((input: { username: string }) => ({
@@ -260,6 +276,7 @@ export const getUnifiedLeague = createServerFn({ method: "GET" })
 
 /** Wipe stale league_transactions / weekly_matchups and re-ingest live host data. */
 export const forceClearAndReSyncLeague = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator(
     (input: {
       connectionId: string;
@@ -282,7 +299,8 @@ export const forceClearAndReSyncLeague = createServerFn({ method: "POST" })
         : undefined,
     }),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertOwnsSyncedLeague(context.userId, data.connectionId);
     const { forceClearAndReSyncLeague: run } = await import("./league-resync.server");
     return await run({
       connectionId: data.connectionId,
@@ -299,6 +317,7 @@ export const forceClearAndReSyncLeague = createServerFn({ method: "POST" })
  * Prefer this over forceClearAndReSyncLeague for page-load / cron paths.
  */
 export const deltaSyncLeague = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator(
     (input: {
       connectionId: string;
@@ -321,7 +340,8 @@ export const deltaSyncLeague = createServerFn({ method: "POST" })
         : undefined,
     }),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertOwnsSyncedLeague(context.userId, data.connectionId);
     const { deltaSyncLeague: run } = await import("./league-resync.server");
     return await run({
       connectionId: data.connectionId,

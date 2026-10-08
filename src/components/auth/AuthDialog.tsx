@@ -133,8 +133,9 @@ export function AuthDialog({
         }
 
         const rpc = supabase.rpc.bind(supabase) as unknown as RpcFn;
-        const { data: consumed, error: rpcError } = await rpc("verify_and_consume_invite_code", { target_code: code });
-        if (rpcError || consumed !== true) {
+        // Verify without consuming — burn only after signup succeeds.
+        const { data: valid, error: verifyError } = await rpc("verify_invite_code", { target_code: code });
+        if (verifyError || valid !== true) {
           setError(INVALID_CODE);
           return;
         }
@@ -153,6 +154,11 @@ export function AuthDialog({
         if (signUpError) {
           setError(signUpError.message);
           return;
+        }
+
+        const { data: consumed, error: consumeError } = await rpc("consume_invite_code", { target_code: code });
+        if (consumeError || consumed !== true) {
+          console.warn("[AuthDialog] invite consume after signup failed", consumeError);
         }
 
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
