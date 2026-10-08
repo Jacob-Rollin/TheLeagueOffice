@@ -165,6 +165,109 @@ export function slotLabels(rosterPositions: string[]): string[] {
   return out;
 }
 
+/** Positions a mobile starter slot accepts (aligned with slotLabels). */
+function slotEligiblePositions(slot: string): string[] {
+  switch (slot.trim().toUpperCase()) {
+    case "QB":
+    case "RB":
+    case "WR":
+    case "TE":
+    case "K":
+      return [slot.trim().toUpperCase()];
+    case "DEF":
+    case "DST":
+      return ["DEF"];
+    case "FLEX":
+    case "FLX":
+    case "W/R/T":
+      return ["RB", "WR", "TE"];
+    case "WRRB":
+    case "W/R":
+      return ["RB", "WR"];
+    case "WRTE":
+    case "W/T":
+      return ["WR", "TE"];
+    case "SF":
+    case "SFLEX":
+    case "SUPER_FLEX":
+    case "SUPERFLEX":
+      return ["QB", "RB", "WR", "TE"];
+    default:
+      return [];
+  }
+}
+
+function playerFitsMobileSlot(player: Player, slot: string): boolean {
+  const eligible = slotEligiblePositions(slot);
+  if (!eligible.length) return false;
+  return eligible.includes(player.pos);
+}
+
+/**
+ * Projected-optimal starters for the week (client-only). Dedicated slots fill
+ * before FLEX/SF so leftovers get the best remaining skill pieces.
+ */
+export function buildProjectedOptimalLineup(
+  labels: string[],
+  pool: Player[],
+  projectFor: (player: Player) => number | null,
+): { starters: LineupRow[]; starterIds: Set<string>; total: number } {
+  const ranked = pool
+    .map((player) => ({
+      player,
+      value: Math.max(0, Number(projectFor(player)) || 0),
+    }))
+    .sort((a, b) => b.value - a.value || a.player.name.localeCompare(b.player.name));
+
+  const used = new Set<string>();
+  const pick = (slot: string): Player | null => {
+    const hit = ranked.find(
+      (entry) => !used.has(entry.player.id) && playerFitsMobileSlot(entry.player, slot),
+    );
+    if (!hit) return null;
+    used.add(hit.player.id);
+    return hit.player;
+  };
+
+  const starters: LineupRow[] = labels.map((slot) => ({ slot, player: null }));
+  labels.forEach((slot, i) => {
+    if (slot === "FLEX" || slot === "FLX" || slot === "SF" || slot === "SFLEX") return;
+    starters[i] = { slot, player: pick(slot) };
+  });
+  labels.forEach((slot, i) => {
+    if (slot !== "FLEX" && slot !== "FLX" && slot !== "SF" && slot !== "SFLEX") return;
+    starters[i] = { slot, player: pick(slot) };
+  });
+
+  let total = 0;
+  for (const row of starters) {
+    if (!row.player) continue;
+    total += Math.max(0, Number(projectFor(row.player)) || 0);
+  }
+  return {
+    starters,
+    starterIds: new Set(
+      starters.map((r) => r.player?.id).filter((id): id is string => Boolean(id)),
+    ),
+    total: Math.round(total * 100) / 100,
+  };
+}
+
+/** Sum projected points for the given starter rows. */
+export function sumLineupProjection(
+  rows: LineupRow[],
+  projectFor: (player: Player) => number | null,
+): number {
+  let total = 0;
+  for (const row of rows) {
+    if (!row.player) continue;
+    const p = projectFor(row.player);
+    if (p == null || !Number.isFinite(p)) continue;
+    total += p;
+  }
+  return Math.round(total * 100) / 100;
+}
+
 export function teamKeys(team: string): string[] {
   const nfl = team.trim().toUpperCase();
   return TEAM_ALIASES[nfl] ?? [nfl];

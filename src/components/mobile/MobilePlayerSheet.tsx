@@ -13,6 +13,7 @@ import {
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import type { Pos } from "@/lib/draft";
 import { teamFullName } from "@/lib/nfl-teams";
@@ -76,6 +77,9 @@ const AVATAR_POS = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
 
 function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const [tab, setTab] = useState<"overview" | "stats" | "logs">("overview");
+  // Reuses the league-rosters React Query cache — no catalog fetch required.
+  const { ownerByPlayerId } = useLeagueRosters([]);
+  const fantasyOwner = ownerByPlayerId.get(id) ?? null;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -195,10 +199,15 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                     </p>
                   </div>
                 </div>
+                {fantasyOwner ? (
+                  <p className="mt-2 truncate text-[13px] font-medium text-m-card-fg">
+                    {fantasyOwner}
+                  </p>
+                ) : null}
                 {injuryInfo ? (
                   <span
                     className={cn(
-                      "mt-4 inline-block rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wide",
+                      "mt-3 inline-block rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wide",
                       injuryInfo.className,
                     )}
                   >

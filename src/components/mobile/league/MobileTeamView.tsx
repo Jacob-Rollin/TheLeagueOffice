@@ -21,6 +21,7 @@ import {
   PossessionStripBadges,
   REGULAR_SEASON_WEEKS,
   Score,
+  buildProjectedOptimalLineup,
   entryPoints,
   gameStripLabels,
   ordinal,
@@ -30,6 +31,7 @@ import {
   scheduleOpponent,
   shortName,
   slotLabels,
+  sumLineupProjection,
   useNflSchedule,
   type LineupRow,
 } from "./lineupShared";
@@ -44,6 +46,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const { myTeam, rosterPositions, loading: rostersLoading } = useLeagueRosters(players);
   const { rows: standingsRows } = useMobileLeagueStandings();
   const [week, setWeek] = useState<number | null>(null);
+  const [showOptimized, setShowOptimized] = useState(false);
   const { nflWeek, projectFor, rankFor, sleeperIdFor } = useLeagueProjections(week);
   useEffect(() => {
     if (week == null && nflWeek != null) setWeek(Math.min(nflWeek, REGULAR_SEASON_WEEKS));
@@ -56,6 +59,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const { scoringMap } = useLeagueScoringMeta();
   const { statsFor } = useWeeklyActualStats(activeWeek);
   const isPastWeek = currentWeek != null && activeWeek < currentWeek;
+  const isCurrentWeek = currentWeek != null && Number(activeWeek) === Number(currentWeek);
 
   const standingIndex = standingsRows.findIndex(
     (r) => myTeam != null && Number(r.rosterId) === Number(myTeam.slot),
@@ -70,7 +74,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
       ? (entries.find((e) => e.matchupId === mine.matchupId && e.rosterId !== mine.rosterId) ?? null)
       : null;
 
-  const lineup = useMemo(() => {
+  const currentLineup = useMemo(() => {
     const labels = slotLabels(rosterPositions);
     if (mine?.starters.length) return resolveEntryLineup(mine, labels, playersById);
 
@@ -83,6 +87,57 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     const reserve = (myTeam?.ir ?? []).map((p) => ({ slot: "IR", player: p }));
     return { starters, bench, reserve };
   }, [rosterPositions, myTeam, mine, playersById]);
+
+  const projectPlayer = (p: Player) => projectFor(sleeperIdFor(p));
+
+  /** Hide optimize once any current starter's NFL game has started (or finished). */
+  const startersLocked = useMemo(() => {
+    for (const row of currentLineup.starters) {
+      if (!row.player) continue;
+      if (row.player.bye != null && Number(row.player.bye) === Number(activeWeek)) continue;
+      const phase = progressFor(row.player.team, progressByNflTeam)?.phase ?? "pre";
+      if (phase === "in" || phase === "post") return true;
+    }
+    return false;
+  }, [currentLineup.starters, progressByNflTeam, activeWeek]);
+
+  const optimizePlan = useMemo(() => {
+    if (!myTeam || !isCurrentWeek || startersLocked) return null;
+    const labels = slotLabels(rosterPositions);
+    const irIds = new Set((myTeam.ir ?? []).map((p) => p.id));
+    const pool = (myTeam.players ?? []).filter((p) => !irIds.has(p.id));
+    if (!pool.length || !labels.length) return null;
+
+    const optimal = buildProjectedOptimalLineup(labels, pool, projectPlayer);
+    const currentTotal = sumLineupProjection(currentLineup.starters, projectPlayer);
+    const gain = Math.round((optimal.total - currentTotal) * 100) / 100;
+    if (gain < 0.05) return null;
+
+    const bench = pool
+      .filter((p) => !optimal.starterIds.has(p.id))
+      .map((p) => ({ slot: "BN", player: p }));
+    const reserve = (myTeam.ir ?? []).map((p) => ({ slot: "IR", player: p }));
+    return {
+      gain,
+      lineup: { starters: optimal.starters, bench, reserve },
+    };
+    // projectFor / sleeperIdFor are stable enough via projectPlayer closure on week hooks
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    myTeam,
+    isCurrentWeek,
+    startersLocked,
+    rosterPositions,
+    currentLineup.starters,
+    projectFor,
+    sleeperIdFor,
+  ]);
+
+  useEffect(() => {
+    if (!optimizePlan || startersLocked) setShowOptimized(false);
+  }, [optimizePlan, startersLocked]);
+
+  const lineup = showOptimized && optimizePlan ? optimizePlan.lineup : currentLineup;
 
   const loading = playersLoading || rostersLoading;
   if (loading && !myTeam) {
@@ -238,6 +293,40 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
           </Link>
         </div>
       </section>
+
+      {optimizePlan ? (
+        <div className="relative z-10 -mt-4 flex flex-col items-center gap-2 px-4">
+          <button
+            type="button"
+            onClick={() => setShowOptimized((v) => !v)}
+            aria-pressed={showOptimized}
+            aria-label={
+              showOptimized
+                ? "Show your current set lineup"
+                : `Preview optimized lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
+            }
+            className="inline-flex overflow-hidden rounded-full shadow-[0_4px_14px_rgba(16,185,129,0.35)]"
+          >
+            <span className="bg-emerald-400 px-4 py-2.5 font-display text-base font-extrabold tabular-nums text-white">
+              + {optimizePlan.gain.toFixed(2)}
+            </span>
+            <span
+              className={
+                showOptimized
+                  ? "bg-emerald-800 px-5 py-2.5 font-display text-base font-extrabold uppercase tracking-wide text-white"
+                  : "bg-emerald-600 px-5 py-2.5 font-display text-base font-extrabold uppercase tracking-wide text-white"
+              }
+            >
+              {showOptimized ? "Optimized" : "Optimize"}
+            </span>
+          </button>
+          {showOptimized ? (
+            <p className="text-center text-xs text-m-muted">
+              Preview only — tap again for your set lineup
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <LineupSection title="Starters" rows={lineup.starters} {...rowProps} />
       <LineupSection title="Bench" rows={lineup.bench} {...rowProps} />
