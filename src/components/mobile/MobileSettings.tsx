@@ -6,6 +6,7 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
+import { COMMISH_SCROLL_PAD } from "./commissioner/MobileCommissionerChrome";
 import { MobileCommissionerTools } from "./commissioner/MobileCommissionerTools";
 import { useMobileTheme, type MobileThemePreference } from "./MobileThemeContext";
 
@@ -33,8 +34,16 @@ export function MobileSettingsOverlay({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Settings" className="fixed inset-0 z-50 overflow-y-auto bg-m-bg">
-      <div className="mx-auto w-full max-w-md">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Settings"
+      className="fixed inset-0 z-[60] max-w-[100vw] overflow-x-clip overflow-y-auto overscroll-x-none bg-m-bg touch-pan-y"
+    >
+      <div
+        className="mx-auto w-full max-w-md overflow-x-clip"
+        style={{ paddingBottom: COMMISH_SCROLL_PAD }}
+      >
         <header className="sticky top-0 z-10 flex items-center justify-center border-b border-m-border bg-m-header px-4 py-3 text-m-header-fg">
           <h1 className="font-display text-xl font-semibold tracking-wide">Settings</h1>
           <button
@@ -75,7 +84,7 @@ function MobileSettingsContent({ onNavigate }: { onNavigate: () => void }) {
   return (
     <>
       {commishOpen ? <MobileCommissionerTools onClose={() => setCommishOpen(false)} /> : null}
-      <main className="space-y-3 px-2.5 py-3 pb-10">
+      <main className="space-y-3 px-2.5 py-3">
         <SettingsCard
           title="Account"
           action={

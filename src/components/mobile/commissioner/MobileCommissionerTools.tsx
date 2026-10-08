@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import {
+  COMMISH_SCROLL_PAD,
   CommishHeader,
   CommishSection,
   FieldLabel,
@@ -31,6 +32,12 @@ import {
   TextInput,
   ToggleRow,
 } from "./MobileCommissionerChrome";
+
+const dialogShellClass =
+  "fixed inset-0 z-[60] max-w-[100vw] overflow-x-clip overflow-y-auto overscroll-x-none bg-m-bg touch-pan-y";
+const dialogInnerClass =
+  "mx-auto flex min-h-full w-full max-w-md flex-col overflow-x-clip";
+const dialogInnerStyle = { paddingBottom: COMMISH_SCROLL_PAD } as const;
 
 type HubTab = "league" | "draft" | "rosters";
 type Screen =
@@ -136,8 +143,8 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
 
   if (!isNative) {
     return (
-      <div role="dialog" aria-modal="true" className="fixed inset-0 z-[60] overflow-y-auto bg-m-bg">
-        <div className="mx-auto w-full max-w-md">
+      <div role="dialog" aria-modal="true" className={dialogShellClass}>
+        <div className={dialogInnerClass} style={dialogInnerStyle}>
           <CommishHeader title="Commissioner Tools" onClose={onClose} />
           <main className="px-4 py-8 text-sm text-m-muted">
             Commissioner Tools edit native leagues hosted on The League Office. Synced ESPN / Sleeper /
@@ -150,8 +157,8 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
 
   if (isLoading || !draft) {
     return (
-      <div role="dialog" aria-modal="true" className="fixed inset-0 z-[60] overflow-y-auto bg-m-bg">
-        <div className="mx-auto w-full max-w-md">
+      <div role="dialog" aria-modal="true" className={dialogShellClass}>
+        <div className={dialogInnerClass} style={dialogInnerStyle}>
           <CommishHeader title="Commissioner Tools" onClose={onClose} />
           <p className="px-4 py-8 text-sm text-m-muted">Loading league settings…</p>
         </div>
@@ -161,8 +168,8 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
 
   if (!draft.canManage) {
     return (
-      <div role="dialog" aria-modal="true" className="fixed inset-0 z-[60] overflow-y-auto bg-m-bg">
-        <div className="mx-auto w-full max-w-md">
+      <div role="dialog" aria-modal="true" className={dialogShellClass}>
+        <div className={dialogInnerClass} style={dialogInnerStyle}>
           <CommishHeader title="Commissioner Tools" onClose={onClose} />
           <main className="px-4 py-8 text-sm text-m-muted">
             Only commissioners and co-managers can edit these settings.
@@ -185,9 +192,9 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
               : "Settings");
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Commissioner Tools" className="fixed inset-0 z-[60] overflow-y-auto bg-m-bg">
+    <div role="dialog" aria-modal="true" aria-label="Commissioner Tools" className={dialogShellClass}>
       <Toaster />
-      <div className="mx-auto flex min-h-full w-full max-w-md flex-col">
+      <div className={dialogInnerClass} style={dialogInnerStyle}>
         <CommishHeader
           title={title}
           onClose={screen === "hub" ? onClose : undefined}
@@ -296,6 +303,12 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
               ))}
             </nav>
             <main>
+              <p className="border-b border-m-border px-4 py-3 text-sm text-m-muted">
+                Saves write to the league now. Live enforcement today: league name, scoring preset
+                (display), draft mode, bench/IR counts, IR designations, and weekly/season add
+                limits. Waivers, trades, playoffs, locks, and keepers are stored for upcoming
+                features.
+              </p>
               {tab === "league"
                 ? LEAGUE_NAV.map((item) => (
                     <NavRow key={item.id} label={item.label} onClick={() => setScreen(item.id)} />
@@ -386,7 +399,7 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
                 }}
               />
             </div>
-            <nav className="flex gap-1 overflow-x-auto border-b border-m-border px-2">
+            <nav className="flex max-w-full gap-1 overflow-x-auto overscroll-x-contain border-b border-m-border px-2">
               {(
                 [
                   ["passing", "Passing"],

@@ -58,6 +58,10 @@ export function CommishHeader({
   );
 }
 
+/** Clears mobile bottom tab bar + home indicator when overlays scroll. */
+export const COMMISH_SCROLL_PAD =
+  "calc(3.5rem + env(safe-area-inset-bottom, 0px) + 1.5rem)";
+
 export function CommishSection({
   title,
   info,
@@ -68,11 +72,11 @@ export function CommishSection({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-3 px-4 py-4">
-      <div className="flex items-start justify-between gap-2">
-        <h2 className="font-display text-lg font-bold text-m-card-fg">{title}</h2>
+    <section className="w-full min-w-0 max-w-full space-y-3 overflow-x-clip px-4 py-4">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <h2 className="min-w-0 break-words font-display text-lg font-bold text-m-card-fg">{title}</h2>
         {info ? (
-          <span title={info} className="inline-flex size-6 items-center justify-center rounded-full border border-m-border text-m-muted">
+          <span title={info} className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-m-border text-m-muted">
             <Info className="size-3.5" />
           </span>
         ) : null}
@@ -118,11 +122,15 @@ export function ToggleRow({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2">
-      <div className="min-w-0">
-        <p className="text-base text-m-card-fg">{label}</p>
+    <div className="flex w-full min-w-0 max-w-full items-center justify-between gap-3 py-2">
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <p className="truncate text-base text-m-card-fg">{label}</p>
         {description ? <p className="mt-0.5 text-sm text-m-muted">{description}</p> : null}
       </div>
+      {/*
+        Fixed box + overflow-hidden: the on-state must never grow past the track.
+        Prior translate-x thumbs spilled right and briefly widened the page (horizontal wiggle).
+      */}
       <button
         type="button"
         role="switch"
@@ -130,16 +138,11 @@ export function ToggleRow({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50",
-          checked ? "bg-m-accent" : "bg-m-border",
+          "box-border inline-flex h-7 w-11 shrink-0 items-center overflow-hidden rounded-full p-0.5 transition-colors disabled:opacity-50",
+          checked ? "justify-end bg-m-accent" : "justify-start bg-m-border",
         )}
       >
-        <span
-          className={cn(
-            "absolute top-0.5 size-6 rounded-full bg-white shadow transition-transform",
-            checked ? "translate-x-5" : "translate-x-0.5",
-          )}
-        />
+        <span className="pointer-events-none block size-6 shrink-0 rounded-full bg-white shadow-sm" />
       </button>
     </div>
   );
@@ -161,12 +164,12 @@ export function SegmentedRow<T extends string>({
   disabled?: boolean;
 }) {
   return (
-    <div className="space-y-2 py-2">
-      <div>
+    <div className="w-full min-w-0 max-w-full space-y-2 py-2">
+      <div className="min-w-0">
         <p className="text-base text-m-card-fg">{label}</p>
         {description ? <p className="mt-0.5 text-sm text-m-muted">{description}</p> : null}
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex w-full max-w-full flex-wrap gap-2">
         {options.map((opt) => {
           const active = opt.value === value;
           return (
@@ -176,7 +179,7 @@ export function SegmentedRow<T extends string>({
               disabled={disabled}
               onClick={() => onChange(opt.value)}
               className={cn(
-                "rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50",
+                "max-w-full break-words rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors disabled:opacity-50",
                 active
                   ? "border-m-accent bg-m-accent/15 text-m-accent"
                   : "border-m-border bg-m-card text-m-card-fg",
@@ -223,9 +226,9 @@ export function Stepper({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2">
-      <span className="text-base text-m-card-fg">{label}</span>
-      <div className="flex items-center gap-3">
+    <div className="flex min-w-0 items-center justify-between gap-3 py-2">
+      <span className="min-w-0 flex-1 text-base text-m-card-fg">{label}</span>
+      <div className="flex shrink-0 items-center gap-3">
         <button
           type="button"
           disabled={disabled || value <= min}
