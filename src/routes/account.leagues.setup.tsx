@@ -10,6 +10,7 @@ import {
   NATIVE_LEAGUE_MAX_TEAMS,
   NATIVE_LEAGUE_MIN_TEAMS,
   type NativeDraftMode,
+  type NativeIrEligibility,
   type NativeScoringPreset,
 } from "@/lib/native-league-settings";
 
@@ -41,6 +42,9 @@ function NativeLeagueSetupPage() {
   const [teamCount, setTeamCount] = useState(10);
   const [scoringPreset, setScoringPreset] = useState<NativeScoringPreset>("half");
   const [draftMode, setDraftMode] = useState<NativeDraftMode>("offline");
+  const [benchSpots, setBenchSpots] = useState(6);
+  const [irSpots, setIrSpots] = useState(1);
+  const [irEligibility, setIrEligibility] = useState<NativeIrEligibility>("injured_only");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [createdInvite, setCreatedInvite] = useState<string | null>(null);
@@ -58,6 +62,9 @@ function NativeLeagueSetupPage() {
           scoringPreset,
           draftMode: draftMode === "live" ? "live" : "offline",
           seasonYear: new Date().getUTCFullYear(),
+          benchSpots,
+          irSpots,
+          irEligibility,
           ...(teamName.trim() ? { teamName: teamName.trim() } : {}),
         },
       });
@@ -164,6 +171,41 @@ function NativeLeagueSetupPage() {
             >
               <option value="offline">Offline / commissioner enter</option>
               <option value="live">Live snake (scheduled later)</option>
+            </select>
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={labelClass}>
+              Bench spots
+              <input
+                type="number"
+                min={0}
+                max={20}
+                className={fieldClass}
+                value={benchSpots}
+                onChange={(e) => setBenchSpots(Number(e.target.value))}
+              />
+            </label>
+            <label className={labelClass}>
+              IR spots
+              <input
+                type="number"
+                min={0}
+                max={5}
+                className={fieldClass}
+                value={irSpots}
+                onChange={(e) => setIrSpots(Number(e.target.value))}
+              />
+            </label>
+          </div>
+          <label className={labelClass}>
+            IR eligibility
+            <select
+              className={fieldClass}
+              value={irEligibility}
+              onChange={(e) => setIrEligibility(e.target.value as NativeIrEligibility)}
+            >
+              <option value="injured_only">Injured / inactive only</option>
+              <option value="any">Any rostered player</option>
             </select>
           </label>
         </div>

@@ -39,6 +39,36 @@ export type NativePostDraftPlayerStatus = (typeof NATIVE_POST_DRAFT_PLAYER_STATU
 export const NATIVE_MATCHUP_TIEBREAKER_SLOTS = ["Bench", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
 export type NativeMatchupTiebreakerSlot = (typeof NATIVE_MATCHUP_TIEBREAKER_SLOTS)[number];
 
+/** Who may occupy IR lineup slots. Persisted on roster_slots JSON as `irEligibility`. */
+export const NATIVE_IR_ELIGIBILITY = ["injured_only", "any"] as const;
+export type NativeIrEligibility = (typeof NATIVE_IR_ELIGIBILITY)[number];
+
+const IR_ELIGIBILITY_KEY = "irEligibility";
+
+export function parseIrEligibility(
+  raw: Record<string, unknown> | null | undefined,
+): NativeIrEligibility {
+  const value = raw?.[IR_ELIGIBILITY_KEY];
+  if (typeof value === "string" && NATIVE_IR_ELIGIBILITY.includes(value as NativeIrEligibility)) {
+    return value as NativeIrEligibility;
+  }
+  return "injured_only";
+}
+
+/** Merge slot counts + IR eligibility into the JSON blob stored on native_leagues.roster_slots. */
+export function packRosterSlotsJson(
+  slots: Partial<Record<RosterSlotKey, number>>,
+  irEligibility: NativeIrEligibility = "injured_only",
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(slots) as RosterSlotKey[]) {
+    const n = Math.floor(Number(slots[key] ?? 0));
+    if (Number.isFinite(n) && n > 0) out[key] = n;
+  }
+  out[IR_ELIGIBILITY_KEY] = irEligibility;
+  return out;
+}
+
 /** v1 product caps from the native leagues plan. */
 export const NATIVE_LEAGUE_MIN_TEAMS = 4;
 export const NATIVE_LEAGUE_MAX_TEAMS = 20;
@@ -116,6 +146,7 @@ export type NativeLeagueSettingsInput = {
   matchupTiebreakerSlot?: NativeMatchupTiebreakerSlot;
   divisionsEnabled?: boolean;
   rosterSlots?: Partial<Record<RosterSlotKey, number>>;
+  irEligibility?: NativeIrEligibility;
   scoringPreset?: NativeScoringPreset;
   scoringSettings?: Record<string, number>;
   waiverType?: NativeWaiverType;
@@ -175,6 +206,7 @@ export type NativeLeagueSettingsNormalized = Required<
   >
 > & {
   rosterSlots: Record<RosterSlotKey, number>;
+  irEligibility: NativeIrEligibility;
   scoringSettings: Record<string, number>;
   waiverBudget: number | null;
   maxAddsPerWeek: number | null;
@@ -239,6 +271,13 @@ export function normalizeNativeLeagueSettings(
   if (issues.length) return { ok: false, issues };
 
   const rosterSlots = { ...defaultNativeRosterSlots(), ...(input.rosterSlots ?? {}) };
+  // Clamp reserve sizes commissioners care about most.
+  rosterSlots.BN = clampInt(rosterSlots.BN, 6, 0, 20);
+  rosterSlots.IR = clampInt(rosterSlots.IR, 1, 0, 5);
+  rosterSlots.TAXI = clampInt(rosterSlots.TAXI ?? 0, 0, 0, 5);
+  const irEligibility = (NATIVE_IR_ELIGIBILITY.includes(input.irEligibility as NativeIrEligibility)
+    ? input.irEligibility
+    : "injured_only") as NativeIrEligibility;
   const scoringPreset = (NATIVE_SCORING_PRESETS.includes(input.scoringPreset as NativeScoringPreset)
     ? input.scoringPreset
     : "half") as NativeScoringPreset;
@@ -285,6 +324,7 @@ export function normalizeNativeLeagueSettings(
         : "Bench") as NativeMatchupTiebreakerSlot,
       divisionsEnabled: Boolean(input.divisionsEnabled),
       rosterSlots,
+      irEligibility,
       scoringPreset,
       scoringSettings,
       waiverType,

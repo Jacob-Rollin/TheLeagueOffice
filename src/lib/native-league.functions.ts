@@ -2,7 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import type { NativeScoringPreset, NativeDraftMode } from "@/lib/native-league-settings";
+import type {
+  NativeDraftMode,
+  NativeIrEligibility,
+  NativeScoringPreset,
+} from "@/lib/native-league-settings";
 
 async function assertAdminUser(userId: string): Promise<void> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -26,6 +30,9 @@ export const createNativeLeague = createServerFn({ method: "POST" })
       scoringPreset?: NativeScoringPreset;
       draftMode?: NativeDraftMode;
       seasonYear?: number;
+      benchSpots?: number;
+      irSpots?: number;
+      irEligibility?: NativeIrEligibility;
     }) => ({
       name: String(input.name ?? "").slice(0, 128),
       teamCount: Number(input.teamCount ?? 10),
@@ -33,10 +40,22 @@ export const createNativeLeague = createServerFn({ method: "POST" })
       scoringPreset: String(input.scoringPreset ?? "half").slice(0, 16) as NativeScoringPreset,
       draftMode: String(input.draftMode ?? "offline").slice(0, 16) as NativeDraftMode,
       seasonYear: Number(input.seasonYear ?? new Date().getUTCFullYear()),
+      benchSpots: input.benchSpots != null ? Number(input.benchSpots) : undefined,
+      irSpots: input.irSpots != null ? Number(input.irSpots) : undefined,
+      irEligibility: input.irEligibility
+        ? (String(input.irEligibility).slice(0, 32) as NativeIrEligibility)
+        : undefined,
     }),
   )
   .handler(async ({ context, data }) => {
     const { createNativeLeagueForUser } = await import("@/lib/native-league-ops.server");
+    const rosterSlots =
+      data.benchSpots != null || data.irSpots != null
+        ? {
+            ...(data.benchSpots != null ? { BN: data.benchSpots } : {}),
+            ...(data.irSpots != null ? { IR: data.irSpots } : {}),
+          }
+        : undefined;
     return await createNativeLeagueForUser(context.userId, {
       name: data.name,
       teamCount: data.teamCount,
@@ -44,6 +63,8 @@ export const createNativeLeague = createServerFn({ method: "POST" })
       draftMode: data.draftMode === "live" ? "live" : "offline",
       seasonYear: data.seasonYear,
       ...(data.teamName ? { teamName: data.teamName } : {}),
+      ...(rosterSlots ? { rosterSlots } : {}),
+      ...(data.irEligibility ? { irEligibility: data.irEligibility } : {}),
     });
   });
 
@@ -224,13 +245,26 @@ export const kickNativeTeamMember = createServerFn({ method: "POST" })
 export const updateNativeLeagueBasics = createServerFn({ method: "POST" })
   .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator(
-    (input: { linkId: string; name?: string; scoringPreset?: NativeScoringPreset; draftMode?: NativeDraftMode }) => ({
+    (input: {
+      linkId: string;
+      name?: string;
+      scoringPreset?: NativeScoringPreset;
+      draftMode?: NativeDraftMode;
+      benchSpots?: number;
+      irSpots?: number;
+      irEligibility?: NativeIrEligibility;
+    }) => ({
       linkId: String(input.linkId ?? "").trim().slice(0, 36),
       name: input.name != null ? String(input.name).slice(0, 128) : undefined,
       scoringPreset: input.scoringPreset
         ? (String(input.scoringPreset).slice(0, 16) as NativeScoringPreset)
         : undefined,
       draftMode: input.draftMode ? (String(input.draftMode).slice(0, 16) as NativeDraftMode) : undefined,
+      benchSpots: input.benchSpots != null ? Number(input.benchSpots) : undefined,
+      irSpots: input.irSpots != null ? Number(input.irSpots) : undefined,
+      irEligibility: input.irEligibility
+        ? (String(input.irEligibility).slice(0, 32) as NativeIrEligibility)
+        : undefined,
     }),
   )
   .handler(async ({ context, data }) => {
@@ -239,6 +273,9 @@ export const updateNativeLeagueBasics = createServerFn({ method: "POST" })
       ...(data.name != null ? { name: data.name } : {}),
       ...(data.scoringPreset ? { scoringPreset: data.scoringPreset } : {}),
       ...(data.draftMode ? { draftMode: data.draftMode } : {}),
+      ...(data.benchSpots != null ? { benchSpots: data.benchSpots } : {}),
+      ...(data.irSpots != null ? { irSpots: data.irSpots } : {}),
+      ...(data.irEligibility ? { irEligibility: data.irEligibility } : {}),
     });
   });
 
@@ -307,12 +344,14 @@ export const saveNativeLineup = createServerFn({ method: "POST" })
       version: number;
       slots: Record<string, Array<string | null>>;
       posById: Record<string, string>;
+      injuryById?: Record<string, string | null | undefined>;
     }) => ({
       linkId: String(input.linkId ?? "").trim().slice(0, 36),
       week: Number(input.week),
       version: Number(input.version),
       slots: input.slots ?? {},
       posById: input.posById ?? {},
+      injuryById: input.injuryById ?? {},
     }),
   )
   .handler(async ({ context, data }) => {
@@ -322,5 +361,44 @@ export const saveNativeLineup = createServerFn({ method: "POST" })
       version: data.version,
       slots: data.slots,
       posById: data.posById,
+      injuryById: data.injuryById,
     });
+  });
+
+export const submitNativeFreeAgentMove = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      linkId: string;
+      addPlayerId: string;
+      dropPlayerId?: string | null;
+      rosterVersion: number;
+    }) => ({
+      linkId: String(input.linkId ?? "").trim().slice(0, 36),
+      addPlayerId: String(input.addPlayerId ?? "").trim().slice(0, 32),
+      dropPlayerId:
+        input.dropPlayerId == null || input.dropPlayerId === ""
+          ? null
+          : String(input.dropPlayerId).trim().slice(0, 32),
+      rosterVersion: Number(input.rosterVersion),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const { submitNativeFreeAgentMoveForUser } = await import("@/lib/native-league-ops.server");
+    return await submitNativeFreeAgentMoveForUser(context.userId, data.linkId, {
+      addPlayerId: data.addPlayerId,
+      dropPlayerId: data.dropPlayerId,
+      rosterVersion: data.rosterVersion,
+    });
+  });
+
+export const listNativeTransactions = createServerFn({ method: "GET" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; limit?: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    limit: input.limit != null ? Number(input.limit) : 40,
+  }))
+  .handler(async ({ context, data }) => {
+    const { listNativeTransactionsForLink } = await import("@/lib/native-league-ops.server");
+    return await listNativeTransactionsForLink(context.userId, data.linkId, data.limit);
   });
