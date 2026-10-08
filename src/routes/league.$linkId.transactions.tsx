@@ -43,7 +43,7 @@ function NativeTransactionsPage() {
           League <span className="text-primary">Transactions</span>
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Free-agent adds and add/drops. Waivers and trades will appear here as those ships.
+          Free-agent adds, waiver awards, trades, and IR force-resolves.
         </p>
       </div>
 
@@ -66,7 +66,17 @@ function NativeTransactionsPage() {
                   ? `Add ${addName ?? "player"} / Drop ${dropName ?? "player"}`
                   : tx.type === "add"
                     ? `Add ${addName ?? "player"}`
-                    : tx.type;
+                    : tx.type === "waiver_won"
+                      ? `Waiver: +${addName ?? "player"}${dropName ? ` / −${dropName}` : ""}`
+                      : tx.type === "trade"
+                        ? "Trade completed"
+                        : tx.type === "trade_vetoed"
+                          ? "Trade vetoed"
+                          : tx.type === "ir_force_drop"
+                            ? `IR drop ${dropName ?? addName ?? "player"}`
+                            : tx.type === "ir_force_activate"
+                              ? `IR activate ${addName ?? "player"}`
+                              : tx.type;
               return (
                 <li key={tx.id} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-3">
                   <div>

@@ -11,6 +11,8 @@ const NAV = [
   { to: "/league/$linkId/matchup", label: "Matchup", end: false },
   { to: "/league/$linkId/standings", label: "Standings", end: false },
   { to: "/league/$linkId/players", label: "Players", end: false },
+  { to: "/league/$linkId/waivers", label: "Waivers", end: false },
+  { to: "/league/$linkId/trades", label: "Trades", end: false },
   { to: "/league/$linkId/transactions", label: "Transactions", end: false },
   { to: "/league/$linkId/draft", label: "Draft", end: false },
   { to: "/league/$linkId/settings", label: "Settings", end: false },

@@ -60,6 +60,11 @@ function NativeMyTeamPage() {
     for (const p of players) map[p.id] = p.injury_status ?? p.injury ?? null;
     return map;
   }, [players]);
+  const teamByPlayerId = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const p of players) map[p.id] = p.team || null;
+    return map;
+  }, [players]);
   const nameById = useMemo(() => {
     const map = new Map<string, { name: string; pos: string; team: string }>();
     for (const p of players) map.set(p.id, { name: p.name, pos: p.pos, team: p.team });
@@ -218,6 +223,7 @@ function NativeMyTeamPage() {
           slots: slotsRecordFromViews(views),
           posById,
           injuryById,
+          teamByPlayerId,
         },
       });
       if (!result.ok) {
