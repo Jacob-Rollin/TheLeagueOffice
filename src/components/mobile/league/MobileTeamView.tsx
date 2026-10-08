@@ -333,8 +333,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
                 }
                 className={
                   "pointer-events-auto relative inline-flex h-[44px] items-stretch overflow-hidden rounded-[14px] " +
-                  "shadow-[0_3px_0_0_#1a3d2e,0_6px_12px_rgba(0,0,0,0.18)] " +
-                  "active:translate-y-px active:shadow-[0_2px_0_0_#1a3d2e,0_3px_8px_rgba(0,0,0,0.16)]"
+                  "shadow-[0_3px_0_0_#1a3d2e,0_6px_12px_rgba(0,0,0,0.18)]"
                 }
               >
                 {/* Invisible +gain keeps full two-tone width when Optimized. */}
