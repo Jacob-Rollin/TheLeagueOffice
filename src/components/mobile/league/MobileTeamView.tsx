@@ -268,7 +268,9 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
               week={activeWeek}
               onChange={setWeek}
               centered
-              className="rounded-none"
+              // Must set bg-m-select-bg explicitly — bg-transparent (from earlier polish)
+              // overrides the component default via twMerge and blends into the card.
+              className="rounded-none bg-m-select-bg text-m-select-fg"
             />
 
             <div className="px-4 pb-4 pt-3">
