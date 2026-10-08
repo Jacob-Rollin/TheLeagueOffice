@@ -377,7 +377,7 @@ native_draft_picks
   source ENUM('manager','autopick','commissioner')
 
 native_draft_queues
-  league_id, team_id, player_id, rank
+  league_id, team_id, player_id, queue_rank
 ```
 
 ### 4.4 History (everything hosts store)
