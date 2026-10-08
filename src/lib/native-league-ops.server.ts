@@ -319,6 +319,152 @@ export async function joinNativeLeagueForUser(
   }
 }
 
+export type NativeMemberLeagueSummary = {
+  linkId: string;
+  leagueId: string;
+  role: string;
+  teamId: number | null;
+  name: string;
+  inviteCode: string;
+  seasonYear: number;
+  status: string;
+  leagueType: string;
+  teamCount: number;
+  filledTeams: number;
+  scoringPreset: string;
+  draftMode: string;
+  draftStatus: string;
+  updatedAt: string | null;
+  createdAt: string;
+  canEditInvite: boolean;
+};
+
+async function assertMembershipLink(
+  userId: string,
+  linkId: string,
+): Promise<{
+  linkId: string;
+  leagueId: string;
+  role: string;
+  teamId: number | null;
+} | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
+    .from("native_league_links")
+    .select("id, native_league_id, role, team_id")
+    .eq("id", linkId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    linkId: String(data.id),
+    leagueId: String(data.native_league_id),
+    role: String(data.role ?? "member"),
+    teamId: data.team_id == null ? null : Number(data.team_id),
+  };
+}
+
+export async function getNativeLeagueSummaryForLink(
+  userId: string,
+  linkId: string,
+): Promise<NativeMemberLeagueSummary | null> {
+  if (!tidbConfigured()) return null;
+  const membership = await assertMembershipLink(userId, linkId);
+  if (!membership) return null;
+
+  const rows = await tidbExecute<{
+    id: string;
+    name: string;
+    invite_code: string;
+    season_year: number;
+    status: string;
+    league_type: string;
+    team_count: number;
+    scoring_preset: string;
+    draft_mode: string;
+    draft_status: string;
+    created_at: string;
+    updated_at: string | null;
+    filled_teams: number;
+  }>(
+    `SELECT l.id, l.name, l.invite_code, l.season_year, l.status, l.league_type, l.team_count,
+            l.scoring_preset, l.draft_mode, l.draft_status, l.created_at, l.updated_at,
+            (SELECT COUNT(*) FROM native_teams t
+             WHERE t.league_id = l.id AND t.user_id IS NOT NULL) AS filled_teams
+     FROM native_leagues l
+     WHERE l.id = ?
+     LIMIT 1`,
+    [membership.leagueId],
+  );
+  const league = rows[0];
+  if (!league) return null;
+
+  const canEditInvite = membership.role === "commissioner" || membership.role === "co_commish";
+  return {
+    linkId: membership.linkId,
+    leagueId: league.id,
+    role: membership.role,
+    teamId: membership.teamId,
+    name: league.name,
+    inviteCode: league.invite_code,
+    seasonYear: Number(league.season_year),
+    status: league.status,
+    leagueType: league.league_type,
+    teamCount: Number(league.team_count),
+    filledTeams: Number(league.filled_teams ?? 0),
+    scoringPreset: league.scoring_preset,
+    draftMode: league.draft_mode,
+    draftStatus: league.draft_status,
+    updatedAt: league.updated_at,
+    createdAt: league.created_at,
+    canEditInvite,
+  };
+}
+
+export type UpdateNativeInviteResult =
+  | { ok: true; inviteCode: string }
+  | { ok: false; error: string };
+
+/** Commissioner/co-commish can set a custom unique invite code (4–16 A–Z / 0–9). */
+export async function updateNativeInviteCodeForUser(
+  userId: string,
+  linkId: string,
+  rawCode: string,
+): Promise<UpdateNativeInviteResult> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const membership = await assertMembershipLink(userId, linkId);
+  if (!membership) return { ok: false, error: "League not found" };
+  if (membership.role !== "commissioner" && membership.role !== "co_commish") {
+    return { ok: false, error: "Only commissioners can change the invite code" };
+  }
+
+  const inviteCode = String(rawCode ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 16);
+  if (inviteCode.length < 4) {
+    return { ok: false, error: "Invite code must be at least 4 characters (A–Z, 0–9)" };
+  }
+
+  const taken = await tidbExecute<{ id: string }>(
+    `SELECT id FROM native_leagues WHERE invite_code = ? AND id <> ? LIMIT 1`,
+    [inviteCode, membership.leagueId],
+  );
+  if (taken[0]) return { ok: false, error: "That invite code is already in use" };
+
+  try {
+    await tidbExecute(`UPDATE native_leagues SET invite_code = ? WHERE id = ?`, [
+      inviteCode,
+      membership.leagueId,
+    ]);
+    return { ok: true, inviteCode };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not update invite code";
+    return { ok: false, error: message };
+  }
+}
+
 export type AdminDeleteNativeLeagueResult = { ok: true } | { ok: false; error: string };
 
 /** Cascading admin delete: all TiDB `native_*` rows for the league + Supabase membership links. */

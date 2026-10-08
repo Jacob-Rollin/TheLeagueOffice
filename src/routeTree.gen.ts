@@ -60,6 +60,7 @@ import { Route as AccountLeaguesConnectionIdRouteImport } from './routes/account
 import { Route as AccountLeaguesNativeRouteImport } from './routes/account.leagues.native'
 import { Route as AccountLeaguesSetupRouteImport } from './routes/account.leagues.setup'
 import { Route as AccountLeaguesJoinRouteImport } from './routes/account.leagues.join'
+import { Route as AccountLeaguesNativeLinkIdRouteImport } from './routes/account.leagues.native.$linkId'
 import { Route as ApiAdminSeedPlayerWarehouseRouteImport } from './routes/api/admin/seed-player-warehouse'
 import { Route as ApiAdminTidbMigrateRouteImport } from './routes/api/admin/tidb-migrate'
 import { Route as ApiCronLeagueDeltaSyncRouteImport } from './routes/api/cron/league-delta-sync'
@@ -342,6 +343,11 @@ const AccountLeaguesJoinRoute = AccountLeaguesJoinRouteImport.update({
   path: '/account/leagues/join',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AccountLeaguesNativeLinkIdRoute = AccountLeaguesNativeLinkIdRouteImport.update({
+  id: '/account/leagues/native/$linkId',
+  path: '/account/leagues/native/$linkId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminSeedPlayerWarehouseRoute =
   ApiAdminSeedPlayerWarehouseRouteImport.update({
     id: '/api/admin/seed-player-warehouse',
@@ -517,6 +523,7 @@ export interface FileRoutesByFullPath {
   '/account/leagues/native': typeof AccountLeaguesNativeRoute
   '/account/leagues/setup': typeof AccountLeaguesSetupRoute
   '/account/leagues/join': typeof AccountLeaguesJoinRoute
+  '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
@@ -592,6 +599,7 @@ export interface FileRoutesByTo {
   '/account/leagues/native': typeof AccountLeaguesNativeRoute
   '/account/leagues/setup': typeof AccountLeaguesSetupRoute
   '/account/leagues/join': typeof AccountLeaguesJoinRoute
+  '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
@@ -669,6 +677,7 @@ export interface FileRoutesById {
   '/account/leagues/native': typeof AccountLeaguesNativeRoute
   '/account/leagues/setup': typeof AccountLeaguesSetupRoute
   '/account/leagues/join': typeof AccountLeaguesJoinRoute
+  '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
@@ -748,6 +757,7 @@ export interface FileRouteTypes {
     | '/account/leagues/native'
     | '/account/leagues/setup'
     | '/account/leagues/join'
+    | '/account/leagues/native/$linkId'
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
@@ -823,6 +833,7 @@ export interface FileRouteTypes {
     | '/account/leagues/native'
     | '/account/leagues/setup'
     | '/account/leagues/join'
+    | '/account/leagues/native/$linkId'
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
@@ -899,6 +910,7 @@ export interface FileRouteTypes {
     | '/account/leagues/native'
     | '/account/leagues/setup'
     | '/account/leagues/join'
+    | '/account/leagues/native/$linkId'
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
@@ -968,6 +980,7 @@ export interface RootRouteChildren {
   AccountLeaguesNativeRoute: typeof AccountLeaguesNativeRoute
   AccountLeaguesSetupRoute: typeof AccountLeaguesSetupRoute
   AccountLeaguesJoinRoute: typeof AccountLeaguesJoinRoute
+  AccountLeaguesNativeLinkIdRoute: typeof AccountLeaguesNativeLinkIdRoute
   ApiAdminSeedPlayerWarehouseRoute: typeof ApiAdminSeedPlayerWarehouseRoute
   ApiAdminTidbMigrateRoute: typeof ApiAdminTidbMigrateRoute
   ApiCronLeagueDeltaSyncRoute: typeof ApiCronLeagueDeltaSyncRoute
@@ -1346,6 +1359,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountLeaguesJoinRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account/leagues/native/$linkId': {
+      id: '/account/leagues/native/$linkId'
+      path: '/account/leagues/native/$linkId'
+      fullPath: '/account/leagues/native/$linkId'
+      preLoaderRoute: typeof AccountLeaguesNativeLinkIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/seed-player-warehouse': {
       id: '/api/admin/seed-player-warehouse'
       path: '/api/admin/seed-player-warehouse'
@@ -1621,6 +1641,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccountLeaguesNativeRoute: AccountLeaguesNativeRoute,
   AccountLeaguesSetupRoute: AccountLeaguesSetupRoute,
   AccountLeaguesJoinRoute: AccountLeaguesJoinRoute,
+  AccountLeaguesNativeLinkIdRoute: AccountLeaguesNativeLinkIdRoute,
   ApiAdminSeedPlayerWarehouseRoute: ApiAdminSeedPlayerWarehouseRoute,
   ApiAdminTidbMigrateRoute: ApiAdminTidbMigrateRoute,
   ApiCronLeagueDeltaSyncRoute: ApiCronLeagueDeltaSyncRoute,

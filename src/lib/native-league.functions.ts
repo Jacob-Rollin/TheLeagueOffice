@@ -138,3 +138,44 @@ export const adminDeleteNativeLeague = createServerFn({ method: "POST" })
     const { adminDeleteNativeLeague: deleteLeague } = await import("@/lib/native-league-ops.server");
     return await deleteLeague(data.leagueId);
   });
+
+export type NativeMemberLeagueSummary = {
+  linkId: string;
+  leagueId: string;
+  role: string;
+  teamId: number | null;
+  name: string;
+  inviteCode: string;
+  seasonYear: number;
+  status: string;
+  leagueType: string;
+  teamCount: number;
+  filledTeams: number;
+  scoringPreset: string;
+  draftMode: string;
+  draftStatus: string;
+  updatedAt: string | null;
+  createdAt: string;
+  canEditInvite: boolean;
+};
+
+export const getNativeLeagueSummary = createServerFn({ method: "GET" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+  }))
+  .handler(async ({ context, data }): Promise<NativeMemberLeagueSummary | null> => {
+    const { getNativeLeagueSummaryForLink } = await import("@/lib/native-league-ops.server");
+    return await getNativeLeagueSummaryForLink(context.userId, data.linkId);
+  });
+
+export const updateNativeInviteCode = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; inviteCode: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    inviteCode: String(input.inviteCode ?? "").trim().toUpperCase().slice(0, 16),
+  }))
+  .handler(async ({ context, data }) => {
+    const { updateNativeInviteCodeForUser } = await import("@/lib/native-league-ops.server");
+    return await updateNativeInviteCodeForUser(context.userId, data.linkId, data.inviteCode);
+  });
