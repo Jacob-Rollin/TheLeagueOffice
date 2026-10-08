@@ -182,9 +182,9 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   };
 
   return (
-    <main>
+    <main className="bg-m-bg">
       <section
-        className="px-4 pb-5 pt-5 text-white"
+        className="px-4 pb-0 pt-5 text-white"
         style={{ backgroundImage: "linear-gradient(180deg, var(--m-team-hero-from) 0%, var(--m-team-hero-to) 100%)" }}
       >
         <div className="flex items-center gap-4">
@@ -249,8 +249,24 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
           </Link>
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-xl bg-m-card text-m-card-fg">
-          <MobileWeekSelect week={activeWeek} onChange={setWeek} className="rounded-none" />
+        {/* Blue shelf so the matchup card can sit flush under actions and straddle grey. */}
+        <div className="mt-3 h-[8.5rem]" aria-hidden="true" />
+      </section>
+
+      <div
+        className={
+          "relative z-10 -mt-[8.5rem] px-4" +
+          // Optimize badge is absolutely half-below the card; Optimized + hint need more room.
+          (optimizePlan ? (showOptimized ? " mb-28" : " mb-12") : " mb-2")
+        }
+      >
+        <div className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_4px_16px_rgba(0,0,0,0.12)]">
+          <MobileWeekSelect
+            week={activeWeek}
+            onChange={setWeek}
+            centered
+            className="rounded-none bg-transparent"
+          />
 
           <div className="px-4 pb-4 pt-3">
             <p className="text-center font-display text-lg font-bold">
@@ -283,6 +299,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
           <Link
             to="/m/league/$leagueId/matchup"
             params={{ leagueId }}
+            search={{ week: activeWeek }}
             className="flex items-center justify-between border-t border-m-border px-4 py-3.5 font-display text-base font-semibold"
           >
             View Matchup
@@ -292,41 +309,47 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
             </span>
           </Link>
         </div>
-      </section>
 
-      {optimizePlan ? (
-        <div className="relative z-10 -mt-4 flex flex-col items-center gap-2 px-4">
-          <button
-            type="button"
-            onClick={() => setShowOptimized((v) => !v)}
-            aria-pressed={showOptimized}
-            aria-label={
-              showOptimized
-                ? "Show your current set lineup"
-                : `Preview optimized lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
-            }
-            className="inline-flex overflow-hidden rounded-full shadow-[0_4px_14px_rgba(16,185,129,0.35)]"
-          >
-            <span className="bg-emerald-400 px-4 py-2.5 font-display text-base font-extrabold tabular-nums text-white">
-              + {optimizePlan.gain.toFixed(2)}
-            </span>
-            <span
-              className={
+        {optimizePlan ? (
+          <div className="pointer-events-none absolute left-1/2 top-full z-20 flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center px-4">
+            <button
+              type="button"
+              onClick={() => setShowOptimized((v) => !v)}
+              aria-pressed={showOptimized}
+              aria-label={
                 showOptimized
-                  ? "bg-emerald-800 px-5 py-2.5 font-display text-base font-extrabold uppercase tracking-wide text-white"
-                  : "bg-emerald-600 px-5 py-2.5 font-display text-base font-extrabold uppercase tracking-wide text-white"
+                  ? "Show your current set lineup"
+                  : `Preview optimized lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
+              }
+              className={
+                "pointer-events-auto inline-flex items-stretch overflow-hidden rounded-[14px] " +
+                "shadow-[0_3px_0_0_#1a3d2e,0_6px_12px_rgba(0,0,0,0.18)] " +
+                "active:translate-y-px active:shadow-[0_2px_0_0_#1a3d2e,0_3px_8px_rgba(0,0,0,0.16)]"
               }
             >
-              {showOptimized ? "Optimized" : "Optimize"}
-            </span>
-          </button>
-          {showOptimized ? (
-            <p className="text-center text-xs text-m-muted">
-              Preview only — tap again for your set lineup
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+              {showOptimized ? (
+                <span className="bg-[#2d5a47] px-7 py-[11px] font-display text-[17px] font-extrabold italic uppercase tracking-wide text-white">
+                  Optimized
+                </span>
+              ) : (
+                <>
+                  <span className="flex items-center bg-[#76c78c] px-4 py-[9px] font-display text-[22px] font-extrabold italic leading-none tabular-nums text-white">
+                    + {optimizePlan.gain.toFixed(2)}
+                  </span>
+                  <span className="flex items-center bg-[#2d5a47] px-5 py-[11px] font-display text-[15px] font-extrabold italic uppercase tracking-wide text-white">
+                    Optimize
+                  </span>
+                </>
+              )}
+            </button>
+            {showOptimized ? (
+              <p className="mt-7 text-center text-xs text-m-muted">
+                Preview only — tap again for your set lineup
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       <LineupSection title="Starters" rows={lineup.starters} {...rowProps} />
       <LineupSection title="Bench" rows={lineup.bench} {...rowProps} />

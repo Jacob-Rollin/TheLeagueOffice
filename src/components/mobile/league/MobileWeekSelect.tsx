@@ -8,20 +8,24 @@ export function MobileWeekSelect({
   week,
   onChange,
   className,
+  centered = false,
 }: {
   week: number;
   onChange: (week: number) => void;
   className?: string;
+  /** Center Week label + chevron (My Team matchup card). */
+  centered?: boolean;
 }) {
   return (
     <label
       className={cn(
-        "relative flex items-center justify-between rounded-lg bg-m-select-bg px-4 py-3 font-display text-lg font-semibold text-m-select-fg",
+        "relative flex items-center rounded-lg bg-m-select-bg px-4 py-3 font-display text-lg font-semibold text-m-select-fg",
+        centered ? "justify-center gap-1.5" : "justify-between",
         className,
       )}
     >
-      Week {week}
-      <ChevronDown className="size-5" />
+      <span className={centered ? "uppercase tracking-wide" : undefined}>Week {week}</span>
+      <ChevronDown className="size-5 shrink-0 opacity-70" aria-hidden />
       <select
         aria-label="Select week"
         value={week}
