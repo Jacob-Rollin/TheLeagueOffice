@@ -52,6 +52,7 @@ function NativeLeagueTeamsPage() {
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] });
     void queryClient.invalidateQueries({ queryKey: ["native-league-summary", linkId] });
+    void queryClient.invalidateQueries({ queryKey: ["native-league-summaries"] });
   };
 
   const saveName = async (teamId: number) => {
