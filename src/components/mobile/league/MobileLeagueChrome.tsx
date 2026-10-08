@@ -23,7 +23,7 @@ import { MobileTeamLogo } from "./MobileStandings";
 import { useMobileLeagueActivity } from "./useMobileLeague";
 
 /** Bottom tab bar height, excluding the device safe area. */
-const NAV_HEIGHT = "4rem";
+const NAV_HEIGHT = "3.5rem";
 /** Visible height of the collapsed League Activity sheet. */
 const PEEK_HEIGHT = "3.75rem";
 const SHEET_TOP_GAP = "4.75rem";
@@ -54,7 +54,7 @@ export function MobileLeagueBottomNav({ leagueId }: { leagueId: string }) {
     <nav
       className="fixed inset-x-0 bottom-0 z-50 border-t border-m-border bg-m-nav"
       style={{
-        // Keep tab icons/labels above the iPhone home indicator (center = Matchup).
+        // Home-indicator clearance only — do not add extra bottom padding beyond the inset.
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
     >
@@ -70,11 +70,11 @@ export function MobileLeagueBottomNav({ leagueId }: { leagueId: string }) {
               to={tab.to}
               params={{ leagueId }}
               className={cn(
-                "flex flex-col items-center justify-center gap-1 font-display text-[13px] font-bold uppercase tracking-wide",
+                "flex flex-col items-center justify-center gap-0.5 font-display text-[12px] font-bold uppercase tracking-wide",
                 active ? "text-m-nav-active" : "text-m-nav-fg",
               )}
             >
-              <Icon className="size-6" strokeWidth={active ? 2.5 : 2} />
+              <Icon className="size-5" strokeWidth={active ? 2.5 : 2} />
               {tab.label}
             </Link>
           );
