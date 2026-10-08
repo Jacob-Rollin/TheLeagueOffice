@@ -17,6 +17,11 @@ import {
   buildNativeRoundRobinSchedule,
   countDraftableRosterSpots,
 } from "@/lib/native-league-schedule";
+import {
+  parseRosterSlotCounts,
+  validateNativeLineupSlots,
+  type NativeLineupSlots,
+} from "@/lib/native-league-lineup";
 import { getNativeLeagueByInviteCode, countCommissionerNativeLeagues } from "@/lib/native-league.server";
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
 
@@ -387,6 +392,7 @@ type LeagueCoreRow = {
   status: string;
   league_type: string;
   team_count: number;
+  current_week?: number;
   scoring_preset: string;
   draft_mode: string;
   draft_status: string;
@@ -434,8 +440,24 @@ function summaryFromParts(
   };
 }
 
-const LEAGUE_CORE_SELECT = `id, name, invite_code, season_year, status, league_type, team_count,
+const LEAGUE_CORE_SELECT = `id, name, invite_code, season_year, status, league_type, team_count, current_week,
             scoring_preset, draft_mode, draft_status, created_at, updated_at, roster_slots, playoff_start_week`;
+
+function parsePlayerIdList(raw: unknown): string[] {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((id) => String(id ?? "").trim())
+    .filter((id) => id.length > 0)
+    .slice(0, 64);
+}
 
 export async function getNativeLeagueSummaryForLink(
   userId: string,
@@ -611,6 +633,18 @@ export type NativeTeamRow = {
   avatarUrl: string | null;
 };
 
+export type NativeRosterRow = {
+  teamId: number;
+  playerIds: string[];
+  version: number;
+};
+
+export type NativeWeekMatchup = {
+  matchupId: number;
+  homeTeamId: number;
+  awayTeamId: number;
+};
+
 export type NativeLeagueBoard = {
   summary: NativeMemberLeagueSummary;
   teams: NativeTeamRow[];
@@ -618,6 +652,14 @@ export type NativeLeagueBoard = {
   canManage: boolean;
   settingsLocked: boolean;
   playoffStartWeek: number;
+  /** League current week (1–18). */
+  currentWeek: number;
+  /** Per-team roster player ids (Sleeper ids). */
+  rosters: NativeRosterRow[];
+  /** playerId → teamId ownership map for FA / Players merge. */
+  ownership: Record<string, number>;
+  /** Current-week schedule pairings (empty pre-draft). */
+  weekMatchups: NativeWeekMatchup[];
 };
 
 type TeamDbRow = {
@@ -633,8 +675,8 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
   const membership = await assertMembershipLink(userId, linkId);
   if (!membership) return null;
 
-  // Parallel: league core (includes roster_slots) + teams. Filled count from teams in memory.
-  const [rows, teamRows] = await Promise.all([
+  // Parallel board bundle: league + teams + rosters + picks + current-week schedule.
+  const [rows, teamRows, rosterRows, pickRows, scheduleRows] = await Promise.all([
     tidbExecute<LeagueCoreRow>(
       `SELECT ${LEAGUE_CORE_SELECT} FROM native_leagues WHERE id = ? LIMIT 1`,
       [membership.leagueId],
@@ -644,14 +686,58 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
        FROM native_teams WHERE league_id = ? ORDER BY draft_slot ASC`,
       [membership.leagueId],
     ),
+    tidbExecute<{ team_id: number; player_ids: unknown; version: number }>(
+      `SELECT team_id, player_ids, version FROM native_rosters WHERE league_id = ?`,
+      [membership.leagueId],
+    ),
+    tidbExecute<{ player_id: string; team_id: number }>(
+      `SELECT player_id, team_id FROM native_draft_picks
+       WHERE league_id = ? AND player_id IS NOT NULL`,
+      [membership.leagueId],
+    ),
+    tidbExecute<{
+      matchup_id: number;
+      home_team_id: number;
+      away_team_id: number;
+    }>(
+      `SELECT s.matchup_id, s.home_team_id, s.away_team_id
+       FROM native_schedules s
+       INNER JOIN native_leagues l ON l.id = s.league_id
+       WHERE s.league_id = ?
+         AND s.season_year = l.season_year
+         AND s.week = l.current_week
+       ORDER BY s.matchup_id ASC
+       LIMIT 32`,
+      [membership.leagueId],
+    ),
   ]);
   const league = rows[0];
   if (!league) return null;
+
+  const currentWeek = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
 
   const filledTeams = teamRows.filter((t) => t.user_id != null && String(t.user_id).length > 0).length;
   const summary = summaryFromParts(membership, league, filledTeams);
   const rosterSlots = parseRosterSlots(league.roster_slots);
   const settingsLocked = summary.draftStatus !== "not_started" && summary.draftStatus !== "scheduled";
+
+  const rosters: NativeRosterRow[] = rosterRows.map((r) => ({
+    teamId: Number(r.team_id),
+    playerIds: parsePlayerIdList(r.player_ids),
+    version: Number(r.version ?? 1) || 1,
+  }));
+  const ownership: Record<string, number> = {};
+  // Prefer committed rosters; fall back to draft picks while draft is in progress.
+  for (const pick of pickRows) {
+    const playerId = String(pick.player_id ?? "").trim();
+    if (playerId) ownership[playerId] = Number(pick.team_id);
+  }
+  for (const roster of rosters) {
+    for (const playerId of roster.playerIds) {
+      ownership[playerId] = roster.teamId;
+    }
+  }
+
   return {
     summary,
     teams: teamRows.map((t) => ({
@@ -666,6 +752,14 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
     canManage: isCommishRole(summary.role),
     settingsLocked,
     playoffStartWeek: Number(league.playoff_start_week ?? 15) || 15,
+    currentWeek,
+    rosters,
+    ownership,
+    weekMatchups: scheduleRows.map((m) => ({
+      matchupId: Number(m.matchup_id),
+      homeTeamId: Number(m.home_team_id),
+      awayTeamId: Number(m.away_team_id),
+    })),
   };
 }
 
@@ -1123,3 +1217,213 @@ export async function completeNativeDraftForUser(
     return { ok: false, error: message };
   }
 }
+
+export type NativeLineupState = {
+  linkId: string;
+  leagueId: string;
+  teamId: number;
+  teamName: string;
+  seasonYear: number;
+  week: number;
+  version: number;
+  /** null when no saved lineup yet — client should build a default with catalog positions. */
+  slots: NativeLineupSlots | null;
+  rosterPlayerIds: string[];
+  rosterSlots: Record<string, number>;
+  draftComplete: boolean;
+  canEdit: boolean;
+};
+
+function parseSlotsJson(raw: unknown): NativeLineupSlots | null {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const out: NativeLineupSlots = {};
+  for (const [key, bucket] of Object.entries(value as Record<string, unknown>)) {
+    if (!Array.isArray(bucket)) continue;
+    out[key] = bucket.map((id) => (id == null || id === "" ? null : String(id)));
+  }
+  return out;
+}
+
+export async function getNativeLineupForLink(
+  userId: string,
+  linkId: string,
+  weekInput?: number,
+): Promise<NativeLineupState | null> {
+  if (!tidbConfigured()) return null;
+  const membership = await assertMembershipLink(userId, linkId);
+  if (!membership || membership.teamId == null) return null;
+
+  const leagueRows = await tidbExecute<LeagueCoreRow>(
+    `SELECT ${LEAGUE_CORE_SELECT} FROM native_leagues WHERE id = ? LIMIT 1`,
+    [membership.leagueId],
+  );
+  const league = leagueRows[0];
+  if (!league) return null;
+
+  const currentWeek = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
+  const week =
+    weekInput != null && Number.isFinite(weekInput)
+      ? Math.max(1, Math.min(18, Math.round(Number(weekInput))))
+      : currentWeek;
+  const seasonYear = Number(league.season_year);
+  const draftComplete = String(league.draft_status) === "complete";
+  const counts = parseRosterSlotCounts(parseRosterSlots(league.roster_slots) ?? undefined);
+  const rosterSlots: Record<string, number> = {};
+  for (const [k, v] of Object.entries(counts)) {
+    if (v != null && v > 0) rosterSlots[k] = v;
+  }
+
+  const [teamRows, rosterRows, lineupRows] = await Promise.all([
+    tidbExecute<{ id: number; team_name: string }>(
+      `SELECT id, team_name FROM native_teams WHERE id = ? AND league_id = ? LIMIT 1`,
+      [membership.teamId, membership.leagueId],
+    ),
+    tidbExecute<{ player_ids: unknown }>(
+      `SELECT player_ids FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
+      [membership.leagueId, membership.teamId],
+    ),
+    tidbExecute<{ slots: unknown; version: number }>(
+      `SELECT slots, version FROM native_lineups
+       WHERE league_id = ? AND team_id = ? AND season_year = ? AND week = ?
+       LIMIT 1`,
+      [membership.leagueId, membership.teamId, seasonYear, week],
+    ),
+  ]);
+  const team = teamRows[0];
+  if (!team) return null;
+
+  const rosterPlayerIds = parsePlayerIdList(rosterRows[0]?.player_ids);
+  const lineup = lineupRows[0];
+  const slots = lineup ? parseSlotsJson(lineup.slots) : null;
+
+  return {
+    linkId: membership.linkId,
+    leagueId: membership.leagueId,
+    teamId: Number(team.id),
+    teamName: String(team.team_name),
+    seasonYear,
+    week,
+    version: Number(lineup?.version ?? 0) || 0,
+    slots,
+    rosterPlayerIds,
+    rosterSlots,
+    draftComplete,
+    canEdit: draftComplete,
+  };
+}
+
+export async function saveNativeLineupForUser(
+  userId: string,
+  linkId: string,
+  input: {
+    week: number;
+    version: number;
+    slots: NativeLineupSlots;
+    posById: Record<string, string>;
+  },
+): Promise<NativeMutationResult & { version?: number }> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const membership = await assertMembershipLink(userId, linkId);
+  if (!membership || membership.teamId == null) return { ok: false, error: "League not found" };
+
+  const leagueRows = await tidbExecute<LeagueCoreRow>(
+    `SELECT ${LEAGUE_CORE_SELECT} FROM native_leagues WHERE id = ? LIMIT 1`,
+    [membership.leagueId],
+  );
+  const league = leagueRows[0];
+  if (!league) return { ok: false, error: "League not found" };
+  if (String(league.draft_status) !== "complete") {
+    return { ok: false, error: "Lineups unlock after the draft is complete" };
+  }
+
+  const week = Math.max(1, Math.min(18, Math.round(Number(input.week) || 1)));
+  const seasonYear = Number(league.season_year);
+  const expectedVersion = Math.max(0, Math.floor(Number(input.version) || 0));
+  const counts = parseRosterSlotCounts(parseRosterSlots(league.roster_slots) ?? undefined);
+
+  const rosterRows = await tidbExecute<{ player_ids: unknown; version: number }>(
+    `SELECT player_ids, version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
+    [membership.leagueId, membership.teamId],
+  );
+  const rosterPlayerIds = parsePlayerIdList(rosterRows[0]?.player_ids);
+  if (rosterPlayerIds.length === 0) {
+    return { ok: false, error: "Your roster is empty" };
+  }
+
+  const validated = validateNativeLineupSlots({
+    slots: input.slots ?? {},
+    counts,
+    rosterPlayerIds,
+    posById: input.posById ?? {},
+  });
+  if (!validated.ok) return { ok: false, error: validated.error };
+
+  const existing = await tidbExecute<{ version: number }>(
+    `SELECT version FROM native_lineups
+     WHERE league_id = ? AND team_id = ? AND season_year = ? AND week = ?
+     LIMIT 1`,
+    [membership.leagueId, membership.teamId, seasonYear, week],
+  );
+  const currentVersion = Number(existing[0]?.version ?? 0) || 0;
+  if (currentVersion !== expectedVersion) {
+    return { ok: false, error: "Lineup changed elsewhere — reload and try again" };
+  }
+
+  const nextVersion = currentVersion + 1;
+  try {
+    if (currentVersion === 0) {
+      await tidbExecute(
+        `INSERT INTO native_lineups
+           (league_id, team_id, season_year, week, slots, team_total_points, player_points, version)
+         VALUES (?, ?, ?, ?, ?, 0, NULL, ?)`,
+        [
+          membership.leagueId,
+          membership.teamId,
+          seasonYear,
+          week,
+          JSON.stringify(validated.slots),
+          nextVersion,
+        ],
+      );
+    } else {
+      const updated = await tidbExecute(
+        `UPDATE native_lineups
+         SET slots = ?, version = ?
+         WHERE league_id = ? AND team_id = ? AND season_year = ? AND week = ? AND version = ?`,
+        [
+          JSON.stringify(validated.slots),
+          nextVersion,
+          membership.leagueId,
+          membership.teamId,
+          seasonYear,
+          week,
+          expectedVersion,
+        ],
+      );
+      void updated;
+      // TiDB execute may not return affected rows — re-read version as soft check.
+      const check = await tidbExecute<{ version: number }>(
+        `SELECT version FROM native_lineups
+         WHERE league_id = ? AND team_id = ? AND season_year = ? AND week = ?
+         LIMIT 1`,
+        [membership.leagueId, membership.teamId, seasonYear, week],
+      );
+      if (Number(check[0]?.version ?? 0) !== nextVersion) {
+        return { ok: false, error: "Lineup changed elsewhere — reload and try again" };
+      }
+    }
+    return { ok: true, version: nextVersion };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save lineup";
+    return { ok: false, error: message };
+  }
+}
+
