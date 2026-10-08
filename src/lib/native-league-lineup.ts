@@ -5,8 +5,8 @@
 
 import { ROSTER_SLOT_KEYS, type RosterSlotKey } from "@/lib/league-settings";
 import {
-  parseIrEligibility,
-  type NativeIrEligibility,
+  DEFAULT_IR_ALLOWED_STATUSES,
+  type NativeIrAllowedStatus,
 } from "@/lib/native-league-settings";
 
 export type NativeLineupSlots = Record<string, Array<string | null>>;
@@ -24,22 +24,38 @@ const WRRB_ELIGIBLE = new Set(["WR", "RB"]);
 const WRTE_ELIGIBLE = new Set(["WR", "TE"]);
 const SFLEX_ELIGIBLE = new Set(["QB", "RB", "WR", "TE"]);
 
-/** Designations that satisfy IR when league rule is injured_only. */
-const IR_ELIGIBLE_STATUSES = new Set([
-  "IR",
-  "O",
-  "OUT",
-  "D",
-  "DOUBTFUL",
-  "PUP",
-  "SUS",
-  "SUSPENDED",
-  "NA",
-  "COVID-19",
-  "COVID",
-  "Q",
-  "QUESTIONABLE",
-]);
+/**
+ * Map a Sleeper/catalog injury string to a commissioner IR allow-list token.
+ * Q / Doubtful / Out intentionally return null (never IR-eligible).
+ */
+export function classifyIrStatus(
+  injuryStatus: string | null | undefined,
+): NativeIrAllowedStatus | null {
+  const raw = String(injuryStatus ?? "").trim();
+  if (!raw) return null;
+  const upper = raw.toUpperCase();
+
+  // Explicitly reject these even when they appear beside other words.
+  if (
+    /\bQUESTIONABLE\b/.test(upper) ||
+    /\bDOUBTFUL\b/.test(upper) ||
+    /(^|[^A-Z])OUT([^A-Z]|$)/.test(upper) ||
+    upper === "Q" ||
+    upper === "D" ||
+    upper === "O"
+  ) {
+    // Suspended / NA / IR take precedence when clearly present.
+    if (/\bSUSPEND/.test(upper) || upper === "SUS") return "Suspended";
+    if (/\bNA\b/.test(upper) || upper === "NA") return "NA";
+    if (/(^|[^A-Z])IR([^A-Z]|$)/.test(upper) || /\bINJURED RESERVE\b/.test(upper)) return "IR";
+    return null;
+  }
+
+  if (/\bSUSPEND/.test(upper) || upper === "SUS") return "Suspended";
+  if (/\bNA\b/.test(upper) || upper === "NA") return "NA";
+  if (/(^|[^A-Z])IR([^A-Z]|$)/.test(upper) || /\bINJURED RESERVE\b/.test(upper)) return "IR";
+  return null;
+}
 
 export function normalizePlayerPos(pos: string | null | undefined): string {
   const p = String(pos ?? "").trim().toUpperCase();
@@ -59,17 +75,31 @@ export function slotAcceptsPos(slot: RosterSlotKey, pos: string): boolean {
   return slot === p;
 }
 
-/** True when injury designation may occupy an IR lineup slot under injured_only. */
-export function playerEligibleForIr(injuryStatus: string | null | undefined): boolean {
-  const raw = String(injuryStatus ?? "").trim();
-  if (!raw) return false;
-  const upper = raw.toUpperCase();
-  if (IR_ELIGIBLE_STATUSES.has(upper)) return true;
-  // Sleeper sometimes returns "Questionable (Knee)" etc.
-  for (const token of IR_ELIGIBLE_STATUSES) {
-    if (upper.includes(token)) return true;
+/** True when the player's designation is in the league's IR allow-list. */
+export function playerEligibleForIr(
+  injuryStatus: string | null | undefined,
+  allowed: readonly NativeIrAllowedStatus[] = DEFAULT_IR_ALLOWED_STATUSES,
+): boolean {
+  const classified = classifyIrStatus(injuryStatus);
+  if (!classified) return false;
+  return allowed.includes(classified);
+}
+
+/** Players currently in IR slots who no longer match commissioner settings. */
+export function findIneligibleIrOccupants(
+  views: NativeLineupSlotView[],
+  injuryById: Record<string, string | null | undefined>,
+  allowed: readonly NativeIrAllowedStatus[],
+): Array<{ playerId: string; injury: string | null; slotIndex: number }> {
+  const out: Array<{ playerId: string; injury: string | null; slotIndex: number }> = [];
+  for (const row of views) {
+    if (row.key !== "IR" || !row.playerId) continue;
+    const injury = injuryById[row.playerId] ?? null;
+    if (!playerEligibleForIr(injury, allowed)) {
+      out.push({ playerId: row.playerId, injury, slotIndex: row.index });
+    }
   }
-  return false;
+  return out;
 }
 
 export function parseRosterSlotCounts(
@@ -168,12 +198,12 @@ export function buildDefaultLineupSlots(
   counts: Partial<Record<RosterSlotKey, number>>,
   options?: {
     injuryById?: Record<string, string | null | undefined>;
-    irEligibility?: NativeIrEligibility;
+    irAllowedStatuses?: readonly NativeIrAllowedStatus[];
   },
 ): NativeLineupSlots {
   const views = expandLineupSlots(counts);
   const remaining = [...rosterPlayerIds];
-  const irRule = options?.irEligibility ?? "injured_only";
+  const allowed = options?.irAllowedStatuses ?? DEFAULT_IR_ALLOWED_STATUSES;
   const injuryById = options?.injuryById ?? {};
 
   const place = (pred: (key: RosterSlotKey) => boolean) => {
@@ -182,9 +212,7 @@ export function buildDefaultLineupSlots(
       if (!pred(row.key)) continue;
       const idx = remaining.findIndex((id) => {
         if (!slotAcceptsPos(row.key, posById[id] ?? "")) return false;
-        if (row.key === "IR" && irRule === "injured_only") {
-          return playerEligibleForIr(injuryById[id]);
-        }
+        if (row.key === "IR") return playerEligibleForIr(injuryById[id], allowed);
         return true;
       });
       if (idx < 0) continue;
@@ -197,7 +225,7 @@ export function buildDefaultLineupSlots(
   place((key) => key === "BN");
   place((key) => key === "TAXI");
   place((key) => key === "IR");
-  // Spill leftovers into BN if IR rejected them under injured_only.
+  // Spill leftovers into BN if IR rejected them.
   place((key) => key === "BN");
 
   return slotsRecordFromViews(views);
@@ -210,12 +238,12 @@ export function validateNativeLineupSlots(input: {
   posById: Record<string, string>;
   /** Optional injury map for IR eligibility (catalog / Sleeper tokens). */
   injuryById?: Record<string, string | null | undefined>;
-  irEligibility?: NativeIrEligibility;
+  irAllowedStatuses?: readonly NativeIrAllowedStatus[];
 }): { ok: true; slots: NativeLineupSlots } | { ok: false; error: string } {
   const views = viewsFromSlotsRecord(input.counts, input.slots);
   const rosterSet = new Set(input.rosterPlayerIds);
   const seen = new Set<string>();
-  const irRule = input.irEligibility ?? "injured_only";
+  const allowed = input.irAllowedStatuses ?? DEFAULT_IR_ALLOWED_STATUSES;
 
   for (const row of views) {
     const id = row.playerId;
@@ -232,12 +260,13 @@ export function validateNativeLineupSlots(input: {
       const label = row.key === "DEF" ? "DST" : row.key;
       return { ok: false, error: `${pos || "Player"} cannot start in ${label}` };
     }
-    if (row.key === "IR" && irRule === "injured_only") {
+    if (row.key === "IR") {
       const injury = input.injuryById?.[id];
-      if (!playerEligibleForIr(injury)) {
+      if (!playerEligibleForIr(injury, allowed)) {
+        const allowedLabel = allowed.join(", ");
         return {
           ok: false,
-          error: "Only injured / inactive players can fill IR under league settings",
+          error: `IR is limited to ${allowedLabel}. Move or drop players who no longer qualify.`,
         };
       }
     }
@@ -251,4 +280,22 @@ export function validateNativeLineupSlots(input: {
   }
 
   return { ok: true, slots: slotsRecordFromViews(views) };
+}
+
+/** Split validated lineup into active roster ids vs IR reserve. */
+export function splitActiveAndIrFromSlots(slots: NativeLineupSlots): {
+  activePlayerIds: string[];
+  irPlayerIds: string[];
+} {
+  const irPlayerIds: string[] = [];
+  const activePlayerIds: string[] = [];
+  for (const [key, bucket] of Object.entries(slots)) {
+    if (!Array.isArray(bucket)) continue;
+    for (const id of bucket) {
+      if (!id) continue;
+      if (key === "IR") irPlayerIds.push(id);
+      else activePlayerIds.push(id);
+    }
+  }
+  return { activePlayerIds, irPlayerIds };
 }

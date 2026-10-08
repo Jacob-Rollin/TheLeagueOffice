@@ -9,10 +9,10 @@ import {
   NATIVE_MAX_COMMISSIONER_LEAGUES,
   normalizeNativeLeagueSettings,
   packRosterSlotsJson,
-  parseIrEligibility,
+  parseIrAllowedStatuses,
   type NativeCommissionerSettings,
   type NativeDraftMode,
-  type NativeIrEligibility,
+  type NativeIrAllowedStatus,
   type NativeLeagueSettingsInput,
   type NativeScoringPreset,
 } from "@/lib/native-league-settings";
@@ -26,6 +26,7 @@ import {
 import {
   countActiveRosterCapacity,
   parseRosterSlotCounts,
+  splitActiveAndIrFromSlots,
   validateNativeLineupSlots,
   type NativeLineupSlots,
 } from "@/lib/native-league-lineup";
@@ -158,7 +159,7 @@ export async function createNativeLeagueForUser(
         settings.allowMatchupTies ? 1 : 0,
         settings.matchupTiebreakerSlot,
         settings.divisionsEnabled ? 1 : 0,
-        jsonText(packRosterSlotsJson(settings.rosterSlots, settings.irEligibility)),
+        jsonText(packRosterSlotsJson(settings.rosterSlots, settings.irAllowedStatuses)),
         settings.scoringPreset,
         jsonText(settings.scoringSettings),
         settings.waiverType,
@@ -515,7 +516,7 @@ function commissionerSettingsFromLeague(
     keepersPerTeam: Number(league.keepers_per_team ?? 0) || 0,
     keeperNote: league.keeper_note == null ? null : String(league.keeper_note),
     rosterSlots,
-    irEligibility: parseIrEligibility(rosterSlotsRaw),
+    irAllowedStatuses: parseIrAllowedStatuses(rosterSlotsRaw),
     rosterCapacity: countActiveRosterCapacity(slotCounts),
     settingsLocked: draftStatus !== "not_started" && draftStatus !== "scheduled",
     canManage,
@@ -791,7 +792,7 @@ export type NativeLeagueBoard = {
   rosterSlots: Record<string, number>;
   /** Active roster capacity (excludes IR). */
   rosterCapacity: number;
-  irEligibility: NativeIrEligibility;
+  irAllowedStatuses: NativeIrAllowedStatus[];
   /** Full commissioner settings snapshot for mobile / desktop tools. */
   commissioner: NativeCommissionerSettings;
 };
@@ -820,8 +821,8 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
        FROM native_teams WHERE league_id = ? ORDER BY draft_slot ASC`,
       [membership.leagueId],
     ),
-    tidbExecute<{ team_id: number; player_ids: unknown; version: number }>(
-      `SELECT team_id, player_ids, version FROM native_rosters WHERE league_id = ?`,
+    tidbExecute<{ team_id: number; player_ids: unknown; reserve_ir: unknown; version: number }>(
+      `SELECT team_id, player_ids, reserve_ir, version FROM native_rosters WHERE league_id = ?`,
       [membership.leagueId],
     ),
     tidbExecute<{ player_id: string; team_id: number }>(
@@ -860,11 +861,15 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
   }
   const settingsLocked = summary.draftStatus !== "not_started" && summary.draftStatus !== "scheduled";
 
-  const rosters: NativeRosterRow[] = rosterRows.map((r) => ({
-    teamId: Number(r.team_id),
-    playerIds: parsePlayerIdList(r.player_ids),
-    version: Number(r.version ?? 1) || 1,
-  }));
+  const rosters: NativeRosterRow[] = rosterRows.map((r) => {
+    const active = parsePlayerIdList(r.player_ids);
+    const ir = parsePlayerIdList(r.reserve_ir);
+    return {
+      teamId: Number(r.team_id),
+      playerIds: [...active, ...ir.filter((id) => !active.includes(id))],
+      version: Number(r.version ?? 1) || 1,
+    };
+  });
   const ownership: Record<string, number> = {};
   // Prefer committed rosters; fall back to draft picks while draft is in progress.
   for (const pick of pickRows) {
@@ -901,7 +906,7 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
     })),
     rosterSlots,
     rosterCapacity: countActiveRosterCapacity(slotCounts),
-    irEligibility: parseIrEligibility(rosterSlotsRaw),
+    irAllowedStatuses: parseIrAllowedStatuses(rosterSlotsRaw),
     commissioner: commissionerSettingsFromLeague(league, isCommishRole(summary.role)),
   };
 }
@@ -1001,7 +1006,7 @@ export type NativeCommissionerPatch = {
   draftPickTimeLimitSec?: number;
   benchSpots?: number;
   irSpots?: number;
-  irEligibility?: NativeIrEligibility;
+  irAllowedStatuses?: NativeIrAllowedStatus[];
   seasonStartWeek?: number;
   isPublic?: boolean;
   autoActivateNextYear?: boolean;
@@ -1185,7 +1190,7 @@ export async function updateNativeLeagueBasicsForUser(
   }
 
   const touchRoster =
-    input.benchSpots != null || input.irSpots != null || input.irEligibility != null;
+    input.benchSpots != null || input.irSpots != null || input.irAllowedStatuses != null;
   if (touchRoster) {
     const raw = parseRosterSlots(league.roster_slots) ?? {};
     const counts = parseRosterSlotCounts(raw);
@@ -1196,8 +1201,8 @@ export async function updateNativeLeagueBasicsForUser(
     if (input.irSpots != null) {
       merged.IR = Math.max(0, Math.min(5, Math.floor(Number(input.irSpots) || 0)));
     }
-    const irEligibility = input.irEligibility ?? parseIrEligibility(raw);
-    push("roster_slots", JSON.stringify(packRosterSlotsJson(merged, irEligibility)));
+    const irAllowedStatuses = input.irAllowedStatuses ?? parseIrAllowedStatuses(raw);
+    push("roster_slots", JSON.stringify(packRosterSlotsJson(merged, irAllowedStatuses)));
   }
 
   if (!sets.length) return { ok: true };
@@ -1533,9 +1538,16 @@ export type NativeLineupState = {
   version: number;
   /** null when no saved lineup yet — client should build a default with catalog positions. */
   slots: NativeLineupSlots | null;
+  /** Active + IR reserve combined for the editor. */
   rosterPlayerIds: string[];
+  /** Active roster only (excludes IR reserve). */
+  activePlayerIds: string[];
+  /** IR reserve player ids. */
+  irPlayerIds: string[];
   rosterSlots: Record<string, number>;
-  irEligibility: NativeIrEligibility;
+  irAllowedStatuses: NativeIrAllowedStatus[];
+  rosterCapacity: number;
+  rosterVersion: number;
   draftComplete: boolean;
   canEdit: boolean;
 };
@@ -1593,8 +1605,8 @@ export async function getNativeLineupForLink(
       `SELECT id, team_name FROM native_teams WHERE id = ? AND league_id = ? LIMIT 1`,
       [membership.teamId, membership.leagueId],
     ),
-    tidbExecute<{ player_ids: unknown }>(
-      `SELECT player_ids FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
+    tidbExecute<{ player_ids: unknown; reserve_ir: unknown; version: number }>(
+      `SELECT player_ids, reserve_ir, version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
       [membership.leagueId, membership.teamId],
     ),
     tidbExecute<{ slots: unknown; version: number }>(
@@ -1607,7 +1619,9 @@ export async function getNativeLineupForLink(
   const team = teamRows[0];
   if (!team) return null;
 
-  const rosterPlayerIds = parsePlayerIdList(rosterRows[0]?.player_ids);
+  const activePlayerIds = parsePlayerIdList(rosterRows[0]?.player_ids);
+  const irPlayerIds = parsePlayerIdList(rosterRows[0]?.reserve_ir);
+  const rosterPlayerIds = [...activePlayerIds, ...irPlayerIds.filter((id) => !activePlayerIds.includes(id))];
   const lineup = lineupRows[0];
   const slots = lineup ? parseSlotsJson(lineup.slots) : null;
 
@@ -1621,8 +1635,12 @@ export async function getNativeLineupForLink(
     version: Number(lineup?.version ?? 0) || 0,
     slots,
     rosterPlayerIds,
+    activePlayerIds,
+    irPlayerIds,
     rosterSlots,
-    irEligibility: parseIrEligibility(rosterSlotsRaw),
+    irAllowedStatuses: parseIrAllowedStatuses(rosterSlotsRaw),
+    rosterCapacity: countActiveRosterCapacity(counts),
+    rosterVersion: Number(rosterRows[0]?.version ?? 1) || 1,
     draftComplete,
     canEdit: draftComplete,
   };
@@ -1659,24 +1677,36 @@ export async function saveNativeLineupForUser(
   const rosterSlotsRaw = parseRosterSlots(league.roster_slots);
   const counts = parseRosterSlotCounts(rosterSlotsRaw ?? undefined);
 
-  const rosterRows = await tidbExecute<{ player_ids: unknown; version: number }>(
-    `SELECT player_ids, version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
+  const rosterRows = await tidbExecute<{ player_ids: unknown; reserve_ir: unknown; version: number }>(
+    `SELECT player_ids, reserve_ir, version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
     [membership.leagueId, membership.teamId],
   );
-  const rosterPlayerIds = parsePlayerIdList(rosterRows[0]?.player_ids);
+  const activeIds = parsePlayerIdList(rosterRows[0]?.player_ids);
+  const irIds = parsePlayerIdList(rosterRows[0]?.reserve_ir);
+  const rosterPlayerIds = [...activeIds, ...irIds.filter((id) => !activeIds.includes(id))];
   if (rosterPlayerIds.length === 0) {
     return { ok: false, error: "Your roster is empty" };
   }
 
+  const irAllowedStatuses = parseIrAllowedStatuses(rosterSlotsRaw);
   const validated = validateNativeLineupSlots({
     slots: input.slots ?? {},
     counts,
     rosterPlayerIds,
     posById: input.posById ?? {},
     injuryById: input.injuryById ?? {},
-    irEligibility: parseIrEligibility(rosterSlotsRaw),
+    irAllowedStatuses,
   });
   if (!validated.ok) return { ok: false, error: validated.error };
+
+  const { activePlayerIds, irPlayerIds } = splitActiveAndIrFromSlots(validated.slots);
+  const capacity = countActiveRosterCapacity(counts);
+  if (activePlayerIds.length > capacity) {
+    return {
+      ok: false,
+      error: "Active roster is over capacity — drop a player or keep someone on IR",
+    };
+  }
 
   const existing = await tidbExecute<{ version: number }>(
     `SELECT version FROM native_lineups
@@ -1706,7 +1736,7 @@ export async function saveNativeLineupForUser(
         ],
       );
     } else {
-      const updated = await tidbExecute(
+      await tidbExecute(
         `UPDATE native_lineups
          SET slots = ?, version = ?
          WHERE league_id = ? AND team_id = ? AND season_year = ? AND week = ? AND version = ?`,
@@ -1720,8 +1750,6 @@ export async function saveNativeLineupForUser(
           expectedVersion,
         ],
       );
-      void updated;
-      // TiDB execute may not return affected rows — re-read version as soft check.
       const check = await tidbExecute<{ version: number }>(
         `SELECT version FROM native_lineups
          WHERE league_id = ? AND team_id = ? AND season_year = ? AND week = ?
@@ -1732,6 +1760,20 @@ export async function saveNativeLineupForUser(
         return { ok: false, error: "Lineup changed elsewhere — reload and try again" };
       }
     }
+
+    // Keep active / IR reserve in sync so FA capacity reflects open active spots.
+    await tidbExecute(
+      `UPDATE native_rosters
+       SET player_ids = ?, reserve_ir = ?, version = version + 1
+       WHERE league_id = ? AND team_id = ?`,
+      [
+        JSON.stringify(activePlayerIds),
+        JSON.stringify(irPlayerIds),
+        membership.leagueId,
+        membership.teamId,
+      ],
+    );
+
     return { ok: true, version: nextVersion };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save lineup";
@@ -1753,7 +1795,7 @@ async function syncLineupAfterRosterChange(input: {
   week: number;
   nextPlayerIds: string[];
   droppedPlayerId: string | null;
-  addedPlayerId: string;
+  addedPlayerId?: string | null;
 }): Promise<void> {
   const rows = await tidbExecute<{ slots: unknown; version: number }>(
     `SELECT slots, version FROM native_lineups
@@ -1766,37 +1808,43 @@ async function syncLineupAfterRosterChange(input: {
   const slots = parseSlotsJson(row.slots);
   if (!slots) return;
 
-  // Remove dropped player from any slot.
-  if (input.droppedPlayerId) {
+  const clearPlayer = (playerId: string) => {
     for (const key of Object.keys(slots)) {
       const bucket = slots[key];
       if (!Array.isArray(bucket)) continue;
       for (let i = 0; i < bucket.length; i++) {
-        if (bucket[i] === input.droppedPlayerId) bucket[i] = null;
+        if (bucket[i] === playerId) bucket[i] = null;
       }
     }
-  }
+  };
+
+  // Remove dropped player from any slot.
+  if (input.droppedPlayerId) clearPlayer(input.droppedPlayerId);
 
   // Place added player in first empty BN, else first empty non-IR slot.
-  let placed = false;
-  const preferKeys = ["BN", "FLEX", "WRRB", "WRTE", "SFLEX", "QB", "RB", "WR", "TE", "K", "DEF", "TAXI"];
-  for (const key of preferKeys) {
-    const bucket = slots[key];
-    if (!Array.isArray(bucket)) continue;
-    for (let i = 0; i < bucket.length; i++) {
-      if (bucket[i] == null || bucket[i] === "") {
-        bucket[i] = input.addedPlayerId;
-        placed = true;
-        break;
+  // Clear prior slots first so IR → active moves do not leave a duplicate IR row.
+  if (input.addedPlayerId) {
+    clearPlayer(input.addedPlayerId);
+    let placed = false;
+    const preferKeys = ["BN", "FLEX", "WRRB", "WRTE", "SFLEX", "QB", "RB", "WR", "TE", "K", "DEF", "TAXI"];
+    for (const key of preferKeys) {
+      const bucket = slots[key];
+      if (!Array.isArray(bucket)) continue;
+      for (let i = 0; i < bucket.length; i++) {
+        if (bucket[i] == null || bucket[i] === "") {
+          bucket[i] = input.addedPlayerId;
+          placed = true;
+          break;
+        }
       }
+      if (placed) break;
     }
-    if (placed) break;
-  }
-  if (!placed) {
-    // Ensure added id appears somewhere so My Team validation can recover.
-    const bn = slots["BN"] ?? [];
-    bn.push(input.addedPlayerId);
-    slots["BN"] = bn;
+    if (!placed) {
+      // Ensure added id appears somewhere so My Team validation can recover.
+      const bn = slots["BN"] ?? [];
+      bn.push(input.addedPlayerId);
+      slots["BN"] = bn;
+    }
   }
 
   // Drop any ids no longer on roster.
@@ -1869,8 +1917,8 @@ export async function submitNativeFreeAgentMoveForUser(
   const week = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
 
   const [rosterRows, lockRows, teamMeta] = await Promise.all([
-    tidbExecute<{ player_ids: unknown; version: number }>(
-      `SELECT player_ids, version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
+    tidbExecute<{ player_ids: unknown; reserve_ir: unknown; version: number }>(
+      `SELECT player_ids, reserve_ir, version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
       [membership.leagueId, membership.teamId],
     ),
     tidbExecute<{ player_id: string; held_by_team_id: number | null }>(
@@ -1891,9 +1939,11 @@ export async function submitNativeFreeAgentMoveForUser(
     return { ok: false, error: "Roster changed elsewhere — reload and try again" };
   }
 
-  const playerIds = parsePlayerIdList(roster.player_ids);
-  const openSlots = Math.max(0, capacity - playerIds.length);
-  if (playerIds.includes(addPlayerId)) {
+  const activeIds = parsePlayerIdList(roster.player_ids);
+  const irIds = parsePlayerIdList(roster.reserve_ir);
+  const allOwned = [...activeIds, ...irIds];
+  const openSlots = Math.max(0, capacity - activeIds.length);
+  if (allOwned.includes(addPlayerId)) {
     return { ok: false, error: "That player is already on your roster" };
   }
 
@@ -1903,12 +1953,13 @@ export async function submitNativeFreeAgentMoveForUser(
   }
 
   // Also verify ownership via any roster (locks can lag).
-  const allRosters = await tidbExecute<{ team_id: number; player_ids: unknown }>(
-    `SELECT team_id, player_ids FROM native_rosters WHERE league_id = ?`,
+  const allRosters = await tidbExecute<{ team_id: number; player_ids: unknown; reserve_ir: unknown }>(
+    `SELECT team_id, player_ids, reserve_ir FROM native_rosters WHERE league_id = ?`,
     [membership.leagueId],
   );
   for (const row of allRosters) {
-    if (parsePlayerIdList(row.player_ids).includes(addPlayerId)) {
+    const ids = [...parsePlayerIdList(row.player_ids), ...parsePlayerIdList(row.reserve_ir)];
+    if (ids.includes(addPlayerId)) {
       return { ok: false, error: "That player is already rostered in this league" };
     }
   }
@@ -1921,11 +1972,8 @@ export async function submitNativeFreeAgentMoveForUser(
       openSlots: 0,
     };
   }
-  if (openSlots > 0 && dropPlayerId) {
-    // Allow optional drop even with open slots (manager preference).
-  }
   if (dropPlayerId) {
-    if (!playerIds.includes(dropPlayerId)) {
+    if (!allOwned.includes(dropPlayerId)) {
       return { ok: false, error: "Drop player must be on your roster" };
     }
     const dropLock = lockRows.find((r) => String(r.player_id) === dropPlayerId);
@@ -1945,28 +1993,34 @@ export async function submitNativeFreeAgentMoveForUser(
     return { ok: false, error: `Season add limit reached (${maxSeason})` };
   }
 
-  const nextPlayerIds = dropPlayerId
-    ? [...playerIds.filter((id) => id !== dropPlayerId), addPlayerId]
-    : [...playerIds, addPlayerId];
-  if (nextPlayerIds.length > capacity) {
+  let nextActive = [...activeIds];
+  let nextIr = [...irIds];
+  if (dropPlayerId) {
+    nextActive = nextActive.filter((id) => id !== dropPlayerId);
+    nextIr = nextIr.filter((id) => id !== dropPlayerId);
+  }
+  nextActive = [...nextActive, addPlayerId];
+  if (nextActive.length > capacity) {
     return { ok: false, error: "Roster is full — choose a player to drop", requiresDrop: true };
   }
 
   const nextVersion = currentVersion + 1;
+  const nextAll = [...nextActive, ...nextIr];
   try {
     await tidbExecute(
-      `UPDATE native_rosters SET player_ids = ?, version = ?
+      `UPDATE native_rosters SET player_ids = ?, reserve_ir = ?, version = ?
        WHERE league_id = ? AND team_id = ? AND version = ?`,
       [
-        JSON.stringify(nextPlayerIds),
+        JSON.stringify(nextActive),
+        JSON.stringify(nextIr),
         nextVersion,
         membership.leagueId,
         membership.teamId,
         expectedRosterVersion,
       ],
     );
-    const verify = await tidbExecute<{ version: number; player_ids: unknown }>(
-      `SELECT version, player_ids FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
+    const verify = await tidbExecute<{ version: number }>(
+      `SELECT version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
       [membership.leagueId, membership.teamId],
     );
     if (Number(verify[0]?.version ?? 0) !== nextVersion) {
@@ -2016,7 +2070,7 @@ export async function submitNativeFreeAgentMoveForUser(
       teamId: membership.teamId,
       seasonYear,
       week,
-      nextPlayerIds,
+      nextPlayerIds: nextAll,
       droppedPlayerId: dropPlayerId,
       addedPlayerId: addPlayerId,
     });
@@ -2024,10 +2078,162 @@ export async function submitNativeFreeAgentMoveForUser(
     return {
       ok: true,
       rosterVersion: nextVersion,
-      openSlots: Math.max(0, capacity - nextPlayerIds.length),
+      openSlots: Math.max(0, capacity - nextActive.length),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not complete free-agent move";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * Resolve an IR occupant who no longer matches commissioner allow-list:
+ * - drop: remove that player from the roster
+ * - activate: move them to active (requires dropPlayerId when active is full)
+ */
+export async function resolveNativeIrViolationForUser(
+  userId: string,
+  linkId: string,
+  input: {
+    playerId: string;
+    action: "drop" | "activate";
+    dropPlayerId?: string | null;
+    rosterVersion: number;
+  },
+): Promise<NativeFaMoveResult> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const membership = await assertMembershipLink(userId, linkId);
+  if (!membership || membership.teamId == null) {
+    return { ok: false, error: "Claim a team seat first" };
+  }
+
+  const playerId = String(input.playerId ?? "").trim().slice(0, 32);
+  const dropPlayerId =
+    input.dropPlayerId == null || input.dropPlayerId === ""
+      ? null
+      : String(input.dropPlayerId).trim().slice(0, 32);
+  if (!playerId) return { ok: false, error: "Select a player" };
+  if (input.action !== "drop" && input.action !== "activate") {
+    return { ok: false, error: "Invalid IR resolution action" };
+  }
+
+  const leagueRows = await tidbExecute<LeagueCoreRow>(
+    `SELECT ${LEAGUE_CORE_SELECT} FROM native_leagues WHERE id = ? LIMIT 1`,
+    [membership.leagueId],
+  );
+  const league = leagueRows[0];
+  if (!league) return { ok: false, error: "League not found" };
+
+  const capacity = countActiveRosterCapacity(parseRosterSlots(league.roster_slots));
+  const expectedRosterVersion = Math.max(1, Math.floor(Number(input.rosterVersion) || 1));
+  const seasonYear = Number(league.season_year);
+  const week = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
+
+  const rosterRows = await tidbExecute<{ player_ids: unknown; reserve_ir: unknown; version: number }>(
+    `SELECT player_ids, reserve_ir, version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
+    [membership.leagueId, membership.teamId],
+  );
+  const roster = rosterRows[0];
+  if (!roster) return { ok: false, error: "Roster not found" };
+  const currentVersion = Number(roster.version ?? 1) || 1;
+  if (currentVersion !== expectedRosterVersion) {
+    return { ok: false, error: "Roster changed elsewhere — reload and try again" };
+  }
+
+  let nextActive = parsePlayerIdList(roster.player_ids);
+  let nextIr = parsePlayerIdList(roster.reserve_ir);
+  if (!nextIr.includes(playerId)) {
+    return { ok: false, error: "Player is not on IR" };
+  }
+
+  if (input.action === "drop") {
+    nextActive = nextActive.filter((id) => id !== playerId);
+    nextIr = nextIr.filter((id) => id !== playerId);
+  } else {
+    // activate: remove from IR, add to active (optionally drop someone else)
+    nextIr = nextIr.filter((id) => id !== playerId);
+    if (dropPlayerId) {
+      if (dropPlayerId === playerId) return { ok: false, error: "Choose a different player to drop" };
+      if (!nextActive.includes(dropPlayerId) && !nextIr.includes(dropPlayerId)) {
+        return { ok: false, error: "Drop player must be on your roster" };
+      }
+      nextActive = nextActive.filter((id) => id !== dropPlayerId);
+      nextIr = nextIr.filter((id) => id !== dropPlayerId);
+    }
+    if (!nextActive.includes(playerId)) nextActive = [...nextActive, playerId];
+    if (nextActive.length > capacity) {
+      return {
+        ok: false,
+        error: "Active roster is full — choose a player to drop to activate this IR player",
+        requiresDrop: true,
+        openSlots: 0,
+      };
+    }
+  }
+
+  const nextVersion = currentVersion + 1;
+  try {
+    await tidbExecute(
+      `UPDATE native_rosters SET player_ids = ?, reserve_ir = ?, version = ?
+       WHERE league_id = ? AND team_id = ? AND version = ?`,
+      [
+        JSON.stringify(nextActive),
+        JSON.stringify(nextIr),
+        nextVersion,
+        membership.leagueId,
+        membership.teamId,
+        expectedRosterVersion,
+      ],
+    );
+
+    if (input.action === "drop") {
+      await tidbExecute(
+        `DELETE FROM native_player_locks WHERE league_id = ? AND player_id = ? AND held_by_team_id = ?`,
+        [membership.leagueId, playerId, membership.teamId],
+      );
+    } else if (dropPlayerId) {
+      await tidbExecute(
+        `DELETE FROM native_player_locks WHERE league_id = ? AND player_id = ? AND held_by_team_id = ?`,
+        [membership.leagueId, dropPlayerId, membership.teamId],
+      );
+    }
+
+    await tidbExecute(
+      `INSERT INTO native_transactions
+         (league_id, team_id, type, status, payload, created_by, processed_at)
+       VALUES (?, ?, ?, 'completed', ?, ?, UTC_TIMESTAMP())`,
+      [
+        membership.leagueId,
+        membership.teamId,
+        input.action === "drop" ? "ir_force_drop" : "ir_force_activate",
+        JSON.stringify({
+          playerId,
+          dropPlayerId: input.action === "activate" ? dropPlayerId : null,
+          week,
+          seasonYear,
+        }),
+        userId,
+      ],
+    );
+
+    // Soft-clear lineup slots for removed players; leave manager to re-save lineup.
+    await syncLineupAfterRosterChange({
+      leagueId: membership.leagueId,
+      teamId: membership.teamId,
+      seasonYear,
+      week,
+      nextPlayerIds: [...nextActive, ...nextIr],
+      droppedPlayerId: input.action === "drop" ? playerId : dropPlayerId,
+      addedPlayerId: input.action === "activate" ? playerId : null,
+    });
+
+    return {
+      ok: true,
+      rosterVersion: nextVersion,
+      openSlots: Math.max(0, capacity - nextActive.length),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not resolve IR violation";
     return { ok: false, error: message };
   }
 }

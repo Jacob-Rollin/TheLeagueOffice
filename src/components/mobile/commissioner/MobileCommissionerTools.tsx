@@ -10,10 +10,13 @@ import {
   updateNativeLeagueBasics,
 } from "@/lib/native-league.functions";
 import {
+  DEFAULT_IR_ALLOWED_STATUSES,
+  NATIVE_IR_ALLOWED_STATUS_LABELS,
+  NATIVE_IR_ALLOWED_STATUS_OPTIONS,
   defaultNativeScoringSettings,
   type NativeCommissionerSettings,
   type NativeDraftMode,
-  type NativeIrEligibility,
+  type NativeIrAllowedStatus,
   type NativeScoringPreset,
 } from "@/lib/native-league-settings";
 import { cn } from "@/lib/utils";
@@ -250,7 +253,9 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
                     void savePatch({
                       benchSpots: draft.rosterSlots["BN"] ?? 0,
                       irSpots: draft.rosterSlots["IR"] ?? 0,
-                      irEligibility: draft.irEligibility,
+                      irAllowedStatuses: draft.irAllowedStatuses?.length
+                        ? draft.irAllowedStatuses
+                        : [...DEFAULT_IR_ALLOWED_STATUSES],
                     });
                   }
                 }
@@ -784,41 +789,62 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
         ) : null}
 
         {screen === "roster-slots" ? (
-          <main className="space-y-3 px-4 py-4">
-            <Stepper
-              label="Bench Spots"
-              value={Number(draft.rosterSlots["BN"] ?? 0)}
-              min={0}
-              max={20}
-              disabled={!canEdit}
-              onChange={(n) =>
-                setDraft({ ...draft, rosterSlots: { ...draft.rosterSlots, BN: n } })
-              }
-            />
-            <Stepper
-              label="IR Spots"
-              value={Number(draft.rosterSlots["IR"] ?? 0)}
-              min={0}
-              max={5}
-              disabled={!canEdit}
-              onChange={(n) =>
-                setDraft({ ...draft, rosterSlots: { ...draft.rosterSlots, IR: n } })
-              }
-            />
-            <SegmentedRow
-              label="IR Eligibility"
-              value={draft.irEligibility}
-              disabled={!canEdit}
-              options={[
-                { value: "injured_only", label: "Injured / inactive only" },
-                { value: "any", label: "Any rostered player" },
-              ]}
-              onChange={(v) => setDraft({ ...draft, irEligibility: v as NativeIrEligibility })}
-            />
-            <p className="text-sm text-m-muted">
-              Active roster capacity (starters + bench): {draft.rosterCapacity}. IR does not add a
-              free free-agent spot.
-            </p>
+          <main>
+            <CommishSection title="Roster Slots">
+              <Stepper
+                label="Bench Spots"
+                value={Number(draft.rosterSlots["BN"] ?? 0)}
+                min={0}
+                max={20}
+                disabled={!canEdit}
+                onChange={(n) =>
+                  setDraft({ ...draft, rosterSlots: { ...draft.rosterSlots, BN: n } })
+                }
+              />
+              <Stepper
+                label="IR Spots"
+                value={Number(draft.rosterSlots["IR"] ?? 0)}
+                min={0}
+                max={5}
+                disabled={!canEdit}
+                onChange={(n) =>
+                  setDraft({ ...draft, rosterSlots: { ...draft.rosterSlots, IR: n } })
+                }
+              />
+              <p className="text-sm text-m-muted">
+                Active roster capacity (starters + bench): {draft.rosterCapacity}. IR does not add a
+                free free-agent spot.
+              </p>
+            </CommishSection>
+            <CommishSection
+              title="IR Slot Designations"
+              info="Only selected tags may occupy IR. Questionable, Doubtful, and Out never qualify."
+            >
+              {NATIVE_IR_ALLOWED_STATUS_OPTIONS.map((status) => (
+                <ToggleRow
+                  key={status}
+                  label={NATIVE_IR_ALLOWED_STATUS_LABELS[status]}
+                  checked={(draft.irAllowedStatuses ?? DEFAULT_IR_ALLOWED_STATUSES).includes(status)}
+                  disabled={!canEdit}
+                  onChange={(on) => {
+                    const current = draft.irAllowedStatuses?.length
+                      ? [...draft.irAllowedStatuses]
+                      : [...DEFAULT_IR_ALLOWED_STATUSES];
+                    let next: NativeIrAllowedStatus[];
+                    if (on) {
+                      next = current.includes(status) ? current : [...current, status];
+                    } else {
+                      next = current.filter((s) => s !== status);
+                      if (next.length === 0) next = [...DEFAULT_IR_ALLOWED_STATUSES];
+                    }
+                    setDraft({ ...draft, irAllowedStatuses: next });
+                  }}
+                />
+              ))}
+              <p className="text-sm text-m-muted">
+                Managers must activate or drop IR players who no longer match these tags.
+              </p>
+            </CommishSection>
           </main>
         ) : null}
       </div>

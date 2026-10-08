@@ -10,10 +10,13 @@ import {
   updateNativeInviteCode,
   updateNativeLeagueBasics,
 } from "@/lib/native-league.functions";
-import type {
-  NativeDraftMode,
-  NativeIrEligibility,
-  NativeScoringPreset,
+import {
+  DEFAULT_IR_ALLOWED_STATUSES,
+  NATIVE_IR_ALLOWED_STATUS_LABELS,
+  NATIVE_IR_ALLOWED_STATUS_OPTIONS,
+  type NativeDraftMode,
+  type NativeIrAllowedStatus,
+  type NativeScoringPreset,
 } from "@/lib/native-league-settings";
 
 export const Route = createFileRoute("/league/$linkId/settings")({
@@ -46,7 +49,9 @@ function NativeLeagueSettingsInLeague() {
   const [draftMode, setDraftMode] = useState<NativeDraftMode>("offline");
   const [benchSpots, setBenchSpots] = useState(6);
   const [irSpots, setIrSpots] = useState(1);
-  const [irEligibility, setIrEligibility] = useState<NativeIrEligibility>("injured_only");
+  const [irAllowedStatuses, setIrAllowedStatuses] = useState<NativeIrAllowedStatus[]>([
+    ...DEFAULT_IR_ALLOWED_STATUSES,
+  ]);
   const [inviteDraft, setInviteDraft] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -55,11 +60,25 @@ function NativeLeagueSettingsInLeague() {
     setName(board.summary.name);
     setScoringPreset((board.summary.scoringPreset as NativeScoringPreset) || "half");
     setDraftMode(board.summary.draftMode === "live" ? "live" : "offline");
-    setBenchSpots(Number(board.rosterSlots.BN ?? 6) || 0);
-    setIrSpots(Number(board.rosterSlots.IR ?? 1) || 0);
-    setIrEligibility(board.irEligibility ?? "injured_only");
+    setBenchSpots(Number(board.rosterSlots["BN"] ?? 6) || 0);
+    setIrSpots(Number(board.rosterSlots["IR"] ?? 1) || 0);
+    setIrAllowedStatuses(
+      board.irAllowedStatuses?.length
+        ? [...board.irAllowedStatuses]
+        : [...DEFAULT_IR_ALLOWED_STATUSES],
+    );
     setInviteDraft(board.summary.inviteCode);
   }, [board]);
+
+  const toggleIrStatus = (status: NativeIrAllowedStatus) => {
+    setIrAllowedStatuses((prev) => {
+      if (prev.includes(status)) {
+        const next = prev.filter((s) => s !== status);
+        return next.length > 0 ? next : [...DEFAULT_IR_ALLOWED_STATUSES];
+      }
+      return [...prev, status];
+    });
+  };
 
   if (!board) return null;
   const { summary, canManage, settingsLocked } = board;
@@ -84,7 +103,7 @@ function NativeLeagueSettingsInLeague() {
           draftMode,
           benchSpots,
           irSpots,
-          irEligibility,
+          irAllowedStatuses,
         },
       });
       if (!result.ok) {
@@ -194,21 +213,30 @@ function NativeLeagueSettingsInLeague() {
               />
             </label>
           </div>
-          <label className={labelClass}>
-            IR eligibility
-            <select
-              className={fieldClass}
-              value={irEligibility}
-              disabled={!canManage || settingsLocked || saving}
-              onChange={(e) => setIrEligibility(e.target.value as NativeIrEligibility)}
-            >
-              <option value="injured_only">Injured / inactive only</option>
-              <option value="any">Any rostered player</option>
-            </select>
-          </label>
+          <fieldset disabled={!canManage || settingsLocked || saving} className="space-y-2">
+            <legend className={labelClass}>IR slot designations</legend>
+            <p className="text-xs text-muted-foreground">
+              Only selected tags may occupy IR. Questionable, Doubtful, and Out never qualify.
+              Default is IR only.
+            </p>
+            <div className="mt-1 space-y-2">
+              {NATIVE_IR_ALLOWED_STATUS_OPTIONS.map((status) => (
+                <label key={status} className="flex items-center gap-2 text-sm text-slate-800">
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    checked={irAllowedStatuses.includes(status)}
+                    onChange={() => toggleIrStatus(status)}
+                  />
+                  {NATIVE_IR_ALLOWED_STATUS_LABELS[status]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <p className="text-xs text-muted-foreground">
-            Active roster capacity is starters + bench (+ taxi). IR is a lineup designation and does
-            not add a free free-agent spot. Capacity: {board.rosterCapacity}.
+            Active roster capacity is starters + bench (+ taxi). IR does not add a free free-agent
+            spot. Capacity: {board.rosterCapacity}. When a player on IR no longer matches these tags,
+            their manager must activate them (dropping someone if the roster is full) or drop them.
           </p>
         </div>
 

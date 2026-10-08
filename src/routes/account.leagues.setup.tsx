@@ -7,10 +7,13 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { createNativeLeague } from "@/lib/native-league.functions";
 import {
+  DEFAULT_IR_ALLOWED_STATUSES,
+  NATIVE_IR_ALLOWED_STATUS_LABELS,
+  NATIVE_IR_ALLOWED_STATUS_OPTIONS,
   NATIVE_LEAGUE_MAX_TEAMS,
   NATIVE_LEAGUE_MIN_TEAMS,
   type NativeDraftMode,
-  type NativeIrEligibility,
+  type NativeIrAllowedStatus,
   type NativeScoringPreset,
 } from "@/lib/native-league-settings";
 
@@ -44,8 +47,20 @@ function NativeLeagueSetupPage() {
   const [draftMode, setDraftMode] = useState<NativeDraftMode>("offline");
   const [benchSpots, setBenchSpots] = useState(6);
   const [irSpots, setIrSpots] = useState(1);
-  const [irEligibility, setIrEligibility] = useState<NativeIrEligibility>("injured_only");
+  const [irAllowedStatuses, setIrAllowedStatuses] = useState<NativeIrAllowedStatus[]>([
+    ...DEFAULT_IR_ALLOWED_STATUSES,
+  ]);
   const [creating, setCreating] = useState(false);
+
+  const toggleIrStatus = (status: NativeIrAllowedStatus) => {
+    setIrAllowedStatuses((prev) => {
+      if (prev.includes(status)) {
+        const next = prev.filter((s) => s !== status);
+        return next.length > 0 ? next : [...DEFAULT_IR_ALLOWED_STATUSES];
+      }
+      return [...prev, status];
+    });
+  };
   const [createError, setCreateError] = useState<string | null>(null);
   const [createdInvite, setCreatedInvite] = useState<string | null>(null);
 
@@ -64,7 +79,7 @@ function NativeLeagueSetupPage() {
           seasonYear: new Date().getUTCFullYear(),
           benchSpots,
           irSpots,
-          irEligibility,
+          irAllowedStatuses,
           ...(teamName.trim() ? { teamName: teamName.trim() } : {}),
         },
       });
@@ -197,17 +212,25 @@ function NativeLeagueSetupPage() {
               />
             </label>
           </div>
-          <label className={labelClass}>
-            IR eligibility
-            <select
-              className={fieldClass}
-              value={irEligibility}
-              onChange={(e) => setIrEligibility(e.target.value as NativeIrEligibility)}
-            >
-              <option value="injured_only">Injured / inactive only</option>
-              <option value="any">Any rostered player</option>
-            </select>
-          </label>
+          <fieldset className="space-y-2">
+            <legend className={labelClass}>IR slot designations</legend>
+            <p className="text-xs text-slate-600">
+              Only selected tags may occupy IR. Questionable, Doubtful, and Out never qualify.
+            </p>
+            <div className="mt-1 space-y-2">
+              {NATIVE_IR_ALLOWED_STATUS_OPTIONS.map((status) => (
+                <label key={status} className="flex items-center gap-2 text-sm text-slate-800">
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+                    checked={irAllowedStatuses.includes(status)}
+                    onChange={() => toggleIrStatus(status)}
+                  />
+                  {NATIVE_IR_ALLOWED_STATUS_LABELS[status]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
         </div>
 
         {createError ? <p className="mt-3 text-sm text-red-600">{createError}</p> : null}
