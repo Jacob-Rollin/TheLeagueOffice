@@ -395,9 +395,9 @@ function AreTheyPlayingPage() {
       </div>
 
       <p className="mt-3 text-xs text-slate-400">
-        Practice participation and designations come from each team&apos;s official injury report, filled in from
-        ESPN injury news until the official report posts. DNP = did not participate, LP = limited, FP = full
-        participation, Healthy = not on that day&apos;s report.
+        Practice participation and designations come from each team&apos;s official injury report, backfilled from
+        the NFL.com league report and ESPN injury news when a club page is incomplete. DNP = did not participate,
+        LP = limited, FP = full participation, Healthy = not on that day&apos;s report.
       </p>
 
       <PlayerModalHost ref={modalRef} />

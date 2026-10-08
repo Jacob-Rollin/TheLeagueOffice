@@ -221,13 +221,169 @@ async function fetchEspnInjuries(): Promise<EspnInjury[]> {
   return out;
 }
 
-async function fetchCurrentWeek(): Promise<number | null> {
+async function fetchNflState(): Promise<{ week: number | null; season: number | null }> {
   const res = await fetch("https://api.sleeper.app/v1/state/nfl", { signal: AbortSignal.timeout(10_000) }).catch(
     () => null,
   );
-  if (!res || !res.ok) return null;
-  const json = (await res.json().catch(() => null)) as { week?: number } | null;
-  return typeof json?.week === "number" ? json.week : null;
+  if (!res || !res.ok) return { week: null, season: null };
+  const json = (await res.json().catch(() => null)) as { week?: number; season?: string | number } | null;
+  const week = typeof json?.week === "number" ? json.week : null;
+  const seasonNum = Number(json?.season);
+  return { week, season: Number.isFinite(seasonNum) ? seasonNum : null };
+}
+
+/** NFL.com club logo abbreviations → our fantasy team keys. */
+const NFL_LOGO_TEAM: Record<string, string> = { AZ: "ARI", LA: "LAR", WSH: "WAS" };
+
+const NICK_TO_TEAM: Record<string, string> = Object.fromEntries(
+  Object.entries(CLUB_SITES).flatMap(([abbr, c]) => {
+    const nick = c.name.split(" ").at(-1)!;
+    return [
+      [c.name.toLowerCase(), abbr],
+      [nick.toLowerCase(), abbr],
+    ];
+  }),
+);
+
+type NflLeagueLine = {
+  name: string;
+  team: string;
+  pos: string;
+  injury: string | null;
+  mark: PracticeMark | null;
+  gameStatus: GameStatus | null;
+};
+
+/**
+ * Official league-wide injury page (single Practice Status column). Used to fill
+ * clubs whose sites omit SSR tables and ESPN rows that lack practice notes.
+ */
+async function fetchNflLeagueInjuries(season: number, week: number): Promise<NflLeagueLine[]> {
+  const res = await fetch(`https://www.nfl.com/injuries/league/${season}/reg${week}`, {
+    headers: { "user-agent": "Mozilla/5.0 (compatible; TheLeagueOffice/1.0)", accept: "text/html" },
+    signal: AbortSignal.timeout(20_000),
+  }).catch(() => null);
+  if (!res || !res.ok) return [];
+  const html = await res.text();
+  const out: NflLeagueLine[] = [];
+  const units = html.matchAll(/<section class="nfl-o-injury-report__unit">([\s\S]*?)<\/section>/g);
+  for (const unitMatch of units) {
+    const unit = unitMatch[1] ?? "";
+    const parts = unit.split(/(<table[\s\S]*?<\/table>)/i);
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i] ?? "";
+      if (!/^<table/i.test(part)) continue;
+      const prev = cellText(parts[i - 1] ?? "");
+      let team: string | null = null;
+      let last = -1;
+      for (const [name, abbr] of Object.entries(NICK_TO_TEAM)) {
+        const at = prev.toLowerCase().lastIndexOf(name);
+        if (at > last) {
+          last = at;
+          team = abbr;
+        }
+      }
+      if (!team) {
+        const logo = [...prev.matchAll(/clubs\/logos\/([A-Z]{2,3})/g)].at(-1)?.[1];
+        if (logo) team = NFL_LOGO_TEAM[logo] ?? logo;
+      }
+      if (!team) continue;
+
+      const body = part.match(/<tbody>([\s\S]*?)<\/tbody>/i)?.[1] ?? "";
+      for (const row of body.matchAll(/<tr[\s\S]*?<\/tr>/gi)) {
+        const cells = [...row[0].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => cellText(c[1] ?? ""));
+        if (cells.length < 5) continue;
+        const name = cells[0] ?? "";
+        const pos = (cells[1] ?? "").toUpperCase();
+        if (!name || !FANTASY_POSITIONS.has(pos)) continue;
+        const injuryRaw = (cells[2] ?? "").trim();
+        out.push({
+          name,
+          team,
+          pos,
+          injury: injuryRaw && !/not specified|undisclosed/i.test(injuryRaw) ? injuryRaw : null,
+          mark: toMark(cells[3] ?? ""),
+          gameStatus: toGameStatus(cells[4] ?? ""),
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/** Weekday abbr to stamp a single league-page Practice Status onto (Sun → Fri). */
+function practiceDayLabel(now: number): string {
+  const wd = easternWeekday(now);
+  if (wd >= 1 && wd <= 6) return (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const)[wd - 1]!;
+  return "Fri";
+}
+
+function fillMissingMarks(days: PracticeDay[], mark: PracticeMark | null, reportDay: string): PracticeDay[] {
+  if (!mark) return days;
+  if (!days.length) return [{ day: reportDay, mark }];
+  if (days.some((d) => d.mark)) {
+    return days.map((d) => (d.mark ? d : d.day === reportDay ? { ...d, mark } : d));
+  }
+  let idx = days.findIndex((d) => d.day === reportDay);
+  if (idx < 0) {
+    // Early week (Mon/Tue) or odd day labels: stamp the latest column on/before today.
+    const reportIdx = DAY_INDEX[reportDay] ?? 0;
+    idx = 0;
+    for (let i = 0; i < days.length; i++) {
+      const di = DAY_INDEX[days[i]!.day] ?? 0;
+      if (di > 0 && di <= reportIdx) idx = i;
+    }
+  }
+  return days.map((d, i) => (i === idx ? { ...d, mark } : d));
+}
+
+function mergeNflLeague(lines: InjuryReportLine[], nfl: NflLeagueLine[], now: number): InjuryReportLine[] {
+  if (!nfl.length) return lines;
+  const reportDay = practiceDayLabel(now);
+  const byKey = new Map(nfl.map((e) => [`${normPlayerName(e.name)}|${e.team}`, e]));
+  const lastName = (name: string) => normPlayerName(name.split(" ").slice(-1)[0] ?? "");
+  const onReport = new Set(lines.map((l) => `${lastName(l.name)}|${l.team}|${l.pos}`));
+  const seen = new Set<string>();
+  const out: InjuryReportLine[] = [];
+
+  for (const line of lines) {
+    const key = `${normPlayerName(line.name)}|${line.team}`;
+    seen.add(key);
+    const n = byKey.get(key);
+    if (!n) {
+      out.push(line);
+      continue;
+    }
+    out.push({
+      ...line,
+      injury: line.injury ?? n.injury,
+      gameStatus: line.gameStatus ?? n.gameStatus,
+      days: fillMissingMarks(line.days, n.mark, reportDay),
+      final: line.final || Boolean(n.gameStatus),
+    });
+  }
+
+  for (const n of nfl) {
+    const key = `${normPlayerName(n.name)}|${n.team}`;
+    if (seen.has(key) || (!n.mark && !n.gameStatus)) continue;
+    if (onReport.has(`${lastName(n.name)}|${n.team}|${n.pos}`)) continue;
+    seen.add(key);
+    const dayCols = ["Wed", "Thu", "Fri"];
+    out.push({
+      name: n.name,
+      team: n.team,
+      pos: n.pos,
+      injury: n.injury,
+      days: fillMissingMarks(
+        dayCols.map((day) => ({ day, mark: null })),
+        n.mark,
+        reportDay,
+      ),
+      gameStatus: n.gameStatus,
+      final: Boolean(n.gameStatus),
+    });
+  }
+  return out;
 }
 
 const DAY_ABBR: Record<string, string> = {
@@ -267,6 +423,8 @@ function practiceFromNews(comments: string[], noteDate: number): { marks: Map<st
   const marks = new Map<string, PracticeMark>();
   let addedOn: string | null = null;
   const noteDay = easternWeekday(noteDate);
+  const noteAbbr =
+    noteDay >= 1 && noteDay <= 6 ? (["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const)[noteDay - 1]! : null;
   for (const text of comments) {
     for (const sentence of text.split(/(?<=[.!?])\s+/)) {
       if (!/practic|participa|injury report|session/i.test(sentence)) continue;
@@ -274,12 +432,20 @@ function practiceFromNews(comments: string[], noteDate: number): { marks: Map<st
         const days = [...clause.matchAll(/\b(monday|tuesday|wednesday|thursday|friday|saturday)\b/gi)].map(
           (m) => DAY_ABBR[(m[1] ?? "").toLowerCase()]!,
         );
-        if (days.length !== 1) continue;
-        const day = days[0]!;
-        if ((DAY_INDEX[day] ?? 9) > noteDay) continue;
-        if (/added to the (team's |club's )?injury report/i.test(clause)) addedOn ??= day;
-        const mark = clauseMark(clause);
-        if (mark && !marks.has(day)) marks.set(day, mark);
+        if (days.length === 1) {
+          const day = days[0]!;
+          if ((DAY_INDEX[day] ?? 9) > noteDay) continue;
+          if (/added to the (team's |club's )?injury report/i.test(clause)) addedOn ??= day;
+          const mark = clauseMark(clause);
+          if (mark && !marks.has(day)) marks.set(day, mark);
+          continue;
+        }
+        // "was limited in practice" with no weekday — stamp the note's own day.
+        if (days.length === 0 && noteAbbr) {
+          if (/added to the (team's |club's )?injury report/i.test(clause)) addedOn ??= noteAbbr;
+          const mark = clauseMark(clause);
+          if (mark && !marks.has(noteAbbr)) marks.set(noteAbbr, mark);
+        }
       }
     }
   }
@@ -363,14 +529,21 @@ function mergeEspn(reports: ClubReport[], espn: EspnInjury[], now: number): Inju
 const cache = new Map<number, { at: number; value: Promise<AreTheyPlayingPayload> }>();
 
 async function buildPayload(week: number): Promise<AreTheyPlayingPayload> {
-  const [reports, currentWeek] = await Promise.all([
+  const [reports, state] = await Promise.all([
     Promise.all(Object.keys(CLUB_SITES).map((team) => fetchClub(team, week).catch(() => null))),
-    fetchCurrentWeek().catch(() => null),
+    fetchNflState().catch(() => ({ week: null, season: null })),
   ]);
   const clubReports = reports.filter((r): r is ClubReport => r != null);
-  const espn = currentWeek === week ? await fetchEspnInjuries().catch(() => []) : [];
+  const isCurrentWeek = state.week == null || state.week === week;
+  const [espn, nfl] = await Promise.all([
+    isCurrentWeek ? fetchEspnInjuries().catch(() => []) : Promise.resolve([] as EspnInjury[]),
+    state.season != null
+      ? fetchNflLeagueInjuries(state.season, week).catch(() => [])
+      : Promise.resolve([] as NflLeagueLine[]),
+  ]);
   const now = Date.now();
-  const lines = espn.length ? mergeEspn(clubReports, espn, now) : clubReports.flatMap((r) => r.lines);
+  let lines = espn.length ? mergeEspn(clubReports, espn, now) : clubReports.flatMap((r) => r.lines);
+  if (nfl.length) lines = mergeNflLeague(lines, nfl, now);
   return { week, updatedAt: now, lines };
 }
 
@@ -378,20 +551,24 @@ export function loadAreTheyPlaying(
   week: number,
   opts?: { allowCompute?: boolean },
 ): Promise<AreTheyPlayingPayload> {
-  const hit = cache.get(week);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
   const allowCompute = opts?.allowCompute === true;
+  // Cron rebuilds must not reuse the in-memory memo or a stale TiDB snap —
+  // practice marks change several times midweek.
+  if (!allowCompute) {
+    const hit = cache.get(week);
+    if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
+  }
 
   const value = (async () => {
     const snapKey = `week-${week}`;
-    try {
-      const { readAggJson } = await import("./research-agg.server");
-      const cached = await readAggJson<AreTheyPlayingPayload>("agg_are_they_playing", snapKey);
-      if (cached?.lines?.length) return cached;
-    } catch {
-      /* scrape below when allowed */
-    }
     if (!allowCompute) {
+      try {
+        const { readAggJson } = await import("./research-agg.server");
+        const cached = await readAggJson<AreTheyPlayingPayload>("agg_are_they_playing", snapKey);
+        if (cached?.lines?.length) return cached;
+      } catch {
+        /* scrape below when allowed */
+      }
       try {
         const { tidbConfigured } = await import("@/lib/tidb");
         if (tidbConfigured()) {
