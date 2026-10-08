@@ -14,14 +14,29 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchLeagueRostersForConnection } from "@/lib/league-rosters-fetch";
+import {
+  getNativeLeagueSummary,
+  updateNativeInviteCode,
+  type NativeMemberLeagueSummary,
+} from "@/lib/native-league.functions";
 import { canFetchMetaClient, fetchSleeperMetaClient } from "@/lib/sleeper-meta-client";
 import { markRevalidated, writeRosterCache } from "@/lib/roster-cache";
 import { touchLeagueSyncTimestamp } from "@/lib/league-sync-state";
+import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/account/leagues/")({
   ssr: false,
@@ -33,6 +48,13 @@ const buttonClass =
   "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
 const outlineClass =
   "rounded-md border border-border bg-white px-4 py-2 font-display text-sm uppercase tracking-wide text-slate-800 disabled:opacity-60";
+
+function nativeScoringLabel(preset: string | null | undefined): string {
+  const key = (preset ?? "half").toLowerCase();
+  if (key === "ppr") return "Full PPR";
+  if (key === "std" || key === "standard") return "Standard";
+  return "Half PPR";
+}
 
 export type ConnectionRow = {
   id: string;
@@ -177,10 +199,6 @@ function LeaguesPage() {
     }
   };
 
-  const selectLeague = (id: string) => {
-    setActiveLeagueId(id);
-  };
-
   const viewTools = (id: string) => {
     setActiveLeagueId(id);
     void navigate({ to: "/playbook" });
@@ -191,6 +209,7 @@ function LeaguesPage() {
 
   return (
     <AccountShell title="My Leagues" active="leagues">
+      <Toaster />
       <div className="space-y-10">
         <section className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -219,14 +238,9 @@ function LeaguesPage() {
               </p>
             </div>
           ) : (
-            <ul className="grid grid-cols-1 gap-3 md:grid-cols-[auto_auto_minmax(10rem,1fr)_10rem_auto]">
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-[auto_auto_minmax(10rem,1fr)_10rem_auto_auto]">
               {nativeRows.map((row) => (
-                <NativeLeagueRow
-                  key={row.id}
-                  row={row}
-                  onSelect={() => selectLeague(row.id)}
-                  onViewTools={() => viewTools(row.id)}
-                />
+                <NativeLeagueRow key={row.id} row={row} onViewTools={() => viewTools(row.id)} />
               ))}
             </ul>
           )}
@@ -310,16 +324,74 @@ function LeaguesPage() {
 
 function NativeLeagueRow({
   row,
-  onSelect,
   onViewTools,
 }: {
   row: NativeLinkRow;
-  onSelect: () => void;
   onViewTools: () => void;
 }) {
-  const label = row.label?.trim() || "Native League";
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteDraft, setInviteDraft] = useState("");
+  const [inviteSaving, setInviteSaving] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: summary } = useQuery({
+    queryKey: ["native-league-summary", row.id],
+    enabled: Boolean(row.id),
+    staleTime: 60_000,
+    retry: false,
+    queryFn: async (): Promise<NativeMemberLeagueSummary | null> =>
+      getNativeLeagueSummary({ data: { linkId: row.id } }),
+  });
+
+  const label = summary?.name?.trim() || row.label?.trim() || "Native League";
   const role =
     row.role === "commissioner" ? "Commissioner" : row.role === "co_commish" ? "Co-Commish" : "Member";
+  const canEditInvite = summary?.canEditInvite === true;
+  const inviteCode = summary?.inviteCode ?? "";
+  const scoring = nativeScoringLabel(summary?.scoringPreset);
+  const teamCount = summary?.teamCount;
+  const updatedAt = summary?.updatedAt || summary?.createdAt || row.created_at;
+
+  const openInvite = () => {
+    setInviteError(null);
+    setInviteDraft(inviteCode);
+    setInviteOpen(true);
+  };
+
+  const copyInvite = async () => {
+    const code = (canEditInvite ? inviteDraft : inviteCode).trim();
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success("Invite code copied.");
+    } catch {
+      toast.error("Could not copy invite code.");
+    }
+  };
+
+  const saveInvite = async () => {
+    if (!canEditInvite || inviteSaving) return;
+    setInviteSaving(true);
+    setInviteError(null);
+    try {
+      const result = await updateNativeInviteCode({
+        data: { linkId: row.id, inviteCode: inviteDraft },
+      });
+      if (!result.ok) {
+        setInviteError(result.error);
+        return;
+      }
+      setInviteDraft(result.inviteCode);
+      await queryClient.invalidateQueries({ queryKey: ["native-league-summary", row.id] });
+      toast.success("Invite code updated.");
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : "Could not update invite code.");
+    } finally {
+      setInviteSaving(false);
+    }
+  };
+
   return (
     <li className="col-span-full grid grid-cols-1 items-center gap-x-4 gap-y-3 rounded-xl border border-border bg-card px-4 py-4 md:grid-cols-subgrid">
       <span
@@ -332,18 +404,108 @@ function NativeLeagueRow({
       <div className="min-w-0">
         <p className="text-base font-semibold leading-tight text-black">{label}</p>
         <p className="text-sm font-medium leading-tight text-black">
-          Native · {role} · {row.season_year}
+          Native
+          <span className="mx-1 font-normal text-black/70">-</span>
+          {role}
         </p>
       </div>
-      <p className="text-sm text-black/70">Updated {formatRelativeTime(row.created_at)}</p>
-      <div className="flex items-center gap-2 md:justify-self-end">
-        <button type="button" className={outlineClass} onClick={onSelect}>
-          Select
-        </button>
-        <button type="button" className={buttonClass} onClick={onViewTools}>
-          Tools
-        </button>
+      <span className="whitespace-nowrap text-sm font-medium text-foreground md:justify-self-start">
+        Updated {formatRelativeTime(updatedAt)}
+      </span>
+      <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className="rounded-md border border-border px-2 py-1">{scoring}</span>
+        <span className="rounded-md border border-border px-2 py-1">Redraft</span>
+        <span className="rounded-md border border-border px-2 py-1">
+          {teamCount ? `${teamCount} Team` : "Teams"}
+        </span>
       </div>
+      <div className="flex items-center gap-2 md:justify-self-end">
+        <Link
+          to="/league/$linkId/settings"
+          params={{ linkId: row.id }}
+          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground"
+        >
+          Settings
+        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="League options"
+            className="rounded-md border border-border px-2 py-1.5 text-xs leading-none text-foreground"
+          >
+            ⋮
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem asChild className="font-medium">
+              <Link to="/league/$linkId" params={{ linkId: row.id }}>
+                Open League
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="font-medium">
+              <Link to="/league/$linkId/settings" params={{ linkId: row.id }}>
+                League Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="font-medium" onSelect={() => onViewTools()}>
+              View Tools
+            </DropdownMenuItem>
+            <DropdownMenuItem className="font-medium" onSelect={() => openInvite()}>
+              Invite Code
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>League invite code</DialogTitle>
+            <DialogDescription>
+              {canEditInvite
+                ? "Share this code so managers can join. Commissioners can customize it."
+                : "Share this code with managers who still need to join."}
+            </DialogDescription>
+          </DialogHeader>
+          {canEditInvite ? (
+            <label className="block text-sm font-medium text-slate-800">
+              Invite code
+              <input
+                className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2 font-mono text-sm uppercase tracking-wider text-slate-900 outline-none focus:border-primary"
+                value={inviteDraft}
+                onChange={(e) =>
+                  setInviteDraft(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16))
+                }
+                maxLength={16}
+                spellCheck={false}
+              />
+            </label>
+          ) : (
+            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-base tracking-wider text-foreground">
+              {inviteCode || "—"}
+            </p>
+          )}
+          {inviteError ? <p className="text-sm text-red-600">{inviteError}</p> : null}
+          <DialogFooter className="gap-2 sm:justify-between">
+            <button type="button" className={outlineClass} onClick={() => void copyInvite()}>
+              Copy
+            </button>
+            <div className="flex flex-wrap gap-2">
+              {canEditInvite ? (
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={inviteSaving || inviteDraft.trim().length < 4}
+                  onClick={() => void saveInvite()}
+                >
+                  {inviteSaving ? "Saving…" : "Save"}
+                </button>
+              ) : null}
+              <button type="button" className={outlineClass} onClick={() => setInviteOpen(false)}>
+                Close
+              </button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </li>
   );
 }
