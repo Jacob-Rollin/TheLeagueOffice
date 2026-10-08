@@ -15,6 +15,7 @@ import type { WeeklyMatchupEntry } from "@/lib/league.server";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
 import { scoreActualLine } from "@/lib/scoring-map";
+import { cn } from "@/lib/utils";
 
 import {
   HEX_CLIP,
@@ -24,7 +25,8 @@ import {
   buildProjectedOptimalLineup,
   entryPoints,
   gameStripLabels,
-  ordinal,
+  matchupClockStatus,
+  matchupViewerResult,
   possessionPill,
   progressFor,
   resolveEntryLineup,
@@ -168,6 +170,40 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const myProjected =
     showOptimized && optimizePlan ? optimizePlan.optimalTotal : myProjectedBase;
   const oppProjected = sumStarterProj(opponent);
+
+  let matchupStatus: { label: string; className: string } | null = null;
+  if (mine && opponent) {
+    if (isPastWeek) {
+      const result = matchupViewerResult(mine.points, opponent.points);
+      matchupStatus =
+        result === "won"
+          ? { label: "Won", className: "text-emerald-500" }
+          : result === "lost"
+            ? { label: "Lost", className: "text-red-500" }
+            : { label: "Tie", className: "text-m-muted" };
+    } else {
+      const oppStarters = resolveEntryLineup(
+        opponent,
+        slotLabels(rosterPositions),
+        playersById,
+      ).starters;
+      const clock = matchupClockStatus(
+        [
+          ...currentLineup.starters.map((r) => r.player),
+          ...oppStarters.map((r) => r.player),
+        ],
+        progressByNflTeam,
+        activeWeek,
+      );
+      matchupStatus =
+        clock === "live"
+          ? { label: "Live", className: "text-m-accent" }
+          : clock === "final"
+            ? { label: "Final", className: "text-m-card-fg" }
+            : { label: "Pre-Game", className: "text-m-muted" };
+    }
+  }
+
   const rowProps: RowHelpers = {
     pointsFor: (p) => {
       if (!mine) return null;
@@ -315,9 +351,14 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
               className="relative z-0 flex items-center justify-between border-t border-m-border px-4 pb-4 pt-3.5 font-display text-base font-semibold"
             >
               <span className="min-w-0 truncate pr-2">View Matchup</span>
-              <span className="flex shrink-0 items-center gap-1 text-m-muted">
-                {standingIndex >= 0 ? `${ordinal(standingIndex + 1)} in league` : ""}
-                <ChevronRight className="size-5" />
+              <span
+                className={cn(
+                  "flex shrink-0 items-center gap-1",
+                  matchupStatus?.className ?? "text-m-muted",
+                )}
+              >
+                {matchupStatus?.label ?? ""}
+                <ChevronRight className="size-5 text-m-muted" />
               </span>
             </Link>
           </div>

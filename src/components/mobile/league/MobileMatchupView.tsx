@@ -22,6 +22,7 @@ import {
   Score,
   entryPoints,
   gameStripLabels,
+  matchupViewerResult,
   minutesLeft,
   possessionPill,
   progressFor,
@@ -275,6 +276,11 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
               awayProjected={teamProjected(current.away)}
               pointsFor={pointsFor}
               projectedFor={cardHelpers.projectedFor}
+              viewerResult={
+                current.mine
+                  ? matchupViewerResult(current.home.points, current.away.points)
+                  : null
+              }
               onClose={() => setRecapOpen(false)}
             />
           ) : null}

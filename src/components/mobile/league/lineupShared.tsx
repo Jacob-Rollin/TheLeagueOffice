@@ -283,6 +283,38 @@ export function progressFor(team: string, progress: Map<string, NflGameProgress>
   return undefined;
 }
 
+/** Aggregate starter NFL phases into a fantasy matchup clock state. */
+export type MatchupClockStatus = "pre" | "live" | "final";
+
+export function matchupClockStatus(
+  starters: Array<Player | null | undefined>,
+  progressByNflTeam: Map<string, NflGameProgress>,
+  week: number,
+): MatchupClockStatus {
+  let sawPre = false;
+  let sawIn = false;
+  let sawPost = false;
+  for (const player of starters) {
+    if (!player) continue;
+    if (player.bye != null && Number(player.bye) === Number(week)) continue;
+    const phase = progressFor(player.team, progressByNflTeam)?.phase ?? "pre";
+    if (phase === "in") sawIn = true;
+    else if (phase === "post") sawPost = true;
+    else sawPre = true;
+  }
+  if (sawIn || (sawPost && sawPre)) return "live";
+  if (sawPost && !sawPre) return "final";
+  return "pre";
+}
+
+/** Result for the viewing manager after a completed matchup. */
+export type MatchupViewerResult = "won" | "lost" | "tied";
+
+export function matchupViewerResult(myPoints: number, oppPoints: number): MatchupViewerResult {
+  if (Math.abs(myPoints - oppPoints) < 0.005) return "tied";
+  return myPoints > oppPoints ? "won" : "lost";
+}
+
 export function shortName(player: Player) {
   if (player.pos === "DEF") return player.name.split(" ").at(-1) ?? player.name;
   const [first, ...rest] = player.name.split(" ");
