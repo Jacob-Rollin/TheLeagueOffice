@@ -34,14 +34,20 @@ export async function tidbNativeLeagueStatus(): Promise<{
     return { configured: false, tablesReady: false, missingTables: [...NATIVE_LEAGUE_TABLE_NAMES], leagueCount: 0 };
   }
 
-  const missingTables: string[] = [];
-  for (const table of NATIVE_LEAGUE_TABLE_NAMES) {
-    try {
-      await tidbExecute(`SELECT 1 FROM \`${table}\` LIMIT 1`);
-    } catch {
-      missingTables.push(table);
-    }
+  // One information_schema probe instead of SELECT 1 × N tables.
+  let present = new Set<string>();
+  try {
+    const placeholders = NATIVE_LEAGUE_TABLE_NAMES.map(() => "?").join(", ");
+    const rows = await tidbExecute<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables
+       WHERE table_schema = DATABASE() AND table_name IN (${placeholders})`,
+      [...NATIVE_LEAGUE_TABLE_NAMES],
+    );
+    present = new Set(rows.map((r) => String(r.table_name)));
+  } catch {
+    present = new Set();
   }
+  const missingTables = NATIVE_LEAGUE_TABLE_NAMES.filter((name) => !present.has(name));
 
   let leagueCount = 0;
   if (!missingTables.includes("native_leagues")) {
@@ -56,7 +62,7 @@ export async function tidbNativeLeagueStatus(): Promise<{
   return {
     configured: true,
     tablesReady: missingTables.length === 0,
-    missingTables,
+    missingTables: [...missingTables],
     leagueCount,
   };
 }
@@ -121,13 +127,17 @@ export type NativeLeagueAdminListRow = {
 export async function listNativeLeaguesForAdmin(limit = 500): Promise<NativeLeagueAdminListRow[]> {
   if (!tidbConfigured()) return [];
   const cap = Math.min(Math.max(Number(limit) || 500, 1), 1000);
+  // Join once for filled seats — avoids correlated COUNT per league row.
   return await tidbExecute<NativeLeagueAdminListRow>(
     `SELECT l.id, l.season_year, l.name, l.invite_code, l.commissioner_user_id, l.status,
             l.league_type, l.team_count, l.current_week, l.scoring_preset, l.draft_mode,
             l.draft_status, l.created_at,
-            (SELECT COUNT(*) FROM native_teams t
-             WHERE t.league_id = l.id AND t.user_id IS NOT NULL) AS filled_teams
+            COALESCE(f.c, 0) AS filled_teams
      FROM native_leagues l
+     LEFT JOIN (
+       SELECT league_id, COUNT(*) AS c FROM native_teams
+       WHERE user_id IS NOT NULL GROUP BY league_id
+     ) f ON f.league_id = l.id
      ORDER BY l.created_at DESC
      LIMIT ${cap}`,
   );
