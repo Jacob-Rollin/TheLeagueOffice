@@ -25,9 +25,18 @@ function NativeLeagueDashboard() {
   });
 
   if (!board) return null;
-  const { summary, canManage, teams } = board;
+  const { summary, canManage, teams, currentWeek, weekMatchups, rosters, ownership } = board;
   const draftDone = summary.draftStatus === "complete";
   const liveDeferred = summary.draftMode === "live" && !draftDone;
+  const myTeamId = summary.teamId;
+  const myRoster = myTeamId != null ? rosters.find((r) => r.teamId === myTeamId) : null;
+  const myTeam = myTeamId != null ? teams.find((t) => t.id === myTeamId) : null;
+  const teamName = (id: number) => teams.find((t) => t.id === id)?.teamName ?? `Team ${id}`;
+  const myMatchup =
+    myTeamId == null
+      ? null
+      : weekMatchups.find((m) => m.homeTeamId === myTeamId || m.awayTeamId === myTeamId) ?? null;
+  const ownedCount = Object.keys(ownership).length;
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -54,14 +63,15 @@ function NativeLeagueDashboard() {
         ) : (
           <>
             <p className="mt-2 text-sm text-slate-600">
-              Draft complete — league is in season. Lineups, waivers, and matchups land in the next phases.
+              Draft complete — week {currentWeek} is live. Browse free agents on Players; lineups and
+              waivers land next.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Link to="/league/$linkId/teams" params={{ linkId }} className={buttonClass}>
-                View Teams
+              <Link to="/league/$linkId/players" params={{ linkId }} className={buttonClass}>
+                League Players
               </Link>
-              <Link to="/playbook" className={outlineClass}>
-                Research Tools
+              <Link to="/league/$linkId/teams" params={{ linkId }} className={outlineClass}>
+                View Teams
               </Link>
             </div>
           </>
@@ -89,6 +99,18 @@ function NativeLeagueDashboard() {
               {summary.filledTeams}/{summary.teamCount}
             </dd>
           </div>
+          {draftDone ? (
+            <>
+              <div>
+                <dt className="text-muted-foreground">Current week</dt>
+                <dd className="font-medium text-slate-900">Week {currentWeek}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Rostered players</dt>
+                <dd className="font-medium text-slate-900">{ownedCount}</dd>
+              </div>
+            </>
+          ) : null}
         </dl>
         <ul className="mt-4 space-y-1 text-sm text-slate-700">
           {teams.slice(0, 6).map((t) => (
@@ -102,6 +124,55 @@ function NativeLeagueDashboard() {
           ) : null}
         </ul>
       </section>
+
+      {draftDone ? (
+        <>
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">My Roster</h2>
+            {myTeam && myRoster ? (
+              <>
+                <p className="mt-2 text-sm text-slate-600">
+                  {myTeam.teamName} · {myRoster.playerIds.length} players
+                </p>
+                <Link
+                  to="/league/$linkId/players"
+                  params={{ linkId }}
+                  className={`${outlineClass} mt-4 inline-flex`}
+                >
+                  Open Players
+                </Link>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-slate-600">No team seat linked to your account.</p>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">
+              Week {currentWeek} Matchup
+            </h2>
+            {myMatchup ? (
+              <p className="mt-2 text-base font-semibold text-slate-900">
+                {teamName(myMatchup.homeTeamId)}{" "}
+                <span className="font-normal text-muted-foreground">vs</span>{" "}
+                {teamName(myMatchup.awayTeamId)}
+              </p>
+            ) : weekMatchups.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                {weekMatchups.slice(0, 6).map((m) => (
+                  <li key={m.matchupId} className="border-t border-border py-1.5">
+                    {teamName(m.homeTeamId)} vs {teamName(m.awayTeamId)}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-slate-600">
+                Schedule not generated yet — complete the draft to build week pairings.
+              </p>
+            )}
+          </section>
+        </>
+      ) : null}
     </div>
   );
 }

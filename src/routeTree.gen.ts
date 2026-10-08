@@ -66,6 +66,7 @@ import { Route as LeagueLinkIdIndexRouteImport } from './routes/league.$linkId.i
 import { Route as LeagueLinkIdTeamsRouteImport } from './routes/league.$linkId.teams'
 import { Route as LeagueLinkIdDraftRouteImport } from './routes/league.$linkId.draft'
 import { Route as LeagueLinkIdSettingsRouteImport } from './routes/league.$linkId.settings'
+import { Route as LeagueLinkIdPlayersRouteImport } from './routes/league.$linkId.players'
 import { Route as ApiAdminSeedPlayerWarehouseRouteImport } from './routes/api/admin/seed-player-warehouse'
 import { Route as ApiAdminTidbMigrateRouteImport } from './routes/api/admin/tidb-migrate'
 import { Route as ApiCronLeagueDeltaSyncRouteImport } from './routes/api/cron/league-delta-sync'
@@ -379,6 +380,11 @@ const LeagueLinkIdSettingsRoute = LeagueLinkIdSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => LeagueLinkIdRoute,
 } as any)
+const LeagueLinkIdPlayersRoute = LeagueLinkIdPlayersRouteImport.update({
+  id: '/players',
+  path: '/players',
+  getParentRoute: () => LeagueLinkIdRoute,
+} as any)
 const ApiAdminSeedPlayerWarehouseRoute =
   ApiAdminSeedPlayerWarehouseRouteImport.update({
     id: '/api/admin/seed-player-warehouse',
@@ -560,6 +566,7 @@ export interface FileRoutesByFullPath {
   '/league/$linkId/teams': typeof LeagueLinkIdTeamsRoute
   '/league/$linkId/draft': typeof LeagueLinkIdDraftRoute
   '/league/$linkId/settings': typeof LeagueLinkIdSettingsRoute
+  '/league/$linkId/players': typeof LeagueLinkIdPlayersRoute
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
@@ -640,6 +647,7 @@ export interface FileRoutesByTo {
   '/league/$linkId/teams': typeof LeagueLinkIdTeamsRoute
   '/league/$linkId/draft': typeof LeagueLinkIdDraftRoute
   '/league/$linkId/settings': typeof LeagueLinkIdSettingsRoute
+  '/league/$linkId/players': typeof LeagueLinkIdPlayersRoute
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
@@ -722,6 +730,7 @@ export interface FileRoutesById {
   '/league/$linkId/teams': typeof LeagueLinkIdTeamsRoute
   '/league/$linkId/draft': typeof LeagueLinkIdDraftRoute
   '/league/$linkId/settings': typeof LeagueLinkIdSettingsRoute
+  '/league/$linkId/players': typeof LeagueLinkIdPlayersRoute
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
   '/api/cron/league-delta-sync': typeof ApiCronLeagueDeltaSyncRoute
@@ -807,6 +816,7 @@ export interface FileRouteTypes {
     | '/league/$linkId/teams'
     | '/league/$linkId/draft'
     | '/league/$linkId/settings'
+    | '/league/$linkId/players'
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
@@ -888,6 +898,7 @@ export interface FileRouteTypes {
     | '/league/$linkId/teams'
     | '/league/$linkId/draft'
     | '/league/$linkId/settings'
+    | '/league/$linkId/players'
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
@@ -970,6 +981,7 @@ export interface FileRouteTypes {
     | '/league/$linkId/teams'
     | '/league/$linkId/draft'
     | '/league/$linkId/settings'
+    | '/league/$linkId/players'
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
     | '/api/cron/league-delta-sync'
@@ -1045,6 +1057,7 @@ export interface RootRouteChildren {
   LeagueLinkIdTeamsRoute: typeof LeagueLinkIdTeamsRoute
   LeagueLinkIdDraftRoute: typeof LeagueLinkIdDraftRoute
   LeagueLinkIdSettingsRoute: typeof LeagueLinkIdSettingsRoute
+  LeagueLinkIdPlayersRoute: typeof LeagueLinkIdPlayersRoute
   ApiAdminSeedPlayerWarehouseRoute: typeof ApiAdminSeedPlayerWarehouseRoute
   ApiAdminTidbMigrateRoute: typeof ApiAdminTidbMigrateRoute
   ApiCronLeagueDeltaSyncRoute: typeof ApiCronLeagueDeltaSyncRoute
@@ -1466,6 +1479,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeagueLinkIdSettingsRouteImport
       parentRoute: typeof LeagueLinkIdRoute
     }
+    '/league/$linkId/players': {
+      id: '/league/$linkId/players'
+      path: '/players'
+      fullPath: '/league/$linkId/players'
+      preLoaderRoute: typeof LeagueLinkIdPlayersRouteImport
+      parentRoute: typeof LeagueLinkIdRoute
+    }
     '/api/admin/seed-player-warehouse': {
       id: '/api/admin/seed-player-warehouse'
       path: '/api/admin/seed-player-warehouse'
@@ -1705,12 +1725,14 @@ interface LeagueLinkIdRouteChildren {
   LeagueLinkIdTeamsRoute: typeof LeagueLinkIdTeamsRoute
   LeagueLinkIdDraftRoute: typeof LeagueLinkIdDraftRoute
   LeagueLinkIdSettingsRoute: typeof LeagueLinkIdSettingsRoute
+  LeagueLinkIdPlayersRoute: typeof LeagueLinkIdPlayersRoute
 }
 const LeagueLinkIdRouteChildren: LeagueLinkIdRouteChildren = {
   LeagueLinkIdIndexRoute: LeagueLinkIdIndexRoute,
   LeagueLinkIdTeamsRoute: LeagueLinkIdTeamsRoute,
   LeagueLinkIdDraftRoute: LeagueLinkIdDraftRoute,
   LeagueLinkIdSettingsRoute: LeagueLinkIdSettingsRoute,
+  LeagueLinkIdPlayersRoute: LeagueLinkIdPlayersRoute,
 }
 const LeagueLinkIdRouteWithChildren = LeagueLinkIdRoute._addFileChildren(
   LeagueLinkIdRouteChildren,
