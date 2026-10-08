@@ -10,6 +10,8 @@ on:
   schedule:
     # After research-aggregates (08:15) and Vercel 07:00 backup.
     - cron: "45 8 * * *"
+    # After Wed–Fri afternoon practice-report warm (18:15).
+    - cron: "45 18 * * 3,4,5"
     # Evening gameday refresh (after research 19:15).
     - cron: "45 19 * * 0,1,4"
   workflow_dispatch: {}
