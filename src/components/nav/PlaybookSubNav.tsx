@@ -55,6 +55,7 @@ function platformLabel(platform: string): string {
   if (value === "espn") return "ESPN";
   if (value === "sleeper") return "Sleeper";
   if (value === "yahoo") return "Yahoo";
+  if (value === "native") return "Native";
   return platform || "League";
 }
 

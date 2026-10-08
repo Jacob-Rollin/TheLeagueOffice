@@ -36,6 +36,9 @@ export async function fetchLeagueSettingsForConnection(input: {
   let leagueId = String(input.leagueId ?? "").trim();
   if (!leagueId) return null;
 
+  // Native settings load from TiDB in a later phase — never fall through to Fluid.
+  if (platform === "native") return null;
+
   if (platform === "sleeper") {
     const resolved = await ensureSleeperNumericLeagueId(leagueId).catch(() => null);
     if (resolved) {

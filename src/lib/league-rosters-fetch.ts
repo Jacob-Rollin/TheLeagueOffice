@@ -32,6 +32,9 @@ export async function fetchLeagueRostersForConnection(input: {
   let leagueId = String(input.leagueId ?? "").trim();
   if (!leagueId) return null;
 
+  // Native rosters load from TiDB in a later phase — never fall through to Fluid.
+  if (platform === "native") return null;
+
   if (platform === "sleeper") {
     const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(
       "@/lib/sleeper-resolve-client"
