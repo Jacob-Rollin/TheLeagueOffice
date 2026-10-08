@@ -72,9 +72,9 @@ export function CommishSection({
   children: ReactNode;
 }) {
   return (
-    <section className="min-w-0 space-y-3 px-4 py-4">
+    <section className="w-full min-w-0 max-w-full space-y-3 overflow-x-clip px-4 py-4">
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <h2 className="min-w-0 font-display text-lg font-bold text-m-card-fg">{title}</h2>
+        <h2 className="min-w-0 break-words font-display text-lg font-bold text-m-card-fg">{title}</h2>
         {info ? (
           <span title={info} className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-m-border text-m-muted">
             <Info className="size-3.5" />
@@ -122,11 +122,15 @@ export function ToggleRow({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 items-center justify-between gap-4 py-2">
-      <div className="min-w-0 flex-1">
-        <p className="text-base text-m-card-fg">{label}</p>
+    <div className="flex w-full min-w-0 max-w-full items-center justify-between gap-3 py-2">
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <p className="truncate text-base text-m-card-fg">{label}</p>
         {description ? <p className="mt-0.5 text-sm text-m-muted">{description}</p> : null}
       </div>
+      {/*
+        Fixed box + overflow-hidden: the on-state must never grow past the track.
+        Prior translate-x thumbs spilled right and briefly widened the page (horizontal wiggle).
+      */}
       <button
         type="button"
         role="switch"
@@ -134,12 +138,11 @@ export function ToggleRow({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          // Flex + justify keeps the thumb inside the track (no translate overflow / horizontal wiggle).
-          "inline-flex h-7 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50",
+          "box-border inline-flex h-7 w-11 shrink-0 items-center overflow-hidden rounded-full p-0.5 transition-colors disabled:opacity-50",
           checked ? "justify-end bg-m-accent" : "justify-start bg-m-border",
         )}
       >
-        <span className="pointer-events-none size-6 rounded-full bg-white shadow" />
+        <span className="pointer-events-none block size-6 shrink-0 rounded-full bg-white shadow-sm" />
       </button>
     </div>
   );
@@ -161,12 +164,12 @@ export function SegmentedRow<T extends string>({
   disabled?: boolean;
 }) {
   return (
-    <div className="min-w-0 space-y-2 py-2">
+    <div className="w-full min-w-0 max-w-full space-y-2 py-2">
       <div className="min-w-0">
         <p className="text-base text-m-card-fg">{label}</p>
         {description ? <p className="mt-0.5 text-sm text-m-muted">{description}</p> : null}
       </div>
-      <div className="flex max-w-full flex-wrap gap-2">
+      <div className="flex w-full max-w-full flex-wrap gap-2">
         {options.map((opt) => {
           const active = opt.value === value;
           return (
@@ -176,7 +179,7 @@ export function SegmentedRow<T extends string>({
               disabled={disabled}
               onClick={() => onChange(opt.value)}
               className={cn(
-                "max-w-full rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors disabled:opacity-50",
+                "max-w-full break-words rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors disabled:opacity-50",
                 active
                   ? "border-m-accent bg-m-accent/15 text-m-accent"
                   : "border-m-border bg-m-card text-m-card-fg",

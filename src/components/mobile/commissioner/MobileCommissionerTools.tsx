@@ -34,8 +34,9 @@ import {
 } from "./MobileCommissionerChrome";
 
 const dialogShellClass =
-  "fixed inset-0 z-[60] overflow-x-hidden overflow-y-auto overscroll-x-none bg-m-bg touch-pan-y";
-const dialogInnerClass = "mx-auto flex min-h-full w-full max-w-md flex-col overflow-x-hidden";
+  "fixed inset-0 z-[60] max-w-[100vw] overflow-x-clip overflow-y-auto overscroll-x-none bg-m-bg touch-pan-y";
+const dialogInnerClass =
+  "mx-auto flex min-h-full w-full max-w-md flex-col overflow-x-clip";
 const dialogInnerStyle = { paddingBottom: COMMISH_SCROLL_PAD } as const;
 
 type HubTab = "league" | "draft" | "rosters";

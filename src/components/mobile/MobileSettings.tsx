@@ -38,10 +38,10 @@ export function MobileSettingsOverlay({ onClose }: { onClose: () => void }) {
       role="dialog"
       aria-modal="true"
       aria-label="Settings"
-      className="fixed inset-0 z-[60] overflow-x-hidden overflow-y-auto overscroll-x-none bg-m-bg touch-pan-y"
+      className="fixed inset-0 z-[60] max-w-[100vw] overflow-x-clip overflow-y-auto overscroll-x-none bg-m-bg touch-pan-y"
     >
       <div
-        className="mx-auto w-full max-w-md overflow-x-hidden"
+        className="mx-auto w-full max-w-md overflow-x-clip"
         style={{ paddingBottom: COMMISH_SCROLL_PAD }}
       >
         <header className="sticky top-0 z-10 flex items-center justify-center border-b border-m-border bg-m-header px-4 py-3 text-m-header-fg">
