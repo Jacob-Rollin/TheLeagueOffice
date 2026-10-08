@@ -169,6 +169,14 @@ export const getNativeLeagueSummary = createServerFn({ method: "GET" })
     return await getNativeLeagueSummaryForLink(context.userId, data.linkId);
   });
 
+/** Batched My Leagues summaries — one Fluid call instead of N× getNativeLeagueSummary. */
+export const listNativeLeagueSummaries = createServerFn({ method: "GET" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .handler(async ({ context }): Promise<NativeMemberLeagueSummary[]> => {
+    const { listNativeLeagueSummariesForUser } = await import("@/lib/native-league-ops.server");
+    return await listNativeLeagueSummariesForUser(context.userId);
+  });
+
 export const updateNativeInviteCode = createServerFn({ method: "POST" })
   .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((input: { linkId: string; inviteCode: string }) => ({

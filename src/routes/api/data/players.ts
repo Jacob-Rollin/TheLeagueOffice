@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { jsonResponse } from "@/lib/api-cache";
+import { jsonResponse, warehouseCacheControl } from "@/lib/api-cache";
+import { processMemo } from "@/lib/process-memo";
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
 
 type WarehouseRow = {
@@ -59,21 +60,28 @@ export const Route = createFileRoute("/api/data/players")({
         const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
         try {
-          const countRows = await tidbExecute<{ c: number }>(
-            `SELECT COUNT(*) AS c FROM player_warehouse ${whereSql}`,
-            params,
+          const memoKey = `warehouse-players:${q}|${position}|${team}|${limit}|${offset}`;
+          const payload = await processMemo(memoKey, 30_000, async () => {
+            const countRows = await tidbExecute<{ c: number }>(
+              `SELECT COUNT(*) AS c FROM player_warehouse ${whereSql}`,
+              params,
+            );
+            const total = Number(countRows[0]?.c ?? 0);
+            const players = await tidbExecute<WarehouseRow>(
+              `SELECT sleeper_id, player_name, position, team, fantasycalc_value,
+                      leaguelogs_status, injury_type, injury_notes, updated_at
+               FROM player_warehouse
+               ${whereSql}
+               ORDER BY player_name ASC
+               LIMIT ? OFFSET ?`,
+              [...params, limit, offset],
+            );
+            return { players, total };
+          });
+          return jsonResponse(
+            { ok: true, players: payload.players, total: payload.total, limit, offset },
+            { cache: warehouseCacheControl() },
           );
-          const total = Number(countRows[0]?.c ?? 0);
-          const players = await tidbExecute<WarehouseRow>(
-            `SELECT sleeper_id, player_name, position, team, fantasycalc_value,
-                    leaguelogs_status, injury_type, injury_notes, updated_at
-             FROM player_warehouse
-             ${whereSql}
-             ORDER BY player_name ASC
-             LIMIT ? OFFSET ?`,
-            [...params, limit, offset],
-          );
-          return jsonResponse({ ok: true, players, total, limit, offset });
         } catch (error) {
           const message = error instanceof Error ? error.message : "query failed";
           console.error("[api/data/players]", message);

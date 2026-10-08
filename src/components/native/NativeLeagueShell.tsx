@@ -20,6 +20,7 @@ export function NativeLeagueShell({ linkId }: { linkId: string }) {
   const { data: board, isLoading, error } = useQuery({
     queryKey: ["native-league-board", linkId],
     enabled: Boolean(userId && linkId),
+    staleTime: 60_000,
     retry: false,
     queryFn: () => getNativeLeagueBoard({ data: { linkId } }),
   });

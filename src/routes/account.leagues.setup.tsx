@@ -68,6 +68,7 @@ function NativeLeagueSetupPage() {
       setCreatedInvite(result.inviteCode);
       await queryClient.invalidateQueries({ queryKey: ["league-connections", userId] });
       await queryClient.invalidateQueries({ queryKey: ["native-league-links", userId] });
+      await queryClient.invalidateQueries({ queryKey: ["native-league-summaries", userId] });
       await queryClient.invalidateQueries({ queryKey: ["active-league-connections", userId] });
       await refresh();
       setActiveLeagueId(result.linkId);

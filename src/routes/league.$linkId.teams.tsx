@@ -43,6 +43,7 @@ function NativeLeagueTeamsPage() {
   const { data: board } = useQuery({
     queryKey: ["native-league-board", linkId],
     enabled: Boolean(user?.id && linkId),
+    staleTime: 60_000,
     queryFn: () => getNativeLeagueBoard({ data: { linkId } }),
   });
 
