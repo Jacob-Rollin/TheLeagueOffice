@@ -8,8 +8,6 @@ on:
   schedule:
     # Morning warm (after Vercel 07:00 backup window) — all days including Saturday.
     - cron: "15 8 * * *"
-    # Afternoon refresh Wed–Fri after club practice reports post (≈2:15pm ET).
-    - cron: "15 18 * * 3,4,5"
     # Evening refresh on gamedays (Sun/Mon/Thu) for injury designations.
     - cron: "15 19 * * 0,1,4"
   workflow_dispatch:

@@ -111,13 +111,10 @@ export const Route = createFileRoute("/api/data/research/$kind")({
           }
 
           if (kind === "are-they-playing") {
-            // Browse reads snap-cdn; Publish Snap CDN fetches this route with
-            // CRON_SECRET and must be allowed to rebuild (practice marks change
-            // midweek — a warm-but-stale TiDB row would pin empty Wed/Thu/Fri).
-            const { authorizeCronRequest } = await import("@/lib/cron-auth.server");
-            const allowCompute = authorizeCronRequest(request);
+            // Read-only TiDB. Practice scrapes stay on `/api/cron/research-aggregates`
+            // (`?only=are-they-playing` Mon–Fri) — never on browse or snap publish.
             const { loadAreTheyPlaying } = await import("@/lib/are-they-playing.server");
-            const payload = await loadAreTheyPlaying(week ?? 1, { allowCompute });
+            const payload = await loadAreTheyPlaying(week ?? 1);
             return researchOk(payload, payload.lines.length > 0);
           }
 
