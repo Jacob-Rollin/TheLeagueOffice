@@ -46,6 +46,11 @@ function NativeMyTeamPage() {
     for (const p of players) map[p.id] = p.pos;
     return map;
   }, [players]);
+  const injuryById = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const p of players) map[p.id] = p.injury_status ?? p.injury ?? null;
+    return map;
+  }, [players]);
   const nameById = useMemo(() => {
     const map = new Map<string, { name: string; pos: string; team: string }>();
     for (const p of players) map.set(p.id, { name: p.name, pos: p.pos, team: p.team });
@@ -73,7 +78,10 @@ function NativeMyTeamPage() {
       setViews(viewsFromSlotsRecord(counts, lineup.slots));
       setDirty(false);
     } else if (lineup.rosterPlayerIds.length > 0 && Object.keys(posById).length > 0) {
-      const defaults = buildDefaultLineupSlots(lineup.rosterPlayerIds, posById, counts);
+      const defaults = buildDefaultLineupSlots(lineup.rosterPlayerIds, posById, counts, {
+        injuryById,
+        irEligibility: lineup.irEligibility,
+      });
       setViews(viewsFromSlotsRecord(counts, defaults));
       setDirty(true);
     } else {
@@ -82,7 +90,7 @@ function NativeMyTeamPage() {
     }
     setVersion(lineup.version);
     setSelectedKey(null);
-  }, [lineup, posById]);
+  }, [lineup, posById, injuryById]);
 
   const selectedIndex = views.findIndex((v) => `${v.key}:${v.index}` === selectedKey);
 
@@ -128,6 +136,7 @@ function NativeMyTeamPage() {
           version,
           slots: slotsRecordFromViews(views),
           posById,
+          injuryById,
         },
       });
       if (!result.ok) {

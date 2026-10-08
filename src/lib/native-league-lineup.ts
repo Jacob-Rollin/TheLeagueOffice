@@ -4,6 +4,10 @@
  */
 
 import { ROSTER_SLOT_KEYS, type RosterSlotKey } from "@/lib/league-settings";
+import {
+  parseIrEligibility,
+  type NativeIrEligibility,
+} from "@/lib/native-league-settings";
 
 export type NativeLineupSlots = Record<string, Array<string | null>>;
 
@@ -19,6 +23,23 @@ const FLEX_ELIGIBLE = new Set(["RB", "WR", "TE"]);
 const WRRB_ELIGIBLE = new Set(["WR", "RB"]);
 const WRTE_ELIGIBLE = new Set(["WR", "TE"]);
 const SFLEX_ELIGIBLE = new Set(["QB", "RB", "WR", "TE"]);
+
+/** Designations that satisfy IR when league rule is injured_only. */
+const IR_ELIGIBLE_STATUSES = new Set([
+  "IR",
+  "O",
+  "OUT",
+  "D",
+  "DOUBTFUL",
+  "PUP",
+  "SUS",
+  "SUSPENDED",
+  "NA",
+  "COVID-19",
+  "COVID",
+  "Q",
+  "QUESTIONABLE",
+]);
 
 export function normalizePlayerPos(pos: string | null | undefined): string {
   const p = String(pos ?? "").trim().toUpperCase();
@@ -38,6 +59,19 @@ export function slotAcceptsPos(slot: RosterSlotKey, pos: string): boolean {
   return slot === p;
 }
 
+/** True when injury designation may occupy an IR lineup slot under injured_only. */
+export function playerEligibleForIr(injuryStatus: string | null | undefined): boolean {
+  const raw = String(injuryStatus ?? "").trim();
+  if (!raw) return false;
+  const upper = raw.toUpperCase();
+  if (IR_ELIGIBLE_STATUSES.has(upper)) return true;
+  // Sleeper sometimes returns "Questionable (Knee)" etc.
+  for (const token of IR_ELIGIBLE_STATUSES) {
+    if (upper.includes(token)) return true;
+  }
+  return false;
+}
+
 export function parseRosterSlotCounts(
   raw: Record<string, unknown> | null | undefined,
 ): Partial<Record<RosterSlotKey, number>> {
@@ -48,6 +82,32 @@ export function parseRosterSlotCounts(
     if (Number.isFinite(n) && n > 0) out[key] = n;
   }
   return out;
+}
+
+/** Active roster capacity (starters + BN + TAXI). IR does not add a free FA spot. */
+export function countActiveRosterCapacity(
+  counts: Partial<Record<RosterSlotKey, number>> | Record<string, unknown> | null | undefined,
+): number {
+  const parsed =
+    counts && typeof counts === "object" && !Array.isArray(counts)
+      ? parseRosterSlotCounts(counts as Record<string, unknown>)
+      : {};
+  let total = 0;
+  for (const [key, n] of Object.entries(parsed)) {
+    if (key === "IR") continue;
+    if (typeof n === "number" && n > 0) total += n;
+  }
+  return total > 0 ? total : 15;
+}
+
+export function countIrSlots(
+  counts: Partial<Record<RosterSlotKey, number>> | Record<string, unknown> | null | undefined,
+): number {
+  const parsed =
+    counts && typeof counts === "object" && !Array.isArray(counts)
+      ? parseRosterSlotCounts(counts as Record<string, unknown>)
+      : {};
+  return Math.max(0, Math.floor(Number(parsed.IR ?? 0)) || 0);
 }
 
 /** Expand slot counts into ordered empty slot rows (starters then BN/IR/TAXI). */
@@ -106,15 +166,27 @@ export function buildDefaultLineupSlots(
   rosterPlayerIds: string[],
   posById: Record<string, string>,
   counts: Partial<Record<RosterSlotKey, number>>,
+  options?: {
+    injuryById?: Record<string, string | null | undefined>;
+    irEligibility?: NativeIrEligibility;
+  },
 ): NativeLineupSlots {
   const views = expandLineupSlots(counts);
   const remaining = [...rosterPlayerIds];
+  const irRule = options?.irEligibility ?? "injured_only";
+  const injuryById = options?.injuryById ?? {};
 
-  const place = (pred: (pos: string) => boolean) => {
+  const place = (pred: (key: RosterSlotKey) => boolean) => {
     for (const row of views) {
       if (row.playerId) continue;
       if (!pred(row.key)) continue;
-      const idx = remaining.findIndex((id) => slotAcceptsPos(row.key, posById[id] ?? ""));
+      const idx = remaining.findIndex((id) => {
+        if (!slotAcceptsPos(row.key, posById[id] ?? "")) return false;
+        if (row.key === "IR" && irRule === "injured_only") {
+          return playerEligibleForIr(injuryById[id]);
+        }
+        return true;
+      });
       if (idx < 0) continue;
       row.playerId = remaining.splice(idx, 1)[0] ?? null;
     }
@@ -123,7 +195,10 @@ export function buildDefaultLineupSlots(
   place((key) => key === "QB" || key === "RB" || key === "WR" || key === "TE" || key === "K" || key === "DEF");
   place((key) => key === "FLEX" || key === "WRRB" || key === "WRTE" || key === "SFLEX");
   place((key) => key === "BN");
-  place((key) => key === "IR" || key === "TAXI");
+  place((key) => key === "TAXI");
+  place((key) => key === "IR");
+  // Spill leftovers into BN if IR rejected them under injured_only.
+  place((key) => key === "BN");
 
   return slotsRecordFromViews(views);
 }
@@ -133,10 +208,14 @@ export function validateNativeLineupSlots(input: {
   counts: Partial<Record<RosterSlotKey, number>>;
   rosterPlayerIds: string[];
   posById: Record<string, string>;
+  /** Optional injury map for IR eligibility (catalog / Sleeper tokens). */
+  injuryById?: Record<string, string | null | undefined>;
+  irEligibility?: NativeIrEligibility;
 }): { ok: true; slots: NativeLineupSlots } | { ok: false; error: string } {
   const views = viewsFromSlotsRecord(input.counts, input.slots);
   const rosterSet = new Set(input.rosterPlayerIds);
   const seen = new Set<string>();
+  const irRule = input.irEligibility ?? "injured_only";
 
   for (const row of views) {
     const id = row.playerId;
@@ -152,6 +231,15 @@ export function validateNativeLineupSlots(input: {
     if (!slotAcceptsPos(row.key, pos)) {
       const label = row.key === "DEF" ? "DST" : row.key;
       return { ok: false, error: `${pos || "Player"} cannot start in ${label}` };
+    }
+    if (row.key === "IR" && irRule === "injured_only") {
+      const injury = input.injuryById?.[id];
+      if (!playerEligibleForIr(injury)) {
+        return {
+          ok: false,
+          error: "Only injured / inactive players can fill IR under league settings",
+        };
+      }
     }
   }
 

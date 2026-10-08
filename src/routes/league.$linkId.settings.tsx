@@ -10,7 +10,11 @@ import {
   updateNativeInviteCode,
   updateNativeLeagueBasics,
 } from "@/lib/native-league.functions";
-import type { NativeDraftMode, NativeScoringPreset } from "@/lib/native-league-settings";
+import type {
+  NativeDraftMode,
+  NativeIrEligibility,
+  NativeScoringPreset,
+} from "@/lib/native-league-settings";
 
 export const Route = createFileRoute("/league/$linkId/settings")({
   ssr: false,
@@ -40,6 +44,9 @@ function NativeLeagueSettingsInLeague() {
   const [name, setName] = useState("");
   const [scoringPreset, setScoringPreset] = useState<NativeScoringPreset>("half");
   const [draftMode, setDraftMode] = useState<NativeDraftMode>("offline");
+  const [benchSpots, setBenchSpots] = useState(6);
+  const [irSpots, setIrSpots] = useState(1);
+  const [irEligibility, setIrEligibility] = useState<NativeIrEligibility>("injured_only");
   const [inviteDraft, setInviteDraft] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -48,6 +55,9 @@ function NativeLeagueSettingsInLeague() {
     setName(board.summary.name);
     setScoringPreset((board.summary.scoringPreset as NativeScoringPreset) || "half");
     setDraftMode(board.summary.draftMode === "live" ? "live" : "offline");
+    setBenchSpots(Number(board.rosterSlots.BN ?? 6) || 0);
+    setIrSpots(Number(board.rosterSlots.IR ?? 1) || 0);
+    setIrEligibility(board.irEligibility ?? "injured_only");
     setInviteDraft(board.summary.inviteCode);
   }, [board]);
 
@@ -72,6 +82,9 @@ function NativeLeagueSettingsInLeague() {
           name,
           scoringPreset,
           draftMode,
+          benchSpots,
+          irSpots,
+          irEligibility,
         },
       });
       if (!result.ok) {
@@ -155,6 +168,48 @@ function NativeLeagueSettingsInLeague() {
               <option value="live">Live snake (entry board available; clock later)</option>
             </select>
           </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={labelClass}>
+              Bench spots
+              <input
+                type="number"
+                min={0}
+                max={20}
+                className={fieldClass}
+                value={benchSpots}
+                disabled={!canManage || settingsLocked || saving}
+                onChange={(e) => setBenchSpots(Number(e.target.value))}
+              />
+            </label>
+            <label className={labelClass}>
+              IR spots
+              <input
+                type="number"
+                min={0}
+                max={5}
+                className={fieldClass}
+                value={irSpots}
+                disabled={!canManage || settingsLocked || saving}
+                onChange={(e) => setIrSpots(Number(e.target.value))}
+              />
+            </label>
+          </div>
+          <label className={labelClass}>
+            IR eligibility
+            <select
+              className={fieldClass}
+              value={irEligibility}
+              disabled={!canManage || settingsLocked || saving}
+              onChange={(e) => setIrEligibility(e.target.value as NativeIrEligibility)}
+            >
+              <option value="injured_only">Injured / inactive only</option>
+              <option value="any">Any rostered player</option>
+            </select>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Active roster capacity is starters + bench (+ taxi). IR is a lineup designation and does
+            not add a free free-agent spot. Capacity: {board.rosterCapacity}.
+          </p>
         </div>
 
         {canManage && !settingsLocked ? (
