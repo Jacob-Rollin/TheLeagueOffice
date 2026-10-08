@@ -71,35 +71,35 @@ function MobileHeader() {
       <Settings className="size-5" strokeWidth={2.5} />
     </button>
   );
-  const headerClass = cn(
-    "sticky top-0 z-20 flex items-center justify-between bg-m-header px-4 pb-3 text-m-header-fg",
+  // Safe-area sits outside the content row so the logo stays truly centered.
+  const headerShellClass = cn(
+    "sticky top-0 z-20 bg-m-header text-m-header-fg",
     theme === "dark" ? "border-b border-m-border" : "shadow-[0_2px_6px_rgba(0,0,0,0.18)]",
   );
-  // With viewport-fit=cover, clear the iPhone notch / status bar.
-  const headerStyle = { paddingTop: "calc(0.75rem + env(safe-area-inset-top, 0px))" } as const;
+  const headerShellStyle = { paddingTop: "env(safe-area-inset-top, 0px)" } as const;
+  const headerRowClass = "relative flex items-center justify-between px-4 py-3";
 
   if (subpageTitle && leagueId) {
     return (
-      <header className={headerClass} style={headerStyle}>
-        <button
-          type="button"
-          aria-label="Back"
-          className={iconButtonClass}
-          onClick={() =>
-            router.history.canGoBack()
-              ? router.history.back()
-              : void router.navigate({ to: "/m/league/$leagueId/team", params: { leagueId } })
-          }
-        >
-          <ChevronLeft className="size-6" strokeWidth={2.5} />
-        </button>
-        <h1
-          className="absolute left-1/2 -translate-x-1/2 font-display text-xl font-semibold tracking-wide"
-          style={{ top: "calc((100% + env(safe-area-inset-top, 0px)) / 2)", transform: "translate(-50%, -50%)" }}
-        >
-          {subpageTitle}
-        </h1>
-        <span className="size-11" aria-hidden="true" />
+      <header className={headerShellClass} style={headerShellStyle}>
+        <div className={headerRowClass}>
+          <button
+            type="button"
+            aria-label="Back"
+            className={iconButtonClass}
+            onClick={() =>
+              router.history.canGoBack()
+                ? router.history.back()
+                : void router.navigate({ to: "/m/league/$leagueId/team", params: { leagueId } })
+            }
+          >
+            <ChevronLeft className="size-6" strokeWidth={2.5} />
+          </button>
+          <h1 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-display text-xl font-semibold tracking-wide">
+            {subpageTitle}
+          </h1>
+          <span className="size-11" aria-hidden="true" />
+        </div>
       </header>
     );
   }
@@ -107,31 +107,32 @@ function MobileHeader() {
   return (
     <>
       {settingsOpen ? <MobileSettingsOverlay onClose={closeSettings} /> : null}
-      <header className={headerClass} style={headerStyle}>
-        {inLeague ? (
-          <Link to="/m" aria-label="Home" className={iconButtonClass}>
-            <House className="size-5" strokeWidth={2.5} />
-          </Link>
-        ) : (
-          settingsButton
-        )}
+      <header className={headerShellClass} style={headerShellStyle}>
+        <div className={headerRowClass}>
+          {inLeague ? (
+            <Link to="/m" aria-label="Home" className={iconButtonClass}>
+              <House className="size-5" strokeWidth={2.5} />
+            </Link>
+          ) : (
+            settingsButton
+          )}
 
-        <Link
-          to="/m"
-          aria-label="The League Office home"
-          className="absolute left-1/2 -translate-x-1/2"
-          style={{ top: "calc((100% + env(safe-area-inset-top, 0px)) / 2)", transform: "translate(-50%, -50%)" }}
-        >
-          <img src="/the-league-logo.png" alt="" className="h-12 w-auto" />
-        </Link>
-
-        {inLeague ? (
-          settingsButton
-        ) : (
-          <Link to="/" aria-label="Open desktop site" className={iconButtonClass}>
-            <Monitor className="size-5" strokeWidth={2.5} />
+          <Link
+            to="/m"
+            aria-label="The League Office home"
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+          >
+            <img src="/the-league-logo.png" alt="" className="h-12 w-auto" />
           </Link>
-        )}
+
+          {inLeague ? (
+            settingsButton
+          ) : (
+            <Link to="/" aria-label="Open desktop site" className={iconButtonClass}>
+              <Monitor className="size-5" strokeWidth={2.5} />
+            </Link>
+          )}
+        </div>
       </header>
     </>
   );
