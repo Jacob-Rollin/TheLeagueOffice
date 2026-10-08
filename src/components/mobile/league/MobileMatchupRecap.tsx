@@ -6,7 +6,7 @@ import type { WeeklyMatchupEntry } from "@/lib/league.server";
 import type { Player } from "@/lib/players-build";
 import { cn } from "@/lib/utils";
 
-import { Score, shortName, type LineupRow } from "./lineupShared";
+import { Score, shortName, type LineupRow, type MatchupViewerResult } from "./lineupShared";
 import { MobileTeamLogo } from "./MobileStandings";
 
 type SideLineup = { starters: LineupRow[]; bench: LineupRow[] };
@@ -43,6 +43,7 @@ export function MobileMatchupRecap({
   awayProjected,
   pointsFor,
   projectedFor,
+  viewerResult,
   onClose,
 }: {
   week: number;
@@ -55,6 +56,8 @@ export function MobileMatchupRecap({
   awayProjected: number;
   pointsFor: (entry: WeeklyMatchupEntry, player: Player) => number;
   projectedFor: (player: Player) => number | null;
+  /** Set when the open recap is the signed-in manager's matchup. */
+  viewerResult?: MatchupViewerResult | null;
   onClose: () => void;
 }) {
   const margin = Math.round((home.points - away.points) * 100) / 100;
@@ -157,6 +160,21 @@ export function MobileMatchupRecap({
         </div>
 
         <div className="space-y-4 px-3 py-4">
+          {viewerResult === "won" || viewerResult === "lost" || viewerResult === "tied" ? (
+            <section className="rounded-xl bg-m-card px-4 py-3.5 text-center shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
+              <p
+                className={cn(
+                  "font-display text-2xl font-extrabold italic tracking-wide",
+                  viewerResult === "won" && "text-emerald-500",
+                  viewerResult === "lost" && "text-red-500",
+                  viewerResult === "tied" && "text-m-muted",
+                )}
+              >
+                {viewerResult === "won" ? "You Won" : viewerResult === "lost" ? "You Lost" : "You Tied"}
+              </p>
+            </section>
+          ) : null}
+
           <section className="rounded-xl bg-m-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
               <div className="min-w-0 text-center">
