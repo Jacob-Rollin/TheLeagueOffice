@@ -5,10 +5,13 @@
 | Decision | Choice |
 | --- | --- |
 | League type (v1) | **Redraft season-long only** (Keeper / Dynasty / Best Ball / IDP deferred; document settings for later) |
-| Draft modes (v1) | **Offline / commissioner-entered** + **scheduled live snake** (auction deferred) |
+| Draft modes (v1) | **Offline / commissioner-entered** + **scheduled live snake** (auction / salary-cap deferred; NFL “Auto” draft deferred) |
 | Data home | **TiDB for high-churn native league ops**; **Supabase A for auth + thin membership index** |
+| Mobile settings UX | **NFL Fantasy Commissioner Tools IA** (tabs + drill-down lists), styled with our existing `.mobile-theme-light` / `.mobile-theme-dark` tokens — not NFL’s black/gold chrome |
 
 This plan is the blueprint for making “run a league natively” real. Today those tables exist on Supabase A as **schema-only** — no create/join UI, no mutation engine, incomplete settings vs host platforms. Synced Sleeper/ESPN/Yahoo Playbook remains unchanged.
+
+**Reference:** NFL Fantasy commissioner / league settings screenshots (League Info, Scoring, Waivers/Adds/Trades, Playoffs & Ties, Divisions, Teams, Draft Settings, Keepers) inform the settings catalog and mobile IA below. Source images live in [`docs/references/nfl-fantasy-settings/`](references/nfl-fantasy-settings/). Our mobile Waivers/Trades pages ([`MobileTransactionPages.tsx`](../src/components/mobile/league/MobileTransactionPages.tsx)) already follow that list + empty-state pattern for **synced** leagues.
 
 ---
 
@@ -76,17 +79,56 @@ Supabase free tier stays healthy because it only sees auth + occasional membersh
 
 Canonical runtime shape for native leagues should extend [`LeagueSettingsDetail`](../src/lib/league-settings.ts) into a persisted `settings_json` (Sleeper-keyed scoring map + structured knobs). Below is the **redraft v1** catalog — store everything we need for parity with NFL.com / ESPN / Sleeper redraft; defer dynasty/IDP/best-ball **behavior**, but keep schema extensible via JSON so we do not paint ourselves into fixed columns again.
 
+### 3.0 NFL Fantasy screenshot inventory (source of truth for IA)
+
+Commissioner Tools root uses three tabs. Persist every field below even when v1 UI locks some to defaults.
+
+#### Tab: League
+
+| Screen | Fields from NFL Fantasy | Persist key(s) | v1 behavior |
+| --- | --- | --- | --- |
+| **League Info** | League name; league password; league start week (1–5); auto-activate next year; viewable by public; read-only league id | `name`, `join_password_hash` (optional), `season_start_week`, `auto_activate_next_year`, `is_public`, `id` | Name + invite code required; password optional; public view default off; auto-activate stored for season roll |
+| **Scoring** | Tabs: Passing / Rushing / Receiving / Kicking (+ Defense/Misc). Ratio yards (“1 pt every N yds”); TDs; INTs; attempts/completions/incompletions/sacks; bonuses (300–399, 400+, 40+ TD) | `scoring_preset`, `scoring_settings` JSON (Sleeper keys) | Full editor; map yard ratios ↔ `pass_yd` etc. |
+| **Waivers, Adds, Trades** | See §3.4–3.5 expanded rows | many | Full redraft set |
+| **Playoffs & Ties** | Weeks per playoff matchup (1 / 2 all / 2 championship); playoff teams (none/4/6/7/8); playoff weeks (16&17 / 17&18); standings tiebreaker (PF / H2H / division); allow matchup ties; matchup tiebreaker position (Bench/QB/RB/WR/TE/K/DEF) | `playoff_*`, `standings_tiebreaker`, `allow_matchup_ties`, `matchup_tiebreaker` | Implement; division tiebreaker only if divisions on |
+| **Divisions** | Toggle on/off; (when on) name divisions + assign teams | `divisions_enabled`, `divisions` JSON | **Schema + toggle in v1**; naming/assign UI ships with schedule generator when enabled |
+| **Teams** | Team count chips (NFL shows 10–20); remove teams (pre-draft only) | `team_count`, `native_teams` rows | Support **4–20**; add/remove only before draft starts |
+| **Managers & Co-Managers** | Invite, primary owner, co-managers | `native_teams.user_id`, roles on links | Commissioner + co-commish + member |
+
+#### Tab: Draft
+
+| Screen | Fields | Persist | v1 |
+| --- | --- | --- | --- |
+| **Draft Settings** | Draft type: Live / Auto / Offline; format: Standard / Salary Cap; order: Snake / Linear; time per pick (15/30/45/60s…) | `draft_mode`, `draft_format`, `draft_order_type`, `draft_pick_time_limit_sec`, `draft_scheduled_at` | **Live snake + Offline**; Auto + Salary Cap stored as enums but disabled in UI |
+
+#### Tab: Rosters
+
+| Screen | Fields | Persist | v1 |
+| --- | --- | --- | --- |
+| **Keeper Settings** | Keepers per team; note to managers | `keepers_per_team`, `keeper_note` | UI visible, **forced 0** / note optional; no keeper execution until Keeper phase |
+
+#### Manager-facing (non-commish) — already partially built for synced
+
+| Screen | Pattern | Native addition |
+| --- | --- | --- |
+| **Waivers** | Tabs Pending / Waiver Report; empty state; gear rows for priority, type, period | Real pending claims + report from `native_waiver_claims` |
+| **Trades** | Propose CTA; empty pending; gear rows for max trades, review type, deadline, reject time | Real `native_trades` + settings from TiDB |
+
 ### 3.1 League identity & structure
 
 | Setting | NFL | ESPN | Sleeper | v1 native |
 | --- | --- | --- | --- | --- |
 | League name | Yes | Yes | Yes | Yes |
-| Team count (typically 4–14 / 8–12) | Yes | Yes | Yes | Yes (4–14) |
+| League password (join) | Yes | Optional | Invite link | Optional hash + invite code |
+| League start week | Yes (1–5) | Implicit | Implicit | Yes (`season_start_week`, default 1) |
+| Auto-activate next year | Yes | — | — | Persist boolean; cron uses on season roll |
+| Viewable by public | Yes | Yes | Yes | Default **off**; if on, standings/matchups CDN-readable |
+| Team count | 10–20 typical | Varies | Varies | **4–20** |
 | Season year | Yes | Yes | Yes | Yes |
 | League type Redraft / Keeper / Dynasty | Yes | Yes | Yes | **Redraft only**; store `league_type` enum for later |
 | Best Ball | — | — | Yes | Deferred (`best_ball` flag reserved false) |
-| Divisions | Yes | Yes | Optional | Deferred (flat schedule) |
-| Public / private | Yes | Yes | Yes | Private + invite code |
+| Divisions | Yes | Yes | Optional | Schema + toggle; assign teams when enabled |
+| Public / private | Yes | Yes | Yes | Private + invite code (password optional) |
 
 ### 3.2 Roster slots
 
@@ -105,73 +147,87 @@ Also persist: `max_roster_spots`, IR eligibility rules (must be designated OUT/I
 
 **Do not** expand `league_scoring_settings` fixed columns. Persist full map + `scoring_preset` (`std` \| `half` \| `ppr` \| `custom`).
 
+Mobile editor mirrors NFL: horizontal tabs **Passing / Rushing / Receiving / Kicking / Defense / Misc**, label left / numeric field right, section **Bonuses**.
+
+**Yard ratios:** NFL UI “1 pt every N yds” ↔ store Sleeper-style `pass_yd = 1/N` (existing `formatScoringValue` already understands this). Editor may show N and convert on save.
+
+**Passing fields from NFL screenshot (map to keys):** yards (`pass_yd`), TDs (`pass_td`), INTs (`pass_int`), attempts (`pass_att`), completions (`pass_cmp`), incompletions (`pass_inc`), sacked (`pass_sack`), bonuses 300–399 / 400+ / 40+ TD (`bonus_pass_yd_300`, `bonus_pass_yd_400`, `pass_td_40p`). Same pattern for rush/rec/kick/def via `SCORING_GROUPS`.
+
 **Core (all three platforms):** pass_yd/td/int/2pt, rush_yd/td/2pt, rec/rec_yd/rec_td/rec_2pt, fum_lost, K (PAT + FG buckets), DST (sack/int/fum_rec/ff/safe/blk/td + points-allowed buckets).
 
-**Extended (Sleeper-complete; ESPN/NFL custom leagues use subsets):** from `SCORING_GROUPS` — attempts, first downs, 40+/50+ bonuses, 100/200/300/400 yard bonuses, TE/RB/WR reception premiums, FG miss-by-distance, `fgm_50_59` / `fgm_60p`, return yards, etc.
+**Extended:** attempts, completions, first downs, 40+/50+ bonuses, yard bonuses, TE/RB/WR reception premiums, FG miss-by-distance, `fgm_50_59` / `fgm_60p`, return yards, etc.
 
-**NFL.com specifics to support via same map:** standard / PPR / half; custom point values; fractional points; defense PA brackets (align keys to Sleeper `pts_allow_*`).
-
-**ESPN specifics:** map through existing `ESPN_STAT_MAP` concepts when importing presets; expand map coverage for K distance + DEF when building native preset templates (native leagues are not ESPN sync — presets are UX copy).
+**ESPN specifics:** map through existing `ESPN_STAT_MAP` for presets; expand K/DEF coverage in native preset templates.
 
 **Yahoo:** not a create-path source for v1; half-PPR preset is enough if we ever import.
 
-### 3.4 Waivers & free agency
+### 3.4 Waivers, adds & free agency (NFL-expanded)
 
-| Setting | NFL | ESPN | Sleeper | v1 |
-| --- | --- | --- | --- | --- |
-| Waiver type: Rolling / Reverse standings / FAAB | Yes | Yes | Yes | All three |
-| FAAB budget | Yes | Yes | Yes | Yes when type=FAAB |
-| Waiver clear / period (hours or days) | Yes | Yes | Yes | Store hours; UI can show days |
-| Daily waivers vs weekly | Partial | Partial | `daily_waivers` | Weekly process cron + optional daily clear time |
-| Waiver process time (e.g. Wed AM) | Yes | Yes | Yes | Cron schedule + league timezone |
-| Free agent after clear (first come) | Yes | Yes | Yes | Yes — **requires locking** (see §6) |
-| Claim priority order | Yes | Yes | Yes | Persist per team; rotate on Rolling |
-
-### 3.5 Trades
-
-| Setting | NFL | ESPN | Sleeper | v1 |
-| --- | --- | --- | --- | --- |
-| Trades enabled | Yes | Yes | Yes | Yes |
-| Trade deadline (week or datetime) | Yes | Date | Week | Store both week + optional timestamp |
-| Review / veto window (hours/days) | Yes | Yes | Review days | Yes |
-| Veto: commissioner / league vote / none | Yes | Yes | Yes | Commish + none in v1; vote deferred |
-| Max trades / season | — | Yes | — | Optional |
-| Trade for future picks | Dynasty | Dynasty | Dynasty | **No** in redraft v1 |
-
-### 3.6 Schedule & playoffs
-
-| Setting | v1 |
-| --- | --- |
-| Regular season weeks | Generate 1…`playoff_start_week - 1` |
-| Playoff teams / start week / rounds | Yes |
-| Consolation bracket | Deferred |
-| Medial / third-place game | Optional flag deferred |
-| Matchup pairing algorithm | Snake-friendly round-robin generator (deterministic seed) |
-| Lineup lock | Per player NFL game start (preferred) or week kickoff |
-
-### 3.7 Draft (v1 modes)
-
-| Setting | Offline | Live snake |
+| Setting | NFL Fantasy values | v1 |
 | --- | --- | --- |
-| Draft date/time (UTC + league tz display) | Optional scheduled “draft night” marker | Required for clock |
-| Rounds | Yes | Yes |
-| Snake vs linear | Commissioner order | Snake default |
-| Pick timer seconds | N/A | Yes (`draft_pick_time_limit`) |
-| Draft order | Manual / random | Random + commissioner reorder before start |
-| Autopick / queue | N/A | Simple queue + autopick on timeout |
-| Commissioner assign pick | **Primary path** | Override stuck picks |
-| Auction | — | Deferred |
+| Waiver period | No Waivers / 1–4 days | Store days (0 = none → FA only); process cron respects |
+| Waiver type | Move to Last after Claim, Never Reset; Resets to Inverse Standings | Map → `rolling` / `reverse`; plus **FAAB** (ESPN/Sleeper parity) |
+| Post-draft players | Free Agents / Follow Waiver Rules | `post_draft_player_status` enum |
+| Lock free agents on gametime | ON/OFF | `lock_fa_on_gametime` — blocks FA add after player’s NFL kickoff |
+| Max adds per week | No Maximum / N | `max_adds_per_week` NULL = unlimited |
+| Max adds per season | No Maximum / N | `max_adds_per_season` NULL |
+| Top players undroppable | ON/OFF | `undroppable_top_players` — when on, protect top-N by ADP/value at draft end |
+| Roster lock type | Game Time / First Game | `roster_lock_type` — per-player kickoff vs week’s first kickoff |
+| FAAB budget | (ESPN/Sleeper; not on this NFL screen) | Yes when `waiver_type=faab` |
+| Claim priority order | Shown as “5 of 10” | Persist per team; rotate on rolling; rebuild on reverse |
 
-### 3.8 Explicitly deferred (document only)
+### 3.5 Trades (NFL-expanded)
 
-- Keeper count / keeper cost / keeper rounds
+| Setting | NFL Fantasy values | v1 |
+| --- | --- | --- |
+| Max trades per season | Unlimited / N | `max_trades_per_season` NULL |
+| Trade review type | Commissioner Review (+ League Vote / None on other hosts) | `trade_veto_mode`: `none` \| `commissioner` (vote deferred) |
+| Trade deadline | Calendar datetime (e.g. Thu Nov 20) | `trade_deadline_at` (+ optional week mirror) |
+| Trade reject / review time | Hours/days window | `trade_review_hours` |
+| Trade for future picks | Dynasty | **No** in redraft v1 |
+
+### 3.6 Schedule & playoffs (NFL-expanded)
+
+| Setting | NFL Fantasy values | v1 |
+| --- | --- | --- |
+| Weeks per playoff matchup | 1 Week; 2 Weeks (All); 2 Weeks (Championship) | `playoff_matchup_length` enum |
+| Playoff teams | None / 4 / 6 / 7 / 8 | `playoff_teams` (0 = disabled) |
+| Playoff weeks | 16&17 / 17&18 | Derive `playoff_start_week` + length from pair |
+| Standings tiebreaker | Points For / Head to Head / Division Record | `standings_tiebreaker` |
+| Allow matchup ties | ON/OFF | `allow_matchup_ties` |
+| Matchup tiebreaker | Bench / QB / RB / WR / TE / K / DEF | `matchup_tiebreaker_slot` — scoring engine compares that bucket |
+| Regular season schedule | (generated) | Round-robin; respect divisions when enabled |
+| Consolation bracket | — | Deferred |
+
+### 3.7 Draft (NFL-expanded; v1 modes)
+
+| Setting | NFL options | v1 |
+| --- | --- | --- |
+| Draft type | Live / Auto / Offline | **Live** + **Offline**; Auto deferred |
+| Draft format | Standard / Salary Cap | **Standard** only; Salary Cap deferred |
+| Draft order | Snake / Linear | Both |
+| Time per pick | 15 / 30 / 45 / 60 (+ more as needed) | Seconds int; live only |
+| Draft date/time | (schedule) | `draft_scheduled_at` |
+| Commissioner assign / undo | Offline + live override | Yes |
+| Autopick / queue | Live | Queue + ADP fallback on timeout |
+
+### 3.8 Keepers (document + schema; no execution in v1)
+
+| Setting | NFL | v1 |
+| --- | --- | --- |
+| Keepers per team | Stepper | Persist; UI locked at **0** |
+| Note to managers | Free text | Optional string |
+
+### 3.9 Explicitly deferred (behavior)
+
+- Keeper execution / keeper cost / keeper rounds
 - Dynasty taxi years, rookie drafts, draft capital trades
 - Best Ball (no weekly lineups)
 - IDP slots + IDP scoring
-- Divisions + strength-of-schedule custom schedules
-- League vote veto
-- DFS-style salary caps
-- NFL.com “guillotine” / unique formats
+- Draft type Auto; draft format Salary Cap / auction
+- League vote trade veto
+- NFL.com guillotine / unique formats
+- Full public website SEO pages (flag only)
 
 ---
 
@@ -187,44 +243,70 @@ native_leagues
   season_year SMALLINT
   name VARCHAR(128)
   invite_code VARCHAR(16) UNIQUE   -- league join, not site signup
+  join_password_hash VARCHAR(255) NULL
   commissioner_user_id VARCHAR(36)
   status ENUM('setup','drafting','in_season','completed')
-  league_type ENUM('redraft')      -- extend later
-  team_count TINYINT
+  league_type ENUM('redraft')      -- extend later: keeper, dynasty
+  is_public TINYINT(1) DEFAULT 0
+  auto_activate_next_year TINYINT(1) DEFAULT 1
+  season_start_week TINYINT DEFAULT 1
+  team_count TINYINT               -- 4–20
   current_week TINYINT
   playoff_start_week TINYINT
-  playoff_teams TINYINT
+  playoff_teams TINYINT            -- 0 = none
+  playoff_matchup_length ENUM('one','two_all','two_championship')
+  playoff_week_pair VARCHAR(16)    -- e.g. '16-17' | '17-18'
+  standings_tiebreaker ENUM('points_for','head_to_head','division')
+  allow_matchup_ties TINYINT(1) DEFAULT 0
+  matchup_tiebreaker_slot VARCHAR(8)  -- Bench|QB|RB|WR|TE|K|DEF
+  divisions_enabled TINYINT(1) DEFAULT 0
+  divisions JSON NULL              -- [{id,name,team_ids[]}]
   roster_slots JSON                -- RosterSlotKey → count
   scoring_preset VARCHAR(16)
   scoring_settings JSON            -- full Sleeper-keyed map
   waiver_type ENUM('rolling','reverse','faab')
   waiver_budget INT NULL
-  waiver_clear_hours INT
-  waiver_process_weekday TINYINT   -- 0=Sun … UTC/league tz
-  waiver_process_time CHAR(5)      -- HH:MM in league_tz
+  waiver_period_days TINYINT       -- 0 = no waivers (FA only)
+  waiver_clear_hours INT NULL       -- optional finer control
+  waiver_process_weekday TINYINT
+  waiver_process_time CHAR(5)
+  post_draft_player_status ENUM('free_agents','follow_waiver_rules')
+  lock_fa_on_gametime TINYINT(1) DEFAULT 1
+  max_adds_per_week INT NULL
+  max_adds_per_season INT NULL
+  undroppable_top_players TINYINT(1) DEFAULT 0
+  roster_lock_type ENUM('game_time','first_game') DEFAULT 'game_time'
   league_tz VARCHAR(64)
   trade_deadline_week TINYINT NULL
   trade_deadline_at DATETIME NULL
   trade_review_hours INT
   trade_veto_mode ENUM('none','commissioner')
-  draft_mode ENUM('offline','live_snake')
+  max_trades_per_season INT NULL
+  draft_mode ENUM('offline','live','auto')  -- auto reserved
+  draft_format ENUM('standard','salary_cap') -- salary_cap reserved
+  draft_order_type ENUM('snake','linear') DEFAULT 'snake'
   draft_status ENUM('not_started','scheduled','live','paused','complete')
   draft_scheduled_at DATETIME NULL
   draft_pick_time_limit_sec INT
   draft_order JSON                 -- [team_id,…]
   current_draft_pick INT
-  settings_version INT             -- bump on settings change
+  keepers_per_team TINYINT DEFAULT 0
+  keeper_note TEXT NULL
+  settings_version INT
   created_at, updated_at
 
 native_teams
   id BIGINT PK AI
   league_id CHAR(36)
-  user_id VARCHAR(36) NULL         -- null = open seat / AI placeholder later
+  user_id VARCHAR(36) NULL         -- null = open seat
   team_name VARCHAR(64)
   avatar_url VARCHAR(512) NULL
+  division_id VARCHAR(36) NULL
   draft_slot TINYINT
   waiver_priority INT
   faab_balance INT NULL
+  adds_this_week INT DEFAULT 0
+  adds_this_season INT DEFAULT 0
   UNIQUE(league_id, user_id)
   UNIQUE(league_id, draft_slot)
 
@@ -380,13 +462,14 @@ Deprecate unused Supabase `leagues` / `lineups` / … for new work (leave tables
 4. Season roll → `native_season_archive`; reset or new `season_year` row for following year (redraft redrafts).
 5. CDN route `/api/data/native-league/$id` for history views (member auth or league-private token — prefer auth).
 
-### Phase 5 — Polish & parity
+### Phase 5 — Mobile commissioner + polish
 
-1. Co-commissioner role, email/link invites, push-less in-app toasts.
-2. Commissioner tools: force drop, reverse transaction, edit scores (audit log).
-3. Export season JSON / CSV.
-4. Mobile `/m` native league paths.
-5. Document deferred Keeper/Dynasty/Best Ball/IDP → Phase N.
+1. Mobile Commissioner Tools sheet (§8) — League / Draft / Rosters drill-downs with SAVE, light+dark.
+2. Wire native claims/trades into existing Waivers/Trades mobile pages.
+3. Co-commissioner role, email/link invites, push-less in-app toasts.
+4. Commissioner tools: force drop, reverse transaction, edit scores (audit log).
+5. Export season JSON / CSV.
+6. Document deferred Keeper execution / Dynasty / Best Ball / IDP / Auto draft / Salary Cap → Phase N.
 
 ---
 
@@ -458,18 +541,92 @@ Single TiDB transaction per league:
 | Supabase | Auth + `native_league_links` | Low churn |
 | Synced Playbook | Unchanged | Keep Fluid bans in `.cursorrules` |
 
-**Hard product caps (v1):** ≤14 teams/league, ≤3 commissioner leagues/user, claim queue length cap, transaction log pagination (no unbounded dumps).
+**Hard product caps (v1):** ≤20 teams/league, ≤3 commissioner leagues/user, claim queue length cap, transaction log pagination (no unbounded dumps).
 
 **Monitoring:** log TiDB RU-ish proxies (query count / latency) on native cron and mutation routes; alert if native traffic dominates Fluid Active CPU (reuse lean cron style from `league-delta-sync.yml`).
 
 ---
 
-## 8. Product surfaces to build
+## 8. Mobile Commissioner Tools UX (NFL IA × our themes)
+
+Mobile settings menus follow the **information architecture** of NFL Fantasy Commissioner Tools, but use **our** `/m` theme system — never copy NFL black/gold as a new palette.
+
+### 8.1 Theme mapping
+
+Wrap all commissioner screens in existing [`MobileShell`](../src/components/mobile/MobileShell.tsx) / `mobile-theme-light|dark` ([`styles.css`](../src/styles.css)):
+
+| NFL screenshot cue | Our token / pattern |
+| --- | --- |
+| Near-black page bg | `--m-bg` (light `#e4e1da`, dark `#121212`) |
+| Header bar | `--m-header` / `--m-header-fg` (light cyan header, dark `#121212`) |
+| Close / back icon button | `--m-icon-bg` / `--m-icon-fg` (same pattern as [`MobileSettingsOverlay`](../src/components/mobile/MobileSettings.tsx)) |
+| Active tab underline / selected chip | `--m-accent` / `--m-tab-active` (teal/cyan — already matches NFL accent role) |
+| List row text | `--m-card-fg`; secondary subtext `--m-muted` |
+| Dividers | `--m-border` |
+| Primary CTA (Propose Trade) | `--m-cta` / `--m-cta-fg` (our yellow CTA — do **not** switch to NFL gold nav) |
+| Bottom nav active | `--m-nav-active` (blue, already intentionally not yellow) |
+| Form inputs / chips | `--m-select-bg` / `--m-chip`; selected segment `--m-tab-active` |
+| Sheet / nested card | `--m-sheet` / `--m-card` |
+
+**Rule:** Structure and control types match NFL; colors and fonts stay League Office mobile (Archivo / display utilities already used under `/m`).
+
+### 8.2 Information architecture (routes)
+
+```
+/m/league/$leagueId/commissioner          → root sheet: tabs League | Draft | Rosters
+  League/
+    league-info                           → name, password, start week, toggles, id
+    scoring                               → Passing|Rushing|Receiving|Kicking|Defense|Misc + SAVE
+    waivers-adds-trades                   → waiver/add/trade settings + SAVE
+    playoffs-ties                         → playoff + tiebreaker settings + SAVE
+    divisions                             → toggle (+ assign when on)
+    teams                                 → team count chips + Remove Teams
+    managers                              → invites, co-managers
+  Draft/
+    draft-settings                        → type/format/order/timer + SAVE
+  Rosters/
+    keeper-settings                       → keepers stepper (locked 0) + note
+```
+
+Manager-facing (already stubbed for synced; wire native writes):
+
+- `/m/league/$leagueId/waivers` — Pending | Waiver Report + settings rows  
+- `/m/league/$leagueId/trades` — Propose Trade + settings rows  
+
+Entry: League tab overflow / gear → “Commissioner Tools” (commissioner & co-commish only).
+
+### 8.3 Reusable mobile components to add
+
+Extend patterns already in [`MobileTransactionPages.tsx`](../src/components/mobile/league/MobileTransactionPages.tsx) and [`MobileSettings.tsx`](../src/components/mobile/MobileSettings.tsx):
+
+| Component | Role |
+| --- | --- |
+| `MobileCommishSheet` | Full-screen overlay; title; X close; sticky header |
+| `MobileCommishTabs` | League / Draft / Rosters; `border-m-accent` underline |
+| `MobileSettingsNavRow` | Label + chevron `>` drill-down |
+| `MobileSettingRow` | Gear + title + muted value (reuse existing `SettingRow`) |
+| `MobileSegmentedChoice` | Horizontal chip group (waiver period, team count, draft type…) |
+| `MobileToggleRow` | Label + description + switch |
+| `MobileStepperRow` | − / value / + (keepers) |
+| `MobileFormField` | Label above rounded input; optional trailing eye icon |
+| `MobileSaveHeader` | Back + title + SAVE |
+| `MobileEmptyState` | Icon + headline + helper + outline button |
+
+All controls must be theme-token driven (`bg-m-*`, `text-m-*`, `border-m-*`) so light/dark flip with [`MobileThemeContext`](../src/components/mobile/MobileThemeContext.tsx).
+
+### 8.4 Desktop commissioner
+
+Desktop Playbook keeps Broadcast chrome (`SiteNav` + `PlaybookShell`). Settings can be a denser form of the same field groups — do **not** port mobile dark-sheet look to desktop research/playbook pages.
+
+---
+
+## 9. Product surfaces to build
 
 | Surface | Notes |
 | --- | --- |
 | Create League wizard | Presets mirroring NFL/ESPN/Sleeper redraft defaults |
-| Invite / join | Code + link; open seats; commissioner approve optional (default open with code) |
+| Invite / join | Code + link (+ optional password); open seats |
+| Mobile Commissioner Tools | §8 — NFL IA, our light/dark tokens |
 | League settings | Read-only mid-season for structural fields |
 | Draft room | Offline assign + live snake |
 | Playbook native | Dashboard, My Team, Matchup, Standings, Rosters, Transactions — same chrome as synced |
@@ -478,11 +635,11 @@ Single TiDB transaction per league:
 | Commissioner console | Scores, force txns, schedule, draft controls |
 | Active league switcher | Native + synced + sandbox coexist |
 
-Reuse: `PlaybookShell`, `PlayerModalHost`, `ActiveLeagueLabel`, research boards (scoring format from native `scoring_settings`). Do **not** invent a new visual theme — Broadcast tokens.
+Reuse: `PlaybookShell`, `PlayerModalHost`, `ActiveLeagueLabel`, research boards (scoring format from native `scoring_settings`). Desktop = Broadcast; mobile `/m` = existing mobile themes.
 
 ---
 
-## 9. Scoring engine notes
+## 10. Scoring engine notes
 
 1. Normalize all presets to Sleeper keys (existing philosophy in `scoring-map.ts`).
 2. Week stats source: prefer already-budgeted public/snap paths; one bundle per week, apply to all native leagues in cron (amortize RU + Sleeper budget).
@@ -491,19 +648,20 @@ Reuse: `PlaybookShell`, `PlayerModalHost`, `ActiveLeagueLabel`, research boards 
 
 ---
 
-## 10. Invites (league vs site)
+## 11. Invites (league vs site)
 
 | Mechanism | Purpose | Store |
 | --- | --- | --- |
 | Site `invite_codes` | Signup gate | Supabase (unchanged) |
 | League `invite_code` | Join native league | TiDB `native_leagues.invite_code` |
+| Optional league password | Extra gate (NFL Fantasy parity) | `join_password_hash` (never store plaintext) |
 | Optional email deep link | `/join/:code` | Same code |
 
 Regenerate code = commissioner action; rate-limit join attempts server-side.
 
 ---
 
-## 11. Testing plan
+## 12. Testing plan
 
 1. **Unit:** claim sort (FAAB ties, rolling rotation), roster legality, schedule generator, scoring apply on fixture stats.
 2. **Concurrency:** parallel add same player (one 200, one 409); parallel draft picks; trade vs FA race.
@@ -513,7 +671,7 @@ Regenerate code = commissioner action; rate-limit join attempts server-side.
 
 ---
 
-## 12. Risks & open engineering follow-ups (non-blocking)
+## 13. Risks & open engineering follow-ups (non-blocking)
 
 - **Realtime:** v1 = polling with `page-visibility`; Supabase Realtime not used for TiDB state.
 - **Legal/ToS:** native hosting increases responsibility for fair commissioner tools and dispute audit logs.
@@ -523,28 +681,30 @@ Regenerate code = commissioner action; rate-limit join attempts server-side.
 
 ---
 
-## 13. Suggested implementation order (engineering tickets)
+## 14. Suggested implementation order (engineering tickets)
 
-1. TiDB `native_*` DDL + migrate action  
+1. TiDB `native_*` DDL (NFL-expanded columns) + migrate action  
 2. Supabase `native_league_links`  
 3. Auth-gated TiDB client helper + membership checks  
-4. Create/join/settings APIs + wizard UI  
-5. Offline draft + roster commit  
-6. Schedule generator + Playbook read surfaces (CDN history stubs)  
-7. Lineup save + lock  
-8. FA add/drop with league lock  
-9. Waiver claims + cron  
-10. Trades + veto cron  
-11. Live snake draft  
-12. Weekly scoring cron + standings + archive  
-13. Commissioner console + audit  
-14. Mobile paths + caps/monitoring  
+4. Create/join/settings APIs + shared Zod settings schema  
+5. Mobile Commissioner Tools shell (tabs + nav rows + theme tokens) + desktop wizard  
+6. Offline draft + roster commit  
+7. Schedule generator + Playbook/mobile read surfaces (CDN history stubs)  
+8. Lineup save + lock (`game_time` / `first_game`)  
+9. FA add/drop with league lock + add caps / undroppable / FA gametime lock  
+10. Waiver claims + cron (rolling / reverse / FAAB)  
+11. Trades + veto cron  
+12. Live snake draft  
+13. Weekly scoring cron + standings + playoff/tiebreakers + archive  
+14. Commissioner audit tools + caps/monitoring  
+15. Keeper/Auto/Salary Cap unlock later  
 
 ---
 
-## 14. Success criteria (v1)
+## 15. Success criteria (v1)
 
 - Commissioner creates a redraft league, invites managers, completes offline or live snake draft.
+- Mobile Commissioner Tools mirrors NFL IA (League / Draft / Rosters) and works in both light and dark mobile themes.
 - Managers set lineups; two managers cannot own the same player; waiver/FAAB/trade paths are race-safe.
 - Week scores and matchups persist; prior weeks remain readable without burning Fluid/TiDB on every view.
 - Synced Sleeper/ESPN/Yahoo flows and free-tier guardrails in `.cursorrules` remain intact.
