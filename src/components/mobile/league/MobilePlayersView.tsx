@@ -102,7 +102,8 @@ export function MobilePlayersView() {
   const [limit, setLimit] = useState(PAGE_SIZE);
 
   const [pendingAdd, setPendingAdd] = useState<Player | null>(null);
-  const [dropId, setDropId] = useState("");
+  /** Chosen drop while confirming an add on a full roster. */
+  const [selectedDrop, setSelectedDrop] = useState<Player | null>(null);
   const [pendingDrop, setPendingDrop] = useState<Player | null>(null);
   const [pendingTrade, setPendingTrade] = useState<Player | null>(null);
   const [tradeGive, setTradeGive] = useState<string[]>([]);
@@ -180,13 +181,13 @@ export function MobilePlayersView() {
         if (result.requiresDrop) {
           const player = playersById.get(addPlayerId) ?? null;
           setPendingAdd(player);
-          setDropId(dropCandidates[0]?.id ?? "");
+          setSelectedDrop(null);
         }
         return;
       }
       toast.success(dropPlayerId ? "Add / drop submitted." : "Player added.");
       setPendingAdd(null);
-      setDropId("");
+      setSelectedDrop(null);
       await refreshNative();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not complete add.");
@@ -270,7 +271,7 @@ export function MobilePlayersView() {
         return;
       }
       setPendingAdd(player);
-      setDropId(dropCandidates.find((p) => p.id !== player.id)?.id ?? dropCandidates[0]?.id ?? "");
+      setSelectedDrop(null);
       return;
     }
     if (action === "drop") {
@@ -554,50 +555,80 @@ export function MobilePlayersView() {
         </button>
       ) : null}
 
-      {pendingAdd ? (
+      {pendingAdd && !selectedDrop ? (
+        <div className="fixed inset-0 z-50 flex flex-col bg-m-bg text-m-card-fg">
+          <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
+            <header className="shrink-0 border-b border-m-border bg-m-card px-4 pb-3 pt-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="font-display text-2xl font-bold">Choose a drop</h3>
+                  <p className="mt-1 text-sm text-m-muted">
+                    Roster full ({capacity}/{capacity}). Tap{" "}
+                    <span className="font-semibold text-[#e8551f]">−</span> to drop someone and add{" "}
+                    <span className="font-semibold text-m-card-fg">{pendingAdd.name}</span>.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  aria-label="Close"
+                  className="shrink-0 rounded-lg px-3 py-2 font-display text-sm font-semibold text-m-muted"
+                  onClick={() => {
+                    setPendingAdd(null);
+                    setSelectedDrop(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </header>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2.5 py-3 pb-10">
+              {dropCandidates.length ? (
+                dropCandidates.map((p) => (
+                  <DropCandidateRow
+                    key={p.id}
+                    player={p}
+                    rank={rankFor(p.id).pos}
+                    disabled={busy}
+                    onDrop={() => setSelectedDrop(p)}
+                  />
+                ))
+              ) : (
+                <p className="px-2 py-10 text-center text-sm text-m-muted">No roster players to drop.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingAdd && selectedDrop ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Choose player to drop"
+            aria-label="Confirm add and drop"
             className="w-full max-w-md rounded-t-2xl bg-m-card p-5 text-m-card-fg shadow-lg sm:rounded-2xl"
           >
-            <h3 className="font-display text-2xl font-bold">Choose a drop</h3>
-            <p className="mt-2 text-sm text-m-muted">
-              Roster full ({capacity}/{capacity}). Drop someone to add{" "}
-              <span className="font-semibold text-m-card-fg">{pendingAdd.name}</span>.
-            </p>
-            <label className="mt-4 block text-sm font-semibold">
-              Drop player
-              <select
-                className="mt-1 w-full rounded-lg border border-m-border bg-m-bg px-3 py-2.5 text-base text-m-card-fg"
-                value={dropId}
-                onChange={(e) => setDropId(e.target.value)}
-              >
-                {dropCandidates.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.pos === "DEF" ? "DST" : p.pos})
-                  </option>
-                ))}
-              </select>
-            </label>
+            <h3 className="font-display text-2xl font-bold">Confirm move</h3>
+            <p className="mt-2 text-sm text-m-muted">Review the add and drop before submitting.</p>
+            <div className="mt-4 space-y-2">
+              <ConfirmMoveRow tone="add" player={pendingAdd} />
+              <ConfirmMoveRow tone="drop" player={selectedDrop} />
+            </div>
             <div className="mt-5 flex gap-2">
               <button
                 type="button"
                 className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
                 disabled={busy}
-                onClick={() => {
-                  setPendingAdd(null);
-                  setDropId("");
-                }}
+                onClick={() => setSelectedDrop(null)}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className="flex-1 rounded-lg bg-[#1fae5b] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
-                disabled={busy || !dropId}
-                onClick={() => void runAdd(pendingAdd.id, dropId)}
+                disabled={busy}
+                onClick={() => void runAdd(pendingAdd.id, selectedDrop.id)}
               >
                 {busy ? "Submitting…" : "Confirm"}
               </button>
@@ -803,6 +834,104 @@ function RankHex({ rank, className }: { rank: number | null; className?: string 
     >
       {rank}
     </span>
+  );
+}
+
+/** Team-style roster row with a red minus to choose as the drop. */
+function DropCandidateRow({
+  player,
+  rank,
+  disabled,
+  onDrop,
+}: {
+  player: Player;
+  rank: number | null;
+  disabled?: boolean;
+  onDrop: () => void;
+}) {
+  const logo = teamLogo(player.team);
+  const openPlayer = useOpenMobilePlayer();
+  const posLabel = player.pos === "DEF" ? "DST" : player.pos;
+  return (
+    <article className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
+      <div className="flex items-center gap-2 px-3 py-3">
+        <span className="w-7 shrink-0 text-xs font-semibold text-m-muted">{posLabel}</span>
+        <button
+          type="button"
+          aria-label={`Drop ${shortName(player)}`}
+          disabled={disabled}
+          onClick={onDrop}
+          className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#e8551f] text-white shadow-[inset_0_-3px_0_#b83d10] disabled:opacity-50"
+        >
+          <Minus className="size-5" strokeWidth={2.5} />
+        </button>
+        <div
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5"
+          {...playerPressProps(openPlayer, player.id)}
+        >
+          <div className="relative shrink-0">
+            <PlayerAvatar
+              id={player.id}
+              pos={player.pos}
+              team={player.team}
+              name={player.name}
+              className="size-12"
+              logoClassName="hidden"
+            />
+            <RankHex rank={rank} className="-left-2 -top-2 size-6 text-[11px]" />
+            <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
+          </div>
+          {logo && player.pos !== "DEF" ? (
+            <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-1" />
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[17px] font-semibold leading-tight">{shortName(player)}</p>
+            <p className="truncate text-xs text-m-muted">
+              {player.team || "FA"} - {posLabel}
+            </p>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ConfirmMoveRow({ tone, player }: { tone: "add" | "drop"; player: Player }) {
+  const logo = teamLogo(player.team);
+  const posLabel = player.pos === "DEF" ? "DST" : player.pos;
+  const isAdd = tone === "add";
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-m-border bg-m-row-alt px-3 py-3">
+      <span
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-lg text-white",
+          isAdd ? "bg-[#1fae5b] shadow-[inset_0_-2px_0_#168444]" : "bg-[#e8551f] shadow-[inset_0_-2px_0_#b83d10]",
+        )}
+        aria-hidden
+      >
+        {isAdd ? <Plus className="size-5" strokeWidth={2.5} /> : <Minus className="size-5" strokeWidth={2.5} />}
+      </span>
+      <PlayerAvatar
+        id={player.id}
+        pos={player.pos}
+        team={player.team}
+        name={player.name}
+        className="size-11 shrink-0"
+        logoClassName="hidden"
+      />
+      {logo && player.pos !== "DEF" ? (
+        <img src={logo} alt="" className="size-7 shrink-0 rounded-full bg-m-chip object-contain p-1" />
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-m-muted">
+          {isAdd ? "Add" : "Drop"}
+        </p>
+        <p className="truncate text-[15px] font-semibold leading-tight">{shortName(player)}</p>
+        <p className="truncate text-xs text-m-muted">
+          {player.team || "FA"} - {posLabel}
+        </p>
+      </div>
+    </div>
   );
 }
 
