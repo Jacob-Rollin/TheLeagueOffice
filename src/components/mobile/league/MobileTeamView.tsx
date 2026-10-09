@@ -44,7 +44,8 @@ import {
   gameStripLabels,
   liveUnitPillLabel,
   matchupClockStatus,
-  matchupDefenseLabel,
+  matchupDefenseParts,
+  matchupDefenseToneClass,
   matchupViewerResult,
   possessionPill,
   progressFor,
@@ -1037,10 +1038,10 @@ function LineupCard({
     ? showActuals || progress?.phase === "in" || progress?.phase === "post"
     : false;
 
-  /** Header blue swap control — snug against the position label. */
+  /** Header blue swap control — reserved rail so FLEX/labels don't collide with avatars. */
   const swapBtnClass = (active: boolean) =>
     cn(
-      "flex size-11 shrink-0 items-center justify-center rounded-lg text-m-header-fg shadow-[inset_0_-2px_0_var(--m-team-hero-to)]",
+      "flex size-10 shrink-0 items-center justify-center rounded-lg text-m-header-fg shadow-[inset_0_-2px_0_var(--m-team-hero-to)]",
       active ? "bg-[var(--m-team-hero-to)]" : "bg-m-header",
       active && "ring-2 ring-offset-2 ring-m-header",
     );
@@ -1049,25 +1050,27 @@ function LineupCard({
     return (
       <div
         className={cn(
-          "flex items-center gap-1.5 rounded-xl bg-m-card px-2.5 py-4 text-m-card-fg",
+          "flex items-center rounded-xl bg-m-card px-2.5 py-4 text-m-card-fg",
           eligibleTarget && "ring-2 ring-m-header",
         )}
       >
-        <span className="w-6 shrink-0 text-center text-[11px] font-semibold text-m-muted">
+        <span className="w-9 shrink-0 text-[11px] font-semibold uppercase text-m-muted">
           {row.slot}
         </span>
-        {canEdit && eligibleTarget ? (
-          <button
-            type="button"
-            aria-label={`Move player into ${row.slot}`}
-            onClick={() => onSwapAction?.(rowKey)}
-            className={swapBtnClass(true)}
-          >
-            <ArrowUpDown className="size-5" strokeWidth={2.5} />
-          </button>
-        ) : (
-          <span className="size-11 shrink-0" aria-hidden />
-        )}
+        <div className="mr-3 shrink-0">
+          {canEdit && eligibleTarget ? (
+            <button
+              type="button"
+              aria-label={`Move player into ${row.slot}`}
+              onClick={() => onSwapAction?.(rowKey)}
+              className={swapBtnClass(true)}
+            >
+              <ArrowUpDown className="size-5" strokeWidth={2.5} />
+            </button>
+          ) : (
+            <span className="size-10 shrink-0" aria-hidden />
+          )}
+        </div>
         <span className="text-sm font-semibold text-m-muted">{row.name ?? "Empty slot"}</span>
       </div>
     );
@@ -1089,8 +1092,8 @@ function LineupCard({
   const showBall = stripShowsFootball(player, progress);
   // Matchup rank / avg allowed only for current (and future) weeks — past weeks keep the simple strip.
   const showMatchupContext = !showActuals && !isBye;
-  const defenseLabel = showMatchupContext
-    ? matchupDefenseLabel({
+  const defenseParts = showMatchupContext
+    ? matchupDefenseParts({
         opponentLabel,
         pos: player.pos,
         defenseRank: defenseRankFor(player),
@@ -1102,7 +1105,7 @@ function LineupCard({
   const showSwap = canEdit && !locked;
   const actionControl = locked ? (
     <span
-      className="flex size-11 shrink-0 items-center justify-center text-m-muted"
+      className="flex size-10 shrink-0 items-center justify-center text-m-muted"
       aria-label="Locked — game started"
     >
       <Lock className="size-5" strokeWidth={2.25} />
@@ -1121,7 +1124,7 @@ function LineupCard({
       <ArrowUpDown className="size-5" strokeWidth={2.5} />
     </button>
   ) : (
-    <span className="size-11 shrink-0" aria-hidden />
+    <span className="size-10 shrink-0" aria-hidden />
   );
 
   return (
@@ -1132,11 +1135,11 @@ function LineupCard({
         eligibleTarget && "ring-2 ring-m-header bg-m-highlight",
       )}
     >
-      <div className="flex items-center gap-1.5 px-2.5 py-3">
-        <span className="w-6 shrink-0 text-center text-[11px] font-semibold text-m-muted">
-          {row.slot}
+      <div className="flex items-center px-2.5 py-3">
+        <span className="w-9 shrink-0 text-[11px] font-semibold uppercase text-m-muted">
+          {row.slot === "DEF" ? "DST" : row.slot}
         </span>
-        {actionControl}
+        <div className="mr-3 shrink-0">{actionControl}</div>
         <div
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
           {...(eligibleTarget
@@ -1166,10 +1169,7 @@ function LineupCard({
                 : { fallbackSrc: row.headshot ?? null })}
             />
             {posRank ? (
-              <span
-                className="absolute -left-1.5 -top-1.5 flex size-5 items-center justify-center bg-m-pos-rank-bg font-display text-[10px] font-bold text-m-pos-rank-fg shadow-[0_0_0_1px_rgba(0,0,0,0.08)]"
-                style={{ clipPath: HEX_CLIP }}
-              >
+              <span className="absolute -left-1 -top-1 z-[1] flex size-5 items-center justify-center rounded-full border border-black/12 bg-white font-display text-[10px] font-bold text-m-card-fg shadow-sm">
                 {posRank}
               </span>
             ) : null}
@@ -1207,9 +1207,18 @@ function LineupCard({
       </div>
       {showMatchupContext ? (
         <div className="flex items-center gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
-          <span className="max-w-[28%] shrink-0 truncate">{strip.game || "—"}</span>
-          <span className="min-w-0 flex-1 truncate text-center uppercase tracking-wide">
-            {defenseLabel ?? ""}
+          <span className="max-w-[28%] shrink-0 truncate text-m-card-fg">{strip.game || "—"}</span>
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-center uppercase tracking-wide",
+              defenseParts ? matchupDefenseToneClass(defenseParts.rank) : "",
+            )}
+          >
+            {defenseParts
+              ? defenseParts.rank != null
+                ? `${defenseParts.prefix} ${defenseParts.abbr} #${defenseParts.rank} vs ${defenseParts.pos}`
+                : `${defenseParts.prefix} ${defenseParts.abbr}${defenseParts.pos ? ` vs ${defenseParts.pos}` : ""}`
+              : ""}
           </span>
           {phase === "in" ? (
             <span className="inline-flex shrink-0 items-center gap-1 uppercase">
