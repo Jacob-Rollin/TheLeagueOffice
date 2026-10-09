@@ -1140,10 +1140,13 @@ function LineupCard({
     <span className="size-10 shrink-0" aria-hidden />
   );
 
+  const gameFinal = Boolean(isFinal || (showActuals && !isLive && !isBye));
+
   return (
     <article
       className={cn(
-        "overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
+        "overflow-hidden rounded-xl text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
+        gameFinal ? "bg-m-bg" : "bg-m-card",
         selected && "ring-2 ring-m-header",
         eligibleTarget && "ring-2 ring-m-header bg-m-highlight",
       )}
@@ -1189,7 +1192,10 @@ function LineupCard({
             {/* Synced leagues have no swap rail — pin lock on the avatar so rows stay aligned. */}
             {!canEdit && locked ? (
               <span
-                className="absolute -bottom-0.5 -right-0.5 z-[1] flex size-5 items-center justify-center rounded-full bg-m-card text-m-muted shadow-sm ring-1 ring-m-border"
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 z-[1] flex size-5 items-center justify-center rounded-full text-m-muted shadow-sm ring-1 ring-m-border",
+                  gameFinal ? "bg-m-bg" : "bg-m-card",
+                )}
                 aria-label="Locked — game started"
               >
                 <Lock className="size-3" strokeWidth={2.5} />
