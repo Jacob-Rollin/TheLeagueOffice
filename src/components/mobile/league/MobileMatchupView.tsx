@@ -606,7 +606,7 @@ function HalfCard({
     opponent: helpers.opponentFor(player),
     team: player.team,
   });
-  // Skill/K only — DST never shows the strip football (Sideline covers that).
+  // Skill/K on offense, DST on defense (not Sideline).
   const showBall = stripShowsFootball(player, progress);
 
   return (

@@ -549,7 +549,8 @@ export function FootballIcon({ className }: { className?: string }) {
 
 /**
  * Football / RZ beside the live clock.
- * Football = this NFL team has the ball (skill / K only — never DST).
+ * Football = the fantasy unit is the one currently on the field
+ * (offense for skill/K, defense for DST).
  */
 export function PossessionStripBadges({
   hasBall,
@@ -560,7 +561,7 @@ export function PossessionStripBadges({
 }) {
   if (!hasBall && !redZone) return null;
   return (
-    <span className="inline-flex items-center gap-1" title={hasBall ? "Team has the ball" : undefined}>
+    <span className="inline-flex items-center gap-1" title={hasBall ? "Unit on the field" : undefined}>
       {hasBall ? <FootballIcon className="size-3.5 text-m-accent" /> : null}
       {redZone ? (
         <span className="rounded-[3px] bg-orange-500 px-1 py-px text-[8px] font-bold leading-none tracking-wide text-white">
@@ -572,14 +573,17 @@ export function PossessionStripBadges({
 }
 
 /**
- * Whether the strip should show the football next to the quarter/clock.
- * Skill/K: team has possession. DST: never (Sideline already covers offense-out).
+ * Football next to the quarter when this fantasy unit is relevant:
+ * - Skill / K: NFL team has the ball (offense)
+ * - DST: opponent has the ball (defense on the field) — not while Sideline
  */
 export function stripShowsFootball(
-  player: Pick<Player, "team" | "pos">,
+  player: Pick<Player, "team" | "pos" | "injury_status" | "injury">,
   progress: NflGameProgress | undefined,
 ): boolean {
-  if (player.pos === "DEF") return false;
   if (progress?.phase !== "in" || !progress.possessionAbbr) return false;
-  return teamKeys(player.team).includes(progress.possessionAbbr.toUpperCase());
+  if (isRuledOut(player.injury_status ?? player.injury)) return false;
+  const teamHasBall = teamKeys(player.team).includes(progress.possessionAbbr.toUpperCase());
+  // DST inverts: football while defense is out, not while own offense has it.
+  return player.pos === "DEF" ? !teamHasBall : teamHasBall;
 }
