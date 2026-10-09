@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ArrowLeftRight, Minus, Newspaper, Plus, Shirt, Swords, Trophy, Users } from "lucide-react";
+import { ArrowLeftRight, Minus, Newspaper, Plus, Trophy, Users, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 
 import {
@@ -20,6 +20,7 @@ import type { LeagueActivityEvent, LeagueActivityMove } from "@/lib/league.funct
 import { cn } from "@/lib/utils";
 
 import { MobileTeamLogo } from "./MobileStandings";
+import { FootballIcon, HelmetIcon } from "./mobileNavIcons";
 import { useMobileLeagueActivity } from "./useMobileLeague";
 
 /** Bottom tab bar height, excluding the device safe area. */
@@ -38,10 +39,10 @@ type TabPath =
   | "/m/league/$leagueId/players"
   | "/m/league/$leagueId";
 
-const TABS: { to: TabPath; label: string; icon: typeof Trophy; segment: string | null }[] = [
+const TABS: { to: TabPath; label: string; icon: LucideIcon; segment: string | null }[] = [
   { to: "/m/league/$leagueId/feed", label: "Feed", icon: Newspaper, segment: "feed" },
-  { to: "/m/league/$leagueId/team", label: "Team", icon: Shirt, segment: "team" },
-  { to: "/m/league/$leagueId/matchup", label: "Matchup", icon: Swords, segment: "matchup" },
+  { to: "/m/league/$leagueId/team", label: "Team", icon: HelmetIcon, segment: "team" },
+  { to: "/m/league/$leagueId/matchup", label: "Matchup", icon: FootballIcon, segment: "matchup" },
   { to: "/m/league/$leagueId/players", label: "Players", icon: Users, segment: "players" },
   { to: "/m/league/$leagueId", label: "League", icon: Trophy, segment: null },
 ];
