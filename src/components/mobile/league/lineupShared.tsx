@@ -249,23 +249,48 @@ function playerFitsMobileSlot(player: Player, slot: string): boolean {
   return eligible.includes(player.pos);
 }
 
+export type OptimalLineupOptions = {
+  /**
+   * Per starter-slot index: keep this player locked in place (game started).
+   * Null/undefined means the slot may be filled by optimize.
+   */
+  pinnedStarters?: Array<Player | null | undefined>;
+  /** Player ids that cannot move (locked on bench/IR or already pinned). */
+  immovableIds?: ReadonlySet<string>;
+};
+
 /**
  * Projected-optimal starters for the week (client-only). Dedicated slots fill
  * before FLEX/SF so leftovers get the best remaining skill pieces.
+ * Locked (immovable) players stay put and are never promoted from bench.
  */
 export function buildProjectedOptimalLineup(
   labels: string[],
   pool: Player[],
   projectFor: (player: Player) => number | null,
+  options?: OptimalLineupOptions,
 ): { starters: LineupRow[]; starterIds: Set<string>; total: number } {
+  const pinned = options?.pinnedStarters ?? [];
+  const immovable = options?.immovableIds ?? new Set<string>();
+
+  const used = new Set<string>();
+  const starters: LineupRow[] = labels.map((slot, i) => {
+    const pinnedPlayer = pinned[i] ?? null;
+    if (pinnedPlayer) {
+      used.add(pinnedPlayer.id);
+      return { slot, player: pinnedPlayer };
+    }
+    return { slot, player: null };
+  });
+
   const ranked = pool
+    .filter((player) => !immovable.has(player.id) && !used.has(player.id))
     .map((player) => ({
       player,
       value: Math.max(0, Number(projectFor(player)) || 0),
     }))
     .sort((a, b) => b.value - a.value || a.player.name.localeCompare(b.player.name));
 
-  const used = new Set<string>();
   const pick = (slot: string): Player | null => {
     const hit = ranked.find(
       (entry) => !used.has(entry.player.id) && playerFitsMobileSlot(entry.player, slot),
@@ -275,12 +300,13 @@ export function buildProjectedOptimalLineup(
     return hit.player;
   };
 
-  const starters: LineupRow[] = labels.map((slot) => ({ slot, player: null }));
   labels.forEach((slot, i) => {
+    if (starters[i]?.player) return;
     if (slot === "FLEX" || slot === "FLX" || slot === "SF" || slot === "SFLEX") return;
     starters[i] = { slot, player: pick(slot) };
   });
   labels.forEach((slot, i) => {
+    if (starters[i]?.player) return;
     if (slot !== "FLEX" && slot !== "FLX" && slot !== "SF" && slot !== "SFLEX") return;
     starters[i] = { slot, player: pick(slot) };
   });
