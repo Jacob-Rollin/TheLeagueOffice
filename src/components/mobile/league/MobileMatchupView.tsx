@@ -24,6 +24,7 @@ import {
   REGULAR_SEASON_WEEKS,
   Score,
   entryPoints,
+  formatPlayerFinalBox,
   gameStripLabels,
   liveUnitPillLabel,
   matchupViewerResult,
@@ -614,24 +615,32 @@ function HalfCard({
   }
 
   const progress = helpers.progressOf(player);
-  const started = helpers.showActuals || progress?.phase === "in" || progress?.phase === "post";
+  const phase = progress?.phase;
+  const isLive = phase === "in";
+  const isBye = helpers.byeWeek(player);
+  const isFinal = phase === "post" || (helpers.showActuals && phase !== "pre" && phase !== "in");
+  const gameFinal = Boolean(isFinal || (helpers.showActuals && !isLive && !isBye));
+  const started = helpers.showActuals || phase === "in" || phase === "post";
   const points = started ? helpers.pointsFor(entry, player) : null;
   const projected = helpers.projectedFor(player);
   const posRank = helpers.posRankFor(player);
   const logo = teamLogo(player.team);
   const status = possessionPill(player, progress);
   const strip = gameStripLabels(progress, {
-    bye: helpers.byeWeek(player),
+    bye: isBye,
     opponent: helpers.opponentFor(player),
     team: player.team,
   });
   // Skill/K on offense, DST on defense (not Sideline).
   const showBall = stripShowsFootball(player, progress);
+  const finalBox =
+    gameFinal ? formatPlayerFinalBox(progress?.boxScoreLabel ?? strip.game, player.team) : null;
 
   return (
     <article
       className={cn(
-        "cursor-pointer overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
+        "cursor-pointer overflow-hidden rounded-xl text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
+        gameFinal ? "bg-m-player-card-final" : "bg-m-player-card",
         bench && "opacity-85",
       )}
       {...playerPressProps(openPlayer, helpers.playerIdFor(player))}
@@ -704,14 +713,25 @@ function HalfCard({
           )}
         </p>
       </div>
-      {/* Always game left / clock+badges right — avoid mirror flipping live strips. */}
-      <div className="flex items-center justify-between gap-1 bg-m-row-alt px-2.5 py-1.5 text-[10px] font-semibold text-m-muted">
-        <span className="truncate">{strip.game}</span>
-        <span className="inline-flex shrink-0 items-center gap-1 uppercase">
-          <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
-          {strip.status}
-        </span>
-      </div>
+      {gameFinal ? (
+        <div className="flex items-center justify-between gap-1 bg-m-row-alt px-2.5 py-1.5 text-[10px] text-m-card-fg">
+          <span className="min-w-0 truncate font-semibold">
+            {finalBox?.scoreLine || strip.game || "Final"}
+          </span>
+          <span className="shrink-0 font-bold uppercase tracking-wide text-black [.mobile-theme-dark_&]:text-white">
+            {finalBox?.resultLabel || strip.status || "Final"}
+          </span>
+        </div>
+      ) : (
+        /* Always game left / clock+badges right — avoid mirror flipping live strips. */
+        <div className="flex items-center justify-between gap-1 bg-m-row-alt px-2.5 py-1.5 text-[10px] font-semibold text-m-muted">
+          <span className="truncate">{strip.game}</span>
+          <span className="inline-flex shrink-0 items-center gap-1 uppercase">
+            <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
+            {strip.status}
+          </span>
+        </div>
+      )}
     </article>
   );
 }
