@@ -43,6 +43,7 @@ raw.githubusercontent.com path.
 - Daily **08:45 UTC** (after research warm)
 - Gameday evenings **19:45 UTC** (Sun/Mon/Thu)
 - Manual `workflow_dispatch` anytime
+- **Native live week stats** (separate workflow `native-live-week-stats.yml`): every 5 minutes on gameday UTC windows; writes `snap/native-week-stats-{season}-w{week}.json` only (preserves research files)
 
 Each run **force-pushes an orphan** `snap-cdn` branch (no git history bloat).
 

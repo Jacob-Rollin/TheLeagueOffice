@@ -55,4 +55,10 @@ export const R2_SNAP_KEYS = {
   tradeBasis: () => `snap/trade-basis.json`,
   /** Compact warehouse dump for player-brain hydration (replaces Vercel /api/data/players-export). */
   playersExport: () => `snap/players-export.json`,
+  /**
+   * Sleeper week actuals for native-league live Matchup overlay (Actions → snap-cdn).
+   * Shared by all visitors — not per-league. Path includes season+week for cache bust.
+   */
+  nativeWeekStats: (season: number | string, week: number) =>
+    `snap/native-week-stats-${season}-w${week}.json`,
 } as const;

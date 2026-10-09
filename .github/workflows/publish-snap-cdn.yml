@@ -106,6 +106,43 @@ jobs:
           # Player-brain warehouse — browse reads snap-cdn instead of Vercel /api/data/players-export.
           fetch "$BASE/api/data/players-export" out/snap/players-export.json
 
+          # Native Matchup live overlay — Sleeper week stats (no Vercel; Actions → Sleeper).
+          # Also refreshed more often by native-live-week-stats.yml on gamedays.
+          SEASON=$(curl -fsSL "https://api.sleeper.app/v1/state/nfl" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('league_season') or d.get('season') or '')")
+          if [ -n "$SEASON" ]; then
+            POS="position[]=QB&position[]=RB&position[]=WR&position[]=TE&position[]=K&position[]=DEF"
+            if curl -fsSL "https://api.sleeper.app/v1/stats/nfl/${SEASON}/${WEEK}?season_type=regular&${POS}" -o /tmp/native-week-raw.json; then
+              python3 <<PY
+          import json, datetime
+          from pathlib import Path
+          season, week = "${SEASON}", int("${WEEK}")
+          raw = json.load(open("/tmp/native-week-raw.json"))
+          stats = {}
+          if isinstance(raw, list):
+              for row in raw:
+                  pid = str((row or {}).get("player_id") or "").strip()
+                  st = (row or {}).get("stats") or {}
+                  if pid and isinstance(st, dict):
+                      stats[pid] = {k: float(v) for k, v in st.items() if isinstance(v, (int, float))}
+          elif isinstance(raw, dict):
+              for pid, row in raw.items():
+                  st = (row or {}).get("stats") if isinstance(row, dict) else None
+                  if isinstance(st, dict):
+                      stats[str(pid)] = {k: float(v) for k, v in st.items() if isinstance(v, (int, float))}
+          if stats:
+              Path(f"out/snap/native-week-stats-{season}-w{week}.json").write_text(
+                  json.dumps({
+                      "season": int(season) if str(season).isdigit() else season,
+                      "week": week,
+                      "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+                      "stats": stats,
+                  }, separators=(",", ":"))
+              )
+              print("ok native week stats", season, week, len(stats))
+          PY
+            fi
+          fi
+
           count=$(find out -type f -name '*.json' | wc -l | tr -d ' ')
           echo "Downloaded $count JSON files"
           if [ "$count" = "0" ]; then
