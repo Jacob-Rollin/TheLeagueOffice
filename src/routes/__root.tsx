@@ -5,6 +5,10 @@ import appCss from "../styles.css?url";
 import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import { scheduleIdleSnapPrefetch } from "@/lib/idle-snap-prefetch";
 import { registerPlayerDetailQueryClient } from "@/lib/prefetch-player-detail";
+import {
+  hydrateResearchQueryCache,
+  subscribeResearchQueryPersist,
+} from "@/lib/research-query-persist";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { ActiveLeagueProvider } from "@/context/ActiveLeagueContext";
@@ -160,6 +164,20 @@ function RootComponent() {
   useEffect(() => {
     registerPlayerDetailQueryClient(queryClient);
     void hydratePlayerBrain();
+  }, [queryClient]);
+
+  // Restore last-good research / matchup RQ from IndexedDB, then persist updates.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub = () => {};
+    void hydrateResearchQueryCache(queryClient).finally(() => {
+      if (cancelled) return;
+      unsub = subscribeResearchQueryPersist(queryClient);
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, [queryClient]);
 
   // Idle-warm hottest research/injury snaps into RQ (snap-cdn only — no Fluid/TiDB).

@@ -5,6 +5,7 @@ import { startTransition, useMemo, useRef, useState } from "react";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { InjuryReportCard, type InjuryReportOwner } from "@/components/injury/InjuryReportCard";
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
+import { ResearchCardListSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
   Select,
   SelectContent,
@@ -64,6 +65,7 @@ function InjuryReportsPage() {
         : 10 * 60 * 1000,
     refetchIntervalInBackground: false,
     retry: false,
+    placeholderData: (prev) => prev,
     queryFn: () => fetchSnapInjuryReports(),
   });
 
@@ -170,11 +172,11 @@ function InjuryReportsPage() {
         </Select>
       </div>
 
-      {query.isLoading || query.isError || shown.length === 0 ? (
+      {query.isLoading ? (
+        <ResearchCardListSkeleton count={6} />
+      ) : query.isError || shown.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          {query.isLoading ? (
-            <p className="px-5 py-10 text-center text-sm text-slate-400">Loading injury reports…</p>
-          ) : query.isError ? (
+          {query.isError ? (
             <p className="px-5 py-10 text-center text-sm text-rose-600">
               Could not load injury reports. Try again shortly.
             </p>

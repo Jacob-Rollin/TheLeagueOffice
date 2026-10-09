@@ -28,6 +28,7 @@ import {
   formatNflKickoffLabel,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
+import { MatchupBoardSkeleton } from "@/components/research/ResearchTableSkeleton";
 import { playerHoverPrefetchProps } from "@/lib/prefetch-player-detail";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { hasScorableProjectionStats, scoreStats, type ScoringMap } from "@/lib/scoring-map";
@@ -1158,8 +1159,10 @@ function PlaybookMyTeamPage() {
     return out.sort((a, b) => at(b.published) - at(a.published));
   }, [rosteredPlayers, reportBySleeperId, newsById]);
 
+  // Last-good: once myTeam is hydrated (RQ/IDB), never blank the roster on soft refresh.
   const loading =
-    playersLoading || rostersLoading || projectionsLoading || matchupsLoading || nflWeek.isLoading;
+    !myTeam &&
+    (playersLoading || rostersLoading || projectionsLoading || matchupsLoading || nflWeek.isLoading);
 
   const openPlayer = (id: string) => modalRef.current?.open(id);
 
@@ -1309,8 +1312,8 @@ function PlaybookMyTeamPage() {
         <TeamOverview rosterId={myTeam.slot} onOpenPlayer={openPlayer} />
       ) : (
       <section>
-      {loading && !myTeam ? (
-        <p className="text-sm text-muted-foreground">Loading your roster…</p>
+      {loading ? (
+        <MatchupBoardSkeleton />
       ) : !myTeam ? (
         <p className="text-sm text-muted-foreground">
           Sync a league to load your My Team dashboard.{" "}

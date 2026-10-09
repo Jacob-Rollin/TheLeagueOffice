@@ -8,6 +8,7 @@ import {
   scoringFormatLabel,
   useResearchScoringFormat,
 } from "@/components/research/ScoringFormatSelect";
+import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
@@ -17,6 +18,7 @@ import {
 } from "@/components/research/SortHeader";
 import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import type { FantasyPointsAllowedPos } from "@/lib/players.server";
+import { usePrefetchSiblingFormats } from "@/lib/prefetch-research-formats";
 import { fetchResearchFpa, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +70,7 @@ function FantasyPointsAllowedPage() {
     placeholderData: (prev) => prev,
     queryFn: () => fetchResearchFpa(scoringFormat),
   });
+  usePrefetchSiblingFormats("fpa", scoringFormat, { enabled: Boolean(query.data) });
 
   const payload = query.data;
   const rows = useMemo(() => {
@@ -182,14 +185,7 @@ function FantasyPointsAllowedPage() {
             </thead>
             <tbody>
               {query.isLoading ? (
-                <tr>
-                  <td
-                    colSpan={1 + POS_COLS.length * 2}
-                    className="px-4 py-10 text-center text-slate-400"
-                  >
-                    Loading fantasy points allowed…
-                  </td>
-                </tr>
+                <ResearchTableSkeleton rows={12} cols={1 + POS_COLS.length * 2} />
               ) : query.isError ? (
                 <tr>
                   <td

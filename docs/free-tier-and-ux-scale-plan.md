@@ -2,7 +2,7 @@
 
 Living plan for staying on free tiers while expanding users, keeping live scoring / research fresh, and making pages feel as fast as FantasyPros-style tools (instant tables, minimal blank loading).
 
-**Status:** planning — implement incrementally alongside feature work  
+**Status:** in progress — UX backlog items shipping incrementally  
 **Last updated:** 2026-10-09  
 **Related:** `.cursorrules` (Free-Tier Guardrails), `docs/snap-cdn-setup.md`, `docs/native-leagues-plan.md`
 
@@ -102,28 +102,29 @@ Ship these whenever touching related routes. Prefer small PRs.
 ### A. Instant navigation (no blank screens)
 - [x] Enable TanStack Router **intent preload** on research / playbook nav links (`preload="intent"` + router `defaultPreload: "intent"`) — shipped
 - [x] On app shell: idle-prefetch top research snaps (FPA, SOS analysis, leaders, injury) from snap-cdn only — shipped (`idle-snap-prefetch.ts`; skips when snap base unset)
-- [ ] Persist React Query research cache to IndexedDB (stale-while-revalidate across visits)
-- [ ] Expand `placeholderData: (prev) => prev` to all research + league board queries that still blank on load
-- [ ] Replace text “Loading…” with **layout-matching skeletons** (table chrome visible immediately)
+- [x] Persist React Query research cache to IndexedDB (stale-while-revalidate across visits) — shipped (`research-query-persist.ts`; also persists `active-matchups` for last-good boards)
+- [x] Expand `placeholderData: (prev) => prev` to all research + league board queries that still blank on load — shipped (research boards + `useActiveMatchups` + injury/ATP/targets/trade-market)
+- [x] Replace text “Loading…” with **layout-matching skeletons** (table chrome visible immediately) — shipped (`ResearchTableSkeleton` / `MatchupBoardSkeleton` on research + Matchup/My Team)
 
 ### Player popups (mobile + desktop) — separate from nav warm
-Popups use `hydratePlayerBrain` + `fetchPlayerDetailClient` (snap/IndexedDB; Fluid only in dev). Shell already warms the brain once per session. **Intent preload / research snap idle warm do not speed popups.** Next free-tier-safe step: prefetch `detailQuery(id)` on row hover / touchstart (Sleeper + brain only — never Fluid).
+Popups use `hydratePlayerBrain` + `fetchPlayerDetailClient` (snap/IndexedDB; Fluid only in dev). Shell already warms the brain once per session. **Intent preload / research snap idle warm do not speed popups.**
+- [x] Prefetch `detailQuery(id)` on row hover / touchstart (Sleeper + brain only — never Fluid) — shipped (`prefetch-player-detail.ts`)
 
 ### B. Faster stats / tables
-- [ ] Prefetch all three scoring formats (std/half/ppr) after first research hit — format toggle = cache hit, no spinner
+- [x] Prefetch all three scoring formats (std/half/ppr) after first research hit — format toggle = cache hit, no spinner — shipped (`prefetch-research-formats.ts`; snap-cdn only)
 - [ ] Virtualize long tables (leaders, redzone, targets) when row count is large
 - [ ] Defer non-critical below-fold widgets; paint primary table first
 - [ ] Keep filter/sort/position tabs fully client-side after one snap fetch
 
 ### C. Live scoring smoothness
 - [ ] Sleeper: keep browser polls; pause when `document.hidden` (already via page-visibility — don’t regress)
-- [ ] Show last matchup scores immediately from RQ/IndexedDB while soft-refreshing
+- [x] Show last matchup scores immediately from RQ/IndexedDB while soft-refreshing — shipped (RQ persist + `boardLoading` only when no entries; My Team never blanks once `myTeam` hydrated)
 - [ ] ESPN: prefer TiDB CDN boards; never block first paint waiting on Fluid
 - [ ] Avoid full-page remounts on week change — swap data in place (`placeholderData` / deferred values)
 
 ### D. Perceived performance
 - [ ] Optimistic UI for lineup/waiver/native mutations where safe
-- [ ] Prefetch player detail on row hover (draft list already does some of this — extend to research/waiver)
+- [x] Prefetch player detail on row hover (draft list already does some of this — extend to research/waiver) — shipped with player popup hover/touch prefetch
 - [ ] Soft transitions (`startTransition` / `useDeferredValue`) for search filters (native players already uses deferred query)
 - [ ] Ensure ScoreTicker / navbar never wait on research or league Fluid
 
@@ -166,3 +167,19 @@ When a PR touches a surface, also apply the matching UX/free-tier item:
 - Full Auth Hook invite enforcement (security track)
 - FantasyPros-style paid expert consensus data
 - Shortening research CDN TTLs for “fresher” feel (hurts free tier — use cron cadence instead)
+
+---
+
+## 9. Shipped UX checkpoint (2026-10-09)
+
+| Item | Where |
+|---|---|
+| Intent preload | `router.tsx` `defaultPreload: "intent"` + nav menus |
+| Idle snap warm | `idle-snap-prefetch.ts` via `__root.tsx` |
+| Player popup hover/touch prefetch | `prefetch-player-detail.ts` |
+| RQ → IndexedDB persist | `research-query-persist.ts` (research keys + `active-matchups`) |
+| Sibling format prefetch | `prefetch-research-formats.ts` on FPA / SOS / Matchups Guide / Trade Market |
+| Layout skeletons | `ResearchTableSkeleton.tsx` on research boards; Matchup/My Team |
+| Last-good Matchup / My Team | `useActiveMatchups` / `useLeagueRosters` loading gates; `playbook.matchup` `boardLoading` |
+
+**Still needs your infra (not in UX PRs):** Coolify/Oracle cron worker; Matchup Replay nflverse off request path; Production `VITE_SNAP_CDN_BASE` confirmation.

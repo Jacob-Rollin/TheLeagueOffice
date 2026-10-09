@@ -188,6 +188,8 @@ export function useActiveMatchups(week: number | null | undefined) {
     staleTime: isPastWeek ? 10 * 60 * 1000 : isCurrentWeek ? 15 * 1000 : 60 * 1000,
     refetchInterval: visibleRefetchInterval(pollMs),
     refetchIntervalInBackground: false,
+    // Keep prior week visible while the next week resolves (no blank board).
+    placeholderData: (prev) => prev,
     queryFn: async () =>
       loadWeekMatchups({
         leagueId,
@@ -202,7 +204,8 @@ export function useActiveMatchups(week: number | null | undefined) {
 
   return {
     matchups: query.data ?? null,
-    loading: query.isLoading,
+    // Only "loading" when we have nothing to paint (IDB/RQ last-good counts).
+    loading: query.isLoading && !query.data,
   };
 }
 
