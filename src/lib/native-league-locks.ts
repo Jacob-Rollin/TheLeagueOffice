@@ -52,6 +52,30 @@ export function parseScoreboardKickoffs(json: unknown): Map<string, NflTeamKicko
   return out;
 }
 
+const KICKOFF_TEAM_ALIASES: Record<string, string[]> = {
+  WAS: ["WAS", "WSH"],
+  WSH: ["WSH", "WAS"],
+  JAC: ["JAC", "JAX"],
+  JAX: ["JAX", "JAC"],
+  LAR: ["LAR", "LA"],
+  LA: ["LA", "LAR"],
+};
+
+function kickoffRowForTeam(
+  team: string,
+  kickoffs: Map<string, NflTeamKickoff>,
+): NflTeamKickoff | undefined {
+  const abbr = team.trim().toUpperCase();
+  if (!abbr) return undefined;
+  const direct = kickoffs.get(abbr);
+  if (direct) return direct;
+  for (const alt of KICKOFF_TEAM_ALIASES[abbr] ?? []) {
+    const hit = kickoffs.get(alt);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
 /** True when the NFL team's game has started (in/post or kickoff time passed). */
 export function nflTeamHasLocked(
   team: string | null | undefined,
@@ -60,7 +84,7 @@ export function nflTeamHasLocked(
 ): boolean {
   const abbr = String(team ?? "").trim().toUpperCase();
   if (!abbr || abbr === "FA") return false;
-  const row = kickoffs.get(abbr);
+  const row = kickoffRowForTeam(abbr, kickoffs);
   if (!row) return false;
   if (row.state === "in" || row.state === "post") return true;
   return row.kickoffMs <= now;

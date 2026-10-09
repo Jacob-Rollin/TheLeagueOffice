@@ -171,19 +171,16 @@ export async function filterLockedLineupSlots(input: {
       });
       if (!locked) continue;
       const was = prevPlace.get(id);
-      // Locked player must stay in the same slot; reject moves.
-      if (!was || was.key !== key || was.index !== i) {
-        // Restore locked player to previous slot if possible.
-        if (was) {
-          const prevBucket = next[was.key] ?? [];
-          while (prevBucket.length <= was.index) prevBucket.push(null);
-          // Clear current erroneous placement.
-          bucket[i] = null;
-          prevBucket[was.index] = id;
-          next[was.key] = prevBucket;
-        } else {
-          return { ok: false, error: "Cannot move a player whose NFL game has locked" };
-        }
+      // No prior placement — initial lineup / first save, not a move. Allow.
+      if (!was) continue;
+      // Locked player must stay in the same slot; snap them back if moved.
+      if (was.key !== key || was.index !== i) {
+        const prevBucket = next[was.key] ?? [];
+        while (prevBucket.length <= was.index) prevBucket.push(null);
+        // Clear current erroneous placement.
+        bucket[i] = null;
+        prevBucket[was.index] = id;
+        next[was.key] = prevBucket;
       }
     }
   }

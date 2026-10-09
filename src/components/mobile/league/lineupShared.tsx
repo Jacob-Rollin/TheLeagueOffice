@@ -474,6 +474,25 @@ export function matchupDefenseLabel(opts: {
   pos: string | null | undefined;
   defenseRank: number | null | undefined;
 }): string | null {
+  const parts = matchupDefenseParts(opts);
+  if (!parts) return null;
+  return parts.rank != null
+    ? `${parts.prefix} ${parts.abbr} #${parts.rank} vs ${parts.pos}`
+    : `${parts.prefix} ${parts.abbr}${parts.pos ? ` vs ${parts.pos}` : ""}`;
+}
+
+export type MatchupDefenseParts = {
+  prefix: "@" | "vs.";
+  abbr: string;
+  pos: string;
+  rank: number | null;
+};
+
+export function matchupDefenseParts(opts: {
+  opponentLabel: string | null | undefined;
+  pos: string | null | undefined;
+  defenseRank: number | null | undefined;
+}): MatchupDefenseParts | null {
   const parsed = parseOpponentLabel(opts.opponentLabel);
   if (!parsed) return null;
   const pos = (opts.pos || "").toUpperCase() === "DEF" ? "DST" : (opts.pos || "").toUpperCase();
@@ -481,9 +500,22 @@ export function matchupDefenseLabel(opts: {
     opts.defenseRank != null && Number.isFinite(opts.defenseRank) && opts.defenseRank > 0
       ? Math.round(opts.defenseRank)
       : null;
-  if (rank != null && pos) return `${parsed.prefix} ${parsed.abbr} #${rank} vs ${pos}`;
-  if (pos) return `${parsed.prefix} ${parsed.abbr} vs ${pos}`;
-  return `${parsed.prefix} ${parsed.abbr}`;
+  return { prefix: parsed.prefix, abbr: parsed.abbr, pos, rank };
+}
+
+/** Tough (low #) = red, soft (high #) = green, mid = black — Sleeper-style. */
+export function matchupDefenseTone(rank: number | null | undefined): "tough" | "soft" | "neutral" {
+  if (rank == null || !Number.isFinite(rank) || rank <= 0) return "neutral";
+  if (rank <= 10) return "tough";
+  if (rank >= 23) return "soft";
+  return "neutral";
+}
+
+export function matchupDefenseToneClass(rank: number | null | undefined): string {
+  const tone = matchupDefenseTone(rank);
+  if (tone === "tough") return "text-red-600";
+  if (tone === "soft") return "text-emerald-600";
+  return "text-m-card-fg";
 }
 
 /** Left / right labels for the game strip under a player card. */

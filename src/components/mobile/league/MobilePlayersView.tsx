@@ -790,13 +790,15 @@ function SelectBox({
 
 function RankHex({ rank, className }: { rank: number | null; className?: string }) {
   if (!rank) return null;
+  const circular = className?.includes("rounded-full");
   return (
     <span
       className={cn(
-        "absolute flex items-center justify-center bg-m-pos-rank-bg font-display font-bold text-m-pos-rank-fg shadow-[0_0_0_1px_rgba(0,0,0,0.08)]",
+        "absolute flex items-center justify-center font-display font-bold",
+        !circular && "bg-m-pos-rank-bg text-m-pos-rank-fg shadow-[0_0_0_1px_rgba(0,0,0,0.08)]",
         className,
       )}
-      style={{ clipPath: HEX_CLIP }}
+      style={circular ? undefined : { clipPath: HEX_CLIP }}
     >
       {rank}
     </span>
@@ -820,8 +822,8 @@ function DropCandidateRow({
   const posLabel = player.pos === "DEF" ? "DST" : player.pos;
   return (
     <article className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
-      <div className="flex items-center gap-1.5 px-2.5 py-3">
-        <span className="w-6 shrink-0 text-center text-[11px] font-semibold text-m-muted">
+      <div className="flex items-center px-2.5 py-3">
+        <span className="w-9 shrink-0 text-[11px] font-semibold uppercase text-m-muted">
           {posLabel}
         </span>
         <button
@@ -829,7 +831,7 @@ function DropCandidateRow({
           aria-label={`Drop ${shortName(player)}`}
           disabled={disabled}
           onClick={onDrop}
-          className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#e8551f] text-white shadow-[inset_0_-3px_0_#b83d10] disabled:opacity-50"
+          className="mr-3 flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#e8551f] text-white shadow-[inset_0_-3px_0_#b83d10] disabled:opacity-50"
         >
           <Minus className="size-5" strokeWidth={2.5} />
         </button>
@@ -846,7 +848,10 @@ function DropCandidateRow({
               className="size-12"
               logoClassName="hidden"
             />
-            <RankHex rank={rank} className="-left-1.5 -top-1.5 size-5 text-[10px]" />
+            <RankHex
+              rank={rank}
+              className="-left-1 -top-1 size-5 rounded-full border border-black/12 bg-white text-[10px] text-m-card-fg shadow-sm"
+            />
             <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
           </div>
           {logo && player.pos !== "DEF" ? (
