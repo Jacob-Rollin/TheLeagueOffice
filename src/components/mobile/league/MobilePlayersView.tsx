@@ -621,9 +621,12 @@ export function MobilePlayersView() {
         <MobileCenteredConfirm label="Confirm drop">
           <h3 className="font-display text-2xl font-bold">Drop player</h3>
           <p className="mt-2 text-sm text-m-muted">
-            Drop <span className="font-semibold text-m-card-fg">{pendingDrop.name}</span> to free
-            agency? This uses your league roster settings ({openSlots} open of {capacity}).
+            Send this player to free agency? Uses your league roster settings ({openSlots} open of{" "}
+            {capacity}).
           </p>
+          <div className="mt-4">
+            <ConfirmMoveRow tone="drop" player={pendingDrop} />
+          </div>
           <div className="mt-5 flex gap-2">
             <button
               type="button"
@@ -649,30 +652,37 @@ export function MobilePlayersView() {
         <MobileCenteredConfirm label="Propose trade">
           <h3 className="font-display text-2xl font-bold">Propose trade</h3>
           <p className="mt-2 text-sm text-m-muted">
-            Receive <span className="font-semibold text-m-card-fg">{pendingTrade.name}</span>
             {tradePartnerId != null
-              ? ` from ${board?.teams.find((t) => t.id === tradePartnerId)?.teamName ?? "team"}`
+              ? `From ${board?.teams.find((t) => t.id === tradePartnerId)?.teamName ?? "team"}. `
               : ""}
-            . Select who you give — uneven trades must fit your {capacity}-player roster (
-            {openSlots} open).
+            Select who you give — uneven trades must fit your {capacity}-player roster ({openSlots}{" "}
+            open).
           </p>
+          <div className="mt-4">
+            <ConfirmMoveRow tone="receive" player={pendingTrade} />
+          </div>
           {tradeNeedsSlots ? (
-            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 [.mobile-theme-dark_&]:bg-amber-950/40 [.mobile-theme-dark_&]:text-amber-100">
               Giving {tradeGive.length || "0"} for 1 needs {tradeSlotNeed} open slot
               {tradeSlotNeed === 1 ? "" : "s"}; you have {openSlots}. Add more players on your give
               side.
             </p>
           ) : null}
-          <ul className="mt-4 max-h-56 space-y-1 overflow-y-auto overscroll-contain rounded-lg border border-m-border">
+          <p className="mt-3 text-[11px] font-bold uppercase tracking-wide text-m-muted">You give</p>
+          <ul className="mt-1.5 max-h-48 space-y-2 overflow-y-auto overscroll-contain pr-0.5">
             {(myRoster?.playerIds ?? []).map((id) => {
               const p = playersById.get(id);
               if (!p) return null;
               const checked = tradeGive.includes(id);
               return (
-                <li key={id} className="border-b border-m-border last:border-0">
-                  <label className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                <li key={id}>
+                  <label className="block cursor-pointer">
+                    <span className="sr-only">
+                      {checked ? "Remove from give side" : "Add to give side"} {p.name}
+                    </span>
                     <input
                       type="checkbox"
+                      className="peer sr-only"
                       checked={checked}
                       onChange={() =>
                         setTradeGive((prev) =>
@@ -682,8 +692,14 @@ export function MobilePlayersView() {
                         )
                       }
                     />
-                    <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-                    <span className="text-m-muted">{p.pos === "DEF" ? "DST" : p.pos}</span>
+                    <span
+                      className={cn(
+                        "block rounded-xl ring-offset-2 ring-offset-m-card peer-focus-visible:ring-2 peer-focus-visible:ring-[#f08a24]",
+                        checked && "ring-2 ring-[#f08a24]",
+                      )}
+                    >
+                      <ConfirmMoveRow tone="give" player={p} />
+                    </span>
                   </label>
                 </li>
               );
@@ -871,20 +887,48 @@ function DropCandidateRow({
   );
 }
 
-function ConfirmMoveRow({ tone, player }: { tone: "add" | "drop"; player: Player }) {
+type ConfirmTone = "add" | "drop" | "receive" | "give";
+
+const CONFIRM_TONE: Record<
+  ConfirmTone,
+  { label: string; boxClass: string; Icon: typeof Plus }
+> = {
+  add: {
+    label: "Add",
+    boxClass: "bg-[#1fae5b] shadow-[inset_0_-2px_0_#168444]",
+    Icon: Plus,
+  },
+  drop: {
+    label: "Drop",
+    boxClass: "bg-[#e8551f] shadow-[inset_0_-2px_0_#b83d10]",
+    Icon: Minus,
+  },
+  receive: {
+    label: "Receive",
+    boxClass: "bg-[#f08a24] shadow-[inset_0_-2px_0_#c96a12]",
+    Icon: ArrowLeftRight,
+  },
+  give: {
+    label: "Give",
+    boxClass: "bg-[#f08a24] shadow-[inset_0_-2px_0_#c96a12]",
+    Icon: ArrowLeftRight,
+  },
+};
+
+function ConfirmMoveRow({ tone, player }: { tone: ConfirmTone; player: Player }) {
   const logo = teamLogo(player.team);
   const posLabel = player.pos === "DEF" ? "DST" : player.pos;
-  const isAdd = tone === "add";
+  const { label, boxClass, Icon } = CONFIRM_TONE[tone];
   return (
     <div className="flex items-center gap-3 rounded-xl border border-m-border bg-m-row-alt px-3 py-3">
       <span
         className={cn(
           "flex size-10 shrink-0 items-center justify-center rounded-lg text-white",
-          isAdd ? "bg-[#1fae5b] shadow-[inset_0_-2px_0_#168444]" : "bg-[#e8551f] shadow-[inset_0_-2px_0_#b83d10]",
+          boxClass,
         )}
         aria-hidden
       >
-        {isAdd ? <Plus className="size-5" strokeWidth={2.5} /> : <Minus className="size-5" strokeWidth={2.5} />}
+        <Icon className="size-5" strokeWidth={2.5} />
       </span>
       <PlayerAvatar
         id={player.id}
@@ -900,9 +944,7 @@ function ConfirmMoveRow({ tone, player }: { tone: "add" | "drop"; player: Player
         <span className="size-7 shrink-0" aria-hidden />
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-m-muted">
-          {isAdd ? "Add" : "Drop"}
-        </p>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-m-muted">{label}</p>
         <p className="truncate text-[15px] font-semibold leading-tight">{shortName(player)}</p>
         <p className="truncate text-xs text-m-muted">
           {player.team || "FA"} - {posLabel}
