@@ -850,7 +850,7 @@ function DropCandidateRow({
             />
             <RankHex
               rank={rank}
-              className="-left-1 -top-1 size-5 rounded-full border border-black/12 bg-white text-[10px] text-m-card-fg shadow-sm"
+              className="-left-1 -top-1 size-5 rounded-full border border-black/15 bg-white text-[10px] text-black shadow-sm"
             />
             <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
           </div>
