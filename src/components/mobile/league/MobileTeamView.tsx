@@ -836,15 +836,11 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
               <p className="mb-1 text-center text-xs text-m-muted">
                 Preview only — tap again for your set lineup
               </p>
-            ) : isNative ? (
-              <p className="mb-1 text-center text-xs text-m-muted">
-                Tap Optimize to set and save the best projected lineup
-              </p>
             ) : null}
           </>
         ) : null}
 
-        {canEditLineup ? (
+        {canEditLineup && !isNative ? (
           <p className="mb-2 text-center text-xs text-m-muted">
             {selectedKey
               ? "Tap a highlighted slot to swap or place this player."
