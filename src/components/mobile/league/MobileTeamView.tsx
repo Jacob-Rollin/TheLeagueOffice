@@ -952,27 +952,37 @@ function LineupCard({
     ? showActuals || progress?.phase === "in" || progress?.phase === "post"
     : false;
 
+  /** Header blue swap control — snug against the position label. */
+  const swapBtnClass = (active: boolean) =>
+    cn(
+      "flex size-11 shrink-0 items-center justify-center rounded-lg text-m-header-fg shadow-[inset_0_-2px_0_var(--m-team-hero-to)]",
+      active ? "bg-[var(--m-team-hero-to)]" : "bg-m-header",
+      active && "ring-2 ring-offset-2 ring-m-header",
+    );
+
   if (!player) {
     return (
       <div
         className={cn(
-          "flex items-center gap-3 rounded-xl bg-m-card px-3 py-4 text-m-card-fg",
-          eligibleTarget && "ring-2 ring-[#1a8cff]",
+          "flex items-center gap-2 rounded-xl bg-m-card px-3 py-4 text-m-card-fg",
+          eligibleTarget && "ring-2 ring-m-header",
         )}
       >
-        <span className="w-8 text-xs font-semibold text-m-muted">{row.slot}</span>
-        {canEdit && eligibleTarget ? (
-          <button
-            type="button"
-            aria-label={`Move player into ${row.slot}`}
-            onClick={() => onSwapAction?.(rowKey)}
-            className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#1a8cff] text-white shadow-[inset_0_-2px_0_#0d6ec9]"
-          >
-            <ArrowUpDown className="size-5" strokeWidth={2.5} />
-          </button>
-        ) : (
-          <span className="size-11 shrink-0" aria-hidden />
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="w-7 text-xs font-semibold text-m-muted">{row.slot}</span>
+          {canEdit && eligibleTarget ? (
+            <button
+              type="button"
+              aria-label={`Move player into ${row.slot}`}
+              onClick={() => onSwapAction?.(rowKey)}
+              className={swapBtnClass(true)}
+            >
+              <ArrowUpDown className="size-5" strokeWidth={2.5} />
+            </button>
+          ) : (
+            <span className="size-11 shrink-0" aria-hidden />
+          )}
+        </div>
         <span className="text-sm font-semibold text-m-muted">{row.name ?? "Empty slot"}</span>
       </div>
     );
@@ -1008,11 +1018,7 @@ function LineupCard({
         e.stopPropagation();
         onSwapAction?.(rowKey);
       }}
-      className={cn(
-        "flex size-11 shrink-0 items-center justify-center rounded-lg text-white shadow-[inset_0_-2px_0_#0d6ec9]",
-        selected || eligibleTarget ? "bg-[#0d6ec9]" : "bg-[#1a8cff]",
-        selected && "ring-2 ring-offset-2 ring-[#1a8cff]",
-      )}
+      className={swapBtnClass(selected || eligibleTarget)}
     >
       <ArrowUpDown className="size-5" strokeWidth={2.5} />
     </button>
@@ -1024,13 +1030,15 @@ function LineupCard({
     <article
       className={cn(
         "overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
-        selected && "ring-2 ring-[#1a8cff]",
-        eligibleTarget && "ring-2 ring-[#1a8cff]/bg-sky-50/40",
+        selected && "ring-2 ring-m-header",
+        eligibleTarget && "ring-2 ring-m-header bg-m-highlight",
       )}
     >
-      <div className="flex items-center gap-2.5 px-3 py-3">
-        <span className="w-8 shrink-0 text-xs font-semibold text-m-muted">{row.slot}</span>
-        {actionControl}
+      <div className="flex items-center gap-2 px-3 py-3">
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="w-7 shrink-0 text-xs font-semibold text-m-muted">{row.slot}</span>
+          {actionControl}
+        </div>
         <div
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5"
           {...(eligibleTarget
