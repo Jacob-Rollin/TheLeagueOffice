@@ -249,11 +249,14 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
 
   const projectPlayer = (p: Player) => projectFor(sleeperIdFor(p));
 
-  /** Hide optimize once any current starter's NFL game has started (or finished). */
+  const isPlayerLocked = (player: Player | null | undefined) =>
+    playerIsLocked(player, progressByNflTeam, activeWeek, isPastWeek);
+
+  /** Hide Optimize once any starter’s NFL game has started (same as synced leagues). */
   const startersLocked = useMemo(() => {
     for (const row of currentLineup.starters) {
       if (!row.player) continue;
-      if (playerIsLocked(row.player, progressByNflTeam, activeWeek, isPastWeek)) return true;
+      if (isPlayerLocked(row.player)) return true;
     }
     return false;
   }, [currentLineup.starters, progressByNflTeam, activeWeek, isPastWeek]);
@@ -378,7 +381,26 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     const pool = (myTeam.players ?? []).filter((p) => !irIds.has(p.id));
     if (!pool.length || !labels.length) return null;
 
-    const optimal = buildProjectedOptimalLineup(labels, pool, projectPlayer);
+    // Defense-in-depth: pin any locked players if Optimize still runs (race / clock).
+    const immovableIds = new Set<string>();
+    const pinnedStarters = currentLineup.starters.map((row) => {
+      if (row.player && isPlayerLocked(row.player)) {
+        immovableIds.add(row.player.id);
+        return row.player;
+      }
+      return null;
+    });
+    for (const row of currentLineup.bench) {
+      if (row.player && isPlayerLocked(row.player)) immovableIds.add(row.player.id);
+    }
+    for (const row of currentLineup.reserve) {
+      if (row.player && isPlayerLocked(row.player)) immovableIds.add(row.player.id);
+    }
+
+    const optimal = buildProjectedOptimalLineup(labels, pool, projectPlayer, {
+      pinnedStarters,
+      immovableIds,
+    });
     const currentTotal = sumLineupProjection(currentLineup.starters, projectPlayer);
     const gain = Math.round((optimal.total - currentTotal) * 100) / 100;
     if (gain < 0.05) return null;
@@ -403,6 +425,11 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     startersLocked,
     rosterPositions,
     currentLineup.starters,
+    currentLineup.bench,
+    currentLineup.reserve,
+    progressByNflTeam,
+    activeWeek,
+    isPastWeek,
     projectFor,
     sleeperIdFor,
   ]);
@@ -417,40 +444,65 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
 
   const applyNativeOptimize = async () => {
     if (!isNative || !linkId || !nativeLineup || !optimizePlan || savingLineup) return;
-    const counts = parseRosterSlotCounts(nativeLineup.rosterSlots);
-    const views = expandLineupSlots(counts);
+
+    // Keep locked players in their exact slots; only rearrange unlocked ones.
+    const views = nativeViews.map((v) => ({ ...v }));
+    const lockedIdByKey = new Map<string, string>();
+    for (const v of views) {
+      if (!v.playerId) continue;
+      const p = playersById.get(v.playerId);
+      if (isPlayerLocked(p)) lockedIdByKey.set(viewKey(v), v.playerId);
+    }
+    for (const v of views) {
+      if (lockedIdByKey.has(viewKey(v))) continue;
+      v.playerId = null;
+    }
+
+    const placed = new Set(lockedIdByKey.values());
     const starterQueues = new Map<string, string[]>();
     for (const row of optimizePlan.lineup.starters) {
-      if (!row.player) continue;
+      if (!row.player || placed.has(row.player.id)) continue;
       const key = (row.slot === "DST" ? "DEF" : row.slot) as RosterSlotKey;
       const q = starterQueues.get(key) ?? [];
       q.push(row.player.id);
       starterQueues.set(key, q);
     }
     for (const v of views) {
-      if (!v.starter) continue;
+      if (!v.starter || v.playerId) continue;
       const q = starterQueues.get(v.key);
-      if (q?.length) v.playerId = q.shift() ?? null;
+      if (!q?.length) continue;
+      const id = q.shift() ?? null;
+      if (!id) continue;
+      v.playerId = id;
+      placed.add(id);
     }
+
     const benchIds = optimizePlan.lineup.bench
       .map((r) => r.player?.id)
-      .filter((id): id is string => Boolean(id));
+      .filter((id): id is string => Boolean(id) && !placed.has(id));
     const irIds = optimizePlan.lineup.reserve
       .map((r) => r.player?.id)
-      .filter((id): id is string => Boolean(id));
+      .filter((id): id is string => Boolean(id) && !placed.has(id));
     for (const v of views) {
       if (v.playerId) continue;
-      if (v.key === "BN" && benchIds.length) v.playerId = benchIds.shift() ?? null;
-      else if ((v.key === "IR" || v.key === "TAXI") && irIds.length) {
-        v.playerId = irIds.shift() ?? null;
+      if (v.key === "BN" && benchIds.length) {
+        const id = benchIds.shift()!;
+        v.playerId = id;
+        placed.add(id);
+      } else if ((v.key === "IR" || v.key === "TAXI") && irIds.length) {
+        const id = irIds.shift()!;
+        v.playerId = id;
+        placed.add(id);
       }
     }
-    // Spill any leftover bench ids into empty BN slots.
     for (const v of views) {
       if (v.playerId || v.key !== "BN") continue;
       if (!benchIds.length) break;
-      v.playerId = benchIds.shift() ?? null;
+      const id = benchIds.shift()!;
+      v.playerId = id;
+      placed.add(id);
     }
+
     setNativeViews(views);
     setShowOptimized(false);
     await persistNativeLineup(views);
