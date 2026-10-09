@@ -148,6 +148,22 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
     return scored ?? host;
   };
 
+  /** Header totals follow the same live starter scores as the lineup rows. */
+  const teamActualPoints = (entry: WeeklyMatchupEntry): number => {
+    const { starters } = slotsFor(entry);
+    let sum = 0;
+    let sawStarter = false;
+    for (const row of starters) {
+      if (!row.player) continue;
+      const pts = pointsFor(entry, row.player);
+      if (!Number.isFinite(pts)) continue;
+      sum += pts;
+      sawStarter = true;
+    }
+    if (sawStarter) return Math.round(sum * 100) / 100;
+    return Number(entry.points) || 0;
+  };
+
   const teamProjected = (entry: WeeklyMatchupEntry): number => {
     if (entry.projectedPoints > 0) return entry.projectedPoints;
     const { starters } = slotsFor(entry);
@@ -201,6 +217,7 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
           pairs={pairs}
           activeIndex={activeIndex}
           standingByRoster={standingByRoster}
+          actualPointsFor={teamActualPoints}
           projectedFor={teamProjected}
           onSelect={(i) => {
             setActiveIndex(i);
@@ -227,6 +244,8 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
                   standingByRoster={standingByRoster}
                   homeMinutes={minutesFor(pair.home)}
                   awayMinutes={minutesFor(pair.away)}
+                  homePoints={teamActualPoints(pair.home)}
+                  awayPoints={teamActualPoints(pair.away)}
                   homeProjected={teamProjected(pair.home)}
                   awayProjected={teamProjected(pair.away)}
                   showRecap={isPastWeek && i === activeIndex}
@@ -274,11 +293,16 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
               labels={labels}
               homeProjected={teamProjected(current.home)}
               awayProjected={teamProjected(current.away)}
+              homePoints={teamActualPoints(current.home)}
+              awayPoints={teamActualPoints(current.away)}
               pointsFor={pointsFor}
               projectedFor={cardHelpers.projectedFor}
               viewerResult={
                 current.mine
-                  ? matchupViewerResult(current.home.points, current.away.points)
+                  ? matchupViewerResult(
+                      teamActualPoints(current.home),
+                      teamActualPoints(current.away),
+                    )
                   : null
               }
               onClose={() => setRecapOpen(false)}
@@ -312,6 +336,8 @@ function MatchupCard({
   standingByRoster,
   homeMinutes,
   awayMinutes,
+  homePoints,
+  awayPoints,
   homeProjected,
   awayProjected,
   showRecap,
@@ -322,6 +348,8 @@ function MatchupCard({
   standingByRoster: Map<number, { row: StandingRow; rank: number }>;
   homeMinutes: { remaining: number; total: number };
   awayMinutes: { remaining: number; total: number };
+  homePoints: number;
+  awayPoints: number;
   homeProjected: number;
   awayProjected: number;
   showRecap?: boolean;
@@ -341,7 +369,7 @@ function MatchupCard({
           <div className="flex items-start justify-between gap-2">
             <RankedLogo name={home.teamName} logo={home.logo} rank={homeStanding?.rank ?? null} />
             <div className="pt-2 text-right">
-              <Score value={home.points} className="font-display text-[30px] font-extrabold italic leading-none" />
+              <Score value={homePoints} className="font-display text-[30px] font-extrabold italic leading-none" />
               <p className={cn("mt-1 text-sm font-semibold tabnum", projTone(homeProjected, awayProjected))}>
                 {homeProjected.toFixed(2)}
               </p>
@@ -364,7 +392,7 @@ function MatchupCard({
           <div className="flex flex-row-reverse items-start justify-between gap-2">
             <RankedLogo name={away.teamName} logo={away.logo} rank={awayStanding?.rank ?? null} />
             <div className="pt-2">
-              <Score value={away.points} className="font-display text-[30px] font-extrabold italic leading-none" />
+              <Score value={awayPoints} className="font-display text-[30px] font-extrabold italic leading-none" />
               <p className={cn("mt-1 text-sm font-semibold tabnum", projTone(awayProjected, homeProjected))}>
                 {awayProjected.toFixed(2)}
               </p>
@@ -410,51 +438,67 @@ function Scoreboard({
   pairs,
   activeIndex,
   standingByRoster,
+  actualPointsFor,
   projectedFor,
   onSelect,
 }: {
   pairs: Pair[];
   activeIndex: number;
   standingByRoster: Map<number, { row: StandingRow; rank: number }>;
+  actualPointsFor: (entry: WeeklyMatchupEntry) => number;
   projectedFor: (entry: WeeklyMatchupEntry) => number;
   onSelect: (index: number) => void;
 }) {
   return (
     <div className="mt-3 space-y-2.5 px-2.5">
-      {pairs.map((pair, i) => (
-        <button
-          key={`${pair.home.rosterId}-${pair.away.rosterId}`}
-          type="button"
-          onClick={() => onSelect(i)}
-          className={cn(
-            "block w-full overflow-hidden rounded-xl border bg-m-card text-left text-m-card-fg",
-            i === activeIndex ? "border-m-accent" : "border-transparent",
-          )}
-        >
-          {[pair.home, pair.away].map((side, s) => {
-            const standing = standingByRoster.get(Number(side.rosterId));
-            const leading = side.points > (s === 0 ? pair.away.points : pair.home.points);
-            return (
-              <div key={side.rosterId} className={cn("flex items-center gap-3 px-3 py-2.5", s === 1 && "border-t border-m-border")}>
-                <MobileTeamLogo name={side.teamName} logo={side.logo} className="size-9" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold">{side.teamName}</span>
-                  <span className="block truncate text-xs text-m-muted">
-                    {[side.owner, record(standing?.row)].filter(Boolean).join(" | ")}
+      {pairs.map((pair, i) => {
+        const homePts = actualPointsFor(pair.home);
+        const awayPts = actualPointsFor(pair.away);
+        return (
+          <button
+            key={`${pair.home.rosterId}-${pair.away.rosterId}`}
+            type="button"
+            onClick={() => onSelect(i)}
+            className={cn(
+              "block w-full overflow-hidden rounded-xl border bg-m-card text-left text-m-card-fg",
+              i === activeIndex ? "border-m-accent" : "border-transparent",
+            )}
+          >
+            {[
+              { side: pair.home, pts: homePts, leading: homePts > awayPts },
+              { side: pair.away, pts: awayPts, leading: awayPts > homePts },
+            ].map(({ side, pts, leading }, s) => {
+              const standing = standingByRoster.get(Number(side.rosterId));
+              return (
+                <div
+                  key={side.rosterId}
+                  className={cn("flex items-center gap-3 px-3 py-2.5", s === 1 && "border-t border-m-border")}
+                >
+                  <MobileTeamLogo name={side.teamName} logo={side.logo} className="size-9" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">{side.teamName}</span>
+                    <span className="block truncate text-xs text-m-muted">
+                      {[side.owner, record(standing?.row)].filter(Boolean).join(" | ")}
+                    </span>
                   </span>
-                </span>
-                <span className="text-right">
-                  <Score
-                    value={side.points}
-                    className={cn("font-display text-xl font-bold italic leading-none", !leading && "text-m-muted")}
-                  />
-                  <span className="block text-xs text-m-muted tabnum">{projectedFor(side).toFixed(2)}</span>
-                </span>
-              </div>
-            );
-          })}
-        </button>
-      ))}
+                  <span className="text-right">
+                    <Score
+                      value={pts}
+                      className={cn(
+                        "font-display text-xl font-bold italic leading-none",
+                        !leading && "text-m-muted",
+                      )}
+                    />
+                    <span className="block text-xs text-m-muted tabnum">
+                      {projectedFor(side).toFixed(2)}
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
+          </button>
+        );
+      })}
     </div>
   );
 }

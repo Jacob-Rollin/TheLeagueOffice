@@ -44,6 +44,8 @@ export function MobileMatchupRecap({
   pointsFor,
   projectedFor,
   viewerResult,
+  homePoints: homePointsProp,
+  awayPoints: awayPointsProp,
   onClose,
 }: {
   week: number;
@@ -58,11 +60,16 @@ export function MobileMatchupRecap({
   projectedFor: (player: Player) => number | null;
   /** Set when the open recap is the signed-in manager's matchup. */
   viewerResult?: MatchupViewerResult | null;
+  /** Live starter-sum totals when host entry.points lags player scores. */
+  homePoints?: number;
+  awayPoints?: number;
   onClose: () => void;
 }) {
-  const margin = Math.round((home.points - away.points) * 100) / 100;
-  const homeWon = home.points > away.points;
-  const awayWon = away.points > home.points;
+  const homePts = homePointsProp ?? home.points;
+  const awayPts = awayPointsProp ?? away.points;
+  const margin = Math.round((homePts - awayPts) * 100) / 100;
+  const homeWon = homePts > awayPts;
+  const awayWon = awayPts > homePts;
   const tied = !homeWon && !awayWon;
 
   const battles = useMemo((): Battle[] => {
@@ -134,8 +141,8 @@ export function MobileMatchupRecap({
     };
   }, [home, away, homeLineup.bench, awayLineup.bench, pointsFor]);
 
-  const homeDelta = Math.round((home.points - homeProjected) * 100) / 100;
-  const awayDelta = Math.round((away.points - awayProjected) * 100) / 100;
+  const homeDelta = Math.round((homePts - homeProjected) * 100) / 100;
+  const awayDelta = Math.round((awayPts - awayProjected) * 100) / 100;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/50" role="dialog" aria-modal="true" aria-label="Matchup recap">
@@ -181,7 +188,7 @@ export function MobileMatchupRecap({
                 <MobileTeamLogo name={home.teamName} logo={home.logo} className="mx-auto size-12" />
                 <p className="mt-2 truncate text-sm font-semibold">{home.teamName}</p>
                 <Score
-                  value={home.points}
+                  value={homePts}
                   className={cn(
                     "mt-1 font-display text-2xl font-extrabold italic",
                     homeWon && "text-emerald-500",
@@ -193,7 +200,7 @@ export function MobileMatchupRecap({
                 <MobileTeamLogo name={away.teamName} logo={away.logo} className="mx-auto size-12" />
                 <p className="mt-2 truncate text-sm font-semibold">{away.teamName}</p>
                 <Score
-                  value={away.points}
+                  value={awayPts}
                   className={cn(
                     "mt-1 font-display text-2xl font-extrabold italic",
                     awayWon && "text-emerald-500",

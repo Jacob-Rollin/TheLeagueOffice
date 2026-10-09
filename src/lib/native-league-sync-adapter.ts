@@ -359,9 +359,14 @@ export async function fetchNativeWeekMatchups(
   if (!payload) return null;
 
   const board = await fetchNativeBoardForLink(clean);
-  const isCurrent = currentWeek != null && week === currentWeek;
+  // Overlay when viewing the NFL current week or the league's own current week
+  // (commissioners may advance for testing while NFL week is unchanged).
+  const boardWeek = board?.currentWeek ?? null;
+  const isLiveWeek =
+    (currentWeek != null && week === currentWeek) ||
+    (boardWeek != null && week === boardWeek);
 
-  if (isCurrent && payload.matchups.length) {
+  if (isLiveWeek && payload.matchups.length) {
     const seasonYear = payload.seasonYear || board?.summary.seasonYear || new Date().getUTCFullYear();
     const live = await fetchNativeLiveWeekStats(seasonYear, week).catch(() => null);
     const stats = live?.stats;

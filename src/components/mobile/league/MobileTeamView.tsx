@@ -495,10 +495,46 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
       : myProjectedBase;
   const oppProjected = sumStarterProj(opponent);
 
+  const scorePlayerOnEntry = (entry: WeeklyMatchupEntry | null, p: Player): number => {
+    if (!entry) return 0;
+    const host = entryPoints(entry, p.id);
+    if (host !== 0) return host;
+    const scored = scoreActualLine(statsFor(sleeperIdFor(p)), scoringMap);
+    return scored ?? host;
+  };
+
+  const sumStarterActuals = (
+    entry: WeeklyMatchupEntry | null,
+    starters: LineupRow[],
+  ): number | null => {
+    if (!entry) return null;
+    let sum = 0;
+    let saw = false;
+    for (const row of starters) {
+      if (!row.player) continue;
+      sum += scorePlayerOnEntry(entry, row.player);
+      saw = true;
+    }
+    if (saw) return Math.round(sum * 100) / 100;
+    return Number(entry.points) || 0;
+  };
+
+  /** Header totals follow the same live starter scores as the lineup rows. */
+  const myLivePoints = sumStarterActuals(mine, currentLineup.starters);
+  const oppLivePoints = opponent
+    ? sumStarterActuals(
+        opponent,
+        resolveEntryLineup(opponent, slotLabels(rosterPositions), playersById).starters,
+      )
+    : null;
+
   let matchupStatus: { label: string; className: string } | null = null;
   if (mine && opponent) {
     if (isPastWeek) {
-      const result = matchupViewerResult(mine.points, opponent.points);
+      const result = matchupViewerResult(
+        myLivePoints ?? mine.points,
+        oppLivePoints ?? opponent.points,
+      );
       matchupStatus =
         result === "won"
           ? { label: "Won", className: "text-emerald-500" }
@@ -531,10 +567,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const rowProps: RowHelpers = {
     pointsFor: (p) => {
       if (!mine) return null;
-      const host = entryPoints(mine, p.id);
-      if (host !== 0) return host;
-      const scored = scoreActualLine(statsFor(sleeperIdFor(p)), scoringMap);
-      return scored ?? host;
+      return scorePlayerOnEntry(mine, p);
     },
     projectedFor: (p) => projectFor(sleeperIdFor(p)),
     posRankFor: (p) => rankFor(sleeperIdFor(p)).pos,
@@ -645,7 +678,10 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
                   <MobileTeamLogo name={myTeam.team} logo={myTeam.logo} className="size-14" />
                   <div className="flex flex-1 items-center justify-center gap-3">
                     <div className="text-right">
-                      <Score value={mine?.points ?? null} className="font-display text-[34px] font-extrabold italic leading-none" />
+                      <Score
+                        value={myLivePoints ?? mine?.points ?? null}
+                        className="font-display text-[34px] font-extrabold italic leading-none"
+                      />
                       <p
                         className={
                           "mt-1 text-sm tabnum " +
@@ -660,7 +696,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
                     <span className="font-display text-sm font-bold text-m-muted">vs</span>
                     <div>
                       <Score
-                        value={opponent?.points ?? null}
+                        value={oppLivePoints ?? opponent?.points ?? null}
                         className="font-display text-[34px] font-extrabold italic leading-none text-m-muted"
                       />
                       <p className="mt-1 text-sm text-m-muted tabnum">{oppProjected != null ? oppProjected.toFixed(2) : "-"}</p>
