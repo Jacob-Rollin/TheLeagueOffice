@@ -549,8 +549,7 @@ export function FootballIcon({ className }: { className?: string }) {
 
 /**
  * Football / RZ beside the live clock.
- * Football = this NFL team has the ball (for DST that is exactly when the
- * unit pill is Sideline — offense out, defense not on the field).
+ * Football = this NFL team has the ball (skill / K only — never DST).
  */
 export function PossessionStripBadges({
   hasBall,
@@ -574,13 +573,13 @@ export function PossessionStripBadges({
 
 /**
  * Whether the strip should show the football next to the quarter/clock.
- * Skill/K: team has possession. DST: same signal — true while Sideline
- * (own offense has the ball); false while Defense (opponent has it).
+ * Skill/K: team has possession. DST: never (Sideline already covers offense-out).
  */
 export function stripShowsFootball(
   player: Pick<Player, "team" | "pos">,
   progress: NflGameProgress | undefined,
 ): boolean {
+  if (player.pos === "DEF") return false;
   if (progress?.phase !== "in" || !progress.possessionAbbr) return false;
   return teamKeys(player.team).includes(progress.possessionAbbr.toUpperCase());
 }

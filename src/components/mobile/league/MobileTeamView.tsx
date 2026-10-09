@@ -988,7 +988,7 @@ function LineupCard({
     opponent: opponentFor(player),
     team: player.team,
   });
-  // DST Sideline (own offense has the ball) → football beside the quarter.
+  // Skill/K only — DST never shows the strip football (Sideline covers that).
   const showBall = stripShowsFootball(player, progress);
 
   const showSwap = canEdit && !locked;
