@@ -93,6 +93,9 @@ export function entryPoints(entry: WeeklyMatchupEntry, playerId: string): number
  * Starters / bench / reserve for one matchup side, aligned to the league's
  * starting slots. ESPN athletes missing from the Sleeper catalog fall back to
  * the host's own name, team, position and headshot.
+ *
+ * Placement prefers position fit over raw starter-array index so mis-ordered
+ * native slot JSON (alphabetical MySQL keys) still paints QB/RB/… correctly.
  */
 export function resolveEntryLineup(
   entry: WeeklyMatchupEntry,
@@ -113,14 +116,57 @@ export function resolveEntryLineup(
     if (key.startsWith("espn:") && meta.slot === "starter") unmatchedByName.set(meta.name.toLowerCase(), key);
   }
 
-  const used = new Set<string>();
-  const starters: LineupRow[] = labels.map((slot, i) => {
+  type Cand = { id: string; player: Player; index: number };
+  const candidates: Cand[] = [];
+  const seenIds = new Set<string>();
+  for (let i = 0; i < entry.starters.length; i += 1) {
     let id = entry.starters[i] || "";
     const name = entry.starterNames?.[i] || null;
     if (!id && name) id = unmatchedByName.get(name.toLowerCase()) ?? "";
-    const player = id ? resolve(id) : null;
-    if (player) used.add(id);
-    return { slot, player, headshot: headshot(id), name: player ? null : name };
+    if (!id || seenIds.has(id)) continue;
+    const player = resolve(id);
+    if (!player) continue;
+    seenIds.add(id);
+    candidates.push({ id, player, index: i });
+  }
+
+  const used = new Set<string>();
+  const takeForSlot = (slot: string, preferIndex: number): Cand | null => {
+    const prefer = candidates.find(
+      (c) =>
+        !used.has(c.id) &&
+        c.index === preferIndex &&
+        playerFitsMobileSlot(c.player, slot),
+    );
+    if (prefer) return prefer;
+    return (
+      candidates.find((c) => !used.has(c.id) && playerFitsMobileSlot(c.player, slot)) ?? null
+    );
+  };
+
+  const starters: LineupRow[] = labels.map((slot) => ({ slot, player: null }));
+  // Dedicated slots first, then flex — same order as optimize.
+  labels.forEach((slot, i) => {
+    if (slot === "FLEX" || slot === "FLX" || slot === "SF" || slot === "SFLEX") return;
+    const hit = takeForSlot(slot, i);
+    if (!hit) return;
+    used.add(hit.id);
+    starters[i] = { slot, player: hit.player, headshot: headshot(hit.id) };
+  });
+  labels.forEach((slot, i) => {
+    if (slot !== "FLEX" && slot !== "FLX" && slot !== "SF" && slot !== "SFLEX") return;
+    const hit = takeForSlot(slot, i);
+    if (!hit) return;
+    used.add(hit.id);
+    starters[i] = { slot, player: hit.player, headshot: headshot(hit.id) };
+  });
+  // Last resort: keep index alignment for unresolved host names / unknown pos.
+  labels.forEach((slot, i) => {
+    if (starters[i]?.player) return;
+    const hit = candidates.find((c) => !used.has(c.id) && c.index === i);
+    if (!hit) return;
+    used.add(hit.id);
+    starters[i] = { slot, player: hit.player, headshot: headshot(hit.id) };
   });
 
   const irIds = new Set(entry.irIds);
@@ -441,20 +487,30 @@ export function isRuledOut(status: string | null | undefined): boolean {
 }
 
 /**
- * Live possession pill. Public ESPN scoreboard cannot tell which skill players
- * are in a given package, so "Possession" means the NFL team has the ball
- * (Sideline otherwise / when ruled out). DEF inverts: active when the offense
- * (opponent) has the ball.
+ * Live unit pill for mobile cards. Public ESPN scoreboard cannot tell which
+ * skill players are in a given package, so we label the relevant *team unit*:
+ * - Offense — player's NFL team has the ball (skill / K)
+ * - Defense — opponent has the ball (DST only)
+ * - Sideline — the other unit is out, or the player is ruled out
+ * Football icon on the strip still means "this NFL team has the ball."
  */
+export type LiveUnitPill = "offense" | "defense" | "sideline";
+
 export function possessionPill(
   player: Player,
   progress: NflGameProgress | undefined,
-): "possession" | "sideline" | null {
+): LiveUnitPill | null {
   if (progress?.phase !== "in" || !progress.possessionAbbr) return null;
   if (isRuledOut(player.injury_status ?? player.injury)) return "sideline";
   const hasBall = teamKeys(player.team).includes(progress.possessionAbbr.toUpperCase());
-  const active = player.pos === "DEF" ? !hasBall : hasBall;
-  return active ? "possession" : "sideline";
+  if (player.pos === "DEF") return hasBall ? "sideline" : "defense";
+  return hasBall ? "offense" : "sideline";
+}
+
+export function liveUnitPillLabel(status: LiveUnitPill): string {
+  if (status === "offense") return "Offense";
+  if (status === "defense") return "Defense";
+  return "Sideline";
 }
 
 /** Regulation minutes a player's game has left: 60 before kickoff, 0 once final or on bye. */
@@ -465,7 +521,10 @@ export function minutesLeft(progress: NflGameProgress | undefined): number {
   return Math.max(0, Math.min(60, progress.minutesRemaining));
 }
 
-/** Compact football glyph for possession on the game strip. */
+/**
+ * Compact American-football glyph for the live game strip.
+ * (Prior lacings used an X that read as a star at 12px — keep horizontal laces only.)
+ */
 export function FootballIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -474,19 +533,25 @@ export function FootballIcon({ className }: { className?: string }) {
       className={cn("inline-block shrink-0", className)}
       fill="currentColor"
     >
-      <ellipse cx="8" cy="8" rx="6.5" ry="4.2" transform="rotate(-35 8 8)" />
+      {/* Tip-to-tip football, slight tilt */}
+      <path d="M2.2 9.2c1.2-3.2 4-5.2 5.8-5.6 1.8-.4 4.2.6 5.8 2.8 1.2 1.7 1.2 3.4 0 4.4-1.6 1.4-4.2 1.6-6.2.6C5.2 10.4 3.2 10.8 2.2 9.2Z" />
+      {/* Center seam + lace ticks (light so they read on accent fill) */}
       <path
-        d="M5.2 7.2h5.6M6.1 5.9l1.9 2.2M9.9 5.9L8 8.1M6.1 10.1L8 7.9M9.9 10.1L8 7.9"
+        d="M5.2 8.2h5.6M7 6.9v2.6M8 6.7v3M9 6.9v2.6"
         fill="none"
         stroke="var(--m-row-alt, #f6f5f2)"
-        strokeWidth="0.9"
+        strokeWidth="1"
         strokeLinecap="round"
       />
     </svg>
   );
 }
 
-/** Football / RZ badges beside the live clock on a player card strip. */
+/**
+ * Football / RZ beside the live clock.
+ * Football = the fantasy unit is the one currently on the field
+ * (offense for skill/K, defense for DST).
+ */
 export function PossessionStripBadges({
   hasBall,
   redZone,
@@ -496,8 +561,8 @@ export function PossessionStripBadges({
 }) {
   if (!hasBall && !redZone) return null;
   return (
-    <span className="inline-flex items-center gap-1">
-      {hasBall ? <FootballIcon className="size-3 text-m-accent" /> : null}
+    <span className="inline-flex items-center gap-1" title={hasBall ? "Unit on the field" : undefined}>
+      {hasBall ? <FootballIcon className="size-3.5 text-m-accent" /> : null}
       {redZone ? (
         <span className="rounded-[3px] bg-orange-500 px-1 py-px text-[8px] font-bold leading-none tracking-wide text-white">
           RZ
@@ -505,4 +570,20 @@ export function PossessionStripBadges({
       ) : null}
     </span>
   );
+}
+
+/**
+ * Football next to the quarter when this fantasy unit is relevant:
+ * - Skill / K: NFL team has the ball (offense)
+ * - DST: opponent has the ball (defense on the field) — not while Sideline
+ */
+export function stripShowsFootball(
+  player: Pick<Player, "team" | "pos" | "injury_status" | "injury">,
+  progress: NflGameProgress | undefined,
+): boolean {
+  if (progress?.phase !== "in" || !progress.possessionAbbr) return false;
+  if (isRuledOut(player.injury_status ?? player.injury)) return false;
+  const teamHasBall = teamKeys(player.team).includes(progress.possessionAbbr.toUpperCase());
+  // DST inverts: football while defense is out, not while own offense has it.
+  return player.pos === "DEF" ? !teamHasBall : teamHasBall;
 }

@@ -48,9 +48,9 @@ export function useMobileLeagueStandings() {
   };
 }
 
-const WAIVER_WINDOW_MS = 24 * 60 * 60 * 1000;
+const WAIVER_WINDOW_MS = 12 * 60 * 60 * 1000;
 
-/** True for the 24 hours after the league's most recent waiver run. */
+/** True for 12 hours after the league's most recent waiver execution. */
 export function useWaiverActivityWindow() {
   const { events } = useMobileLeagueActivity();
   const [now, setNow] = useState(() => Date.now());
@@ -60,7 +60,10 @@ export function useWaiverActivityWindow() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const lastWaiverAt = events.reduce((latest, e) => (e.kind === "waiver" && e.at > latest ? e.at : latest), 0);
+  const lastWaiverAt = events.reduce(
+    (latest, e) => (e.kind === "waiver" && e.at > latest ? e.at : latest),
+    0,
+  );
   return lastWaiverAt > 0 && now - lastWaiverAt < WAIVER_WINDOW_MS;
 }
 

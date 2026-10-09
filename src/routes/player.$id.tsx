@@ -89,7 +89,8 @@ const bioQuery = (id: string) =>
 
 const nextGameQuery = (team: string) =>
   queryOptions({
-    queryKey: ["player-next-game", team],
+    // v2: fantasy-week slate (Tuesday roll), not next calendar kickoff.
+    queryKey: ["player-next-game", "v2-fantasy-week", team],
     queryFn: () => fetchNextGameClient(team),
     staleTime: 1000 * 60 * 60 * 6,
     retry: false,
