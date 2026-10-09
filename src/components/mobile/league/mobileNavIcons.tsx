@@ -2,25 +2,23 @@ import { createLucideIcon } from "lucide-react";
 
 /**
  * Horizontal American football — Matchup tab.
- * Same pointed prolate shell as the vertical reference, rotated 90°.
+ * Larger, more open pointed shell so laces read at 20px.
  */
 export const FootballIcon = createLucideIcon("football", [
   [
     "path",
     {
-      // Pointed football silhouette (originally vertical), laid on its side.
-      d: "M12 2.75c-2.55 3.35-4.1 6.45-4.1 9.25s1.55 5.9 4.1 9.25c2.55-3.35 4.1-6.45 4.1-9.25S14.55 6.1 12 2.75z",
-      transform: "rotate(90 12 12)",
+      // Pointed tips, taller midsection — fills the 24 box without feeling cramped.
+      d: "M1.5 12C4 5.5 8 3.75 12 3.75S20 5.5 22.5 12C20 18.5 16 20.25 12 20.25S4 18.5 1.5 12z",
       key: "shell",
     },
   ],
-  // Laces along the long axis (5 stitches like the reference).
-  ["path", { d: "M7.75 12h8.5", key: "lace-spine" }],
-  ["path", { d: "M9.1 10.45v3.1", key: "lace-1" }],
-  ["path", { d: "M10.55 10.45v3.1", key: "lace-2" }],
-  ["path", { d: "M12 10.45v3.1", key: "lace-3" }],
-  ["path", { d: "M13.45 10.45v3.1", key: "lace-4" }],
-  ["path", { d: "M14.9 10.45v3.1", key: "lace-5" }],
+  // Longer, more spaced lace stitches.
+  ["path", { d: "M7.25 12h9.5", key: "lace-spine" }],
+  ["path", { d: "M8.75 9.35v5.3", key: "lace-1" }],
+  ["path", { d: "M10.9 9.35v5.3", key: "lace-2" }],
+  ["path", { d: "M13.1 9.35v5.3", key: "lace-3" }],
+  ["path", { d: "M15.25 9.35v5.3", key: "lace-4" }],
 ]);
 
 /**
