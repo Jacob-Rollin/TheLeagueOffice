@@ -431,6 +431,22 @@ export const submitNativeFreeAgentMove = createServerFn({ method: "POST" })
     });
   });
 
+/** Pure drop (no add) for native leagues — frees a roster slot. */
+export const submitNativeFreeAgentDrop = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; dropPlayerId: string; rosterVersion: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    dropPlayerId: String(input.dropPlayerId ?? "").trim().slice(0, 32),
+    rosterVersion: Number(input.rosterVersion),
+  }))
+  .handler(async ({ context, data }) => {
+    const { submitNativeFreeAgentDropForUser } = await import("@/lib/native-league-ops.server");
+    return await submitNativeFreeAgentDropForUser(context.userId, data.linkId, {
+      dropPlayerId: data.dropPlayerId,
+      rosterVersion: data.rosterVersion,
+    });
+  });
+
 export const listNativeTransactions = createServerFn({ method: "GET" })
   .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((input: { linkId: string; limit?: number }) => ({

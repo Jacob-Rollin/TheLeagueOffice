@@ -2151,6 +2151,138 @@ export async function submitNativeFreeAgentMoveForUser(
 }
 
 /**
+ * Pure free-agent drop (no add). Frees an active/IR slot under commissioner capacity.
+ */
+export async function submitNativeFreeAgentDropForUser(
+  userId: string,
+  linkId: string,
+  input: { dropPlayerId: string; rosterVersion: number },
+): Promise<NativeFaMoveResult> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const membership = await assertMembershipLink(userId, linkId);
+  if (!membership || membership.teamId == null) {
+    return { ok: false, error: "Claim a team seat before dropping players" };
+  }
+
+  const dropPlayerId = String(input.dropPlayerId ?? "").trim().slice(0, 32);
+  if (!dropPlayerId) return { ok: false, error: "Select a player to drop" };
+
+  const leagueRows = await tidbExecute<LeagueCoreRow>(
+    `SELECT ${LEAGUE_CORE_SELECT} FROM native_leagues WHERE id = ? LIMIT 1`,
+    [membership.leagueId],
+  );
+  const league = leagueRows[0];
+  if (!league) return { ok: false, error: "League not found" };
+  if (String(league.draft_status) !== "complete") {
+    return { ok: false, error: "Drops unlock after the draft is complete" };
+  }
+  if (String(league.status) === "completed") {
+    return { ok: false, error: "This season is complete" };
+  }
+
+  const capacity = countActiveRosterCapacity(parseRosterSlots(league.roster_slots));
+  const expectedRosterVersion = Math.max(1, Math.floor(Number(input.rosterVersion) || 1));
+  const seasonYear = Number(league.season_year);
+  const week = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
+
+  const [rosterRows, lockRows] = await Promise.all([
+    tidbExecute<{ player_ids: unknown; reserve_ir: unknown; version: number }>(
+      `SELECT player_ids, reserve_ir, version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
+      [membership.leagueId, membership.teamId],
+    ),
+    tidbExecute<{ player_id: string; held_by_team_id: number | null; lock_reason?: string }>(
+      `SELECT player_id, held_by_team_id, lock_reason FROM native_player_locks
+       WHERE league_id = ? AND player_id = ?`,
+      [membership.leagueId, dropPlayerId],
+    ),
+  ]);
+
+  const roster = rosterRows[0];
+  if (!roster) return { ok: false, error: "Roster not found" };
+  const currentVersion = Number(roster.version ?? 1) || 1;
+  if (currentVersion !== expectedRosterVersion) {
+    return { ok: false, error: "Roster changed elsewhere — reload and try again" };
+  }
+
+  const activeIds = parsePlayerIdList(roster.player_ids);
+  const irIds = parsePlayerIdList(roster.reserve_ir);
+  const allOwned = [...activeIds, ...irIds];
+  if (!allOwned.includes(dropPlayerId)) {
+    return { ok: false, error: "Drop player must be on your roster" };
+  }
+
+  const dropLock = lockRows[0];
+  if (dropLock && String(dropLock.lock_reason ?? "") === "trade_hold") {
+    return { ok: false, error: "That player is held in a pending trade" };
+  }
+  if (dropLock && Number(dropLock.held_by_team_id) !== Number(membership.teamId)) {
+    return { ok: false, error: "You do not hold that player" };
+  }
+
+  const nextActive = activeIds.filter((id) => id !== dropPlayerId);
+  const nextIr = irIds.filter((id) => id !== dropPlayerId);
+  const nextVersion = currentVersion + 1;
+
+  try {
+    await tidbExecute(
+      `UPDATE native_rosters SET player_ids = ?, reserve_ir = ?, version = ?
+       WHERE league_id = ? AND team_id = ? AND version = ?`,
+      [
+        JSON.stringify(nextActive),
+        JSON.stringify(nextIr),
+        nextVersion,
+        membership.leagueId,
+        membership.teamId,
+        expectedRosterVersion,
+      ],
+    );
+    const verify = await tidbExecute<{ version: number }>(
+      `SELECT version FROM native_rosters WHERE league_id = ? AND team_id = ? LIMIT 1`,
+      [membership.leagueId, membership.teamId],
+    );
+    if (Number(verify[0]?.version ?? 0) !== nextVersion) {
+      return { ok: false, error: "Roster changed elsewhere — reload and try again" };
+    }
+
+    await tidbExecute(
+      `DELETE FROM native_player_locks WHERE league_id = ? AND player_id = ? AND held_by_team_id = ?`,
+      [membership.leagueId, dropPlayerId, membership.teamId],
+    );
+
+    await tidbExecute(
+      `INSERT INTO native_transactions
+         (league_id, team_id, type, status, payload, created_by, processed_at)
+       VALUES (?, ?, 'drop', 'completed', ?, ?, UTC_TIMESTAMP())`,
+      [
+        membership.leagueId,
+        membership.teamId,
+        JSON.stringify({ dropPlayerId, week, seasonYear }),
+        userId,
+      ],
+    );
+
+    await syncLineupAfterRosterChange({
+      leagueId: membership.leagueId,
+      teamId: membership.teamId,
+      seasonYear,
+      week,
+      nextPlayerIds: [...nextActive, ...nextIr],
+      droppedPlayerId: dropPlayerId,
+      addedPlayerId: null,
+    });
+
+    return {
+      ok: true,
+      rosterVersion: nextVersion,
+      openSlots: Math.max(0, capacity - nextActive.length),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not drop player";
+    return { ok: false, error: message };
+  }
+}
+
+/**
  * Resolve an IR occupant who no longer matches commissioner allow-list:
  * - drop: remove that player from the roster
  * - activate: move them to active (requires dropPlayerId when active is full)
