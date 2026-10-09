@@ -152,12 +152,18 @@ export function nativeMatchupWeekToLeagueWeekMatchups(
   const entries: WeeklyMatchupEntry[] = [];
   for (const m of payload.matchups) {
     for (const side of [m.home, m.away] as const) {
-      const startersRaw = payload.startersByTeamId[String(side.teamId)] ?? [];
+      const startersRaw = (payload.startersByTeamId[String(side.teamId)] ?? [])
+        .map((id) => String(id ?? "").trim())
+        .filter(Boolean);
+      const roster = rosterByTeam.get(side.teamId);
+      const rosterIds = (roster?.playerIds ?? []).map(String);
+      // When no saved lineup for this week, paint roster ids so Matchup isn't empty
+      // (Team page seeds + persists; Matchup must not depend on visiting Team first).
+      const source = startersRaw.length ? startersRaw : rosterIds;
       const starters =
         starterLen > 0
-          ? Array.from({ length: starterLen }, (_, i) => startersRaw[i] ?? "")
-          : startersRaw.map((id) => String(id ?? "").trim());
-      const roster = rosterByTeam.get(side.teamId);
+          ? Array.from({ length: starterLen }, (_, i) => source[i] ?? "")
+          : source.slice();
       entries.push({
         rosterId: side.teamId,
         matchupId: m.matchupId,
@@ -168,7 +174,7 @@ export function nativeMatchupWeekToLeagueWeekMatchups(
         owner: "",
         logo: logoByTeam.get(side.teamId) ?? null,
         starters,
-        playerIds: (roster?.playerIds ?? []).map(String),
+        playerIds: rosterIds,
         irIds: (roster?.irPlayerIds ?? []).map(String),
         playerPoints: { ...side.playerPoints },
       });

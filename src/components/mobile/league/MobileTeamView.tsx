@@ -27,7 +27,7 @@ import {
   viewsFromSlotsRecord,
   type NativeLineupSlotView,
 } from "@/lib/native-league-lineup";
-import { getNativeLineup, saveNativeLineup } from "@/lib/native-league.functions";
+import { getNativeLeagueBoard, getNativeLineup, saveNativeLineup } from "@/lib/native-league.functions";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
 import { scoreActualLine } from "@/lib/scoring-map";
@@ -96,10 +96,22 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const [savingLineup, setSavingLineup] = useState(false);
   const seededLineupKey = useRef<string | null>(null);
   const { nflWeek, projectFor, rankFor, sleeperIdFor } = useLeagueProjections(week);
+
+  const boardQuery = useQuery({
+    queryKey: ["native-league-board", linkId],
+    enabled: Boolean(linkId),
+    staleTime: 60_000,
+    queryFn: () => getNativeLeagueBoard({ data: { linkId: linkId! } }),
+  });
+  const boardWeek = boardQuery.data?.currentWeek ?? null;
+
   useEffect(() => {
-    if (week == null && nflWeek != null) setWeek(Math.min(nflWeek, REGULAR_SEASON_WEEKS));
-  }, [nflWeek, week]);
-  const activeWeek = week ?? nflWeek ?? 1;
+    if (week != null) return;
+    // Native leagues may advance ahead of the NFL calendar — prefer board week.
+    const fallback = isNative ? (boardWeek ?? nflWeek) : nflWeek;
+    if (fallback != null) setWeek(Math.min(fallback, REGULAR_SEASON_WEEKS));
+  }, [week, isNative, boardWeek, nflWeek]);
+  const activeWeek = week ?? (isNative ? (boardWeek ?? nflWeek) : nflWeek) ?? 1;
 
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam, currentWeek } = useNflGameProgress(activeWeek);
@@ -252,14 +264,30 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const isPlayerLocked = (player: Player | null | undefined) =>
     playerIsLocked(player, progressByNflTeam, activeWeek, isPastWeek);
 
-  /** Hide Optimize once any starter’s NFL game has started (same as synced leagues). */
-  const startersLocked = useMemo(() => {
-    for (const row of currentLineup.starters) {
+  /**
+   * Hide Optimize when locked players block a full rearrange.
+   * Synced: first starter lock (existing parity).
+   * Native: any starter/bench/IR lock — locked bench players cannot be promoted,
+   * so keep the control off once anyone on the roster is locked.
+   */
+  const optimizeLockedOut = useMemo(() => {
+    const rows = isNative
+      ? [...currentLineup.starters, ...currentLineup.bench, ...currentLineup.reserve]
+      : currentLineup.starters;
+    for (const row of rows) {
       if (!row.player) continue;
       if (isPlayerLocked(row.player)) return true;
     }
     return false;
-  }, [currentLineup.starters, progressByNflTeam, activeWeek, isPastWeek]);
+  }, [
+    isNative,
+    currentLineup.starters,
+    currentLineup.bench,
+    currentLineup.reserve,
+    progressByNflTeam,
+    activeWeek,
+    isPastWeek,
+  ]);
 
   const persistNativeLineup = async (nextViews: NativeLineupSlotView[]) => {
     if (!linkId || !nativeLineup || savingLineup) return;
@@ -373,7 +401,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   };
 
   const optimizePlan = useMemo(() => {
-    if (!myTeam || startersLocked) return null;
+    if (!myTeam || optimizeLockedOut) return null;
     if (!isNative && !isCurrentWeek) return null;
     if (isNative && !nativeWeekEditable) return null;
     const labels = slotLabels(rosterPositions);
@@ -422,7 +450,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     isNative,
     isCurrentWeek,
     nativeWeekEditable,
-    startersLocked,
+    optimizeLockedOut,
     rosterPositions,
     currentLineup.starters,
     currentLineup.bench,
@@ -435,8 +463,8 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   ]);
 
   useEffect(() => {
-    if (!optimizePlan || startersLocked) setShowOptimized(false);
-  }, [optimizePlan, startersLocked]);
+    if (!optimizePlan || optimizeLockedOut) setShowOptimized(false);
+  }, [optimizePlan, optimizeLockedOut]);
 
   useEffect(() => {
     if (showOptimized) setSelectedKey(null);

@@ -1,8 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
 import { InjuryAvatarBadge } from "@/components/injury/InjuryAvatarBadge";
 import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueProjections, useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
@@ -10,6 +12,7 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { StandingRow, WeeklyMatchupEntry } from "@/lib/league.server";
+import { getNativeLeagueBoard } from "@/lib/native-league.functions";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
 import { scoreActualLine } from "@/lib/scoring-map";
@@ -46,6 +49,10 @@ const record = (r: StandingRow | undefined) =>
   r ? `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ""}` : "";
 
 export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}) {
+  const { activeLeague } = useActiveLeague();
+  const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
+  const linkId = isNative ? (activeLeague?.id ?? null) : null;
+
   const { data: playersPayload } = useSleeperPlayers();
   const players = useMemo(() => playersPayload?.players ?? [], [playersPayload]);
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
@@ -58,6 +65,15 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
       : null,
   );
   const { nflWeek, projectFor, rankFor, sleeperIdFor } = useLeagueProjections(week);
+
+  const boardQuery = useQuery({
+    queryKey: ["native-league-board", linkId],
+    enabled: Boolean(linkId),
+    staleTime: 60_000,
+    queryFn: () => getNativeLeagueBoard({ data: { linkId: linkId! } }),
+  });
+  const boardWeek = boardQuery.data?.currentWeek ?? null;
+
   // Apply week from Team → Matchup (?week=) when the search param changes.
   useEffect(() => {
     if (initialWeek != null && initialWeek >= 1) {
@@ -65,9 +81,12 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
     }
   }, [initialWeek]);
   useEffect(() => {
-    if (week == null && nflWeek != null) setWeek(Math.min(nflWeek, REGULAR_SEASON_WEEKS));
-  }, [nflWeek, week]);
-  const activeWeek = week ?? nflWeek ?? 1;
+    if (week != null) return;
+    // Native: prefer league board week (may be advanced for testing) over NFL calendar.
+    const fallback = isNative ? (boardWeek ?? nflWeek) : nflWeek;
+    if (fallback != null) setWeek(Math.min(fallback, REGULAR_SEASON_WEEKS));
+  }, [week, isNative, boardWeek, nflWeek]);
+  const activeWeek = week ?? (isNative ? (boardWeek ?? nflWeek) : nflWeek) ?? 1;
 
   const { matchups, loading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam, currentWeek } = useNflGameProgress(activeWeek);
