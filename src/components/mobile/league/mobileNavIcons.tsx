@@ -8,17 +8,17 @@ export const FootballIcon = createLucideIcon("football", [
   [
     "path",
     {
-      // Elongated prolate shape — long tip-to-tip, modest mid height.
-      d: "M1 12C3.75 7.1 7.75 5.5 12 5.5S20.25 7.1 23 12C20.25 16.9 16.25 18.5 12 18.5S3.75 16.9 1 12z",
+      // Longer tip-to-tip, lower mid height — classic football proportions.
+      d: "M0.75 12C3.5 7.6 7.5 6.25 12 6.25S20.5 7.6 23.25 12C20.5 16.4 16.5 17.75 12 17.75S3.5 16.4 0.75 12z",
       key: "shell",
     },
   ],
-  // Thinner lace strokes so they don't bunch at 20px.
-  ["path", { d: "M8.25 12h7.5", strokeWidth: "1.35", key: "lace-spine" }],
-  ["path", { d: "M9.5 10.15v3.7", strokeWidth: "1.35", key: "lace-1" }],
-  ["path", { d: "M11.15 10.15v3.7", strokeWidth: "1.35", key: "lace-2" }],
-  ["path", { d: "M12.85 10.15v3.7", strokeWidth: "1.35", key: "lace-3" }],
-  ["path", { d: "M14.5 10.15v3.7", strokeWidth: "1.35", key: "lace-4" }],
+  // Thin, short, spaced stitches.
+  ["path", { d: "M8.5 12h7", strokeWidth: "1.2", key: "lace-spine" }],
+  ["path", { d: "M9.7 10.4v3.2", strokeWidth: "1.2", key: "lace-1" }],
+  ["path", { d: "M11.25 10.4v3.2", strokeWidth: "1.2", key: "lace-2" }],
+  ["path", { d: "M12.75 10.4v3.2", strokeWidth: "1.2", key: "lace-3" }],
+  ["path", { d: "M14.3 10.4v3.2", strokeWidth: "1.2", key: "lace-4" }],
 ]);
 
 /**
