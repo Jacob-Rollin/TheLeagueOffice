@@ -28,6 +28,12 @@ export function useActiveStandings() {
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      if (platform === "native") {
+        const linkId = String(id ?? "").trim();
+        if (!linkId) return null;
+        const { fetchNativeStandings } = await import("@/lib/native-league-sync-adapter");
+        return fetchNativeStandings(linkId);
+      }
       let hostId = leagueId;
       if (platform === "sleeper") {
         hostId = (await ensureSleeperNumericLeagueId(hostId).catch(() => null)) ?? hostId;

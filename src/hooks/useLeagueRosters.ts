@@ -109,6 +109,7 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
         teamName: activeLeague?.teamName,
         s2: activeLeague?.s2,
         swid: activeLeague?.swid,
+        connectionId,
       });
       // Network roster pulls (not IndexedDB hydrate) update My Leagues "Synced".
       if (connectionId && data) {

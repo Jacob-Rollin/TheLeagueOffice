@@ -87,6 +87,7 @@ export function useLeagueAnalytics({ history, forecast }: { history: boolean; fo
         leagueId: connectionArgs(activeLeague).identifier,
         platform: connectionArgs(activeLeague).platform,
         teamName: activeLeague?.teamName,
+        connectionId: activeLeague?.id,
         ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
         ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
       }),

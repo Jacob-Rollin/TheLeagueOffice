@@ -94,6 +94,7 @@ export function GlobalSearch() {
           teamName: league.teamName,
           s2: league.s2,
           swid: league.swid,
+          connectionId: league.id,
         }),
     })),
   });
