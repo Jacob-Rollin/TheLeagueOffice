@@ -29,6 +29,7 @@ import {
   scoringFormatLabel,
   useResearchScoringFormat,
 } from "@/components/research/ScoringFormatSelect";
+import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -669,11 +670,7 @@ function LeadersTable({
         </thead>
         <tbody>
           {loading ? (
-            <tr>
-              <td colSpan={colSpan} className="px-4 py-10 text-center text-slate-400">
-                Loading fantasy leaders…
-              </td>
-            </tr>
+            <ResearchTableSkeleton rows={12} cols={colSpan} />
           ) : error ? (
             <tr>
               <td colSpan={colSpan} className="px-4 py-10 text-center text-rose-600">

@@ -229,7 +229,8 @@ export function useLeagueRosters(players: Player[], options?: { cacheKey?: strin
 
   return {
     synced: Boolean(activeLeague) && teams.length > 0,
-    loading: query.isLoading,
+    // IDB hydrate / RQ persist can supply data before the network round-trip.
+    loading: query.isLoading && !query.data,
     /** True while a silent background revalidation is in flight. */
     refreshing: query.isFetching && !query.isLoading,
     teams,

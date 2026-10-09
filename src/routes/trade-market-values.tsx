@@ -19,6 +19,7 @@ import {
   scoringFormatLabel,
   useResearchScoringFormat,
 } from "@/components/research/ScoringFormatSelect";
+import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
   nextSortState,
   PLAYER_LIST_HEADER_ROW,
@@ -38,6 +39,7 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { fetchMarketHistoryClient } from "@/lib/market-history-client";
+import { usePrefetchSiblingFormats } from "@/lib/prefetch-research-formats";
 import { fetchSnapTradeMarket } from "@/lib/snap-cdn";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { scaleValue } from "@/lib/trade-engine";
@@ -162,8 +164,10 @@ function TradeMarketPage() {
     queryKey: ["trade-market", format],
     staleTime: 60 * 60 * 1000,
     retry: 1,
+    placeholderData: (prev) => prev,
     queryFn: () => fetchSnapTradeMarket(format),
   });
+  usePrefetchSiblingFormats("trade-market", format, { enabled: Boolean(query.data) });
   const payload = query.data;
 
   const { oppById, ppgRankById, targets } = useMemo(() => {
@@ -463,11 +467,7 @@ function TradeMarketPage() {
             </thead>
             <tbody>
               {query.isLoading ? (
-                <tr>
-                  <td colSpan={colSpan} className="px-4 py-10 text-center text-slate-400">
-                    Loading trade market…
-                  </td>
-                </tr>
+                <ResearchTableSkeleton rows={12} cols={colSpan} />
               ) : query.isError ? (
                 <tr>
                   <td colSpan={colSpan} className="px-4 py-10 text-center text-rose-600">

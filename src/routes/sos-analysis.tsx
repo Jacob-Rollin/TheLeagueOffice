@@ -10,6 +10,7 @@ import {
   scoringFormatLabel,
   useResearchScoringFormat,
 } from "@/components/research/ScoringFormatSelect";
+import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
   nextSortState,
   PLAYER_LIST_HEADER_ROW,
@@ -18,6 +19,7 @@ import {
 } from "@/components/research/SortHeader";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
+import { usePrefetchSiblingFormats } from "@/lib/prefetch-research-formats";
 import { fetchResearchSosAnalysis, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import type { DepthChartEntry, SosAnalysisCell, SosAnalysisRow } from "@/lib/players.server";
 import { injuryMicroBadge } from "@/lib/sandbox-rosters";
@@ -127,6 +129,7 @@ function SosAnalysisPage() {
     placeholderData: (prev) => prev,
     queryFn: () => fetchResearchSosAnalysis(scoringFormat),
   });
+  usePrefetchSiblingFormats("sos", scoringFormat, { enabled: Boolean(query.data) });
   const payload = query.data;
 
   const selectTab = (next: Tab) =>
@@ -274,11 +277,7 @@ function SosAnalysisPage() {
               </thead>
               <tbody>
                 {query.isLoading ? (
-                  <tr>
-                    <td colSpan={colCount} className="px-4 py-10 text-center text-slate-400">
-                      Loading strength of schedule…
-                    </td>
-                  </tr>
+                  <ResearchTableSkeleton rows={12} cols={colCount} />
                 ) : query.isError ? (
                   <tr>
                     <td colSpan={colCount} className="px-4 py-10 text-center text-rose-600">

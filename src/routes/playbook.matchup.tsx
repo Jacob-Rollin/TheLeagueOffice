@@ -21,6 +21,7 @@ import {
   type StartSitAlert,
 } from "@/components/playbook/MatchupSidebar";
 import { playbookCardClass, resolveAvatarUrl } from "@/components/playbook/panels";
+import { MatchupBoardSkeleton } from "@/components/research/ResearchTableSkeleton";
 import { SosStars } from "@/components/sos/SosStars";
 import type { MatchupBoardRecapInput } from "@/lib/matchup-board-recap";
 import type { MatchupReplayRequest } from "@/lib/matchup-replay";
@@ -1347,10 +1348,13 @@ function PlaybookMatchupPage() {
 
   // Board pairings must not wait on weekly projections / season stats — that
   // made every week look empty while Sleeper projection bundles were cold.
+  // Last-good: if RQ/IndexedDB already has entries, paint them while soft-refreshing.
+  const hasBoardData = Boolean(matchups?.entries?.length);
   const boardLoading =
-    matchupsLoading ||
-    nflWeek.isLoading ||
-    (rostersLoading && teams.length === 0);
+    !hasBoardData &&
+    (matchupsLoading ||
+      nflWeek.isLoading ||
+      (rostersLoading && teams.length === 0));
 
   const weeklyPair = useMemo(() => {
     const empty = {
@@ -2397,7 +2401,7 @@ function PlaybookMatchupPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <section className={cn(playbookCardClass, "min-w-0 lg:col-span-2")}>
       {boardLoading ? (
-        <p className="text-sm text-muted-foreground">Loading matchup board…</p>
+        <MatchupBoardSkeleton />
       ) : !matchups?.entries?.length ? (
         <p className="text-sm text-muted-foreground">No matchups for Week {activeWeek} yet.</p>
       ) : (
@@ -2711,7 +2715,20 @@ function PlaybookMatchupPage() {
           }
         >
           {boardLoading ? (
-            <p className="text-sm text-muted-foreground">Loading matchups…</p>
+            <div className="space-y-3" aria-busy="true">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="space-y-2 rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="h-3 w-24 animate-pulse rounded bg-primary/10" />
+                    <div className="h-3 w-8 animate-pulse rounded bg-primary/10" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="h-3 w-20 animate-pulse rounded bg-primary/10" />
+                    <div className="h-3 w-8 animate-pulse rounded bg-primary/10" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : aroundLeague.length ? (
             <div className="space-y-3">
               {aroundLeague.map((m) => (

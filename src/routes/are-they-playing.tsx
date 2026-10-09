@@ -5,6 +5,7 @@ import { memo, startTransition, useDeferredValue, useMemo, useRef, useState } fr
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
   nextSortState,
   PLAYER_LIST_HEADER_ROW,
@@ -133,6 +134,7 @@ function AreTheyPlayingPage() {
     refetchInterval: visibleRefetchInterval(15 * 60 * 1000),
     refetchIntervalInBackground: false,
     retry: false,
+    placeholderData: (prev) => prev,
     queryFn: () => fetchResearchAreTheyPlaying(week ?? 1),
   });
 
@@ -366,11 +368,7 @@ function AreTheyPlayingPage() {
             </thead>
             <tbody>
               {query.isLoading || week == null ? (
-                <tr>
-                  <td colSpan={colSpan} className="px-4 py-10 text-center text-slate-400">
-                    Loading official injury reports…
-                  </td>
-                </tr>
+                <ResearchTableSkeleton rows={12} cols={colSpan} />
               ) : query.isError ? (
                 <tr>
                   <td colSpan={colSpan} className="px-4 py-10 text-center text-rose-600">

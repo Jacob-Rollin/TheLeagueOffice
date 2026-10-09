@@ -10,6 +10,7 @@ import {
   scoringFormatLabel,
   useResearchScoringFormat,
 } from "@/components/research/ScoringFormatSelect";
+import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
   nextSortState,
   PLAYER_LIST_HEADER_ROW,
@@ -29,6 +30,7 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos } from "@/lib/draft";
+import { usePrefetchSiblingFormats } from "@/lib/prefetch-research-formats";
 import { fetchResearchMatchupsGuide, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import type { MatchupDefenseCell } from "@/lib/players.server";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
@@ -160,6 +162,10 @@ function MatchupsGuidePage() {
     retry: 1,
     placeholderData: (prev) => prev,
     queryFn: () => fetchResearchMatchupsGuide(week, scoringFormat),
+  });
+  usePrefetchSiblingFormats("matchups-guide", scoringFormat, {
+    week,
+    enabled: Boolean(query.data),
   });
   const guide = query.data;
   const activeWeek = week ?? guide?.week ?? null;
@@ -482,11 +488,7 @@ function MatchupsGuidePage() {
             </thead>
             <tbody>
               {query.isLoading ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
-                    Loading matchups…
-                  </td>
-                </tr>
+                <ResearchTableSkeleton rows={12} cols={6} />
               ) : query.isError ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-rose-600">
