@@ -1038,12 +1038,15 @@ function LineupCard({
     ? showActuals || progress?.phase === "in" || progress?.phase === "post"
     : false;
 
-  /** Header blue swap control — reserved rail so FLEX/labels don't collide with avatars. */
+  /**
+   * Swap control always uses light-theme header blue so dark mode stays readable
+   * (dark `--m-header` is near-black and hides the button).
+   */
   const swapBtnClass = (active: boolean) =>
     cn(
-      "flex size-10 shrink-0 items-center justify-center rounded-lg text-m-header-fg shadow-[inset_0_-2px_0_var(--m-team-hero-to)]",
-      active ? "bg-[var(--m-team-hero-to)]" : "bg-m-header",
-      active && "ring-2 ring-offset-2 ring-m-header",
+      "flex size-10 shrink-0 items-center justify-center rounded-lg text-white shadow-[inset_0_-2px_0_#0e7593]",
+      active ? "bg-[#0e7593]" : "bg-[#1ba3c6]",
+      active && "ring-2 ring-offset-2 ring-[#1ba3c6] ring-offset-m-card",
     );
 
   if (!player) {
@@ -1057,20 +1060,22 @@ function LineupCard({
         <span className="w-9 shrink-0 text-[11px] font-semibold uppercase text-m-muted">
           {row.slot}
         </span>
-        <div className="mr-3 shrink-0">
-          {canEdit && eligibleTarget ? (
-            <button
-              type="button"
-              aria-label={`Move player into ${row.slot}`}
-              onClick={() => onSwapAction?.(rowKey)}
-              className={swapBtnClass(true)}
-            >
-              <ArrowUpDown className="size-5" strokeWidth={2.5} />
-            </button>
-          ) : (
-            <span className="size-10 shrink-0" aria-hidden />
-          )}
-        </div>
+        {canEdit ? (
+          <div className="mr-3 shrink-0">
+            {eligibleTarget ? (
+              <button
+                type="button"
+                aria-label={`Move player into ${row.slot}`}
+                onClick={() => onSwapAction?.(rowKey)}
+                className={swapBtnClass(true)}
+              >
+                <ArrowUpDown className="size-5" strokeWidth={2.5} />
+              </button>
+            ) : (
+              <span className="size-10 shrink-0" aria-hidden />
+            )}
+          </div>
+        ) : null}
         <span className="text-sm font-semibold text-m-muted">{row.name ?? "Empty slot"}</span>
       </div>
     );
@@ -1090,8 +1095,11 @@ function LineupCard({
   });
   // Skill/K on offense, DST on defense (not Sideline).
   const showBall = stripShowsFootball(player, progress);
-  // Matchup rank / avg allowed only for current (and future) weeks — past weeks keep the simple strip.
-  const showMatchupContext = !showActuals && !isBye;
+  const phase = progress?.phase ?? "pre";
+  const isLive = phase === "in";
+  const isFinal = phase === "post" || (showActuals && phase !== "pre" && phase !== "in");
+  // Pre-game matchup context only — live/final use clock/score footers instead.
+  const showMatchupContext = !showActuals && !isBye && phase === "pre";
   const defenseParts = showMatchupContext
     ? matchupDefenseParts({
         opponentLabel,
@@ -1100,10 +1108,10 @@ function LineupCard({
       })
     : null;
   const avgAllowed = showMatchupContext ? avgAllowedFor(player) : null;
-  const phase = progress?.phase ?? "pre";
 
   const showSwap = canEdit && !locked;
-  const actionControl = locked ? (
+  /** Native editable: always reserve a size-10 rail (swap / lock / spacer). */
+  const actionControl = !canEdit ? null : locked ? (
     <span
       className="flex size-10 shrink-0 items-center justify-center text-m-muted"
       aria-label="Locked — game started"
@@ -1139,7 +1147,7 @@ function LineupCard({
         <span className="w-9 shrink-0 text-[11px] font-semibold uppercase text-m-muted">
           {row.slot === "DEF" ? "DST" : row.slot}
         </span>
-        <div className="mr-3 shrink-0">{actionControl}</div>
+        {actionControl ? <div className="mr-3 shrink-0">{actionControl}</div> : null}
         <div
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
           {...(eligibleTarget
@@ -1169,8 +1177,17 @@ function LineupCard({
                 : { fallbackSrc: row.headshot ?? null })}
             />
             {posRank ? (
-              <span className="absolute -left-1 -top-1 z-[1] flex size-5 items-center justify-center rounded-full border border-black/12 bg-white font-display text-[10px] font-bold text-m-card-fg shadow-sm">
+              <span className="absolute -left-1 -top-1 z-[1] flex size-5 items-center justify-center rounded-full border border-black/15 bg-white font-display text-[10px] font-bold text-black shadow-sm">
                 {posRank}
+              </span>
+            ) : null}
+            {/* Synced leagues have no swap rail — pin lock on the avatar so rows stay aligned. */}
+            {!canEdit && locked ? (
+              <span
+                className="absolute -bottom-0.5 -right-0.5 z-[1] flex size-5 items-center justify-center rounded-full bg-m-card text-m-muted shadow-sm ring-1 ring-m-border"
+                aria-label="Locked — game started"
+              >
+                <Lock className="size-3" strokeWidth={2.5} />
               </span>
             ) : null}
             <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
@@ -1205,7 +1222,24 @@ function LineupCard({
           </div>
         </div>
       </div>
-      {showMatchupContext ? (
+      {isFinal || (showActuals && !isLive) ? (
+        <div className="flex items-center justify-between gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
+          <span className="min-w-0 truncate text-m-card-fg">{strip.game || "Final"}</span>
+          <span className="inline-flex shrink-0 items-center gap-1 uppercase text-m-muted">
+            {strip.status || "Final"}
+          </span>
+        </div>
+      ) : isLive ? (
+        <div className="flex items-center gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
+          <span className="max-w-[40%] shrink-0 truncate text-m-card-fg">{strip.game || "Live"}</span>
+          <span className="min-w-0 flex-1 truncate text-center uppercase tracking-wide text-m-card-fg">
+            {strip.status}
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1 uppercase">
+            <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
+          </span>
+        </div>
+      ) : showMatchupContext ? (
         <div className="flex items-center gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
           <span className="max-w-[28%] shrink-0 truncate text-m-card-fg">{strip.game || "—"}</span>
           <span
@@ -1220,21 +1254,14 @@ function LineupCard({
                 : `${defenseParts.prefix} ${defenseParts.abbr}${defenseParts.pos ? ` vs ${defenseParts.pos}` : ""}`
               : ""}
           </span>
-          {phase === "in" ? (
-            <span className="inline-flex shrink-0 items-center gap-1 uppercase">
-              <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
-              {strip.status}
+          <span className="max-w-[40%] shrink-0 text-right leading-tight">
+            <span className="block text-[9px] font-medium normal-case tracking-normal text-m-muted/90">
+              avg allowed to position
             </span>
-          ) : (
-            <span className="max-w-[40%] shrink-0 text-right leading-tight">
-              <span className="block text-[9px] font-medium normal-case tracking-normal text-m-muted/90">
-                avg allowed to position
-              </span>
-              <span className="tabnum font-bold text-m-card-fg">
-                {avgAllowed != null ? avgAllowed.toFixed(1) : "—"}
-              </span>
+            <span className="tabnum font-bold text-m-card-fg">
+              {avgAllowed != null ? avgAllowed.toFixed(1) : "—"}
             </span>
-          )}
+          </span>
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">

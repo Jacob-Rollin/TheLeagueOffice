@@ -169,10 +169,12 @@
   --m-rank-col: #173238;
   --m-highlight: rgba(17, 163, 196, 0.16);
   --m-team-hero-from: #0f8aa6;
-  --m-team-hero-to: #1a2224;
+  /* Keep swap/hero accent blue (not near-black) so controls stay visible. */
+  --m-team-hero-to: #0e7593;
   --m-team-rank-bg: #11a3c4;
   --m-team-rank-fg: #ffffff;
-  --m-pos-rank-bg: #f2f2f2;
+  /* White chip + black digits — readable on dark cards. */
+  --m-pos-rank-bg: #ffffff;
   --m-pos-rank-fg: #141414;
   --m-select-bg: #3a3a3a;
   --m-select-fg: #ffffff;
