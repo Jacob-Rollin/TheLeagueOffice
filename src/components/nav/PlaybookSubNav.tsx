@@ -307,6 +307,7 @@ export function PlaybookSubNav({ links = PLAYBOOK_SUBNAV_LINKS }: { links?: SubN
                 <Link
                   key={item.to}
                   to={item.to}
+                  preload="intent"
                   {...(item.search ? { search: item.search } : {})}
                   className={cn(
                     "inline-flex items-center gap-1.5 whitespace-nowrap transition-colors",

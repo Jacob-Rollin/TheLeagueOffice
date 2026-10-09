@@ -100,11 +100,14 @@ What FantasyPros-style sites do well (from public stack / page behavior):
 Ship these whenever touching related routes. Prefer small PRs.
 
 ### A. Instant navigation (no blank screens)
-- [ ] Enable TanStack Router **intent preload** on research / playbook nav links (`preload="intent"`)
-- [ ] On app shell / home: idle-prefetch top research snaps (FPA, leaders, ATP, injury) from snap-cdn only
+- [x] Enable TanStack Router **intent preload** on research / playbook nav links (`preload="intent"` + router `defaultPreload: "intent"`) — shipped
+- [x] On app shell: idle-prefetch top research snaps (FPA, SOS analysis, leaders, injury) from snap-cdn only — shipped (`idle-snap-prefetch.ts`; skips when snap base unset)
 - [ ] Persist React Query research cache to IndexedDB (stale-while-revalidate across visits)
 - [ ] Expand `placeholderData: (prev) => prev` to all research + league board queries that still blank on load
 - [ ] Replace text “Loading…” with **layout-matching skeletons** (table chrome visible immediately)
+
+### Player popups (mobile + desktop) — separate from nav warm
+Popups use `hydratePlayerBrain` + `fetchPlayerDetailClient` (snap/IndexedDB; Fluid only in dev). Shell already warms the brain once per session. **Intent preload / research snap idle warm do not speed popups.** Next free-tier-safe step: prefetch `detailQuery(id)` on row hover / touchstart (Sleeper + brain only — never Fluid).
 
 ### B. Faster stats / tables
 - [ ] Prefetch all three scoring formats (std/half/ppr) after first research hit — format toggle = cache hit, no spinner
