@@ -487,20 +487,30 @@ export function isRuledOut(status: string | null | undefined): boolean {
 }
 
 /**
- * Live possession pill. Public ESPN scoreboard cannot tell which skill players
- * are in a given package, so "Possession" means the NFL team has the ball
- * (Sideline otherwise / when ruled out). DEF inverts: active when the offense
- * (opponent) has the ball.
+ * Live unit pill for mobile cards. Public ESPN scoreboard cannot tell which
+ * skill players are in a given package, so we label the relevant *team unit*:
+ * - Offense — player's NFL team has the ball (skill / K)
+ * - Defense — opponent has the ball (DST only)
+ * - Sideline — the other unit is out, or the player is ruled out
+ * Football icon on the strip still means "this NFL team has the ball."
  */
+export type LiveUnitPill = "offense" | "defense" | "sideline";
+
 export function possessionPill(
   player: Player,
   progress: NflGameProgress | undefined,
-): "possession" | "sideline" | null {
+): LiveUnitPill | null {
   if (progress?.phase !== "in" || !progress.possessionAbbr) return null;
   if (isRuledOut(player.injury_status ?? player.injury)) return "sideline";
   const hasBall = teamKeys(player.team).includes(progress.possessionAbbr.toUpperCase());
-  const active = player.pos === "DEF" ? !hasBall : hasBall;
-  return active ? "possession" : "sideline";
+  if (player.pos === "DEF") return hasBall ? "sideline" : "defense";
+  return hasBall ? "offense" : "sideline";
+}
+
+export function liveUnitPillLabel(status: LiveUnitPill): string {
+  if (status === "offense") return "Offense";
+  if (status === "defense") return "Defense";
+  return "Sideline";
 }
 
 /** Regulation minutes a player's game has left: 60 before kickoff, 0 once final or on bye. */

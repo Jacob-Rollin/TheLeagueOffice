@@ -41,6 +41,7 @@ import {
   buildProjectedOptimalLineup,
   entryPoints,
   gameStripLabels,
+  liveUnitPillLabel,
   matchupClockStatus,
   matchupViewerResult,
   possessionPill,
@@ -1079,12 +1080,12 @@ function LineupCard({
             {status ? (
               <span
                 className={
-                  status === "possession"
-                    ? "mt-1 inline-block rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
-                    : "mt-1 inline-block rounded-full bg-m-chip px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-m-muted"
+                  status === "sideline"
+                    ? "mt-1 inline-block rounded-full bg-m-chip px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-m-muted"
+                    : "mt-1 inline-block rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
                 }
               >
-                {status === "possession" ? "Possession" : "Sideline"}
+                {liveUnitPillLabel(status)}
               </span>
             ) : (
               <p className="mt-1 text-xs italic text-m-muted tabnum">

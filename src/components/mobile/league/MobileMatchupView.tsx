@@ -22,6 +22,7 @@ import {
   Score,
   entryPoints,
   gameStripLabels,
+  liveUnitPillLabel,
   matchupViewerResult,
   minutesLeft,
   possessionPill,
@@ -655,10 +656,10 @@ function HalfCard({
               <span
                 className={cn(
                   "mt-1 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide",
-                  status === "possession" ? "bg-emerald-500 text-white" : "bg-m-chip text-m-muted",
+                  status === "sideline" ? "bg-m-chip text-m-muted" : "bg-emerald-500 text-white",
                 )}
               >
-                {status === "possession" ? "Possession" : "Sideline"}
+                {liveUnitPillLabel(status)}
               </span>
             ) : (
               <p className="mt-1 text-xs italic text-m-muted tabnum">{projected != null ? projected.toFixed(2) : "-"}</p>
