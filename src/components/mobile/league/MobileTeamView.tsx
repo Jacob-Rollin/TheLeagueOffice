@@ -1228,11 +1228,11 @@ function LineupCard({
         </div>
       </div>
       {isFinal || (showActuals && !isLive) ? (
-        <div className="flex items-center justify-between gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
-          <span className="min-w-0 truncate text-m-card-fg">
+        <div className="flex items-center justify-center gap-3 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-card-fg">
+          <span className="min-w-0 truncate text-center">
             {finalBox?.scoreLine || strip.game || "Final"}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1 uppercase text-m-card-fg">
+          <span className="shrink-0 uppercase tracking-wide">
             {finalBox?.resultLabel || strip.status || "Final"}
           </span>
         </div>
