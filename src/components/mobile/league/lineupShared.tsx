@@ -521,7 +521,10 @@ export function minutesLeft(progress: NflGameProgress | undefined): number {
   return Math.max(0, Math.min(60, progress.minutesRemaining));
 }
 
-/** Compact football glyph for possession on the game strip. */
+/**
+ * Compact American-football glyph for the live game strip.
+ * (Prior lacings used an X that read as a star at 12px — keep horizontal laces only.)
+ */
 export function FootballIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -530,19 +533,25 @@ export function FootballIcon({ className }: { className?: string }) {
       className={cn("inline-block shrink-0", className)}
       fill="currentColor"
     >
-      <ellipse cx="8" cy="8" rx="6.5" ry="4.2" transform="rotate(-35 8 8)" />
+      {/* Tip-to-tip football, slight tilt */}
+      <path d="M2.2 9.2c1.2-3.2 4-5.2 5.8-5.6 1.8-.4 4.2.6 5.8 2.8 1.2 1.7 1.2 3.4 0 4.4-1.6 1.4-4.2 1.6-6.2.6C5.2 10.4 3.2 10.8 2.2 9.2Z" />
+      {/* Center seam + lace ticks (light so they read on accent fill) */}
       <path
-        d="M5.2 7.2h5.6M6.1 5.9l1.9 2.2M9.9 5.9L8 8.1M6.1 10.1L8 7.9M9.9 10.1L8 7.9"
+        d="M5.2 8.2h5.6M7 6.9v2.6M8 6.7v3M9 6.9v2.6"
         fill="none"
         stroke="var(--m-row-alt, #f6f5f2)"
-        strokeWidth="0.9"
+        strokeWidth="1"
         strokeLinecap="round"
       />
     </svg>
   );
 }
 
-/** Football / RZ badges beside the live clock on a player card strip. */
+/**
+ * Football / RZ beside the live clock.
+ * Football = this NFL team has the ball (for DST that is exactly when the
+ * unit pill is Sideline — offense out, defense not on the field).
+ */
 export function PossessionStripBadges({
   hasBall,
   redZone,
@@ -552,8 +561,8 @@ export function PossessionStripBadges({
 }) {
   if (!hasBall && !redZone) return null;
   return (
-    <span className="inline-flex items-center gap-1">
-      {hasBall ? <FootballIcon className="size-3 text-m-accent" /> : null}
+    <span className="inline-flex items-center gap-1" title={hasBall ? "Team has the ball" : undefined}>
+      {hasBall ? <FootballIcon className="size-3.5 text-m-accent" /> : null}
       {redZone ? (
         <span className="rounded-[3px] bg-orange-500 px-1 py-px text-[8px] font-bold leading-none tracking-wide text-white">
           RZ
@@ -561,4 +570,17 @@ export function PossessionStripBadges({
       ) : null}
     </span>
   );
+}
+
+/**
+ * Whether the strip should show the football next to the quarter/clock.
+ * Skill/K: team has possession. DST: same signal — true while Sideline
+ * (own offense has the ball); false while Defense (opponent has it).
+ */
+export function stripShowsFootball(
+  player: Pick<Player, "team" | "pos">,
+  progress: NflGameProgress | undefined,
+): boolean {
+  if (progress?.phase !== "in" || !progress.possessionAbbr) return false;
+  return teamKeys(player.team).includes(progress.possessionAbbr.toUpperCase());
 }

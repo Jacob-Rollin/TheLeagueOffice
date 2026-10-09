@@ -50,6 +50,7 @@ import {
   scheduleOpponent,
   shortName,
   slotLabels,
+  stripShowsFootball,
   sumLineupProjection,
   useNflSchedule,
   type LineupRow,
@@ -987,6 +988,8 @@ function LineupCard({
     opponent: opponentFor(player),
     team: player.team,
   });
+  // DST Sideline (own offense has the ball) → football beside the quarter.
+  const showBall = stripShowsFootball(player, progress);
 
   const showSwap = canEdit && !locked;
   const actionControl = locked ? (
@@ -1098,7 +1101,7 @@ function LineupCard({
       <div className="flex items-center justify-between gap-2 bg-m-row-alt px-3 py-1.5 text-[11px] font-semibold text-m-muted">
         <span className="truncate">{strip.game}</span>
         <span className="inline-flex shrink-0 items-center gap-1 uppercase">
-          <PossessionStripBadges hasBall={strip.hasBall} redZone={strip.redZone} />
+          <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
           {strip.status}
         </span>
       </div>

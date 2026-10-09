@@ -31,6 +31,7 @@ import {
   scheduleOpponent,
   shortName,
   slotLabels,
+  stripShowsFootball,
   useNflSchedule,
   type LineupRow,
 } from "./lineupShared";
@@ -605,6 +606,8 @@ function HalfCard({
     opponent: helpers.opponentFor(player),
     team: player.team,
   });
+  // DST Sideline (own offense has the ball) → football beside the quarter.
+  const showBall = stripShowsFootball(player, progress);
 
   return (
     <article
@@ -684,7 +687,7 @@ function HalfCard({
       <div className="flex items-center justify-between gap-1 bg-m-row-alt px-2.5 py-1.5 text-[10px] font-semibold text-m-muted">
         <span className="truncate">{strip.game}</span>
         <span className="inline-flex shrink-0 items-center gap-1 uppercase">
-          <PossessionStripBadges hasBall={strip.hasBall} redZone={strip.redZone} />
+          <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
           {strip.status}
         </span>
       </div>
