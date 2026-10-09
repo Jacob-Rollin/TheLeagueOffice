@@ -8,7 +8,8 @@ import { getCached } from "@/lib/sleeper-cache";
 import { cn } from "@/lib/utils";
 
 export const REGULAR_SEASON_WEEKS = 18;
-export const HEX_CLIP = "polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%)";
+/** Flat hexagon (home-plate-ish) used for mobile pos-rank chips. */
+export const HEX_CLIP = "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)";
 
 const SKIP_SLOTS = new Set(["BN", "BENCH", "IR", "IL", "TAXI", "RESERVE"]);
 const SCHEDULE_CACHE_KEY = "schedule-v1";

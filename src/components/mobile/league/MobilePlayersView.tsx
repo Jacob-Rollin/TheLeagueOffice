@@ -793,7 +793,7 @@ function RankHex({ rank, className }: { rank: number | null; className?: string 
   return (
     <span
       className={cn(
-        "absolute flex items-center justify-center bg-m-pos-rank-bg font-display font-bold text-m-pos-rank-fg",
+        "absolute flex items-center justify-center bg-m-pos-rank-bg font-display font-bold text-m-pos-rank-fg shadow-[0_0_0_1px_rgba(0,0,0,0.08)]",
         className,
       )}
       style={{ clipPath: HEX_CLIP }}
@@ -820,8 +820,10 @@ function DropCandidateRow({
   const posLabel = player.pos === "DEF" ? "DST" : player.pos;
   return (
     <article className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
-      <div className="flex items-center gap-2 px-3 py-3">
-        <span className="w-7 shrink-0 text-xs font-semibold text-m-muted">{posLabel}</span>
+      <div className="flex items-center gap-1.5 px-2.5 py-3">
+        <span className="w-6 shrink-0 text-center text-[11px] font-semibold text-m-muted">
+          {posLabel}
+        </span>
         <button
           type="button"
           aria-label={`Drop ${shortName(player)}`}
@@ -844,7 +846,7 @@ function DropCandidateRow({
               className="size-12"
               logoClassName="hidden"
             />
-            <RankHex rank={rank} className="-left-2 -top-2 size-6 text-[11px]" />
+            <RankHex rank={rank} className="-left-1.5 -top-1.5 size-5 text-[10px]" />
             <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
           </div>
           {logo && player.pos !== "DEF" ? (

@@ -1040,25 +1040,25 @@ function LineupCard({
     return (
       <div
         className={cn(
-          "flex items-center gap-2 rounded-xl bg-m-card px-3 py-4 text-m-card-fg",
+          "flex items-center gap-1.5 rounded-xl bg-m-card px-2.5 py-4 text-m-card-fg",
           eligibleTarget && "ring-2 ring-m-header",
         )}
       >
-        <div className="flex shrink-0 items-center gap-1">
-          <span className="w-7 text-xs font-semibold text-m-muted">{row.slot}</span>
-          {canEdit && eligibleTarget ? (
-            <button
-              type="button"
-              aria-label={`Move player into ${row.slot}`}
-              onClick={() => onSwapAction?.(rowKey)}
-              className={swapBtnClass(true)}
-            >
-              <ArrowUpDown className="size-5" strokeWidth={2.5} />
-            </button>
-          ) : (
-            <span className="size-11 shrink-0" aria-hidden />
-          )}
-        </div>
+        <span className="w-6 shrink-0 text-center text-[11px] font-semibold text-m-muted">
+          {row.slot}
+        </span>
+        {canEdit && eligibleTarget ? (
+          <button
+            type="button"
+            aria-label={`Move player into ${row.slot}`}
+            onClick={() => onSwapAction?.(rowKey)}
+            className={swapBtnClass(true)}
+          >
+            <ArrowUpDown className="size-5" strokeWidth={2.5} />
+          </button>
+        ) : (
+          <span className="size-11 shrink-0" aria-hidden />
+        )}
         <span className="text-sm font-semibold text-m-muted">{row.name ?? "Empty slot"}</span>
       </div>
     );
@@ -1110,13 +1110,13 @@ function LineupCard({
         eligibleTarget && "ring-2 ring-m-header bg-m-highlight",
       )}
     >
-      <div className="flex items-center gap-2 px-3 py-3">
-        <div className="flex shrink-0 items-center gap-1">
-          <span className="w-7 shrink-0 text-xs font-semibold text-m-muted">{row.slot}</span>
-          {actionControl}
-        </div>
+      <div className="flex items-center gap-1.5 px-2.5 py-3">
+        <span className="w-6 shrink-0 text-center text-[11px] font-semibold text-m-muted">
+          {row.slot}
+        </span>
+        {actionControl}
         <div
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
           {...(eligibleTarget
             ? {
                 role: "button",
@@ -1145,7 +1145,7 @@ function LineupCard({
             />
             {posRank ? (
               <span
-                className="absolute -left-2 -top-2 flex size-6 items-center justify-center bg-m-pos-rank-bg font-display text-[11px] font-bold text-m-pos-rank-fg"
+                className="absolute -left-1.5 -top-1.5 flex size-5 items-center justify-center bg-m-pos-rank-bg font-display text-[10px] font-bold text-m-pos-rank-fg shadow-[0_0_0_1px_rgba(0,0,0,0.08)]"
                 style={{ clipPath: HEX_CLIP }}
               >
                 {posRank}
