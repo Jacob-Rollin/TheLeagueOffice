@@ -518,6 +518,50 @@ export function matchupDefenseToneClass(rank: number | null | undefined): string
   return "text-m-card-fg";
 }
 
+/**
+ * Completed-game strip from the player's team POV:
+ * `LAR 24 @ ATL 27` (away) or `BUF 31 vs MIA 10` (home), plus FINAL (W/L).
+ * Parses ESPN-style `AWAY score - HOME score` box labels.
+ */
+export function formatPlayerFinalBox(
+  boxScoreLabel: string | null | undefined,
+  playerTeam: string | null | undefined,
+): { scoreLine: string; resultLabel: string } | null {
+  const raw = String(boxScoreLabel ?? "").trim();
+  const m = raw.match(/^([A-Za-z]{2,4})\s+(\d+)\s*[-–]\s*([A-Za-z]{2,4})\s+(\d+)$/);
+  if (!m) return null;
+  const awayTeam = m[1]!.toUpperCase();
+  const awayScore = Number(m[2]);
+  const homeTeam = m[3]!.toUpperCase();
+  const homeScore = Number(m[4]);
+  if (!Number.isFinite(awayScore) || !Number.isFinite(homeScore)) return null;
+
+  const keys = teamKeys(playerTeam ?? "");
+  const playerAway = keys.includes(awayTeam);
+  const playerHome = keys.includes(homeTeam);
+  if (!playerAway && !playerHome) {
+    // Unknown side — keep away @ home orientation without W/L.
+    return {
+      scoreLine: `${awayTeam} ${awayScore} @ ${homeTeam} ${homeScore}`,
+      resultLabel: "Final",
+    };
+  }
+
+  const myTeam = playerAway ? awayTeam : homeTeam;
+  const myScore = playerAway ? awayScore : homeScore;
+  const oppTeam = playerAway ? homeTeam : awayTeam;
+  const oppScore = playerAway ? homeScore : awayScore;
+  const connector = playerAway ? "@" : "vs";
+  let result = "T";
+  if (myScore > oppScore) result = "W";
+  else if (myScore < oppScore) result = "L";
+
+  return {
+    scoreLine: `${myTeam} ${myScore} ${connector} ${oppTeam} ${oppScore}`,
+    resultLabel: `Final (${result})`,
+  };
+}
+
 /** Left / right labels for the game strip under a player card. */
 export function gameStripLabels(
   progress: NflGameProgress | undefined,

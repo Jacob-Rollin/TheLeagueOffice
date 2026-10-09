@@ -44,6 +44,7 @@ import {
   gameStripLabels,
   liveUnitPillLabel,
   matchupClockStatus,
+  formatPlayerFinalBox,
   matchupDefenseParts,
   matchupDefenseToneClass,
   matchupViewerResult,
@@ -1108,6 +1109,10 @@ function LineupCard({
       })
     : null;
   const avgAllowed = showMatchupContext ? avgAllowedFor(player) : null;
+  const finalBox =
+    isFinal || (showActuals && !isLive)
+      ? formatPlayerFinalBox(progress?.boxScoreLabel ?? strip.game, player.team)
+      : null;
 
   const showSwap = canEdit && !locked;
   /** Native editable: always reserve a size-10 rail (swap / lock / spacer). */
@@ -1224,9 +1229,11 @@ function LineupCard({
       </div>
       {isFinal || (showActuals && !isLive) ? (
         <div className="flex items-center justify-between gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
-          <span className="min-w-0 truncate text-m-card-fg">{strip.game || "Final"}</span>
-          <span className="inline-flex shrink-0 items-center gap-1 uppercase text-m-muted">
-            {strip.status || "Final"}
+          <span className="min-w-0 truncate text-m-card-fg">
+            {finalBox?.scoreLine || strip.game || "Final"}
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1 uppercase text-m-card-fg">
+            {finalBox?.resultLabel || strip.status || "Final"}
           </span>
         </div>
       ) : isLive ? (
