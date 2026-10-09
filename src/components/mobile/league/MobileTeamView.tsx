@@ -13,6 +13,7 @@ import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueProjections, useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
+import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { WeeklyMatchupEntry } from "@/lib/league.server";
@@ -43,6 +44,7 @@ import {
   gameStripLabels,
   liveUnitPillLabel,
   matchupClockStatus,
+  matchupDefenseLabel,
   matchupViewerResult,
   possessionPill,
   progressFor,
@@ -118,6 +120,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const { data: schedule = [] } = useNflSchedule();
   const { scoringMap } = useLeagueScoringMeta();
   const { statsFor } = useWeeklyActualStats(activeWeek);
+  const { rankFor: defenseRankFor, avgAllowedFor } = usePositionalDefenseRanks();
   const isPastWeek = currentWeek != null && activeWeek < currentWeek;
   const isCurrentWeek = currentWeek != null && Number(activeWeek) === Number(currentWeek);
 
@@ -658,6 +661,8 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     byeWeek: (p) => p.bye === activeWeek,
     playerIdFor: (p) => sleeperIdFor(p),
     showActuals: isPastWeek,
+    defenseRankFor: (p) => defenseRankFor(p.pos, scheduleOpponent(schedule, activeWeek, p.team)),
+    avgAllowedFor: (p) => avgAllowedFor(p.pos, scheduleOpponent(schedule, activeWeek, p.team)),
   };
 
   return (
@@ -947,6 +952,8 @@ type RowHelpers = {
   byeWeek: (p: Player) => boolean;
   playerIdFor: (p: Player) => string;
   showActuals: boolean;
+  defenseRankFor: (p: Player) => number | null;
+  avgAllowedFor: (p: Player) => number | null;
 };
 
 type EditHelpers = {
@@ -1013,6 +1020,8 @@ function LineupCard({
   byeWeek,
   playerIdFor,
   showActuals,
+  defenseRankFor,
+  avgAllowedFor,
 }: {
   row: LineupRow;
   rowKey: string;
@@ -1040,25 +1049,25 @@ function LineupCard({
     return (
       <div
         className={cn(
-          "flex items-center gap-2 rounded-xl bg-m-card px-3 py-4 text-m-card-fg",
+          "flex items-center gap-1.5 rounded-xl bg-m-card px-2.5 py-4 text-m-card-fg",
           eligibleTarget && "ring-2 ring-m-header",
         )}
       >
-        <div className="flex shrink-0 items-center gap-1">
-          <span className="w-7 text-xs font-semibold text-m-muted">{row.slot}</span>
-          {canEdit && eligibleTarget ? (
-            <button
-              type="button"
-              aria-label={`Move player into ${row.slot}`}
-              onClick={() => onSwapAction?.(rowKey)}
-              className={swapBtnClass(true)}
-            >
-              <ArrowUpDown className="size-5" strokeWidth={2.5} />
-            </button>
-          ) : (
-            <span className="size-11 shrink-0" aria-hidden />
-          )}
-        </div>
+        <span className="w-6 shrink-0 text-center text-[11px] font-semibold text-m-muted">
+          {row.slot}
+        </span>
+        {canEdit && eligibleTarget ? (
+          <button
+            type="button"
+            aria-label={`Move player into ${row.slot}`}
+            onClick={() => onSwapAction?.(rowKey)}
+            className={swapBtnClass(true)}
+          >
+            <ArrowUpDown className="size-5" strokeWidth={2.5} />
+          </button>
+        ) : (
+          <span className="size-11 shrink-0" aria-hidden />
+        )}
         <span className="text-sm font-semibold text-m-muted">{row.name ?? "Empty slot"}</span>
       </div>
     );
@@ -1069,13 +1078,26 @@ function LineupCard({
   const posRank = posRankFor(player);
   const logo = teamLogo(player.team);
   const status = possessionPill(player, progress);
+  const opponentLabel = opponentFor(player);
+  const isBye = byeWeek(player);
   const strip = gameStripLabels(progress, {
-    bye: byeWeek(player),
-    opponent: opponentFor(player),
+    bye: isBye,
+    opponent: opponentLabel,
     team: player.team,
   });
   // Skill/K on offense, DST on defense (not Sideline).
   const showBall = stripShowsFootball(player, progress);
+  // Matchup rank / avg allowed only for current (and future) weeks — past weeks keep the simple strip.
+  const showMatchupContext = !showActuals && !isBye;
+  const defenseLabel = showMatchupContext
+    ? matchupDefenseLabel({
+        opponentLabel,
+        pos: player.pos,
+        defenseRank: defenseRankFor(player),
+      })
+    : null;
+  const avgAllowed = showMatchupContext ? avgAllowedFor(player) : null;
+  const phase = progress?.phase ?? "pre";
 
   const showSwap = canEdit && !locked;
   const actionControl = locked ? (
@@ -1110,13 +1132,13 @@ function LineupCard({
         eligibleTarget && "ring-2 ring-m-header bg-m-highlight",
       )}
     >
-      <div className="flex items-center gap-2 px-3 py-3">
-        <div className="flex shrink-0 items-center gap-1">
-          <span className="w-7 shrink-0 text-xs font-semibold text-m-muted">{row.slot}</span>
-          {actionControl}
-        </div>
+      <div className="flex items-center gap-1.5 px-2.5 py-3">
+        <span className="w-6 shrink-0 text-center text-[11px] font-semibold text-m-muted">
+          {row.slot}
+        </span>
+        {actionControl}
         <div
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
           {...(eligibleTarget
             ? {
                 role: "button",
@@ -1145,7 +1167,7 @@ function LineupCard({
             />
             {posRank ? (
               <span
-                className="absolute -left-2 -top-2 flex size-6 items-center justify-center bg-m-pos-rank-bg font-display text-[11px] font-bold text-m-pos-rank-fg"
+                className="absolute -left-1.5 -top-1.5 flex size-5 items-center justify-center bg-m-pos-rank-bg font-display text-[10px] font-bold text-m-pos-rank-fg shadow-[0_0_0_1px_rgba(0,0,0,0.08)]"
                 style={{ clipPath: HEX_CLIP }}
               >
                 {posRank}
@@ -1183,13 +1205,37 @@ function LineupCard({
           </div>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 bg-m-row-alt px-3 py-1.5 text-[11px] font-semibold text-m-muted">
-        <span className="truncate">{strip.game}</span>
-        <span className="inline-flex shrink-0 items-center gap-1 uppercase">
-          <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
-          {strip.status}
-        </span>
-      </div>
+      {showMatchupContext ? (
+        <div className="flex items-center gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
+          <span className="max-w-[28%] shrink-0 truncate">{strip.game || "—"}</span>
+          <span className="min-w-0 flex-1 truncate text-center uppercase tracking-wide">
+            {defenseLabel ?? ""}
+          </span>
+          {phase === "in" ? (
+            <span className="inline-flex shrink-0 items-center gap-1 uppercase">
+              <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
+              {strip.status}
+            </span>
+          ) : (
+            <span className="max-w-[40%] shrink-0 text-right leading-tight">
+              <span className="block text-[9px] font-medium normal-case tracking-normal text-m-muted/90">
+                avg allowed to position
+              </span>
+              <span className="tabnum font-bold text-m-card-fg">
+                {avgAllowed != null ? avgAllowed.toFixed(1) : "—"}
+              </span>
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
+          <span className="truncate">{strip.game}</span>
+          <span className="inline-flex shrink-0 items-center gap-1 uppercase">
+            <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
+            {strip.status}
+          </span>
+        </div>
+      )}
     </article>
   );
 }

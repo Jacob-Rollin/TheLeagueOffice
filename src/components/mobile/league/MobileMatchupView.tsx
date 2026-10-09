@@ -653,7 +653,7 @@ function HalfCard({
             {posRank ? (
               <span
                 className={cn(
-                  "absolute -top-1.5 flex size-5 items-center justify-center bg-m-pos-rank-bg font-display text-[10px] font-bold text-m-pos-rank-fg",
+                  "absolute -top-1.5 flex size-5 items-center justify-center bg-m-pos-rank-bg font-display text-[10px] font-bold text-m-pos-rank-fg shadow-[0_0_0_1px_rgba(0,0,0,0.08)]",
                   mirror ? "-right-1.5" : "-left-1.5",
                 )}
                 style={{ clipPath: HEX_CLIP }}
@@ -661,10 +661,7 @@ function HalfCard({
                 {posRank}
               </span>
             ) : null}
-            <InjuryAvatarBadge
-              status={player.injury_status ?? player.injury}
-              className={mirror ? "-right-0.5 left-auto" : undefined}
-            />
+            <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
           </div>
           {/* Avatar is already the team mark for DST — skip the redundant chip. */}
           {logo && player.pos !== "DEF" ? (

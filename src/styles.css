@@ -128,8 +128,9 @@
   --m-team-hero-to: #0e7593;
   --m-team-rank-bg: #ffffff;
   --m-team-rank-fg: #0e7593;
-  --m-pos-rank-bg: #d3eef7;
-  --m-pos-rank-fg: #0b6a86;
+  /* Light grey hexagon + dark digits — matches Sleeper-style pos rank chips. */
+  --m-pos-rank-bg: #f0f0f0;
+  --m-pos-rank-fg: #1a1a1a;
   --m-select-bg: #ececec;
   --m-select-fg: #2a2d31;
   color-scheme: light;
