@@ -64,6 +64,9 @@
   --color-m-icon-fg: var(--m-icon-fg);
   --color-m-card: var(--m-card);
   --color-m-card-fg: var(--m-card-fg);
+  /* Lineup/matchup player boxes — live vs completed game. */
+  --color-m-player-card: var(--m-player-card);
+  --color-m-player-card-final: var(--m-player-card-final);
   --color-m-muted: var(--m-muted);
   --color-m-border: var(--m-border);
   --color-m-section: var(--m-section);
@@ -101,6 +104,8 @@
   --m-icon-fg: #0d2f45;
   --m-card: #ffffff;
   --m-card-fg: #1f2328;
+  --m-player-card: #ffffff;
+  --m-player-card-final: #e4e1da;
   --m-muted: #50565c;
   --m-border: #d9d5cc;
   --m-section: #2a2d31;
@@ -144,6 +149,9 @@
   --m-icon-fg: #ffffff;
   --m-card: #262626;
   --m-card-fg: #ffffff;
+  /* Active/upcoming player boxes brighter; final keeps the prior card grey. */
+  --m-player-card: #3c3c3c;
+  --m-player-card-final: #262626;
   --m-muted: #b8b8b8;
   --m-border: #3a3a3a;
   --m-section: #f2f2f2;

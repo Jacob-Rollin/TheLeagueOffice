@@ -1146,7 +1146,7 @@ function LineupCard({
     <article
       className={cn(
         "overflow-hidden rounded-xl text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
-        gameFinal ? "bg-m-bg" : "bg-m-card",
+        gameFinal ? "bg-m-player-card-final" : "bg-m-player-card",
         selected && "ring-2 ring-m-header",
         eligibleTarget && "ring-2 ring-m-header bg-m-highlight",
       )}
@@ -1194,7 +1194,7 @@ function LineupCard({
               <span
                 className={cn(
                   "absolute -bottom-0.5 -right-0.5 z-[1] flex size-5 items-center justify-center rounded-full text-m-muted shadow-sm ring-1 ring-m-border",
-                  gameFinal ? "bg-m-bg" : "bg-m-card",
+                  gameFinal ? "bg-m-player-card-final" : "bg-m-player-card",
                 )}
                 aria-label="Locked — game started"
               >

@@ -640,7 +640,7 @@ function HalfCard({
     <article
       className={cn(
         "cursor-pointer overflow-hidden rounded-xl text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
-        gameFinal ? "bg-m-bg" : "bg-m-card",
+        gameFinal ? "bg-m-player-card-final" : "bg-m-player-card",
         bench && "opacity-85",
       )}
       {...playerPressProps(openPlayer, helpers.playerIdFor(player))}
