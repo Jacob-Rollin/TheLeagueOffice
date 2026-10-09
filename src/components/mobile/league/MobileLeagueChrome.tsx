@@ -1,5 +1,15 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ArrowLeftRight, Minus, Newspaper, Plus, Trophy, Users, type LucideIcon } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Minus,
+  Newspaper,
+  Plus,
+  Shirt,
+  Swords,
+  Trophy,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 
 import {
@@ -29,6 +39,11 @@ const NAV_HEIGHT = "3.5rem";
 const PEEK_HEIGHT = "3.75rem";
 const SHEET_TOP_GAP = "4.75rem";
 
+/**
+ * Team/Matchup sport icons (helmet + football). Set false to restore Shirt + Swords.
+ */
+const USE_SPORT_NAV_ICONS = true;
+
 export const mobileLeagueContentPad = (withSheet: boolean) =>
   `calc(${NAV_HEIGHT}${withSheet ? ` + ${PEEK_HEIGHT}` : ""} + env(safe-area-inset-bottom, 0px) + 1rem)`;
 
@@ -41,8 +56,18 @@ type TabPath =
 
 const TABS: { to: TabPath; label: string; icon: LucideIcon; segment: string | null }[] = [
   { to: "/m/league/$leagueId/feed", label: "Feed", icon: Newspaper, segment: "feed" },
-  { to: "/m/league/$leagueId/team", label: "Team", icon: HelmetIcon, segment: "team" },
-  { to: "/m/league/$leagueId/matchup", label: "Matchup", icon: FootballIcon, segment: "matchup" },
+  {
+    to: "/m/league/$leagueId/team",
+    label: "Team",
+    icon: USE_SPORT_NAV_ICONS ? HelmetIcon : Shirt,
+    segment: "team",
+  },
+  {
+    to: "/m/league/$leagueId/matchup",
+    label: "Matchup",
+    icon: USE_SPORT_NAV_ICONS ? FootballIcon : Swords,
+    segment: "matchup",
+  },
   { to: "/m/league/$leagueId/players", label: "Players", icon: Users, segment: "players" },
   { to: "/m/league/$leagueId", label: "League", icon: Trophy, segment: null },
 ];
