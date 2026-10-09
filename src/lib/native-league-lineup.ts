@@ -188,6 +188,45 @@ export function viewsFromSlotsRecord(
   return views;
 }
 
+/** True when any starter/bench/IR bucket has a player id. */
+export function nativeSlotsHavePlayers(slots: NativeLineupSlots | null | undefined): boolean {
+  if (!slots || typeof slots !== "object") return false;
+  for (const bucket of Object.values(slots)) {
+    if (!Array.isArray(bucket)) continue;
+    if (bucket.some((id) => id != null && String(id).trim() !== "")) return true;
+  }
+  return false;
+}
+
+/**
+ * Flatten starter ids in ROSTER_SLOT_KEYS order (QB→…→DEF).
+ * Never use Object.entries — MySQL/TiDB JSON often returns keys alphabetically,
+ * which misaligns matchup rows (e.g. DEF painted in the QB slot).
+ */
+export function starterIdsFromNativeSlots(slotsRaw: unknown): string[] {
+  let slots: unknown = slotsRaw;
+  if (typeof slotsRaw === "string") {
+    try {
+      slots = JSON.parse(slotsRaw);
+    } catch {
+      return [];
+    }
+  }
+  if (!slots || typeof slots !== "object" || Array.isArray(slots)) return [];
+  const record = slots as Record<string, unknown>;
+  const out: string[] = [];
+  for (const key of ROSTER_SLOT_KEYS) {
+    if (key === "BN" || key === "IR" || key === "TAXI") continue;
+    const bucket = record[key];
+    if (!Array.isArray(bucket)) continue;
+    for (const id of bucket) {
+      if (id == null || id === "") continue;
+      out.push(String(id));
+    }
+  }
+  return out;
+}
+
 /**
  * Greedy default: fill positional starters, then FLEX variants, then BN.
  * Unplaced players spill into BN then IR.

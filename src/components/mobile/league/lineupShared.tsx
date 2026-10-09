@@ -93,6 +93,9 @@ export function entryPoints(entry: WeeklyMatchupEntry, playerId: string): number
  * Starters / bench / reserve for one matchup side, aligned to the league's
  * starting slots. ESPN athletes missing from the Sleeper catalog fall back to
  * the host's own name, team, position and headshot.
+ *
+ * Placement prefers position fit over raw starter-array index so mis-ordered
+ * native slot JSON (alphabetical MySQL keys) still paints QB/RB/… correctly.
  */
 export function resolveEntryLineup(
   entry: WeeklyMatchupEntry,
@@ -113,14 +116,57 @@ export function resolveEntryLineup(
     if (key.startsWith("espn:") && meta.slot === "starter") unmatchedByName.set(meta.name.toLowerCase(), key);
   }
 
-  const used = new Set<string>();
-  const starters: LineupRow[] = labels.map((slot, i) => {
+  type Cand = { id: string; player: Player; index: number };
+  const candidates: Cand[] = [];
+  const seenIds = new Set<string>();
+  for (let i = 0; i < entry.starters.length; i += 1) {
     let id = entry.starters[i] || "";
     const name = entry.starterNames?.[i] || null;
     if (!id && name) id = unmatchedByName.get(name.toLowerCase()) ?? "";
-    const player = id ? resolve(id) : null;
-    if (player) used.add(id);
-    return { slot, player, headshot: headshot(id), name: player ? null : name };
+    if (!id || seenIds.has(id)) continue;
+    const player = resolve(id);
+    if (!player) continue;
+    seenIds.add(id);
+    candidates.push({ id, player, index: i });
+  }
+
+  const used = new Set<string>();
+  const takeForSlot = (slot: string, preferIndex: number): Cand | null => {
+    const prefer = candidates.find(
+      (c) =>
+        !used.has(c.id) &&
+        c.index === preferIndex &&
+        playerFitsMobileSlot(c.player, slot),
+    );
+    if (prefer) return prefer;
+    return (
+      candidates.find((c) => !used.has(c.id) && playerFitsMobileSlot(c.player, slot)) ?? null
+    );
+  };
+
+  const starters: LineupRow[] = labels.map((slot) => ({ slot, player: null }));
+  // Dedicated slots first, then flex — same order as optimize.
+  labels.forEach((slot, i) => {
+    if (slot === "FLEX" || slot === "FLX" || slot === "SF" || slot === "SFLEX") return;
+    const hit = takeForSlot(slot, i);
+    if (!hit) return;
+    used.add(hit.id);
+    starters[i] = { slot, player: hit.player, headshot: headshot(hit.id) };
+  });
+  labels.forEach((slot, i) => {
+    if (slot !== "FLEX" && slot !== "FLX" && slot !== "SF" && slot !== "SFLEX") return;
+    const hit = takeForSlot(slot, i);
+    if (!hit) return;
+    used.add(hit.id);
+    starters[i] = { slot, player: hit.player, headshot: headshot(hit.id) };
+  });
+  // Last resort: keep index alignment for unresolved host names / unknown pos.
+  labels.forEach((slot, i) => {
+    if (starters[i]?.player) return;
+    const hit = candidates.find((c) => !used.has(c.id) && c.index === i);
+    if (!hit) return;
+    used.add(hit.id);
+    starters[i] = { slot, player: hit.player, headshot: headshot(hit.id) };
   });
 
   const irIds = new Set(entry.irIds);

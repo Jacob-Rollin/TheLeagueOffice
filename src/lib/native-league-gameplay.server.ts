@@ -18,7 +18,7 @@ import {
   syncLineupAfterRosterChange,
   type NativeMutationResult,
 } from "@/lib/native-league-ops.server";
-import { countActiveRosterCapacity } from "@/lib/native-league-lineup";
+import { countActiveRosterCapacity, starterIdsFromNativeSlots } from "@/lib/native-league-lineup";
 import { scoreActualLine, type ScoringMap } from "@/lib/scoring-map";
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
 
@@ -1414,7 +1414,7 @@ export async function getNativeMatchupWeekForLink(
   );
   const startersByTeamId: Record<string, string[]> = {};
   for (const row of lineups) {
-    const ids = extractStarterIds(row.slots);
+    const ids = starterIdsFromNativeSlots(row.slots);
     if (ids.length) startersByTeamId[String(row.team_id)] = ids;
   }
   for (const [teamId, row] of resultByTeam) {
@@ -1683,7 +1683,7 @@ async function scoreLeagueWeek(
   for (const team of teams) {
     const teamId = Number(team.id);
     const slotsRaw = lineupByTeam.get(teamId);
-    const starters = extractStarterIds(slotsRaw);
+    const starters = starterIdsFromNativeSlots(slotsRaw);
     const playerPoints: Record<string, number> = {};
     let total = 0;
     for (const playerId of starters) {
@@ -1728,27 +1728,6 @@ async function scoreLeagueWeek(
     scored++;
   }
   return scored;
-}
-
-function extractStarterIds(slotsRaw: unknown): string[] {
-  let slots: unknown = slotsRaw;
-  if (typeof slotsRaw === "string") {
-    try {
-      slots = JSON.parse(slotsRaw);
-    } catch {
-      return [];
-    }
-  }
-  if (!slots || typeof slots !== "object" || Array.isArray(slots)) return [];
-  const out: string[] = [];
-  for (const [key, bucket] of Object.entries(slots as Record<string, unknown>)) {
-    if (key === "BN" || key === "IR" || key === "TAXI") continue;
-    if (!Array.isArray(bucket)) continue;
-    for (const id of bucket) {
-      if (id) out.push(String(id));
-    }
-  }
-  return out;
 }
 
 async function materializeStandingsSnap(league: LeagueRow, asOfWeek: number): Promise<void> {

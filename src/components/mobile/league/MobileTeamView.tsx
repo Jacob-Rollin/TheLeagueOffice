@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftRight, ArrowUpDown, ChevronRight, Lock, Timer, UserPlus } from "lucide-react";
-import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
@@ -16,7 +16,11 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { WeeklyMatchupEntry } from "@/lib/league.server";
+import type { RosterSlotKey } from "@/lib/league-settings";
 import {
+  buildDefaultLineupSlots,
+  expandLineupSlots,
+  nativeSlotsHavePlayers,
   parseRosterSlotCounts,
   slotAcceptsPos,
   slotsRecordFromViews,
@@ -88,6 +92,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const [nativeVersion, setNativeVersion] = useState(0);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [savingLineup, setSavingLineup] = useState(false);
+  const seededLineupKey = useRef<string | null>(null);
   const { nflWeek, projectFor, rankFor, sleeperIdFor } = useLeagueProjections(week);
   useEffect(() => {
     if (week == null && nflWeek != null) setWeek(Math.min(nflWeek, REGULAR_SEASON_WEEKS));
@@ -130,14 +135,63 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   useEffect(() => {
     if (!nativeLineup) return;
     const counts = parseRosterSlotCounts(nativeLineup.rosterSlots);
-    if (nativeLineup.slots) {
+    const hasSaved = nativeSlotsHavePlayers(nativeLineup.slots);
+    if (hasSaved) {
       setNativeViews(viewsFromSlotsRecord(counts, nativeLineup.slots));
-    } else {
-      setNativeViews(viewsFromSlotsRecord(counts, {}));
+      setNativeVersion(nativeLineup.version);
+      setSelectedKey(null);
+      return;
     }
+
+    // No saved week lineup yet — seed from roster by position so Team/Matchup aren't empty.
+    if (nativeLineup.rosterPlayerIds.length > 0 && Object.keys(posById).length > 0) {
+      const seeded = buildDefaultLineupSlots(nativeLineup.rosterPlayerIds, posById, counts, {
+        injuryById,
+        irAllowedStatuses: nativeLineup.irAllowedStatuses,
+      });
+      const views = viewsFromSlotsRecord(counts, seeded);
+      setNativeViews(views);
+      setNativeVersion(nativeLineup.version);
+      setSelectedKey(null);
+      const seedKey = `${linkId}:${nativeLineup.week}:${nativeLineup.version}:${nativeLineup.rosterPlayerIds.join(",")}`;
+      if (
+        linkId &&
+        nativeLineup.canEdit &&
+        nativeLineup.draftComplete &&
+        seededLineupKey.current !== seedKey
+      ) {
+        seededLineupKey.current = seedKey;
+        void (async () => {
+          try {
+            const result = await saveNativeLineup({
+              data: {
+                linkId,
+                week: nativeLineup.week,
+                version: nativeLineup.version,
+                slots: slotsRecordFromViews(views),
+                posById,
+                injuryById,
+                teamByPlayerId,
+              },
+            });
+            if (result.ok) {
+              if (result.version != null) setNativeVersion(result.version);
+              await queryClient.invalidateQueries({ queryKey: ["native-lineup", linkId] });
+              await queryClient.invalidateQueries({ queryKey: ["active-matchups", linkId] });
+              await queryClient.invalidateQueries({ queryKey: ["league-rosters", linkId] });
+            }
+          } catch {
+            /* best-effort seed */
+          }
+        })();
+      }
+      return;
+    }
+
+    setNativeViews(viewsFromSlotsRecord(counts, {}));
     setNativeVersion(nativeLineup.version);
     setSelectedKey(null);
-  }, [nativeLineup]);
+  }, [nativeLineup, posById, injuryById, teamByPlayerId, linkId, queryClient]);
 
   const standingIndex = standingsRows.findIndex(
     (r) => myTeam != null && Number(r.rosterId) === Number(myTeam.slot),
@@ -182,13 +236,13 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
 
   const currentLineup = nativeDisplayLineup ?? hostLineup;
 
+  // Native testing may advance league week ahead of the NFL calendar — allow edits
+  // for the lineup week being viewed when the server says canEdit.
+  const nativeWeekEditable = Boolean(
+    isNative && nativeLineup?.canEdit && Number(nativeLineup.week) === Number(activeWeek),
+  );
   const canEditLineup = Boolean(
-    isNative &&
-      linkId &&
-      nativeLineup?.canEdit &&
-      isCurrentWeek &&
-      !showOptimized &&
-      !isPastWeek,
+    nativeWeekEditable && linkId && !showOptimized && !(isPastWeek && !isNative),
   );
 
   const projectPlayer = (p: Player) => projectFor(sleeperIdFor(p));
@@ -314,7 +368,9 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   };
 
   const optimizePlan = useMemo(() => {
-    if (!myTeam || !isCurrentWeek || startersLocked) return null;
+    if (!myTeam || startersLocked) return null;
+    if (!isNative && !isCurrentWeek) return null;
+    if (isNative && !nativeWeekEditable) return null;
     const labels = slotLabels(rosterPositions);
     const irIds = new Set((myTeam.ir ?? []).map((p) => p.id));
     const pool = (myTeam.players ?? []).filter((p) => !irIds.has(p.id));
@@ -339,7 +395,9 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     myTeam,
+    isNative,
     isCurrentWeek,
+    nativeWeekEditable,
     startersLocked,
     rosterPositions,
     currentLineup.starters,
@@ -355,7 +413,57 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     if (showOptimized) setSelectedKey(null);
   }, [showOptimized]);
 
-  const lineup = showOptimized && optimizePlan ? optimizePlan.lineup : currentLineup;
+  const applyNativeOptimize = async () => {
+    if (!isNative || !linkId || !nativeLineup || !optimizePlan || savingLineup) return;
+    const counts = parseRosterSlotCounts(nativeLineup.rosterSlots);
+    const views = expandLineupSlots(counts);
+    const starterQueues = new Map<string, string[]>();
+    for (const row of optimizePlan.lineup.starters) {
+      if (!row.player) continue;
+      const key = (row.slot === "DST" ? "DEF" : row.slot) as RosterSlotKey;
+      const q = starterQueues.get(key) ?? [];
+      q.push(row.player.id);
+      starterQueues.set(key, q);
+    }
+    for (const v of views) {
+      if (!v.starter) continue;
+      const q = starterQueues.get(v.key);
+      if (q?.length) v.playerId = q.shift() ?? null;
+    }
+    const benchIds = optimizePlan.lineup.bench
+      .map((r) => r.player?.id)
+      .filter((id): id is string => Boolean(id));
+    const irIds = optimizePlan.lineup.reserve
+      .map((r) => r.player?.id)
+      .filter((id): id is string => Boolean(id));
+    for (const v of views) {
+      if (v.playerId) continue;
+      if (v.key === "BN" && benchIds.length) v.playerId = benchIds.shift() ?? null;
+      else if ((v.key === "IR" || v.key === "TAXI") && irIds.length) {
+        v.playerId = irIds.shift() ?? null;
+      }
+    }
+    // Spill any leftover bench ids into empty BN slots.
+    for (const v of views) {
+      if (v.playerId || v.key !== "BN") continue;
+      if (!benchIds.length) break;
+      v.playerId = benchIds.shift() ?? null;
+    }
+    setNativeViews(views);
+    setShowOptimized(false);
+    await persistNativeLineup(views);
+  };
+
+  const onOptimizeClick = () => {
+    if (isNative) {
+      void applyNativeOptimize();
+      return;
+    }
+    setShowOptimized((v) => !v);
+  };
+
+  const lineup =
+    !isNative && showOptimized && optimizePlan ? optimizePlan.lineup : currentLineup;
 
   const loading = playersLoading || rostersLoading;
   if (loading && !myTeam) {
@@ -382,7 +490,9 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   };
   const myProjectedBase = sumStarterProj(mine);
   const myProjected =
-    showOptimized && optimizePlan ? optimizePlan.optimalTotal : myProjectedBase;
+    !isNative && showOptimized && optimizePlan
+      ? optimizePlan.optimalTotal
+      : myProjectedBase;
   const oppProjected = sumStarterProj(opponent);
 
   let matchupStatus: { label: string; className: string } | null = null;
@@ -539,7 +649,9 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
                       <p
                         className={
                           "mt-1 text-sm tabnum " +
-                          (showOptimized && optimizePlan ? "font-semibold text-emerald-600" : "text-m-muted")
+                          (!isNative && showOptimized && optimizePlan
+                            ? "font-semibold text-emerald-600"
+                            : "text-m-muted")
                         }
                       >
                         {myProjected != null ? myProjected.toFixed(2) : "-"}
@@ -582,35 +694,44 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
             <div className="pointer-events-none absolute left-1/2 top-full z-20 -translate-x-1/2 -translate-y-[14px]">
               <button
                 type="button"
-                onClick={() => setShowOptimized((v) => !v)}
-                aria-pressed={showOptimized}
+                onClick={onOptimizeClick}
+                disabled={isNative && savingLineup}
+                aria-pressed={!isNative && showOptimized}
                 aria-label={
-                  showOptimized
-                    ? "Show your current set lineup"
-                    : `Preview optimized lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
+                  isNative
+                    ? `Optimize and save lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
+                    : showOptimized
+                      ? "Show your current set lineup"
+                      : `Preview optimized lineup, plus ${optimizePlan.gain.toFixed(2)} projected points`
                 }
                 className={
-                  "pointer-events-auto relative inline-flex h-[44px] items-stretch overflow-hidden rounded-[14px] " +
-                  "shadow-[0_3px_0_0_#1a3d2e,0_6px_12px_rgba(0,0,0,0.18)]"
+                  "pointer-events-auto relative inline-flex h-[44px] max-w-[min(100vw-2rem,22rem)] items-stretch overflow-hidden rounded-[14px] " +
+                  "shadow-[0_3px_0_0_#1a3d2e,0_6px_12px_rgba(0,0,0,0.18)] disabled:opacity-60"
                 }
               >
-                {/* Invisible +gain keeps full two-tone width when Optimized. */}
+                {/* Invisible +gain keeps full two-tone width when Optimized (synced preview only). */}
                 <span
                   className={
-                    "flex h-full items-center px-4 font-display text-[22px] font-extrabold italic leading-none tabular-nums " +
-                    (showOptimized ? "invisible" : "bg-[#76c78c] text-white")
+                    "flex h-full shrink-0 items-center whitespace-nowrap px-3.5 font-display text-[20px] font-extrabold italic leading-none tabular-nums " +
+                    (!isNative && showOptimized ? "invisible" : "bg-[#76c78c] text-white")
                   }
-                  aria-hidden={showOptimized}
+                  aria-hidden={!isNative && showOptimized}
                 >
-                  + {optimizePlan.gain.toFixed(2)}
+                  +{optimizePlan.gain.toFixed(2)}
                 </span>
                 <span
                   className={
-                    "flex h-full items-center bg-[#2d5a47] font-display text-[15px] font-extrabold italic uppercase tracking-wide text-white " +
-                    (showOptimized ? "absolute inset-0 justify-center px-5" : "px-5")
+                    "flex h-full items-center whitespace-nowrap bg-[#2d5a47] font-display text-[15px] font-extrabold italic uppercase tracking-wide text-white " +
+                    (!isNative && showOptimized ? "absolute inset-0 justify-center px-5" : "px-4")
                   }
                 >
-                  {showOptimized ? "Optimized" : "Optimize"}
+                  {isNative
+                    ? savingLineup
+                      ? "Saving…"
+                      : "Optimize"
+                    : showOptimized
+                      ? "Optimized"
+                      : "Optimize"}
                 </span>
               </button>
             </div>
@@ -621,9 +742,13 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
           <>
             {/* Room for the ~22px of badge below the card; fixed so toggle doesn't jump. */}
             <div className="h-8" aria-hidden="true" />
-            {showOptimized ? (
+            {!isNative && showOptimized ? (
               <p className="mb-1 text-center text-xs text-m-muted">
                 Preview only — tap again for your set lineup
+              </p>
+            ) : isNative ? (
+              <p className="mb-1 text-center text-xs text-m-muted">
+                Tap Optimize to set and save the best projected lineup
               </p>
             ) : null}
           </>
