@@ -647,7 +647,10 @@ function HalfCard({
               className={mirror ? "-right-0.5 left-auto" : undefined}
             />
           </div>
-          {logo ? <img src={logo} alt="" className="mt-1.5 size-7 shrink-0 rounded-full bg-m-chip object-contain p-1" /> : null}
+          {/* Avatar is already the team mark for DST — skip the redundant chip. */}
+          {logo && player.pos !== "DEF" ? (
+            <img src={logo} alt="" className="mt-1.5 size-7 shrink-0 rounded-full bg-m-chip object-contain p-1" />
+          ) : null}
           <div
             className={cn(
               "flex min-w-0 flex-1 flex-col",
