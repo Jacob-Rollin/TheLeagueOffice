@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { useMobileTheme } from "@/components/mobile/MobileThemeContext";
 import { cn } from "@/lib/utils";
 
 /** Above league bottom nav / activity peek (z-50) so actions stay tappable. */
@@ -17,6 +18,12 @@ function useLockBodyScroll(active: boolean) {
   }, [active]);
 }
 
+/** Portals escape MobileShell — re-apply theme tokens so bg-m-* paints opaque. */
+function useMobileThemeClass() {
+  const { theme } = useMobileTheme();
+  return theme === "dark" ? "mobile-theme-dark" : "mobile-theme-light";
+}
+
 /**
  * Centered Cancel/Confirm (and similar) dialog for native mobile transactions.
  * Portaled to body so the bottom tab bar cannot clip the action buttons.
@@ -31,11 +38,13 @@ export function MobileCenteredConfirm({
   className?: string;
 }) {
   useLockBodyScroll(true);
+  const themeClass = useMobileThemeClass();
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 flex items-center justify-center bg-black/50 px-4 py-6",
+        themeClass,
+        "fixed inset-0 flex items-center justify-center bg-black/55 px-4 py-6",
         OVERLAY_Z,
       )}
       style={{
@@ -62,6 +71,8 @@ export function MobileCenteredConfirm({
 /**
  * Full-screen scrollable picker (e.g. Choose a drop) for native mobile transactions.
  * Explicit dvh + portaled body mount so the roster list can scroll on iOS.
+ * Theme class is required on the portal root — otherwise m-* tokens are unset and
+ * the Players page bleeds through a transparent sheet.
  */
 export function MobileFullScreenPicker({
   title,
@@ -77,10 +88,12 @@ export function MobileFullScreenPicker({
   children: ReactNode;
 }) {
   useLockBodyScroll(true);
+  const themeClass = useMobileThemeClass();
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
       className={cn(
+        themeClass,
         "fixed inset-0 flex h-[100dvh] max-h-[100dvh] flex-col bg-m-bg text-m-card-fg",
         OVERLAY_Z,
       )}
@@ -89,11 +102,11 @@ export function MobileFullScreenPicker({
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
     >
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-md flex-1 flex-col">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-md flex-1 flex-col bg-m-bg">
         <header className="shrink-0 border-b border-m-border bg-m-card px-4 pb-3 pt-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="font-display text-2xl font-bold">{title}</h3>
+              <h3 className="font-display text-2xl font-bold text-m-card-fg">{title}</h3>
               {subtitle ? <div className="mt-1 text-sm text-m-muted">{subtitle}</div> : null}
             </div>
             <button
@@ -107,7 +120,7 @@ export function MobileFullScreenPicker({
             </button>
           </div>
         </header>
-        <div className="min-h-0 flex-1 touch-pan-y space-y-2 overflow-y-auto overscroll-contain px-2.5 py-3 pb-10">
+        <div className="min-h-0 flex-1 touch-pan-y space-y-2 overflow-y-auto overscroll-contain bg-m-bg px-2.5 py-3 pb-10">
           {children}
         </div>
       </div>
