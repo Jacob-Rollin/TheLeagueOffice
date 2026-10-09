@@ -20,7 +20,11 @@ export const getRouter = () => {
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
-    defaultPreloadStaleTime: 0,
+    // Hover/focus preloads the route module so research/playbook navigations
+    // feel instant. Does not call Fluid — only loads the client chunk.
+    defaultPreload: "intent",
+    defaultPreloadDelay: 50,
+    defaultPreloadStaleTime: 30_000,
   });
 
   return router;
