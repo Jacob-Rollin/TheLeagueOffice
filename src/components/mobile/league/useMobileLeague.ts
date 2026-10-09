@@ -49,8 +49,36 @@ export function useMobileLeagueStandings() {
 }
 
 const WAIVER_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** Weekly waiver clears run Tuesday morning Eastern — not mid-week FAAB/rolling claims. */
+const WAIVER_CLEAR_TZ = "America/New_York";
 
-/** True for the 24 hours after the league's most recent waiver run. */
+/** True when `atMs` falls on a Tuesday in America/New_York. */
+export function isEasternTuesday(atMs: number): boolean {
+  if (!Number.isFinite(atMs) || atMs <= 0) return false;
+  const day = new Intl.DateTimeFormat("en-US", {
+    timeZone: WAIVER_CLEAR_TZ,
+    weekday: "short",
+  }).format(new Date(atMs));
+  return day === "Tue";
+}
+
+/**
+ * Most recent successful weekly waiver clear (Tuesday ET), or 0.
+ * Ignores free-agent adds, trades, IR, and Wed–Mon waiver executions.
+ */
+export function latestTuesdayWaiverAt(
+  events: { kind: string; at: number }[],
+): number {
+  let latest = 0;
+  for (const e of events) {
+    if (e.kind !== "waiver") continue;
+    if (!isEasternTuesday(e.at)) continue;
+    if (e.at > latest) latest = e.at;
+  }
+  return latest;
+}
+
+/** True for 24 hours after Tuesday's waiver clear only. */
 export function useWaiverActivityWindow() {
   const { events } = useMobileLeagueActivity();
   const [now, setNow] = useState(() => Date.now());
@@ -60,8 +88,8 @@ export function useWaiverActivityWindow() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const lastWaiverAt = events.reduce((latest, e) => (e.kind === "waiver" && e.at > latest ? e.at : latest), 0);
-  return lastWaiverAt > 0 && now - lastWaiverAt < WAIVER_WINDOW_MS;
+  const lastTuesdayWaiverAt = latestTuesdayWaiverAt(events);
+  return lastTuesdayWaiverAt > 0 && now - lastTuesdayWaiverAt < WAIVER_WINDOW_MS;
 }
 
 /** Full host transaction log for the active league. */
