@@ -252,6 +252,15 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const isPlayerLocked = (player: Player | null | undefined) =>
     playerIsLocked(player, progressByNflTeam, activeWeek, isPastWeek);
 
+  /** Hide Optimize once any starter’s NFL game has started (same as synced leagues). */
+  const startersLocked = useMemo(() => {
+    for (const row of currentLineup.starters) {
+      if (!row.player) continue;
+      if (isPlayerLocked(row.player)) return true;
+    }
+    return false;
+  }, [currentLineup.starters, progressByNflTeam, activeWeek, isPastWeek]);
+
   const persistNativeLineup = async (nextViews: NativeLineupSlotView[]) => {
     if (!linkId || !nativeLineup || savingLineup) return;
     setSavingLineup(true);
@@ -364,7 +373,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   };
 
   const optimizePlan = useMemo(() => {
-    if (!myTeam) return null;
+    if (!myTeam || startersLocked) return null;
     if (!isNative && !isCurrentWeek) return null;
     if (isNative && !nativeWeekEditable) return null;
     const labels = slotLabels(rosterPositions);
@@ -372,7 +381,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     const pool = (myTeam.players ?? []).filter((p) => !irIds.has(p.id));
     if (!pool.length || !labels.length) return null;
 
-    // Pin anyone whose NFL game has started so Optimize cannot move them.
+    // Defense-in-depth: pin any locked players if Optimize still runs (race / clock).
     const immovableIds = new Set<string>();
     const pinnedStarters = currentLineup.starters.map((row) => {
       if (row.player && isPlayerLocked(row.player)) {
@@ -413,6 +422,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     isNative,
     isCurrentWeek,
     nativeWeekEditable,
+    startersLocked,
     rosterPositions,
     currentLineup.starters,
     currentLineup.bench,
@@ -425,8 +435,8 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   ]);
 
   useEffect(() => {
-    if (!optimizePlan) setShowOptimized(false);
-  }, [optimizePlan]);
+    if (!optimizePlan || startersLocked) setShowOptimized(false);
+  }, [optimizePlan, startersLocked]);
 
   useEffect(() => {
     if (showOptimized) setSelectedKey(null);
