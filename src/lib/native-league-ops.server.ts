@@ -1790,12 +1790,12 @@ export async function commissionerEditRosterForUser(
     if (nextActive.includes(addPlayerId) || nextIr.includes(addPlayerId)) {
       return { ok: false, error: "That player is already on this roster" };
     }
-    const ownedElsewhere = await tidbExecute<{ team_id: number }>(
-      `SELECT team_id FROM native_player_locks
+    const ownedElsewhere = await tidbExecute<{ held_by_team_id: number }>(
+      `SELECT held_by_team_id FROM native_player_locks
        WHERE league_id = ? AND player_id = ? AND held_by_team_id IS NOT NULL LIMIT 1`,
       [membership.leagueId, addPlayerId],
     );
-    if (ownedElsewhere[0] && Number(ownedElsewhere[0].team_id) !== teamId) {
+    if (ownedElsewhere[0] && Number(ownedElsewhere[0].held_by_team_id) !== teamId) {
       return { ok: false, error: "That player is already rostered on another team" };
     }
     const allRosters = await tidbExecute<{ team_id: number; player_ids: unknown; reserve_ir: unknown }>(
