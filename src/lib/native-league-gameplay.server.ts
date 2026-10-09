@@ -1294,6 +1294,10 @@ export async function getNativeMatchupWeekForLink(
   seasonYear: number;
   matchups: NativeMatchupView[];
   myTeamId: number | null;
+  /** League scoring map for client-side live overlay (native Matchup only). */
+  scoringSettings: Record<string, number>;
+  /** Starter sleeper ids by team id (from week lineups, else last scored snap). */
+  startersByTeamId: Record<string, string[]>;
 } | null> {
   if (!tidbConfigured()) return null;
   const membership = await assertMembershipLink(userId, linkId);
@@ -1306,7 +1310,7 @@ export async function getNativeMatchupWeekForLink(
       : Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
   const seasonYear = Number(league.season_year);
 
-  const [sched, results, teams] = await Promise.all([
+  const [sched, results, teams, lineups] = await Promise.all([
     tidbExecute<{
       matchup_id: number;
       home_team_id: number;
@@ -1322,14 +1326,20 @@ export async function getNativeMatchupWeekForLink(
       points: number;
       player_points: unknown;
       matchup_id: number | null;
+      starters: unknown;
     }>(
-      `SELECT team_id, points, player_points, matchup_id FROM native_matchup_results
+      `SELECT team_id, points, player_points, matchup_id, starters FROM native_matchup_results
        WHERE league_id = ? AND season_year = ? AND week = ?`,
       [membership.leagueId, seasonYear, week],
     ),
     tidbExecute<{ id: number; team_name: string }>(
       `SELECT id, team_name FROM native_teams WHERE league_id = ?`,
       [membership.leagueId],
+    ),
+    tidbExecute<{ team_id: number; slots: unknown }>(
+      `SELECT team_id, slots FROM native_lineups
+       WHERE league_id = ? AND season_year = ? AND week = ?`,
+      [membership.leagueId, seasonYear, week],
     ),
   ]);
 
@@ -1340,19 +1350,32 @@ export async function getNativeMatchupWeekForLink(
       {
         points: Number(r.points ?? 0),
         playerPoints: parsePlayerPoints(r.player_points),
+        starters: parseStarterIdList(r.starters),
       },
     ]),
   );
+  const startersByTeamId: Record<string, string[]> = {};
+  for (const row of lineups) {
+    const ids = extractStarterIds(row.slots);
+    if (ids.length) startersByTeamId[String(row.team_id)] = ids;
+  }
+  for (const [teamId, row] of resultByTeam) {
+    if (!startersByTeamId[String(teamId)]?.length && row.starters.length) {
+      startersByTeamId[String(teamId)] = row.starters;
+    }
+  }
 
   return {
     week,
     seasonYear,
     myTeamId: membership.teamId,
+    scoringSettings: parseScoringSettingsJson(league.scoring_settings),
+    startersByTeamId,
     matchups: sched.map((s) => {
       const homeId = Number(s.home_team_id);
       const awayId = Number(s.away_team_id);
-      const home = resultByTeam.get(homeId) ?? { points: 0, playerPoints: {} };
-      const away = resultByTeam.get(awayId) ?? { points: 0, playerPoints: {} };
+      const home = resultByTeam.get(homeId) ?? { points: 0, playerPoints: {}, starters: [] };
+      const away = resultByTeam.get(awayId) ?? { points: 0, playerPoints: {}, starters: [] };
       return {
         week,
         seasonYear,
@@ -1372,6 +1395,19 @@ export async function getNativeMatchupWeekForLink(
       };
     }),
   };
+}
+
+function parseStarterIdList(raw: unknown): string[] {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return value.map((id) => String(id ?? "").trim()).filter(Boolean);
 }
 
 function parsePlayerPoints(raw: unknown): Record<string, number> {
@@ -1461,13 +1497,36 @@ function parseStandingsFull(raw: unknown): NativeStandingRow[] {
     .filter((r) => r.teamId > 0);
 }
 
-/** Cron: apply Sleeper week stats → lineup points + matchup results + standings snap. */
+/**
+ * Cron modes for native scoring (live Matchup overlay is separate — snap-cdn).
+ * - points: write week fantasy totals to TiDB (infrequent; not needed for live UI)
+ * - standings: finalize W–L / PF / PA snap from stored week results (weekly)
+ * - both: points then standings (Tue finalize / manual)
+ */
 export async function processNativeScoringCron(opts?: {
   leagueId?: string;
   week?: number;
   limit?: number;
-}): Promise<{ ok: boolean; leagues: number; teamsScored: number; error?: string }> {
-  if (!tidbConfigured()) return { ok: false, leagues: 0, teamsScored: 0, error: "TiDB not configured" };
+  mode?: "points" | "standings" | "both";
+}): Promise<{
+  ok: boolean;
+  leagues: number;
+  teamsScored: number;
+  standingsUpdated: number;
+  mode: "points" | "standings" | "both";
+  error?: string;
+}> {
+  const mode = opts?.mode === "standings" || opts?.mode === "both" ? opts.mode : "points";
+  if (!tidbConfigured()) {
+    return {
+      ok: false,
+      leagues: 0,
+      teamsScored: 0,
+      standingsUpdated: 0,
+      mode,
+      error: "TiDB not configured",
+    };
+  }
   const limit = Math.max(1, Math.min(40, Math.floor(opts?.limit ?? 15)));
   const leagues = opts?.leagueId
     ? await tidbExecute<LeagueRow>(
@@ -1482,7 +1541,10 @@ export async function processNativeScoringCron(opts?: {
       );
 
   let teamsScored = 0;
+  let standingsUpdated = 0;
   const statsCache = new Map<string, Record<string, Record<string, number>>>();
+  const writePoints = mode === "points" || mode === "both";
+  const writeStandings = mode === "standings" || mode === "both";
 
   for (const league of leagues) {
     const week =
@@ -1490,17 +1552,33 @@ export async function processNativeScoringCron(opts?: {
         ? Math.max(1, Math.min(18, Math.round(Number(opts.week))))
         : Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
     const seasonYear = Number(league.season_year);
-    const cacheKey = `${seasonYear}:${week}`;
-    let stats = statsCache.get(cacheKey);
-    if (!stats) {
-      stats = await fetchSleeperWeekStatsServer(seasonYear, week);
-      statsCache.set(cacheKey, stats);
+
+    if (writePoints) {
+      const cacheKey = `${seasonYear}:${week}`;
+      let stats = statsCache.get(cacheKey);
+      if (!stats) {
+        stats = await fetchSleeperWeekStatsServer(seasonYear, week);
+        statsCache.set(cacheKey, stats);
+      }
+      teamsScored += await scoreLeagueWeek(league, week, stats);
     }
-    const scored = await scoreLeagueWeek(league, week, stats);
-    teamsScored += scored;
-    await materializeStandingsSnap(league, week);
+
+    if (writeStandings) {
+      // Prefer a fresh points write when finalizing so W–L uses complete week totals.
+      if (!writePoints) {
+        const cacheKey = `${seasonYear}:${week}`;
+        let stats = statsCache.get(cacheKey);
+        if (!stats) {
+          stats = await fetchSleeperWeekStatsServer(seasonYear, week);
+          statsCache.set(cacheKey, stats);
+        }
+        teamsScored += await scoreLeagueWeek(league, week, stats);
+      }
+      await materializeStandingsSnap(league, week);
+      standingsUpdated += 1;
+    }
   }
-  return { ok: true, leagues: leagues.length, teamsScored };
+  return { ok: true, leagues: leagues.length, teamsScored, standingsUpdated, mode };
 }
 
 async function scoreLeagueWeek(

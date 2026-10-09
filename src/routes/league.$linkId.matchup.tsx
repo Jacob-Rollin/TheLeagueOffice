@@ -5,13 +5,22 @@ import { useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { getNativeLeagueBoard, getNativeMatchupWeek } from "@/lib/native-league.functions";
+import {
+  fetchNativeLiveWeekStats,
+  overlayNativeLiveMatchupScores,
+} from "@/lib/native-live-scoring";
+import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
+import type { ScoringMap } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$linkId/matchup")({
   ssr: false,
   component: NativeMatchupPage,
 });
+
+/** Live stats poll while Matchup is open and the tab is visible (native only). */
+const LIVE_STATS_POLL_MS = 60_000;
 
 function NativeMatchupPage() {
   const { linkId } = Route.useParams();
@@ -33,6 +42,33 @@ function NativeMatchupPage() {
     queryFn: () => getNativeMatchupWeek({ data: { linkId, week: activeWeek } }),
   });
 
+  const seasonYear = data?.seasonYear ?? board?.summary.seasonYear ?? new Date().getUTCFullYear();
+  const isCurrentWeek = activeWeek === (board?.currentWeek ?? activeWeek);
+
+  const liveStats = useQuery({
+    queryKey: ["native-live-week-stats", seasonYear, activeWeek],
+    enabled: Boolean(data && isCurrentWeek),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: visibleRefetchInterval(LIVE_STATS_POLL_MS),
+    refetchIntervalInBackground: false,
+    retry: false,
+    queryFn: () => fetchNativeLiveWeekStats(seasonYear, activeWeek),
+  });
+
+  const scoredMatchups = useMemo(() => {
+    const base = data?.matchups ?? [];
+    const stats = liveStats.data?.stats;
+    const starters = data?.startersByTeamId ?? {};
+    const scoring = (data?.scoringSettings ?? {}) as ScoringMap;
+    if (!stats || Object.keys(stats).length === 0) return base;
+    return overlayNativeLiveMatchupScores(base, starters, stats, scoring);
+  }, [data?.matchups, data?.startersByTeamId, data?.scoringSettings, liveStats.data?.stats]);
+
+  const liveActive = Boolean(
+    isCurrentWeek && liveStats.data && Object.keys(liveStats.data.stats).length > 0,
+  );
+
   const cache = useSleeperPlayers();
   const fallback = useQuery({
     queryKey: ["players-catalog"],
@@ -48,8 +84,8 @@ function NativeMatchupPage() {
 
   const myTeamId = data?.myTeamId ?? board?.summary.teamId ?? null;
   const focus =
-    data?.matchups.find((m) => m.home.teamId === myTeamId || m.away.teamId === myTeamId) ??
-    data?.matchups[0] ??
+    scoredMatchups.find((m) => m.home.teamId === myTeamId || m.away.teamId === myTeamId) ??
+    scoredMatchups[0] ??
     null;
 
   return (
@@ -60,8 +96,15 @@ function NativeMatchupPage() {
             Week <span className="text-primary">Matchup</span>
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Scores update when the scoring cron applies Sleeper week stats.
+            {liveActive
+              ? "Live scores from shared week stats (refreshes about every minute while this tab is open)."
+              : "Official scores update when the scoring cron writes TiDB snaps. Live overlay appears once week-stats snap is published."}
           </p>
+          {liveActive && liveStats.data?.updatedAt ? (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Stats as of {new Date(liveStats.data.updatedAt).toLocaleString()}
+            </p>
+          ) : null}
         </div>
         <label className="text-sm">
           <span className="sr-only">Week</span>
@@ -94,15 +137,22 @@ function NativeMatchupPage() {
                 points={focus.home.points}
                 mine={focus.home.teamId === myTeamId}
                 align="left"
+                live={liveActive}
               />
               <p className="text-center font-display text-sm uppercase tracking-wide text-slate-500">
                 Week {activeWeek}
+                {liveActive ? (
+                  <span className="mt-1 block text-[10px] font-semibold tracking-wider text-accent">
+                    Live
+                  </span>
+                ) : null}
               </p>
               <TeamScore
                 name={focus.away.teamName}
                 points={focus.away.points}
                 mine={focus.away.teamId === myTeamId}
                 align="right"
+                live={liveActive}
               />
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -119,7 +169,7 @@ function NativeMatchupPage() {
             </div>
           </section>
 
-          {(data?.matchups.length ?? 0) > 1 ? (
+          {scoredMatchups.length > 1 ? (
             <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 px-4 py-2">
                 <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900">
@@ -127,7 +177,7 @@ function NativeMatchupPage() {
                 </h3>
               </div>
               <ul className="divide-y divide-slate-100">
-                {data!.matchups.map((m) => (
+                {scoredMatchups.map((m) => (
                   <li
                     key={m.matchupId}
                     className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
@@ -157,16 +207,23 @@ function TeamScore({
   points,
   mine,
   align,
+  live,
 }: {
   name: string;
   points: number;
   mine: boolean;
   align: "left" | "right";
+  live?: boolean;
 }) {
   return (
     <div className={cn(align === "right" && "sm:text-right")}>
       <p className={cn("font-medium text-slate-900", mine && "text-primary")}>{name}</p>
-      <p className="font-display text-3xl font-semibold tracking-wide text-slate-900">
+      <p
+        className={cn(
+          "font-display text-3xl font-semibold tracking-wide text-slate-900",
+          live && "text-slate-900",
+        )}
+      >
         {points.toFixed(1)}
       </p>
     </div>

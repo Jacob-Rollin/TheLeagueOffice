@@ -1,26 +1,27 @@
 name: Native League Ops
 
-# Waivers / trade veto windows + scoring + AI managers for native leagues.
-# Requires APP_URL + CRON_SECRET. Browse paths read TiDB snaps only.
+# Waivers / trade veto / TiDB point snaps / weekly standings / AI managers.
+# Live Matchup scores use snap-cdn (native-live-week-stats.yml) — not this workflow.
+# Requires APP_URL + CRON_SECRET.
 
 on:
   schedule:
-    # Waivers: Wed 10:00 America/New_York ≈ 14:00 UTC (configurable process slot later).
+    # Waivers: Wed 10:00 America/New_York ≈ 14:00 UTC.
     - cron: "0 14 * * 3"
     # Trade veto settle: every 2h.
     - cron: "20 */2 * * *"
-    # Scoring: gameday evenings hourly (Thu–Mon UTC blocks).
-    - cron: "30 0-5,16-23 * * 0,1,4,5,6"
-    # Daily scoring catch-up.
+    # TiDB week point snaps only (not W–L): daily catch-up. Live UI does not depend on this.
     - cron: "40 7 * * *"
+    # Standings W–L finalize after MNF: Tue 10:00 America/New_York ≈ 14:00 UTC.
+    - cron: "0 14 * * 2"
     # AI draft/lineup tick (Tue–Wed mornings + Thu pre-kickoff).
     - cron: "15 15 * * 2,3,4"
   workflow_dispatch:
     inputs:
       mode:
-        description: "waivers | scoring | ai | both | all"
+        description: "waivers | points | standings | ai | both | all"
         type: choice
-        options: [both, waivers, scoring, ai, all]
+        options: [both, waivers, points, standings, ai, all]
         default: both
 
 permissions:
@@ -50,13 +51,18 @@ jobs:
           AUTH="Authorization: Bearer ${CRON_SECRET}"
 
           run_waivers() {
-            echo "POST ${BASE}/api/cron/native-waivers"
+            echo "GET ${BASE}/api/cron/native-waivers"
             curl -fsS -H "$AUTH" "${BASE}/api/cron/native-waivers?limit=20" | head -c 2000
             echo
           }
-          run_scoring() {
-            echo "GET ${BASE}/api/cron/native-scoring"
-            curl -fsS -H "$AUTH" "${BASE}/api/cron/native-scoring?limit=15" | head -c 2000
+          run_points() {
+            echo "GET ${BASE}/api/cron/native-scoring?mode=points"
+            curl -fsS -H "$AUTH" "${BASE}/api/cron/native-scoring?mode=points&limit=15" | head -c 2000
+            echo
+          }
+          run_standings() {
+            echo "GET ${BASE}/api/cron/native-scoring?mode=standings"
+            curl -fsS -H "$AUTH" "${BASE}/api/cron/native-scoring?mode=standings&limit=15" | head -c 2000
             echo
           }
           run_ai() {
@@ -65,7 +71,6 @@ jobs:
             echo
           }
 
-          # Scheduled veto tick (:*/2) only needs waivers endpoint (includes veto settle).
           if [ "$SCHEDULE" = "20 */2 * * *" ]; then
             run_waivers
             exit 0
@@ -74,11 +79,24 @@ jobs:
             run_ai
             exit 0
           fi
+          if [ "$SCHEDULE" = "40 7 * * *" ]; then
+            run_points
+            exit 0
+          fi
+          if [ "$SCHEDULE" = "0 14 * * 2" ]; then
+            run_standings
+            exit 0
+          fi
+          if [ "$SCHEDULE" = "0 14 * * 3" ]; then
+            run_waivers
+            exit 0
+          fi
 
           case "$MODE" in
             waivers) run_waivers ;;
-            scoring) run_scoring ;;
+            points) run_points ;;
+            standings) run_standings ;;
             ai) run_ai ;;
-            all) run_waivers; run_scoring; run_ai ;;
-            *) run_waivers; run_scoring ;;
+            all) run_waivers; run_points; run_standings; run_ai ;;
+            *) run_waivers; run_points ;;
           esac
