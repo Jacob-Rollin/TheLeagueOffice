@@ -183,7 +183,7 @@ export function PlaybookMenu() {
       <DropdownMenuContent align="start" className="w-56">
         {PLAYBOOK_LINKS.map((item) => (
           <DropdownMenuItem key={item.to} asChild>
-            <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+            <Link to={item.to} preload="intent" className="block w-full whitespace-nowrap font-medium">
               {item.label}
             </Link>
           </DropdownMenuItem>
@@ -208,7 +208,7 @@ export function TradeMenu() {
       <DropdownMenuContent align="start" className="w-56">
         {TRADE_LINKS.map((item) => (
           <DropdownMenuItem key={item.to} asChild>
-            <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+            <Link to={item.to} preload="intent" className="block w-full whitespace-nowrap font-medium">
               {item.label}
             </Link>
           </DropdownMenuItem>
@@ -233,7 +233,7 @@ export function WaiverMenu() {
       <DropdownMenuContent align="start" className="w-56">
         {WAIVER_LINKS.map((item) => (
           <DropdownMenuItem key={item.to} asChild>
-            <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+            <Link to={item.to} preload="intent" className="block w-full whitespace-nowrap font-medium">
               {item.label}
             </Link>
           </DropdownMenuItem>
@@ -250,7 +250,7 @@ export function DraftMenu() {
       <DropdownMenuContent align="start" className="w-56">
         {DRAFT_LINKS.map((item) => (
           <DropdownMenuItem key={item.to} asChild>
-            <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+            <Link to={item.to} preload="intent" className="block w-full whitespace-nowrap font-medium">
               {item.label}
             </Link>
           </DropdownMenuItem>
@@ -271,7 +271,7 @@ export function ResearchMenu() {
             <DropdownMenuLabel className={menuHeadingClass}>{section.heading}</DropdownMenuLabel>
             {section.links.map((item) => (
               <DropdownMenuItem key={item.to} asChild>
-                <Link to={item.to} className="block w-full whitespace-nowrap font-medium">
+                <Link to={item.to} preload="intent" className="block w-full whitespace-nowrap font-medium">
                   {item.label}
                 </Link>
               </DropdownMenuItem>
