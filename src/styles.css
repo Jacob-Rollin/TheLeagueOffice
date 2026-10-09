@@ -105,7 +105,8 @@
   --m-card: #ffffff;
   --m-card-fg: #1f2328;
   --m-player-card: #ffffff;
-  --m-player-card-final: #e4e1da;
+  /* Slightly darker than --m-bg so final boxes don't blend into the page. */
+  --m-player-card-final: #d0ccc3;
   --m-muted: #50565c;
   --m-border: #d9d5cc;
   --m-section: #2a2d31;

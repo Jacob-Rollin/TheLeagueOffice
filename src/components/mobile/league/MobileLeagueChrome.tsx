@@ -1,5 +1,15 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ArrowLeftRight, Minus, Newspaper, Plus, Shirt, Swords, Trophy, Users } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Minus,
+  Newspaper,
+  Plus,
+  Shirt,
+  Swords,
+  Trophy,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 
 import {
@@ -20,6 +30,7 @@ import type { LeagueActivityEvent, LeagueActivityMove } from "@/lib/league.funct
 import { cn } from "@/lib/utils";
 
 import { MobileTeamLogo } from "./MobileStandings";
+import { FootballIcon, HelmetIcon } from "./mobileNavIcons";
 import { useMobileLeagueActivity } from "./useMobileLeague";
 
 /** Bottom tab bar height, excluding the device safe area. */
@@ -27,6 +38,11 @@ const NAV_HEIGHT = "3.5rem";
 /** Visible height of the collapsed League Activity sheet. */
 const PEEK_HEIGHT = "3.75rem";
 const SHEET_TOP_GAP = "4.75rem";
+
+/**
+ * Team/Matchup sport icons (helmet + football). Set false to restore Shirt + Swords.
+ */
+const USE_SPORT_NAV_ICONS = true;
 
 export const mobileLeagueContentPad = (withSheet: boolean) =>
   `calc(${NAV_HEIGHT}${withSheet ? ` + ${PEEK_HEIGHT}` : ""} + env(safe-area-inset-bottom, 0px) + 1rem)`;
@@ -38,10 +54,20 @@ type TabPath =
   | "/m/league/$leagueId/players"
   | "/m/league/$leagueId";
 
-const TABS: { to: TabPath; label: string; icon: typeof Trophy; segment: string | null }[] = [
+const TABS: { to: TabPath; label: string; icon: LucideIcon; segment: string | null }[] = [
   { to: "/m/league/$leagueId/feed", label: "Feed", icon: Newspaper, segment: "feed" },
-  { to: "/m/league/$leagueId/team", label: "Team", icon: Shirt, segment: "team" },
-  { to: "/m/league/$leagueId/matchup", label: "Matchup", icon: Swords, segment: "matchup" },
+  {
+    to: "/m/league/$leagueId/team",
+    label: "Team",
+    icon: USE_SPORT_NAV_ICONS ? HelmetIcon : Shirt,
+    segment: "team",
+  },
+  {
+    to: "/m/league/$leagueId/matchup",
+    label: "Matchup",
+    icon: USE_SPORT_NAV_ICONS ? FootballIcon : Swords,
+    segment: "matchup",
+  },
   { to: "/m/league/$leagueId/players", label: "Players", icon: Users, segment: "players" },
   { to: "/m/league/$leagueId", label: "League", icon: Trophy, segment: null },
 ];
