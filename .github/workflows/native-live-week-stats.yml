@@ -1,0 +1,106 @@
+name: Native Live Week Stats
+
+# Publishes Sleeper week actuals to snap-cdn for native Matchup live overlay.
+# Fetches Sleeper from Actions (one shared download) — no Vercel Fluid.
+# Updates one JSON file on the existing snap-cdn branch (preserves research snaps).
+
+on:
+  schedule:
+    # Gameday afternoons/evenings UTC (Thu–Mon): every 5 minutes.
+    - cron: "*/5 16-23 * * 0,1,4,5,6"
+    - cron: "*/5 0-5 * * 0,1"
+    # Midday catch-up Sun/Mon.
+    - cron: "0 12-15 * * 0,1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: native-live-week-stats
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Build native week-stats JSON from Sleeper
+        id: build
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import datetime, json, urllib.request
+          from pathlib import Path
+
+          state = json.load(urllib.request.urlopen("https://api.sleeper.app/v1/state/nfl"))
+          season = str(state.get("league_season") or state.get("season") or datetime.datetime.utcnow().year)
+          week = max(1, int(state.get("week") or 1))
+          pos = "&".join(f"position[]={p}" for p in ("QB", "RB", "WR", "TE", "K", "DEF"))
+          url = f"https://api.sleeper.app/v1/stats/nfl/{season}/{week}?season_type=regular&{pos}"
+          raw = json.load(urllib.request.urlopen(url))
+          stats = {}
+          if isinstance(raw, list):
+              for row in raw:
+                  pid = str((row or {}).get("player_id") or "").strip()
+                  st = (row or {}).get("stats") or {}
+                  if not pid or not isinstance(st, dict):
+                      continue
+                  stats[pid] = {k: float(v) for k, v in st.items() if isinstance(v, (int, float))}
+          elif isinstance(raw, dict):
+              for pid, row in raw.items():
+                  st = (row or {}).get("stats") if isinstance(row, dict) else None
+                  if not isinstance(st, dict):
+                      continue
+                  stats[str(pid)] = {k: float(v) for k, v in st.items() if isinstance(v, (int, float))}
+          if not stats:
+              raise SystemExit("empty week stats from Sleeper")
+          payload = {
+              "season": int(season) if str(season).isdigit() else season,
+              "week": week,
+              "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+              "stats": stats,
+          }
+          Path("/tmp/native-week-stats.json").write_text(json.dumps(payload, separators=(",", ":")))
+          Path("/tmp/native-week-meta.env").write_text(f"SEASON={season}\nWEEK={week}\n")
+          print(f"season={season} week={week} players={len(stats)}")
+          PY
+          # shellcheck disable=SC1091
+          source /tmp/native-week-meta.env
+          echo "season=$SEASON" >> "$GITHUB_OUTPUT"
+          echo "week=$WEEK" >> "$GITHUB_OUTPUT"
+
+      - name: Update snap-cdn file
+        env:
+          SEASON: ${{ steps.build.outputs.season }}
+          WEEK: ${{ steps.build.outputs.week }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          DEST="snap/native-week-stats-${SEASON}-w${WEEK}.json"
+          WORK=$(mktemp -d)
+          cd "$WORK"
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" snap-cdn >/dev/null 2>&1; then
+            git fetch --depth=1 "$REMOTE" snap-cdn
+            git checkout -q FETCH_HEAD
+            git checkout -q -B snap-cdn
+          else
+            git checkout -q -b snap-cdn
+            touch .nojekyll
+            echo "# Snap CDN" > README.md
+          fi
+          mkdir -p snap
+          cp /tmp/native-week-stats.json "$DEST"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No content change — skip push."
+            exit 0
+          fi
+          git commit -q -m "Native live week stats ${SEASON} w${WEEK} $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push --force "$REMOTE" snap-cdn
+          echo "Published ${DEST}"

@@ -1294,6 +1294,10 @@ export async function getNativeMatchupWeekForLink(
   seasonYear: number;
   matchups: NativeMatchupView[];
   myTeamId: number | null;
+  /** League scoring map for client-side live overlay (native Matchup only). */
+  scoringSettings: Record<string, number>;
+  /** Starter sleeper ids by team id (from week lineups, else last scored snap). */
+  startersByTeamId: Record<string, string[]>;
 } | null> {
   if (!tidbConfigured()) return null;
   const membership = await assertMembershipLink(userId, linkId);
@@ -1306,7 +1310,7 @@ export async function getNativeMatchupWeekForLink(
       : Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
   const seasonYear = Number(league.season_year);
 
-  const [sched, results, teams] = await Promise.all([
+  const [sched, results, teams, lineups] = await Promise.all([
     tidbExecute<{
       matchup_id: number;
       home_team_id: number;
@@ -1322,14 +1326,20 @@ export async function getNativeMatchupWeekForLink(
       points: number;
       player_points: unknown;
       matchup_id: number | null;
+      starters: unknown;
     }>(
-      `SELECT team_id, points, player_points, matchup_id FROM native_matchup_results
+      `SELECT team_id, points, player_points, matchup_id, starters FROM native_matchup_results
        WHERE league_id = ? AND season_year = ? AND week = ?`,
       [membership.leagueId, seasonYear, week],
     ),
     tidbExecute<{ id: number; team_name: string }>(
       `SELECT id, team_name FROM native_teams WHERE league_id = ?`,
       [membership.leagueId],
+    ),
+    tidbExecute<{ team_id: number; slots: unknown }>(
+      `SELECT team_id, slots FROM native_lineups
+       WHERE league_id = ? AND season_year = ? AND week = ?`,
+      [membership.leagueId, seasonYear, week],
     ),
   ]);
 
@@ -1340,19 +1350,32 @@ export async function getNativeMatchupWeekForLink(
       {
         points: Number(r.points ?? 0),
         playerPoints: parsePlayerPoints(r.player_points),
+        starters: parseStarterIdList(r.starters),
       },
     ]),
   );
+  const startersByTeamId: Record<string, string[]> = {};
+  for (const row of lineups) {
+    const ids = extractStarterIds(row.slots);
+    if (ids.length) startersByTeamId[String(row.team_id)] = ids;
+  }
+  for (const [teamId, row] of resultByTeam) {
+    if (!startersByTeamId[String(teamId)]?.length && row.starters.length) {
+      startersByTeamId[String(teamId)] = row.starters;
+    }
+  }
 
   return {
     week,
     seasonYear,
     myTeamId: membership.teamId,
+    scoringSettings: parseScoringSettingsJson(league.scoring_settings),
+    startersByTeamId,
     matchups: sched.map((s) => {
       const homeId = Number(s.home_team_id);
       const awayId = Number(s.away_team_id);
-      const home = resultByTeam.get(homeId) ?? { points: 0, playerPoints: {} };
-      const away = resultByTeam.get(awayId) ?? { points: 0, playerPoints: {} };
+      const home = resultByTeam.get(homeId) ?? { points: 0, playerPoints: {}, starters: [] };
+      const away = resultByTeam.get(awayId) ?? { points: 0, playerPoints: {}, starters: [] };
       return {
         week,
         seasonYear,
@@ -1372,6 +1395,19 @@ export async function getNativeMatchupWeekForLink(
       };
     }),
   };
+}
+
+function parseStarterIdList(raw: unknown): string[] {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return value.map((id) => String(id ?? "").trim()).filter(Boolean);
 }
 
 function parsePlayerPoints(raw: unknown): Record<string, number> {

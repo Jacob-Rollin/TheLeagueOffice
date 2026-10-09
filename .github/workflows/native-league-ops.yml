@@ -9,8 +9,9 @@ on:
     - cron: "0 14 * * 3"
     # Trade veto settle: every 2h.
     - cron: "20 */2 * * *"
-    # Scoring: gameday evenings hourly (Thu–Mon UTC blocks).
-    - cron: "30 0-5,16-23 * * 0,1,4,5,6"
+    # Official TiDB scoring: every 15m on gameday windows (Thu–Mon UTC).
+    # Live Matchup overlay uses snap-cdn week stats; this writes standings snaps.
+    - cron: "5,20,35,50 0-5,16-23 * * 0,1,4,5,6"
     # Daily scoring catch-up.
     - cron: "40 7 * * *"
     # AI draft/lineup tick (Tue–Wed mornings + Thu pre-kickoff).
