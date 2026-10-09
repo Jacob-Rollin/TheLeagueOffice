@@ -27,6 +27,8 @@ import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
 import { cn } from "@/lib/utils";
 
+const START_WEEK_OPTIONS = Array.from({ length: 14 }, (_, i) => i + 1);
+
 export const Route = createFileRoute("/league/$linkId/draft")({
   ssr: false,
   component: NativeLeagueDraftPage,
@@ -66,6 +68,7 @@ function NativeLeagueDraftPage() {
   const [pos, setPos] = useState<(typeof POS_FILTERS)[number]>("ALL");
   const [busy, setBusy] = useState(false);
   const [confirmComplete, setConfirmComplete] = useState(false);
+  const [startWeek, setStartWeek] = useState(5);
 
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const drafted = useMemo(() => new Set(draft?.draftedPlayerIds ?? []), [draft?.draftedPlayerIds]);
@@ -86,6 +89,13 @@ function NativeLeagueDraftPage() {
       setTeamId(draft.board.teams[0].id);
     }
   }, [draft?.board.teams, teamId]);
+
+  useEffect(() => {
+    const fromSettings = Number(draft?.board.commissioner.seasonStartWeek ?? 0);
+    if (fromSettings >= 1 && fromSettings <= 14) {
+      setStartWeek(fromSettings);
+    }
+  }, [draft?.board.commissioner.seasonStartWeek]);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["native-draft-state", linkId] });
@@ -139,14 +149,21 @@ function NativeLeagueDraftPage() {
     if (!draft?.board.canManage || busy) return;
     setBusy(true);
     try {
-      const result = await completeNativeDraft({ data: { linkId } });
+      const result = await completeNativeDraft({ data: { linkId, startWeek } });
       if (!result.ok) {
         toast.error(result.error);
         return;
       }
-      toast.success("Draft complete — season started.");
+      const week = result.startWeek ?? startWeek;
+      const ai = result.aiLineups ?? 0;
+      toast.success(
+        ai > 0
+          ? `Season started at week ${week}. AI lineups set for ${ai} team(s).`
+          : `Season started at week ${week}. Earlier weeks are skipped.`,
+      );
       setConfirmComplete(false);
       await refresh();
+      await queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not complete draft.");
     } finally {
@@ -183,6 +200,11 @@ function NativeLeagueDraftPage() {
 
   const { board, picks, totalPicks, canAssign, liveDraftDeferred } = draft;
   const done = board.summary.draftStatus === "complete";
+  const seededRosterPlayers = (board.rosters ?? []).reduce(
+    (n, r) => n + (r.playerIds?.length ?? 0),
+    0,
+  );
+  const canComplete = picks.length > 0 || seededRosterPlayers > 0;
 
   return (
     <div className="space-y-4">
@@ -222,7 +244,7 @@ function NativeLeagueDraftPage() {
               <button
                 type="button"
                 className={buttonClass}
-                disabled={busy || picks.length === 0}
+                disabled={busy || !canComplete}
                 onClick={() => setConfirmComplete(true)}
               >
                 Complete Draft
@@ -350,10 +372,27 @@ function NativeLeagueDraftPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Complete this draft?</AlertDialogTitle>
             <AlertDialogDescription>
-              Rosters will be written from the pick log, player locks applied, and a regular-season schedule
-              generated. This cannot be undone from the UI.
+              Rosters will be written from the pick log (or keep commissioner-seeded rosters), player
+              locks applied, and a regular-season schedule generated from your start week through
+              playoffs. Earlier NFL weeks are skipped for testing.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <label className="block text-sm font-medium text-slate-800">
+            Season start week
+            <select
+              className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
+              value={startWeek}
+              onChange={(e) => setStartWeek(Number(e.target.value))}
+              disabled={busy}
+            >
+              {START_WEEK_OPTIONS.map((w) => (
+                <option key={w} value={w}>
+                  Week {w}
+                  {w === 5 || w === 6 ? " (current testing)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -364,7 +403,7 @@ function NativeLeagueDraftPage() {
                 void complete();
               }}
             >
-              {busy ? "Completing…" : "Complete Draft"}
+              {busy ? "Completing…" : `Start at Week ${startWeek}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

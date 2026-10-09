@@ -7,6 +7,7 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import {
   getNativeLeagueBoard,
+  setNativeLeagueWeek,
   updateNativeLeagueBasics,
 } from "@/lib/native-league.functions";
 import {
@@ -96,6 +97,7 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
   const [screen, setScreen] = useState<Screen>("hub");
   const [draft, setDraft] = useState<NativeCommissionerSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [weekBusy, setWeekBusy] = useState(false);
   const [scoringTab, setScoringTab] = useState<ScoringTab>("passing");
 
   useEffect(() => {
@@ -119,9 +121,17 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
 
   const locked = Boolean(draft?.settingsLocked);
   const canEdit = Boolean(draft?.canManage) && !locked;
+  const canManage = Boolean(draft?.canManage);
+  const draftComplete = board?.summary.draftStatus === "complete";
+  const currentWeek = board?.currentWeek ?? 1;
 
   const savePatch = async (patch: Record<string, unknown>) => {
-    if (!linkId || !canEdit || saving) return;
+    if (!linkId || saving) return;
+    // After draft lock, only allowAiTeams may save from league-info.
+    if (locked && !("allowAiTeams" in patch && Object.keys(patch).length === 1)) {
+      if (!canEdit) return;
+    }
+    if (!canManage) return;
     setSaving(true);
     try {
       const result = await updateNativeLeagueBasics({ data: { linkId, ...patch } });
@@ -138,6 +148,26 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
       toast.error(err instanceof Error ? err.message : "Could not save settings.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const advanceWeek = async () => {
+    if (!linkId || !canManage || weekBusy || !draftComplete) return;
+    setWeekBusy(true);
+    try {
+      const result = await setNativeLeagueWeek({
+        data: { linkId, runAiLineups: true },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Moved to week ${result.week}.`);
+      await queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not advance week.");
+    } finally {
+      setWeekBusy(false);
     }
   };
 
@@ -204,13 +234,17 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
               ? undefined
               : () => {
                   if (screen === "league-info") {
-                    void savePatch({
-                      name: draft.name,
-                      seasonStartWeek: draft.seasonStartWeek,
-                      isPublic: draft.isPublic,
-                      autoActivateNextYear: draft.autoActivateNextYear,
-                      allowAiTeams: draft.allowAiTeams,
-                    });
+                    if (locked) {
+                      void savePatch({ allowAiTeams: draft.allowAiTeams });
+                    } else {
+                      void savePatch({
+                        name: draft.name,
+                        seasonStartWeek: draft.seasonStartWeek,
+                        isPublic: draft.isPublic,
+                        autoActivateNextYear: draft.autoActivateNextYear,
+                        allowAiTeams: draft.allowAiTeams,
+                      });
+                    }
                   } else if (screen === "scoring") {
                     void savePatch({
                       scoringPreset: draft.scoringPreset as NativeScoringPreset,
@@ -269,12 +303,15 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
                 }
           }
           saving={saving}
-          saveDisabled={!canEdit}
+          saveDisabled={
+            screen === "league-info" ? !canManage : !canEdit
+          }
         />
 
         {locked ? (
           <p className="border-b border-m-border bg-m-card px-4 py-2 text-xs text-m-muted">
-            Structural settings lock after the draft starts.
+            Structural settings lock after the draft starts. Allow AI managers and Advance week
+            remain available for testing.
           </p>
         ) : null}
 
@@ -343,13 +380,22 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
               Invite Code
               <TextInput value={draft.inviteCode} disabled readOnly className="font-mono tracking-wider" />
             </FieldLabel>
-            <SegmentedRow
-              label="League Start"
-              value={String(draft.seasonStartWeek)}
-              disabled={!canEdit}
-              options={[1, 2, 3, 4, 5].map((w) => ({ value: String(w), label: `Week ${w}` }))}
-              onChange={(v) => setDraft({ ...draft, seasonStartWeek: Number(v) })}
-            />
+            <FieldLabel>
+              League Start
+              <select
+                disabled={!canEdit}
+                className="w-full rounded-lg border border-m-border bg-m-bg px-3 py-2.5 text-base text-m-card-fg"
+                value={String(draft.seasonStartWeek)}
+                onChange={(e) => setDraft({ ...draft, seasonStartWeek: Number(e.target.value) })}
+              >
+                {Array.from({ length: 14 }, (_, i) => i + 1).map((w) => (
+                  <option key={w} value={w}>
+                    Week {w}
+                    {w === 5 || w === 6 ? " (current testing)" : ""}
+                  </option>
+                ))}
+              </select>
+            </FieldLabel>
             <ToggleRow
               label="Auto-activate next year"
               description="Automatically activates your league for the following season"
@@ -366,11 +412,27 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
             />
             <ToggleRow
               label="Allow AI managers"
-              description="Testing only: assign AI to open seats on desktop Teams. AI drafts by ADP and sets weekly lineups (sits bye / Out / IR). Cron-backed — not on page load."
+              description="Testing only: assign AI to seats on desktop Teams anytime. AI drafts by ADP and sets weekly lineups (sits bye / Out / IR). Cron-backed — not on page load."
               checked={Boolean(draft.allowAiTeams)}
-              disabled={!canEdit}
+              disabled={!canManage}
               onChange={(v) => setDraft({ ...draft, allowAiTeams: v })}
             />
+            {draftComplete && canManage ? (
+              <div className="rounded-lg border border-m-border bg-m-card px-3 py-3">
+                <p className="text-sm font-medium text-m-card-fg">Current week: {currentWeek}</p>
+                <p className="mt-1 text-xs text-m-muted">
+                  Advance the league week for testing. AI lineups refresh for AI seats.
+                </p>
+                <button
+                  type="button"
+                  disabled={weekBusy || currentWeek >= 18}
+                  onClick={() => void advanceWeek()}
+                  className="mt-3 w-full rounded-lg bg-m-accent px-3 py-2.5 text-sm font-semibold text-m-accent-fg disabled:opacity-50"
+                >
+                  {weekBusy ? "Updating…" : `Advance to Week ${Math.min(18, currentWeek + 1)}`}
+                </button>
+              </div>
+            ) : null}
             <div>
               <p className="text-sm text-m-muted">League ID</p>
               <p className="mt-1 font-mono text-sm text-m-card-fg">{draft.leagueId}</p>

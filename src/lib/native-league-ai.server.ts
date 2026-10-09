@@ -135,11 +135,6 @@ export async function setNativeTeamAiForUser(
     return { ok: false, error: "Enable AI managers in league settings first" };
   }
 
-  const draftStatus = String(league.draft_status ?? "");
-  if (draftStatus !== "not_started" && draftStatus !== "scheduled") {
-    return { ok: false, error: "AI seats can only change before the draft starts" };
-  }
-
   const teams = await tidbExecute<TeamAiRow>(
     `SELECT id, team_name, user_id, draft_slot, is_ai, ai_persona
      FROM native_teams WHERE id = ? AND league_id = ? LIMIT 1`,
@@ -149,8 +144,17 @@ export async function setNativeTeamAiForUser(
   if (!team) return { ok: false, error: "Team not found" };
 
   if (input.enabled) {
+    // Testing: commissioners may convert any seat (except their own human seat) to AI anytime.
+    if (team.user_id && String(team.user_id) === String(userId)) {
+      return { ok: false, error: "Cannot convert your own seat to AI" };
+    }
     if (team.user_id) {
-      return { ok: false, error: "Open the human seat first before assigning AI" };
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin
+        .from("native_league_links")
+        .delete()
+        .eq("native_league_id", membership.leagueId)
+        .eq("user_id", team.user_id);
     }
     const persona = randomAiPersona();
     const name = String(team.team_name ?? "").startsWith("Team ")

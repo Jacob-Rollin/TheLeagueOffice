@@ -1,8 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 
+import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
-import { getNativeLeagueBoard } from "@/lib/native-league.functions";
+import { getNativeLeagueBoard, setNativeLeagueWeek } from "@/lib/native-league.functions";
 
 export const Route = createFileRoute("/league/$linkId/")({
   ssr: false,
@@ -10,13 +13,17 @@ export const Route = createFileRoute("/league/$linkId/")({
 });
 
 const buttonClass =
-  "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground";
+  "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
 const outlineClass =
-  "rounded-md border border-border bg-white px-4 py-2 font-display text-sm uppercase tracking-wide text-slate-800";
+  "rounded-md border border-border bg-white px-4 py-2 font-display text-sm uppercase tracking-wide text-slate-800 disabled:opacity-60";
 
 function NativeLeagueDashboard() {
   const { linkId } = Route.useParams();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [weekBusy, setWeekBusy] = useState(false);
+  const [jumpWeek, setJumpWeek] = useState<number | "">("");
+
   const { data: board } = useQuery({
     queryKey: ["native-league-board", linkId],
     enabled: Boolean(user?.id && linkId),
@@ -25,7 +32,8 @@ function NativeLeagueDashboard() {
   });
 
   if (!board) return null;
-  const { summary, canManage, teams, currentWeek, weekMatchups, rosters, ownership } = board;
+  const { summary, canManage, teams, currentWeek, weekMatchups, rosters, ownership, commissioner } =
+    board;
   const draftDone = summary.draftStatus === "complete";
   const liveDeferred = summary.draftMode === "live" && !draftDone;
   const myTeamId = summary.teamId;
@@ -37,9 +45,48 @@ function NativeLeagueDashboard() {
       ? null
       : weekMatchups.find((m) => m.homeTeamId === myTeamId || m.awayTeamId === myTeamId) ?? null;
   const ownedCount = Object.keys(ownership).length;
+  const seasonStart = Math.max(1, Number(commissioner.seasonStartWeek ?? 1) || 1);
+  const maxJump = 18;
+
+  const refreshBoard = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] });
+    await queryClient.invalidateQueries({ queryKey: ["native-draft-state", linkId] });
+    await queryClient.invalidateQueries({ queryKey: ["native-matchup", linkId] });
+  };
+
+  const advanceWeek = async (toWeek?: number) => {
+    if (!canManage || weekBusy) return;
+    setWeekBusy(true);
+    try {
+      const result = await setNativeLeagueWeek({
+        data: {
+          linkId,
+          ...(toWeek != null ? { toWeek } : {}),
+          runAiLineups: true,
+        },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      const ai = result.aiLineups ?? 0;
+      toast.success(
+        ai > 0
+          ? `Moved to week ${result.week}. AI lineups updated for ${ai} team(s).`
+          : `Moved to week ${result.week}.`,
+      );
+      setJumpWeek("");
+      await refreshBoard();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not change week.");
+    } finally {
+      setWeekBusy(false);
+    }
+  };
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      <Toaster />
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Next Steps</h2>
         {!draftDone ? (
@@ -47,7 +94,7 @@ function NativeLeagueDashboard() {
             <p className="mt-2 text-sm text-slate-600">
               {liveDeferred
                 ? "Live snake draft UI ships next — until then, use Offline entry on the Draft tab to assign picks from an external draft."
-                : "Use the Draft tab to enter picks from your offline / external draft, then complete the draft to start the season."}
+                : "Use the Draft tab to enter picks from your offline / external draft, then complete the draft to start the season. Or seed rosters manually on Teams."}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Link to="/league/$linkId/draft" params={{ linkId }} className={buttonClass}>
@@ -130,6 +177,58 @@ function NativeLeagueDashboard() {
           ) : null}
         </ul>
       </section>
+
+      {draftDone && canManage ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">
+            Commissioner Week Controls
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Season started at week {seasonStart}. Advance to test the next week without replaying
+            earlier matchups. AI lineups refresh automatically for AI seats.
+          </p>
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <button
+              type="button"
+              className={buttonClass}
+              disabled={weekBusy || currentWeek >= maxJump}
+              onClick={() => void advanceWeek()}
+            >
+              {weekBusy ? "Updating…" : `Advance to Week ${Math.min(maxJump, currentWeek + 1)}`}
+            </button>
+            <label className="block text-sm font-medium text-slate-800">
+              Jump to week
+              <select
+                className="mt-1 block min-w-[8rem] rounded-md border border-border px-3 py-2 text-sm"
+                value={jumpWeek === "" ? "" : String(jumpWeek)}
+                disabled={weekBusy}
+                onChange={(e) =>
+                  setJumpWeek(e.target.value === "" ? "" : Number(e.target.value))
+                }
+              >
+                <option value="">Select…</option>
+                {Array.from({ length: maxJump - seasonStart + 1 }, (_, i) => seasonStart + i).map(
+                  (w) => (
+                    <option key={w} value={w} disabled={w === currentWeek}>
+                      Week {w}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <button
+              type="button"
+              className={outlineClass}
+              disabled={weekBusy || jumpWeek === "" || jumpWeek === currentWeek}
+              onClick={() => {
+                if (typeof jumpWeek === "number") void advanceWeek(jumpWeek);
+              }}
+            >
+              Set Week
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {draftDone ? (
         <>
