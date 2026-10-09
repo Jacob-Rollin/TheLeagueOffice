@@ -453,6 +453,39 @@ export function scheduleOpponent(schedule: ScheduleGame[], week: number, team: s
   return keys.includes(game.away.toUpperCase()) ? `@ ${game.home}` : `vs. ${game.away}`;
 }
 
+/** Parse `@ LAR` / `vs. BAL` into home/away prefix + opponent abbr. */
+export function parseOpponentLabel(label: string | null | undefined): {
+  prefix: "@" | "vs.";
+  abbr: string;
+} | null {
+  const raw = String(label ?? "").trim();
+  if (!raw) return null;
+  const away = /^@\s*/i.test(raw);
+  const abbr = raw.replace(/^(vs\.?|@)\s*/i, "").trim().toUpperCase();
+  if (!abbr) return null;
+  return { prefix: away ? "@" : "vs.", abbr };
+}
+
+/**
+ * Sleeper-style mid strip: `@ HOU #19 vs RB` (opponent + defense rank vs player pos).
+ */
+export function matchupDefenseLabel(opts: {
+  opponentLabel: string | null | undefined;
+  pos: string | null | undefined;
+  defenseRank: number | null | undefined;
+}): string | null {
+  const parsed = parseOpponentLabel(opts.opponentLabel);
+  if (!parsed) return null;
+  const pos = (opts.pos || "").toUpperCase() === "DEF" ? "DST" : (opts.pos || "").toUpperCase();
+  const rank =
+    opts.defenseRank != null && Number.isFinite(opts.defenseRank) && opts.defenseRank > 0
+      ? Math.round(opts.defenseRank)
+      : null;
+  if (rank != null && pos) return `${parsed.prefix} ${parsed.abbr} #${rank} vs ${pos}`;
+  if (pos) return `${parsed.prefix} ${parsed.abbr} vs ${pos}`;
+  return `${parsed.prefix} ${parsed.abbr}`;
+}
+
 /** Left / right labels for the game strip under a player card. */
 export function gameStripLabels(
   progress: NflGameProgress | undefined,

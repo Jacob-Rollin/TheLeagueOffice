@@ -13,6 +13,7 @@ import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueProjections, useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
+import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { WeeklyMatchupEntry } from "@/lib/league.server";
@@ -43,6 +44,7 @@ import {
   gameStripLabels,
   liveUnitPillLabel,
   matchupClockStatus,
+  matchupDefenseLabel,
   matchupViewerResult,
   possessionPill,
   progressFor,
@@ -118,6 +120,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const { data: schedule = [] } = useNflSchedule();
   const { scoringMap } = useLeagueScoringMeta();
   const { statsFor } = useWeeklyActualStats(activeWeek);
+  const { rankFor: defenseRankFor, avgAllowedFor } = usePositionalDefenseRanks();
   const isPastWeek = currentWeek != null && activeWeek < currentWeek;
   const isCurrentWeek = currentWeek != null && Number(activeWeek) === Number(currentWeek);
 
@@ -658,6 +661,8 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     byeWeek: (p) => p.bye === activeWeek,
     playerIdFor: (p) => sleeperIdFor(p),
     showActuals: isPastWeek,
+    defenseRankFor: (p) => defenseRankFor(p.pos, scheduleOpponent(schedule, activeWeek, p.team)),
+    avgAllowedFor: (p) => avgAllowedFor(p.pos, scheduleOpponent(schedule, activeWeek, p.team)),
   };
 
   return (
@@ -947,6 +952,8 @@ type RowHelpers = {
   byeWeek: (p: Player) => boolean;
   playerIdFor: (p: Player) => string;
   showActuals: boolean;
+  defenseRankFor: (p: Player) => number | null;
+  avgAllowedFor: (p: Player) => number | null;
 };
 
 type EditHelpers = {
@@ -1013,6 +1020,8 @@ function LineupCard({
   byeWeek,
   playerIdFor,
   showActuals,
+  defenseRankFor,
+  avgAllowedFor,
 }: {
   row: LineupRow;
   rowKey: string;
@@ -1069,13 +1078,24 @@ function LineupCard({
   const posRank = posRankFor(player);
   const logo = teamLogo(player.team);
   const status = possessionPill(player, progress);
+  const opponentLabel = opponentFor(player);
+  const isBye = byeWeek(player);
   const strip = gameStripLabels(progress, {
-    bye: byeWeek(player),
-    opponent: opponentFor(player),
+    bye: isBye,
+    opponent: opponentLabel,
     team: player.team,
   });
   // Skill/K on offense, DST on defense (not Sideline).
   const showBall = stripShowsFootball(player, progress);
+  const defenseLabel = isBye
+    ? null
+    : matchupDefenseLabel({
+        opponentLabel,
+        pos: player.pos,
+        defenseRank: defenseRankFor(player),
+      });
+  const avgAllowed = isBye ? null : avgAllowedFor(player);
+  const phase = progress?.phase ?? "pre";
 
   const showSwap = canEdit && !locked;
   const actionControl = locked ? (
@@ -1183,12 +1203,26 @@ function LineupCard({
           </div>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 bg-m-row-alt px-3 py-1.5 text-[11px] font-semibold text-m-muted">
-        <span className="truncate">{strip.game}</span>
-        <span className="inline-flex shrink-0 items-center gap-1 uppercase">
-          <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
-          {strip.status}
+      <div className="flex items-center gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
+        <span className="max-w-[28%] shrink-0 truncate">{strip.game || "—"}</span>
+        <span className="min-w-0 flex-1 truncate text-center uppercase tracking-wide">
+          {defenseLabel ?? ""}
         </span>
+        {phase === "in" ? (
+          <span className="inline-flex shrink-0 items-center gap-1 uppercase">
+            <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
+            {strip.status}
+          </span>
+        ) : (
+          <span className="max-w-[40%] shrink-0 text-right leading-tight">
+            <span className="block text-[9px] font-medium normal-case tracking-normal text-m-muted/90">
+              avg allowed to position
+            </span>
+            <span className="tabnum font-bold text-m-card-fg">
+              {avgAllowed != null ? avgAllowed.toFixed(1) : "—"}
+            </span>
+          </span>
+        )}
       </div>
     </article>
   );
