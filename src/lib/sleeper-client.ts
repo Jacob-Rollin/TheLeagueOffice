@@ -69,14 +69,22 @@ export type NflStateClient = {
   week: number;
   /** Sleeper UI slate — often lags `week` by one while scores finalize. */
   displayWeek: number;
+  /** Sleeper season phase; fantasy weeks roll on Tuesday during `regular`. */
+  seasonType: "pre" | "regular" | "post" | "off";
 };
 
 /** Short enough that Tuesday week-roll lands in completed-week metrics quickly. */
 const NFL_STATE_TTL_MS = 10 * 60 * 1000;
 
+function parseNflSeasonType(raw: unknown): NflStateClient["seasonType"] {
+  const s = String(raw ?? "regular").toLowerCase();
+  if (s === "pre" || s === "post" || s === "off" || s === "regular") return s;
+  return "regular";
+}
+
 export async function fetchNflStateClient(): Promise<NflStateClient> {
-  // v3 includes displayWeek so analytics can close the just-finished slate.
-  return getCached("nfl-state-client-v3", NFL_STATE_TTL_MS, async () => {
+  // v4 includes seasonType so current-week matchups follow the fantasy slate.
+  return getCached("nfl-state-client-v4", NFL_STATE_TTL_MS, async () => {
     const res = await sleeperFetch("https://api.sleeper.app/v1/state/nfl");
     if (!res.ok) throw new Error(`state ${res.status}`);
     const json = (await res.json()) as Record<string, unknown>;
@@ -87,6 +95,7 @@ export async function fetchNflStateClient(): Promise<NflStateClient> {
       // Prefer advanced `week` for live matchups; analytics also reads displayWeek.
       week,
       displayWeek,
+      seasonType: parseNflSeasonType(json["season_type"]),
     };
   });
 }
@@ -155,10 +164,34 @@ async function fetchScheduleClient(
   });
 }
 
+function toNextGame(
+  season: string,
+  abbr: string,
+  game: ScheduleGame & { seasonType: "pre" | "regular" },
+): NextGame {
+  const isHome = game.home === abbr;
+  return {
+    season,
+    week: game.week,
+    home: game.home,
+    away: game.away,
+    date: game.date ?? null,
+    isHome,
+    opponent: isHome ? game.away : game.home,
+    seasonType: game.seasonType,
+  };
+}
+
+/**
+ * Current-slate matchup for an NFL team (player popup / outlook).
+ * Uses Sleeper's fantasy `week` (rolls ~Tuesday) so TNF/Sunday/MNF stay on
+ * the active week until the slate advances — not the next calendar kickoff.
+ */
 export async function fetchNextGameClient(team: string): Promise<NextGame | null> {
   const abbr = (team || "").toUpperCase();
   if (!abbr || abbr === "FA") return null;
-  const season = currentSeason();
+  const state = await fetchNflStateClient().catch(() => null);
+  const season = state?.season ?? currentSeason();
   const [pre, reg] = await Promise.all([
     fetchScheduleClient("pre", season),
     fetchScheduleClient("regular", season),
@@ -174,22 +207,32 @@ export async function fetchNextGameClient(team: string): Promise<NextGame | null
       return a.week - b.week;
     });
   if (!mine.length) return null;
-  const today = new Date().toISOString().slice(0, 10);
-  const upcoming =
-    mine.find((g) => (g.date ? g.date >= today : false)) ??
-    mine.find((g) => g.status === "pre_game" || g.status === "in_game") ??
-    mine[0]!;
-  const isHome = upcoming.home === abbr;
-  return {
-    season,
-    week: upcoming.week,
-    home: upcoming.home,
-    away: upcoming.away,
-    date: upcoming.date ?? null,
-    isHome,
-    opponent: isHome ? upcoming.away : upcoming.home,
-    seasonType: upcoming.seasonType,
-  };
+
+  const fantasyWeek = state?.week ?? null;
+  const phase = state?.seasonType ?? "regular";
+  let chosen: Tagged | undefined;
+  if (fantasyWeek != null) {
+    const preferType: "pre" | "regular" = phase === "pre" ? "pre" : "regular";
+    // Keep showing this week's game while it is live or already final mid-slate.
+    chosen = mine.find((g) => g.seasonType === preferType && g.week === fantasyWeek);
+    if (!chosen && preferType === "regular") {
+      chosen = mine.find((g) => g.seasonType === "pre" && g.week === fantasyWeek);
+    }
+    // Bye / no row for this week — next scheduled game after the fantasy week.
+    if (!chosen) {
+      chosen =
+        mine.find((g) => g.seasonType === preferType && g.week > fantasyWeek) ??
+        mine.find((g) => g.week > fantasyWeek);
+    }
+  }
+  if (!chosen) {
+    const today = new Date().toISOString().slice(0, 10);
+    chosen =
+      mine.find((g) => (g.date ? g.date.slice(0, 10) >= today : false)) ??
+      mine.find((g) => g.status === "pre_game" || g.status === "in_game") ??
+      mine[0]!;
+  }
+  return toNextGame(season, abbr, chosen);
 }
 
 async function weeklyRawClient(

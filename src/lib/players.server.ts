@@ -313,11 +313,12 @@ export type NextGame = {
   seasonType: "pre" | "regular";
 };
 
-/** Next scheduled matchup for an NFL team abbreviation, or null. */
+/** Current fantasy-week matchup for an NFL team abbreviation, or null. */
 export async function loadNextGame(team: string): Promise<NextGame | null> {
   const abbr = (team || "").toUpperCase();
   if (!abbr || abbr === "FA") return null;
-  const season = currentSeason();
+  const state = await nflState("state").catch(() => null);
+  const season = state?.season ?? currentSeason();
   const [pre, reg] = await Promise.all([
     scheduleForType(`pre|${season}`).catch(() => []),
     scheduleForType(`regular|${season}`).catch(() => []),
@@ -333,12 +334,29 @@ export async function loadNextGame(team: string): Promise<NextGame | null> {
       return a.week - b.week;
     });
   if (mine.length === 0) return null;
-  const today = new Date().toISOString().slice(0, 10);
-  // Prefer a live/upcoming game, including in-progress preseason games today.
-  const upcoming =
-    mine.find((g) => (g.date ? g.date >= today : false)) ??
-    mine.find((g) => g.status === "pre_game" || g.status === "in_game") ??
-    mine[0]!;
+  const fantasyWeek = state?.week ?? null;
+  const preferType: "pre" | "regular" =
+    String(state?.seasonType ?? "regular").toLowerCase() === "pre" ? "pre" : "regular";
+  let upcoming: Tagged | undefined;
+  if (fantasyWeek != null) {
+    // Sleeper week rolls ~Tuesday — keep TNF/MNF on the active slate.
+    upcoming = mine.find((g) => g.seasonType === preferType && g.week === fantasyWeek);
+    if (!upcoming && preferType === "regular") {
+      upcoming = mine.find((g) => g.seasonType === "pre" && g.week === fantasyWeek);
+    }
+    if (!upcoming) {
+      upcoming =
+        mine.find((g) => g.seasonType === preferType && g.week > fantasyWeek) ??
+        mine.find((g) => g.week > fantasyWeek);
+    }
+  }
+  if (!upcoming) {
+    const today = new Date().toISOString().slice(0, 10);
+    upcoming =
+      mine.find((g) => (g.date ? String(g.date).slice(0, 10) >= today : false)) ??
+      mine.find((g) => g.status === "pre_game" || g.status === "in_game") ??
+      mine[0]!;
+  }
   const isHome = upcoming.home === abbr;
   return {
     season,

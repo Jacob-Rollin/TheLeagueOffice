@@ -118,7 +118,8 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   const player = detail.data?.player ?? null;
   const team = player?.team && player.team !== "FA" ? player.team : null;
   const { data: nextGame } = useQuery({
-    queryKey: ["player-next-game", team],
+    // v2: fantasy-week slate (Tuesday roll), not next calendar kickoff.
+    queryKey: ["player-next-game", "v2-fantasy-week", team],
     enabled: Boolean(team),
     queryFn: () => fetchNextGameClient(team!),
     staleTime: HOUR,
