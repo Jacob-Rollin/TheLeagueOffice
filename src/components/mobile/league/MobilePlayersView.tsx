@@ -38,6 +38,7 @@ import {
   shortName,
   useNflSchedule,
 } from "./lineupShared";
+import { MobileCenteredConfirm, MobileFullScreenPicker } from "./MobileTransactionModals";
 
 type PosFilter = "ALL" | "QB" | "RB" | "WR" | "TE" | "FLEX" | "K" | "DEF";
 type Mode = "projections" | "stats" | "trends";
@@ -556,195 +557,160 @@ export function MobilePlayersView() {
       ) : null}
 
       {pendingAdd && !selectedDrop ? (
-        <div className="fixed inset-0 z-50 flex flex-col bg-m-bg text-m-card-fg">
-          <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
-            <header className="shrink-0 border-b border-m-border bg-m-card px-4 pb-3 pt-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="font-display text-2xl font-bold">Choose a drop</h3>
-                  <p className="mt-1 text-sm text-m-muted">
-                    Roster full ({capacity}/{capacity}). Tap{" "}
-                    <span className="font-semibold text-[#e8551f]">−</span> to drop someone and add{" "}
-                    <span className="font-semibold text-m-card-fg">{pendingAdd.name}</span>.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  aria-label="Close"
-                  className="shrink-0 rounded-lg px-3 py-2 font-display text-sm font-semibold text-m-muted"
-                  onClick={() => {
-                    setPendingAdd(null);
-                    setSelectedDrop(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </header>
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2.5 py-3 pb-10">
-              {dropCandidates.length ? (
-                dropCandidates.map((p) => (
-                  <DropCandidateRow
-                    key={p.id}
-                    player={p}
-                    rank={rankFor(p.id).pos}
-                    disabled={busy}
-                    onDrop={() => setSelectedDrop(p)}
-                  />
-                ))
-              ) : (
-                <p className="px-2 py-10 text-center text-sm text-m-muted">No roster players to drop.</p>
-              )}
-            </div>
-          </div>
-        </div>
+        <MobileFullScreenPicker
+          title="Choose a drop"
+          closeDisabled={busy}
+          onClose={() => {
+            setPendingAdd(null);
+            setSelectedDrop(null);
+          }}
+          subtitle={
+            <>
+              Roster full ({capacity}/{capacity}). Tap{" "}
+              <span className="font-semibold text-[#e8551f]">−</span> to drop someone and add{" "}
+              <span className="font-semibold text-m-card-fg">{pendingAdd.name}</span>.
+            </>
+          }
+        >
+          {dropCandidates.length ? (
+            dropCandidates.map((p) => (
+              <DropCandidateRow
+                key={p.id}
+                player={p}
+                rank={rankFor(p.id).pos}
+                disabled={busy}
+                onDrop={() => setSelectedDrop(p)}
+              />
+            ))
+          ) : (
+            <p className="px-2 py-10 text-center text-sm text-m-muted">No roster players to drop.</p>
+          )}
+        </MobileFullScreenPicker>
       ) : null}
 
       {pendingAdd && selectedDrop ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Confirm add and drop"
-            className="w-full max-w-md rounded-t-2xl bg-m-card p-5 text-m-card-fg shadow-lg sm:rounded-2xl"
-          >
-            <h3 className="font-display text-2xl font-bold">Confirm move</h3>
-            <p className="mt-2 text-sm text-m-muted">Review the add and drop before submitting.</p>
-            <div className="mt-4 space-y-2">
-              <ConfirmMoveRow tone="add" player={pendingAdd} />
-              <ConfirmMoveRow tone="drop" player={selectedDrop} />
-            </div>
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
-                disabled={busy}
-                onClick={() => setSelectedDrop(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="flex-1 rounded-lg bg-[#1fae5b] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
-                disabled={busy}
-                onClick={() => void runAdd(pendingAdd.id, selectedDrop.id)}
-              >
-                {busy ? "Submitting…" : "Confirm"}
-              </button>
-            </div>
+        <MobileCenteredConfirm label="Confirm add and drop">
+          <h3 className="font-display text-2xl font-bold">Confirm move</h3>
+          <p className="mt-2 text-sm text-m-muted">Review the add and drop before submitting.</p>
+          <div className="mt-4 space-y-2">
+            <ConfirmMoveRow tone="add" player={pendingAdd} />
+            <ConfirmMoveRow tone="drop" player={selectedDrop} />
           </div>
-        </div>
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
+              disabled={busy}
+              onClick={() => setSelectedDrop(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="flex-1 rounded-lg bg-[#1fae5b] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
+              disabled={busy}
+              onClick={() => void runAdd(pendingAdd.id, selectedDrop.id)}
+            >
+              {busy ? "Submitting…" : "Confirm"}
+            </button>
+          </div>
+        </MobileCenteredConfirm>
       ) : null}
 
       {pendingDrop ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Confirm drop"
-            className="w-full max-w-md rounded-t-2xl bg-m-card p-5 text-m-card-fg shadow-lg sm:rounded-2xl"
-          >
-            <h3 className="font-display text-2xl font-bold">Drop player</h3>
-            <p className="mt-2 text-sm text-m-muted">
-              Drop <span className="font-semibold text-m-card-fg">{pendingDrop.name}</span> to free
-              agency? This uses your league roster settings ({openSlots} open of {capacity}).
-            </p>
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
-                disabled={busy}
-                onClick={() => setPendingDrop(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="flex-1 rounded-lg bg-[#e8551f] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
-                disabled={busy}
-                onClick={() => void runDrop(pendingDrop.id)}
-              >
-                {busy ? "Dropping…" : "Confirm drop"}
-              </button>
-            </div>
+        <MobileCenteredConfirm label="Confirm drop">
+          <h3 className="font-display text-2xl font-bold">Drop player</h3>
+          <p className="mt-2 text-sm text-m-muted">
+            Drop <span className="font-semibold text-m-card-fg">{pendingDrop.name}</span> to free
+            agency? This uses your league roster settings ({openSlots} open of {capacity}).
+          </p>
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
+              disabled={busy}
+              onClick={() => setPendingDrop(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="flex-1 rounded-lg bg-[#e8551f] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
+              disabled={busy}
+              onClick={() => void runDrop(pendingDrop.id)}
+            >
+              {busy ? "Dropping…" : "Confirm drop"}
+            </button>
           </div>
-        </div>
+        </MobileCenteredConfirm>
       ) : null}
 
       {pendingTrade ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Propose trade"
-            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-m-card p-5 text-m-card-fg shadow-lg sm:rounded-2xl"
-          >
-            <h3 className="font-display text-2xl font-bold">Propose trade</h3>
-            <p className="mt-2 text-sm text-m-muted">
-              Receive <span className="font-semibold text-m-card-fg">{pendingTrade.name}</span>
-              {tradePartnerId != null
-                ? ` from ${board?.teams.find((t) => t.id === tradePartnerId)?.teamName ?? "team"}`
-                : ""}
-              . Select who you give — uneven trades must fit your {capacity}-player roster (
-              {openSlots} open).
+        <MobileCenteredConfirm label="Propose trade">
+          <h3 className="font-display text-2xl font-bold">Propose trade</h3>
+          <p className="mt-2 text-sm text-m-muted">
+            Receive <span className="font-semibold text-m-card-fg">{pendingTrade.name}</span>
+            {tradePartnerId != null
+              ? ` from ${board?.teams.find((t) => t.id === tradePartnerId)?.teamName ?? "team"}`
+              : ""}
+            . Select who you give — uneven trades must fit your {capacity}-player roster (
+            {openSlots} open).
+          </p>
+          {tradeNeedsSlots ? (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Giving {tradeGive.length || "0"} for 1 needs {tradeSlotNeed} open slot
+              {tradeSlotNeed === 1 ? "" : "s"}; you have {openSlots}. Add more players on your give
+              side.
             </p>
-            {tradeNeedsSlots ? (
-              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                Giving {tradeGive.length || "0"} for 1 needs {tradeSlotNeed} open slot
-                {tradeSlotNeed === 1 ? "" : "s"}; you have {openSlots}. Add more players on your give
-                side.
-              </p>
-            ) : null}
-            <ul className="mt-4 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-m-border">
-              {(myRoster?.playerIds ?? []).map((id) => {
-                const p = playersById.get(id);
-                if (!p) return null;
-                const checked = tradeGive.includes(id);
-                return (
-                  <li key={id} className="border-b border-m-border last:border-0">
-                    <label className="flex items-center gap-3 px-3 py-2.5 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setTradeGive((prev) =>
-                            checked
-                              ? prev.filter((x) => x !== id)
-                              : [...prev, id].slice(0, 8),
-                          )
-                        }
-                      />
-                      <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-                      <span className="text-m-muted">{p.pos === "DEF" ? "DST" : p.pos}</span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
-                disabled={busy}
-                onClick={() => {
-                  setPendingTrade(null);
-                  setTradeGive([]);
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="flex-1 rounded-lg bg-[#f08a24] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
-                disabled={busy || !tradeGive.length || tradePartnerId == null || tradeNeedsSlots}
-                onClick={() => void runTrade()}
-              >
-                {busy ? "Sending…" : "Propose"}
-              </button>
-            </div>
+          ) : null}
+          <ul className="mt-4 max-h-56 space-y-1 overflow-y-auto overscroll-contain rounded-lg border border-m-border">
+            {(myRoster?.playerIds ?? []).map((id) => {
+              const p = playersById.get(id);
+              if (!p) return null;
+              const checked = tradeGive.includes(id);
+              return (
+                <li key={id} className="border-b border-m-border last:border-0">
+                  <label className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setTradeGive((prev) =>
+                          checked
+                            ? prev.filter((x) => x !== id)
+                            : [...prev, id].slice(0, 8),
+                        )
+                      }
+                    />
+                    <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                    <span className="text-m-muted">{p.pos === "DEF" ? "DST" : p.pos}</span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
+              disabled={busy}
+              onClick={() => {
+                setPendingTrade(null);
+                setTradeGive([]);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="flex-1 rounded-lg bg-[#f08a24] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
+              disabled={busy || !tradeGive.length || tradePartnerId == null || tradeNeedsSlots}
+              onClick={() => void runTrade()}
+            >
+              {busy ? "Sending…" : "Propose"}
+            </button>
           </div>
-        </div>
+        </MobileCenteredConfirm>
       ) : null}
     </main>
   );
