@@ -523,24 +523,26 @@ export function minutesLeft(progress: NflGameProgress | undefined): number {
 
 /**
  * Compact American-football glyph for the live game strip.
- * (Prior lacings used an X that read as a star at 12px — keep horizontal laces only.)
+ * Clean black horizontal silhouette + white lace ticks (reads at ~14px).
  */
 export function FootballIcon({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 16 16"
+      viewBox="0 0 16 10"
       aria-hidden
       className={cn("inline-block shrink-0", className)}
-      fill="currentColor"
     >
-      {/* Tip-to-tip football, slight tilt */}
-      <path d="M2.2 9.2c1.2-3.2 4-5.2 5.8-5.6 1.8-.4 4.2.6 5.8 2.8 1.2 1.7 1.2 3.4 0 4.4-1.6 1.4-4.2 1.6-6.2.6C5.2 10.4 3.2 10.8 2.2 9.2Z" />
-      {/* Center seam + lace ticks (light so they read on accent fill) */}
+      {/* Pointed horizontal football */}
       <path
-        d="M5.2 8.2h5.6M7 6.9v2.6M8 6.7v3M9 6.9v2.6"
+        fill="currentColor"
+        d="M1 5C1 5 3.2 1.15 8 1.15S15 5 15 5 12.8 8.85 8 8.85 1 5 1 5Z"
+      />
+      {/* Seam + two lace ticks (white on black fill) */}
+      <path
+        d="M5.4 5h5.2M7.15 3.85v2.3M8.85 3.85v2.3"
         fill="none"
-        stroke="var(--m-row-alt, #f6f5f2)"
-        strokeWidth="1"
+        stroke="#fff"
+        strokeWidth="1.15"
         strokeLinecap="round"
       />
     </svg>
@@ -562,7 +564,7 @@ export function PossessionStripBadges({
   if (!hasBall && !redZone) return null;
   return (
     <span className="inline-flex items-center gap-1" title={hasBall ? "Unit on the field" : undefined}>
-      {hasBall ? <FootballIcon className="size-3.5 text-m-accent" /> : null}
+      {hasBall ? <FootballIcon className="h-2.5 w-3.5 text-m-card-fg" /> : null}
       {redZone ? (
         <span className="rounded-[3px] bg-orange-500 px-1 py-px text-[8px] font-bold leading-none tracking-wide text-white">
           RZ
