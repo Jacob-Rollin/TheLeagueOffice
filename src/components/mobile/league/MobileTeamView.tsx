@@ -1087,14 +1087,16 @@ function LineupCard({
   });
   // Skill/K on offense, DST on defense (not Sideline).
   const showBall = stripShowsFootball(player, progress);
-  const defenseLabel = isBye
-    ? null
-    : matchupDefenseLabel({
+  // Matchup rank / avg allowed only for current (and future) weeks — past weeks keep the simple strip.
+  const showMatchupContext = !showActuals && !isBye;
+  const defenseLabel = showMatchupContext
+    ? matchupDefenseLabel({
         opponentLabel,
         pos: player.pos,
         defenseRank: defenseRankFor(player),
-      });
-  const avgAllowed = isBye ? null : avgAllowedFor(player);
+      })
+    : null;
+  const avgAllowed = showMatchupContext ? avgAllowedFor(player) : null;
   const phase = progress?.phase ?? "pre";
 
   const showSwap = canEdit && !locked;
@@ -1203,27 +1205,37 @@ function LineupCard({
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
-        <span className="max-w-[28%] shrink-0 truncate">{strip.game || "—"}</span>
-        <span className="min-w-0 flex-1 truncate text-center uppercase tracking-wide">
-          {defenseLabel ?? ""}
-        </span>
-        {phase === "in" ? (
+      {showMatchupContext ? (
+        <div className="flex items-center gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
+          <span className="max-w-[28%] shrink-0 truncate">{strip.game || "—"}</span>
+          <span className="min-w-0 flex-1 truncate text-center uppercase tracking-wide">
+            {defenseLabel ?? ""}
+          </span>
+          {phase === "in" ? (
+            <span className="inline-flex shrink-0 items-center gap-1 uppercase">
+              <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
+              {strip.status}
+            </span>
+          ) : (
+            <span className="max-w-[40%] shrink-0 text-right leading-tight">
+              <span className="block text-[9px] font-medium normal-case tracking-normal text-m-muted/90">
+                avg allowed to position
+              </span>
+              <span className="tabnum font-bold text-m-card-fg">
+                {avgAllowed != null ? avgAllowed.toFixed(1) : "—"}
+              </span>
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-2 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-muted">
+          <span className="truncate">{strip.game}</span>
           <span className="inline-flex shrink-0 items-center gap-1 uppercase">
             <PossessionStripBadges hasBall={showBall} redZone={strip.redZone && showBall} />
             {strip.status}
           </span>
-        ) : (
-          <span className="max-w-[40%] shrink-0 text-right leading-tight">
-            <span className="block text-[9px] font-medium normal-case tracking-normal text-m-muted/90">
-              avg allowed to position
-            </span>
-            <span className="tabnum font-bold text-m-card-fg">
-              {avgAllowed != null ? avgAllowed.toFixed(1) : "—"}
-            </span>
-          </span>
-        )}
-      </div>
+        </div>
+      )}
     </article>
   );
 }
