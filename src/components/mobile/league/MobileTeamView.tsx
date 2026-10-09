@@ -1197,10 +1197,12 @@ function LineupCard({
             ) : null}
             <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
           </div>
-          {/* Avatar is already the team mark for DST — skip the redundant chip. */}
-          {logo && player.pos !== "DEF" ? (
+          {/* Keep the logo chip for DST too so names align with skill positions. */}
+          {logo ? (
             <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-1" />
-          ) : null}
+          ) : (
+            <span className="size-8 shrink-0" aria-hidden />
+          )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-[17px] font-semibold leading-tight">{shortName(player)}</p>
             <p className="truncate text-xs text-m-muted">
@@ -1228,11 +1230,11 @@ function LineupCard({
         </div>
       </div>
       {isFinal || (showActuals && !isLive) ? (
-        <div className="flex items-center justify-center gap-3 bg-m-row-alt px-2.5 py-1.5 text-[11px] font-semibold text-m-card-fg">
-          <span className="min-w-0 truncate text-center">
+        <div className="flex items-center justify-center gap-3 bg-m-row-alt px-2.5 py-1.5 text-[11px] text-m-card-fg">
+          <span className="min-w-0 truncate text-center font-semibold">
             {finalBox?.scoreLine || strip.game || "Final"}
           </span>
-          <span className="shrink-0 uppercase tracking-wide">
+          <span className="shrink-0 font-bold uppercase tracking-wide text-black [.mobile-theme-dark_&]:text-white">
             {finalBox?.resultLabel || strip.status || "Final"}
           </span>
         </div>

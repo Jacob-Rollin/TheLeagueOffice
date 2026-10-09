@@ -663,10 +663,12 @@ function HalfCard({
             ) : null}
             <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
           </div>
-          {/* Avatar is already the team mark for DST — skip the redundant chip. */}
-          {logo && player.pos !== "DEF" ? (
+          {/* Keep logo chip for DST so columns align with skill positions. */}
+          {logo ? (
             <img src={logo} alt="" className="mt-1.5 size-7 shrink-0 rounded-full bg-m-chip object-contain p-1" />
-          ) : null}
+          ) : (
+            <span className="mt-1.5 size-7 shrink-0" aria-hidden />
+          )}
           <div
             className={cn(
               "flex min-w-0 flex-1 flex-col",

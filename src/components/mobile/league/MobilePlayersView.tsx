@@ -854,9 +854,11 @@ function DropCandidateRow({
             />
             <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
           </div>
-          {logo && player.pos !== "DEF" ? (
+          {logo ? (
             <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-1" />
-          ) : null}
+          ) : (
+            <span className="size-8 shrink-0" aria-hidden />
+          )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-[17px] font-semibold leading-tight">{shortName(player)}</p>
             <p className="truncate text-xs text-m-muted">
@@ -892,9 +894,11 @@ function ConfirmMoveRow({ tone, player }: { tone: "add" | "drop"; player: Player
         className="size-11 shrink-0"
         logoClassName="hidden"
       />
-      {logo && player.pos !== "DEF" ? (
+      {logo ? (
         <img src={logo} alt="" className="size-7 shrink-0 rounded-full bg-m-chip object-contain p-1" />
-      ) : null}
+      ) : (
+        <span className="size-7 shrink-0" aria-hidden />
+      )}
       <div className="min-w-0 flex-1">
         <p className="text-[11px] font-bold uppercase tracking-wide text-m-muted">
           {isAdd ? "Add" : "Drop"}
