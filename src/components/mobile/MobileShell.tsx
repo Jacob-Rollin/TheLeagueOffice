@@ -4,7 +4,7 @@ import { useCallback, useState, type ReactNode } from "react";
 
 import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { useAuth } from "@/hooks/useAuth";
-import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { adminGateStatus, useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/utils";
 
 import { MobilePlayerSheetProvider } from "./MobilePlayerSheet";
@@ -26,11 +26,16 @@ export function MobileShell({ children }: { children: ReactNode }) {
 function MobileFrame({ children }: { children: ReactNode }) {
   const { theme } = useMobileTheme();
   const { user, ready } = useAuth();
-  const { data: isAdmin, isFetched, isError } = useIsAdmin(user?.id ?? null);
-
-  const checking = !ready || (Boolean(user) && !isFetched);
-  const signedIn = Boolean(user);
-  const allowed = signedIn && !isError && isAdmin === true;
+  const { data: isAdmin, isFetched, isError, refetch, isFetching } = useIsAdmin(
+    user?.id ?? null,
+  );
+  const gate = adminGateStatus({
+    ready,
+    userId: user?.id,
+    isAdmin,
+    isFetched,
+    isError,
+  });
 
   return (
     <div
@@ -41,12 +46,19 @@ function MobileFrame({ children }: { children: ReactNode }) {
     >
       <div className="mx-auto w-full max-w-md">
         <MobileHeader />
-        {checking ? (
+        {gate === "loading" ? (
           <MobileNotice>Checking access...</MobileNotice>
-        ) : allowed ? (
+        ) : gate === "allowed" ? (
           <MobilePlayerSheetProvider>{children}</MobilePlayerSheetProvider>
-        ) : !signedIn ? (
+        ) : gate === "signed_out" ? (
           <MobileSignInGate />
+        ) : gate === "verify_failed" ? (
+          <MobileVerifyFailed
+            busy={isFetching}
+            onRetry={() => {
+              void refetch();
+            }}
+          />
         ) : (
           <MobileNotice>Admin access required. Mobile pages are in preview.</MobileNotice>
         )}
@@ -142,6 +154,32 @@ function MobileNotice({ children }: { children: ReactNode }) {
   return (
     <div className="px-5 py-16 text-center font-display text-sm font-semibold uppercase tracking-widest text-m-muted">
       {children}
+    </div>
+  );
+}
+
+/** Session/RLS blip — not the same as “you are not an admin”. */
+function MobileVerifyFailed({ busy, onRetry }: { busy: boolean; onRetry: () => void }) {
+  return (
+    <div className="px-5 py-16 text-center">
+      <p className="font-display text-sm font-semibold uppercase tracking-widest text-m-muted">
+        Could not verify admin access
+      </p>
+      <p className="mt-2 text-sm text-m-muted">
+        You are signed in, but we could not confirm your role yet. Try again.
+      </p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onRetry}
+        className={
+          "mt-6 rounded-lg bg-m-cta px-4 py-3 font-display text-sm font-extrabold italic " +
+          "uppercase tracking-wider text-m-cta-fg shadow-[0_3px_0_rgba(0,0,0,0.25)] " +
+          "disabled:opacity-60"
+        }
+      >
+        {busy ? "Retrying…" : "Retry"}
+      </button>
     </div>
   );
 }
