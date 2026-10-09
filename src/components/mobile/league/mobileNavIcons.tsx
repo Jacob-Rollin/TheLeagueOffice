@@ -2,23 +2,23 @@ import { createLucideIcon } from "lucide-react";
 
 /**
  * Horizontal American football — Matchup tab.
- * Larger, more open pointed shell so laces read at 20px.
+ * Long pointed shell (real football proportions) + thin spaced laces.
  */
 export const FootballIcon = createLucideIcon("football", [
   [
     "path",
     {
-      // Pointed tips, taller midsection — fills the 24 box without feeling cramped.
-      d: "M1.5 12C4 5.5 8 3.75 12 3.75S20 5.5 22.5 12C20 18.5 16 20.25 12 20.25S4 18.5 1.5 12z",
+      // Elongated prolate shape — long tip-to-tip, modest mid height.
+      d: "M1 12C3.75 7.1 7.75 5.5 12 5.5S20.25 7.1 23 12C20.25 16.9 16.25 18.5 12 18.5S3.75 16.9 1 12z",
       key: "shell",
     },
   ],
-  // Longer, more spaced lace stitches.
-  ["path", { d: "M7.25 12h9.5", key: "lace-spine" }],
-  ["path", { d: "M8.75 9.35v5.3", key: "lace-1" }],
-  ["path", { d: "M10.9 9.35v5.3", key: "lace-2" }],
-  ["path", { d: "M13.1 9.35v5.3", key: "lace-3" }],
-  ["path", { d: "M15.25 9.35v5.3", key: "lace-4" }],
+  // Thinner lace strokes so they don't bunch at 20px.
+  ["path", { d: "M8.25 12h7.5", strokeWidth: "1.35", key: "lace-spine" }],
+  ["path", { d: "M9.5 10.15v3.7", strokeWidth: "1.35", key: "lace-1" }],
+  ["path", { d: "M11.15 10.15v3.7", strokeWidth: "1.35", key: "lace-2" }],
+  ["path", { d: "M12.85 10.15v3.7", strokeWidth: "1.35", key: "lace-3" }],
+  ["path", { d: "M14.5 10.15v3.7", strokeWidth: "1.35", key: "lace-4" }],
 ]);
 
 /**
