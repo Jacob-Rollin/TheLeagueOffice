@@ -1,4 +1,4 @@
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, ChevronDown, ChevronUp, Cloud, CloudRain, CloudSnow, Star, Sun } from "lucide-react";
 
@@ -18,12 +18,10 @@ import type { Scoring } from "@/lib/draft";
 import type { Pos } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
 import { getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
-import { getPlayerDetail } from "@/lib/players.functions";
+import { detailQuery } from "@/lib/player-detail-query";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
 import type { CareerSeasonRow, GameLog } from "@/lib/players.server";
 import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
-import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
-import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import { formatNflGameStatusLabel, formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { fetchLeagueScoringPreferred } from "@/lib/scoring-client";
 import { projectionPoints, type ScoringMap } from "@/lib/scoring-map";
@@ -119,24 +117,8 @@ const SCORING_OPTIONS: { value: Scoring; label: string }[] = [
   { value: "ppr", label: "PPR" },
 ];
 
-export const detailQuery = (id: string) =>
-  queryOptions({
-    queryKey: ["player", id, "client-v1"],
-    queryFn: async () => {
-      const brain = await hydratePlayerBrain().catch(() => null);
-      const client = await fetchPlayerDetailClient(id, brain);
-      if (client) return client;
-      // Catalog miss: Fluid only in dev — production soft-empties.
-      try {
-        if (import.meta.env.PROD) return null;
-      } catch {
-        /* ignore */
-      }
-      return getPlayerDetail({ data: { id } });
-    },
-    staleTime: 1000 * 60 * 30,
-    retry: false,
-  });
+/** @deprecated Import from `@/lib/player-detail-query` — re-exported for existing call sites. */
+export { detailQuery };
 
 export function PlayerDetail({
   id,

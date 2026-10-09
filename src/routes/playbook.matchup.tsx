@@ -4,8 +4,9 @@ import { Lock, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
-import { detailQuery } from "@/components/draft/PlayerDetail";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import { detailQuery } from "@/lib/player-detail-query";
+import { playerHoverPrefetchProps } from "@/lib/prefetch-player-detail";
 import {
   MatchupReplayModal,
   WatchReplayButton,
@@ -722,6 +723,7 @@ function MatchupPlayerThumb({
     <button
       type="button"
       onClick={onOpen}
+      {...playerHoverPrefetchProps(player.id)}
       aria-label={`Open ${player.name} details`}
       className={cn(
         "relative h-14 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-slate-200 bg-white shadow-sm transition-all hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
@@ -900,7 +902,7 @@ function LeftPlayerCard({
   const sleeperPos = rankFor(player.id).pos;
 
   return (
-    <div className={shell}>
+    <div className={shell} {...playerHoverPrefetchProps(player.id)}>
       <MatchupPlayerThumb player={player} onOpen={open} />
       <div className="flex min-w-0 flex-1 flex-col items-start justify-center pl-3.5 text-left">
         <p className="flex max-w-full items-center gap-1.5 truncate text-left text-[15px] leading-snug">
@@ -1002,7 +1004,7 @@ function RightPlayerCard({
   const sleeperPos = rankFor(player.id).pos;
 
   return (
-    <div className={shell}>
+    <div className={shell} {...playerHoverPrefetchProps(player.id)}>
       <MatchupScoreColumn
         liveLabel={liveScoreLabel(phase, livePts)}
         livePts={livePts}

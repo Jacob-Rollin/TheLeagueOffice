@@ -28,6 +28,7 @@ import {
   formatNflKickoffLabel,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
+import { playerHoverPrefetchProps } from "@/lib/prefetch-player-detail";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { hasScorableProjectionStats, scoreStats, type ScoringMap } from "@/lib/scoring-map";
 import { getCached } from "@/lib/sleeper-cache";
@@ -1366,6 +1367,7 @@ function PlaybookMyTeamPage() {
                       <button
                         type="button"
                         onClick={() => openPlayer(player.id)}
+                        {...playerHoverPrefetchProps(player.id)}
                         className="flex min-w-0 items-center gap-3 text-left transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         <PlayerAvatar
