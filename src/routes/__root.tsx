@@ -3,6 +3,7 @@ import { Outlet, Link, createRootRouteWithContext, useRouter, useRouterState, He
 import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
+import { registerPlayerDetailQueryClient } from "@/lib/prefetch-player-detail";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { ActiveLeagueProvider } from "@/context/ActiveLeagueContext";
@@ -156,8 +157,9 @@ function RootComponent() {
   // Silent background player-brain hydration once per session (30-min heartbeat inside).
   // Do not re-fire on every pathname change — that re-entered withFreshSos / getSosBoard.
   useEffect(() => {
+    registerPlayerDetailQueryClient(queryClient);
     void hydratePlayerBrain();
-  }, []);
+  }, [queryClient]);
 
   const isMobilePage = pathname === "/m" || pathname.startsWith("/m/");
 

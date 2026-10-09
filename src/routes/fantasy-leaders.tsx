@@ -14,6 +14,7 @@ import {
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import { playerHoverPrefetchProps } from "@/lib/prefetch-player-detail";
 import {
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
@@ -494,6 +495,7 @@ const LeaderPlayerCell = memo(function LeaderPlayerCell({
     <button
       type="button"
       onClick={() => onOpen(row.id)}
+      {...playerHoverPrefetchProps(row.id)}
       className="flex min-w-0 items-center gap-2.5 text-left transition-opacity hover:opacity-85"
     >
       <PlayerAvatar

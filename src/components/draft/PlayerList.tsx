@@ -6,8 +6,8 @@ import { GripVertical, Search, Star, Undo2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PlayerAvatar } from "./PlayerAvatar";
-import { detailQuery } from "./PlayerDetail";
 import { cn } from "@/lib/utils";
+import { prefetchPlayerDetail } from "@/lib/prefetch-player-detail";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import {
   POSITIONS,
@@ -703,8 +703,11 @@ function PlayerListImpl({
                     <button
                       type="button"
                       className="flex flex-1 items-center gap-2 rounded py-0.5 text-left hover:bg-secondary/50"
-                      onPointerEnter={() => queryClient.prefetchQuery(detailQuery(p.id))}
-                      onPointerDown={() => onOpenPlayer(p.id)}
+                      onPointerEnter={() => prefetchPlayerDetail(p.id, queryClient)}
+                      onPointerDown={() => {
+                        prefetchPlayerDetail(p.id, queryClient);
+                        onOpenPlayer(p.id);
+                      }}
                       onClick={() => onOpenPlayer(p.id)}
                     >
                       {playerBody}

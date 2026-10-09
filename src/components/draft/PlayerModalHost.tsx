@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle, useState } from "react";
 
 import { PlayerModal } from "./PlayerModal";
+import { prefetchPlayerDetail } from "@/lib/prefetch-player-detail";
 
 export type PlayerModalHandle = { open: (id: string) => void; close: () => void };
 
@@ -24,7 +25,17 @@ export const PlayerModalHost = forwardRef<
   ref,
 ) {
   const [id, setId] = useState<string | null>(null);
-  useImperativeHandle(ref, () => ({ open: setId, close: () => setId(null) }), []);
+  useImperativeHandle(
+    ref,
+    () => ({
+      open: (playerId: string) => {
+        prefetchPlayerDetail(playerId);
+        setId(playerId);
+      },
+      close: () => setId(null),
+    }),
+    [],
+  );
 
   const draftRosterLabel =
     id && resolveDraftRosterLabel ? resolveDraftRosterLabel(id) : showDraftActions ? null : undefined;
@@ -34,11 +45,14 @@ export const PlayerModalHost = forwardRef<
     <PlayerModal
       id={id}
       onClose={() => setId(null)}
-      onSelectPlayer={setId}
+      onSelectPlayer={(playerId) => {
+        prefetchPlayerDetail(playerId);
+        setId(playerId);
+      }}
       showDraftActions={showDraftActions}
-      draftRosterLabel={draftRosterLabel}
-      sessionDrafted={sessionDrafted}
-      onSessionDraft={onSessionDraft}
+      {...(draftRosterLabel !== undefined ? { draftRosterLabel } : {})}
+      {...(sessionDrafted !== undefined ? { sessionDrafted } : {})}
+      {...(onSessionDraft ? { onSessionDraft } : {})}
     />
   );
 });

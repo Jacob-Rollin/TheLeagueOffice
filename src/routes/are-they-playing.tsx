@@ -32,6 +32,7 @@ import { currentSeason, fetchSchedule, type Player } from "@/lib/players-build";
 import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { fetchResearchAreTheyPlaying, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import { useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
+import { playerHoverPrefetchProps } from "@/lib/prefetch-player-detail";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 import { buildScheduleByTeam, formatOppLabel } from "@/lib/wire-matchups";
@@ -426,6 +427,7 @@ const PlayingRow = memo(function PlayingRow({
         <button
           type="button"
           onClick={() => onOpen(player.id)}
+          {...playerHoverPrefetchProps(player.id)}
           className="flex min-w-0 items-center gap-2.5 text-left transition-opacity hover:opacity-85"
         >
           <PlayerAvatar

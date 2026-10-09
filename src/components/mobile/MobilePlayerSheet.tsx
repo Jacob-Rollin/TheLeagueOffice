@@ -17,11 +17,10 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import type { Pos } from "@/lib/draft";
 import { teamFullName } from "@/lib/nfl-teams";
-import { getPlayerDetail } from "@/lib/players.functions";
+import { detailQuery } from "@/lib/player-detail-query";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
 import type { SeasonLine } from "@/lib/players.server";
-import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
-import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
+import { prefetchPlayerDetail } from "@/lib/prefetch-player-detail";
 import { fetchResearchFpa } from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
@@ -49,13 +48,19 @@ export function useOpenMobilePlayer() {
 /** Props that make any element open the player popup on tap or Enter/Space. */
 export function playerPressProps(open: OpenPlayer, id: string | null | undefined) {
   if (!id || id.startsWith("espn:")) return {};
+  const warm = () => prefetchPlayerDetail(id);
   return {
     role: "button" as const,
     tabIndex: 0,
+    // Warm on intent before the click/tap completes (mobile pointerdown is early).
+    onPointerEnter: warm,
+    onFocus: warm,
+    onPointerDown: warm,
     onClick: () => open(id),
     onKeyDown: (e: KeyboardEvent) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
+        warm();
         open(id);
       }
     },
@@ -64,9 +69,13 @@ export function playerPressProps(open: OpenPlayer, id: string | null | undefined
 
 export function MobilePlayerSheetProvider({ children }: { children: ReactNode }) {
   const [playerId, setPlayerId] = useState<string | null>(null);
+  const open = useCallback((id: string) => {
+    prefetchPlayerDetail(id);
+    setPlayerId(id);
+  }, []);
   const close = useCallback(() => setPlayerId(null), []);
   return (
-    <MobilePlayerContext.Provider value={setPlayerId}>
+    <MobilePlayerContext.Provider value={open}>
       {children}
       {playerId ? <MobilePlayerSheet id={playerId} onClose={close} /> : null}
     </MobilePlayerContext.Provider>
@@ -93,22 +102,8 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
     };
   }, [onClose]);
 
-  const detail = useQuery({
-    queryKey: ["player", id, "client-v1"],
-    queryFn: async () => {
-      const brain = await hydratePlayerBrain().catch(() => null);
-      const client = await fetchPlayerDetailClient(id, brain);
-      if (client) return client;
-      try {
-        if (import.meta.env.PROD) return null;
-      } catch {
-        /* ignore */
-      }
-      return getPlayerDetail({ data: { id } });
-    },
-    staleTime: HOUR,
-    retry: false,
-  });
+  // Same cache key as desktop PlayerDetail / hover prefetch.
+  const detail = useQuery(detailQuery(id));
   const { data: bio } = useQuery({
     queryKey: ["player-bio", id],
     queryFn: () => fetchPlayerBioClient(id),
