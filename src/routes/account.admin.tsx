@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
-import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { adminGateStatus, useIsAdmin } from "@/hooks/useIsAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import {
   createArticle,
@@ -100,9 +100,18 @@ type ProfileAdminRow = {
 
 function AdminPage() {
   const { user, ready } = useAuth();
-  const { data: isAdmin, isFetched, isError } = useIsAdmin(user?.id ?? null);
+  const { data: isAdmin, isFetched, isError, refetch, isFetching } = useIsAdmin(
+    user?.id ?? null,
+  );
   const search = Route.useSearch();
   const [tab, setTab] = useState<SubTab>(search.tab ?? "invites");
+  const gate = adminGateStatus({
+    ready,
+    userId: user?.id,
+    isAdmin,
+    isFetched,
+    isError,
+  });
 
   const tabClass = (value: SubTab) =>
     cn(
@@ -112,7 +121,7 @@ function AdminPage() {
         : "border-transparent text-muted-foreground hover:text-foreground",
     );
 
-  if (!ready || !isFetched) {
+  if (gate === "loading") {
     return (
       <AccountShell title="Admin" active="admin">
         <div className="p-6 font-display text-sm uppercase tracking-wide text-muted-foreground">
@@ -122,7 +131,27 @@ function AdminPage() {
     );
   }
 
-  if (isError || !isAdmin) {
+  if (gate === "verify_failed") {
+    return (
+      <AccountShell title="Admin" active="admin">
+        <div className="space-y-3 p-6">
+          <p className="font-display text-sm uppercase tracking-wide text-muted-foreground">
+            Could not verify admin access. You are signed in — retry in a moment.
+          </p>
+          <button
+            type="button"
+            disabled={isFetching}
+            onClick={() => void refetch()}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground disabled:opacity-60"
+          >
+            {isFetching ? "Retrying…" : "Retry"}
+          </button>
+        </div>
+      </AccountShell>
+    );
+  }
+
+  if (gate !== "allowed") {
     return (
       <AccountShell title="Admin" active="admin">
         <div className="p-6 font-display text-sm uppercase tracking-wide text-destructive">
