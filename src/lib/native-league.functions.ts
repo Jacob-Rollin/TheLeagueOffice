@@ -346,12 +346,62 @@ export const undoNativeOfflinePick = createServerFn({ method: "POST" })
 
 export const completeNativeDraft = createServerFn({ method: "POST" })
   .middleware([attachSupabaseAuth, requireSupabaseAuth])
-  .inputValidator((input: { linkId: string }) => ({
+  .inputValidator((input: { linkId: string; startWeek?: number }) => ({
     linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    startWeek: input.startWeek != null ? Number(input.startWeek) : undefined,
   }))
   .handler(async ({ context, data }) => {
     const { completeNativeDraftForUser } = await import("@/lib/native-league-ops.server");
-    return await completeNativeDraftForUser(context.userId, data.linkId);
+    return await completeNativeDraftForUser(context.userId, data.linkId, {
+      ...(data.startWeek != null ? { startWeek: data.startWeek } : {}),
+    });
+  });
+
+/** Commissioner: advance or jump the league's live week (optionally refresh AI lineups). */
+export const setNativeLeagueWeek = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; toWeek?: number; runAiLineups?: boolean }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    toWeek: input.toWeek != null ? Number(input.toWeek) : undefined,
+    runAiLineups: input.runAiLineups !== false,
+  }))
+  .handler(async ({ context, data }) => {
+    const { setNativeLeagueWeekForUser } = await import("@/lib/native-league-ops.server");
+    return await setNativeLeagueWeekForUser(context.userId, data.linkId, {
+      ...(data.toWeek != null ? { toWeek: data.toWeek } : {}),
+      runAiLineups: data.runAiLineups,
+    });
+  });
+
+/** Commissioner testing: add/drop a player on any team roster (skip draft / FA rules). */
+export const commissionerEditNativeRoster = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      linkId: string;
+      teamId: number;
+      addPlayerId?: string | null;
+      dropPlayerId?: string | null;
+    }) => ({
+      linkId: String(input.linkId ?? "").trim().slice(0, 36),
+      teamId: Number(input.teamId),
+      addPlayerId:
+        input.addPlayerId == null || input.addPlayerId === ""
+          ? null
+          : String(input.addPlayerId).trim().slice(0, 32),
+      dropPlayerId:
+        input.dropPlayerId == null || input.dropPlayerId === ""
+          ? null
+          : String(input.dropPlayerId).trim().slice(0, 32),
+    }),
+  )
+  .handler(async ({ context, data }) => {
+    const { commissionerEditRosterForUser } = await import("@/lib/native-league-ops.server");
+    return await commissionerEditRosterForUser(context.userId, data.linkId, {
+      teamId: data.teamId,
+      addPlayerId: data.addPlayerId,
+      dropPlayerId: data.dropPlayerId,
+    });
   });
 
 export const getNativeLineup = createServerFn({ method: "GET" })
@@ -428,6 +478,22 @@ export const submitNativeFreeAgentMove = createServerFn({ method: "POST" })
       dropPlayerId: data.dropPlayerId,
       rosterVersion: data.rosterVersion,
       addPlayerTeam: data.addPlayerTeam,
+    });
+  });
+
+/** Pure drop (no add) for native leagues — frees a roster slot. */
+export const submitNativeFreeAgentDrop = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; dropPlayerId: string; rosterVersion: number }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    dropPlayerId: String(input.dropPlayerId ?? "").trim().slice(0, 32),
+    rosterVersion: Number(input.rosterVersion),
+  }))
+  .handler(async ({ context, data }) => {
+    const { submitNativeFreeAgentDropForUser } = await import("@/lib/native-league-ops.server");
+    return await submitNativeFreeAgentDropForUser(context.userId, data.linkId, {
+      dropPlayerId: data.dropPlayerId,
+      rosterVersion: data.rosterVersion,
     });
   });
 

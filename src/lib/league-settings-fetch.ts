@@ -36,8 +36,13 @@ export async function fetchLeagueSettingsForConnection(input: {
   let leagueId = String(input.leagueId ?? "").trim();
   if (!leagueId) return null;
 
-  // Native settings load from TiDB in a later phase — never fall through to Fluid.
-  if (platform === "native") return null;
+  // Native: commissioner snapshot from TiDB board (linkId = connectionId).
+  if (platform === "native") {
+    const linkId = String(input.connectionId ?? "").trim();
+    if (!linkId) return null;
+    const { fetchNativeLeagueSettings } = await import("@/lib/native-league-sync-adapter");
+    return fetchNativeLeagueSettings(linkId);
+  }
 
   if (platform === "sleeper") {
     const resolved = await ensureSleeperNumericLeagueId(leagueId).catch(() => null);

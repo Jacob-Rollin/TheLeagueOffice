@@ -54,6 +54,7 @@ function NativeLeagueSettingsInLeague() {
   ]);
   const [inviteDraft, setInviteDraft] = useState("");
   const [allowAiTeams, setAllowAiTeams] = useState(false);
+  const [seasonStartWeek, setSeasonStartWeek] = useState(1);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -70,6 +71,7 @@ function NativeLeagueSettingsInLeague() {
     );
     setInviteDraft(board.summary.inviteCode);
     setAllowAiTeams(Boolean(board.commissioner.allowAiTeams));
+    setSeasonStartWeek(Math.max(1, Math.min(14, Number(board.commissioner.seasonStartWeek ?? 1) || 1)));
   }, [board]);
 
   const toggleIrStatus = (status: NativeIrAllowedStatus) => {
@@ -98,16 +100,19 @@ function NativeLeagueSettingsInLeague() {
     setSaving(true);
     try {
       const result = await updateNativeLeagueBasics({
-        data: {
-          linkId,
-          name,
-          scoringPreset,
-          draftMode,
-          benchSpots,
-          irSpots,
-          irAllowedStatuses,
-          allowAiTeams,
-        },
+        data: settingsLocked
+          ? { linkId, allowAiTeams }
+          : {
+              linkId,
+              name,
+              scoringPreset,
+              draftMode,
+              benchSpots,
+              irSpots,
+              irAllowedStatuses,
+              seasonStartWeek,
+              allowAiTeams,
+            },
       });
       if (!result.ok) {
         toast.error(result.error);
@@ -190,6 +195,26 @@ function NativeLeagueSettingsInLeague() {
               <option value="live">Live snake (entry board available; clock later)</option>
             </select>
           </label>
+          <label className={labelClass}>
+            League start week
+            <select
+              className={fieldClass}
+              value={seasonStartWeek}
+              disabled={!canManage || settingsLocked || saving}
+              onChange={(e) => setSeasonStartWeek(Number(e.target.value))}
+            >
+              {Array.from({ length: 14 }, (_, i) => i + 1).map((w) => (
+                <option key={w} value={w}>
+                  Week {w}
+                  {w === 5 || w === 6 ? " (current testing)" : ""}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Completing the draft builds the schedule from this NFL week forward so earlier weeks
+              can be skipped for mid-season testing.
+            </span>
+          </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className={labelClass}>
               Bench spots
@@ -246,22 +271,27 @@ function NativeLeagueSettingsInLeague() {
               type="checkbox"
               className="mt-0.5 size-4 rounded border-slate-300 text-primary focus:ring-primary"
               checked={allowAiTeams}
-              disabled={!canManage || settingsLocked || saving}
+              disabled={!canManage || saving}
               onChange={(e) => setAllowAiTeams(e.target.checked)}
             />
             <span>
               <span className="font-medium">Allow AI managers</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
-                For testing: assign AI to open seats on Teams. AI drafts by ADP, sets weekly lineups,
-                and sits bye / Out / IR players. Runs via Actions cron — not on every page load.
+                For testing: assign AI to seats on Teams anytime. AI drafts by ADP, sets weekly
+                lineups, and sits bye / Out / IR players. Runs via Actions cron — not on every page
+                load. This toggle stays editable after the draft starts.
               </span>
             </span>
           </label>
         </div>
 
-        {canManage && !settingsLocked ? (
+        {canManage ? (
           <button type="button" className={`${buttonClass} mt-4`} disabled={saving} onClick={() => void saveBasics()}>
-            {saving ? "Saving…" : "Save Settings"}
+            {saving
+              ? "Saving…"
+              : settingsLocked
+                ? "Save AI Setting"
+                : "Save Settings"}
           </button>
         ) : null}
       </section>

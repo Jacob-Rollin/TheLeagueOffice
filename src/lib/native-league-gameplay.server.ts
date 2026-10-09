@@ -937,6 +937,35 @@ export async function proposeNativeTradeForUser(
     if (!theirIds.has(id)) return { ok: false, error: "Counterpart must own the players you receive" };
   }
 
+  // Uneven trades (e.g. 1-for-2) must fit commissioner active roster capacity.
+  const capacity = countActiveRosterCapacity(parseRosterSlots(league.roster_slots));
+  const mineFit = tradeRosterFitsCapacity(
+    parsePlayerIdList(mine.player_ids),
+    parsePlayerIdList(mine.reserve_ir),
+    give,
+    receive,
+    capacity,
+  );
+  const theirFit = tradeRosterFitsCapacity(
+    parsePlayerIdList(theirs.player_ids),
+    parsePlayerIdList(theirs.reserve_ir),
+    receive,
+    give,
+    capacity,
+  );
+  if (!mineFit.ok) {
+    return {
+      ok: false,
+      error: `This trade would put you over the roster limit (${capacity}). Give ${mineFit.overBy} more player${mineFit.overBy === 1 ? "" : "s"}, or free a slot first.`,
+    };
+  }
+  if (!theirFit.ok) {
+    return {
+      ok: false,
+      error: `This trade would put the other team over the roster limit (${capacity}). They need ${theirFit.overBy} more open slot${theirFit.overBy === 1 ? "" : "s"}.`,
+    };
+  }
+
   // Block players on trade_hold.
   const allPlayers = [...give, ...receive];
   const holds = await tidbExecute<{ player_id: string }>(
@@ -1095,6 +1124,27 @@ async function clearTradeHolds(leagueId: string, playerIds: string[]): Promise<v
   );
 }
 
+/** Active roster length after a trade swap must not exceed commissioner capacity. */
+export function tradeRosterFitsCapacity(
+  active: string[],
+  ir: string[],
+  giving: string[],
+  receiving: string[],
+  capacity: number,
+): { ok: true } | { ok: false; overBy: number; nextActive: number } {
+  let nextActive = active.filter((id) => !giving.includes(id));
+  const nextIr = ir.filter((id) => !giving.includes(id));
+  for (const id of receiving) {
+    if (!nextActive.includes(id) && !nextIr.includes(id)) nextActive.push(id);
+  }
+  if (nextActive.length <= capacity) return { ok: true };
+  return {
+    ok: false,
+    overBy: nextActive.length - capacity,
+    nextActive: nextActive.length,
+  };
+}
+
 async function commitNativeTrade(
   leagueId: string,
   tradeId: number,
@@ -1106,6 +1156,7 @@ async function commitNativeTrade(
   const b = legs[1]!;
   const week = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
   const seasonYear = Number(league.season_year);
+  const capacity = countActiveRosterCapacity(parseRosterSlots(league.roster_slots));
 
   const rosters = await tidbExecute<{
     team_id: number;
@@ -1148,6 +1199,13 @@ async function commitNativeTrade(
     b.playerIds,
     a.playerIds,
   );
+
+  if (swapA.nextActive.length > capacity || swapB.nextActive.length > capacity) {
+    return {
+      ok: false,
+      error: `Trade would exceed the league roster limit (${capacity} active players)`,
+    };
+  }
 
   await tidbExecute(
     `UPDATE native_rosters SET player_ids = ?, reserve_ir = ?, version = version + 1

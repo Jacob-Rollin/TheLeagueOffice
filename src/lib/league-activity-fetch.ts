@@ -35,10 +35,19 @@ export async function fetchLeagueActivityForConnection(input: {
   platform: string;
   s2?: string | null | undefined;
   swid?: string | null | undefined;
+  connectionId?: string | null | undefined;
 }): Promise<LeagueActivityEvent[]> {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
   let leagueId = String(input.leagueId ?? "").trim();
   if (!leagueId) return [];
+
+  if (platform === "native") {
+    const linkId = String(input.connectionId ?? "").trim();
+    if (!linkId) return [];
+    const { fetchNativeTransactionLog } = await import("@/lib/native-league-sync-adapter");
+    const log = await fetchNativeTransactionLog(linkId);
+    return log.events;
+  }
 
   leagueId = await sleeperLeagueId(platform, leagueId);
 
@@ -70,11 +79,19 @@ export async function fetchLeagueTransactionLogForConnection(input: {
   platform: string;
   s2?: string | null | undefined;
   swid?: string | null | undefined;
+  connectionId?: string | null | undefined;
 }): Promise<LeagueTransactionLog> {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
   let leagueId = String(input.leagueId ?? "").trim();
   const empty: LeagueTransactionLog = { events: [], teams: [], currentWeek: 1 };
   if (!leagueId) return empty;
+
+  if (platform === "native") {
+    const linkId = String(input.connectionId ?? "").trim();
+    if (!linkId) return empty;
+    const { fetchNativeTransactionLog } = await import("@/lib/native-league-sync-adapter");
+    return fetchNativeTransactionLog(linkId);
+  }
 
   leagueId = await sleeperLeagueId(platform, leagueId);
 

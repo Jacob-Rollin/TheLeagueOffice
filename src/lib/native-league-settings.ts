@@ -398,7 +398,8 @@ export function normalizeNativeLeagueSettings(
       name,
       seasonYear,
       teamCount,
-      seasonStartWeek: clampInt(input.seasonStartWeek ?? 1, 1, 1, 5),
+      // Allow mid-season test starts (e.g. week 5/6). Must stay before playoffs.
+      seasonStartWeek: clampInt(input.seasonStartWeek ?? 1, 1, 1, 14),
       isPublic: Boolean(input.isPublic),
       autoActivateNextYear: input.autoActivateNextYear !== false,
       playoffStartWeek: clampInt(input.playoffStartWeek ?? 15, 15, 1, 18),

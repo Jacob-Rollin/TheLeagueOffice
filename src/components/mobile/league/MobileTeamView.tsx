@@ -1,10 +1,14 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeftRight, ChevronRight, Lock, Timer, UserPlus } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowLeftRight, ArrowUpDown, ChevronRight, Lock, Timer, UserPlus } from "lucide-react";
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { toast } from "sonner";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
 import { InjuryAvatarBadge } from "@/components/injury/InjuryAvatarBadge";
 import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
+import { Toaster } from "@/components/ui/sonner";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useLeagueProjections, useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
@@ -12,6 +16,14 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { WeeklyMatchupEntry } from "@/lib/league.server";
+import {
+  parseRosterSlotCounts,
+  slotAcceptsPos,
+  slotsRecordFromViews,
+  viewsFromSlotsRecord,
+  type NativeLineupSlotView,
+} from "@/lib/native-league-lineup";
+import { getNativeLineup, saveNativeLineup } from "@/lib/native-league.functions";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
 import { scoreActualLine } from "@/lib/scoring-map";
@@ -41,7 +53,30 @@ import { MobileTeamLogo } from "./MobileStandings";
 import { MobileWeekSelect } from "./MobileWeekSelect";
 import { useMobileLeagueStandings } from "./useMobileLeague";
 
+function viewKey(row: NativeLineupSlotView): string {
+  return `${row.key}:${row.index}`;
+}
+
+function playerIsLocked(
+  player: Player | null | undefined,
+  progressByNflTeam: Map<string, NflGameProgress> | null | undefined,
+  activeWeek: number,
+  showActuals: boolean,
+): boolean {
+  if (!player) return false;
+  if (showActuals) return true;
+  if (player.bye != null && Number(player.bye) === Number(activeWeek)) return false;
+  if (!progressByNflTeam) return false;
+  const phase = progressFor(player.team, progressByNflTeam)?.phase ?? "pre";
+  return phase === "in" || phase === "post";
+}
+
 export function MobileTeamView({ leagueId }: { leagueId: string }) {
+  const { activeLeague } = useActiveLeague();
+  const queryClient = useQueryClient();
+  const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
+  const linkId = isNative ? (activeLeague?.id ?? null) : null;
+
   const { data: playersPayload, loading: playersLoading } = useSleeperPlayers();
   const players = useMemo(() => playersPayload?.players ?? [], [playersPayload]);
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
@@ -49,6 +84,10 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const { rows: standingsRows } = useMobileLeagueStandings();
   const [week, setWeek] = useState<number | null>(null);
   const [showOptimized, setShowOptimized] = useState(false);
+  const [nativeViews, setNativeViews] = useState<NativeLineupSlotView[]>([]);
+  const [nativeVersion, setNativeVersion] = useState(0);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [savingLineup, setSavingLineup] = useState(false);
   const { nflWeek, projectFor, rankFor, sleeperIdFor } = useLeagueProjections(week);
   useEffect(() => {
     if (week == null && nflWeek != null) setWeek(Math.min(nflWeek, REGULAR_SEASON_WEEKS));
@@ -63,6 +102,43 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const isPastWeek = currentWeek != null && activeWeek < currentWeek;
   const isCurrentWeek = currentWeek != null && Number(activeWeek) === Number(currentWeek);
 
+  const nativeLineupQuery = useQuery({
+    queryKey: ["native-lineup", linkId, activeWeek],
+    enabled: Boolean(linkId),
+    staleTime: 15_000,
+    retry: false,
+    queryFn: () => getNativeLineup({ data: { linkId: linkId!, week: activeWeek } }),
+  });
+  const nativeLineup = nativeLineupQuery.data ?? null;
+
+  const posById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of players) map[p.id] = p.pos;
+    return map;
+  }, [players]);
+  const injuryById = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const p of players) map[p.id] = p.injury_status ?? p.injury ?? null;
+    return map;
+  }, [players]);
+  const teamByPlayerId = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const p of players) map[p.id] = p.team || null;
+    return map;
+  }, [players]);
+
+  useEffect(() => {
+    if (!nativeLineup) return;
+    const counts = parseRosterSlotCounts(nativeLineup.rosterSlots);
+    if (nativeLineup.slots) {
+      setNativeViews(viewsFromSlotsRecord(counts, nativeLineup.slots));
+    } else {
+      setNativeViews(viewsFromSlotsRecord(counts, {}));
+    }
+    setNativeVersion(nativeLineup.version);
+    setSelectedKey(null);
+  }, [nativeLineup]);
+
   const standingIndex = standingsRows.findIndex(
     (r) => myTeam != null && Number(r.rosterId) === Number(myTeam.slot),
   );
@@ -76,7 +152,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
       ? (entries.find((e) => e.matchupId === mine.matchupId && e.rosterId !== mine.rosterId) ?? null)
       : null;
 
-  const currentLineup = useMemo(() => {
+  const hostLineup = useMemo(() => {
     const labels = slotLabels(rosterPositions);
     if (mine?.starters.length) return resolveEntryLineup(mine, labels, playersById);
 
@@ -90,18 +166,152 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     return { starters, bench, reserve };
   }, [rosterPositions, myTeam, mine, playersById]);
 
+  const nativeDisplayLineup = useMemo(() => {
+    if (!isNative || !nativeViews.length) return null;
+    const toRow = (v: NativeLineupSlotView): LineupRow => ({
+      slot: v.key === "DEF" ? "DEF" : v.key,
+      player: v.playerId ? (playersById.get(v.playerId) ?? null) : null,
+    });
+    return {
+      starters: nativeViews.filter((v) => v.starter).map(toRow),
+      bench: nativeViews.filter((v) => v.key === "BN").map(toRow),
+      reserve: nativeViews.filter((v) => v.key === "IR" || v.key === "TAXI").map(toRow),
+      views: nativeViews,
+    };
+  }, [isNative, nativeViews, playersById]);
+
+  const currentLineup = nativeDisplayLineup ?? hostLineup;
+
+  const canEditLineup = Boolean(
+    isNative &&
+      linkId &&
+      nativeLineup?.canEdit &&
+      isCurrentWeek &&
+      !showOptimized &&
+      !isPastWeek,
+  );
+
   const projectPlayer = (p: Player) => projectFor(sleeperIdFor(p));
 
   /** Hide optimize once any current starter's NFL game has started (or finished). */
   const startersLocked = useMemo(() => {
     for (const row of currentLineup.starters) {
       if (!row.player) continue;
-      if (row.player.bye != null && Number(row.player.bye) === Number(activeWeek)) continue;
-      const phase = progressFor(row.player.team, progressByNflTeam)?.phase ?? "pre";
-      if (phase === "in" || phase === "post") return true;
+      if (playerIsLocked(row.player, progressByNflTeam, activeWeek, isPastWeek)) return true;
     }
     return false;
-  }, [currentLineup.starters, progressByNflTeam, activeWeek]);
+  }, [currentLineup.starters, progressByNflTeam, activeWeek, isPastWeek]);
+
+  const persistNativeLineup = async (nextViews: NativeLineupSlotView[]) => {
+    if (!linkId || !nativeLineup || savingLineup) return;
+    setSavingLineup(true);
+    try {
+      const result = await saveNativeLineup({
+        data: {
+          linkId,
+          week: nativeLineup.week,
+          version: nativeVersion,
+          slots: slotsRecordFromViews(nextViews),
+          posById,
+          injuryById,
+          teamByPlayerId,
+        },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        await queryClient.invalidateQueries({ queryKey: ["native-lineup", linkId, activeWeek] });
+        return;
+      }
+      if (result.version != null) setNativeVersion(result.version);
+      toast.success("Lineup saved.");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["native-lineup", linkId] }),
+        queryClient.invalidateQueries({ queryKey: ["active-matchups", linkId] }),
+        queryClient.invalidateQueries({ queryKey: ["league-rosters", linkId] }),
+        queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] }),
+      ]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save lineup.");
+    } finally {
+      setSavingLineup(false);
+    }
+  };
+
+  const onSwapAction = (rowKey: string) => {
+    if (!canEditLineup || savingLineup) return;
+    const views = nativeViews;
+    const idx = views.findIndex((v) => viewKey(v) === rowKey);
+    if (idx < 0) return;
+    const row = views[idx]!;
+    const player = row.playerId ? playersById.get(row.playerId) : null;
+    if (playerIsLocked(player, progressByNflTeam, activeWeek, isPastWeek)) {
+      toast.error("That player is locked — their game has started.");
+      return;
+    }
+
+    if (selectedKey == null) {
+      if (!row.playerId) return;
+      setSelectedKey(rowKey);
+      return;
+    }
+    if (selectedKey === rowKey) {
+      setSelectedKey(null);
+      return;
+    }
+
+    const from = views.findIndex((v) => viewKey(v) === selectedKey);
+    const to = idx;
+    if (from < 0) {
+      setSelectedKey(null);
+      return;
+    }
+    const fromRow = views[from]!;
+    const toRow = views[to]!;
+    const fromPlayer = fromRow.playerId ? playersById.get(fromRow.playerId) : null;
+    const toPlayer = toRow.playerId ? playersById.get(toRow.playerId) : null;
+    if (playerIsLocked(fromPlayer, progressByNflTeam, activeWeek, isPastWeek)) {
+      toast.error("Selected player is locked.");
+      setSelectedKey(null);
+      return;
+    }
+    if (playerIsLocked(toPlayer, progressByNflTeam, activeWeek, isPastWeek)) {
+      toast.error("That slot is locked — their game has started.");
+      return;
+    }
+
+    // Starter slots must accept the incoming player (bench/IR accept anyone).
+    if (toRow.starter && fromPlayer && !slotAcceptsPos(toRow.key, fromPlayer.pos)) {
+      toast.error(`${fromPlayer.pos} cannot start in ${toRow.key === "DEF" ? "DST" : toRow.key}.`);
+      return;
+    }
+    if (fromRow.starter && toPlayer && !slotAcceptsPos(fromRow.key, toPlayer.pos)) {
+      toast.error(`${toPlayer.pos} cannot start in ${fromRow.key === "DEF" ? "DST" : fromRow.key}.`);
+      return;
+    }
+
+    const next = views.map((v) => ({ ...v }));
+    const a = next[from]!;
+    const b = next[to]!;
+    const tmp = a.playerId;
+    a.playerId = b.playerId;
+    b.playerId = tmp;
+    setNativeViews(next);
+    setSelectedKey(null);
+    void persistNativeLineup(next);
+  };
+
+  const isEligibleTarget = (rowKey: string): boolean => {
+    if (!selectedKey || selectedKey === rowKey) return false;
+    const from = nativeViews.find((v) => viewKey(v) === selectedKey);
+    const to = nativeViews.find((v) => viewKey(v) === rowKey);
+    if (!from || !to) return false;
+    const fromPlayer = from.playerId ? playersById.get(from.playerId) : null;
+    const toPlayer = to.playerId ? playersById.get(to.playerId) : null;
+    if (playerIsLocked(toPlayer, progressByNflTeam, activeWeek, isPastWeek)) return false;
+    if (to.starter && fromPlayer && !slotAcceptsPos(to.key, fromPlayer.pos)) return false;
+    if (from.starter && toPlayer && !slotAcceptsPos(from.key, toPlayer.pos)) return false;
+    return true;
+  };
 
   const optimizePlan = useMemo(() => {
     if (!myTeam || !isCurrentWeek || startersLocked) return null;
@@ -140,6 +350,10 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   useEffect(() => {
     if (!optimizePlan || startersLocked) setShowOptimized(false);
   }, [optimizePlan, startersLocked]);
+
+  useEffect(() => {
+    if (showOptimized) setSelectedKey(null);
+  }, [showOptimized]);
 
   const lineup = showOptimized && optimizePlan ? optimizePlan.lineup : currentLineup;
 
@@ -223,6 +437,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
 
   return (
     <main className="bg-m-bg">
+      <Toaster />
       <section
         className="px-4 pb-0 pt-5 text-white"
         style={{ backgroundImage: "linear-gradient(180deg, var(--m-team-hero-from) 0%, var(--m-team-hero-to) 100%)" }}
@@ -413,11 +628,50 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
             ) : null}
           </>
         ) : null}
+
+        {canEditLineup ? (
+          <p className="mb-2 text-center text-xs text-m-muted">
+            {selectedKey
+              ? "Tap a highlighted slot to swap or place this player."
+              : savingLineup
+                ? "Saving lineup…"
+                : "Tap the blue arrows to move a player into a starter slot."}
+          </p>
+        ) : null}
       </div>
 
-      <LineupSection title="Starters" rows={lineup.starters} {...rowProps} />
-      <LineupSection title="Bench" rows={lineup.bench} {...rowProps} />
-      {lineup.reserve.length ? <LineupSection title="Reserve" rows={lineup.reserve} {...rowProps} /> : null}
+      <LineupSection
+        title="Starters"
+        rows={lineup.starters}
+        views={nativeDisplayLineup?.views.filter((v) => v.starter)}
+        canEdit={canEditLineup}
+        selectedKey={selectedKey}
+        isEligibleTarget={isEligibleTarget}
+        onSwapAction={onSwapAction}
+        {...rowProps}
+      />
+      <LineupSection
+        title="Bench"
+        rows={lineup.bench}
+        views={nativeDisplayLineup?.views.filter((v) => v.key === "BN")}
+        canEdit={canEditLineup}
+        selectedKey={selectedKey}
+        isEligibleTarget={isEligibleTarget}
+        onSwapAction={onSwapAction}
+        {...rowProps}
+      />
+      {lineup.reserve.length ? (
+        <LineupSection
+          title="Reserve"
+          rows={lineup.reserve}
+          views={nativeDisplayLineup?.views.filter((v) => v.key === "IR" || v.key === "TAXI")}
+          canEdit={canEditLineup}
+          selectedKey={selectedKey}
+          isEligibleTarget={isEligibleTarget}
+          onSwapAction={onSwapAction}
+          {...rowProps}
+        />
+      ) : null}
     </main>
   );
 }
@@ -456,15 +710,47 @@ type RowHelpers = {
   showActuals: boolean;
 };
 
-function LineupSection({ title, rows, ...helpers }: { title: string; rows: LineupRow[] } & RowHelpers) {
+type EditHelpers = {
+  views: NativeLineupSlotView[] | undefined;
+  canEdit: boolean;
+  selectedKey: string | null;
+  isEligibleTarget: (rowKey: string) => boolean;
+  onSwapAction: (rowKey: string) => void;
+};
+
+function LineupSection({
+  title,
+  rows,
+  views,
+  canEdit,
+  selectedKey,
+  isEligibleTarget,
+  onSwapAction,
+  ...helpers
+}: { title: string; rows: LineupRow[] } & RowHelpers & EditHelpers) {
   return (
     <section>
-      <h2 className="px-4 pb-3 pt-6 font-display text-lg font-bold uppercase tracking-[0.08em] text-m-section">{title}</h2>
+      <h2 className="px-4 pb-3 pt-6 font-display text-lg font-bold uppercase tracking-[0.08em] text-m-section">
+        {title}
+      </h2>
       {rows.length ? (
         <div className="space-y-2.5 px-2.5">
-          {rows.map((row, i) => (
-            <LineupCard key={`${row.slot}-${row.player?.id ?? i}`} row={row} {...helpers} />
-          ))}
+          {rows.map((row, i) => {
+            const view = views?.[i];
+            const rowKey = view ? viewKey(view) : `${row.slot}-${row.player?.id ?? i}`;
+            return (
+              <LineupCard
+                key={rowKey}
+                row={row}
+                rowKey={rowKey}
+                canEdit={Boolean(canEdit && view)}
+                selected={selectedKey === rowKey}
+                eligibleTarget={Boolean(selectedKey && isEligibleTarget(rowKey))}
+                onSwapAction={onSwapAction}
+                {...helpers}
+              />
+            );
+          })}
         </div>
       ) : (
         <p className="px-4 text-sm text-m-muted">No players.</p>
@@ -475,6 +761,11 @@ function LineupSection({ title, rows, ...helpers }: { title: string; rows: Lineu
 
 function LineupCard({
   row,
+  rowKey,
+  canEdit,
+  selected,
+  eligibleTarget,
+  onSwapAction,
   pointsFor,
   projectedFor,
   posRankFor,
@@ -483,20 +774,47 @@ function LineupCard({
   byeWeek,
   playerIdFor,
   showActuals,
-}: { row: LineupRow } & RowHelpers) {
+}: {
+  row: LineupRow;
+  rowKey: string;
+  canEdit: boolean;
+  selected: boolean;
+  eligibleTarget: boolean;
+  onSwapAction: ((rowKey: string) => void) | undefined;
+} & RowHelpers) {
   const openPlayer = useOpenMobilePlayer();
   const player = row.player;
+  const progress = player ? progressOf(player) : undefined;
+  const locked = player
+    ? showActuals || progress?.phase === "in" || progress?.phase === "post"
+    : false;
+
   if (!player) {
     return (
-      <div className="flex items-center gap-3 rounded-xl bg-m-card px-3 py-4 text-m-card-fg">
+      <div
+        className={cn(
+          "flex items-center gap-3 rounded-xl bg-m-card px-3 py-4 text-m-card-fg",
+          eligibleTarget && "ring-2 ring-[#1a8cff]",
+        )}
+      >
         <span className="w-8 text-xs font-semibold text-m-muted">{row.slot}</span>
+        {canEdit && eligibleTarget ? (
+          <button
+            type="button"
+            aria-label={`Move player into ${row.slot}`}
+            onClick={() => onSwapAction?.(rowKey)}
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#1a8cff] text-white shadow-[inset_0_-2px_0_#0d6ec9]"
+          >
+            <ArrowUpDown className="size-5" strokeWidth={2.5} />
+          </button>
+        ) : (
+          <span className="size-11 shrink-0" aria-hidden />
+        )}
         <span className="text-sm font-semibold text-m-muted">{row.name ?? "Empty slot"}</span>
       </div>
     );
   }
 
-  const progress = progressOf(player);
-  const locked = showActuals || progress?.phase === "in" || progress?.phase === "post";
   const points = locked ? pointsFor(player) : null;
   const projected = projectedFor(player);
   const posRank = posRankFor(player);
@@ -508,57 +826,111 @@ function LineupCard({
     team: player.team,
   });
 
+  const showSwap = canEdit && !locked;
+  const actionControl = locked ? (
+    <span
+      className="flex size-11 shrink-0 items-center justify-center text-m-muted"
+      aria-label="Locked — game started"
+    >
+      <Lock className="size-5" strokeWidth={2.25} />
+    </span>
+  ) : showSwap ? (
+    <button
+      type="button"
+      aria-label={selected ? "Cancel move" : `Move ${shortName(player)}`}
+      aria-pressed={selected}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSwapAction?.(rowKey);
+      }}
+      className={cn(
+        "flex size-11 shrink-0 items-center justify-center rounded-lg text-white shadow-[inset_0_-2px_0_#0d6ec9]",
+        selected || eligibleTarget ? "bg-[#0d6ec9]" : "bg-[#1a8cff]",
+        selected && "ring-2 ring-offset-2 ring-[#1a8cff]",
+      )}
+    >
+      <ArrowUpDown className="size-5" strokeWidth={2.5} />
+    </button>
+  ) : (
+    <span className="size-11 shrink-0" aria-hidden />
+  );
+
   return (
-    <article className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
-      <div className="flex cursor-pointer items-center gap-3 px-3 py-3" {...playerPressProps(openPlayer, playerIdFor(player))}>
+    <article
+      className={cn(
+        "overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
+        selected && "ring-2 ring-[#1a8cff]",
+        eligibleTarget && "ring-2 ring-[#1a8cff]/bg-sky-50/40",
+      )}
+    >
+      <div className="flex items-center gap-2.5 px-3 py-3">
         <span className="w-8 shrink-0 text-xs font-semibold text-m-muted">{row.slot}</span>
-        <span className="flex w-5 shrink-0 justify-center text-m-muted">
-          {locked ? <Lock className="size-4" aria-label="Locked" /> : null}
-        </span>
-        <div className="relative shrink-0">
-          <PlayerAvatar
-            id={player.id}
-            pos={player.pos}
-            team={player.team}
-            name={player.name}
-            className="size-12"
-            logoClassName="hidden"
-            {...(player.id.startsWith("espn:") ? { src: row.headshot ?? null } : { fallbackSrc: row.headshot ?? null })}
-          />
-          {posRank ? (
-            <span
-              className="absolute -left-2 -top-2 flex size-6 items-center justify-center bg-m-pos-rank-bg font-display text-[11px] font-bold text-m-pos-rank-fg"
-              style={{ clipPath: HEX_CLIP }}
-            >
-              {posRank}
-            </span>
-          ) : null}
-          <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
-        </div>
-        {logo ? (
-          <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-1" />
-        ) : null}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[17px] font-semibold leading-tight">{shortName(player)}</p>
-          <p className="truncate text-xs text-m-muted">
-            {player.team || "FA"} - {player.pos}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end text-right">
-          <Score value={points} className="font-display text-xl font-bold italic leading-none" />
-          {status ? (
-            <span
-              className={
-                status === "possession"
-                  ? "mt-1 inline-block rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
-                  : "mt-1 inline-block rounded-full bg-m-chip px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-m-muted"
+        {actionControl}
+        <div
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5"
+          {...(eligibleTarget
+            ? {
+                role: "button",
+                tabIndex: 0,
+                onClick: () => onSwapAction?.(rowKey),
+                onKeyDown: (e: KeyboardEvent) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSwapAction?.(rowKey);
+                  }
+                },
               }
-            >
-              {status === "possession" ? "Possession" : "Sideline"}
-            </span>
-          ) : (
-            <p className="mt-1 text-xs italic text-m-muted tabnum">{projected != null ? projected.toFixed(2) : "-"}</p>
-          )}
+            : playerPressProps(openPlayer, playerIdFor(player)))}
+        >
+          <div className="relative shrink-0">
+            <PlayerAvatar
+              id={player.id}
+              pos={player.pos}
+              team={player.team}
+              name={player.name}
+              className="size-12"
+              logoClassName="hidden"
+              {...(player.id.startsWith("espn:")
+                ? { src: row.headshot ?? null }
+                : { fallbackSrc: row.headshot ?? null })}
+            />
+            {posRank ? (
+              <span
+                className="absolute -left-2 -top-2 flex size-6 items-center justify-center bg-m-pos-rank-bg font-display text-[11px] font-bold text-m-pos-rank-fg"
+                style={{ clipPath: HEX_CLIP }}
+              >
+                {posRank}
+              </span>
+            ) : null}
+            <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
+          </div>
+          {logo ? (
+            <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-1" />
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[17px] font-semibold leading-tight">{shortName(player)}</p>
+            <p className="truncate text-xs text-m-muted">
+              {player.team || "FA"} - {player.pos}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end text-right">
+            <Score value={points} className="font-display text-xl font-bold italic leading-none" />
+            {status ? (
+              <span
+                className={
+                  status === "possession"
+                    ? "mt-1 inline-block rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white"
+                    : "mt-1 inline-block rounded-full bg-m-chip px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-m-muted"
+                }
+              >
+                {status === "possession" ? "Possession" : "Sideline"}
+              </span>
+            ) : (
+              <p className="mt-1 text-xs italic text-m-muted tabnum">
+                {projected != null ? projected.toFixed(2) : "-"}
+              </p>
+            )}
+          </div>
         </div>
       </div>
       <div className="flex items-center justify-between gap-2 bg-m-row-alt px-3 py-1.5 text-[11px] font-semibold text-m-muted">

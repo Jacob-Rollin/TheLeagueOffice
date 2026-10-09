@@ -64,6 +64,14 @@ function NativeTradesPage() {
   const [busy, setBusy] = useState(false);
 
   const partnerRoster = board?.rosters.find((r) => r.teamId === partnerId);
+  const capacity = board?.rosterCapacity ?? 15;
+  const myActive = myRoster?.activePlayerIds?.length ?? myRoster?.playerIds.length ?? 0;
+  const theirActive =
+    partnerRoster?.activePlayerIds?.length ?? partnerRoster?.playerIds.length ?? 0;
+  const myAfter = myActive - give.length + receive.length;
+  const theirAfter = theirActive - receive.length + give.length;
+  const myOver = myAfter > capacity;
+  const theirOver = theirAfter > capacity;
 
   const toggle = (list: string[], id: string, set: (v: string[]) => void) => {
     set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id].slice(0, 8));
@@ -200,10 +208,17 @@ function NativeTradesPage() {
               </ul>
             </div>
           </div>
+          {myOver || theirOver ? (
+            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              {myOver
+                ? `This trade would put you at ${myAfter}/${capacity} active players. Give more or receive fewer.`
+                : `This trade would put the other team at ${theirAfter}/${capacity} active players.`}
+            </p>
+          ) : null}
           <button
             type="button"
             className={`${buttonClass} mt-3`}
-            disabled={!partnerId || !give.length || !receive.length || busy}
+            disabled={!partnerId || !give.length || !receive.length || busy || myOver || theirOver}
             onClick={() => void propose()}
           >
             Propose Trade

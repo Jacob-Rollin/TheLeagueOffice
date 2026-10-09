@@ -1855,6 +1855,7 @@ function PlaybookDashboardPage() {
         leagueId: activeLeague?.leagueId ?? "",
         platform: (activeLeague?.platform ?? "sleeper").trim().toLowerCase(),
         teamName: activeLeague?.teamName,
+        connectionId: activeLeague?.id,
         ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
         ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
       }),

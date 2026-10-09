@@ -96,8 +96,18 @@ export async function fetchLeagueScoringPreferred(input: {
   platform: string;
   s2?: string | null | undefined;
   swid?: string | null | undefined;
+  /** Native leagues: Supabase link id (ActiveLeagueToken.id). */
+  connectionId?: string | null | undefined;
 }): Promise<LeagueScoring> {
   const platform = String(input.platform ?? "sleeper").trim().toLowerCase();
+  if (platform === "native") {
+    const linkId = String(input.connectionId ?? "").trim();
+    if (!linkId) {
+      return { format: "half", map: defaultScoringMap("half"), source: "default" };
+    }
+    const { fetchNativeLeagueScoring } = await import("@/lib/native-league-sync-adapter");
+    return fetchNativeLeagueScoring(linkId);
+  }
   if (platform === "sleeper") {
     let leagueId = String(input.identifier ?? "").trim();
     {

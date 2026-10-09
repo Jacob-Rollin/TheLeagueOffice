@@ -104,6 +104,7 @@ export function useLeagueScoringMeta() {
         platform,
         s2: activeLeague?.s2,
         swid: activeLeague?.swid,
+        connectionId: activeLeague?.id,
       }),
   });
 
@@ -352,6 +353,7 @@ export function useLeagueProjections(week?: number | null) {
         platform,
         s2: activeLeague?.s2,
         swid: activeLeague?.swid,
+        connectionId: activeLeague?.id,
       }),
   });
 
@@ -564,6 +566,7 @@ export function useSeasonProjectionStats() {
         platform,
         s2: activeLeague?.s2,
         swid: activeLeague?.swid,
+        connectionId: activeLeague?.id,
       }),
   });
 

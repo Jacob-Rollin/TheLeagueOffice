@@ -32,8 +32,13 @@ export async function fetchLeagueRostersForConnection(input: {
   let leagueId = String(input.leagueId ?? "").trim();
   if (!leagueId) return null;
 
-  // Native rosters load from TiDB in a later phase — never fall through to Fluid.
-  if (platform === "native") return null;
+  // Native: TiDB board via auth serverFn (linkId = connectionId). Never Fluid.
+  if (platform === "native") {
+    const linkId = String(input.connectionId ?? "").trim();
+    if (!linkId) return null;
+    const { fetchNativeLeagueRosters } = await import("@/lib/native-league-sync-adapter");
+    return fetchNativeLeagueRosters(linkId);
+  }
 
   if (platform === "sleeper") {
     const { ensureSleeperNumericLeagueId, persistResolvedSleeperLeagueId } = await import(

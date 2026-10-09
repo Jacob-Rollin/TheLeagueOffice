@@ -57,7 +57,12 @@ async function loadWeekMatchups(input: {
 }): Promise<LeagueWeekMatchups | null> {
   let { leagueId } = input;
   const { week, currentWeek, platform } = input;
-  if (platform === "native") return null;
+  if (platform === "native") {
+    const linkId = String(input.connectionId ?? "").trim();
+    if (!linkId) return null;
+    const { fetchNativeWeekMatchups } = await import("@/lib/native-league-sync-adapter");
+    return fetchNativeWeekMatchups(linkId, week, currentWeek);
+  }
   const past = currentWeek != null && week < currentWeek;
   const isCurrent = currentWeek != null && week === currentWeek;
   const sleeperPlatform = isSleeperPlatform(platform);
@@ -151,7 +156,8 @@ function liveMatchupPollMs(
 ): number | false {
   if (week == null || currentWeek == null || week !== currentWeek) return false;
   if (liveMs === false) return false;
-  const espnish = platform === "espn" || platform === "yahoo";
+  // Native polls hit auth serverFns (+ live stats snap) — keep ESPN-quiet cadence.
+  const espnish = platform === "espn" || platform === "yahoo" || platform === "native";
   // ESPN/Yahoo polls also hit our CDN route (and sometimes Fluid). Keep them
   // calmer than Sleeper's browser→api.sleeper.app live path.
   const inGame = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : LIVE_POLL_MS;
@@ -216,6 +222,8 @@ export function usePrefetchLeagueMatchupWeeks(enabled = true) {
 
   useEffect(() => {
     if (!enabled || !leagueId || !id) return;
+    // Native weeks load on demand via getNativeMatchupWeek — skip 1–17 warm.
+    if (platform === "native") return;
     let cancelled = false;
 
     (async () => {

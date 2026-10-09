@@ -234,6 +234,7 @@ export function PlayerDetail({
         platform: activeLeague!.platform,
         s2: activeLeague?.s2,
         swid: activeLeague?.swid,
+        connectionId: activeLeague?.id,
       }),
   });
 

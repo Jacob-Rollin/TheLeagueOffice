@@ -33,6 +33,7 @@ export function useFantasyRosterTeamName(
         teamName: activeLeague?.teamName,
         s2: activeLeague?.s2,
         swid: activeLeague?.swid,
+        connectionId: activeLeague?.id,
       }),
   });
 

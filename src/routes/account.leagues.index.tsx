@@ -167,6 +167,7 @@ function LeaguesPage() {
       const rosterData = await fetchLeagueRostersForConnection({
         leagueId: identifier,
         platform: row.platform,
+        connectionId: row.id,
         ...(row.espn_s2 ? { s2: row.espn_s2 } : {}),
         ...(row.swid ? { swid: row.swid } : {}),
       });

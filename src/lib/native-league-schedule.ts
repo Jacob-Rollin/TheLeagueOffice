@@ -10,7 +10,25 @@ export type NativeScheduleMatchup = {
   awayTeamId: number;
 };
 
-/** Build up to `weekCount` weeks of home/away pairs from team ids. */
+/**
+ * Build a regular-season schedule starting at `startWeek` (inclusive) through
+ * `endWeekExclusive - 1` (typically playoff start). Round-robin rounds are
+ * remapped onto NFL week numbers so testing can skip early weeks (e.g. start 5).
+ */
+export function buildNativeSeasonSchedule(
+  teamIds: number[],
+  startWeek: number,
+  endWeekExclusive: number,
+): NativeScheduleMatchup[] {
+  const start = Math.max(1, Math.min(18, Math.floor(startWeek) || 1));
+  const endEx = Math.max(start + 1, Math.min(19, Math.floor(endWeekExclusive) || 15));
+  const weekCount = endEx - start;
+  const raw = buildNativeRoundRobinSchedule(teamIds, weekCount);
+  if (start === 1) return raw;
+  return raw.map((m) => ({ ...m, week: m.week + start - 1 }));
+}
+
+/** Build up to `weekCount` weeks of home/away pairs from team ids (weeks 1..N). */
 export function buildNativeRoundRobinSchedule(
   teamIds: number[],
   weekCount: number,

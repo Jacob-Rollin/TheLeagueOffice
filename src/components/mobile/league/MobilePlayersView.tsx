@@ -1,11 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftRight, ChevronDown, Minus, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
 import { InjuryAvatarBadge } from "@/components/injury/InjuryAvatarBadge";
 import { playerPressProps, useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
+import { Toaster } from "@/components/ui/sonner";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import {
   useLeagueProjections,
   useSeasonProjectionStats,
@@ -15,6 +18,12 @@ import {
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import {
+  getNativeLeagueBoard,
+  proposeNativeTrade,
+  submitNativeFreeAgentDrop,
+  submitNativeFreeAgentMove,
+} from "@/lib/native-league.functions";
 import type { Player } from "@/lib/players-build";
 import { projectionPoints } from "@/lib/scoring-map";
 import { fetchTrendingAddsClient } from "@/lib/sleeper-trending";
@@ -65,10 +74,23 @@ function useSleeperTrending(type: "add" | "drop") {
 type Column = { key: string; label: string; value: (p: Player) => number | null; decimals: number };
 
 export function MobilePlayersView() {
+  const { activeLeague } = useActiveLeague();
+  const queryClient = useQueryClient();
+  const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
+  const linkId = isNative ? (activeLeague?.id ?? null) : null;
+
   const { data: playersPayload, loading: playersLoading } = useSleeperPlayers();
   const players = useMemo(() => playersPayload?.players ?? [], [playersPayload]);
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const { teams, myTeam, rosteredIds } = useLeagueRosters(players);
+
+  const boardQuery = useQuery({
+    queryKey: ["native-league-board", linkId],
+    enabled: Boolean(linkId),
+    staleTime: 60_000,
+    queryFn: () => getNativeLeagueBoard({ data: { linkId: linkId! } }),
+  });
+  const board = boardQuery.data ?? null;
 
   const [trendPos, setTrendPos] = useState<PosFilter>("QB");
   const [search, setSearch] = useState("");
@@ -78,6 +100,13 @@ export function MobilePlayersView() {
   const [period, setPeriod] = useState<"season" | number>("season");
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE_SIZE);
+
+  const [pendingAdd, setPendingAdd] = useState<Player | null>(null);
+  const [dropId, setDropId] = useState("");
+  const [pendingDrop, setPendingDrop] = useState<Player | null>(null);
+  const [pendingTrade, setPendingTrade] = useState<Player | null>(null);
+  const [tradeGive, setTradeGive] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
 
   const projectionWeek = mode === "projections" && period !== "season" ? period : null;
   const { nflWeek, nflSeason, projectFor, rankFor, seasonStats, scoringMap, format } =
@@ -97,7 +126,161 @@ export function MobilePlayersView() {
     for (const t of teams) for (const p of t.players) map.set(p.id, t.team);
     return map;
   }, [teams]);
+  const ownerTeamIdByPlayer = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!board) return map;
+    for (const [playerId, teamId] of Object.entries(board.ownership ?? {})) {
+      map.set(playerId, Number(teamId));
+    }
+    return map;
+  }, [board]);
   const actionFor = (p: Player): Action => (myIds.has(p.id) ? "drop" : rosteredIds.has(p.id) ? "trade" : "add");
+
+  const myTeamId = board?.summary.teamId ?? null;
+  const myRoster = board?.rosters.find((r) => r.teamId === myTeamId) ?? null;
+  const capacity = board?.rosterCapacity ?? 15;
+  const openSlots = myRoster
+    ? Math.max(0, capacity - (myRoster.activePlayerIds?.length ?? myRoster.playerIds.length))
+    : 0;
+  const draftDone = board?.summary.draftStatus === "complete";
+  const canMutateNative = Boolean(isNative && linkId && draftDone && myTeamId != null && myRoster);
+
+  const dropCandidates = useMemo(() => {
+    if (!myRoster) return [] as Player[];
+    return myRoster.playerIds
+      .map((id) => playersById.get(id))
+      .filter((p): p is Player => Boolean(p));
+  }, [myRoster, playersById]);
+
+  const refreshNative = async () => {
+    if (!linkId) return;
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] }),
+      queryClient.invalidateQueries({ queryKey: ["league-rosters", linkId] }),
+      queryClient.invalidateQueries({ queryKey: ["league-transaction-log", linkId] }),
+      queryClient.invalidateQueries({ queryKey: ["native-trades", linkId] }),
+    ]);
+  };
+
+  const runAdd = async (addPlayerId: string, dropPlayerId: string | null) => {
+    if (!linkId || !myRoster || busy) return;
+    setBusy(true);
+    try {
+      const result = await submitNativeFreeAgentMove({
+        data: {
+          linkId,
+          addPlayerId,
+          dropPlayerId,
+          rosterVersion: myRoster.version,
+          addPlayerTeam: playersById.get(addPlayerId)?.team ?? null,
+        },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        if (result.requiresDrop) {
+          const player = playersById.get(addPlayerId) ?? null;
+          setPendingAdd(player);
+          setDropId(dropCandidates[0]?.id ?? "");
+        }
+        return;
+      }
+      toast.success(dropPlayerId ? "Add / drop submitted." : "Player added.");
+      setPendingAdd(null);
+      setDropId("");
+      await refreshNative();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not complete add.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runDrop = async (playerId: string) => {
+    if (!linkId || !myRoster || busy) return;
+    setBusy(true);
+    try {
+      const result = await submitNativeFreeAgentDrop({
+        data: { linkId, dropPlayerId: playerId, rosterVersion: myRoster.version },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Player dropped.");
+      setPendingDrop(null);
+      await refreshNative();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not drop player.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const tradePartnerId = pendingTrade ? (ownerTeamIdByPlayer.get(pendingTrade.id) ?? null) : null;
+  /** Receiving 1; net active gain is max(0, 1 - giveCount). */
+  const tradeSlotNeed = Math.max(0, 1 - tradeGive.length);
+  const tradeNeedsSlots = tradeSlotNeed > openSlots;
+
+  const runTrade = async () => {
+    if (!linkId || !pendingTrade || tradePartnerId == null || !tradeGive.length || busy) return;
+    if (tradeNeedsSlots) {
+      const needGive = tradeGive.length + (tradeSlotNeed - openSlots);
+      toast.error(
+        `Not enough roster space (${openSlots} open of ${capacity}). Give at least ${needGive} player${needGive === 1 ? "" : "s"} for this trade.`,
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await proposeNativeTrade({
+        data: {
+          linkId,
+          acceptorTeamId: tradePartnerId,
+          givePlayerIds: tradeGive,
+          receivePlayerIds: [pendingTrade.id],
+        },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Trade proposed.");
+      setPendingTrade(null);
+      setTradeGive([]);
+      await refreshNative();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not propose trade.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onNativeAction = (player: Player, action: Action) => {
+    if (!canMutateNative) {
+      toast.error(
+        draftDone
+          ? "Claim a team seat to manage your roster."
+          : "Free-agent moves unlock after the draft is complete.",
+      );
+      return;
+    }
+    if (action === "add") {
+      if (openSlots > 0) {
+        void runAdd(player.id, null);
+        return;
+      }
+      setPendingAdd(player);
+      setDropId(dropCandidates.find((p) => p.id !== player.id)?.id ?? dropCandidates[0]?.id ?? "");
+      return;
+    }
+    if (action === "drop") {
+      setPendingDrop(player);
+      return;
+    }
+    // trade
+    setPendingTrade(player);
+    setTradeGive([]);
+  };
 
   const addsById = useMemo(() => new Map(trendingAdds.map((r) => [r.player_id, r.count])), [trendingAdds]);
   const dropsById = useMemo(() => new Map(trendingDrops.map((r) => [r.player_id, r.count])), [trendingDrops]);
@@ -222,6 +405,7 @@ export function MobilePlayersView() {
 
   return (
     <main className="pb-6">
+      <Toaster />
       <h2 className="px-4 pb-3 pt-5 font-display text-lg font-bold uppercase tracking-[0.08em] text-m-section">
         Most Added Players
       </h2>
@@ -350,6 +534,9 @@ export function MobilePlayersView() {
                 game={helpers.game(p).game}
                 cols={tableCols}
                 sortKey={sortCol.key}
+                nativeMode={isNative}
+                busy={busy}
+                onNativeAction={onNativeAction}
               />
             ))
           ) : (
@@ -365,6 +552,168 @@ export function MobilePlayersView() {
         >
           Show More
         </button>
+      ) : null}
+
+      {pendingAdd ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choose player to drop"
+            className="w-full max-w-md rounded-t-2xl bg-m-card p-5 text-m-card-fg shadow-lg sm:rounded-2xl"
+          >
+            <h3 className="font-display text-2xl font-bold">Choose a drop</h3>
+            <p className="mt-2 text-sm text-m-muted">
+              Roster full ({capacity}/{capacity}). Drop someone to add{" "}
+              <span className="font-semibold text-m-card-fg">{pendingAdd.name}</span>.
+            </p>
+            <label className="mt-4 block text-sm font-semibold">
+              Drop player
+              <select
+                className="mt-1 w-full rounded-lg border border-m-border bg-m-bg px-3 py-2.5 text-base text-m-card-fg"
+                value={dropId}
+                onChange={(e) => setDropId(e.target.value)}
+              >
+                {dropCandidates.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.pos === "DEF" ? "DST" : p.pos})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
+                disabled={busy}
+                onClick={() => {
+                  setPendingAdd(null);
+                  setDropId("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-lg bg-[#1fae5b] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
+                disabled={busy || !dropId}
+                onClick={() => void runAdd(pendingAdd.id, dropId)}
+              >
+                {busy ? "Submitting…" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingDrop ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm drop"
+            className="w-full max-w-md rounded-t-2xl bg-m-card p-5 text-m-card-fg shadow-lg sm:rounded-2xl"
+          >
+            <h3 className="font-display text-2xl font-bold">Drop player</h3>
+            <p className="mt-2 text-sm text-m-muted">
+              Drop <span className="font-semibold text-m-card-fg">{pendingDrop.name}</span> to free
+              agency? This uses your league roster settings ({openSlots} open of {capacity}).
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
+                disabled={busy}
+                onClick={() => setPendingDrop(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-lg bg-[#e8551f] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
+                disabled={busy}
+                onClick={() => void runDrop(pendingDrop.id)}
+              >
+                {busy ? "Dropping…" : "Confirm drop"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingTrade ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Propose trade"
+            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-m-card p-5 text-m-card-fg shadow-lg sm:rounded-2xl"
+          >
+            <h3 className="font-display text-2xl font-bold">Propose trade</h3>
+            <p className="mt-2 text-sm text-m-muted">
+              Receive <span className="font-semibold text-m-card-fg">{pendingTrade.name}</span>
+              {tradePartnerId != null
+                ? ` from ${board?.teams.find((t) => t.id === tradePartnerId)?.teamName ?? "team"}`
+                : ""}
+              . Select who you give — uneven trades must fit your {capacity}-player roster (
+              {openSlots} open).
+            </p>
+            {tradeNeedsSlots ? (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Giving {tradeGive.length || "0"} for 1 needs {tradeSlotNeed} open slot
+                {tradeSlotNeed === 1 ? "" : "s"}; you have {openSlots}. Add more players on your give
+                side.
+              </p>
+            ) : null}
+            <ul className="mt-4 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-m-border">
+              {(myRoster?.playerIds ?? []).map((id) => {
+                const p = playersById.get(id);
+                if (!p) return null;
+                const checked = tradeGive.includes(id);
+                return (
+                  <li key={id} className="border-b border-m-border last:border-0">
+                    <label className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setTradeGive((prev) =>
+                            checked
+                              ? prev.filter((x) => x !== id)
+                              : [...prev, id].slice(0, 8),
+                          )
+                        }
+                      />
+                      <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                      <span className="text-m-muted">{p.pos === "DEF" ? "DST" : p.pos}</span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
+                disabled={busy}
+                onClick={() => {
+                  setPendingTrade(null);
+                  setTradeGive([]);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-lg bg-[#f08a24] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
+                disabled={busy || !tradeGive.length || tradePartnerId == null || tradeNeedsSlots}
+                onClick={() => void runTrade()}
+              >
+                {busy ? "Sending…" : "Propose"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </main>
   );
@@ -525,6 +874,9 @@ function PlayerRow({
   game,
   cols,
   sortKey,
+  nativeMode,
+  busy,
+  onNativeAction,
 }: {
   player: Player;
   action: Action;
@@ -532,20 +884,35 @@ function PlayerRow({
   game: string;
   cols: Column[];
   sortKey: string;
+  nativeMode?: boolean;
+  busy?: boolean;
+  onNativeAction?: (player: Player, action: Action) => void;
 }) {
   const style = ACTION_STYLE[action];
   const Icon = action === "trade" ? ArrowLeftRight : action === "drop" ? Minus : Plus;
   const openPlayer = useOpenMobilePlayer();
+  const btnClass = cn(
+    "flex size-11 shrink-0 items-center justify-center rounded-lg text-white disabled:opacity-50",
+    style.className,
+  );
   return (
     <div className="flex border-b border-m-border">
       <div className="sticky left-0 z-10 flex w-[230px] shrink-0 items-center gap-2.5 bg-m-card px-2.5 py-2.5">
-        <Link
-          to={style.to}
-          aria-label={style.label}
-          className={cn("flex size-11 shrink-0 items-center justify-center rounded-lg text-white", style.className)}
-        >
-          <Icon className="size-5" strokeWidth={2.5} />
-        </Link>
+        {nativeMode && onNativeAction ? (
+          <button
+            type="button"
+            aria-label={style.label}
+            disabled={busy}
+            className={btnClass}
+            onClick={() => onNativeAction(player, action)}
+          >
+            <Icon className="size-5" strokeWidth={2.5} />
+          </button>
+        ) : (
+          <Link to={style.to} aria-label={style.label} className={btnClass}>
+            <Icon className="size-5" strokeWidth={2.5} />
+          </Link>
+        )}
         <div
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5"
           {...playerPressProps(openPlayer, player.id)}
