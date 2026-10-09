@@ -3,11 +3,8 @@ import { Outlet, Link, createRootRouteWithContext, useRouter, useRouterState, He
 import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
-<<<<<<< HEAD
-import { registerPlayerDetailQueryClient } from "@/lib/prefetch-player-detail";
-=======
 import { scheduleIdleSnapPrefetch } from "@/lib/idle-snap-prefetch";
->>>>>>> origin/main
+import { registerPlayerDetailQueryClient } from "@/lib/prefetch-player-detail";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { ActiveLeagueProvider } from "@/context/ActiveLeagueContext";
