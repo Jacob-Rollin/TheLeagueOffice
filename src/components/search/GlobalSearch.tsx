@@ -54,6 +54,7 @@ const PAGES: { label: string; to: string; hint: string }[] = [
   { label: "SoS Analysis", to: "/sos-analysis", hint: "Remaining strength of schedule by team and position" },
   { label: "Fantasy Points Allowed", to: "/fantasy-points-allowed", hint: "Defense PA ranks by position" },
   { label: "Red Zone Stats", to: "/red-zone-stats", hint: "Inside-the-20 player stats by position" },
+  { label: "The League Network", to: "/tlon", hint: "Live matchup scorebug and scoring feed" },
   { label: "Hall of Fame", to: "/hof", hint: "League history" },
 ];
 

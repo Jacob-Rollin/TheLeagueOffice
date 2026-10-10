@@ -141,6 +141,9 @@ function SiteNav() {
           <WaiverMenu />
           <DraftMenu />
           <ResearchMenu />
+          <Link to="/tlon" className={navLinkClass}>
+            The League Network
+          </Link>
           <Link to="/hof" className={navLinkClass}>
             Hall of Fame
           </Link>
