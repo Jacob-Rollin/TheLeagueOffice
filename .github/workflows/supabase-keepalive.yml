@@ -1,0 +1,42 @@
+name: Supabase Keepalive
+
+# Free-plan Supabase pauses projects with too little Postgres activity over ~7 days.
+# Auth/health checks do not count — this hits /api/cron/supabase-keepalive which
+# runs a tiny profiles SELECT via the service role.
+#
+# Requires repo secrets: APP_URL, CRON_SECRET (same as other cron workflows).
+
+on:
+  schedule:
+    # Twice weekly (Mon + Thu 12:10 UTC) — enough activity inside Supabase’s
+    # ~7-day free-plan inactivity window without a daily Fluid/Actions ping.
+    - cron: "10 12 * * 1,4"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Touch Supabase via app cron
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "Missing APP_URL or CRON_SECRET secrets" >&2
+            exit 1
+          fi
+          BASE="${APP_URL%/}"
+          AUTH="Authorization: Bearer ${CRON_SECRET}"
+          echo "GET ${BASE}/api/cron/supabase-keepalive"
+          curl -fsS -H "$AUTH" "${BASE}/api/cron/supabase-keepalive" | head -c 2000
+          echo
