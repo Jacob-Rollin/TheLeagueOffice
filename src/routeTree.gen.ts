@@ -70,6 +70,7 @@ import { Route as ApiCronNativeAiRouteImport } from './routes/api/cron/native-ai
 import { Route as ApiCronNativeScoringRouteImport } from './routes/api/cron/native-scoring'
 import { Route as ApiCronNativeWaiversRouteImport } from './routes/api/cron/native-waivers'
 import { Route as ApiCronResearchAggregatesRouteImport } from './routes/api/cron/research-aggregates'
+import { Route as ApiCronSupabaseKeepaliveRouteImport } from './routes/api/cron/supabase-keepalive'
 import { Route as ApiCronWarehouseIngestRouteImport } from './routes/api/cron/warehouse-ingest'
 import { Route as ApiDataPlayersRouteImport } from './routes/api/data/players'
 import { Route as ApiDataPlayersExportRouteImport } from './routes/api/data/players-export'
@@ -412,6 +413,12 @@ const ApiCronResearchAggregatesRoute =
     path: '/api/cron/research-aggregates',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiCronSupabaseKeepaliveRoute =
+  ApiCronSupabaseKeepaliveRouteImport.update({
+    id: '/api/cron/supabase-keepalive',
+    path: '/api/cron/supabase-keepalive',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiCronWarehouseIngestRoute = ApiCronWarehouseIngestRouteImport.update({
   id: '/api/cron/warehouse-ingest',
   path: '/api/cron/warehouse-ingest',
@@ -631,6 +638,7 @@ export interface FileRoutesByFullPath {
   '/api/cron/native-scoring': typeof ApiCronNativeScoringRoute
   '/api/cron/native-waivers': typeof ApiCronNativeWaiversRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
+  '/api/cron/supabase-keepalive': typeof ApiCronSupabaseKeepaliveRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/data/players': typeof ApiDataPlayersRoute
   '/api/data/players-export': typeof ApiDataPlayersExportRoute
@@ -722,6 +730,7 @@ export interface FileRoutesByTo {
   '/api/cron/native-scoring': typeof ApiCronNativeScoringRoute
   '/api/cron/native-waivers': typeof ApiCronNativeWaiversRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
+  '/api/cron/supabase-keepalive': typeof ApiCronSupabaseKeepaliveRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/data/players': typeof ApiDataPlayersRoute
   '/api/data/players-export': typeof ApiDataPlayersExportRoute
@@ -816,6 +825,7 @@ export interface FileRoutesById {
   '/api/cron/native-scoring': typeof ApiCronNativeScoringRoute
   '/api/cron/native-waivers': typeof ApiCronNativeWaiversRoute
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
+  '/api/cron/supabase-keepalive': typeof ApiCronSupabaseKeepaliveRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
   '/api/data/players': typeof ApiDataPlayersRoute
   '/api/data/players-export': typeof ApiDataPlayersExportRoute
@@ -912,6 +922,7 @@ export interface FileRouteTypes {
     | '/api/cron/native-scoring'
     | '/api/cron/native-waivers'
     | '/api/cron/research-aggregates'
+    | '/api/cron/supabase-keepalive'
     | '/api/cron/warehouse-ingest'
     | '/api/data/players'
     | '/api/data/players-export'
@@ -1003,6 +1014,7 @@ export interface FileRouteTypes {
     | '/api/cron/native-scoring'
     | '/api/cron/native-waivers'
     | '/api/cron/research-aggregates'
+    | '/api/cron/supabase-keepalive'
     | '/api/cron/warehouse-ingest'
     | '/api/data/players'
     | '/api/data/players-export'
@@ -1096,6 +1108,7 @@ export interface FileRouteTypes {
     | '/api/cron/native-scoring'
     | '/api/cron/native-waivers'
     | '/api/cron/research-aggregates'
+    | '/api/cron/supabase-keepalive'
     | '/api/cron/warehouse-ingest'
     | '/api/data/players'
     | '/api/data/players-export'
@@ -1182,6 +1195,7 @@ export interface RootRouteChildren {
   ApiCronNativeScoringRoute: typeof ApiCronNativeScoringRoute
   ApiCronNativeWaiversRoute: typeof ApiCronNativeWaiversRoute
   ApiCronResearchAggregatesRoute: typeof ApiCronResearchAggregatesRoute
+  ApiCronSupabaseKeepaliveRoute: typeof ApiCronSupabaseKeepaliveRoute
   ApiCronWarehouseIngestRoute: typeof ApiCronWarehouseIngestRoute
   ApiDataPlayersRoute: typeof ApiDataPlayersRoute
   ApiDataPlayersExportRoute: typeof ApiDataPlayersExportRoute
@@ -1625,6 +1639,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCronResearchAggregatesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/supabase-keepalive': {
+      id: '/api/cron/supabase-keepalive'
+      path: '/api/cron/supabase-keepalive'
+      fullPath: '/api/cron/supabase-keepalive'
+      preLoaderRoute: typeof ApiCronSupabaseKeepaliveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/cron/warehouse-ingest': {
       id: '/api/cron/warehouse-ingest'
       path: '/api/cron/warehouse-ingest'
@@ -2002,6 +2023,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCronNativeScoringRoute: ApiCronNativeScoringRoute,
   ApiCronNativeWaiversRoute: ApiCronNativeWaiversRoute,
   ApiCronResearchAggregatesRoute: ApiCronResearchAggregatesRoute,
+  ApiCronSupabaseKeepaliveRoute: ApiCronSupabaseKeepaliveRoute,
   ApiCronWarehouseIngestRoute: ApiCronWarehouseIngestRoute,
   ApiDataPlayersRoute: ApiDataPlayersRoute,
   ApiDataPlayersExportRoute: ApiDataPlayersExportRoute,

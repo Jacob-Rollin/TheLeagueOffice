@@ -3,7 +3,7 @@
 Living plan for staying on free tiers while expanding users, keeping live scoring / research fresh, and making pages feel as fast as FantasyPros-style tools (instant tables, minimal blank loading).
 
 **Status:** in progress — UX backlog items shipping incrementally  
-**Last updated:** 2026-10-09  
+**Last updated:** 2026-10-10  
 **Related:** `.cursorrules` (Free-Tier Guardrails), `docs/snap-cdn-setup.md`, `docs/native-leagues-plan.md`
 
 ---
@@ -37,6 +37,15 @@ GitHub Actions → APP_URL + CRON_SECRET → /api/cron/*
 | P1 | Missing / broken `VITE_SNAP_CDN_BASE` | Everyone hits Vercel → TiDB |
 | P2 | raw.githubusercontent.com scale | Fine ~20 users; not a real CDN |
 | P2 | Single TiDB for warehouse + research + synced + native | RU contention as native grows |
+
+### Platform inactivity (not RU burn)
+
+| Platform | If you don’t use the site for ~7 days | What we do |
+|---|---|---|
+| **Supabase Free** | Can **auto-pause** after low Postgres activity over ~7 days (warning email first). Auth/health pings do **not** count — needs a real DB query. | Daily Actions → `/api/cron/supabase-keepalive` (`profiles` SELECT). League delta sync also touches Supabase when it runs, but is not enough alone off-season. |
+| **Vercel Hobby** | No 7-day sleep. Can pause for **usage limits** / policy, not idle days. | Existing Actions crons keep the deployment exercised. |
+| **TiDB Starter** | No inactivity pause — only RU / storage quotas. | N/A for idle days. |
+| **GitHub Actions / snap-cdn** | No project pause for idle. | Scheduled workflows already run. |
 
 ---
 
