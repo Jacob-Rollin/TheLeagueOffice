@@ -85,7 +85,7 @@ export function TlonScorebug({
     <div className="relative mx-auto w-full max-w-4xl">
       {/* Glossy network tab */}
       <div className="absolute left-1/2 top-0 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-white/20 bg-zinc-950 px-4 py-1 shadow-lg shadow-black/40">
-        <span className="display-title text-sm tracking-widest text-white">TLON</span>
+        <span className="display-title text-sm tracking-widest text-white">TLN</span>
         <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide", daypartClass)}>
           {daypart === "LIVE" ? "On Air" : daypart}
         </span>

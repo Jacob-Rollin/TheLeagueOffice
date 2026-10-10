@@ -142,7 +142,7 @@ function SiteNav() {
           <DraftMenu />
           <ResearchMenu />
           <Link to="/tlon" className={navLinkClass}>
-            TLON
+            The League Network
           </Link>
           <Link to="/hof" className={navLinkClass}>
             Hall of Fame

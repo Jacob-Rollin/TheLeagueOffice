@@ -1,6 +1,7 @@
 /**
- * TLON Plan A feed: detect fantasy-point jumps between matchup polls and
- * optionally enrich copy from box-score stat deltas. No play-by-play API.
+ * The League Network (TLN) Plan A feed: detect fantasy-point jumps between
+ * matchup polls and optionally enrich copy from box-score stat deltas.
+ * No play-by-play API.
  */
 
 export const TLON_MIN_DELTA = 0.5;

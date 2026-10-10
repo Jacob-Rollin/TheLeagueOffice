@@ -49,10 +49,10 @@ export const Route = createFileRoute("/tlon")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "The League Office Network — The League Office" },
+      { title: "The League Network — The League Office" },
       {
         name: "description",
-        content: "Watch your fantasy matchup live — scorebug, scoring feed, and studio boards.",
+        content: "Watch your fantasy matchup live on The League Network — scorebug, scoring feed, and studio boards.",
       },
     ],
   }),
@@ -106,9 +106,9 @@ function TlonPage() {
       <main className="mx-auto w-full max-w-shell px-0 pb-16 pt-0 sm:px-0">
         <AccessGate
           kind="guest"
-          product="TLON"
+          product="TLN"
           headline="Watch your matchup like a network broadcast"
-          description="Sign up and sync a league to open The League Office Network — live scorebug, scoring feed, and studio boards for your H2H."
+          description="Sign up and sync a league to open The League Network — live scorebug, scoring feed, and studio boards for your H2H."
         />
       </main>
     );
@@ -119,7 +119,7 @@ function TlonPage() {
       <main className="mx-auto w-full max-w-shell px-0 pb-16 pt-0 sm:px-0">
         <AccessGate
           kind="sync"
-          product="TLON"
+          product="TLN"
           headline={
             leagues.length === 0
               ? "Sync a league to go on air"
@@ -127,7 +127,7 @@ function TlonPage() {
           }
           description={
             leagues.length === 0
-              ? "Connect Sleeper or ESPN so TLON can track your weekly matchup live."
+              ? "Connect Sleeper or ESPN so The League Network can track your weekly matchup live."
               : "Choose an active league from Account to load your matchup network."
           }
           syncTo={leagues.length === 0 ? "/leaguesync" : "/account/leagues"}
@@ -579,7 +579,7 @@ function TlonNetwork() {
             <ActiveLeagueLabel />
           </div>
           <h1 className="display-title text-3xl text-slate-900">
-            League Office <span className="text-primary">Network</span>
+            The League <span className="text-primary">Network</span>
           </h1>
           <p className="mt-1 max-w-xl text-sm text-slate-600">
             Watch this week&apos;s H2H like a broadcast — live scorebug, scoring feed, and studio boards.
