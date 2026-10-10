@@ -22,9 +22,9 @@ function YetToPlayTicks({ count, max = 9 }: { count: number; max?: number }) {
         <span
           key={i}
           className={cn(
-            "rounded-full transition-colors duration-500",
+            "rounded-[1px] transition-colors duration-500",
             slots > 7 ? "h-[1.5px] w-2.5 sm:w-3" : "h-[2px] w-3 sm:w-3.5",
-            i < n ? "bg-white" : "bg-white/25",
+            i < n ? "bg-white shadow-[0_0_4px_rgba(255,255,255,0.45)]" : "bg-white/20",
           )}
         />
       ))}
@@ -40,6 +40,17 @@ function formatScore(n: number): string {
 function rankPrefix(rank: number | null | undefined): string {
   if (rank == null || !Number.isFinite(rank) || rank < 1) return "";
   return `${Math.floor(rank)} `;
+}
+
+function LeadMark({ show }: { show: boolean }) {
+  if (!show) return <span className="mt-0.5 h-[8px] sm:h-[9px]" aria-hidden />;
+  return (
+    <span
+      className="mt-0.5 inline-block border-x-[4px] border-b-[6px] border-x-transparent border-b-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)] sm:border-x-[4.5px] sm:border-b-[7px]"
+      style={{ borderBottomColor: "white" }}
+      aria-label="Leading"
+    />
+  );
 }
 
 export type TlonDaypart = "PRE" | "LIVE" | "FINAL";
@@ -104,38 +115,62 @@ export function TlonScorebug({
     <div className="relative mx-auto w-[min(100%,22.5rem)] sm:w-[min(100%,32rem)]">
       <div
         className={cn(
-          "overflow-hidden rounded-md border border-white/15 shadow-2xl shadow-black/50 sm:rounded-lg",
-          "bg-[#0a0a0a]",
+          "relative overflow-hidden rounded-sm shadow-[0_8px_28px_rgba(0,0,0,0.55),0_2px_8px_rgba(0,0,0,0.35)] sm:rounded",
+          "ring-1 ring-white/20",
         )}
       >
-        {/* Top strip — names + TLN (broadcast header row) */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch text-white">
-          <div className="min-w-0 bg-[#15233a] px-2 py-1 sm:px-3 sm:py-1.5">
+        {/* Broadcast glass sheen across the whole bug */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-20 bg-[linear-gradient(180deg,rgba(255,255,255,0.14)_0%,rgba(255,255,255,0.04)_18%,transparent_42%)]"
+        />
+
+        {/* Top strip — names + TLN */}
+        <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-stretch text-white">
+          <div
+            className="min-w-0 px-2 py-1 sm:px-3 sm:py-1.5"
+            style={{
+              background:
+                "linear-gradient(180deg,rgba(0,0,0,0.28)_0%,rgba(0,0,0,0.12)_100%),linear-gradient(90deg,#1d4ed8 0%,#1e40af 100%)",
+            }}
+          >
             <p
-              className="truncate font-display text-[10px] font-bold uppercase tracking-[0.06em] sm:text-[12px] sm:tracking-[0.1em]"
+              className="truncate font-display text-[10px] font-bold uppercase tracking-[0.08em] text-white drop-shadow-sm sm:text-[12px] sm:tracking-[0.12em]"
               title={leftTitle}
             >
               {leftTitle}
             </p>
           </div>
-          <div className="flex min-w-[3.75rem] items-center justify-center gap-1.5 bg-[#111111] px-2 py-1 sm:min-w-[5.25rem] sm:gap-2 sm:px-2.5 sm:py-1.5">
-            <span className="display-title text-[11px] tracking-[0.18em] sm:text-[13px] sm:tracking-[0.2em]">
+          <div
+            className="flex min-w-[3.75rem] items-center justify-center gap-1.5 px-2 py-1 sm:min-w-[5.25rem] sm:gap-2 sm:px-2.5 sm:py-1.5"
+            style={{
+              background:
+                "linear-gradient(180deg,rgba(255,255,255,0.06)_0%,transparent_100%),#141414",
+            }}
+          >
+            <span className="display-title text-[11px] tracking-[0.2em] text-white drop-shadow sm:text-[13px] sm:tracking-[0.22em]">
               TLN
             </span>
             {daypart === "LIVE" ? (
               <span className="relative flex size-1.5 shrink-0">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-80" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.9)]" />
               </span>
             ) : (
-              <span className="text-[9px] font-bold uppercase tracking-wider text-white/50 sm:text-[10px]">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-white/55 sm:text-[10px]">
                 {statusLabel}
               </span>
             )}
           </div>
-          <div className="min-w-0 bg-[#5c1515] px-2 py-1 text-right sm:px-3 sm:py-1.5">
+          <div
+            className="min-w-0 px-2 py-1 text-right sm:px-3 sm:py-1.5"
+            style={{
+              background:
+                "linear-gradient(180deg,rgba(0,0,0,0.28)_0%,rgba(0,0,0,0.12)_100%),linear-gradient(270deg,#dc2626 0%,#b91c1c 100%)",
+            }}
+          >
             <p
-              className="truncate font-display text-[10px] font-bold uppercase tracking-[0.06em] sm:text-[12px] sm:tracking-[0.1em]"
+              className="truncate font-display text-[10px] font-bold uppercase tracking-[0.08em] text-white drop-shadow-sm sm:text-[12px] sm:tracking-[0.12em]"
               title={rightTitle}
             >
               {rightTitle}
@@ -143,21 +178,29 @@ export function TlonScorebug({
           </div>
         </div>
 
-        {/* Main row — logos, records, yet-to-play ticks, scores, win prob */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch">
-          {/* Away */}
-          <div className="relative min-w-0 bg-[linear-gradient(90deg,#1e3a5f_0%,#15233a_55%,#0f172a_100%)] px-1.5 py-1.5 sm:px-3 sm:py-2.5">
+        {/* Main row */}
+        <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-stretch">
+          {/* Away — saturated blue, lighter on the outer edge like the reference */}
+          <div
+            className="relative min-w-0 px-1.5 py-1.5 sm:px-3 sm:py-2.5"
+            style={{
+              background:
+                "linear-gradient(180deg,rgba(255,255,255,0.1)_0%,transparent_35%),linear-gradient(90deg,#2563eb 0%,#1d4ed8 42%,#1e3a8a 100%)",
+            }}
+          >
             <div className="flex h-full items-center justify-between gap-1.5 sm:gap-2.5">
               <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-                <MatchupTeamAvatar
-                  name={leftName}
-                  logo={leftLogo ?? null}
-                  platform={platform ?? null}
-                  cacheKey={`${leagueKey ?? "tlon"}-left`}
-                  size="md"
-                />
+                <span className="shrink-0 rounded-md ring-1 ring-white/35 shadow-md shadow-black/30 [&_span]:rounded-md [&_span]:border-white/20 [&_span]:bg-white/10">
+                  <MatchupTeamAvatar
+                    name={leftName}
+                    logo={leftLogo ?? null}
+                    platform={platform ?? null}
+                    cacheKey={`${leagueKey ?? "tlon"}-left`}
+                    size="md"
+                  />
+                </span>
                 {leftRecord ? (
-                  <span className="font-display text-[15px] font-bold leading-none tabular-nums text-white sm:text-[1.35rem]">
+                  <span className="font-display text-[15px] font-extrabold leading-none tabular-nums text-white drop-shadow-sm sm:text-[1.4rem]">
                     {leftRecord}
                   </span>
                 ) : null}
@@ -167,70 +210,65 @@ export function TlonScorebug({
                   count={leftYetToPlay}
                   max={Math.max(leftYetToPlayMax, 1)}
                 />
-                <div className="flex flex-col items-center">
+                <div className="flex min-w-[2.75rem] flex-col items-center sm:min-w-[3.5rem]">
                   <p
                     className={cn(
-                      "font-display text-[1.5rem] font-extrabold leading-none tabular-nums text-white sm:text-[2.5rem]",
+                      "font-display text-[1.55rem] font-extrabold leading-none tabular-nums text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)] sm:text-[2.55rem]",
                       "transition-transform duration-300 ease-out",
-                      scorePulseSide === "left" && "scale-110 text-emerald-300",
+                      scorePulseSide === "left" && "scale-110 text-emerald-200",
                     )}
                   >
                     {formatScore(leftLive)}
                   </p>
-                  {leadingSide === "left" ? (
-                    <span
-                      className="mt-0.5 text-[9px] leading-none text-white sm:text-[10px]"
-                      aria-label="Leading"
-                    >
-                      ▲
-                    </span>
-                  ) : (
-                    <span className="mt-0.5 h-[9px] sm:h-[10px]" aria-hidden />
-                  )}
+                  <LeadMark show={leadingSide === "left"} />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Center — status + win prob */}
-          <div className="flex min-w-[3.75rem] flex-col items-center justify-center border-x border-white/10 bg-[#0a0a0a] px-1.5 py-1.5 sm:min-w-[5.5rem] sm:px-2.5 sm:py-2">
-            <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-amber-400 sm:text-[9px] sm:tracking-[0.14em]">
+          {/* Center — charcoal glass */}
+          <div
+            className="relative flex min-w-[3.75rem] flex-col items-center justify-center px-1.5 py-1.5 sm:min-w-[5.5rem] sm:px-2.5 sm:py-2"
+            style={{
+              background:
+                "linear-gradient(180deg,rgba(255,255,255,0.08)_0%,transparent_40%),linear-gradient(180deg,#2a2a2a 0%,#141414 55%,#0c0c0c 100%)",
+              boxShadow: "inset 1px 0 0 rgba(255,255,255,0.08), inset -1px 0 0 rgba(255,255,255,0.08)",
+            }}
+          >
+            <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-amber-300 drop-shadow sm:text-[9px] sm:tracking-[0.16em]">
               {statusLabel}
-              <span className="text-white/35"> · </span>
-              WK {week}
+              <span className="text-white/40"> · </span>
+              <span className="text-white/85">WK {week}</span>
             </p>
-            <p className="font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-white sm:text-[2rem]">
+            <p className="mt-0.5 font-display text-[1.4rem] font-extrabold leading-none tabular-nums text-white drop-shadow sm:text-[2.05rem]">
               {Math.round(favoredPct)}%
             </p>
-            <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-wide text-white/45 sm:text-[9px]">
+            <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/55 sm:text-[9px]">
               Win prob
             </p>
           </div>
 
-          {/* Home */}
-          <div className="relative min-w-0 bg-[linear-gradient(270deg,#7f1d1d_0%,#5c1515_55%,#1a0a0a_100%)] px-1.5 py-1.5 sm:px-3 sm:py-2.5">
+          {/* Home — saturated crimson, lighter on the outer edge */}
+          <div
+            className="relative min-w-0 px-1.5 py-1.5 sm:px-3 sm:py-2.5"
+            style={{
+              background:
+                "linear-gradient(180deg,rgba(255,255,255,0.1)_0%,transparent_35%),linear-gradient(270deg,#ef4444 0%,#dc2626 42%,#991b1b 100%)",
+            }}
+          >
             <div className="flex h-full items-center justify-between gap-1.5 sm:gap-2.5">
               <div className="flex items-center gap-1.5 sm:gap-2.5">
-                <div className="flex flex-col items-center">
+                <div className="flex min-w-[2.75rem] flex-col items-center sm:min-w-[3.5rem]">
                   <p
                     className={cn(
-                      "font-display text-[1.5rem] font-extrabold leading-none tabular-nums text-white sm:text-[2.5rem]",
+                      "font-display text-[1.55rem] font-extrabold leading-none tabular-nums text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)] sm:text-[2.55rem]",
                       "transition-transform duration-300 ease-out",
-                      scorePulseSide === "right" && "scale-110 text-emerald-300",
+                      scorePulseSide === "right" && "scale-110 text-emerald-200",
                     )}
                   >
                     {formatScore(rightLive)}
                   </p>
-                  {leadingSide === "right" ? (
-                    <span
-                      className="mt-0.5 text-[9px] leading-none text-white sm:text-[10px]"
-                      aria-label="Leading"
-                    >
-                      ▲
-                    </span>
-                  ) : (
-                    <span className="mt-0.5 h-[9px] sm:h-[10px]" aria-hidden />
-                  )}
+                  <LeadMark show={leadingSide === "right"} />
                 </div>
                 <YetToPlayTicks
                   count={rightYetToPlay}
@@ -239,17 +277,19 @@ export function TlonScorebug({
               </div>
               <div className="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
                 {rightRecord ? (
-                  <span className="font-display text-[15px] font-bold leading-none tabular-nums text-white sm:text-[1.35rem]">
+                  <span className="font-display text-[15px] font-extrabold leading-none tabular-nums text-white drop-shadow-sm sm:text-[1.4rem]">
                     {rightRecord}
                   </span>
                 ) : null}
-                <MatchupTeamAvatar
-                  name={rightName}
-                  logo={rightLogo ?? null}
-                  platform={platform ?? null}
-                  cacheKey={`${leagueKey ?? "tlon"}-right`}
-                  size="md"
-                />
+                <span className="shrink-0 rounded-md ring-1 ring-white/35 shadow-md shadow-black/30 [&_span]:rounded-md [&_span]:border-white/20 [&_span]:bg-white/10">
+                  <MatchupTeamAvatar
+                    name={rightName}
+                    logo={rightLogo ?? null}
+                    platform={platform ?? null}
+                    cacheKey={`${leagueKey ?? "tlon"}-right`}
+                    size="md"
+                  />
+                </span>
               </div>
             </div>
           </div>
