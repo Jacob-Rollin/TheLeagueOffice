@@ -5,24 +5,21 @@ import type { Pos } from "@/lib/draft";
 import type { TlonPlayArc } from "@/lib/tlon-play-feed";
 import { cn } from "@/lib/utils";
 
-/** Yard markers aligned to field lines (viewBox 0–100; end zones 0–8 / 92–100). */
-const YARD_MARKERS: { pct: number; label: string }[] = [
-  { pct: 16.4, label: "10" },
-  { pct: 24.8, label: "20" },
-  { pct: 33.2, label: "30" },
-  { pct: 41.6, label: "40" },
-  { pct: 50, label: "50" },
-  { pct: 58.4, label: "40" },
-  { pct: 66.8, label: "30" },
-  { pct: 75.2, label: "20" },
-  { pct: 83.6, label: "10" },
-];
+/** End-zone width in % of the full graphic (each side). */
+const EZ = 8;
+const PLAYABLE = 100 - EZ * 2;
 
-function endZoneLabel(name: string): string {
-  const cleaned = name.trim().toUpperCase();
-  if (!cleaned) return "TEAM";
-  if (cleaned.length <= 12) return cleaned;
-  return `${cleaned.slice(0, 11)}…`;
+/** Map yards from the left goal line (0–100) onto the playable field. */
+function yardToPct(yardsFromLeftGoal: number): number {
+  return EZ + (yardsFromLeftGoal / 100) * PLAYABLE;
+}
+
+/** Major yard lines + labels (mirrored after midfield). */
+const MAJOR_YARDS = [10, 20, 30, 40, 50, 60, 70, 80, 90] as const;
+
+function yardLabel(yardsFromLeftGoal: number): string {
+  const fromNear = Math.min(yardsFromLeftGoal, 100 - yardsFromLeftGoal);
+  return String(fromNear);
 }
 
 /**
@@ -66,11 +63,24 @@ export function TlonField({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [arc?.id]);
 
-  const start = active?.hasSpot ? active.startPct : 44;
-  const end = active?.hasSpot ? active.endPct : 56;
+  // Arc spots are yard lines (0–100 from left goal); map onto playable grass.
+  const start = active?.hasSpot ? yardToPct(active.startPct) : 44;
+  const end = active?.hasSpot ? yardToPct(active.endPct) : 56;
   const atEnd = phase === "run" || phase === "hold";
   const x = active ? (atEnd ? end : start) : 50;
   const show = Boolean(active);
+
+  const leftEndZone = (leftName || "Away").trim().toUpperCase() || "AWAY";
+  const rightEndZone = (rightName || "Home").trim().toUpperCase() || "HOME";
+  const endZoneTextClass = (name: string) =>
+    cn(
+      "display-title text-center font-bold leading-none text-white/95",
+      name.length > 18
+        ? "text-[5.5px] tracking-[0.04em] sm:text-[8px] sm:tracking-[0.08em]"
+        : name.length > 12
+          ? "text-[6.5px] tracking-[0.06em] sm:text-[9px] sm:tracking-[0.1em]"
+          : "text-[8px] tracking-[0.1em] sm:text-[11px] sm:tracking-[0.14em]",
+    );
 
   return (
     <div
@@ -89,88 +99,176 @@ export function TlonField({
         }}
       />
 
-      {/* Field lines + end zones */}
+      {/* Field lines + end zones — same coordinate system as yard numbers */}
       <svg
         className="absolute inset-0 h-full w-full"
         viewBox="0 0 100 50"
         preserveAspectRatio="none"
         aria-hidden
       >
-        {/* End zones */}
-        <rect x="0" y="0" width="8" height="50" fill="#1e3a5f" opacity="0.92" />
-        <rect x="92" y="0" width="8" height="50" fill="#7f1d1d" opacity="0.92" />
+        {/* Alternating 5-yard grass bands (playable field only) */}
+        {Array.from({ length: 20 }, (_, i) => {
+          const yd0 = i * 5;
+          const x = yardToPct(yd0);
+          const w = yardToPct(yd0 + 5) - x;
+          return (
+            <rect
+              key={`band-${yd0}`}
+              x={x}
+              y="0"
+              width={w}
+              height="50"
+              fill={i % 2 === 0 ? "#15803d" : "#16a34a"}
+              opacity="0.55"
+            />
+          );
+        })}
 
-        {/* Yard lines */}
-        {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((xPos) => (
-          <line
-            key={xPos}
-            x1={xPos}
-            y1="0"
-            x2={xPos}
-            y2="50"
-            stroke="white"
-            strokeWidth={xPos === 50 ? 0.4 : 0.18}
-            opacity={xPos === 50 ? 0.55 : 0.35}
-          />
-        ))}
+        <rect x="0" y="0" width={EZ} height="50" fill="#1e3a5f" opacity="0.92" />
+        <rect x={100 - EZ} y="0" width={EZ} height="50" fill="#7f1d1d" opacity="0.92" />
 
-        {/* Hash marks (mid-field band) */}
-        {[15, 25, 35, 45, 55, 65, 75, 85].map((xPos) => (
-          <g key={`hash-${xPos}`} opacity="0.28" stroke="white" strokeWidth="0.12">
-            <line x1={xPos} y1="18" x2={xPos} y2="21" />
-            <line x1={xPos} y1="29" x2={xPos} y2="32" />
-          </g>
-        ))}
+        {/* Goal lines */}
+        <line
+          x1={EZ}
+          y1="0"
+          x2={EZ}
+          y2="50"
+          stroke="white"
+          strokeWidth="0.35"
+          opacity="0.55"
+        />
+        <line
+          x1={100 - EZ}
+          y1="0"
+          x2={100 - EZ}
+          y2="50"
+          stroke="white"
+          strokeWidth="0.35"
+          opacity="0.55"
+        />
+
+        {MAJOR_YARDS.map((yd) => {
+          const xPos = yardToPct(yd);
+          return (
+            <line
+              key={yd}
+              x1={xPos}
+              y1="0"
+              x2={xPos}
+              y2="50"
+              stroke="white"
+              strokeWidth={yd === 50 ? 0.45 : 0.22}
+              opacity={yd === 50 ? 0.7 : 0.45}
+            />
+          );
+        })}
+
+        {/* 5-yard lines between majors */}
+        {[5, 15, 25, 35, 45, 55, 65, 75, 85, 95].map((yd) => {
+          const xPos = yardToPct(yd);
+          return (
+            <line
+              key={`five-${yd}`}
+              x1={xPos}
+              y1="0"
+              x2={xPos}
+              y2="50"
+              stroke="white"
+              strokeWidth="0.12"
+              opacity="0.22"
+            />
+          );
+        })}
+
+        {/* Hash marks on every yard between the hashes band */}
+        {Array.from({ length: 99 }, (_, i) => i + 1)
+          .filter((yd) => yd % 5 !== 0)
+          .map((yd) => {
+            const xPos = yardToPct(yd);
+            return (
+              <g key={`hash-${yd}`} opacity="0.3" stroke="white" strokeWidth="0.1">
+                <line x1={xPos} y1="19" x2={xPos} y2="21.2" />
+                <line x1={xPos} y1="28.8" x2={xPos} y2="31" />
+              </g>
+            );
+          })}
       </svg>
 
-      {/* Yard numbers — HTML so text stays readable (SVG text stretches with preserveAspectRatio=none) */}
-      <div className="pointer-events-none absolute inset-0 top-[9%] sm:top-[11%]">
-        {YARD_MARKERS.map((m) => (
-          <span
-            key={`top-${m.pct}`}
-            className={cn(
-              "absolute -translate-x-1/2 font-display text-[9px] font-bold tabular-nums sm:text-[11px]",
-              m.label === "50" ? "text-white/70" : "text-white/50",
-            )}
-            style={{ left: `${m.pct}%` }}
-          >
-            {m.label}
-          </span>
-        ))}
-      </div>
-      <div className="pointer-events-none absolute inset-0 bottom-[20%] sm:bottom-[18%]">
-        {YARD_MARKERS.map((m) => (
-          <span
-            key={`bot-${m.pct}`}
-            className="absolute bottom-0 -translate-x-1/2 font-display text-[9px] font-bold tabular-nums text-white/40 sm:text-[11px]"
-            style={{ left: `${m.pct}%` }}
-          >
-            {m.label}
-          </span>
-        ))}
+      {/*
+        Yard numbers as HTML (SVG text would stretch with preserveAspectRatio=none).
+        left% uses the same yardToPct as the SVG lines so digits sit on the line.
+      */}
+      <div className="pointer-events-none absolute inset-0">
+        {MAJOR_YARDS.map((yd) => {
+          const left = `${yardToPct(yd)}%`;
+          const label = yardLabel(yd);
+          return (
+            <span key={`top-${yd}`}>
+              <span
+                className={cn(
+                  "absolute top-[7%] -translate-x-1/2 font-display text-[9px] font-bold leading-none tabular-nums sm:top-[9%] sm:text-[11px]",
+                  yd === 50 ? "text-white/80" : "text-white/60",
+                )}
+                style={{ left }}
+              >
+                {label}
+              </span>
+              <span
+                className={cn(
+                  "absolute bottom-[17%] -translate-x-1/2 font-display text-[9px] font-bold leading-none tabular-nums sm:bottom-[15%] sm:text-[11px]",
+                  yd === 50 ? "text-white/55" : "text-white/40",
+                )}
+                style={{ left }}
+              >
+                {label}
+              </span>
+            </span>
+          );
+        })}
       </div>
 
-      {/* End zone team names */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-[1] flex w-[8%] items-center justify-center">
+      {/* Midfield logo — circular crop of the 512 app icon (hides square cyan plate) */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1] h-[20%] min-h-[3rem] w-[20%] min-w-[3rem] max-h-[5.5rem] max-w-[5.5rem] -translate-x-1/2 -translate-y-1/2 sm:h-[14%] sm:w-[14%]">
+        <div className="size-full overflow-hidden rounded-full border-2 border-white/35 bg-[#0b1220] shadow-lg shadow-black/40 ring-1 ring-black/40">
+          <img
+            src="/m/icons/icon-512.png"
+            alt=""
+            className="size-full scale-110 object-cover opacity-95"
+            draggable={false}
+          />
+        </div>
+      </div>
+
+      {/* End zone team names — full names, no ellipsis; scale type for longer labels */}
+      <div
+        className="pointer-events-none absolute inset-y-[4%] left-0 z-[1] flex items-center justify-center overflow-visible"
+        style={{ width: `${EZ}%` }}
+      >
         <span
-          className="display-title max-w-[9rem] truncate text-center text-[9px] tracking-wider text-white/90 sm:text-[11px]"
-          style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-          title={leftName}
+          className={endZoneTextClass(leftEndZone)}
+          style={{
+            writingMode: "vertical-rl",
+            transform: "rotate(180deg)",
+          }}
+          title={leftEndZone}
         >
-          {endZoneLabel(leftName)}
+          {leftEndZone}
         </span>
       </div>
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-[1] flex w-[8%] items-center justify-center">
+      <div
+        className="pointer-events-none absolute inset-y-[4%] right-0 z-[1] flex items-center justify-center overflow-visible"
+        style={{ width: `${EZ}%` }}
+      >
         <span
-          className="display-title max-w-[9rem] truncate text-center text-[9px] tracking-wider text-white/90 sm:text-[11px]"
+          className={endZoneTextClass(rightEndZone)}
           style={{ writingMode: "vertical-rl" }}
-          title={rightName}
+          title={rightEndZone}
         >
-          {endZoneLabel(rightName)}
+          {rightEndZone}
         </span>
       </div>
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,0,0,0.45)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)]" />
 
       {show && active ? (
         <>
