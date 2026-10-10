@@ -726,8 +726,8 @@ function TlonNetwork() {
     <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
       <PlayerModalHost ref={modalRef} />
 
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2 sm:mb-4 sm:gap-3">
+        <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <span
               className={cn(
@@ -744,17 +744,20 @@ function TlonNetwork() {
             <ActiveLeagueLabel />
             <span className="display-title text-xs tracking-widest text-slate-400">TLN</span>
           </div>
-          <h1 className="display-title text-2xl text-slate-900 sm:text-3xl">
-            {leftName} <span className="text-slate-400">vs</span>{" "}
+          <h1 className="display-title text-xl leading-tight text-slate-900 sm:text-3xl">
+            <span className="block truncate sm:inline">{leftName}</span>{" "}
+            <span className="text-slate-400">vs</span>{" "}
             <span className="text-primary">{rightName}</span>
           </h1>
-          <p className="mt-0.5 text-sm text-slate-500">Week {activeWeek} · The League Network</p>
+          <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
+            Week {activeWeek} · The League Network
+          </p>
         </div>
         <Link
           to="/playbook/matchup"
-          className="rounded-md border border-blue-600 bg-white px-3 py-1.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+          className="shrink-0 rounded-md border border-blue-600 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 sm:px-3 sm:text-sm"
         >
-          Open full Matchup
+          Full Matchup
         </Link>
       </div>
 
