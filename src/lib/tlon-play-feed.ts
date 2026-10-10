@@ -38,7 +38,7 @@ export type TlonPlayArc = {
   pos: string;
   team: string;
   side: TlonFeedSide;
-  /** Field percent 0–100 (left end zone → right). */
+  /** Yard line 0–100 from the left goal (mapped onto grass in TlonField). */
   startPct: number;
   endPct: number;
   yardGain: number;

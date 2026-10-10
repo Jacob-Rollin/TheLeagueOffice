@@ -78,8 +78,16 @@ export function TlonScorebug({
     daypart === "LIVE" ? "LIVE" : daypart === "FINAL" ? "FINAL" : "PRE";
 
   return (
-    <div className="relative mx-auto w-full max-w-5xl pt-2.5 sm:pt-3">
-      <div className="absolute left-1/2 top-0 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-t-md border border-b-0 border-white/25 bg-zinc-950 px-2.5 py-0.5 shadow-lg shadow-black/50 sm:gap-2 sm:px-4 sm:py-1">
+    <div className="relative mx-auto w-full max-w-5xl">
+      {/*
+        Tab sits on the scorebug with a 1px downward overlap so subpixel
+        rounding cannot leave a hairline gap. Matching zinc-950 border
+        (not white/25) keeps the seam invisible against the bar.
+      */}
+      <div
+        className="absolute bottom-full left-1/2 z-20 flex items-center gap-1.5 rounded-t-md border border-b-0 border-zinc-950 bg-zinc-950 px-2.5 py-0.5 shadow-lg shadow-black/50 sm:gap-2 sm:px-4 sm:py-1"
+        style={{ transform: "translate(-50%, 1px)" }}
+      >
         <span className="display-title text-[11px] tracking-[0.18em] text-white sm:text-[13px] sm:tracking-[0.2em]">
           TLN
         </span>
@@ -94,7 +102,7 @@ export function TlonScorebug({
       <div
         className={cn(
           "overflow-hidden rounded-lg border border-white/20 shadow-2xl shadow-black/50 sm:rounded-xl",
-          "bg-zinc-950/85 backdrop-blur-md",
+          "bg-zinc-950",
           "bg-[linear-gradient(180deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0)_42%),linear-gradient(90deg,#18181b_0%,#09090b_50%,#18181b_100%)]",
         )}
       >
