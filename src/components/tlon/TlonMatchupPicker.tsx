@@ -17,6 +17,7 @@ function shortScore(n: number): string {
   return (Math.round(n * 10) / 10).toFixed(1);
 }
 
+/** Dark channel rail — flip between league matchups like network games. */
 export function TlonMatchupPicker({
   options,
   selectedId,
@@ -33,8 +34,8 @@ export function TlonMatchupPicker({
   if (!options.length) return null;
 
   return (
-    <div className="overflow-x-auto pb-1">
-      <div className="flex min-w-min gap-2">
+    <div className="overflow-x-auto">
+      <div className="flex min-w-min gap-1.5">
         {options.map((opt) => {
           const active = opt.id === selectedId;
           return (
@@ -43,10 +44,10 @@ export function TlonMatchupPicker({
               type="button"
               onClick={() => onSelect(opt.id)}
               className={cn(
-                "flex min-w-[11rem] items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors",
+                "flex min-w-[9.5rem] items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-200",
                 active
-                  ? "border-blue-600 bg-blue-600 text-white"
-                  : "border-slate-200 bg-white text-slate-800 hover:border-blue-300",
+                  ? "bg-white/15 ring-1 ring-white/40"
+                  : "bg-transparent hover:bg-white/8",
               )}
             >
               <div className="flex -space-x-1.5">
@@ -66,15 +67,10 @@ export function TlonMatchupPicker({
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <p className={cn("truncate text-[11px] font-semibold", active ? "text-white" : "text-slate-800")}>
+                <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-white/90">
                   {opt.isMine ? "Your matchup" : opt.label}
                 </p>
-                <p
-                  className={cn(
-                    "tabular-nums text-[11px]",
-                    active ? "text-white/85" : "text-slate-500",
-                  )}
-                >
+                <p className="tabular-nums text-[11px] text-white/60">
                   {shortScore(opt.leftLive)} – {shortScore(opt.rightLive)}
                 </p>
               </div>
