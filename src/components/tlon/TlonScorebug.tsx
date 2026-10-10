@@ -50,7 +50,10 @@ function LeadMark({ show }: { show: boolean }) {
   );
 }
 
-/** Opaque panel: solid fill + optional sheen overlay (never replaces the fill). */
+/**
+ * Opaque panel: solid fill on the shell, layout classes on the inner content
+ * so flex/gap actually apply to children (TLN + live dot stay inline).
+ */
 function Panel({
   className,
   fillClass,
@@ -63,11 +66,11 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <div className={cn("relative min-w-0", fillClass, className)}>
+    <div className={cn("relative min-w-0", fillClass)}>
       {sheenClass ? (
         <div aria-hidden className={cn("pointer-events-none absolute inset-0", sheenClass)} />
       ) : null}
-      <div className="relative z-[1] h-full">{children}</div>
+      <div className={cn("relative z-[1] h-full", className)}>{children}</div>
     </div>
   );
 }
@@ -132,15 +135,15 @@ export function TlonScorebug({
   return (
     <div className="relative mx-auto w-[min(100%,22rem)] sm:w-[min(100%,30rem)]">
       <div className="relative overflow-hidden rounded-sm shadow-[0_6px_20px_rgba(0,0,0,0.55)] ring-1 ring-white/25 sm:rounded">
-        {/* Top strip — slim name + TLN row */}
+        {/* Top strip — thin one-line labels */}
         <div className="grid grid-cols-[1fr_auto_1fr] items-stretch text-white">
           <Panel
             fillClass="bg-[#1e40af]"
-            sheenClass="bg-gradient-to-b from-black/25 to-transparent"
-            className="px-2 py-0.5 sm:px-2.5 sm:py-1"
+            sheenClass="bg-gradient-to-b from-black/20 to-transparent"
+            className="flex items-center px-2 py-px sm:px-2.5 sm:py-0.5"
           >
             <p
-              className="truncate font-display text-[9px] font-bold uppercase tracking-[0.06em] sm:text-[11px] sm:tracking-[0.1em]"
+              className="truncate font-display text-[8px] font-bold uppercase leading-none tracking-[0.06em] sm:text-[10px] sm:tracking-[0.1em]"
               title={leftTitle}
             >
               {leftTitle}
@@ -150,9 +153,9 @@ export function TlonScorebug({
           <Panel
             fillClass="bg-[#111111]"
             sheenClass="bg-gradient-to-b from-white/10 to-transparent"
-            className="flex min-w-[3.5rem] items-center justify-center gap-1 px-2 py-0.5 sm:min-w-[4.75rem] sm:gap-1.5 sm:px-2.5 sm:py-1"
+            className="flex min-w-[3.25rem] items-center justify-center gap-1 px-2 py-px sm:min-w-[4.5rem] sm:gap-1.5 sm:px-2.5 sm:py-0.5"
           >
-            <span className="display-title text-[10px] tracking-[0.18em] sm:text-[12px] sm:tracking-[0.2em]">
+            <span className="display-title text-[9px] leading-none tracking-[0.18em] sm:text-[11px] sm:tracking-[0.2em]">
               TLN
             </span>
             {daypart === "LIVE" ? (
@@ -161,7 +164,7 @@ export function TlonScorebug({
                 <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
               </span>
             ) : (
-              <span className="text-[8px] font-bold uppercase tracking-wider text-white/55">
+              <span className="text-[8px] font-bold uppercase leading-none tracking-wider text-white/55">
                 {statusLabel}
               </span>
             )}
@@ -169,11 +172,11 @@ export function TlonScorebug({
 
           <Panel
             fillClass="bg-[#b91c1c]"
-            sheenClass="bg-gradient-to-b from-black/25 to-transparent"
-            className="px-2 py-0.5 text-right sm:px-2.5 sm:py-1"
+            sheenClass="bg-gradient-to-b from-black/20 to-transparent"
+            className="flex items-center justify-end px-2 py-px sm:px-2.5 sm:py-0.5"
           >
             <p
-              className="truncate font-display text-[9px] font-bold uppercase tracking-[0.06em] sm:text-[11px] sm:tracking-[0.1em]"
+              className="truncate font-display text-[8px] font-bold uppercase leading-none tracking-[0.06em] sm:text-[10px] sm:tracking-[0.1em]"
               title={rightTitle}
             >
               {rightTitle}
@@ -181,7 +184,7 @@ export function TlonScorebug({
           </Panel>
         </div>
 
-        {/* Main row — compact logos / records / ticks / scores */}
+        {/* Main row */}
         <div className="grid grid-cols-[1fr_auto_1fr] items-stretch">
           <Panel
             fillClass="bg-[#1d4ed8]"
@@ -229,17 +232,17 @@ export function TlonScorebug({
           <Panel
             fillClass="bg-[#0f0f0f]"
             sheenClass="bg-gradient-to-b from-white/10 to-transparent"
-            className="flex min-w-[3.5rem] flex-col items-center justify-center border-x border-white/10 px-1.5 py-1 sm:min-w-[5rem] sm:px-2 sm:py-1.5"
+            className="flex min-w-[3.5rem] flex-col items-center justify-center border-x border-white/10 px-1.5 py-1 text-center sm:min-w-[5rem] sm:px-2 sm:py-1.5"
           >
-            <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-amber-300 sm:text-[8px]">
+            <p className="w-full text-center text-[7px] font-bold uppercase tracking-[0.12em] text-amber-300 sm:text-[8px]">
               {statusLabel}
               <span className="text-white/35"> · </span>
               <span className="text-white/85">WK {week}</span>
             </p>
-            <p className="font-display text-[1.15rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.65rem]">
+            <p className="w-full text-center font-display text-[1.15rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.65rem]">
               {Math.round(favoredPct)}%
             </p>
-            <p className="text-[7px] font-semibold uppercase tracking-wide text-white/50 sm:text-[8px]">
+            <p className="w-full text-center text-[7px] font-semibold uppercase tracking-wide text-white/50 sm:text-[8px]">
               Win prob
             </p>
           </Panel>
