@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
 import { cn } from "@/lib/utils";
 
@@ -11,10 +13,7 @@ function YetToPlayTicks({ count, max = 9 }: { count: number; max?: number }) {
   const n = Math.max(0, Math.min(slots, Math.floor(count)));
   return (
     <div
-      className={cn(
-        "flex flex-col justify-center",
-        slots > 7 ? "gap-[2px]" : "gap-[3px]",
-      )}
+      className="flex flex-col justify-center gap-[1.5px]"
       aria-label={`${n} of ${slots} starters yet to play`}
       title={`${n} of ${slots} starters yet to play`}
     >
@@ -22,9 +21,8 @@ function YetToPlayTicks({ count, max = 9 }: { count: number; max?: number }) {
         <span
           key={i}
           className={cn(
-            "rounded-[1px] transition-colors duration-500",
-            slots > 7 ? "h-[1.5px] w-2.5 sm:w-3" : "h-[2px] w-3 sm:w-3.5",
-            i < n ? "bg-white shadow-[0_0_4px_rgba(255,255,255,0.45)]" : "bg-white/20",
+            "h-[1.5px] w-2 rounded-[1px] transition-colors duration-500 sm:w-2.5",
+            i < n ? "bg-white" : "bg-white/25",
           )}
         />
       ))}
@@ -43,12 +41,34 @@ function rankPrefix(rank: number | null | undefined): string {
 }
 
 function LeadMark({ show }: { show: boolean }) {
-  if (!show) return <span className="mt-0.5 h-[8px] sm:h-[9px]" aria-hidden />;
+  if (!show) return <span className="h-[5px]" aria-hidden />;
   return (
     <span
-      className="mt-0.5 inline-block border-x-[4px] border-b-[6px] border-x-transparent border-b-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)] sm:border-x-[4.5px] sm:border-b-[7px]"
+      className="inline-block border-x-[3.5px] border-b-[5px] border-x-transparent border-b-white"
       aria-label="Leading"
     />
+  );
+}
+
+/** Opaque panel: solid fill + optional sheen overlay (never replaces the fill). */
+function Panel({
+  className,
+  fillClass,
+  sheenClass,
+  children,
+}: {
+  className?: string;
+  fillClass: string;
+  sheenClass?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cn("relative min-w-0", fillClass, className)}>
+      {sheenClass ? (
+        <div aria-hidden className={cn("pointer-events-none absolute inset-0", sheenClass)} />
+      ) : null}
+      <div className="relative z-[1] h-full">{children}</div>
+    </div>
   );
 }
 
@@ -110,85 +130,90 @@ export function TlonScorebug({
   const rightTitle = `${rankPrefix(rightRank)}${rightName}`.trim();
 
   return (
-    /* Compact centered bug — leaves field visible on both sides */
-    <div className="relative mx-auto w-[min(100%,22.5rem)] sm:w-[min(100%,32rem)]">
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-sm shadow-[0_8px_28px_rgba(0,0,0,0.55),0_2px_8px_rgba(0,0,0,0.35)] sm:rounded",
-          "ring-1 ring-white/20",
-        )}
-      >
-        {/* Broadcast glass sheen across the whole bug */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 z-20 bg-[linear-gradient(180deg,rgba(255,255,255,0.14)_0%,rgba(255,255,255,0.04)_18%,transparent_42%)]"
-        />
-
-        {/* Top strip — names + TLN */}
-        <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-stretch text-white">
-          <div className="min-w-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.28)_0%,rgba(0,0,0,0.12)_100%),linear-gradient(90deg,#1d4ed8_0%,#1e40af_100%)] px-2 py-1 sm:px-3 sm:py-1.5">
+    <div className="relative mx-auto w-[min(100%,22rem)] sm:w-[min(100%,30rem)]">
+      <div className="relative overflow-hidden rounded-sm shadow-[0_6px_20px_rgba(0,0,0,0.55)] ring-1 ring-white/25 sm:rounded">
+        {/* Top strip — slim name + TLN row */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch text-white">
+          <Panel
+            fillClass="bg-[#1e40af]"
+            sheenClass="bg-gradient-to-b from-black/25 to-transparent"
+            className="px-2 py-0.5 sm:px-2.5 sm:py-1"
+          >
             <p
-              className="truncate font-display text-[10px] font-bold uppercase tracking-[0.08em] text-white drop-shadow-sm sm:text-[12px] sm:tracking-[0.12em]"
+              className="truncate font-display text-[9px] font-bold uppercase tracking-[0.06em] sm:text-[11px] sm:tracking-[0.1em]"
               title={leftTitle}
             >
               {leftTitle}
             </p>
-          </div>
-          <div className="flex min-w-[3.75rem] items-center justify-center gap-1.5 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,transparent_100%),#141414] px-2 py-1 sm:min-w-[5.25rem] sm:gap-2 sm:px-2.5 sm:py-1.5">
-            <span className="display-title text-[11px] tracking-[0.2em] text-white drop-shadow sm:text-[13px] sm:tracking-[0.22em]">
+          </Panel>
+
+          <Panel
+            fillClass="bg-[#111111]"
+            sheenClass="bg-gradient-to-b from-white/10 to-transparent"
+            className="flex min-w-[3.5rem] items-center justify-center gap-1 px-2 py-0.5 sm:min-w-[4.75rem] sm:gap-1.5 sm:px-2.5 sm:py-1"
+          >
+            <span className="display-title text-[10px] tracking-[0.18em] sm:text-[12px] sm:tracking-[0.2em]">
               TLN
             </span>
             {daypart === "LIVE" ? (
               <span className="relative flex size-1.5 shrink-0">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-80" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.9)]" />
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
               </span>
             ) : (
-              <span className="text-[9px] font-bold uppercase tracking-wider text-white/55 sm:text-[10px]">
+              <span className="text-[8px] font-bold uppercase tracking-wider text-white/55">
                 {statusLabel}
               </span>
             )}
-          </div>
-          <div className="min-w-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.28)_0%,rgba(0,0,0,0.12)_100%),linear-gradient(270deg,#dc2626_0%,#b91c1c_100%)] px-2 py-1 text-right sm:px-3 sm:py-1.5">
+          </Panel>
+
+          <Panel
+            fillClass="bg-[#b91c1c]"
+            sheenClass="bg-gradient-to-b from-black/25 to-transparent"
+            className="px-2 py-0.5 text-right sm:px-2.5 sm:py-1"
+          >
             <p
-              className="truncate font-display text-[10px] font-bold uppercase tracking-[0.08em] text-white drop-shadow-sm sm:text-[12px] sm:tracking-[0.12em]"
+              className="truncate font-display text-[9px] font-bold uppercase tracking-[0.06em] sm:text-[11px] sm:tracking-[0.1em]"
               title={rightTitle}
             >
               {rightTitle}
             </p>
-          </div>
+          </Panel>
         </div>
 
-        {/* Main row */}
-        <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-stretch">
-          {/* Away — saturated blue, lighter on the outer edge */}
-          <div className="relative min-w-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.1)_0%,transparent_35%),linear-gradient(90deg,#2563eb_0%,#1d4ed8_42%,#1e3a8a_100%)] px-1.5 py-1.5 sm:px-3 sm:py-2.5">
-            <div className="flex h-full items-center justify-between gap-1.5 sm:gap-2.5">
-              <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-                <span className="shrink-0 rounded-md shadow-md shadow-black/30 ring-1 ring-white/35 [&_span]:rounded-md [&_span]:border-white/20 [&_span]:bg-white/10">
+        {/* Main row — compact logos / records / ticks / scores */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch">
+          <Panel
+            fillClass="bg-[#1d4ed8]"
+            sheenClass="bg-gradient-to-r from-white/15 via-transparent to-black/20"
+            className="px-1.5 py-1 sm:px-2.5 sm:py-1.5"
+          >
+            <div className="flex h-full items-center justify-between gap-1 sm:gap-2">
+              <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
+                <span className="shrink-0 rounded ring-1 ring-white/30 [&_span]:h-7 [&_span]:w-7 [&_span]:rounded [&_span]:border-white/15 sm:[&_span]:h-8 sm:[&_span]:w-8">
                   <MatchupTeamAvatar
                     name={leftName}
                     logo={leftLogo ?? null}
                     platform={platform ?? null}
                     cacheKey={`${leagueKey ?? "tlon"}-left`}
-                    size="md"
+                    size="sm"
                   />
                 </span>
                 {leftRecord ? (
-                  <span className="font-display text-[15px] font-extrabold leading-none tabular-nums text-white drop-shadow-sm sm:text-[1.4rem]">
+                  <span className="font-display text-[13px] font-extrabold leading-none tabular-nums text-white sm:text-[1.15rem]">
                     {leftRecord}
                   </span>
                 ) : null}
               </div>
-              <div className="flex items-center gap-1.5 sm:gap-2.5">
+              <div className="flex items-center gap-1 sm:gap-1.5">
                 <YetToPlayTicks
                   count={leftYetToPlay}
                   max={Math.max(leftYetToPlayMax, 1)}
                 />
-                <div className="flex min-w-[2.75rem] flex-col items-center sm:min-w-[3.5rem]">
+                <div className="flex min-w-[2.4rem] flex-col items-center sm:min-w-[2.9rem]">
                   <p
                     className={cn(
-                      "font-display text-[1.55rem] font-extrabold leading-none tabular-nums text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)] sm:text-[2.55rem]",
+                      "font-display text-[1.25rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.85rem]",
                       "transition-transform duration-300 ease-out",
                       scorePulseSide === "left" && "scale-110 text-emerald-200",
                     )}
@@ -199,31 +224,37 @@ export function TlonScorebug({
                 </div>
               </div>
             </div>
-          </div>
+          </Panel>
 
-          {/* Center — charcoal glass */}
-          <div className="relative flex min-w-[3.75rem] flex-col items-center justify-center bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,transparent_40%),linear-gradient(180deg,#2a2a2a_0%,#141414_55%,#0c0c0c_100%)] px-1.5 py-1.5 shadow-[inset_1px_0_0_rgba(255,255,255,0.08),inset_-1px_0_0_rgba(255,255,255,0.08)] sm:min-w-[5.5rem] sm:px-2.5 sm:py-2">
-            <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-amber-300 drop-shadow sm:text-[9px] sm:tracking-[0.16em]">
+          <Panel
+            fillClass="bg-[#0f0f0f]"
+            sheenClass="bg-gradient-to-b from-white/10 to-transparent"
+            className="flex min-w-[3.5rem] flex-col items-center justify-center border-x border-white/10 px-1.5 py-1 sm:min-w-[5rem] sm:px-2 sm:py-1.5"
+          >
+            <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-amber-300 sm:text-[8px]">
               {statusLabel}
-              <span className="text-white/40"> · </span>
+              <span className="text-white/35"> · </span>
               <span className="text-white/85">WK {week}</span>
             </p>
-            <p className="mt-0.5 font-display text-[1.4rem] font-extrabold leading-none tabular-nums text-white drop-shadow sm:text-[2.05rem]">
+            <p className="font-display text-[1.15rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.65rem]">
               {Math.round(favoredPct)}%
             </p>
-            <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-white/55 sm:text-[9px]">
+            <p className="text-[7px] font-semibold uppercase tracking-wide text-white/50 sm:text-[8px]">
               Win prob
             </p>
-          </div>
+          </Panel>
 
-          {/* Home — saturated crimson, lighter on the outer edge */}
-          <div className="relative min-w-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.1)_0%,transparent_35%),linear-gradient(270deg,#ef4444_0%,#dc2626_42%,#991b1b_100%)] px-1.5 py-1.5 sm:px-3 sm:py-2.5">
-            <div className="flex h-full items-center justify-between gap-1.5 sm:gap-2.5">
-              <div className="flex items-center gap-1.5 sm:gap-2.5">
-                <div className="flex min-w-[2.75rem] flex-col items-center sm:min-w-[3.5rem]">
+          <Panel
+            fillClass="bg-[#dc2626]"
+            sheenClass="bg-gradient-to-l from-white/15 via-transparent to-black/20"
+            className="px-1.5 py-1 sm:px-2.5 sm:py-1.5"
+          >
+            <div className="flex h-full items-center justify-between gap-1 sm:gap-2">
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <div className="flex min-w-[2.4rem] flex-col items-center sm:min-w-[2.9rem]">
                   <p
                     className={cn(
-                      "font-display text-[1.55rem] font-extrabold leading-none tabular-nums text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)] sm:text-[2.55rem]",
+                      "font-display text-[1.25rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.85rem]",
                       "transition-transform duration-300 ease-out",
                       scorePulseSide === "right" && "scale-110 text-emerald-200",
                     )}
@@ -237,24 +268,24 @@ export function TlonScorebug({
                   max={Math.max(rightYetToPlayMax, 1)}
                 />
               </div>
-              <div className="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
+              <div className="flex min-w-0 items-center justify-end gap-1 sm:gap-1.5">
                 {rightRecord ? (
-                  <span className="font-display text-[15px] font-extrabold leading-none tabular-nums text-white drop-shadow-sm sm:text-[1.4rem]">
+                  <span className="font-display text-[13px] font-extrabold leading-none tabular-nums text-white sm:text-[1.15rem]">
                     {rightRecord}
                   </span>
                 ) : null}
-                <span className="shrink-0 rounded-md shadow-md shadow-black/30 ring-1 ring-white/35 [&_span]:rounded-md [&_span]:border-white/20 [&_span]:bg-white/10">
+                <span className="shrink-0 rounded ring-1 ring-white/30 [&_span]:h-7 [&_span]:w-7 [&_span]:rounded [&_span]:border-white/15 sm:[&_span]:h-8 sm:[&_span]:w-8">
                   <MatchupTeamAvatar
                     name={rightName}
                     logo={rightLogo ?? null}
                     platform={platform ?? null}
                     cacheKey={`${leagueKey ?? "tlon"}-right`}
-                    size="md"
+                    size="sm"
                   />
                 </span>
               </div>
             </div>
-          </div>
+          </Panel>
         </div>
       </div>
     </div>
