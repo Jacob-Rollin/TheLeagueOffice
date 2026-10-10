@@ -646,11 +646,25 @@ function TlonNetwork() {
         ? "left"
         : "right";
 
+  const standingByRoster = useMemo(() => {
+    const map = new Map<number, { record: string; rank: number }>();
+    (standings?.rows ?? []).forEach((row, i) => {
+      map.set(Number(row.rosterId), {
+        record: formatRecord(row.wins, row.losses, row.ties ?? 0),
+        rank: i + 1,
+      });
+    });
+    return map;
+  }, [standings?.rows]);
+
   const recordFor = (rosterId: number | null | undefined): string | null => {
     if (rosterId == null) return null;
-    const row = standings?.rows?.find((r) => Number(r.rosterId) === Number(rosterId));
-    if (!row) return null;
-    return formatRecord(row.wins, row.losses, row.ties ?? 0);
+    return standingByRoster.get(Number(rosterId))?.record ?? null;
+  };
+
+  const rankFor = (rosterId: number | null | undefined): number | null => {
+    if (rosterId == null) return null;
+    return standingByRoster.get(Number(rosterId))?.rank ?? null;
   };
 
   const rosterPlayerIds = useMemo(() => {
@@ -774,12 +788,14 @@ function TlonNetwork() {
               leftName={leftName}
               leftLogo={pair.leftTeam?.logo ?? pair.leftEntry?.logo ?? null}
               leftRecord={recordFor(pair.leftEntry?.rosterId)}
+              leftRank={rankFor(pair.leftEntry?.rosterId)}
               leftLive={leftLive}
               leftYetToPlay={yetToPlay(leftStarters)}
               leftYetToPlayMax={leftStarters.length}
               rightName={rightName}
               rightLogo={pair.rightTeam?.logo ?? pair.rightEntry?.logo ?? null}
               rightRecord={recordFor(pair.rightEntry?.rosterId)}
+              rightRank={rankFor(pair.rightEntry?.rosterId)}
               rightLive={rightLive}
               rightYetToPlay={yetToPlay(rightStarters)}
               rightYetToPlayMax={rightStarters.length}

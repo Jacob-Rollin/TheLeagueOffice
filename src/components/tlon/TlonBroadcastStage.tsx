@@ -24,12 +24,14 @@ export function TlonBroadcastStage({
   leftName,
   leftLogo,
   leftRecord,
+  leftRank,
   leftLive,
   leftYetToPlay,
   leftYetToPlayMax,
   rightName,
   rightLogo,
   rightRecord,
+  rightRank,
   rightLive,
   rightYetToPlay,
   rightYetToPlayMax,
@@ -52,12 +54,14 @@ export function TlonBroadcastStage({
   leftName: string;
   leftLogo?: string | null;
   leftRecord?: string | null;
+  leftRank?: number | null;
   leftLive: number;
   leftYetToPlay: number;
   leftYetToPlayMax: number;
   rightName: string;
   rightLogo?: string | null;
   rightRecord?: string | null;
+  rightRank?: number | null;
   rightLive: number;
   rightYetToPlay: number;
   rightYetToPlayMax: number;
@@ -184,21 +188,23 @@ export function TlonBroadcastStage({
           />
         </div>
 
-        {/* Scorebug overlay — lower third */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-1.5 pb-1.5 sm:px-4 sm:pb-3">
-          <div className="pointer-events-auto">
+        {/* Scorebug overlay — compact bar, field shows on the sides */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-2 sm:px-6 sm:pb-3">
+          <div className="pointer-events-auto w-full max-w-[30rem]">
             <TlonScorebug
               week={week}
               daypart={daypart}
               leftName={leftName}
               leftLogo={leftLogo ?? null}
               leftRecord={leftRecord ?? null}
+              leftRank={leftRank ?? null}
               leftLive={leftLive}
               leftYetToPlay={leftYetToPlay}
               leftYetToPlayMax={leftYetToPlayMax}
               rightName={rightName}
               rightLogo={rightLogo ?? null}
               rightRecord={rightRecord ?? null}
+              rightRank={rightRank ?? null}
               rightLive={rightLive}
               rightYetToPlay={rightYetToPlay}
               rightYetToPlayMax={rightYetToPlayMax}

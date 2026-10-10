@@ -1,20 +1,28 @@
+import type { ReactNode } from "react";
+
 import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
 import { cn } from "@/lib/utils";
 
-function TimeoutTicks({ count, max = 5 }: { count: number; max?: number }) {
-  const n = Math.max(0, Math.min(max, Math.floor(count)));
-  const slots = Math.min(5, Math.max(1, Math.min(max, 5)));
+/**
+ * Starters yet to play — fantasy analogue of broadcast timeout ticks.
+ * Lit bars = players whose NFL game has not started.
+ * Slot count follows the lineup (typically 9 starters), not a hard 5.
+ */
+function YetToPlayTicks({ count, max = 9 }: { count: number; max?: number }) {
+  const slots = Math.max(1, Math.min(12, Math.floor(max)));
+  const n = Math.max(0, Math.min(slots, Math.floor(count)));
   return (
     <div
-      className="mt-0.5 flex items-center gap-[2px]"
-      aria-label={`${n} starters yet to play`}
+      className="flex flex-col justify-center gap-[1.5px]"
+      aria-label={`${n} of ${slots} starters yet to play`}
+      title={`${n} of ${slots} starters yet to play`}
     >
       {Array.from({ length: slots }, (_, i) => (
         <span
           key={i}
           className={cn(
-            "h-[2px] w-2 rounded-full transition-colors duration-500 sm:w-2.5",
-            i < n ? "bg-white/90" : "bg-white/20",
+            "h-[1.5px] w-2 rounded-[1px] transition-colors duration-500 sm:w-2.5",
+            i < n ? "bg-white" : "bg-white/25",
           )}
         />
       ))}
@@ -27,6 +35,43 @@ function formatScore(n: number): string {
   return (Math.round(n * 10) / 10).toFixed(1);
 }
 
+function rankPrefix(rank: number | null | undefined): string {
+  if (rank == null || !Number.isFinite(rank) || rank < 1) return "";
+  return `${Math.floor(rank)} `;
+}
+
+function LeadMark({ show }: { show: boolean }) {
+  if (!show) return <span className="h-[5px]" aria-hidden />;
+  return (
+    <span
+      className="inline-block border-x-[3.5px] border-b-[5px] border-x-transparent border-b-white"
+      aria-label="Leading"
+    />
+  );
+}
+
+/** Opaque panel: solid fill + optional sheen overlay (never replaces the fill). */
+function Panel({
+  className,
+  fillClass,
+  sheenClass,
+  children,
+}: {
+  className?: string;
+  fillClass: string;
+  sheenClass?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cn("relative min-w-0", fillClass, className)}>
+      {sheenClass ? (
+        <div aria-hidden className={cn("pointer-events-none absolute inset-0", sheenClass)} />
+      ) : null}
+      <div className="relative z-[1] h-full">{children}</div>
+    </div>
+  );
+}
+
 export type TlonDaypart = "PRE" | "LIVE" | "FINAL";
 
 export function TlonScorebug({
@@ -35,12 +80,14 @@ export function TlonScorebug({
   leftName,
   leftLogo,
   leftRecord,
+  leftRank,
   leftLive,
   leftYetToPlay,
   leftYetToPlayMax,
   rightName,
   rightLogo,
   rightRecord,
+  rightRank,
   rightLive,
   rightYetToPlay,
   rightYetToPlayMax,
@@ -56,12 +103,14 @@ export function TlonScorebug({
   leftName: string;
   leftLogo?: string | null;
   leftRecord?: string | null;
+  leftRank?: number | null;
   leftLive: number;
   leftYetToPlay: number;
   leftYetToPlayMax: number;
   rightName: string;
   rightLogo?: string | null;
   rightRecord?: string | null;
+  rightRank?: number | null;
   rightLive: number;
   rightYetToPlay: number;
   rightYetToPlayMax: number;
@@ -77,140 +126,166 @@ export function TlonScorebug({
   const statusLabel =
     daypart === "LIVE" ? "LIVE" : daypart === "FINAL" ? "FINAL" : "PRE";
 
-  return (
-    <div className="relative mx-auto w-full max-w-5xl pt-5 sm:pt-6">
-      {/*
-        TLN notch sits above the bar; a matching fill strip covers only the
-        shared border under the tab so it reads as one piece (not stacked).
-      */}
-      <div className="absolute left-1/2 top-0 z-20 -translate-x-1/2">
-        <div className="relative flex items-center gap-1.5 rounded-t-md border border-b-0 border-white/20 bg-[#09090b] px-2.5 py-0.5 sm:gap-2 sm:px-4 sm:py-1">
-          <span className="display-title text-[11px] tracking-[0.18em] text-white sm:text-[13px] sm:tracking-[0.2em]">
-            TLN
-          </span>
-          {daypart === "LIVE" ? (
-            <span className="relative flex size-1.5">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
-              <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
-            </span>
-          ) : null}
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] translate-y-full bg-[#09090b]"
-          />
-        </div>
-      </div>
+  const leftTitle = `${rankPrefix(leftRank)}${leftName}`.trim();
+  const rightTitle = `${rankPrefix(rightRank)}${rightName}`.trim();
 
-      <div
-        className={cn(
-          "relative z-10 overflow-hidden rounded-lg border border-white/20 shadow-2xl shadow-black/50 sm:rounded-xl",
-          "bg-[#09090b]",
-          "bg-[linear-gradient(90deg,#18181b_0%,#09090b_50%,#18181b_100%)]",
-        )}
-      >
-        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch">
-          {/* Away */}
-          <div className="relative min-w-0 bg-[linear-gradient(135deg,#27272a_0%,#18181b_55%,#09090b_100%)] px-1.5 py-1.5 sm:px-4 sm:py-2.5">
-            {leadingSide === "left" ? (
-              <span
-                className="absolute left-1/2 top-0 -translate-x-1/2 text-[8px] text-white drop-shadow sm:top-0.5 sm:text-[9px]"
-                aria-label="Leading"
-              >
-                ▼
-              </span>
-            ) : null}
+  return (
+    <div className="relative mx-auto w-[min(100%,22rem)] sm:w-[min(100%,30rem)]">
+      <div className="relative overflow-hidden rounded-sm shadow-[0_6px_20px_rgba(0,0,0,0.55)] ring-1 ring-white/25 sm:rounded">
+        {/* Top strip — slim name + TLN row */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch text-white">
+          <Panel
+            fillClass="bg-[#1e40af]"
+            sheenClass="bg-gradient-to-b from-black/25 to-transparent"
+            className="px-2 py-0.5 sm:px-2.5 sm:py-1"
+          >
             <p
-              className="truncate font-display text-[9px] font-bold uppercase tracking-wide text-white sm:text-xs sm:tracking-wider"
-              title={leftName}
+              className="truncate font-display text-[9px] font-bold uppercase tracking-[0.06em] sm:text-[11px] sm:tracking-[0.1em]"
+              title={leftTitle}
             >
-              {leftName}
+              {leftTitle}
             </p>
-            <div className="mt-0.5 flex items-end justify-between gap-1 sm:mt-1 sm:gap-2">
+          </Panel>
+
+          <Panel
+            fillClass="bg-[#111111]"
+            sheenClass="bg-gradient-to-b from-white/10 to-transparent"
+            className="flex min-w-[3.5rem] items-center justify-center gap-1 px-2 py-0.5 sm:min-w-[4.75rem] sm:gap-1.5 sm:px-2.5 sm:py-1"
+          >
+            <span className="display-title text-[10px] tracking-[0.18em] sm:text-[12px] sm:tracking-[0.2em]">
+              TLN
+            </span>
+            {daypart === "LIVE" ? (
+              <span className="relative flex size-1.5 shrink-0">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
+              </span>
+            ) : (
+              <span className="text-[8px] font-bold uppercase tracking-wider text-white/55">
+                {statusLabel}
+              </span>
+            )}
+          </Panel>
+
+          <Panel
+            fillClass="bg-[#b91c1c]"
+            sheenClass="bg-gradient-to-b from-black/25 to-transparent"
+            className="px-2 py-0.5 text-right sm:px-2.5 sm:py-1"
+          >
+            <p
+              className="truncate font-display text-[9px] font-bold uppercase tracking-[0.06em] sm:text-[11px] sm:tracking-[0.1em]"
+              title={rightTitle}
+            >
+              {rightTitle}
+            </p>
+          </Panel>
+        </div>
+
+        {/* Main row — compact logos / records / ticks / scores */}
+        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch">
+          <Panel
+            fillClass="bg-[#1d4ed8]"
+            sheenClass="bg-gradient-to-r from-white/15 via-transparent to-black/20"
+            className="px-1.5 py-1 sm:px-2.5 sm:py-1.5"
+          >
+            <div className="flex h-full items-center justify-between gap-1 sm:gap-2">
               <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
-                <MatchupTeamAvatar
-                  name={leftName}
-                  logo={leftLogo ?? null}
-                  platform={platform ?? null}
-                  cacheKey={`${leagueKey ?? "tlon"}-left`}
-                  size="sm"
-                />
+                <span className="shrink-0 rounded ring-1 ring-white/30 [&_span]:h-7 [&_span]:w-7 [&_span]:rounded [&_span]:border-white/15 sm:[&_span]:h-8 sm:[&_span]:w-8">
+                  <MatchupTeamAvatar
+                    name={leftName}
+                    logo={leftLogo ?? null}
+                    platform={platform ?? null}
+                    cacheKey={`${leagueKey ?? "tlon"}-left`}
+                    size="sm"
+                  />
+                </span>
                 {leftRecord ? (
-                  <span className="hidden truncate text-[10px] text-white/65 sm:inline">{leftRecord}</span>
+                  <span className="font-display text-[13px] font-extrabold leading-none tabular-nums text-white sm:text-[1.15rem]">
+                    {leftRecord}
+                  </span>
                 ) : null}
               </div>
-              <div className="flex flex-col items-end">
-                <p
-                  className={cn(
-                    "font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-white sm:text-[2.35rem]",
-                    "transition-transform duration-300 ease-out",
-                    scorePulseSide === "left" && "scale-110 text-emerald-300",
-                  )}
-                >
-                  {formatScore(leftLive)}
-                </p>
-                <TimeoutTicks count={leftYetToPlay} max={Math.max(leftYetToPlayMax, 1)} />
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <YetToPlayTicks
+                  count={leftYetToPlay}
+                  max={Math.max(leftYetToPlayMax, 1)}
+                />
+                <div className="flex min-w-[2.4rem] flex-col items-center sm:min-w-[2.9rem]">
+                  <p
+                    className={cn(
+                      "font-display text-[1.25rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.85rem]",
+                      "transition-transform duration-300 ease-out",
+                      scorePulseSide === "left" && "scale-110 text-emerald-200",
+                    )}
+                  >
+                    {formatScore(leftLive)}
+                  </p>
+                  <LeadMark show={leadingSide === "left"} />
+                </div>
               </div>
             </div>
-          </div>
+          </Panel>
 
-          {/* Center — WK label avoids “LIVE 5” reading as five live players */}
-          <div className="flex min-w-[3.75rem] flex-col items-center justify-center border-x border-white/10 bg-black/80 px-1.5 py-1.5 sm:min-w-[6.5rem] sm:px-3 sm:py-2">
-            <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-amber-400 sm:text-[9px] sm:tracking-[0.14em]">
+          <Panel
+            fillClass="bg-[#0f0f0f]"
+            sheenClass="bg-gradient-to-b from-white/10 to-transparent"
+            className="flex min-w-[3.5rem] flex-col items-center justify-center border-x border-white/10 px-1.5 py-1 sm:min-w-[5rem] sm:px-2 sm:py-1.5"
+          >
+            <p className="text-[7px] font-bold uppercase tracking-[0.12em] text-amber-300 sm:text-[8px]">
               {statusLabel}
               <span className="text-white/35"> · </span>
-              WK {week}
+              <span className="text-white/85">WK {week}</span>
             </p>
-            <p className="font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-white sm:text-[2rem]">
+            <p className="font-display text-[1.15rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.65rem]">
               {Math.round(favoredPct)}%
             </p>
-            <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-wide text-white/45 sm:text-[9px]">
+            <p className="text-[7px] font-semibold uppercase tracking-wide text-white/50 sm:text-[8px]">
               Win prob
             </p>
-          </div>
+          </Panel>
 
-          {/* Home */}
-          <div className="relative min-w-0 bg-[linear-gradient(225deg,#7f1d1d_0%,#1e3a5f_48%,#0f172a_100%)] px-1.5 py-1.5 sm:px-4 sm:py-2.5">
-            {leadingSide === "right" ? (
-              <span
-                className="absolute left-1/2 top-0 -translate-x-1/2 text-[8px] text-white drop-shadow sm:top-0.5 sm:text-[9px]"
-                aria-label="Leading"
-              >
-                ▼
-              </span>
-            ) : null}
-            <p
-              className="truncate text-right font-display text-[9px] font-bold uppercase tracking-wide text-white sm:text-xs sm:tracking-wider"
-              title={rightName}
-            >
-              {rightName}
-            </p>
-            <div className="mt-0.5 flex items-end justify-between gap-1 sm:mt-1 sm:gap-2">
-              <div className="flex flex-col items-start">
-                <p
-                  className={cn(
-                    "font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-white sm:text-[2.35rem]",
-                    "transition-transform duration-300 ease-out",
-                    scorePulseSide === "right" && "scale-110 text-emerald-300",
-                  )}
-                >
-                  {formatScore(rightLive)}
-                </p>
-                <TimeoutTicks count={rightYetToPlay} max={Math.max(rightYetToPlayMax, 1)} />
+          <Panel
+            fillClass="bg-[#dc2626]"
+            sheenClass="bg-gradient-to-l from-white/15 via-transparent to-black/20"
+            className="px-1.5 py-1 sm:px-2.5 sm:py-1.5"
+          >
+            <div className="flex h-full items-center justify-between gap-1 sm:gap-2">
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <div className="flex min-w-[2.4rem] flex-col items-center sm:min-w-[2.9rem]">
+                  <p
+                    className={cn(
+                      "font-display text-[1.25rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.85rem]",
+                      "transition-transform duration-300 ease-out",
+                      scorePulseSide === "right" && "scale-110 text-emerald-200",
+                    )}
+                  >
+                    {formatScore(rightLive)}
+                  </p>
+                  <LeadMark show={leadingSide === "right"} />
+                </div>
+                <YetToPlayTicks
+                  count={rightYetToPlay}
+                  max={Math.max(rightYetToPlayMax, 1)}
+                />
               </div>
               <div className="flex min-w-0 items-center justify-end gap-1 sm:gap-1.5">
                 {rightRecord ? (
-                  <span className="hidden truncate text-[10px] text-white/65 sm:inline">{rightRecord}</span>
+                  <span className="font-display text-[13px] font-extrabold leading-none tabular-nums text-white sm:text-[1.15rem]">
+                    {rightRecord}
+                  </span>
                 ) : null}
-                <MatchupTeamAvatar
-                  name={rightName}
-                  logo={rightLogo ?? null}
-                  platform={platform ?? null}
-                  cacheKey={`${leagueKey ?? "tlon"}-right`}
-                  size="sm"
-                />
+                <span className="shrink-0 rounded ring-1 ring-white/30 [&_span]:h-7 [&_span]:w-7 [&_span]:rounded [&_span]:border-white/15 sm:[&_span]:h-8 sm:[&_span]:w-8">
+                  <MatchupTeamAvatar
+                    name={rightName}
+                    logo={rightLogo ?? null}
+                    platform={platform ?? null}
+                    cacheKey={`${leagueKey ?? "tlon"}-right`}
+                    size="sm"
+                  />
+                </span>
               </div>
             </div>
-          </div>
+          </Panel>
         </div>
       </div>
     </div>
