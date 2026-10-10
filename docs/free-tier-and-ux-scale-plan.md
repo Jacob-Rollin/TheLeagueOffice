@@ -42,7 +42,7 @@ GitHub Actions → APP_URL + CRON_SECRET → /api/cron/*
 
 | Platform | If you don’t use the site for ~7 days | What we do |
 |---|---|---|
-| **Supabase Free** | Can **auto-pause** after low Postgres activity over ~7 days (warning email first). Auth/health pings do **not** count — needs a real DB query. | Daily Actions → `/api/cron/supabase-keepalive` (`profiles` SELECT). League delta sync also touches Supabase when it runs, but is not enough alone off-season. |
+| **Supabase Free** | Can **auto-pause** after low Postgres activity over ~7 days (warning email first). Auth/health pings do **not** count — needs a real DB query. | Twice-weekly Actions (Mon/Thu) → `/api/cron/supabase-keepalive` (`profiles` SELECT). League delta sync also touches Supabase when it runs, but is not enough alone off-season. |
 | **Vercel Hobby** | No 7-day sleep. Can pause for **usage limits** / policy, not idle days. | Existing Actions crons keep the deployment exercised. |
 | **TiDB Starter** | No inactivity pause — only RU / storage quotas. | N/A for idle days. |
 | **GitHub Actions / snap-cdn** | No project pause for idle. | Scheduled workflows already run. |

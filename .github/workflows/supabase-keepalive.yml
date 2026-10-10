@@ -8,8 +8,9 @@ name: Supabase Keepalive
 
 on:
   schedule:
-    # Daily mid-morning UTC — enough to reset the 7-day inactivity window.
-    - cron: "10 12 * * *"
+    # Twice weekly (Mon + Thu 12:10 UTC) — enough activity inside Supabase’s
+    # ~7-day free-plan inactivity window without a daily Fluid/Actions ping.
+    - cron: "10 12 * * 1,4"
   workflow_dispatch:
 
 permissions:
