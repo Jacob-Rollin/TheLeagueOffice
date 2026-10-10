@@ -188,9 +188,9 @@ export function TlonBroadcastStage({
           />
         </div>
 
-        {/* Scorebug overlay — lower third */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-1.5 pb-1.5 sm:px-4 sm:pb-3">
-          <div className="pointer-events-auto">
+        {/* Scorebug overlay — compact bar, field shows on the sides */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-2 sm:px-6 sm:pb-3">
+          <div className="pointer-events-auto w-full max-w-[32rem]">
             <TlonScorebug
               week={week}
               daypart={daypart}

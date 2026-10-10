@@ -100,7 +100,8 @@ export function TlonScorebug({
   const rightTitle = `${rankPrefix(rightRank)}${rightName}`.trim();
 
   return (
-    <div className="relative mx-auto w-full max-w-5xl">
+    /* Compact centered bug — leaves field visible on both sides */
+    <div className="relative mx-auto w-[min(100%,22.5rem)] sm:w-[min(100%,32rem)]">
       <div
         className={cn(
           "overflow-hidden rounded-md border border-white/15 shadow-2xl shadow-black/50 sm:rounded-lg",
