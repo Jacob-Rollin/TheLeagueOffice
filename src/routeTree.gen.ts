@@ -29,6 +29,7 @@ import { Route as SeasonProjectionsRouteImport } from './routes/season-projectio
 import { Route as SosAnalysisRouteImport } from './routes/sos-analysis'
 import { Route as StandingsRouteImport } from './routes/standings'
 import { Route as TheWireRouteImport } from './routes/the-wire'
+import { Route as TlonRouteImport } from './routes/tlon'
 import { Route as TopAvailableRouteImport } from './routes/top-available'
 import { Route as TradeRouteImport } from './routes/trade'
 import { Route as TradeDeskRouteImport } from './routes/trade-desk'
@@ -199,6 +200,11 @@ const StandingsRoute = StandingsRouteImport.update({
 const TheWireRoute = TheWireRouteImport.update({
   id: '/the-wire',
   path: '/the-wire',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TlonRoute = TlonRouteImport.update({
+  id: '/tlon',
+  path: '/tlon',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TopAvailableRoute = TopAvailableRouteImport.update({
@@ -585,6 +591,7 @@ export interface FileRoutesByFullPath {
   '/sos-analysis': typeof SosAnalysisRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
+  '/tlon': typeof TlonRoute
   '/top-available': typeof TopAvailableRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -676,6 +683,7 @@ export interface FileRoutesByTo {
   '/sos-analysis': typeof SosAnalysisRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
+  '/tlon': typeof TlonRoute
   '/top-available': typeof TopAvailableRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -768,6 +776,7 @@ export interface FileRoutesById {
   '/sos-analysis': typeof SosAnalysisRoute
   '/standings': typeof StandingsRoute
   '/the-wire': typeof TheWireRoute
+  '/tlon': typeof TlonRoute
   '/top-available': typeof TopAvailableRoute
   '/trade': typeof TradeRoute
   '/trade-desk': typeof TradeDeskRoute
@@ -863,6 +872,7 @@ export interface FileRouteTypes {
     | '/sos-analysis'
     | '/standings'
     | '/the-wire'
+    | '/tlon'
     | '/top-available'
     | '/trade'
     | '/trade-desk'
@@ -954,6 +964,7 @@ export interface FileRouteTypes {
     | '/sos-analysis'
     | '/standings'
     | '/the-wire'
+    | '/tlon'
     | '/top-available'
     | '/trade'
     | '/trade-desk'
@@ -1045,6 +1056,7 @@ export interface FileRouteTypes {
     | '/sos-analysis'
     | '/standings'
     | '/the-wire'
+    | '/tlon'
     | '/top-available'
     | '/trade'
     | '/trade-desk'
@@ -1139,6 +1151,7 @@ export interface RootRouteChildren {
   SosAnalysisRoute: typeof SosAnalysisRoute
   StandingsRoute: typeof StandingsRoute
   TheWireRoute: typeof TheWireRoute
+  TlonRoute: typeof TlonRoute
   TopAvailableRoute: typeof TopAvailableRoute
   TradeRoute: typeof TradeRoute
   TradeDeskRoute: typeof TradeDeskRoute
@@ -1323,6 +1336,13 @@ declare module '@tanstack/react-router' {
       path: '/the-wire'
       fullPath: '/the-wire'
       preLoaderRoute: typeof TheWireRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tlon': {
+      id: '/tlon'
+      path: '/tlon'
+      fullPath: '/tlon'
+      preLoaderRoute: typeof TlonRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/top-available': {
@@ -1951,6 +1971,7 @@ const rootRouteChildren: RootRouteChildren = {
   SosAnalysisRoute: SosAnalysisRoute,
   StandingsRoute: StandingsRoute,
   TheWireRoute: TheWireRoute,
+  TlonRoute: TlonRoute,
   TopAvailableRoute: TopAvailableRoute,
   TradeRoute: TradeRoute,
   TradeDeskRoute: TradeDeskRoute,
@@ -1997,13 +2018,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
