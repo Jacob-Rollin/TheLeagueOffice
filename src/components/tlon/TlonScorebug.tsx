@@ -3,13 +3,19 @@ import { cn } from "@/lib/utils";
 
 function TimeoutTicks({ count, max = 5 }: { count: number; max?: number }) {
   const n = Math.max(0, Math.min(max, Math.floor(count)));
-  const slots = Math.min(5, Math.max(max, 1));
+  const slots = Math.min(5, Math.max(1, Math.min(max, 5)));
   return (
-    <div className="mt-0.5 flex items-center justify-center gap-[3px]" aria-label={`${n} starters yet to play`}>
+    <div
+      className="mt-0.5 flex items-center gap-[2px]"
+      aria-label={`${n} starters yet to play`}
+    >
       {Array.from({ length: slots }, (_, i) => (
         <span
           key={i}
-          className={cn("h-[2px] w-2.5 rounded-full transition-colors duration-500", i < n ? "bg-white/90" : "bg-white/20")}
+          className={cn(
+            "h-[2px] w-2 rounded-full transition-colors duration-500 sm:w-2.5",
+            i < n ? "bg-white/90" : "bg-white/20",
+          )}
         />
       ))}
     </div>
@@ -19,12 +25,6 @@ function TimeoutTicks({ count, max = 5 }: { count: number; max?: number }) {
 function formatScore(n: number): string {
   if (!Number.isFinite(n)) return "0.0";
   return (Math.round(n * 10) / 10).toFixed(1);
-}
-
-function shortName(name: string): string {
-  const cleaned = name.trim().toUpperCase();
-  if (cleaned.length <= 14) return cleaned;
-  return `${cleaned.slice(0, 13)}…`;
 }
 
 export type TlonDaypart = "PRE" | "LIVE" | "FINAL";
@@ -70,17 +70,19 @@ export function TlonScorebug({
   platform?: string | null;
   leagueKey?: string | null;
   leadingSide: "left" | "right" | "tie";
-  /** Briefly pulse the score numeral after a feed hit. */
   scorePulseSide?: "left" | "right" | null;
 }) {
   const favored = winPctLeft >= winPctRight ? "left" : "right";
   const favoredPct = favored === "left" ? winPctLeft : winPctRight;
+  const statusLabel =
+    daypart === "LIVE" ? "LIVE" : daypart === "FINAL" ? "FINAL" : "PRE";
 
   return (
-    <div className="relative mx-auto w-full max-w-5xl pt-3">
-      {/* Glossy network tab — logo only + live dot */}
-      <div className="absolute left-1/2 top-0 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-t-lg border border-b-0 border-white/25 bg-zinc-950 px-4 py-1 shadow-lg shadow-black/50">
-        <span className="display-title text-[13px] tracking-[0.2em] text-white">TLN</span>
+    <div className="relative mx-auto w-full max-w-5xl pt-2.5 sm:pt-3">
+      <div className="absolute left-1/2 top-0 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-t-md border border-b-0 border-white/25 bg-zinc-950 px-2.5 py-0.5 shadow-lg shadow-black/50 sm:gap-2 sm:px-4 sm:py-1">
+        <span className="display-title text-[11px] tracking-[0.18em] text-white sm:text-[13px] sm:tracking-[0.2em]">
+          TLN
+        </span>
         {daypart === "LIVE" ? (
           <span className="relative flex size-1.5">
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
@@ -91,25 +93,30 @@ export function TlonScorebug({
 
       <div
         className={cn(
-          "overflow-hidden rounded-xl border border-white/20 shadow-2xl shadow-black/50",
+          "overflow-hidden rounded-lg border border-white/20 shadow-2xl shadow-black/50 sm:rounded-xl",
           "bg-zinc-950/85 backdrop-blur-md",
-          /* top specular */
           "bg-[linear-gradient(180deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0)_42%),linear-gradient(90deg,#18181b_0%,#09090b_50%,#18181b_100%)]",
         )}
       >
         <div className="grid grid-cols-[1fr_auto_1fr] items-stretch">
-          {/* Away — charcoal */}
-          <div className="relative bg-[linear-gradient(135deg,#27272a_0%,#18181b_55%,#09090b_100%)] px-3 py-2.5 sm:px-4">
+          {/* Away */}
+          <div className="relative min-w-0 bg-[linear-gradient(135deg,#27272a_0%,#18181b_55%,#09090b_100%)] px-1.5 py-1.5 sm:px-4 sm:py-2.5">
             {leadingSide === "left" ? (
-              <span className="absolute left-1/2 top-0.5 -translate-x-1/2 text-[9px] text-white drop-shadow" aria-label="Leading">
+              <span
+                className="absolute left-1/2 top-0 -translate-x-1/2 text-[8px] text-white drop-shadow sm:top-0.5 sm:text-[9px]"
+                aria-label="Leading"
+              >
                 ▼
               </span>
             ) : null}
-            <p className="truncate font-display text-[11px] font-bold uppercase tracking-wider text-white sm:text-xs">
-              {shortName(leftName)}
+            <p
+              className="truncate font-display text-[9px] font-bold uppercase tracking-wide text-white sm:text-xs sm:tracking-wider"
+              title={leftName}
+            >
+              {leftName}
             </p>
-            <div className="mt-1 flex items-end justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-1.5">
+            <div className="mt-0.5 flex items-end justify-between gap-1 sm:mt-1 sm:gap-2">
+              <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
                 <MatchupTeamAvatar
                   name={leftName}
                   logo={leftLogo ?? null}
@@ -117,12 +124,14 @@ export function TlonScorebug({
                   cacheKey={`${leagueKey ?? "tlon"}-left`}
                   size="sm"
                 />
-                {leftRecord ? <span className="truncate text-[10px] text-white/65">{leftRecord}</span> : null}
+                {leftRecord ? (
+                  <span className="hidden truncate text-[10px] text-white/65 sm:inline">{leftRecord}</span>
+                ) : null}
               </div>
-              <div className="text-right">
+              <div className="flex flex-col items-end">
                 <p
                   className={cn(
-                    "font-display text-[2rem] font-extrabold leading-none tabular-nums text-white sm:text-[2.35rem]",
+                    "font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-white sm:text-[2.35rem]",
                     "transition-transform duration-300 ease-out",
                     scorePulseSide === "left" && "scale-110 text-emerald-300",
                   )}
@@ -134,32 +143,42 @@ export function TlonScorebug({
             </div>
           </div>
 
-          {/* Center hub — win% only */}
-          <div className="flex min-w-[5.5rem] flex-col items-center justify-center border-x border-white/10 bg-black/80 px-2.5 py-2 sm:min-w-[6.5rem] sm:px-3">
-            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-amber-400">
-              {daypart === "LIVE" ? "Live" : daypart === "FINAL" ? "Final" : "Week"} {week}
+          {/* Center — WK label avoids “LIVE 5” reading as five live players */}
+          <div className="flex min-w-[3.75rem] flex-col items-center justify-center border-x border-white/10 bg-black/80 px-1.5 py-1.5 sm:min-w-[6.5rem] sm:px-3 sm:py-2">
+            <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-amber-400 sm:text-[9px] sm:tracking-[0.14em]">
+              {statusLabel}
+              <span className="text-white/35"> · </span>
+              WK {week}
             </p>
-            <p className="font-display text-[1.75rem] font-extrabold leading-none tabular-nums text-white sm:text-[2rem]">
+            <p className="font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-white sm:text-[2rem]">
               {Math.round(favoredPct)}%
             </p>
-            <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/45">Win prob</p>
+            <p className="mt-0.5 text-[8px] font-semibold uppercase tracking-wide text-white/45 sm:text-[9px]">
+              Win prob
+            </p>
           </div>
 
-          {/* Home — navy / red brand */}
-          <div className="relative bg-[linear-gradient(225deg,#7f1d1d_0%,#1e3a5f_48%,#0f172a_100%)] px-3 py-2.5 sm:px-4">
+          {/* Home */}
+          <div className="relative min-w-0 bg-[linear-gradient(225deg,#7f1d1d_0%,#1e3a5f_48%,#0f172a_100%)] px-1.5 py-1.5 sm:px-4 sm:py-2.5">
             {leadingSide === "right" ? (
-              <span className="absolute left-1/2 top-0.5 -translate-x-1/2 text-[9px] text-white drop-shadow" aria-label="Leading">
+              <span
+                className="absolute left-1/2 top-0 -translate-x-1/2 text-[8px] text-white drop-shadow sm:top-0.5 sm:text-[9px]"
+                aria-label="Leading"
+              >
                 ▼
               </span>
             ) : null}
-            <p className="truncate text-right font-display text-[11px] font-bold uppercase tracking-wider text-white sm:text-xs">
-              {shortName(rightName)}
+            <p
+              className="truncate text-right font-display text-[9px] font-bold uppercase tracking-wide text-white sm:text-xs sm:tracking-wider"
+              title={rightName}
+            >
+              {rightName}
             </p>
-            <div className="mt-1 flex items-end justify-between gap-2">
-              <div className="text-left">
+            <div className="mt-0.5 flex items-end justify-between gap-1 sm:mt-1 sm:gap-2">
+              <div className="flex flex-col items-start">
                 <p
                   className={cn(
-                    "font-display text-[2rem] font-extrabold leading-none tabular-nums text-white sm:text-[2.35rem]",
+                    "font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-white sm:text-[2.35rem]",
                     "transition-transform duration-300 ease-out",
                     scorePulseSide === "right" && "scale-110 text-emerald-300",
                   )}
@@ -168,8 +187,10 @@ export function TlonScorebug({
                 </p>
                 <TimeoutTicks count={rightYetToPlay} max={Math.max(rightYetToPlayMax, 1)} />
               </div>
-              <div className="flex min-w-0 items-center justify-end gap-1.5">
-                {rightRecord ? <span className="truncate text-[10px] text-white/65">{rightRecord}</span> : null}
+              <div className="flex min-w-0 items-center justify-end gap-1 sm:gap-1.5">
+                {rightRecord ? (
+                  <span className="hidden truncate text-[10px] text-white/65 sm:inline">{rightRecord}</span>
+                ) : null}
                 <MatchupTeamAvatar
                   name={rightName}
                   logo={rightLogo ?? null}

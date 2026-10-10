@@ -12,9 +12,12 @@ import { cn } from "@/lib/utils";
 export function TlonField({
   arc,
   onArcDone,
+  fillHeight = false,
 }: {
   arc: TlonPlayArc | null;
   onArcDone?: (id: string) => void;
+  /** Stretch to fill a fullscreen stage instead of a fixed aspect box. */
+  fillHeight?: boolean;
 }) {
   const [phase, setPhase] = useState<"idle" | "run" | "hold">("idle");
   const [active, setActive] = useState<TlonPlayArc | null>(null);
@@ -46,7 +49,14 @@ export function TlonField({
   const show = Boolean(active);
 
   return (
-    <div className="relative aspect-[2.2/1] w-full overflow-hidden rounded-t-2xl sm:aspect-[2.6/1]">
+    <div
+      className={cn(
+        "relative w-full overflow-hidden rounded-t-2xl",
+        fillHeight
+          ? "h-full min-h-[12rem]"
+          : "aspect-[1.65/1] min-h-[12.5rem] sm:aspect-[2.4/1] sm:min-h-0",
+      )}
+    >
       <div
         className="absolute inset-0"
         style={{
