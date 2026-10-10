@@ -80,30 +80,29 @@ export function TlonScorebug({
   return (
     <div className="relative mx-auto w-full max-w-5xl">
       {/*
-        Tab sits on the scorebug with a 1px downward overlap so subpixel
-        rounding cannot leave a hairline gap. Matching zinc-950 border
-        (not white/25) keeps the seam invisible against the bar.
+        Tab + bar share one border/background. Tab uses extra bottom padding and
+        a negative margin so it paints over the bar’s top edge (no hairline seam).
       */}
-      <div
-        className="absolute bottom-full left-1/2 z-20 flex items-center gap-1.5 rounded-t-md border border-b-0 border-zinc-950 bg-zinc-950 px-2.5 py-0.5 shadow-lg shadow-black/50 sm:gap-2 sm:px-4 sm:py-1"
-        style={{ transform: "translate(-50%, 1px)" }}
-      >
-        <span className="display-title text-[11px] tracking-[0.18em] text-white sm:text-[13px] sm:tracking-[0.2em]">
-          TLN
-        </span>
-        {daypart === "LIVE" ? (
-          <span className="relative flex size-1.5">
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
-            <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
+      <div className="flex justify-center">
+        <div className="relative z-20 -mb-1 flex items-center gap-1.5 rounded-t-md border border-b-0 border-white/20 bg-zinc-950 px-2.5 pb-1.5 pt-0.5 sm:-mb-1.5 sm:gap-2 sm:px-4 sm:pb-2 sm:pt-1">
+          <span className="display-title text-[11px] tracking-[0.18em] text-white sm:text-[13px] sm:tracking-[0.2em]">
+            TLN
           </span>
-        ) : null}
+          {daypart === "LIVE" ? (
+            <span className="relative flex size-1.5">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
+              <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div
         className={cn(
-          "overflow-hidden rounded-lg border border-white/20 shadow-2xl shadow-black/50 sm:rounded-xl",
+          "relative z-10 overflow-hidden rounded-lg border border-white/20 shadow-2xl shadow-black/50 sm:rounded-xl",
+          /* Solid zinc-950 matches the TLN tab — no lighter top highlight (that read as a seam) */
           "bg-zinc-950",
-          "bg-[linear-gradient(180deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0)_42%),linear-gradient(90deg,#18181b_0%,#09090b_50%,#18181b_100%)]",
+          "bg-[linear-gradient(90deg,#18181b_0%,#09090b_50%,#18181b_100%)]",
         )}
       >
         <div className="grid grid-cols-[1fr_auto_1fr] items-stretch">

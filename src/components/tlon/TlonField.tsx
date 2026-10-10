@@ -106,6 +106,24 @@ export function TlonField({
         preserveAspectRatio="none"
         aria-hidden
       >
+        {/* Alternating 5-yard grass bands (playable field only) */}
+        {Array.from({ length: 20 }, (_, i) => {
+          const yd0 = i * 5;
+          const x = yardToPct(yd0);
+          const w = yardToPct(yd0 + 5) - x;
+          return (
+            <rect
+              key={`band-${yd0}`}
+              x={x}
+              y="0"
+              width={w}
+              height="50"
+              fill={i % 2 === 0 ? "#15803d" : "#16a34a"}
+              opacity="0.55"
+            />
+          );
+        })}
+
         <rect x="0" y="0" width={EZ} height="50" fill="#1e3a5f" opacity="0.92" />
         <rect x={100 - EZ} y="0" width={EZ} height="50" fill="#7f1d1d" opacity="0.92" />
 
@@ -139,8 +157,8 @@ export function TlonField({
               x2={xPos}
               y2="50"
               stroke="white"
-              strokeWidth={yd === 50 ? 0.45 : 0.2}
-              opacity={yd === 50 ? 0.6 : 0.38}
+              strokeWidth={yd === 50 ? 0.45 : 0.22}
+              opacity={yd === 50 ? 0.7 : 0.45}
             />
           );
         })}
@@ -176,43 +194,46 @@ export function TlonField({
           })}
       </svg>
 
-      {/* Yard numbers flush on the major lines */}
-      <div className="pointer-events-none absolute inset-0 top-[8%] sm:top-[10%]">
-        {MAJOR_YARDS.map((yd) => (
-          <span
-            key={`top-${yd}`}
-            className={cn(
-              "absolute -translate-x-1/2 font-display text-[9px] font-bold tabular-nums sm:text-[11px]",
-              yd === 50 ? "text-white/75" : "text-white/55",
-            )}
-            style={{ left: `${yardToPct(yd)}%` }}
-          >
-            {yardLabel(yd)}
-          </span>
-        ))}
-      </div>
+      {/*
+        Yard numbers as HTML (SVG text would stretch with preserveAspectRatio=none).
+        left% uses the same yardToPct as the SVG lines so digits sit on the line.
+      */}
       <div className="pointer-events-none absolute inset-0">
-        {MAJOR_YARDS.map((yd) => (
-          <span
-            key={`bot-${yd}`}
-            className={cn(
-              "absolute bottom-[18%] -translate-x-1/2 font-display text-[9px] font-bold tabular-nums sm:bottom-[16%] sm:text-[11px]",
-              yd === 50 ? "text-white/55" : "text-white/40",
-            )}
-            style={{ left: `${yardToPct(yd)}%` }}
-          >
-            {yardLabel(yd)}
-          </span>
-        ))}
+        {MAJOR_YARDS.map((yd) => {
+          const left = `${yardToPct(yd)}%`;
+          const label = yardLabel(yd);
+          return (
+            <span key={`top-${yd}`}>
+              <span
+                className={cn(
+                  "absolute top-[7%] -translate-x-1/2 font-display text-[9px] font-bold leading-none tabular-nums sm:top-[9%] sm:text-[11px]",
+                  yd === 50 ? "text-white/80" : "text-white/60",
+                )}
+                style={{ left }}
+              >
+                {label}
+              </span>
+              <span
+                className={cn(
+                  "absolute bottom-[17%] -translate-x-1/2 font-display text-[9px] font-bold leading-none tabular-nums sm:bottom-[15%] sm:text-[11px]",
+                  yd === 50 ? "text-white/55" : "text-white/40",
+                )}
+                style={{ left }}
+              >
+                {label}
+              </span>
+            </span>
+          );
+        })}
       </div>
 
-      {/* Midfield logo — 512×512 app icon (sharper than favicon / wide wordmark) */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1] flex h-[22%] min-h-[3.25rem] w-[22%] min-w-[3.25rem] max-h-[5.75rem] max-w-[5.75rem] -translate-x-1/2 -translate-y-1/2 items-center justify-center sm:h-[16%] sm:w-[16%]">
-        <div className="flex size-full items-center justify-center rounded-full border border-white/30 bg-black/30 p-[10%] shadow-lg shadow-black/35 backdrop-blur-[1px]">
+      {/* Midfield logo — circular crop of the 512 app icon (hides square cyan plate) */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1] h-[20%] min-h-[3rem] w-[20%] min-w-[3rem] max-h-[5.5rem] max-w-[5.5rem] -translate-x-1/2 -translate-y-1/2 sm:h-[14%] sm:w-[14%]">
+        <div className="size-full overflow-hidden rounded-full border-2 border-white/35 bg-[#0b1220] shadow-lg shadow-black/40 ring-1 ring-black/40">
           <img
             src="/m/icons/icon-512.png"
             alt=""
-            className="size-full object-contain opacity-95"
+            className="size-full scale-110 object-cover opacity-95"
             draggable={false}
           />
         </div>
