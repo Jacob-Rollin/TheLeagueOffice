@@ -4,21 +4,26 @@ import { cn } from "@/lib/utils";
 /**
  * Starters yet to play — fantasy analogue of broadcast timeout ticks.
  * Lit bars = players whose NFL game has not started.
+ * Slot count follows the lineup (typically 9 starters), not a hard 5.
  */
-function YetToPlayTicks({ count, max = 5 }: { count: number; max?: number }) {
-  const n = Math.max(0, Math.min(max, Math.floor(count)));
-  const slots = Math.min(5, Math.max(1, Math.min(max, 5)));
+function YetToPlayTicks({ count, max = 9 }: { count: number; max?: number }) {
+  const slots = Math.max(1, Math.min(12, Math.floor(max)));
+  const n = Math.max(0, Math.min(slots, Math.floor(count)));
   return (
     <div
-      className="flex flex-col justify-center gap-[3px]"
-      aria-label={`${n} starters yet to play`}
-      title={`${n} starters yet to play`}
+      className={cn(
+        "flex flex-col justify-center",
+        slots > 7 ? "gap-[2px]" : "gap-[3px]",
+      )}
+      aria-label={`${n} of ${slots} starters yet to play`}
+      title={`${n} of ${slots} starters yet to play`}
     >
       {Array.from({ length: slots }, (_, i) => (
         <span
           key={i}
           className={cn(
-            "h-[2px] w-3 rounded-full transition-colors duration-500 sm:w-3.5",
+            "rounded-full transition-colors duration-500",
+            slots > 7 ? "h-[1.5px] w-2.5 sm:w-3" : "h-[2px] w-3 sm:w-3.5",
             i < n ? "bg-white" : "bg-white/25",
           )}
         />
