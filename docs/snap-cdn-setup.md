@@ -3,6 +3,20 @@
 Browse reads public research/snap JSON from the orphan `snap-cdn` branch
 instead of TiDB via Vercel. No Cloudflare R2 / card required.
 
+**RU note:** With this base set in Production, research / injury / trade-market /
+player-brain browse should **not** hit TiDB. Missing or unset base is one of the
+largest avoidable TiDB RU burns.
+
+## Status check (repo)
+
+| Check | Expected |
+|---|---|
+| Branch `snap-cdn` exists | Yes (Actions **Publish Snap CDN**) |
+| Sample object | `…/snap-cdn/research/fpa-half.json` returns JSON |
+| Includes warehouse export | `…/snap-cdn/snap/players-export.json` |
+
+Re-run **Publish Snap CDN** if those URLs 404.
+
 ## What you do (one-time)
 
 ### 1. Vercel build env
@@ -14,6 +28,10 @@ Project → **Settings** → **Environment Variables** → **Production**:
 | `VITE_SNAP_CDN_BASE` | `https://raw.githubusercontent.com/Jacob-Rollin/TheLeagueOffice/snap-cdn` |
 
 No trailing slash. Then redeploy a **`main`** deployment (Vite bakes this at build time).
+
+**Verify after deploy:** open a research page → Network tab should show
+`raw.githubusercontent.com/.../snap-cdn/...` (or your Pages URL), **not**
+`/api/data/research/*` as the first hit.
 
 **Do not** promote / redeploy a deployment from branch `snap-cdn` — that branch is JSON-only and will 404 the whole site. `vercel.json` disables automatic Vercel deploys for `snap-cdn` and agent `cursor/*` branches (Hobby ~100 deploys/day). Production still auto-deploys from `main`.
 
