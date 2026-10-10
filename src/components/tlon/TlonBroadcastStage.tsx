@@ -178,6 +178,8 @@ export function TlonBroadcastStage({
           <TlonField
             arc={arc}
             fillHeight={fullscreen}
+            leftName={leftName}
+            rightName={rightName}
             {...(onArcDone ? { onArcDone } : {})}
           />
         </div>
