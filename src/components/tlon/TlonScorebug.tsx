@@ -47,7 +47,6 @@ function LeadMark({ show }: { show: boolean }) {
   return (
     <span
       className="mt-0.5 inline-block border-x-[4px] border-b-[6px] border-x-transparent border-b-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)] sm:border-x-[4.5px] sm:border-b-[7px]"
-      style={{ borderBottomColor: "white" }}
       aria-label="Leading"
     />
   );
@@ -127,13 +126,7 @@ export function TlonScorebug({
 
         {/* Top strip — names + TLN */}
         <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-stretch text-white">
-          <div
-            className="min-w-0 px-2 py-1 sm:px-3 sm:py-1.5"
-            style={{
-              background:
-                "linear-gradient(180deg,rgba(0,0,0,0.28)_0%,rgba(0,0,0,0.12)_100%),linear-gradient(90deg,#1d4ed8 0%,#1e40af 100%)",
-            }}
-          >
+          <div className="min-w-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.28)_0%,rgba(0,0,0,0.12)_100%),linear-gradient(90deg,#1d4ed8_0%,#1e40af_100%)] px-2 py-1 sm:px-3 sm:py-1.5">
             <p
               className="truncate font-display text-[10px] font-bold uppercase tracking-[0.08em] text-white drop-shadow-sm sm:text-[12px] sm:tracking-[0.12em]"
               title={leftTitle}
@@ -141,13 +134,7 @@ export function TlonScorebug({
               {leftTitle}
             </p>
           </div>
-          <div
-            className="flex min-w-[3.75rem] items-center justify-center gap-1.5 px-2 py-1 sm:min-w-[5.25rem] sm:gap-2 sm:px-2.5 sm:py-1.5"
-            style={{
-              background:
-                "linear-gradient(180deg,rgba(255,255,255,0.06)_0%,transparent_100%),#141414",
-            }}
-          >
+          <div className="flex min-w-[3.75rem] items-center justify-center gap-1.5 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,transparent_100%),#141414] px-2 py-1 sm:min-w-[5.25rem] sm:gap-2 sm:px-2.5 sm:py-1.5">
             <span className="display-title text-[11px] tracking-[0.2em] text-white drop-shadow sm:text-[13px] sm:tracking-[0.22em]">
               TLN
             </span>
@@ -162,13 +149,7 @@ export function TlonScorebug({
               </span>
             )}
           </div>
-          <div
-            className="min-w-0 px-2 py-1 text-right sm:px-3 sm:py-1.5"
-            style={{
-              background:
-                "linear-gradient(180deg,rgba(0,0,0,0.28)_0%,rgba(0,0,0,0.12)_100%),linear-gradient(270deg,#dc2626 0%,#b91c1c 100%)",
-            }}
-          >
+          <div className="min-w-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.28)_0%,rgba(0,0,0,0.12)_100%),linear-gradient(270deg,#dc2626_0%,#b91c1c_100%)] px-2 py-1 text-right sm:px-3 sm:py-1.5">
             <p
               className="truncate font-display text-[10px] font-bold uppercase tracking-[0.08em] text-white drop-shadow-sm sm:text-[12px] sm:tracking-[0.12em]"
               title={rightTitle}
@@ -180,17 +161,11 @@ export function TlonScorebug({
 
         {/* Main row */}
         <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-stretch">
-          {/* Away — saturated blue, lighter on the outer edge like the reference */}
-          <div
-            className="relative min-w-0 px-1.5 py-1.5 sm:px-3 sm:py-2.5"
-            style={{
-              background:
-                "linear-gradient(180deg,rgba(255,255,255,0.1)_0%,transparent_35%),linear-gradient(90deg,#2563eb 0%,#1d4ed8 42%,#1e3a8a 100%)",
-            }}
-          >
+          {/* Away — saturated blue, lighter on the outer edge */}
+          <div className="relative min-w-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.1)_0%,transparent_35%),linear-gradient(90deg,#2563eb_0%,#1d4ed8_42%,#1e3a8a_100%)] px-1.5 py-1.5 sm:px-3 sm:py-2.5">
             <div className="flex h-full items-center justify-between gap-1.5 sm:gap-2.5">
               <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-                <span className="shrink-0 rounded-md ring-1 ring-white/35 shadow-md shadow-black/30 [&_span]:rounded-md [&_span]:border-white/20 [&_span]:bg-white/10">
+                <span className="shrink-0 rounded-md shadow-md shadow-black/30 ring-1 ring-white/35 [&_span]:rounded-md [&_span]:border-white/20 [&_span]:bg-white/10">
                   <MatchupTeamAvatar
                     name={leftName}
                     logo={leftLogo ?? null}
@@ -227,14 +202,7 @@ export function TlonScorebug({
           </div>
 
           {/* Center — charcoal glass */}
-          <div
-            className="relative flex min-w-[3.75rem] flex-col items-center justify-center px-1.5 py-1.5 sm:min-w-[5.5rem] sm:px-2.5 sm:py-2"
-            style={{
-              background:
-                "linear-gradient(180deg,rgba(255,255,255,0.08)_0%,transparent_40%),linear-gradient(180deg,#2a2a2a 0%,#141414 55%,#0c0c0c 100%)",
-              boxShadow: "inset 1px 0 0 rgba(255,255,255,0.08), inset -1px 0 0 rgba(255,255,255,0.08)",
-            }}
-          >
+          <div className="relative flex min-w-[3.75rem] flex-col items-center justify-center bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,transparent_40%),linear-gradient(180deg,#2a2a2a_0%,#141414_55%,#0c0c0c_100%)] px-1.5 py-1.5 shadow-[inset_1px_0_0_rgba(255,255,255,0.08),inset_-1px_0_0_rgba(255,255,255,0.08)] sm:min-w-[5.5rem] sm:px-2.5 sm:py-2">
             <p className="text-[8px] font-bold uppercase tracking-[0.14em] text-amber-300 drop-shadow sm:text-[9px] sm:tracking-[0.16em]">
               {statusLabel}
               <span className="text-white/40"> · </span>
@@ -249,13 +217,7 @@ export function TlonScorebug({
           </div>
 
           {/* Home — saturated crimson, lighter on the outer edge */}
-          <div
-            className="relative min-w-0 px-1.5 py-1.5 sm:px-3 sm:py-2.5"
-            style={{
-              background:
-                "linear-gradient(180deg,rgba(255,255,255,0.1)_0%,transparent_35%),linear-gradient(270deg,#ef4444 0%,#dc2626 42%,#991b1b 100%)",
-            }}
-          >
+          <div className="relative min-w-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.1)_0%,transparent_35%),linear-gradient(270deg,#ef4444_0%,#dc2626_42%,#991b1b_100%)] px-1.5 py-1.5 sm:px-3 sm:py-2.5">
             <div className="flex h-full items-center justify-between gap-1.5 sm:gap-2.5">
               <div className="flex items-center gap-1.5 sm:gap-2.5">
                 <div className="flex min-w-[2.75rem] flex-col items-center sm:min-w-[3.5rem]">
@@ -281,7 +243,7 @@ export function TlonScorebug({
                     {rightRecord}
                   </span>
                 ) : null}
-                <span className="shrink-0 rounded-md ring-1 ring-white/35 shadow-md shadow-black/30 [&_span]:rounded-md [&_span]:border-white/20 [&_span]:bg-white/10">
+                <span className="shrink-0 rounded-md shadow-md shadow-black/30 ring-1 ring-white/35 [&_span]:rounded-md [&_span]:border-white/20 [&_span]:bg-white/10">
                   <MatchupTeamAvatar
                     name={rightName}
                     logo={rightLogo ?? null}
