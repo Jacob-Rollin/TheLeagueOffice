@@ -118,7 +118,7 @@ export function TlonScorebug({
               {leftTitle}
             </p>
           </div>
-          <div className="flex min-w-[4.5rem] items-center justify-center gap-1.5 bg-[#111111] px-2 py-1 sm:min-w-[6.5rem] sm:gap-2 sm:px-3 sm:py-1.5">
+          <div className="flex min-w-[3.75rem] items-center justify-center gap-1.5 bg-[#111111] px-2 py-1 sm:min-w-[5.25rem] sm:gap-2 sm:px-2.5 sm:py-1.5">
             <span className="display-title text-[11px] tracking-[0.18em] sm:text-[13px] sm:tracking-[0.2em]">
               TLN
             </span>
@@ -193,7 +193,7 @@ export function TlonScorebug({
           </div>
 
           {/* Center — status + win prob */}
-          <div className="flex min-w-[4.5rem] flex-col items-center justify-center border-x border-white/10 bg-[#0a0a0a] px-2 py-1.5 sm:min-w-[7rem] sm:px-3 sm:py-2">
+          <div className="flex min-w-[3.75rem] flex-col items-center justify-center border-x border-white/10 bg-[#0a0a0a] px-1.5 py-1.5 sm:min-w-[5.5rem] sm:px-2.5 sm:py-2">
             <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-amber-400 sm:text-[9px] sm:tracking-[0.14em]">
               {statusLabel}
               <span className="text-white/35"> · </span>
