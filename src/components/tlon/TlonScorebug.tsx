@@ -78,13 +78,13 @@ export function TlonScorebug({
     daypart === "LIVE" ? "LIVE" : daypart === "FINAL" ? "FINAL" : "PRE";
 
   return (
-    <div className="relative mx-auto w-full max-w-5xl">
+    <div className="relative mx-auto w-full max-w-5xl pt-5 sm:pt-6">
       {/*
-        Tab + bar share one border/background. Tab uses extra bottom padding and
-        a negative margin so it paints over the bar’s top edge (no hairline seam).
+        TLN notch sits above the bar; a matching fill strip covers only the
+        shared border under the tab so it reads as one piece (not stacked).
       */}
-      <div className="flex justify-center">
-        <div className="relative z-20 -mb-1 flex items-center gap-1.5 rounded-t-md border border-b-0 border-white/20 bg-zinc-950 px-2.5 pb-1.5 pt-0.5 sm:-mb-1.5 sm:gap-2 sm:px-4 sm:pb-2 sm:pt-1">
+      <div className="absolute left-1/2 top-0 z-20 -translate-x-1/2">
+        <div className="relative flex items-center gap-1.5 rounded-t-md border border-b-0 border-white/20 bg-[#09090b] px-2.5 py-0.5 sm:gap-2 sm:px-4 sm:py-1">
           <span className="display-title text-[11px] tracking-[0.18em] text-white sm:text-[13px] sm:tracking-[0.2em]">
             TLN
           </span>
@@ -94,14 +94,17 @@ export function TlonScorebug({
               <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
             </span>
           ) : null}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] translate-y-full bg-[#09090b]"
+          />
         </div>
       </div>
 
       <div
         className={cn(
           "relative z-10 overflow-hidden rounded-lg border border-white/20 shadow-2xl shadow-black/50 sm:rounded-xl",
-          /* Solid zinc-950 matches the TLN tab — no lighter top highlight (that read as a seam) */
-          "bg-zinc-950",
+          "bg-[#09090b]",
           "bg-[linear-gradient(90deg,#18181b_0%,#09090b_50%,#18181b_100%)]",
         )}
       >

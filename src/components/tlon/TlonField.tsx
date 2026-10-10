@@ -74,12 +74,12 @@ export function TlonField({
   const rightEndZone = (rightName || "Home").trim().toUpperCase() || "HOME";
   const endZoneTextClass = (name: string) =>
     cn(
-      "display-title text-center font-bold leading-none text-white/95",
+      "display-title text-center font-extrabold leading-[1.05] text-white",
       name.length > 18
-        ? "text-[5.5px] tracking-[0.04em] sm:text-[8px] sm:tracking-[0.08em]"
+        ? "text-[12px] tracking-[0.04em] sm:text-[15px] sm:tracking-[0.08em]"
         : name.length > 12
-          ? "text-[6.5px] tracking-[0.06em] sm:text-[9px] sm:tracking-[0.1em]"
-          : "text-[8px] tracking-[0.1em] sm:text-[11px] sm:tracking-[0.14em]",
+          ? "text-[14px] tracking-[0.06em] sm:text-[18px] sm:tracking-[0.1em]"
+          : "text-[16px] tracking-[0.1em] sm:text-[22px] sm:tracking-[0.14em]",
     );
 
   return (
@@ -195,53 +195,47 @@ export function TlonField({
       </svg>
 
       {/*
-        Yard numbers as HTML (SVG text would stretch with preserveAspectRatio=none).
-        left% uses the same yardToPct as the SVG lines so digits sit on the line.
+        Yard numbers split the line (e.g. 5 | 0) for readability — HTML so text
+        does not stretch with preserveAspectRatio=none.
       */}
       <div className="pointer-events-none absolute inset-0">
         {MAJOR_YARDS.map((yd) => {
           const left = `${yardToPct(yd)}%`;
           const label = yardLabel(yd);
+          const [tens = "", ones = ""] = label.split("");
+          const tone = yd === 50 ? "text-white/85" : "text-white/65";
+          const botTone = yd === 50 ? "text-white/60" : "text-white/45";
+          const digit =
+            "absolute top-1/2 -translate-y-1/2 font-display text-[9px] font-bold leading-none tabular-nums sm:text-[11px]";
           return (
-            <span key={`top-${yd}`}>
-              <span
-                className={cn(
-                  "absolute top-[7%] -translate-x-1/2 font-display text-[9px] font-bold leading-none tabular-nums sm:top-[9%] sm:text-[11px]",
-                  yd === 50 ? "text-white/80" : "text-white/60",
-                )}
-                style={{ left }}
-              >
-                {label}
+            <span key={`yd-${yd}`}>
+              {/* Zero-width anchors on the yard line; digits sit left/right of it */}
+              <span className="absolute top-[8%] h-3 w-0 sm:top-[10%]" style={{ left }}>
+                <span className={cn(digit, "right-[2px]", tone)}>{tens}</span>
+                <span className={cn(digit, "left-[2px]", tone)}>{ones}</span>
               </span>
-              <span
-                className={cn(
-                  "absolute bottom-[17%] -translate-x-1/2 font-display text-[9px] font-bold leading-none tabular-nums sm:bottom-[15%] sm:text-[11px]",
-                  yd === 50 ? "text-white/55" : "text-white/40",
-                )}
-                style={{ left }}
-              >
-                {label}
+              <span className="absolute bottom-[16%] h-3 w-0 sm:bottom-[14%]" style={{ left }}>
+                <span className={cn(digit, "right-[2px]", botTone)}>{tens}</span>
+                <span className={cn(digit, "left-[2px]", botTone)}>{ones}</span>
               </span>
             </span>
           );
         })}
       </div>
 
-      {/* Midfield logo — circular crop of the 512 app icon (hides square cyan plate) */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1] h-[20%] min-h-[3rem] w-[20%] min-w-[3rem] max-h-[5.5rem] max-w-[5.5rem] -translate-x-1/2 -translate-y-1/2 sm:h-[14%] sm:w-[14%]">
-        <div className="size-full overflow-hidden rounded-full border-2 border-white/35 bg-[#0b1220] shadow-lg shadow-black/40 ring-1 ring-black/40">
-          <img
-            src="/m/icons/icon-512.png"
-            alt=""
-            className="size-full scale-110 object-cover opacity-95"
-            draggable={false}
-          />
-        </div>
+      {/* Midfield mark — transparent football logo only (no plate / ring) */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1] h-[16%] min-h-[2.5rem] w-[22%] min-w-[3.5rem] max-h-[4.5rem] max-w-[7rem] -translate-x-1/2 -translate-y-1/2 sm:h-[12%] sm:w-[16%]">
+        <img
+          src="/m/icons/league-mark-field.png"
+          alt=""
+          className="size-full object-contain drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]"
+          draggable={false}
+        />
       </div>
 
-      {/* End zone team names — full names, no ellipsis; scale type for longer labels */}
+      {/* End zone team names — larger type to fill the end zone */}
       <div
-        className="pointer-events-none absolute inset-y-[4%] left-0 z-[1] flex items-center justify-center overflow-visible"
+        className="pointer-events-none absolute inset-y-[1%] left-0 z-[1] flex items-center justify-center overflow-visible px-[2%]"
         style={{ width: `${EZ}%` }}
       >
         <span
@@ -256,7 +250,7 @@ export function TlonField({
         </span>
       </div>
       <div
-        className="pointer-events-none absolute inset-y-[4%] right-0 z-[1] flex items-center justify-center overflow-visible"
+        className="pointer-events-none absolute inset-y-[1%] right-0 z-[1] flex items-center justify-center overflow-visible px-[2%]"
         style={{ width: `${EZ}%` }}
       >
         <span
