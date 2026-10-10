@@ -3,7 +3,7 @@
 Living plan for staying on free tiers while expanding users, keeping live scoring / research fresh, and making pages feel as fast as FantasyPros-style tools (instant tables, minimal blank loading).
 
 **Status:** in progress — UX backlog items shipping incrementally  
-**Last updated:** 2026-10-10  
+**Last updated:** 2026-10-10 (TiDB RU: snap verify + skip-noop upserts)  
 **Related:** `.cursorrules` (Free-Tier Guardrails), `docs/snap-cdn-setup.md`, `docs/native-leagues-plan.md`
 
 ---
@@ -80,10 +80,18 @@ Start with A + B; add C when native leagues see real traffic.
 
 ### Quick wins (no host move)
 1. Matchup Replay off request-path nflverse (precompute/cache like research)
-2. Confirm Production `VITE_SNAP_CDN_BASE` + green Publish Snap CDN
+2. Confirm Production `VITE_SNAP_CDN_BASE` + green Publish Snap CDN — see `docs/snap-cdn-setup.md` (branch objects live; **you** must keep the Vercel env set + redeploy)
 3. Trim gameday ESPN delta frequency / limit vs Sleeper
 4. Cap full research-aggregates cadence; keep ATP-only Mon–Fri
 5. When >~20 concurrent: move snap JSON to R2 or Coolify static CDN
+
+### TiDB RU — shipped / in progress
+| Item | Status |
+|---|---|
+| Snap-cdn browse path (research + `players-export`) | Code + publish workflow; **confirm Production env** |
+| Skip unchanged `synced_matchups` / `synced_rosters` JSON upserts (touch `synced_at` only) | Shipped in tidb-sync |
+| Skip unchanged warehouse ingest | Later |
+| Split free TiDB clusters | Later (when native/research contend) |
 
 ---
 
