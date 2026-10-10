@@ -3,16 +3,13 @@ import { cn } from "@/lib/utils";
 
 function TimeoutTicks({ count, max = 5 }: { count: number; max?: number }) {
   const n = Math.max(0, Math.min(max, Math.floor(count)));
-  if (max <= 0) return null;
+  const slots = Math.min(5, Math.max(max, 1));
   return (
-    <div className="mt-1 flex items-center justify-center gap-1" aria-label={`${n} starters yet to play`}>
-      {Array.from({ length: max }, (_, i) => (
+    <div className="mt-0.5 flex items-center justify-center gap-[3px]" aria-label={`${n} starters yet to play`}>
+      {Array.from({ length: slots }, (_, i) => (
         <span
           key={i}
-          className={cn(
-            "h-0.5 w-3 rounded-full",
-            i < n ? "bg-white/90" : "bg-white/20",
-          )}
+          className={cn("h-[2px] w-2.5 rounded-full transition-colors duration-500", i < n ? "bg-white/90" : "bg-white/20")}
         />
       ))}
     </div>
@@ -22,6 +19,12 @@ function TimeoutTicks({ count, max = 5 }: { count: number; max?: number }) {
 function formatScore(n: number): string {
   if (!Number.isFinite(n)) return "0.0";
   return (Math.round(n * 10) / 10).toFixed(1);
+}
+
+function shortName(name: string): string {
+  const cleaned = name.trim().toUpperCase();
+  if (cleaned.length <= 14) return cleaned;
+  return `${cleaned.slice(0, 13)}…`;
 }
 
 export type TlonDaypart = "PRE" | "LIVE" | "FINAL";
@@ -43,11 +46,10 @@ export function TlonScorebug({
   rightYetToPlayMax,
   winPctLeft,
   winPctRight,
-  projTotal,
-  liveTotal,
   platform,
   leagueKey,
   leadingSide,
+  scorePulseSide,
 }: {
   week: number;
   daypart: TlonDaypart;
@@ -65,67 +67,64 @@ export function TlonScorebug({
   rightYetToPlayMax: number;
   winPctLeft: number;
   winPctRight: number;
-  projTotal: number;
-  liveTotal: number;
   platform?: string | null;
   leagueKey?: string | null;
-  /** Side currently favored / leading for the possession triangle. */
   leadingSide: "left" | "right" | "tie";
+  /** Briefly pulse the score numeral after a feed hit. */
+  scorePulseSide?: "left" | "right" | null;
 }) {
   const favored = winPctLeft >= winPctRight ? "left" : "right";
   const favoredPct = favored === "left" ? winPctLeft : winPctRight;
-  const daypartClass =
-    daypart === "LIVE"
-      ? "bg-rose-600 text-white"
-      : daypart === "FINAL"
-        ? "bg-emerald-600 text-white"
-        : "bg-white/15 text-white/90";
 
   return (
-    <div className="relative mx-auto w-full max-w-4xl">
-      {/* Glossy network tab */}
-      <div className="absolute left-1/2 top-0 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-white/20 bg-zinc-950 px-4 py-1 shadow-lg shadow-black/40">
-        <span className="display-title text-sm tracking-widest text-white">TLN</span>
-        <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide", daypartClass)}>
-          {daypart === "LIVE" ? "On Air" : daypart}
-        </span>
+    <div className="relative mx-auto w-full max-w-5xl pt-3">
+      {/* Glossy network tab — logo only + live dot */}
+      <div className="absolute left-1/2 top-0 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-t-lg border border-b-0 border-white/25 bg-zinc-950 px-4 py-1 shadow-lg shadow-black/50">
+        <span className="display-title text-[13px] tracking-[0.2em] text-white">TLN</span>
+        {daypart === "LIVE" ? (
+          <span className="relative flex size-1.5">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
+            <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
+          </span>
+        ) : null}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-white/15 bg-zinc-950/90 shadow-2xl shadow-black/50 backdrop-blur-md">
+      <div
+        className={cn(
+          "overflow-hidden rounded-xl border border-white/20 shadow-2xl shadow-black/50",
+          "bg-zinc-950/85 backdrop-blur-md",
+          /* top specular */
+          "bg-[linear-gradient(180deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0)_42%),linear-gradient(90deg,#18181b_0%,#09090b_50%,#18181b_100%)]",
+        )}
+      >
         <div className="grid grid-cols-[1fr_auto_1fr] items-stretch">
-          {/* Away / left */}
-          <div className="relative bg-gradient-to-r from-zinc-900 to-zinc-900/80 px-3 py-4 sm:px-5">
+          {/* Away — charcoal */}
+          <div className="relative bg-[linear-gradient(135deg,#27272a_0%,#18181b_55%,#09090b_100%)] px-3 py-2.5 sm:px-4">
             {leadingSide === "left" ? (
-              <span
-                className="absolute right-3 top-2 text-[10px] text-white"
-                aria-label="Leading"
-              >
+              <span className="absolute left-1/2 top-0.5 -translate-x-1/2 text-[9px] text-white drop-shadow" aria-label="Leading">
                 ▼
               </span>
             ) : null}
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-xs font-bold uppercase tracking-wide text-white sm:text-sm">
-                  {leftName}
-                </p>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <MatchupTeamAvatar
-                    name={leftName}
-                    logo={leftLogo ?? null}
-                    platform={platform ?? null}
-                    cacheKey={`${leagueKey ?? "tlon"}-left`}
-                    size="sm"
-                  />
-                  {leftRecord ? (
-                    <span className="text-[11px] text-white/70">{leftRecord}</span>
-                  ) : null}
-                </div>
+            <p className="truncate font-display text-[11px] font-bold uppercase tracking-wider text-white sm:text-xs">
+              {shortName(leftName)}
+            </p>
+            <div className="mt-1 flex items-end justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <MatchupTeamAvatar
+                  name={leftName}
+                  logo={leftLogo ?? null}
+                  platform={platform ?? null}
+                  cacheKey={`${leagueKey ?? "tlon"}-left`}
+                  size="sm"
+                />
+                {leftRecord ? <span className="truncate text-[10px] text-white/65">{leftRecord}</span> : null}
               </div>
               <div className="text-right">
                 <p
                   className={cn(
-                    "font-display text-3xl font-extrabold tabular-nums text-white sm:text-4xl",
-                    "transition-[transform,color] duration-300",
+                    "font-display text-[2rem] font-extrabold leading-none tabular-nums text-white sm:text-[2.35rem]",
+                    "transition-transform duration-300 ease-out",
+                    scorePulseSide === "left" && "scale-110 text-emerald-300",
                   )}
                 >
                   {formatScore(leftLive)}
@@ -135,72 +134,49 @@ export function TlonScorebug({
             </div>
           </div>
 
-          {/* Center hub */}
-          <div className="flex min-w-[7.5rem] flex-col items-center justify-center border-x border-white/10 bg-zinc-950 px-3 py-3 sm:min-w-[9rem] sm:px-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-400">
-              Win prob
+          {/* Center hub — win% only */}
+          <div className="flex min-w-[5.5rem] flex-col items-center justify-center border-x border-white/10 bg-black/80 px-2.5 py-2 sm:min-w-[6.5rem] sm:px-3">
+            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-amber-400">
+              {daypart === "LIVE" ? "Live" : daypart === "FINAL" ? "Final" : "Week"} {week}
             </p>
-            <p className="font-display text-3xl font-extrabold tabular-nums text-white sm:text-4xl">
+            <p className="font-display text-[1.75rem] font-extrabold leading-none tabular-nums text-white sm:text-[2rem]">
               {Math.round(favoredPct)}%
             </p>
-            <div className="mt-1.5 flex h-1.5 w-full max-w-[7rem] overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full bg-emerald-500 transition-[width] duration-500"
-                style={{ width: `${Math.max(0, Math.min(100, winPctLeft))}%` }}
-              />
-              <div
-                className="h-full bg-rose-500 transition-[width] duration-500"
-                style={{ width: `${Math.max(0, Math.min(100, winPctRight))}%` }}
-              />
-            </div>
-            <p className="mt-2 text-center text-[10px] leading-tight text-white/65">
-              <span className="tabular-nums text-white">{formatScore(liveTotal)}</span>
-              <span className="mx-1 text-white/40">·</span>
-              <span className="tabular-nums">proj {formatScore(projTotal)}</span>
-            </p>
-            <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
-              Week {week}
-            </p>
+            <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/45">Win prob</p>
           </div>
 
-          {/* Home / right */}
-          <div className="relative bg-gradient-to-l from-red-950/90 via-zinc-900 to-zinc-900/80 px-3 py-4 sm:px-5">
+          {/* Home — navy / red brand */}
+          <div className="relative bg-[linear-gradient(225deg,#7f1d1d_0%,#1e3a5f_48%,#0f172a_100%)] px-3 py-2.5 sm:px-4">
             {leadingSide === "right" ? (
-              <span
-                className="absolute left-3 top-2 text-[10px] text-white"
-                aria-label="Leading"
-              >
+              <span className="absolute left-1/2 top-0.5 -translate-x-1/2 text-[9px] text-white drop-shadow" aria-label="Leading">
                 ▼
               </span>
             ) : null}
-            <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-right font-display text-[11px] font-bold uppercase tracking-wider text-white sm:text-xs">
+              {shortName(rightName)}
+            </p>
+            <div className="mt-1 flex items-end justify-between gap-2">
               <div className="text-left">
                 <p
                   className={cn(
-                    "font-display text-3xl font-extrabold tabular-nums text-white sm:text-4xl",
-                    "transition-[transform,color] duration-300",
+                    "font-display text-[2rem] font-extrabold leading-none tabular-nums text-white sm:text-[2.35rem]",
+                    "transition-transform duration-300 ease-out",
+                    scorePulseSide === "right" && "scale-110 text-emerald-300",
                   )}
                 >
                   {formatScore(rightLive)}
                 </p>
                 <TimeoutTicks count={rightYetToPlay} max={Math.max(rightYetToPlayMax, 1)} />
               </div>
-              <div className="min-w-0 text-right">
-                <p className="truncate text-xs font-bold uppercase tracking-wide text-white sm:text-sm">
-                  {rightName}
-                </p>
-                <div className="mt-1.5 flex items-center justify-end gap-2">
-                  {rightRecord ? (
-                    <span className="text-[11px] text-white/70">{rightRecord}</span>
-                  ) : null}
-                  <MatchupTeamAvatar
-                    name={rightName}
-                    logo={rightLogo ?? null}
-                    platform={platform ?? null}
-                    cacheKey={`${leagueKey ?? "tlon"}-right`}
-                    size="sm"
-                  />
-                </div>
+              <div className="flex min-w-0 items-center justify-end gap-1.5">
+                {rightRecord ? <span className="truncate text-[10px] text-white/65">{rightRecord}</span> : null}
+                <MatchupTeamAvatar
+                  name={rightName}
+                  logo={rightLogo ?? null}
+                  platform={platform ?? null}
+                  cacheKey={`${leagueKey ?? "tlon"}-right`}
+                  size="sm"
+                />
               </div>
             </div>
           </div>

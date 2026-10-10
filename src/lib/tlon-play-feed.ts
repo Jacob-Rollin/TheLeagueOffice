@@ -1,11 +1,15 @@
 /**
  * The League Network (TLN) Plan A feed: detect fantasy-point jumps between
  * matchup polls and optionally enrich copy from box-score stat deltas.
- * No play-by-play API.
+ * No play-by-play API — field arcs are approximate theater from existing polls.
  */
+
+import type { NflGameProgress } from "@/lib/rolling-live-projection";
 
 export const TLON_MIN_DELTA = 0.5;
 export const TLON_MAX_EVENTS = 40;
+/** Other-matchup Scoring Update threshold (fantasy points). */
+export const TLON_SCORING_UPDATE_MIN = 6;
 
 export type TlonFeedSide = "left" | "right";
 
@@ -22,6 +26,47 @@ export type TlonFeedEvent = {
   headline: string;
   /** Optional NFL game clock label from the scoreboard. */
   gameLabel?: string | null;
+  /** Best-effort yard gain from box-score deltas (rush/rec/pass). */
+  yardGain?: number | null;
+  kind?: "rush" | "rec" | "pass" | "td" | "other";
+};
+
+export type TlonPlayArc = {
+  id: string;
+  playerId: string;
+  playerName: string;
+  pos: string;
+  team: string;
+  side: TlonFeedSide;
+  /** Field percent 0–100 (left end zone → right). */
+  startPct: number;
+  endPct: number;
+  yardGain: number;
+  headline: string;
+  delta: number;
+  /** When false, render a center pulse instead of a yard arc. */
+  hasSpot: boolean;
+};
+
+export type TlonScoringUpdate = {
+  id: string;
+  at: number;
+  matchupId: string;
+  playerId: string;
+  playerName: string;
+  pos: string;
+  team: string;
+  side: TlonFeedSide;
+  delta: number;
+  headline: string;
+  leftName: string;
+  rightName: string;
+  leftFrom: number;
+  leftTo: number;
+  rightFrom: number;
+  rightTo: number;
+  leftLogo?: string | null;
+  rightLogo?: string | null;
 };
 
 type StatLine = Record<string, number>;
@@ -54,6 +99,32 @@ function num(stats: StatLine | null | undefined, key: string): number {
 
 function deltaStat(prev: StatLine | null | undefined, next: StatLine | null | undefined, key: string): number {
   return num(next, key) - num(prev, key);
+}
+
+export function extractYardPlay(
+  prevStats: StatLine | null | undefined,
+  nextStats: StatLine | null | undefined,
+): { yards: number; kind: TlonFeedEvent["kind"] } {
+  if (!nextStats) return { yards: 0, kind: "other" };
+  const rushYd = deltaStat(prevStats, nextStats, "rush_yd");
+  const recYd = deltaStat(prevStats, nextStats, "rec_yd");
+  const passYd = deltaStat(prevStats, nextStats, "pass_yd");
+  const rushTd = deltaStat(prevStats, nextStats, "rush_td");
+  const recTd = deltaStat(prevStats, nextStats, "rec_td");
+  const passTd = deltaStat(prevStats, nextStats, "pass_td");
+  const defTd = deltaStat(prevStats, nextStats, "def_td");
+
+  if (rushYd >= 1 || rushTd > 0) {
+    return { yards: Math.max(rushYd, rushTd > 0 ? 1 : 0), kind: rushTd > 0 ? "td" : "rush" };
+  }
+  if (recYd >= 1 || recTd > 0) {
+    return { yards: Math.max(recYd, recTd > 0 ? 1 : 0), kind: recTd > 0 ? "td" : "rec" };
+  }
+  if (passYd >= 1 || passTd > 0) {
+    return { yards: Math.max(passYd, passTd > 0 ? 1 : 0), kind: passTd > 0 ? "td" : "pass" };
+  }
+  if (defTd > 0) return { yards: 0, kind: "td" };
+  return { yards: 0, kind: "other" };
 }
 
 /** Build a short inferred headline from box-score deltas between polls. */
@@ -117,6 +188,7 @@ export type TlonStarterSnapshot = {
   points: number;
   stats?: StatLine | null;
   gameLabel?: string | null;
+  matchupId?: string;
 };
 
 /**
@@ -138,6 +210,7 @@ export function diffStarterPoints(
     const delta = Math.round((row.points - before.points) * 10) / 10;
     if (Math.abs(delta) < minDelta) continue;
 
+    const yard = extractYardPlay(before.stats ?? null, row.stats ?? null);
     const headline = inferPlayHeadline(before.stats ?? null, row.stats ?? null, delta);
     events.push({
       id: `${row.playerId}-${now}-${delta}`,
@@ -149,11 +222,12 @@ export function diffStarterPoints(
       side: row.side,
       delta,
       headline,
-      gameLabel: row.gameLabel ?? null,
+      ...(row.gameLabel != null ? { gameLabel: row.gameLabel } : {}),
+      ...(yard.yards > 0 ? { yardGain: Math.round(yard.yards) } : {}),
+      ...(yard.kind ? { kind: yard.kind } : {}),
     });
   }
 
-  // Larger swings first within the same poll tick.
   events.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
   return events;
 }
@@ -172,8 +246,110 @@ export function mergeFeedEvents(existing: TlonFeedEvent[], incoming: TlonFeedEve
   return next.slice(0, TLON_MAX_EVENTS);
 }
 
-/** True when any watched starter still has meaningful box-score keys changing. */
-export function statsTouchRelevantKeys(stats: StatLine | null | undefined): boolean {
-  if (!stats) return false;
-  return STAT_KEYS.some((k) => num(stats, k) !== 0);
+/** Approximate ESPN-app style start/end arc from yard gain + scoreboard spot. */
+export function buildPlayArc(
+  event: TlonFeedEvent,
+  progress: NflGameProgress | null | undefined,
+): TlonPlayArc {
+  const yards = Math.max(0, Number(event.yardGain ?? 0) || 0);
+  const team = (event.team || "").trim().toUpperCase();
+  const hasPossession =
+    Boolean(progress?.possessionAbbr) &&
+    progress!.possessionAbbr === team &&
+    progress?.phase === "in";
+  const yardLine = Number(progress?.yardLine);
+  const hasSpot = hasPossession && Number.isFinite(yardLine) && yardLine > 0 && yards >= 1;
+
+  let endPct = 50;
+  let startPct = 50;
+  if (hasSpot) {
+    // Theater: treat scoreboard yardLine as end spot; start = end − gain.
+    endPct = Math.max(2, Math.min(98, yardLine));
+    startPct = Math.max(2, Math.min(98, endPct - yards));
+    // Home teams often drive right→left on TV bugs; flip when home for variety.
+    if (progress?.isHome) {
+      endPct = 100 - endPct;
+      startPct = 100 - startPct;
+    }
+  }
+
+  return {
+    id: `arc-${event.id}`,
+    playerId: event.playerId,
+    playerName: event.playerName,
+    pos: event.pos,
+    team: event.team,
+    side: event.side,
+    startPct,
+    endPct,
+    yardGain: yards,
+    headline: event.headline,
+    delta: event.delta,
+    hasSpot,
+  };
+}
+
+export type LeagueMatchupScoreSnap = {
+  matchupId: string;
+  leftName: string;
+  rightName: string;
+  leftPoints: number;
+  rightPoints: number;
+  leftLogo?: string | null;
+  rightLogo?: string | null;
+  starters: TlonStarterSnapshot[];
+};
+
+/** Detect ≥6 pt starter spikes on boards other than the watched matchup. */
+export function diffLeagueScoringUpdates(
+  prev: Map<string, TlonStarterSnapshot> | null,
+  prevScores: Map<string, { left: number; right: number }> | null,
+  boards: LeagueMatchupScoreSnap[],
+  watchedMatchupId: string | null,
+  opts?: { minDelta?: number; now?: number },
+): TlonScoringUpdate[] {
+  const minDelta = opts?.minDelta ?? TLON_SCORING_UPDATE_MIN;
+  const now = opts?.now ?? Date.now();
+  if (!prev || prev.size === 0) return [];
+
+  const updates: TlonScoringUpdate[] = [];
+  for (const board of boards) {
+    if (watchedMatchupId && board.matchupId === watchedMatchupId) continue;
+    const prevScore = prevScores?.get(board.matchupId);
+    for (const row of board.starters) {
+      const before = prev.get(`${board.matchupId}:${row.playerId}`);
+      if (!before) continue;
+      const delta = Math.round((row.points - before.points) * 10) / 10;
+      if (delta < minDelta) continue;
+      const headline = inferPlayHeadline(before.stats ?? null, row.stats ?? null, delta);
+      const leftFrom = prevScore?.left ?? board.leftPoints - (row.side === "left" ? delta : 0);
+      const rightFrom = prevScore?.right ?? board.rightPoints - (row.side === "right" ? delta : 0);
+      updates.push({
+        id: `su-${board.matchupId}-${row.playerId}-${now}`,
+        at: now,
+        matchupId: board.matchupId,
+        playerId: row.playerId,
+        playerName: row.playerName,
+        pos: row.pos,
+        team: row.team,
+        side: row.side,
+        delta,
+        headline,
+        leftName: board.leftName,
+        rightName: board.rightName,
+        leftFrom: Math.max(0, Math.round(leftFrom * 10) / 10),
+        leftTo: Math.round(board.leftPoints * 10) / 10,
+        rightFrom: Math.max(0, Math.round(rightFrom * 10) / 10),
+        rightTo: Math.round(board.rightPoints * 10) / 10,
+        leftLogo: board.leftLogo ?? null,
+        rightLogo: board.rightLogo ?? null,
+      });
+    }
+  }
+  updates.sort((a, b) => b.delta - a.delta);
+  return updates;
+}
+
+export function leagueStarterKey(matchupId: string, playerId: string): string {
+  return `${matchupId}:${playerId}`;
 }

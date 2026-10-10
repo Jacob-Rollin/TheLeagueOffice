@@ -16,6 +16,13 @@ export type NflGameProgress = {
   possessionAbbr?: string;
   /** True when ESPN reports the possession team is in the red zone. */
   isRedZone?: boolean;
+  /**
+   * Approximate ball spot 0–100 from the scoreboard situation when known.
+   * Used for broadcast theater (TLN play arcs) — not a tracking feed.
+   */
+  yardLine?: number;
+  /** True when this NFL team is the home competitor in its game. */
+  isHome?: boolean;
   /** Final / live box score label, e.g. "SEA 13 - NE 10". */
   boxScoreLabel?: string;
   /** Uppercase NFL opponent abbreviation for this team's game, when known. */
@@ -174,6 +181,7 @@ export function buildNflGameProgressMap(scoreboard: unknown): Map<string, NflGam
       ...(shortDetail ? { shortDetail } : {}),
       ...(possessionAbbr ? { possessionAbbr } : {}),
       ...(isRedZone ? { isRedZone: true } : {}),
+      ...(Number.isFinite(yardLine) && yardLine > 0 ? { yardLine } : {}),
       ...(boxScoreLabel ? { boxScoreLabel } : {}),
     };
 
@@ -182,8 +190,10 @@ export function buildNflGameProgressMap(scoreboard: unknown): Map<string, NflGam
       if (!abbr) continue;
       const opponentAbbr =
         abbr === awayAbbr ? homeAbbr : abbr === homeAbbr ? awayAbbr : "";
+      const isHome = competitor.homeAway === "home";
       map.set(abbr, {
         ...progressBase,
+        isHome,
         ...(opponentAbbr ? { opponentAbbr } : {}),
       });
     }

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import type { Pos } from "@/lib/draft";
@@ -48,7 +48,7 @@ function StudioRow({
     <button
       type="button"
       onClick={() => onOpen?.(row.id)}
-      className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left hover:bg-slate-50"
+      className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-slate-50"
     >
       <PlayerAvatar
         id={row.id}
@@ -71,9 +71,8 @@ function StudioRow({
         </div>
         <p className="truncate text-[11px] text-slate-500">
           {row.team || "—"}
-          {row.progress?.opponentAbbr ? ` @ ${row.progress.opponentAbbr}` : ""}
+          {row.progress?.opponentAbbr ? ` vs ${row.progress.opponentAbbr}` : ""}
           {row.progress?.isRedZone ? " · Red zone" : ""}
-          {row.progress?.possessionAbbr === (row.team || "").toUpperCase() ? " · Ball" : ""}
         </p>
       </div>
       <div className="text-right">
@@ -86,27 +85,7 @@ function StudioRow({
   );
 }
 
-function Panel({
-  title,
-  empty,
-  children,
-}: {
-  title: string;
-  empty: string;
-  children: ReactNode;
-}) {
-  const hasKids = Array.isArray(children) ? children.length > 0 : Boolean(children);
-  return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <header className="border-b border-slate-100 px-3 py-2">
-        <h3 className="display-title text-sm text-slate-900">{title}</h3>
-      </header>
-      <div className="max-h-56 space-y-0.5 overflow-y-auto px-2 py-1.5">
-        {hasKids ? children : <p className="px-1.5 py-3 text-sm text-slate-500">{empty}</p>}
-      </div>
-    </section>
-  );
-}
+type TabId = "clock" | "upcoming" | "locked";
 
 export function TlonStudio({
   onClock,
@@ -123,42 +102,57 @@ export function TlonStudio({
   rightLabel: string;
   onOpenPlayer?: (id: string) => void;
 }) {
+  const defaultTab: TabId = onClock.length ? "clock" : comingUp.length ? "upcoming" : "locked";
+  const [tab, setTab] = useState<TabId>(defaultTab);
+
+  useEffect(() => {
+    setTab(onClock.length ? "clock" : comingUp.length ? "upcoming" : "locked");
+  }, [onClock.length, comingUp.length, locked.length]);
+
+  const tabs: { id: TabId; label: string; rows: TlonStudioPlayer[]; empty: string }[] = [
+    { id: "clock", label: "On the Clock", rows: onClock, empty: "No starters in live NFL games right now." },
+    { id: "upcoming", label: "Coming Up", rows: comingUp, empty: "Every starter is already underway or final." },
+    { id: "locked", label: "Final / Locked", rows: locked, empty: "No starter games are final yet." },
+  ];
+  const active = tabs.find((t) => t.id === tab) ?? tabs[0]!;
+
   return (
-    <div className="grid gap-3 md:grid-cols-3">
-      <Panel title="On the Clock" empty="No starters in live NFL games right now.">
-        {onClock.map((row) => (
-          <StudioRow
-            key={`live-${row.id}`}
-            row={row}
-            leftLabel={leftLabel}
-            rightLabel={rightLabel}
-            {...(onOpenPlayer ? { onOpen: onOpenPlayer } : {})}
-          />
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <header className="flex flex-wrap items-center gap-1 border-b border-slate-100 px-2 py-2 sm:px-3">
+        <h3 className="mr-2 display-title text-sm text-slate-900">Lineup Board</h3>
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-xs font-semibold transition-colors",
+              tab === t.id
+                ? "border border-blue-600 bg-blue-600 text-white"
+                : "border border-slate-200 bg-white text-blue-700 hover:border-blue-300",
+            )}
+          >
+            {t.label}
+            <span className="ml-1 tabular-nums opacity-70">{t.rows.length}</span>
+          </button>
         ))}
-      </Panel>
-      <Panel title="Coming Up" empty="Every starter is already underway or final.">
-        {comingUp.map((row) => (
-          <StudioRow
-            key={`pre-${row.id}`}
-            row={row}
-            leftLabel={leftLabel}
-            rightLabel={rightLabel}
-            {...(onOpenPlayer ? { onOpen: onOpenPlayer } : {})}
-          />
-        ))}
-      </Panel>
-      <Panel title="Final / Locked" empty="No starter games are final yet.">
-        {locked.map((row) => (
-          <StudioRow
-            key={`post-${row.id}`}
-            row={row}
-            leftLabel={leftLabel}
-            rightLabel={rightLabel}
-            {...(onOpenPlayer ? { onOpen: onOpenPlayer } : {})}
-          />
-        ))}
-      </Panel>
-    </div>
+      </header>
+      <div className="max-h-64 space-y-0.5 overflow-y-auto px-2 py-1.5">
+        {active.rows.length ? (
+          active.rows.map((row) => (
+            <StudioRow
+              key={`${tab}-${row.id}`}
+              row={row}
+              leftLabel={leftLabel}
+              rightLabel={rightLabel}
+              {...(onOpenPlayer ? { onOpen: onOpenPlayer } : {})}
+            />
+          ))
+        ) : (
+          <p className="px-1.5 py-6 text-center text-sm text-slate-500">{active.empty}</p>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -177,7 +171,6 @@ export function TlonChaseMeter({
   rightProj: number;
   leftName: string;
   rightName: string;
-  /** Session win% samples for left side (0–100). */
   winHistory: number[];
 }) {
   const liveGap = Math.round((leftLive - rightLive) * 10) / 10;
@@ -227,7 +220,9 @@ export function TlonChaseMeter({
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2"
-                className="text-blue-600"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                className="text-blue-600 transition-[d] duration-500"
                 points={pts}
               />
             </svg>

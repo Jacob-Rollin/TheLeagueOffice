@@ -5,10 +5,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { AccessGate } from "@/components/league/AccessGate";
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
-import { TlonCrawl, type TlonCrawlItem } from "@/components/tlon/TlonCrawl";
+import { TlonBroadcastStage } from "@/components/tlon/TlonBroadcastStage";
+import type { TlonCrawlItem } from "@/components/tlon/TlonCrawl";
 import { TlonMatchupPicker, type TlonMatchupOption } from "@/components/tlon/TlonMatchupPicker";
 import { TlonPlayCard } from "@/components/tlon/TlonPlayCard";
-import { TlonScorebug, type TlonDaypart } from "@/components/tlon/TlonScorebug";
+import type { TlonDaypart } from "@/components/tlon/TlonScorebug";
 import {
   TlonChaseMeter,
   TlonStudio,
@@ -30,19 +31,25 @@ import {
   matchupWeeklyFallback,
   resolveMatchupStarters,
 } from "@/lib/matchup-preview";
+import { visibleRefetchInterval } from "@/lib/page-visibility";
 import {
   computeTeamDisplayProjection,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
 import { fetchSnapFantasyNews, fetchSnapInjuryWire } from "@/lib/snap-cdn";
 import {
+  buildPlayArc,
+  diffLeagueScoringUpdates,
   diffStarterPoints,
+  leagueStarterKey,
   mergeFeedEvents,
   snapshotsToMap,
+  type LeagueMatchupScoreSnap,
   type TlonFeedEvent,
+  type TlonPlayArc,
+  type TlonScoringUpdate,
   type TlonStarterSnapshot,
 } from "@/lib/tlon-play-feed";
-import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/tlon")({
@@ -52,7 +59,8 @@ export const Route = createFileRoute("/tlon")({
       { title: "The League Network — The League Office" },
       {
         name: "description",
-        content: "Watch your fantasy matchup live on The League Network — scorebug, scoring feed, and studio boards.",
+        content:
+          "Watch your fantasy matchup live on The League Network — scorebug, scoring feed, and studio boards.",
       },
     ],
   }),
@@ -159,12 +167,22 @@ function TlonNetwork() {
   const [viewMatchupId, setViewMatchupId] = useState<string | null>(null);
   const [feed, setFeed] = useState<TlonFeedEvent[]>([]);
   const [winHistory, setWinHistory] = useState<number[]>([]);
+  const [activeArc, setActiveArc] = useState<TlonPlayArc | null>(null);
+  const [arcQueue, setArcQueue] = useState<TlonPlayArc[]>([]);
+  const [scoringQueue, setScoringQueue] = useState<TlonScoringUpdate[]>([]);
+  const [activeScoring, setActiveScoring] = useState<TlonScoringUpdate | null>(null);
+  const [scorePulseSide, setScorePulseSide] = useState<"left" | "right" | null>(null);
+
   const prevSnapshots = useRef<Map<string, TlonStarterSnapshot> | null>(null);
+  const prevLeagueStarters = useRef<Map<string, TlonStarterSnapshot> | null>(null);
+  const prevLeagueScores = useRef<Map<string, { left: number; right: number }> | null>(null);
   const feedMatchupKey = useRef<string>("");
   const lastWinSample = useRef<number | null>(null);
+  const pulseTimer = useRef<number | null>(null);
 
   const myRosterId = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
   const platform = activeLeague?.platform ?? null;
+  const labels = useMemo(() => matchupSlotLabels(rosterPositions), [rosterPositions]);
 
   const matchupOptions = useMemo((): TlonMatchupOption[] => {
     const entries = matchups?.entries ?? [];
@@ -221,7 +239,13 @@ function TlonNetwork() {
     setViewMatchupId(null);
     setFeed([]);
     setWinHistory([]);
+    setActiveArc(null);
+    setArcQueue([]);
+    setScoringQueue([]);
+    setActiveScoring(null);
     prevSnapshots.current = null;
+    prevLeagueStarters.current = null;
+    prevLeagueScores.current = null;
     feedMatchupKey.current = "";
     lastWinSample.current = null;
   }, [activeLeagueId, activeWeek]);
@@ -260,16 +284,12 @@ function TlonNetwork() {
     return {
       leftEntry: left,
       rightEntry: right,
-      leftTeam: left
-        ? teams.find((t) => Number(t.slot) === Number(left.rosterId)) ?? null
-        : null,
+      leftTeam: left ? teams.find((t) => Number(t.slot) === Number(left.rosterId)) ?? null : null,
       rightTeam: right
         ? teams.find((t) => Number(t.slot) === Number(right.rosterId)) ?? null
         : null,
     };
   }, [selected, matchups, teams, myRosterId]);
-
-  const labels = useMemo(() => matchupSlotLabels(rosterPositions), [rosterPositions]);
 
   const leftStarters = useMemo(() => {
     if (!pair.leftEntry) return [] as Player[];
@@ -382,6 +402,8 @@ function TlonNetwork() {
     const rows: TlonStarterSnapshot[] = [];
     for (const p of leftStarters) {
       const progress = progressForTeam(progressByNflTeam, p.team);
+      const label = gameLabel(progress);
+      const stats = statsFor(p.id);
       rows.push({
         playerId: p.id,
         playerName: p.name,
@@ -389,12 +411,15 @@ function TlonNetwork() {
         team: p.team || "",
         side: "left",
         points: Number(leftPoints[p.id] ?? 0) || 0,
-        stats: statsFor(p.id),
-        gameLabel: gameLabel(progress),
+        ...(stats ? { stats } : {}),
+        ...(label ? { gameLabel: label } : {}),
+        ...(selected?.id ? { matchupId: selected.id } : {}),
       });
     }
     for (const p of rightStarters) {
       const progress = progressForTeam(progressByNflTeam, p.team);
+      const label = gameLabel(progress);
+      const stats = statsFor(p.id);
       rows.push({
         playerId: p.id,
         playerName: p.name,
@@ -402,12 +427,97 @@ function TlonNetwork() {
         team: p.team || "",
         side: "right",
         points: Number(rightPoints[p.id] ?? 0) || 0,
-        stats: statsFor(p.id),
-        gameLabel: gameLabel(progress),
+        ...(stats ? { stats } : {}),
+        ...(label ? { gameLabel: label } : {}),
+        ...(selected?.id ? { matchupId: selected.id } : {}),
       });
     }
     return rows;
-  }, [leftStarters, rightStarters, leftPoints, rightPoints, progressByNflTeam, statsFor]);
+  }, [
+    leftStarters,
+    rightStarters,
+    leftPoints,
+    rightPoints,
+    progressByNflTeam,
+    statsFor,
+    selected?.id,
+  ]);
+
+  /** All league boards for Scoring Update diffs — same matchups payload. */
+  const leagueBoards = useMemo((): LeagueMatchupScoreSnap[] => {
+    const entries = matchups?.entries ?? [];
+    const byId = new Map<number, typeof entries>();
+    for (const entry of entries) {
+      if (entry.matchupId == null) continue;
+      const bucket = byId.get(entry.matchupId) ?? [];
+      bucket.push(entry);
+      byId.set(entry.matchupId, bucket);
+    }
+    const boards: LeagueMatchupScoreSnap[] = [];
+    for (const [matchupId, bucket] of byId) {
+      const sorted = [...bucket].sort((a, b) => {
+        if (myRosterId != null && Number(a.rosterId) === Number(myRosterId)) return -1;
+        if (myRosterId != null && Number(b.rosterId) === Number(myRosterId)) return 1;
+        return Number(a.rosterId) - Number(b.rosterId);
+      });
+      const left = sorted[0];
+      if (!left) continue;
+      const right = sorted[1] ?? null;
+      const leftTeam = teams.find((t) => Number(t.slot) === Number(left.rosterId)) ?? null;
+      const rightTeam = right
+        ? teams.find((t) => Number(t.slot) === Number(right.rosterId)) ?? null
+        : null;
+      const leftStarts = resolveMatchupStarters(
+        leftTeam,
+        labels,
+        left.starters ?? [],
+        playersById,
+        left.starterNames ?? [],
+      );
+      const rightStarts = right
+        ? resolveMatchupStarters(
+            rightTeam,
+            labels,
+            right.starters ?? [],
+            playersById,
+            right.starterNames ?? [],
+          )
+        : [];
+      const starters: TlonStarterSnapshot[] = [
+        ...leftStarts.map((p) => ({
+          playerId: p.id,
+          playerName: p.name,
+          pos: p.pos,
+          team: p.team || "",
+          side: "left" as const,
+          points: Number(left.playerPoints?.[p.id] ?? 0) || 0,
+          stats: statsFor(p.id),
+          matchupId: String(matchupId),
+        })),
+        ...rightStarts.map((p) => ({
+          playerId: p.id,
+          playerName: p.name,
+          pos: p.pos,
+          team: p.team || "",
+          side: "right" as const,
+          points: Number(right?.playerPoints?.[p.id] ?? 0) || 0,
+          stats: statsFor(p.id),
+          matchupId: String(matchupId),
+        })),
+      ];
+      boards.push({
+        matchupId: String(matchupId),
+        leftName: leftTeam?.team?.trim() || left.teamName,
+        rightName: rightTeam?.team?.trim() || right?.teamName || "Bye",
+        leftPoints: left.points,
+        rightPoints: right?.points ?? 0,
+        leftLogo: leftTeam?.logo ?? left.logo ?? null,
+        rightLogo: rightTeam?.logo ?? right?.logo ?? null,
+        starters,
+      });
+    }
+    return boards;
+  }, [matchups, teams, labels, playersById, statsFor, myRosterId]);
 
   useEffect(() => {
     const key = `${activeLeagueId ?? ""}:${activeWeek}:${selected?.id ?? ""}`;
@@ -416,14 +526,73 @@ function TlonNetwork() {
       prevSnapshots.current = snapshotsToMap(starterSnapshots);
       setFeed([]);
       setWinHistory([]);
+      setActiveArc(null);
+      setArcQueue([]);
       lastWinSample.current = null;
       return;
     }
     if (!starterSnapshots.length) return;
     const incoming = diffStarterPoints(prevSnapshots.current, starterSnapshots);
     prevSnapshots.current = snapshotsToMap(starterSnapshots);
-    if (incoming.length) setFeed((prev) => mergeFeedEvents(prev, incoming));
-  }, [starterSnapshots, activeLeagueId, activeWeek, selected?.id]);
+    if (!incoming.length) return;
+
+    setFeed((prev) => mergeFeedEvents(prev, incoming));
+
+    const top = incoming[0];
+    if (top) {
+      setScorePulseSide(top.side);
+      if (pulseTimer.current) window.clearTimeout(pulseTimer.current);
+      pulseTimer.current = window.setTimeout(() => setScorePulseSide(null), 700);
+      const progress = progressForTeam(progressByNflTeam, top.team);
+      const arc = buildPlayArc(top, progress);
+      setArcQueue((q) => [...q, arc].slice(-6));
+    }
+  }, [starterSnapshots, activeLeagueId, activeWeek, selected?.id, progressByNflTeam]);
+
+  // Drain arc queue smoothly — one at a time.
+  useEffect(() => {
+    if (activeArc || !arcQueue.length) return;
+    const [next, ...rest] = arcQueue;
+    setActiveArc(next ?? null);
+    setArcQueue(rest);
+  }, [activeArc, arcQueue]);
+
+  // League-wide Scoring Updates (≥6) from the same matchups board.
+  useEffect(() => {
+    const starterMap = new Map<string, TlonStarterSnapshot>();
+    const scoreMap = new Map<string, { left: number; right: number }>();
+    for (const board of leagueBoards) {
+      scoreMap.set(board.matchupId, { left: board.leftPoints, right: board.rightPoints });
+      for (const s of board.starters) {
+        starterMap.set(leagueStarterKey(board.matchupId, s.playerId), s);
+      }
+    }
+
+    if (!prevLeagueStarters.current) {
+      prevLeagueStarters.current = starterMap;
+      prevLeagueScores.current = scoreMap;
+      return;
+    }
+
+    const updates = diffLeagueScoringUpdates(
+      prevLeagueStarters.current,
+      prevLeagueScores.current,
+      leagueBoards,
+      selected?.id ?? null,
+    );
+    prevLeagueStarters.current = starterMap;
+    prevLeagueScores.current = scoreMap;
+    if (updates.length) {
+      setScoringQueue((q) => [...q, ...updates].slice(0, 8));
+    }
+  }, [leagueBoards, selected?.id]);
+
+  useEffect(() => {
+    if (activeScoring || !scoringQueue.length) return;
+    const [next, ...rest] = scoringQueue;
+    setActiveScoring(next ?? null);
+    setScoringQueue(rest);
+  }, [activeScoring, scoringQueue]);
 
   const studioBuckets = useMemo(() => {
     const toRow = (p: Player, side: "left" | "right", map: Record<string, number>): TlonStudioPlayer => ({
@@ -529,24 +698,20 @@ function TlonNetwork() {
     },
   });
 
-  // Re-run crawl filter when roster ids settle without refetching snaps every time —
-  // RQ key already includes matchup; placeholder keeps prior crawl.
   const crawlItems = crawlQuery.data ?? [];
 
   const leftName =
-    pair.leftTeam?.team?.trim() ||
-    pair.leftEntry?.teamName ||
-    selected?.leftName ||
-    "Team";
+    pair.leftTeam?.team?.trim() || pair.leftEntry?.teamName || selected?.leftName || "Team";
   const rightName =
     pair.rightTeam?.team?.trim() ||
     pair.rightEntry?.teamName ||
     selected?.rightName ||
     "Opponent";
 
-  const leftLabel = selected?.isMine && Number(pair.leftEntry?.rosterId) === Number(myRosterId)
-    ? "YOU"
-    : leftName.slice(0, 8).toUpperCase();
+  const leftLabel =
+    selected?.isMine && Number(pair.leftEntry?.rosterId) === Number(myRosterId)
+      ? "YOU"
+      : leftName.slice(0, 8).toUpperCase();
   const rightLabel =
     selected?.isMine && Number(pair.rightEntry?.rosterId) === Number(myRosterId)
       ? "YOU"
@@ -561,9 +726,9 @@ function TlonNetwork() {
     <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
       <PlayerModalHost ref={modalRef} />
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="mb-1 flex items-center gap-2">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
             <span
               className={cn(
                 "rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
@@ -577,13 +742,13 @@ function TlonNetwork() {
               {daypart === "LIVE" ? "On Air" : daypart}
             </span>
             <ActiveLeagueLabel />
+            <span className="display-title text-xs tracking-widest text-slate-400">TLN</span>
           </div>
-          <h1 className="display-title text-3xl text-slate-900">
-            The League <span className="text-primary">Network</span>
+          <h1 className="display-title text-2xl text-slate-900 sm:text-3xl">
+            {leftName} <span className="text-slate-400">vs</span>{" "}
+            <span className="text-primary">{rightName}</span>
           </h1>
-          <p className="mt-1 max-w-xl text-sm text-slate-600">
-            Watch this week&apos;s H2H like a broadcast — live scorebug, scoring feed, and studio boards.
-          </p>
+          <p className="mt-0.5 text-sm text-slate-500">Week {activeWeek} · The League Network</p>
         </div>
         <Link
           to="/playbook/matchup"
@@ -593,48 +758,53 @@ function TlonNetwork() {
         </Link>
       </div>
 
-      <div className="mt-6 space-y-4">
+      <div className="space-y-4">
         {boardLoading ? (
           <p className="text-sm text-muted-foreground">Loading matchup network…</p>
         ) : !selected ? (
           <p className="text-sm text-muted-foreground">No matchups available for this week yet.</p>
         ) : (
           <>
-            <div className="rounded-2xl bg-gradient-to-b from-slate-800 to-slate-950 px-3 py-8 sm:px-6">
-              <TlonScorebug
-                week={activeWeek}
-                daypart={daypart}
-                leftName={leftName}
-                leftLogo={pair.leftTeam?.logo ?? pair.leftEntry?.logo ?? null}
-                leftRecord={recordFor(pair.leftEntry?.rosterId)}
-                leftLive={leftLive}
-                leftYetToPlay={yetToPlay(leftStarters)}
-                leftYetToPlayMax={leftStarters.length}
-                rightName={rightName}
-                rightLogo={pair.rightTeam?.logo ?? pair.rightEntry?.logo ?? null}
-                rightRecord={recordFor(pair.rightEntry?.rosterId)}
-                rightLive={rightLive}
-                rightYetToPlay={yetToPlay(rightStarters)}
-                rightYetToPlayMax={rightStarters.length}
-                winPctLeft={winPctLeft}
-                winPctRight={winPctRight}
-                projTotal={leftProj + rightProj}
-                liveTotal={leftLive + rightLive}
-                platform={platform ?? null}
-                leagueKey={activeLeagueId ?? null}
-                leadingSide={leadingSide}
-              />
-            </div>
-
-            <TlonMatchupPicker
-              options={matchupOptions}
-              selectedId={selected.id}
-              onSelect={setViewMatchupId}
-              platform={platform}
-              leagueKey={activeLeagueId}
+            <TlonBroadcastStage
+              week={activeWeek}
+              daypart={daypart}
+              leftName={leftName}
+              leftLogo={pair.leftTeam?.logo ?? pair.leftEntry?.logo ?? null}
+              leftRecord={recordFor(pair.leftEntry?.rosterId)}
+              leftLive={leftLive}
+              leftYetToPlay={yetToPlay(leftStarters)}
+              leftYetToPlayMax={leftStarters.length}
+              rightName={rightName}
+              rightLogo={pair.rightTeam?.logo ?? pair.rightEntry?.logo ?? null}
+              rightRecord={recordFor(pair.rightEntry?.rosterId)}
+              rightLive={rightLive}
+              rightYetToPlay={yetToPlay(rightStarters)}
+              rightYetToPlayMax={rightStarters.length}
+              winPctLeft={winPctLeft}
+              winPctRight={winPctRight}
+              platform={platform ?? null}
+              leagueKey={activeLeagueId ?? null}
+              leadingSide={leadingSide}
+              scorePulseSide={scorePulseSide}
+              arc={activeArc}
+              onArcDone={() => setActiveArc(null)}
+              scoringUpdate={activeScoring}
+              onScoringUpdateDone={() => setActiveScoring(null)}
+              onSelectScoringMatchup={(id) => {
+                setViewMatchupId(id);
+                setActiveScoring(null);
+              }}
+              crawlItems={crawlItems}
+              channelRail={
+                <TlonMatchupPicker
+                  options={matchupOptions}
+                  selectedId={selected.id}
+                  onSelect={setViewMatchupId}
+                  platform={platform}
+                  leagueKey={activeLeagueId}
+                />
+              }
             />
-
-            <TlonCrawl items={crawlItems} />
 
             <TlonChaseMeter
               leftLive={leftLive}
@@ -659,13 +829,13 @@ function TlonNetwork() {
               <header className="flex items-center justify-between border-b border-slate-100 px-3 py-2 sm:px-4">
                 <h2 className="display-title text-base text-slate-900">Live Scoring Feed</h2>
                 <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                  Updates ~30s
+                  Standing by
                 </span>
               </header>
               <div className="space-y-2 p-3 sm:p-4">
                 {feed.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-500">
-                    Waiting for the next scoring move from starters in this matchup…
+                    Standing by for the next scoring play from starters in this matchup…
                   </p>
                 ) : (
                   feed.map((event) => (
