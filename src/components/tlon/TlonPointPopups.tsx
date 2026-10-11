@@ -9,25 +9,27 @@ const HOLD_MS = 20_000;
 const MAX_PER_SIDE = 4;
 
 /**
- * Same yard mapping as TlonField — stacks sit on each side’s 20-yard line
- * for balance (not jammed in the end-zone corners).
+ * Same yard mapping as TlonField — stacks sit on each side’s 30-yard line
+ * so the painted 20 stays clear for red-zone badges.
  */
 const EZ = 8;
 const PLAYABLE = 100 - EZ * 2;
 function yardToPct(yardsFromLeftGoal: number): number {
   return EZ + (yardsFromLeftGoal / 100) * PLAYABLE;
 }
-const LEFT_20_PCT = yardToPct(20);
-const RIGHT_20_PCT = yardToPct(80);
+const LEFT_30_PCT = yardToPct(30);
+const RIGHT_30_PCT = yardToPct(70);
 
 function PointChip({
   event,
   onDone,
   expanded,
+  inRedZone,
 }: {
   event: TlonFeedEvent;
   onDone: (id: string) => void;
   expanded?: boolean;
+  inRedZone?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
   const onDoneRef = useRef(onDone);
@@ -82,11 +84,16 @@ function PointChip({
       <div className="min-w-0 flex-1">
         <p
           className={cn(
-            "truncate font-semibold leading-tight text-white",
+            "flex min-w-0 items-center gap-1 truncate font-semibold leading-tight text-white",
             expanded ? "text-[14px] sm:text-[15px]" : "text-[11px] sm:text-[12px] lg:text-[13px]",
           )}
         >
-          {event.playerName}
+          <span className="truncate">{event.playerName}</span>
+          {inRedZone ? (
+            <span className="shrink-0 rounded bg-rose-600 px-1 py-px text-[9px] font-extrabold uppercase tracking-wider text-white">
+              RZ
+            </span>
+          ) : null}
         </p>
         <p
           className={cn(
@@ -112,27 +119,31 @@ function PointChip({
 }
 
 /**
- * Selected-matchup point adjustments — stacked on each team’s 20-yard line.
+ * Selected-matchup point adjustments — stacked on each team’s 30-yard line.
  * Multiple scorers from one poll appear together; each auto-dismisses.
  */
 export function TlonPointPopups({
   events,
   onDismiss,
   expanded = false,
+  redZonePlayerIds,
 }: {
   events: TlonFeedEvent[];
   onDismiss: (id: string) => void;
   /** Fullscreen / large desktop — bigger chips for readability. */
   expanded?: boolean;
+  /** Player ids currently in the red zone (for chip RZ pills). */
+  redZonePlayerIds?: Set<string>;
 }) {
   const left = events.filter((e) => e.side === "left").slice(0, MAX_PER_SIDE);
   const right = events.filter((e) => e.side === "right").slice(0, MAX_PER_SIDE);
+  const rz = redZonePlayerIds;
 
   if (!left.length && !right.length) return null;
 
   return (
     /*
-      Match TlonField’s grass slab (excludes the 4% front edge) so the 20-yard
+      Match TlonField’s grass slab (excludes the 4% front edge) so the 30-yard
       % anchors line up with the painted yard lines on desktop fullscreen.
     */
     <div className="pointer-events-none absolute inset-x-0 top-0 bottom-[4%] z-30 overflow-hidden">
@@ -143,7 +154,7 @@ export function TlonPointPopups({
             ? "w-[min(42%,20rem)] gap-2.5"
             : "w-[min(40%,16.5rem)] gap-1.5 sm:w-[min(38%,15rem)] lg:w-[min(36%,16.5rem)]",
         )}
-        style={{ left: `${LEFT_20_PCT}%` }}
+        style={{ left: `${LEFT_30_PCT}%` }}
       >
         {left.map((event) => (
           <PointChip
@@ -151,6 +162,7 @@ export function TlonPointPopups({
             event={event}
             onDone={onDismiss}
             expanded={expanded}
+            inRedZone={rz?.has(event.playerId)}
           />
         ))}
       </div>
@@ -161,7 +173,7 @@ export function TlonPointPopups({
             ? "w-[min(42%,20rem)] gap-2.5"
             : "w-[min(40%,16.5rem)] gap-1.5 sm:w-[min(38%,15rem)] lg:w-[min(36%,16.5rem)]",
         )}
-        style={{ left: `${RIGHT_20_PCT}%` }}
+        style={{ left: `${RIGHT_30_PCT}%` }}
       >
         {right.map((event) => (
           <PointChip
@@ -169,6 +181,7 @@ export function TlonPointPopups({
             event={event}
             onDone={onDismiss}
             expanded={expanded}
+            inRedZone={rz?.has(event.playerId)}
           />
         ))}
       </div>

@@ -9,6 +9,7 @@ import { TlonBroadcastStage } from "@/components/tlon/TlonBroadcastStage";
 import type { TlonCrawlItem } from "@/components/tlon/TlonCrawl";
 import { TlonMatchupPicker, type TlonMatchupOption } from "@/components/tlon/TlonMatchupPicker";
 import { TlonPlayCard } from "@/components/tlon/TlonPlayCard";
+import type { TlonRedZonePlayer } from "@/components/tlon/TlonRedZoneBadges";
 import type { TlonDaypart } from "@/components/tlon/TlonScorebug";
 import {
   TlonChaseMeter,
@@ -65,19 +66,28 @@ export const Route = createFileRoute("/tlon")({
   component: TlonPage,
 });
 
+function nflTeamAliases(team: string | null | undefined): string[] {
+  const nfl = (team || "").trim().toUpperCase();
+  if (!nfl) return [];
+  if (nfl === "WAS" || nfl === "WSH") return ["WAS", "WSH"];
+  if (nfl === "LAR" || nfl === "LA") return ["LAR", "LA"];
+  if (nfl === "JAC" || nfl === "JAX") return ["JAC", "JAX"];
+  return [nfl];
+}
+
+function sameNflTeam(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = nflTeamAliases(a);
+  const right = new Set(nflTeamAliases(b));
+  return left.some((x) => right.has(x));
+}
+
 function progressForTeam(
   map: Map<string, NflGameProgress>,
   team: string | null | undefined,
 ): NflGameProgress | undefined {
-  const nfl = (team || "").trim().toUpperCase();
-  if (!nfl) return undefined;
-  if (map.has(nfl)) return map.get(nfl);
-  if (nfl === "WSH") return map.get("WAS");
-  if (nfl === "WAS") return map.get("WSH") ?? map.get("WAS");
-  if (nfl === "LA") return map.get("LAR");
-  if (nfl === "LAR") return map.get("LAR") ?? map.get("LA");
-  if (nfl === "JAC") return map.get("JAX");
-  if (nfl === "JAX") return map.get("JAX") ?? map.get("JAC");
+  for (const abbr of nflTeamAliases(team)) {
+    if (map.has(abbr)) return map.get(abbr);
+  }
   return undefined;
 }
 
@@ -657,6 +667,28 @@ function TlonNetwork() {
       return !phase || phase === "pre" || phase === "in";
     }).length;
 
+  /** Starters whose NFL team has the ball in the red zone right now. */
+  const redZonePlayers = useMemo((): TlonRedZonePlayer[] => {
+    const out: TlonRedZonePlayer[] = [];
+    const push = (starters: Player[], side: "left" | "right") => {
+      for (const p of starters) {
+        const progress = progressForTeam(progressByNflTeam, p.team);
+        if (!progress || progress.phase !== "in" || !progress.isRedZone) continue;
+        if (!sameNflTeam(progress.possessionAbbr, p.team)) continue;
+        out.push({
+          playerId: p.id,
+          playerName: p.name,
+          pos: p.pos,
+          team: p.team || "",
+          side,
+        });
+      }
+    };
+    push(leftStarters, "left");
+    push(rightStarters, "right");
+    return out;
+  }, [leftStarters, rightStarters, progressByNflTeam]);
+
   const daypart: TlonDaypart = useMemo(() => {
     if (preview?.matchupFinal) return "FINAL";
     const anyIn = [...leftStarters, ...rightStarters].some(
@@ -840,6 +872,7 @@ function TlonNetwork() {
               onDismissPointPopup={(id) =>
                 setPointPopups((prev) => prev.filter((e) => e.id !== id))
               }
+              redZonePlayers={redZonePlayers}
               scoringUpdate={activeScoring}
               onScoringUpdateDone={() => setActiveScoring(null)}
               onSelectScoringMatchup={(id) => {

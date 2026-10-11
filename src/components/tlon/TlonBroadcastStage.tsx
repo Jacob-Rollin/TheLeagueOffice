@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { TlonCrawl, type TlonCrawlItem } from "@/components/tlon/TlonCrawl";
 import { TlonField } from "@/components/tlon/TlonField";
 import { TlonPointPopups } from "@/components/tlon/TlonPointPopups";
+import { TlonRedZoneBadges, type TlonRedZonePlayer } from "@/components/tlon/TlonRedZoneBadges";
 import { TlonScorebug, type TlonDaypart } from "@/components/tlon/TlonScorebug";
 import { TlonScoringUpdateToast } from "@/components/tlon/TlonScoringUpdate";
 import type { TlonFeedEvent, TlonScoringUpdate } from "@/lib/tlon-play-feed";
@@ -44,6 +45,7 @@ export function TlonBroadcastStage({
   scorePulseSide,
   pointPopups,
   onDismissPointPopup,
+  redZonePlayers,
   scoringUpdate,
   onScoringUpdateDone,
   onSelectScoringMatchup,
@@ -74,6 +76,8 @@ export function TlonBroadcastStage({
   scorePulseSide?: "left" | "right" | null;
   pointPopups: TlonFeedEvent[];
   onDismissPointPopup?: (id: string) => void;
+  /** Starters whose NFL team currently has possession in the red zone. */
+  redZonePlayers?: TlonRedZonePlayer[];
   scoringUpdate: TlonScoringUpdate | null;
   onScoringUpdateDone?: () => void;
   onSelectScoringMatchup?: (matchupId: string) => void;
@@ -189,10 +193,16 @@ export function TlonBroadcastStage({
             leftName={leftName}
             rightName={rightName}
           />
+          <TlonRedZoneBadges players={redZonePlayers ?? []} expanded={fullscreen} />
           <TlonPointPopups
             events={pointPopups}
             onDismiss={onDismissPointPopup ?? (() => undefined)}
             expanded={fullscreen}
+            redZonePlayerIds={
+              redZonePlayers?.length
+                ? new Set(redZonePlayers.map((p) => p.playerId))
+                : undefined
+            }
           />
         </div>
 
