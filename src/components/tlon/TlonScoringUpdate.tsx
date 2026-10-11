@@ -7,18 +7,25 @@ import type { Pos } from "@/lib/draft";
 import type { TlonScoringUpdate } from "@/lib/tlon-play-feed";
 import { cn } from "@/lib/utils";
 
+const HOLD_MS = 10_000;
+/** Same card — just advances sooner when more league spikes are waiting. */
+const HOLD_QUEUED_MS = 7_000;
+
 export function TlonScoringUpdateToast({
   update,
   platform,
   leagueKey,
   onSelect,
   onDone,
+  queued = false,
 }: {
   update: TlonScoringUpdate | null;
   platform?: string | null;
   leagueKey?: string | null;
   onSelect?: (matchupId: string) => void;
   onDone?: () => void;
+  /** True when more Scoring Updates are waiting behind this one. */
+  queued?: boolean;
 }) {
   const [visible, setVisible] = useState(false);
 
@@ -29,16 +36,16 @@ export function TlonScoringUpdateToast({
     }
     setVisible(false);
     const enter = window.setTimeout(() => setVisible(true), 20);
-    // Hold long enough to read player + score tick-up (enter/exit animations extra).
+    const hold = queued ? HOLD_QUEUED_MS : HOLD_MS;
     const leave = window.setTimeout(() => {
       setVisible(false);
       window.setTimeout(() => onDone?.(), 320);
-    }, 20_000);
+    }, hold);
     return () => {
       window.clearTimeout(enter);
       window.clearTimeout(leave);
     };
-  }, [update?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [update?.id, queued]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const leftDisplay = useCountUp(
     update?.leftFrom ?? 0,
