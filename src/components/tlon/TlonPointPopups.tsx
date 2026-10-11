@@ -8,6 +8,18 @@ import { cn } from "@/lib/utils";
 const HOLD_MS = 8_000;
 const MAX_PER_SIDE = 4;
 
+/**
+ * Same yard mapping as TlonField — stacks sit on each side’s 20-yard line
+ * for balance (not jammed in the end-zone corners).
+ */
+const EZ = 8;
+const PLAYABLE = 100 - EZ * 2;
+function yardToPct(yardsFromLeftGoal: number): number {
+  return EZ + (yardsFromLeftGoal / 100) * PLAYABLE;
+}
+const LEFT_20_PCT = yardToPct(20);
+const RIGHT_20_PCT = yardToPct(80);
+
 function PointChip({
   event,
   onDone,
@@ -71,7 +83,7 @@ function PointChip({
 }
 
 /**
- * Selected-matchup point adjustments — stacked on the team’s field side.
+ * Selected-matchup point adjustments — stacked on each team’s 20-yard line.
  * Multiple scorers from one poll appear together; each auto-dismisses.
  */
 export function TlonPointPopups({
@@ -88,12 +100,18 @@ export function TlonPointPopups({
 
   return (
     <>
-      <div className="pointer-events-none absolute left-2 top-12 z-20 flex w-[min(45%,13rem)] flex-col gap-1.5 sm:left-3 sm:top-14">
+      <div
+        className="pointer-events-none absolute top-[28%] z-20 flex w-[min(42%,13rem)] -translate-x-1/2 flex-col gap-1.5 sm:top-[30%]"
+        style={{ left: `${LEFT_20_PCT}%` }}
+      >
         {left.map((event) => (
           <PointChip key={event.id} event={event} onDone={onDismiss} />
         ))}
       </div>
-      <div className="pointer-events-none absolute right-2 top-12 z-20 flex w-[min(45%,13rem)] flex-col items-end gap-1.5 sm:right-3 sm:top-14">
+      <div
+        className="pointer-events-none absolute top-[28%] z-20 flex w-[min(42%,13rem)] -translate-x-1/2 flex-col items-end gap-1.5 sm:top-[30%]"
+        style={{ left: `${RIGHT_20_PCT}%` }}
+      >
         {right.map((event) => (
           <PointChip key={event.id} event={event} onDone={onDismiss} />
         ))}
