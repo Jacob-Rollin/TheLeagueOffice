@@ -323,10 +323,13 @@ export function TlonField({
         />
       </div>
 
-      {/* End zone team names — larger type to fill the end zone */}
+      {/*
+        End zone team names — centered in the painted EZ (not on the white
+        end board at the back). White end board width is 2.15%.
+      */}
       <div
-        className="pointer-events-none absolute inset-y-[1%] left-0 z-[2] flex items-center justify-center overflow-visible px-[2%]"
-        style={{ width: `${EZ}%` }}
+        className="pointer-events-none absolute inset-y-[1%] z-[2] flex items-center justify-center overflow-visible"
+        style={{ left: "2.15%", width: `${EZ - 2.15}%` }}
       >
         <span
           className={endZoneTextClass(leftEndZone)}
@@ -340,8 +343,8 @@ export function TlonField({
         </span>
       </div>
       <div
-        className="pointer-events-none absolute inset-y-[1%] right-0 z-[2] flex items-center justify-center overflow-visible px-[2%]"
-        style={{ width: `${EZ}%` }}
+        className="pointer-events-none absolute inset-y-[1%] z-[2] flex items-center justify-center overflow-visible"
+        style={{ right: "2.15%", width: `${EZ - 2.15}%` }}
       >
         <span
           className={endZoneTextClass(rightEndZone)}
