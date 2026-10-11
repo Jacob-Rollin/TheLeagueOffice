@@ -5,7 +5,7 @@ import type { Pos } from "@/lib/draft";
 import type { TlonFeedEvent } from "@/lib/tlon-play-feed";
 import { cn } from "@/lib/utils";
 
-const HOLD_MS = 15_000;
+const HOLD_MS = 20_000;
 const MAX_PER_SIDE = 4;
 
 /**
