@@ -77,7 +77,7 @@ function StudioRow({
       </div>
       <div className="text-right">
         <p className="text-sm font-semibold tabular-nums text-slate-900">
-          {(Math.round(row.livePoints * 10) / 10).toFixed(1)}
+          {(Math.round(row.livePoints * 100) / 100).toFixed(2)}
         </p>
         <p className="text-[11px] tabular-nums text-slate-500">{periodLabel(row.progress)}</p>
       </div>

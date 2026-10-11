@@ -4,9 +4,9 @@ import type { TlonFeedEvent } from "@/lib/tlon-play-feed";
 import { cn } from "@/lib/utils";
 
 function formatDelta(n: number): string {
-  const rounded = Math.round(n * 10) / 10;
+  const rounded = Math.round(n * 100) / 100;
   const sign = rounded > 0 ? "+" : "";
-  return `${sign}${rounded.toFixed(1)}`;
+  return `${sign}${rounded.toFixed(2)}`;
 }
 
 function formatTime(at: number): string {

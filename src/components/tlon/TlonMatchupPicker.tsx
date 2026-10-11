@@ -14,7 +14,7 @@ export type TlonMatchupOption = {
 };
 
 function shortScore(n: number): string {
-  return (Math.round(n * 10) / 10).toFixed(1);
+  return (Math.round(n * 100) / 100).toFixed(2);
 }
 
 /** Dark channel rail — flip between league matchups like network games. */
