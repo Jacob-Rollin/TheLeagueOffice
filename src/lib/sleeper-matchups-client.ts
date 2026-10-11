@@ -5,7 +5,7 @@
  *
  * Live current-week polls bypass the long IndexedDB TTL so scores move
  * without burning Fluid. Memory TTL stays under the TLN broadcast poll
- * (~10s) so that page can actually hit the network each cycle.
+ * (~5s) so that page can actually hit the network each cycle.
  */
 
 import type { LeagueWeekMatchups, WeeklyMatchupEntry } from "@/lib/league.server";
@@ -13,8 +13,8 @@ import { getCached, writeCache } from "@/lib/sleeper-cache";
 import { sleeperFetchJson, type SleeperFetchKind } from "@/lib/sleeper-http";
 
 const SLEEPER = "https://api.sleeper.app/v1";
-/** In-memory coalescing for live score polls (must be ≤ fastest poller). */
-const LIVE_MEMORY_TTL_MS = 8 * 1000;
+/** In-memory coalescing for live score polls (must be ≤ fastest poller — TLN 5s). */
+const LIVE_MEMORY_TTL_MS = 4 * 1000;
 
 function sleeperAvatar(id: string | null | undefined): string | null {
   const clean = id?.trim();

@@ -30,10 +30,12 @@ const LIVE_POLL_MS = 30 * 1000;
 /** Between early/late windows — keep ≤60s so TLN field popups don’t stall. */
 const BETWEEN_GAMES_POLL_MS = 60 * 1000;
 /**
- * TLN broadcast stage only — faster Sleeper client polls (~6/min live).
- * Still well under the per-tab soft budget (180/min); other pages keep the default pace.
+ * TLN broadcast stage only — faster Sleeper client polls (~12/min live).
+ * Safe with a single RQ timer + ≤4s matchup memory TTL: ~12–14 Sleeper
+ * req/min/tab with weekly stats still ≪ 180 soft budget / ~1000 IP.
+ * Other pages keep the default pace.
  */
-const BROADCAST_LIVE_POLL_MS = 10 * 1000;
+const BROADCAST_LIVE_POLL_MS = 5 * 1000;
 const BROADCAST_BETWEEN_GAMES_POLL_MS = 20 * 1000;
 /** ESPN/Yahoo polls hit our `/api/data/league` CDN — keep quieter between games. */
 const ESPN_BETWEEN_GAMES_POLL_MS = 5 * 60 * 1000;
