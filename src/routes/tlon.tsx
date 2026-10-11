@@ -9,13 +9,14 @@ import { TlonBroadcastStage } from "@/components/tlon/TlonBroadcastStage";
 import type { TlonCrawlItem } from "@/components/tlon/TlonCrawl";
 import { TlonMatchupPicker, type TlonMatchupOption } from "@/components/tlon/TlonMatchupPicker";
 import { TlonPlayCard } from "@/components/tlon/TlonPlayCard";
-import type { TlonRedZonePlayer } from "@/components/tlon/TlonRedZoneBadges";
+import type { TlonFieldPlayer } from "@/components/tlon/TlonFieldPresence";
 import type { TlonDaypart } from "@/components/tlon/TlonScorebug";
 import {
   TlonChaseMeter,
   TlonStudio,
   type TlonStudioPlayer,
 } from "@/components/tlon/TlonStudio";
+import { possessionPill } from "@/components/mobile/league/lineupShared";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
@@ -670,26 +671,28 @@ function TlonNetwork() {
     }).length;
 
   /**
-   * Starters whose NFL team has the ball in the red zone right now.
-   * Stays lit for the full possession+RZ window (no toast dismiss) — clears
-   * only when ESPN reports the drive left the red zone or lost possession.
-   * Out / IA / IR / PUP / SUS / COV / Doubtful (and DST) never appear.
+   * On-field starters via the same offense/defense/sideline inference as mobile
+   * matchup pills. Offense stacks on the 30; shifts inside the 20 while RZ.
+   * DST sits at the bottom of the stack. Unavailable designations never appear.
    */
-  const redZonePlayers = useMemo((): TlonRedZonePlayer[] => {
-    const out: TlonRedZonePlayer[] = [];
+  const fieldPlayers = useMemo((): TlonFieldPlayer[] => {
+    const out: TlonFieldPlayer[] = [];
     const push = (starters: Player[], side: "left" | "right") => {
       for (const p of starters) {
-        if (p.pos === "DEF") continue;
         if (isUnavailableInjury(resolveInjuryStatus(p))) continue;
         const progress = progressForTeam(progressByNflTeam, p.team);
-        if (!progress || progress.phase !== "in" || !progress.isRedZone) continue;
-        if (!sameNflTeam(progress.possessionAbbr, p.team)) continue;
+        const pill = possessionPill(p, progress);
+        if (pill !== "offense" && pill !== "defense") continue;
+        // Red zone = ESPN isRedZone / yardLine ≤ 20 while this unit is offense.
+        const inRedZone = pill === "offense" && Boolean(progress?.isRedZone);
         out.push({
           playerId: p.id,
           playerName: p.name,
           pos: p.pos,
           team: p.team || "",
           side,
+          unit: pill,
+          inRedZone,
         });
       }
     };
@@ -697,6 +700,21 @@ function TlonNetwork() {
     push(rightStarters, "right");
     return out;
   }, [leftStarters, rightStarters, progressByNflTeam]);
+
+  const fieldPlayerIds = useMemo(
+    () => new Set(fieldPlayers.map((p) => p.playerId)),
+    [fieldPlayers],
+  );
+
+  /** Point ticks for on-field players slide from their chip; rest keep toast cards. */
+  const fieldScoreEvents = useMemo(
+    () => pointPopups.filter((e) => fieldPlayerIds.has(e.playerId)),
+    [pointPopups, fieldPlayerIds],
+  );
+  const offFieldPointPopups = useMemo(
+    () => pointPopups.filter((e) => !fieldPlayerIds.has(e.playerId)),
+    [pointPopups, fieldPlayerIds],
+  );
 
   const daypart: TlonDaypart = useMemo(() => {
     if (preview?.matchupFinal) return "FINAL";
@@ -877,11 +895,12 @@ function TlonNetwork() {
               leagueKey={activeLeagueId ?? null}
               leadingSide={leadingSide}
               scorePulseSide={scorePulseSide}
-              pointPopups={pointPopups}
+              pointPopups={offFieldPointPopups}
               onDismissPointPopup={(id) =>
                 setPointPopups((prev) => prev.filter((e) => e.id !== id))
               }
-              redZonePlayers={redZonePlayers}
+              fieldPlayers={fieldPlayers}
+              fieldScoreEvents={fieldScoreEvents}
               scoringUpdate={activeScoring}
               onScoringUpdateDone={() => setActiveScoring(null)}
               onSelectScoringMatchup={(id) => {

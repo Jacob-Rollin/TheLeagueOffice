@@ -3,8 +3,11 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { TlonCrawl, type TlonCrawlItem } from "@/components/tlon/TlonCrawl";
 import { TlonField } from "@/components/tlon/TlonField";
+import {
+  TlonFieldPresence,
+  type TlonFieldPlayer,
+} from "@/components/tlon/TlonFieldPresence";
 import { TlonPointPopups } from "@/components/tlon/TlonPointPopups";
-import { TlonRedZoneBadges, type TlonRedZonePlayer } from "@/components/tlon/TlonRedZoneBadges";
 import { TlonScorebug, type TlonDaypart } from "@/components/tlon/TlonScorebug";
 import { TlonScoringUpdateToast } from "@/components/tlon/TlonScoringUpdate";
 import type { TlonFeedEvent, TlonScoringUpdate } from "@/lib/tlon-play-feed";
@@ -45,7 +48,8 @@ export function TlonBroadcastStage({
   scorePulseSide,
   pointPopups,
   onDismissPointPopup,
-  redZonePlayers,
+  fieldPlayers,
+  fieldScoreEvents,
   scoringUpdate,
   onScoringUpdateDone,
   onSelectScoringMatchup,
@@ -74,10 +78,13 @@ export function TlonBroadcastStage({
   leagueKey?: string | null;
   leadingSide: "left" | "right" | "tie";
   scorePulseSide?: "left" | "right" | null;
+  /** Off-field point toasts only — on-field ticks slide from presence chips. */
   pointPopups: TlonFeedEvent[];
   onDismissPointPopup?: (id: string) => void;
-  /** Starters whose NFL team currently has possession in the red zone. */
-  redZonePlayers?: TlonRedZonePlayer[];
+  /** Offense/defense starters currently on the field (mobile pill inference). */
+  fieldPlayers?: TlonFieldPlayer[];
+  /** Point ticks for on-field players — slide out from their chips. */
+  fieldScoreEvents?: TlonFeedEvent[];
   scoringUpdate: TlonScoringUpdate | null;
   onScoringUpdateDone?: () => void;
   onSelectScoringMatchup?: (matchupId: string) => void;
@@ -193,16 +200,23 @@ export function TlonBroadcastStage({
             leftName={leftName}
             rightName={rightName}
           />
-          <TlonRedZoneBadges players={redZonePlayers ?? []} expanded={fullscreen} />
+          <TlonFieldPresence
+            players={fieldPlayers ?? []}
+            scoreEvents={fieldScoreEvents ?? []}
+            {...(onDismissPointPopup ? { onDismissScore: onDismissPointPopup } : {})}
+            expanded={fullscreen}
+          />
           <TlonPointPopups
             events={pointPopups}
             onDismiss={onDismissPointPopup ?? (() => undefined)}
             expanded={fullscreen}
-            redZonePlayerIds={
-              redZonePlayers?.length
-                ? new Set(redZonePlayers.map((p) => p.playerId))
-                : undefined
-            }
+            {...(fieldPlayers?.length
+              ? {
+                  redZonePlayerIds: new Set(
+                    fieldPlayers.filter((p) => p.inRedZone).map((p) => p.playerId),
+                  ),
+                }
+              : {})}
           />
         </div>
 

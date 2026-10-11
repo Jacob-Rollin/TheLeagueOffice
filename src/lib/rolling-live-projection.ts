@@ -134,6 +134,7 @@ export function buildNflGameProgressMap(scoreboard: unknown): Map<string, NflGam
     }
     const sit = competition.situation;
     const yardLine = Number(sit?.yardLine);
+    // Red zone = inside the opponent’s 20 (ESPN flag, or yardLine 1–20 fallback).
     const isRedZone = Boolean(
       sit?.isRedZone ||
         sit?.ballsInRedZone ||
