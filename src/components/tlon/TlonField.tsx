@@ -1,8 +1,3 @@
-import { useEffect, useState } from "react";
-
-import { playerImage } from "@/components/draft/PlayerAvatar";
-import type { Pos } from "@/lib/draft";
-import type { TlonPlayArc } from "@/lib/tlon-play-feed";
 import { cn } from "@/lib/utils";
 
 /** End-zone width in % of the full graphic (each side). */
@@ -76,54 +71,19 @@ function GoalPost({ side }: { side: "left" | "right" }) {
 }
 
 /**
- * Stylized 2D field with a single approximate play arc.
- * Positions are theater from box-score + scoreboard — not GPS tracking.
- * Depth + goalposts are visual only — yardToPct / arcs stay flat 2D.
+ * Stylized 2D field stage. Point adjustments render beside the field
+ * (see TlonPointPopups) — yardToPct stays available for any future overlays.
  */
 export function TlonField({
-  arc,
-  onArcDone,
   fillHeight = false,
   leftName = "Away",
   rightName = "Home",
 }: {
-  arc: TlonPlayArc | null;
-  onArcDone?: (id: string) => void;
   /** Stretch to fill a fullscreen stage instead of a fixed aspect box. */
   fillHeight?: boolean;
   leftName?: string;
   rightName?: string;
 }) {
-  const [phase, setPhase] = useState<"idle" | "run" | "hold">("idle");
-  const [active, setActive] = useState<TlonPlayArc | null>(null);
-
-  useEffect(() => {
-    if (!arc) return;
-    setActive(arc);
-    setPhase("idle");
-    const t0 = window.setTimeout(() => setPhase("run"), 50);
-    const t1 = window.setTimeout(() => setPhase("hold"), 950);
-    const t2 = window.setTimeout(() => {
-      setPhase("idle");
-      setActive(null);
-      onArcDone?.(arc.id);
-    }, 8000);
-    return () => {
-      window.clearTimeout(t0);
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-    // Drive animation from arc identity only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arc?.id]);
-
-  // Arc spots are yard lines (0–100 from left goal); map onto playable grass.
-  const start = active?.hasSpot ? yardToPct(active.startPct) : 44;
-  const end = active?.hasSpot ? yardToPct(active.endPct) : 56;
-  const atEnd = phase === "run" || phase === "hold";
-  const x = active ? (atEnd ? end : start) : 50;
-  const show = Boolean(active);
-
   const leftEndZone = (leftName || "Away").trim().toUpperCase() || "AWAY";
   const rightEndZone = (rightName || "Home").trim().toUpperCase() || "HOME";
   const endZoneTextClass = (name: string) =>
@@ -372,54 +332,6 @@ export function TlonField({
         className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/15"
       />
 
-      {show && active ? (
-        <>
-          {active.hasSpot ? (
-            <div className="pointer-events-none absolute inset-0 z-[2]">
-              <div
-                className="absolute top-[52%] h-[3px] -translate-y-1/2 rounded-full bg-white/85 shadow"
-                style={{
-                  left: `${Math.min(start, end)}%`,
-                  width: atEnd ? `${Math.abs(end - start)}%` : "0%",
-                  transition: "width 700ms cubic-bezier(0.22, 1, 0.36, 1)",
-                }}
-              />
-              <div
-                className="absolute top-[52%] size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80"
-                style={{ left: `${start}%` }}
-              />
-            </div>
-          ) : null}
-
-          <div
-            className={cn(
-              "absolute top-[42%] z-10 -translate-x-1/2 -translate-y-1/2 will-change-transform",
-              "transition-[left,transform] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              phase === "hold" && "scale-110",
-            )}
-            style={{ left: `${x}%` }}
-          >
-            <div className="relative">
-              <img
-                src={playerImage(active.playerId, (active.pos || "WR") as Pos, active.team)}
-                alt=""
-                className="size-10 rounded-full border-2 border-white object-cover shadow-lg shadow-black/40 sm:size-12"
-                onError={(e) => {
-                  e.currentTarget.style.visibility = "hidden";
-                }}
-              />
-              <div className="absolute -bottom-6 left-1/2 w-max max-w-[10rem] -translate-x-1/2 rounded-md bg-black/75 px-1.5 py-0.5 text-center text-[10px] font-semibold text-white shadow">
-                <span className="block truncate">{active.playerName}</span>
-                <span className="text-emerald-300">
-                  {active.yardGain > 0 ? `+${active.yardGain} yd` : active.headline} ·{" "}
-                  {active.delta >= 0 ? "+" : ""}
-                  {active.delta.toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </>
-      ) : null}
       </div>
 
       {/* Front slab edge — sells thickness without skewing the field plane */}

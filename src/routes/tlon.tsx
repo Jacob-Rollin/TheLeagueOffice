@@ -38,7 +38,6 @@ import {
 } from "@/lib/rolling-live-projection";
 import { fetchSnapFantasyNews, fetchSnapInjuryWire } from "@/lib/snap-cdn";
 import {
-  buildPlayArc,
   diffLeagueScoringUpdates,
   diffStarterPoints,
   leagueStarterKey,
@@ -46,7 +45,6 @@ import {
   snapshotsToMap,
   type LeagueMatchupScoreSnap,
   type TlonFeedEvent,
-  type TlonPlayArc,
   type TlonScoringUpdate,
   type TlonStarterSnapshot,
 } from "@/lib/tlon-play-feed";
@@ -167,8 +165,7 @@ function TlonNetwork() {
   const [viewMatchupId, setViewMatchupId] = useState<string | null>(null);
   const [feed, setFeed] = useState<TlonFeedEvent[]>([]);
   const [winHistory, setWinHistory] = useState<number[]>([]);
-  const [activeArc, setActiveArc] = useState<TlonPlayArc | null>(null);
-  const [arcQueue, setArcQueue] = useState<TlonPlayArc[]>([]);
+  const [pointPopups, setPointPopups] = useState<TlonFeedEvent[]>([]);
   const [scoringQueue, setScoringQueue] = useState<TlonScoringUpdate[]>([]);
   const [activeScoring, setActiveScoring] = useState<TlonScoringUpdate | null>(null);
   const [scorePulseSide, setScorePulseSide] = useState<"left" | "right" | null>(null);
@@ -239,8 +236,7 @@ function TlonNetwork() {
     setViewMatchupId(null);
     setFeed([]);
     setWinHistory([]);
-    setActiveArc(null);
-    setArcQueue([]);
+    setPointPopups([]);
     setScoringQueue([]);
     setActiveScoring(null);
     prevSnapshots.current = null;
@@ -526,8 +522,7 @@ function TlonNetwork() {
       prevSnapshots.current = snapshotsToMap(starterSnapshots);
       setFeed([]);
       setWinHistory([]);
-      setActiveArc(null);
-      setArcQueue([]);
+      setPointPopups([]);
       lastWinSample.current = null;
       return;
     }
@@ -544,22 +539,13 @@ function TlonNetwork() {
       if (pulseTimer.current) window.clearTimeout(pulseTimer.current);
       pulseTimer.current = window.setTimeout(() => setScorePulseSide(null), 700);
     }
-    // Queue several scorers from this poll so secondary jumps aren’t waiting another cycle.
-    const arcs = incoming.slice(0, 3).map((ev) =>
-      buildPlayArc(ev, progressForTeam(progressByNflTeam, ev.team)),
-    );
-    if (arcs.length) {
-      setArcQueue((q) => [...q, ...arcs].slice(-6));
-    }
-  }, [starterSnapshots, activeLeagueId, activeWeek, selected?.id, progressByNflTeam]);
-
-  // Drain arc queue smoothly — one at a time.
-  useEffect(() => {
-    if (activeArc || !arcQueue.length) return;
-    const [next, ...rest] = arcQueue;
-    setActiveArc(next ?? null);
-    setArcQueue(rest);
-  }, [activeArc, arcQueue]);
+    // Stack on the team’s field side — show several from one poll at once.
+    setPointPopups((prev) => {
+      const seen = new Set(prev.map((e) => e.id));
+      const next = incoming.filter((e) => !seen.has(e.id));
+      return [...next, ...prev].slice(0, 8);
+    });
+  }, [starterSnapshots, activeLeagueId, activeWeek, selected?.id]);
 
   // League-wide Scoring Updates (≥6) — skips the selected / on-air matchup.
   useEffect(() => {
@@ -809,8 +795,10 @@ function TlonNetwork() {
               leagueKey={activeLeagueId ?? null}
               leadingSide={leadingSide}
               scorePulseSide={scorePulseSide}
-              arc={activeArc}
-              onArcDone={() => setActiveArc(null)}
+              pointPopups={pointPopups}
+              onDismissPointPopup={(id) =>
+                setPointPopups((prev) => prev.filter((e) => e.id !== id))
+              }
               scoringUpdate={activeScoring}
               onScoringUpdateDone={() => setActiveScoring(null)}
               onSelectScoringMatchup={(id) => {
