@@ -613,10 +613,11 @@ function TlonNetwork() {
     return { onClock, comingUp, locked };
   }, [leftStarters, rightStarters, leftPoints, rightPoints, progressByNflTeam]);
 
+  /** Lit dots = game not finished yet (pregame or in progress). Grey only after final. */
   const yetToPlay = (starters: Player[]) =>
     starters.filter((p) => {
       const phase = progressForTeam(progressByNflTeam, p.team)?.phase;
-      return !phase || phase === "pre";
+      return !phase || phase === "pre" || phase === "in";
     }).length;
 
   const daypart: TlonDaypart = useMemo(() => {
