@@ -22,23 +22,38 @@ function yardLabel(yardsFromLeftGoal: number): string {
   return String(fromNear);
 }
 
-/** Yellow uprights at each end - decorative only; does not affect yard math. */
+/**
+ * Classic upright silhouette at the BACK CENTER of each end zone.
+ * Small icon (not top-down brackets) so it reads as a goalpost on a 2D field.
+ */
 function GoalPost({ side }: { side: "left" | "right" }) {
   return (
     <div
       className={cn(
-        "pointer-events-none absolute top-1/5 z-[1] flex h-3/5 w-[4.5%] min-w-4 max-w-8 flex-col items-center opacity-90",
-        side === "left" ? "left-[1.1%]" : "right-[1.1%]",
+        "pointer-events-none absolute top-1/2 z-[2] h-[24%] max-h-16 min-h-10 w-[2.4%] min-w-[12px] max-w-[18px] -translate-y-1/2",
+        // Back of end zone (EZ = 8%), vertically centered on the hashes
+        side === "left" ? "left-[1.15%]" : "right-[1.15%]",
       )}
       aria-hidden
     >
-      <div className="relative mt-[8%] flex h-[42%] w-[78%] items-start justify-center">
-        <span className="absolute inset-x-0 top-0 h-[3px] rounded-full bg-yellow-400 shadow" />
-        <span className="absolute inset-y-0 left-0 w-[3px] rounded-full bg-yellow-400 shadow" />
-        <span className="absolute inset-y-0 right-0 w-[3px] rounded-full bg-yellow-400 shadow" />
-      </div>
-      <span className="h-[22%] w-[3px] rounded-full bg-yellow-500" />
-      <span className="h-[3px] w-[42%] rounded-full bg-yellow-600" />
+      <svg
+        viewBox="0 0 32 72"
+        className="h-full w-full drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <g stroke="#fde047" strokeLinecap="round" strokeLinejoin="round" fill="none">
+          {/* Uprights */}
+          <line x1="6" y1="4" x2="6" y2="34" strokeWidth="2.8" />
+          <line x1="26" y1="4" x2="26" y2="34" strokeWidth="2.8" />
+          {/* Crossbar */}
+          <line x1="6" y1="34" x2="26" y2="34" strokeWidth="3" />
+          {/* Gooseneck + post */}
+          <path d="M16 34 V48 Q16 54 16 58" strokeWidth="2.6" />
+        </g>
+        {/* Ground pad */}
+        <rect x="10" y="58" width="12" height="5" rx="1.5" fill="#a16207" />
+        <rect x="8" y="62" width="16" height="3" rx="1" fill="#854d0e" opacity="0.85" />
+      </svg>
     </div>
   );
 }
