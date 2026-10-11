@@ -22,9 +22,31 @@ function yardLabel(yardsFromLeftGoal: number): string {
   return String(fromNear);
 }
 
+/** Yellow uprights at each end - decorative only; does not affect yard math. */
+function GoalPost({ side }: { side: "left" | "right" }) {
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute top-1/5 z-[1] flex h-3/5 w-[4.5%] min-w-4 max-w-8 flex-col items-center opacity-90",
+        side === "left" ? "left-[1.1%]" : "right-[1.1%]",
+      )}
+      aria-hidden
+    >
+      <div className="relative mt-[8%] flex h-[42%] w-[78%] items-start justify-center">
+        <span className="absolute inset-x-0 top-0 h-[3px] rounded-full bg-yellow-400 shadow" />
+        <span className="absolute inset-y-0 left-0 w-[3px] rounded-full bg-yellow-400 shadow" />
+        <span className="absolute inset-y-0 right-0 w-[3px] rounded-full bg-yellow-400 shadow" />
+      </div>
+      <span className="h-[22%] w-[3px] rounded-full bg-yellow-500" />
+      <span className="h-[3px] w-[42%] rounded-full bg-yellow-600" />
+    </div>
+  );
+}
+
 /**
  * Stylized 2D field with a single approximate play arc.
  * Positions are theater from box-score + scoreboard — not GPS tracking.
+ * Depth + goalposts are visual only — yardToPct / arcs stay flat 2D.
  */
 export function TlonField({
   arc,
@@ -85,12 +107,17 @@ export function TlonField({
   return (
     <div
       className={cn(
-        "relative w-full overflow-hidden rounded-t-2xl",
+        "relative w-full overflow-hidden rounded-t-2xl bg-[#0b1220]",
         fillHeight
           ? "h-full min-h-[12rem]"
           : "aspect-[1.65/1] min-h-[12.5rem] sm:aspect-[2.4/1] sm:min-h-0",
       )}
     >
+      {/*
+        Field slab — same flat coordinate system as before. Depth is rim +
+        lighting only (no perspective transform), so arcs/yard % stay correct.
+      */}
+      <div className="absolute inset-x-0 top-0 bottom-[4%] overflow-hidden rounded-t-2xl shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
       <div
         className="absolute inset-0"
         style={{
@@ -235,7 +262,7 @@ export function TlonField({
 
       {/* End zone team names — larger type to fill the end zone */}
       <div
-        className="pointer-events-none absolute inset-y-[1%] left-0 z-[1] flex items-center justify-center overflow-visible px-[2%]"
+        className="pointer-events-none absolute inset-y-[1%] left-0 z-[2] flex items-center justify-center overflow-visible px-[2%]"
         style={{ width: `${EZ}%` }}
       >
         <span
@@ -250,7 +277,7 @@ export function TlonField({
         </span>
       </div>
       <div
-        className="pointer-events-none absolute inset-y-[1%] right-0 z-[1] flex items-center justify-center overflow-visible px-[2%]"
+        className="pointer-events-none absolute inset-y-[1%] right-0 z-[2] flex items-center justify-center overflow-visible px-[2%]"
         style={{ width: `${EZ}%` }}
       >
         <span
@@ -262,7 +289,22 @@ export function TlonField({
         </span>
       </div>
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)]" />
+      <GoalPost side="left" />
+      <GoalPost side="right" />
+
+      {/* Depth lighting — does not change layout coordinates */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.28)_0%,transparent_22%,transparent_72%,rgba(0,0,0,0.22)_100%)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_42%,rgba(0,0,0,0.38)_100%)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/15"
+      />
 
       {show && active ? (
         <>
@@ -312,6 +354,17 @@ export function TlonField({
           </div>
         </>
       ) : null}
+      </div>
+
+      {/* Front slab edge — sells thickness without skewing the field plane */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-[4%] bg-[linear-gradient(180deg,#14532d_0%,#052e16_55%,#022c22_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-[2%] bottom-[1%] h-[2px] rounded-full bg-black/35 blur-[1px]"
+      />
     </div>
   );
 }
