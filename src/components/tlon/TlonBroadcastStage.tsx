@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { TlonCrawl, type TlonCrawlItem } from "@/components/tlon/TlonCrawl";
 import { TlonField } from "@/components/tlon/TlonField";
+import { TlonPointPopups } from "@/components/tlon/TlonPointPopups";
 import { TlonScorebug, type TlonDaypart } from "@/components/tlon/TlonScorebug";
 import { TlonScoringUpdateToast } from "@/components/tlon/TlonScoringUpdate";
-import type { TlonPlayArc, TlonScoringUpdate } from "@/lib/tlon-play-feed";
+import type { TlonFeedEvent, TlonScoringUpdate } from "@/lib/tlon-play-feed";
 import { cn } from "@/lib/utils";
 
 function clearBodyLock() {
@@ -41,8 +42,8 @@ export function TlonBroadcastStage({
   leagueKey,
   leadingSide,
   scorePulseSide,
-  arc,
-  onArcDone,
+  pointPopups,
+  onDismissPointPopup,
   scoringUpdate,
   onScoringUpdateDone,
   onSelectScoringMatchup,
@@ -71,8 +72,8 @@ export function TlonBroadcastStage({
   leagueKey?: string | null;
   leadingSide: "left" | "right" | "tie";
   scorePulseSide?: "left" | "right" | null;
-  arc: TlonPlayArc | null;
-  onArcDone?: (id: string) => void;
+  pointPopups: TlonFeedEvent[];
+  onDismissPointPopup?: (id: string) => void;
   scoringUpdate: TlonScoringUpdate | null;
   onScoringUpdateDone?: () => void;
   onSelectScoringMatchup?: (matchupId: string) => void;
@@ -180,13 +181,17 @@ export function TlonBroadcastStage({
       <div className={cn("relative min-h-0", fullscreen && "flex min-h-0 flex-1 flex-col")}>
         <div className={cn(fullscreen && "min-h-0 flex-1")}>
           <TlonField
-            arc={arc}
             fillHeight={fullscreen}
             leftName={leftName}
             rightName={rightName}
-            {...(onArcDone ? { onArcDone } : {})}
           />
         </div>
+
+        {/* Selected-matchup point ticks — stacked on each team’s side */}
+        <TlonPointPopups
+          events={pointPopups}
+          onDismiss={onDismissPointPopup ?? (() => undefined)}
+        />
 
         {/* Scorebug overlay — compact bar, field shows on the sides */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-2 sm:px-6 sm:pb-3">
