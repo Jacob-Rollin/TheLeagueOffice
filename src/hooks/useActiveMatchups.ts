@@ -63,9 +63,11 @@ async function loadWeekMatchups(input: {
   connectionId: string | null;
   s2?: string;
   swid?: string;
+  /** TLN broadcast: prefer live Sleeper pulls even before NFL week hydrates. */
+  preferLive?: boolean;
 }): Promise<LeagueWeekMatchups | null> {
   let { leagueId } = input;
-  const { week, currentWeek, platform } = input;
+  const { week, currentWeek, platform, preferLive = false } = input;
   if (platform === "native") {
     const linkId = String(input.connectionId ?? "").trim();
     if (!linkId) return null;
@@ -73,7 +75,11 @@ async function loadWeekMatchups(input: {
     return fetchNativeWeekMatchups(linkId, week, currentWeek);
   }
   const past = currentWeek != null && week < currentWeek;
-  const isCurrent = currentWeek != null && week === currentWeek;
+  // Without a hydrated NFL week, broadcast still wants the live client path —
+  // warm IndexedDB (minutes TTL) is what made scores look "refresh-only".
+  const isCurrent =
+    (currentWeek != null && week === currentWeek) ||
+    (preferLive && currentWeek == null && week > 0);
   const sleeperPlatform = isSleeperPlatform(platform);
 
   // Always resolve Sleeper ids — numeric user ids fail /league/{id} otherwise.
@@ -164,25 +170,26 @@ function liveMatchupPollMs(
   platform: string,
   pace: ActiveMatchupsPace,
 ): number | false {
-  if (week == null || currentWeek == null || week !== currentWeek) return false;
-  if (liveMs === false) return false;
   // Native polls hit auth serverFns (+ live stats snap) — keep ESPN-quiet cadence.
   const espnish = platform === "espn" || platform === "yahoo" || platform === "native";
   // ESPN/Yahoo polls also hit our CDN route (and sometimes Fluid). Keep them
   // calmer than Sleeper's browser→api.sleeper.app live path — even on TLN.
   const broadcast = !espnish && pace === "broadcast";
-  const inGame = espnish
-    ? ESPN_BETWEEN_GAMES_POLL_MS
-    : broadcast
-      ? BROADCAST_LIVE_POLL_MS
-      : LIVE_POLL_MS;
-  const between = espnish
-    ? ESPN_BETWEEN_GAMES_POLL_MS
-    : broadcast
-      ? BROADCAST_BETWEEN_GAMES_POLL_MS
-      : BETWEEN_GAMES_POLL_MS;
-  const liveFloor = broadcast ? BROADCAST_LIVE_POLL_MS : 30_000;
-  if (typeof liveMs === "number" && liveMs <= liveFloor) return inGame;
+
+  if (broadcast) {
+    if (week == null) return false;
+    // Known past week — stop. Future / unknown NFL week — keep a gentle poke.
+    if (currentWeek != null && week < currentWeek) return false;
+    if (typeof liveMs === "number" && liveMs <= 30_000) return BROADCAST_LIVE_POLL_MS;
+    return BROADCAST_BETWEEN_GAMES_POLL_MS;
+  }
+
+  if (week == null || currentWeek == null || week !== currentWeek) return false;
+  if (liveMs === false) return false;
+  const inGame = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : LIVE_POLL_MS;
+  const between = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : BETWEEN_GAMES_POLL_MS;
+  // liveRefreshMs uses 30s for in-game — map that band onto our page pace.
+  if (typeof liveMs === "number" && liveMs <= 30_000) return inGame;
   if (typeof liveMs === "number" && liveMs >= ALL_FINAL_POLL_MS) return ALL_FINAL_POLL_MS;
   return Math.max(inGame, Math.min(between, liveMs));
 }
@@ -194,6 +201,7 @@ export function useActiveMatchups(
 ) {
   const pace = opts?.pace ?? "default";
   const { activeLeague } = useActiveLeague();
+  const queryClient = useQueryClient();
   const id = activeLeague?.id ?? null;
   const leagueId = activeLeague?.leagueId ?? "";
   const platform = (activeLeague?.platform ?? "sleeper").trim().toLowerCase();
@@ -203,21 +211,26 @@ export function useActiveMatchups(
   const isCurrentWeek = safeWeek != null && currentWeek != null && safeWeek === currentWeek;
   const liveMs = liveRefreshMs(safeWeek, currentWeek, progressByNflTeam);
   const pollMs = liveMatchupPollMs(safeWeek, currentWeek, liveMs, platform, pace);
+  const broadcast = pace === "broadcast";
+
+  const queryKey = [...activeMatchupsQueryKey(id, safeWeek ?? 0), currentWeek ?? "na"] as const;
 
   const query = useQuery({
-    queryKey: [...activeMatchupsQueryKey(id, safeWeek ?? 0), currentWeek ?? "na"],
+    queryKey,
     enabled: Boolean(leagueId && safeWeek),
     retry: false,
     // Live boards go stale quickly so RQ refetches on the poll interval.
     staleTime: isPastWeek
       ? 10 * 60 * 1000
-      : isCurrentWeek
-        ? pace === "broadcast"
-          ? 5 * 1000
-          : 15 * 1000
-        : 60 * 1000,
+      : broadcast
+        ? 3 * 1000
+        : isCurrentWeek
+          ? 15 * 1000
+          : 60 * 1000,
     refetchInterval: visibleRefetchInterval(pollMs),
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: broadcast ? true : false,
+    refetchOnMount: broadcast ? "always" : true,
     // Keep prior week visible while the next week resolves (no blank board).
     placeholderData: (prev) => prev,
     queryFn: async () =>
@@ -227,10 +240,24 @@ export function useActiveMatchups(
         currentWeek,
         platform,
         connectionId: id,
+        preferLive: broadcast,
         ...(activeLeague?.s2 ? { s2: activeLeague.s2 } : {}),
         ...(activeLeague?.swid ? { swid: activeLeague.swid } : {}),
       }),
   });
+
+  // Belt-and-suspenders for TLN: RQ interval can stay false while NFL week is
+  // hydrating; keep invalidating so scores/popups move without a full refresh.
+  useEffect(() => {
+    if (!broadcast || !id || !safeWeek || isPastWeek) return;
+    const ms = typeof pollMs === "number" ? pollMs : BROADCAST_LIVE_POLL_MS;
+    const tick = () => {
+      if (!isPageVisible()) return;
+      void queryClient.invalidateQueries({ queryKey: activeMatchupsQueryKey(id, safeWeek) });
+    };
+    const t = window.setInterval(tick, ms);
+    return () => window.clearInterval(t);
+  }, [broadcast, id, safeWeek, isPastWeek, pollMs, queryClient]);
 
   return {
     matchups: query.data ?? null,
