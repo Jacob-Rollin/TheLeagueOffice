@@ -683,7 +683,7 @@ function TlonNetwork() {
         const progress = progressForTeam(progressByNflTeam, p.team);
         const pill = possessionPill(p, progress);
         if (pill !== "offense" && pill !== "defense") continue;
-        // Red zone = ESPN isRedZone / yardLine ≤ 20 while this unit is offense.
+        // Red zone = 20 or closer (progress.isRedZone from scoreboard / yardLine).
         const inRedZone = pill === "offense" && Boolean(progress?.isRedZone);
         out.push({
           playerId: p.id,

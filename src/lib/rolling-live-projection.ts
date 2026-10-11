@@ -14,11 +14,15 @@ export type NflGameProgress = {
   shortDetail?: string;
   /** Uppercase NFL team abbreviation currently with possession, when known. */
   possessionAbbr?: string;
-  /** True when ESPN reports the possession team is in the red zone. */
+  /**
+   * True when the possession is at the opponent’s 20 or closer.
+   * ESPN `isRedZone` / `ballsInRedZone`, or yardLine ≤20 / ≥80 on a 0–100 spot.
+   */
   isRedZone?: boolean;
   /**
    * Approximate ball spot 0–100 from the scoreboard situation when known.
    * Used for broadcast theater (TLN play arcs) — not a tracking feed.
+   * Red zone ≈ ≤20 or ≥80 depending on which end the drive is attacking.
    */
   yardLine?: number;
   /** True when this NFL team is the home competitor in its game. */
@@ -134,12 +138,11 @@ export function buildNflGameProgressMap(scoreboard: unknown): Map<string, NflGam
     }
     const sit = competition.situation;
     const yardLine = Number(sit?.yardLine);
-    // Red zone = inside the opponent’s 20 (ESPN flag, or yardLine 1–20 fallback).
-    const isRedZone = Boolean(
-      sit?.isRedZone ||
-        sit?.ballsInRedZone ||
-        (Number.isFinite(yardLine) && yardLine > 0 && yardLine <= 20),
-    );
+    // Red zone = opponent’s 20 or closer. Prefer ESPN’s flag; yardLine fallback
+    // covers both ends of a 0–100 field spot (≤20 near one goal, ≥80 near the other).
+    const yardLineInRedZone =
+      Number.isFinite(yardLine) && yardLine > 0 && (yardLine <= 20 || yardLine >= 80);
+    const isRedZone = Boolean(sit?.isRedZone || sit?.ballsInRedZone || yardLineInRedZone);
 
     const away = (competition.competitors ?? []).find((c) => c.homeAway === "away");
     const home = (competition.competitors ?? []).find((c) => c.homeAway === "home");
