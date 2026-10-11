@@ -54,14 +54,14 @@ function LogoBlock({
   return (
     <div
       className={cn(
-        "flex w-9 shrink-0 items-center justify-center self-stretch sm:w-11",
+        "flex w-7 shrink-0 items-center justify-center self-stretch sm:w-11",
         tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]",
       )}
     >
       <span
         className={cn(
           "shrink-0 [&_span]:rounded [&_span]:border-white/25 [&_span]:bg-white/10",
-          "[&_span]:h-7 [&_span]:w-7 sm:[&_span]:h-8 sm:[&_span]:w-8",
+          "[&_span]:h-6 [&_span]:w-6 sm:[&_span]:h-8 sm:[&_span]:w-8",
         )}
       >
         {children}
@@ -97,7 +97,7 @@ function TeamSide({
   const right = align === "right";
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-1.5 py-1 sm:gap-1.5 sm:px-2.5 sm:py-1.5">
+    <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-1 py-1 sm:gap-1.5 sm:px-2.5 sm:py-1.5">
       {/* Top: rank + full team name only */}
       <p
         className={cn(
@@ -107,11 +107,11 @@ function TeamSide({
         title={rankLabel ? `${rankLabel} ${name}` : name}
       >
         {rankLabel ? (
-          <span className="shrink-0 font-display text-[9px] font-semibold tabular-nums text-slate-500 sm:text-[10px]">
+          <span className="shrink-0 font-display text-[8px] font-semibold tabular-nums text-slate-500 sm:text-[10px]">
             {rankLabel}
           </span>
         ) : null}
-        <span className="min-w-0 break-words font-display text-[9px] font-extrabold uppercase tracking-[0.03em] text-slate-900 sm:text-[11px] sm:tracking-[0.04em]">
+        <span className="min-w-0 break-words font-display text-[8px] font-extrabold uppercase tracking-[0.02em] text-slate-900 sm:text-[11px] sm:tracking-[0.04em]">
           {name}
         </span>
       </p>
@@ -119,18 +119,18 @@ function TeamSide({
       {/* Bottom: dots + record bar, score beside them */}
       <div
         className={cn(
-          "flex items-end gap-1.5 sm:gap-2",
+          "flex items-end gap-1 sm:gap-2",
           right && "flex-row-reverse",
         )}
       >
-        <div className="flex min-w-[4.25rem] flex-1 flex-col gap-[3px] sm:min-w-[5rem] sm:gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-[3px] sm:min-w-[5rem] sm:gap-1">
           <YetToPlayDots
             count={yetToPlay}
             max={Math.max(yetToPlayMax, 1)}
             tone={tone}
           />
-          <div className={cn("w-full rounded-[2px] px-1.5 py-[2px] sm:px-2 sm:py-0.5", bar)}>
-            <p className="text-center font-display text-[9px] font-bold leading-none tabular-nums tracking-wide text-white sm:text-[11px]">
+          <div className={cn("w-full rounded-[2px] px-1 py-[2px] sm:px-2 sm:py-0.5", bar)}>
+            <p className="text-center font-display text-[8px] font-bold leading-none tabular-nums tracking-wide text-white sm:text-[11px]">
               {record?.trim() || "—"}
             </p>
           </div>
@@ -138,7 +138,7 @@ function TeamSide({
 
         <p
           className={cn(
-            "shrink-0 font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-slate-900 sm:text-[1.7rem]",
+            "relative z-[1] shrink-0 font-display text-[1.15rem] font-extrabold leading-none tabular-nums text-slate-900 sm:text-[1.7rem]",
             "transition-transform duration-300 ease-out",
             pulse && "scale-110 text-emerald-700",
           )}
@@ -154,7 +154,7 @@ export type TlonDaypart = "PRE" | "LIVE" | "FINAL";
 
 export function TlonScorebug({
   week: _week,
-  daypart: _daypart,
+  daypart,
   leftName,
   leftLogo,
   leftRecord,
@@ -228,26 +228,40 @@ export function TlonScorebug({
             pulse={scorePulseSide === "left"}
           />
 
-          {/* Center — highest win % with arrow toward that team */}
-          <div className="flex min-w-[3.5rem] shrink-0 flex-col items-center justify-center gap-0.5 bg-[#111111] px-1.5 py-1 sm:min-w-[4.25rem] sm:gap-1 sm:px-2 sm:py-1.5">
-            <div className="flex items-center justify-center gap-1">
+          {/*
+            Center — TLN + live flash on top; win % + arrow + WIN PROB below.
+            Keep narrow on phones so scores stay visible in portrait.
+          */}
+          <div className="flex w-[2.65rem] shrink-0 flex-col items-center justify-center gap-[2px] bg-[#111111] px-0.5 py-1 sm:w-auto sm:min-w-[4.5rem] sm:gap-1 sm:px-2 sm:py-1.5">
+            <div className="flex items-center justify-center gap-0.5 sm:gap-1">
+              <span className="display-title text-[7px] leading-none tracking-[0.12em] text-white sm:text-[10px] sm:tracking-[0.16em]">
+                TLN
+              </span>
+              {daypart === "LIVE" ? (
+                <span className="relative flex size-1 shrink-0 sm:size-1.5">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
+                  <span className="relative inline-flex size-1 rounded-full bg-rose-500 sm:size-1.5" />
+                </span>
+              ) : null}
+            </div>
+            <div className="flex items-center justify-center gap-0.5 sm:gap-1">
               {favored === "left" ? (
                 <span
-                  className="inline-block border-y-[4px] border-r-[5px] border-y-transparent border-r-white"
+                  className="inline-block border-y-[3px] border-r-[4px] border-y-transparent border-r-white sm:border-y-[4px] sm:border-r-[5px]"
                   aria-label="Favored left"
                 />
               ) : null}
-              <span className="font-display text-[1.05rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.25rem]">
+              <span className="font-display text-[0.85rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.25rem]">
                 {Math.round(favoredPct)}%
               </span>
               {favored === "right" ? (
                 <span
-                  className="inline-block border-y-[4px] border-l-[5px] border-y-transparent border-l-white"
+                  className="inline-block border-y-[3px] border-l-[4px] border-y-transparent border-l-white sm:border-y-[4px] sm:border-l-[5px]"
                   aria-label="Favored right"
                 />
               ) : null}
             </div>
-            <p className="w-full text-center text-[6.5px] font-semibold uppercase tracking-wide text-white/55 sm:text-[7.5px]">
+            <p className="w-full text-center text-[5.5px] font-semibold uppercase tracking-wide text-white/55 sm:text-[7.5px]">
               Win prob
             </p>
           </div>
