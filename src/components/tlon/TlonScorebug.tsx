@@ -103,18 +103,18 @@ function LogoBlock({
   return (
     <div
       className={cn(
-        // Fixed-width end caps stretched to row height — avoid aspect-square
-        // (it fights flex stretch and collapses one side into a tall thin strip).
-        "flex shrink-0 items-stretch self-stretch",
-        expanded ? "w-[3.5rem] p-1.5 sm:w-16 sm:p-2" : "w-10 p-1 sm:w-12 sm:p-[5px]",
+        // End cap matches scorebug row height; width stays fixed so the bug
+        // doesn’t grow. Logo inside is a square crop centered in the frame.
+        "flex shrink-0 items-center justify-center self-stretch",
+        expanded ? "w-[3.5rem] px-1.5 sm:w-16 sm:px-2" : "w-10 px-1 sm:w-12 sm:px-[5px]",
         tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]",
       )}
     >
       <div
         className={cn(
-          "min-h-0 min-w-0 flex-1 overflow-hidden rounded-[3px] bg-white/10",
-          // MatchupTeamAvatar renders a sized <span> — force it to fill the frame.
-          "[&>span]:!box-border [&>span]:!h-full [&>span]:!w-full [&>span]:!max-h-none [&>span]:!max-w-none",
+          "aspect-square w-full overflow-hidden rounded-[3px] bg-white/10",
+          // MatchupTeamAvatar renders a sized <span> — fill the square only.
+          "[&>span]:!box-border [&>span]:!h-full [&>span]:!w-full [&>span]:!max-h-full [&>span]:!max-w-full",
           "[&>span]:!rounded-[3px] [&>span]:!border-0 [&>span]:!bg-transparent",
           "[&>span>img]:!h-full [&>span>img]:!w-full [&>span>img]:!object-cover",
         )}
