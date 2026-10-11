@@ -193,9 +193,19 @@ export function TlonBroadcastStage({
           onDismiss={onDismissPointPopup ?? (() => undefined)}
         />
 
-        {/* Scorebug overlay — compact bar, field shows on the sides */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-2 sm:px-6 sm:pb-3">
-          <div className="pointer-events-auto w-full max-w-[30rem]">
+        {/* Scorebug overlay — grows in fullscreen so it tracks the desktop stage */}
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center",
+            fullscreen ? "px-4 pb-3 sm:px-8 sm:pb-4" : "px-3 pb-2 sm:px-6 sm:pb-3",
+          )}
+        >
+          <div
+            className={cn(
+              "pointer-events-auto w-full",
+              fullscreen ? "max-w-[min(52rem,92vw)]" : "max-w-[30rem] sm:max-w-[36rem] lg:max-w-[42rem]",
+            )}
+          >
             <TlonScorebug
               week={week}
               daypart={daypart}
@@ -219,6 +229,7 @@ export function TlonBroadcastStage({
               leagueKey={leagueKey ?? null}
               leadingSide={leadingSide}
               scorePulseSide={scorePulseSide ?? null}
+              expanded={fullscreen}
             />
           </div>
         </div>
