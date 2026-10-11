@@ -53,6 +53,7 @@ export function injuryBadgeInfo(status: string | null | undefined): InjuryBadgeI
   }
   if (
     clean === "NA" ||
+    clean === "IA" ||
     clean === "NOT ACTIVE" ||
     clean === "INACTIVE" ||
     clean === "EXEMPT" ||
@@ -61,6 +62,17 @@ export function injuryBadgeInfo(status: string | null | undefined): InjuryBadgeI
     return { letter: "NA", text: "Not Active", tone: "rose", className: ROSE };
   }
   return null;
+}
+
+/**
+ * True when the designation means the player is not available to play
+ * (Out / IR / Inactive / PUP / Suspended / COVID / Doubtful). Questionable
+ * returns false — they can still be on the field.
+ */
+export function isUnavailableInjury(status: string | null | undefined): boolean {
+  const letter = injuryBadgeInfo(status)?.letter;
+  if (!letter || letter === "Q") return false;
+  return true;
 }
 
 /** Compact letter for avatar / list chips. */

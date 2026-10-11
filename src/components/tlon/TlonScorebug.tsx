@@ -103,18 +103,19 @@ function LogoBlock({
   return (
     <div
       className={cn(
-        // Even navy/red frame on all four sides — logo fills the inner area.
-        "flex shrink-0 items-stretch self-stretch",
-        expanded ? "w-[3.5rem] p-1.5 sm:w-16 sm:p-2" : "w-10 p-1 sm:w-12 sm:p-[5px]",
+        // Perfect square end cap — height from the scorebug row, width matches.
+        "aspect-square h-auto w-auto shrink-0 self-stretch",
+        "flex items-center justify-center",
+        expanded ? "p-1.5 sm:p-2" : "p-1 sm:p-[5px]",
         tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]",
       )}
     >
       <div
         className={cn(
-          "min-h-0 min-w-0 flex-1 overflow-hidden rounded-[3px] bg-white/10",
-          // MatchupTeamAvatar renders a sized <span> — force it to fill the frame.
-          "[&>span]:!box-border [&>span]:!h-full [&>span]:!w-full [&>span]:!max-h-none [&>span]:!max-w-none",
-          "[&>span]:!rounded-[3px] [&>span]:!border-0 [&>span]:!bg-transparent",
+          "size-full overflow-hidden rounded-md bg-white/10",
+          // Keep the avatar’s square/circle shape — scale to the square, don’t stretch.
+          "[&>span]:!box-border [&>span]:!h-full [&>span]:!w-full [&>span]:!max-h-full [&>span]:!max-w-full",
+          "[&>span]:!rounded-md [&>span]:!border-0 [&>span]:!bg-transparent",
         )}
       >
         {children}
@@ -334,7 +335,13 @@ export function TlonScorebug({
                 : "w-[2.65rem] gap-[2px] px-0.5 py-1 sm:w-auto sm:min-w-[4.5rem] sm:gap-1 sm:px-2 sm:py-1.5",
             )}
           >
-            <div className="flex items-center justify-center gap-0.5 sm:gap-1">
+            {/* Hairline under TLN — same slate-300 rule as team-name / score split */}
+            <div
+              className={cn(
+                "flex w-full items-center justify-center gap-0.5 border-b border-slate-300 sm:gap-1",
+                expanded ? "pb-1.5 mb-1.5 sm:pb-2 sm:mb-2" : "pb-1 mb-1 sm:pb-1.5 sm:mb-1.5",
+              )}
+            >
               <span
                 className={cn(
                   "display-title leading-none text-white",

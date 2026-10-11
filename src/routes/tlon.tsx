@@ -9,12 +9,14 @@ import { TlonBroadcastStage } from "@/components/tlon/TlonBroadcastStage";
 import type { TlonCrawlItem } from "@/components/tlon/TlonCrawl";
 import { TlonMatchupPicker, type TlonMatchupOption } from "@/components/tlon/TlonMatchupPicker";
 import { TlonPlayCard } from "@/components/tlon/TlonPlayCard";
+import type { TlonFieldPlayer } from "@/components/tlon/TlonFieldPresence";
 import type { TlonDaypart } from "@/components/tlon/TlonScorebug";
 import {
   TlonChaseMeter,
   TlonStudio,
   type TlonStudioPlayer,
 } from "@/components/tlon/TlonStudio";
+import { possessionPill } from "@/components/mobile/league/lineupShared";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
@@ -25,6 +27,7 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player } from "@/lib/draft";
+import { isUnavailableInjury } from "@/lib/injury-badge";
 import {
   computeMatchupPreview,
   matchupSlotLabels,
@@ -36,6 +39,7 @@ import {
   computeTeamDisplayProjection,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
+import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { fetchSnapFantasyNews, fetchSnapInjuryWire } from "@/lib/snap-cdn";
 import {
   diffLeagueScoringUpdates,
@@ -65,19 +69,28 @@ export const Route = createFileRoute("/tlon")({
   component: TlonPage,
 });
 
+function nflTeamAliases(team: string | null | undefined): string[] {
+  const nfl = (team || "").trim().toUpperCase();
+  if (!nfl) return [];
+  if (nfl === "WAS" || nfl === "WSH") return ["WAS", "WSH"];
+  if (nfl === "LAR" || nfl === "LA") return ["LAR", "LA"];
+  if (nfl === "JAC" || nfl === "JAX") return ["JAC", "JAX"];
+  return [nfl];
+}
+
+function sameNflTeam(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = nflTeamAliases(a);
+  const right = new Set(nflTeamAliases(b));
+  return left.some((x) => right.has(x));
+}
+
 function progressForTeam(
   map: Map<string, NflGameProgress>,
   team: string | null | undefined,
 ): NflGameProgress | undefined {
-  const nfl = (team || "").trim().toUpperCase();
-  if (!nfl) return undefined;
-  if (map.has(nfl)) return map.get(nfl);
-  if (nfl === "WSH") return map.get("WAS");
-  if (nfl === "WAS") return map.get("WSH") ?? map.get("WAS");
-  if (nfl === "LA") return map.get("LAR");
-  if (nfl === "LAR") return map.get("LAR") ?? map.get("LA");
-  if (nfl === "JAC") return map.get("JAX");
-  if (nfl === "JAX") return map.get("JAX") ?? map.get("JAC");
+  for (const abbr of nflTeamAliases(team)) {
+    if (map.has(abbr)) return map.get(abbr);
+  }
   return undefined;
 }
 
@@ -657,6 +670,52 @@ function TlonNetwork() {
       return !phase || phase === "pre" || phase === "in";
     }).length;
 
+  /**
+   * On-field starters via the same offense/defense/sideline inference as mobile
+   * matchup pills. Offense stacks on the 30; shifts inside the 20 while RZ.
+   * DST sits at the bottom of the stack. Unavailable designations never appear.
+   */
+  const fieldPlayers = useMemo((): TlonFieldPlayer[] => {
+    const out: TlonFieldPlayer[] = [];
+    const push = (starters: Player[], side: "left" | "right") => {
+      for (const p of starters) {
+        if (isUnavailableInjury(resolveInjuryStatus(p))) continue;
+        const progress = progressForTeam(progressByNflTeam, p.team);
+        const pill = possessionPill(p, progress);
+        if (pill !== "offense" && pill !== "defense") continue;
+        // Red zone = 20 or closer (progress.isRedZone from scoreboard / yardLine).
+        const inRedZone = pill === "offense" && Boolean(progress?.isRedZone);
+        out.push({
+          playerId: p.id,
+          playerName: p.name,
+          pos: p.pos,
+          team: p.team || "",
+          side,
+          unit: pill,
+          inRedZone,
+        });
+      }
+    };
+    push(leftStarters, "left");
+    push(rightStarters, "right");
+    return out;
+  }, [leftStarters, rightStarters, progressByNflTeam]);
+
+  const fieldPlayerIds = useMemo(
+    () => new Set(fieldPlayers.map((p) => p.playerId)),
+    [fieldPlayers],
+  );
+
+  /** Point ticks for on-field players slide from their chip; rest keep toast cards. */
+  const fieldScoreEvents = useMemo(
+    () => pointPopups.filter((e) => fieldPlayerIds.has(e.playerId)),
+    [pointPopups, fieldPlayerIds],
+  );
+  const offFieldPointPopups = useMemo(
+    () => pointPopups.filter((e) => !fieldPlayerIds.has(e.playerId)),
+    [pointPopups, fieldPlayerIds],
+  );
+
   const daypart: TlonDaypart = useMemo(() => {
     if (preview?.matchupFinal) return "FINAL";
     const anyIn = [...leftStarters, ...rightStarters].some(
@@ -836,10 +895,12 @@ function TlonNetwork() {
               leagueKey={activeLeagueId ?? null}
               leadingSide={leadingSide}
               scorePulseSide={scorePulseSide}
-              pointPopups={pointPopups}
+              pointPopups={offFieldPointPopups}
               onDismissPointPopup={(id) =>
                 setPointPopups((prev) => prev.filter((e) => e.id !== id))
               }
+              fieldPlayers={fieldPlayers}
+              fieldScoreEvents={fieldScoreEvents}
               scoringUpdate={activeScoring}
               onScoringUpdateDone={() => setActiveScoring(null)}
               onSelectScoringMatchup={(id) => {
