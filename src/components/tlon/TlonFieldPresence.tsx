@@ -41,55 +41,6 @@ function sortOnField(a: TlonFieldPlayer, b: TlonFieldPlayer): number {
   return order.indexOf(a.pos) - order.indexOf(b.pos);
 }
 
-function ScoreSlide({
-  event,
-  side,
-  expanded,
-  onDone,
-}: {
-  event: TlonFeedEvent;
-  side: TlonFeedSide;
-  expanded?: boolean;
-  onDone: (id: string) => void;
-}) {
-  const [visible, setVisible] = useState(false);
-  const onDoneRef = useRef(onDone);
-  onDoneRef.current = onDone;
-  const sign = event.delta >= 0 ? "+" : "";
-  const up = event.delta >= 0;
-  const outward = side === "left" ? "-translate-x-2" : "translate-x-2";
-  const outwardHidden = side === "left" ? "-translate-x-6" : "translate-x-6";
-
-  useEffect(() => {
-    const enter = window.setTimeout(() => setVisible(true), 20);
-    const leave = window.setTimeout(() => {
-      setVisible(false);
-      window.setTimeout(() => onDoneRef.current(event.id), 280);
-    }, SCORE_HOLD_MS);
-    return () => {
-      window.clearTimeout(enter);
-      window.clearTimeout(leave);
-    };
-  }, [event.id]);
-
-  return (
-    <span
-      className={cn(
-        "pointer-events-none absolute top-1/2 z-10 -translate-y-1/2 font-display font-extrabold tabular-nums",
-        "rounded-md shadow-lg backdrop-blur-sm",
-        side === "left" ? "right-full mr-1" : "left-full ml-1",
-        expanded ? "px-1.5 py-0.5 text-[13px] sm:text-[15px]" : "px-1 py-px text-[11px] sm:text-[12px]",
-        up ? "bg-emerald-500/25 text-emerald-300" : "bg-rose-500/25 text-rose-300",
-        "transition-[opacity,transform] duration-300 ease-out",
-        visible ? `opacity-100 ${outward}` : `opacity-0 ${outwardHidden}`,
-      )}
-    >
-      {sign}
-      {event.delta.toFixed(2)}
-    </span>
-  );
-}
-
 function PresenceChip({
   player,
   expanded,
@@ -103,76 +54,111 @@ function PresenceChip({
 }) {
   const isDef = player.unit === "defense";
   const rz = player.inRedZone;
+  const [scoreVisible, setScoreVisible] = useState(false);
+  const onDoneRef = useRef(onScoreDone);
+  onDoneRef.current = onScoreDone;
+
+  useEffect(() => {
+    if (!scoreEvent) {
+      setScoreVisible(false);
+      return;
+    }
+    setScoreVisible(false);
+    const enter = window.setTimeout(() => setScoreVisible(true), 20);
+    const leave = window.setTimeout(() => {
+      setScoreVisible(false);
+      window.setTimeout(() => onDoneRef.current(scoreEvent.id), 280);
+    }, SCORE_HOLD_MS);
+    return () => {
+      window.clearTimeout(enter);
+      window.clearTimeout(leave);
+    };
+  }, [scoreEvent?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sign = scoreEvent && scoreEvent.delta >= 0 ? "+" : "";
+  const up = scoreEvent ? scoreEvent.delta >= 0 : true;
 
   return (
-    <div className="relative">
-      <div
+    <div
+      className={cn(
+        "flex items-center gap-1.5 rounded-full border bg-[#0b1220]/92 shadow-lg backdrop-blur-md",
+        "transition-[padding,gap] duration-300 ease-out",
+        rz
+          ? "border-rose-500/55"
+          : isDef
+            ? "border-sky-400/40"
+            : "border-white/20",
+        expanded ? "px-2 py-1 sm:gap-2 sm:px-2.5 sm:py-1.5" : "gap-1.5 px-1.5 py-0.5",
+      )}
+      title={
+        rz
+          ? `${player.playerName} — red zone`
+          : isDef
+            ? `${player.playerName} — defense`
+            : `${player.playerName} — offense`
+      }
+    >
+      <img
+        src={playerImage(player.playerId, (player.pos || "WR") as Pos, player.team)}
+        alt=""
         className={cn(
-          "flex items-center gap-1.5 rounded-full border bg-[#0b1220]/92 shadow-lg backdrop-blur-md",
-          rz
-            ? "border-rose-500/55"
-            : isDef
-              ? "border-sky-400/40"
-              : "border-white/20",
-          expanded ? "px-2 py-1 sm:gap-2 sm:px-2.5 sm:py-1.5" : "px-1.5 py-0.5",
+          "shrink-0 rounded-full border border-white/30 object-cover",
+          expanded ? "size-7 sm:size-8" : "size-5 sm:size-6",
         )}
-        title={
-          rz
-            ? `${player.playerName} — red zone`
-            : isDef
-              ? `${player.playerName} — defense`
-              : `${player.playerName} — offense`
-        }
+        onError={(e) => {
+          e.currentTarget.style.visibility = "hidden";
+        }}
+      />
+      <span
+        className={cn(
+          "min-w-0 truncate font-semibold text-white",
+          expanded
+            ? "max-w-[7rem] text-[12px] sm:max-w-[8.5rem] sm:text-[13px]"
+            : "max-w-[5.5rem] text-[10px] sm:text-[11px]",
+        )}
       >
-        <img
-          src={playerImage(player.playerId, (player.pos || "WR") as Pos, player.team)}
-          alt=""
-          className={cn(
-            "shrink-0 rounded-full border border-white/30 object-cover",
-            expanded ? "size-7 sm:size-8" : "size-5 sm:size-6",
-          )}
-          onError={(e) => {
-            e.currentTarget.style.visibility = "hidden";
-          }}
-        />
+        {player.playerName}
+      </span>
+      {rz ? (
         <span
           className={cn(
-            "min-w-0 truncate font-semibold text-white",
-            expanded
-              ? "max-w-[7rem] text-[12px] sm:max-w-[8.5rem] sm:text-[13px]"
-              : "max-w-[5.5rem] text-[10px] sm:text-[11px]",
+            "shrink-0 rounded bg-rose-600 font-display font-extrabold uppercase tracking-wider text-white",
+            expanded ? "px-1.5 py-0.5 text-[10px] sm:text-[11px]" : "px-1 py-px text-[9px]",
           )}
         >
-          {player.playerName}
+          RZ
         </span>
-        {rz ? (
-          <span
-            className={cn(
-              "shrink-0 rounded bg-rose-600 font-display font-extrabold uppercase tracking-wider text-white",
-              expanded ? "px-1.5 py-0.5 text-[10px] sm:text-[11px]" : "px-1 py-px text-[9px]",
-            )}
-          >
-            RZ
-          </span>
-        ) : isDef ? (
-          <span
-            className={cn(
-              "shrink-0 rounded bg-sky-600/90 font-display font-extrabold uppercase tracking-wider text-white",
-              expanded ? "px-1.5 py-0.5 text-[10px] sm:text-[11px]" : "px-1 py-px text-[9px]",
-            )}
-          >
-            DEF
+      ) : isDef ? (
+        <span
+          className={cn(
+            "shrink-0 rounded bg-sky-600/90 font-display font-extrabold uppercase tracking-wider text-white",
+            expanded ? "px-1.5 py-0.5 text-[10px] sm:text-[11px]" : "px-1 py-px text-[9px]",
+          )}
+        >
+          DEF
+        </span>
+      ) : null}
+      {/* Point tick extends the pill to the right — not a floating chip beside it. */}
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center overflow-hidden border-l border-white/20",
+          "font-display font-extrabold leading-none tabular-nums",
+          "transition-[max-width,opacity,margin,padding] duration-300 ease-out",
+          up ? "text-emerald-300" : "text-rose-300",
+          expanded ? "text-[13px] sm:text-[15px]" : "text-[11px] sm:text-[12px]",
+          scoreEvent && scoreVisible
+            ? "ml-0.5 max-w-[4.5rem] opacity-100 pl-1.5"
+            : "ml-0 max-w-0 opacity-0 pl-0",
+        )}
+        aria-hidden={!scoreEvent}
+      >
+        {scoreEvent ? (
+          <span className="whitespace-nowrap">
+            {sign}
+            {scoreEvent.delta.toFixed(2)}
           </span>
         ) : null}
-      </div>
-      {scoreEvent ? (
-        <ScoreSlide
-          event={scoreEvent}
-          side={player.side}
-          {...(expanded != null ? { expanded } : {})}
-          onDone={onScoreDone}
-        />
-      ) : null}
+      </span>
     </div>
   );
 }
@@ -241,7 +227,7 @@ function SideStacks({
 /**
  * Live on-field presence — offense stacked on each side’s 30, shifting inside
  * the 20 when that NFL unit is in the red zone. DST sits at the bottom of the
- * stack. Point ticks slide out sideways from the player chip (not toast cards).
+ * stack. Kickers stay off until a point tick. Score deltas extend the pill.
  */
 export function TlonFieldPresence({
   players,

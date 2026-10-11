@@ -670,18 +670,41 @@ function TlonNetwork() {
       return !phase || phase === "pre" || phase === "in";
     }).length;
 
+  /** Player ids with an active point toast — kickers only appear while scoring. */
+  const scoringPlayerIds = useMemo(
+    () => new Set(pointPopups.map((e) => e.playerId)),
+    [pointPopups],
+  );
+
   /**
    * On-field starters via the same offense/defense/sideline inference as mobile
    * matchup pills. Offense stacks on the 30; shifts inside the 20 while RZ.
-   * DST sits at the bottom of the stack. Unavailable designations never appear.
+   * DST sits at the bottom. Kickers stay off unless they have a live point tick.
+   * Unavailable designations never appear.
    */
   const fieldPlayers = useMemo((): TlonFieldPlayer[] => {
     const out: TlonFieldPlayer[] = [];
     const push = (starters: Player[], side: "left" | "right") => {
       for (const p of starters) {
         if (isUnavailableInjury(resolveInjuryStatus(p))) continue;
+        // Kickers only flash on when they actually score.
+        if (p.pos === "K" && !scoringPlayerIds.has(p.id)) continue;
         const progress = progressForTeam(progressByNflTeam, p.team);
         const pill = possessionPill(p, progress);
+        // Scoring kickers still need a lane even if pill briefly reads sideline.
+        if (p.pos === "K" && scoringPlayerIds.has(p.id)) {
+          const inRedZone = Boolean(progress?.isRedZone && progress.phase === "in");
+          out.push({
+            playerId: p.id,
+            playerName: p.name,
+            pos: p.pos,
+            team: p.team || "",
+            side,
+            unit: "offense",
+            inRedZone,
+          });
+          continue;
+        }
         if (pill !== "offense" && pill !== "defense") continue;
         // Red zone = 20 or closer (progress.isRedZone from scoreboard / yardLine).
         const inRedZone = pill === "offense" && Boolean(progress?.isRedZone);
@@ -699,14 +722,14 @@ function TlonNetwork() {
     push(leftStarters, "left");
     push(rightStarters, "right");
     return out;
-  }, [leftStarters, rightStarters, progressByNflTeam]);
+  }, [leftStarters, rightStarters, progressByNflTeam, scoringPlayerIds]);
 
   const fieldPlayerIds = useMemo(
     () => new Set(fieldPlayers.map((p) => p.playerId)),
     [fieldPlayers],
   );
 
-  /** Point ticks for on-field players slide from their chip; rest keep toast cards. */
+  /** Point ticks for on-field players extend their pill; rest keep toast cards. */
   const fieldScoreEvents = useMemo(
     () => pointPopups.filter((e) => fieldPlayerIds.has(e.playerId)),
     [pointPopups, fieldPlayerIds],
