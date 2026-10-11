@@ -4,16 +4,24 @@ import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
 import { cn } from "@/lib/utils";
 
 /**
- * Starters yet to play — fantasy analogue of broadcast timeout ticks.
- * Lit bars = players whose NFL game has not started.
- * Slot count follows the lineup (typically 9 starters), not a hard 5.
+ * Starters yet to play — fantasy analogue of broadcast timeout dots.
+ * Lit dots = players whose NFL game has not started.
  */
-function YetToPlayTicks({ count, max = 9 }: { count: number; max?: number }) {
+function YetToPlayDots({
+  count,
+  max = 9,
+  tone,
+}: {
+  count: number;
+  max?: number;
+  tone: "navy" | "red";
+}) {
   const slots = Math.max(1, Math.min(12, Math.floor(max)));
   const n = Math.max(0, Math.min(slots, Math.floor(count)));
+  const lit = tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]";
   return (
     <div
-      className="flex flex-col justify-center gap-[1.5px]"
+      className="flex items-center gap-[3px]"
       aria-label={`${n} of ${slots} starters yet to play`}
       title={`${n} of ${slots} starters yet to play`}
     >
@@ -21,8 +29,8 @@ function YetToPlayTicks({ count, max = 9 }: { count: number; max?: number }) {
         <span
           key={i}
           className={cn(
-            "h-[1.5px] w-2 rounded-[1px] transition-colors duration-500 sm:w-2.5",
-            i < n ? "bg-white" : "bg-white/25",
+            "size-[3px] rounded-full sm:size-[3.5px]",
+            i < n ? lit : "bg-slate-300",
           )}
         />
       ))}
@@ -35,42 +43,131 @@ function formatScore(n: number): string {
   return (Math.round(n * 10) / 10).toFixed(1);
 }
 
-function rankPrefix(rank: number | null | undefined): string {
-  if (rank == null || !Number.isFinite(rank) || rank < 1) return "";
-  return `${Math.floor(rank)} `;
-}
-
 function LeadMark({ show }: { show: boolean }) {
   if (!show) return <span className="h-[5px]" aria-hidden />;
   return (
     <span
-      className="inline-block border-x-[3.5px] border-b-[5px] border-x-transparent border-b-white"
+      className="inline-block border-x-[3.5px] border-b-[5px] border-x-transparent border-b-slate-900"
       aria-label="Leading"
     />
   );
 }
 
-/**
- * Opaque panel: solid fill on the shell, layout classes on the inner content
- * so flex/gap actually apply to children (TLN + live dot stay inline).
- */
-function Panel({
-  className,
-  fillClass,
-  sheenClass,
+function LogoBlock({
+  tone,
   children,
 }: {
-  className?: string;
-  fillClass: string;
-  sheenClass?: string;
+  tone: "navy" | "red";
   children: ReactNode;
 }) {
   return (
-    <div className={cn("relative min-w-0", fillClass)}>
-      {sheenClass ? (
-        <div aria-hidden className={cn("pointer-events-none absolute inset-0", sheenClass)} />
-      ) : null}
-      <div className={cn("relative z-[1] h-full", className)}>{children}</div>
+    <div
+      className={cn(
+        "flex w-9 items-center justify-center sm:w-11",
+        tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]",
+      )}
+    >
+      <span
+        className={cn(
+          "shrink-0 [&_span]:rounded [&_span]:border-white/25 [&_span]:bg-white/10",
+          "[&_span]:h-7 [&_span]:w-7 sm:[&_span]:h-8 sm:[&_span]:w-8",
+        )}
+      >
+        {children}
+      </span>
+    </div>
+  );
+}
+
+function TeamInfo({
+  name,
+  rank,
+  record,
+  yetToPlay,
+  yetToPlayMax,
+  tone,
+  align,
+}: {
+  name: string;
+  rank?: number | null;
+  record?: string | null;
+  yetToPlay: number;
+  yetToPlayMax: number;
+  tone: "navy" | "red";
+  align: "left" | "right";
+}) {
+  const rankLabel =
+    rank != null && Number.isFinite(rank) && rank >= 1 ? String(Math.floor(rank)) : "";
+  const bar =
+    tone === "navy"
+      ? "bg-[#1e3a5f]"
+      : "bg-[#b91c1c]";
+
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 flex-col justify-center gap-[3px] px-1.5 py-1 sm:gap-1 sm:px-2 sm:py-1.5",
+        align === "right" && "items-end",
+      )}
+    >
+      <p
+        className={cn(
+          "flex min-w-0 items-baseline gap-1 leading-none",
+          align === "right" && "w-full justify-end",
+        )}
+        title={rankLabel ? `${rankLabel} ${name}` : name}
+      >
+        {rankLabel ? (
+          <span className="shrink-0 font-display text-[9px] font-semibold tabular-nums text-slate-500 sm:text-[10px]">
+            {rankLabel}
+          </span>
+        ) : null}
+        <span className="min-w-0 truncate font-display text-[9px] font-extrabold uppercase tracking-[0.03em] text-slate-900 sm:text-[11px] sm:tracking-[0.05em]">
+          {name}
+        </span>
+      </p>
+
+      <YetToPlayDots
+        count={yetToPlay}
+        max={Math.max(yetToPlayMax, 1)}
+        tone={tone}
+      />
+
+      <div
+        className={cn(
+          "w-full min-w-[3.5rem] rounded-[2px] px-1.5 py-[2px] sm:min-w-[4.25rem] sm:px-2 sm:py-0.5",
+          bar,
+        )}
+      >
+        <p className="text-center font-display text-[9px] font-bold leading-none tabular-nums tracking-wide text-white sm:text-[11px]">
+          {record?.trim() || "—"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ScoreCol({
+  score,
+  leading,
+  pulse,
+}: {
+  score: number;
+  leading: boolean;
+  pulse: boolean;
+}) {
+  return (
+    <div className="flex min-w-[2.35rem] flex-col items-center justify-center px-1 sm:min-w-[2.85rem] sm:px-1.5">
+      <p
+        className={cn(
+          "font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-slate-900 sm:text-[1.75rem]",
+          "transition-transform duration-300 ease-out",
+          pulse && "scale-110 text-emerald-700",
+        )}
+      >
+        {formatScore(score)}
+      </p>
+      <LeadMark show={leading} />
     </div>
   );
 }
@@ -129,166 +226,89 @@ export function TlonScorebug({
   const statusLabel =
     daypart === "LIVE" ? "LIVE" : daypart === "FINAL" ? "FINAL" : "PRE";
 
-  const leftTitle = `${rankPrefix(leftRank)}${leftName}`.trim();
-  const rightTitle = `${rankPrefix(rightRank)}${rightName}`.trim();
-
   return (
-    <div className="relative mx-auto w-[min(100%,22rem)] sm:w-[min(100%,30rem)]">
-      <div className="relative overflow-hidden rounded-sm shadow-[0_6px_20px_rgba(0,0,0,0.55)] ring-1 ring-white/25 sm:rounded">
-        {/* Top strip — thin one-line labels */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch text-white">
-          <Panel
-            fillClass="bg-[#1e40af]"
-            sheenClass="bg-gradient-to-b from-black/20 to-transparent"
-            className="flex items-center px-2 py-px sm:px-2.5 sm:py-0.5"
-          >
-            <p
-              className="truncate font-display text-[8px] font-bold uppercase leading-none tracking-[0.06em] sm:text-[10px] sm:tracking-[0.1em]"
-              title={leftTitle}
-            >
-              {leftTitle}
-            </p>
-          </Panel>
+    <div className="relative mx-auto w-[min(100%,26rem)] sm:w-[min(100%,34rem)]">
+      <div className="relative overflow-hidden rounded-sm bg-slate-100 shadow-[0_6px_20px_rgba(0,0,0,0.55)] ring-1 ring-black/20 sm:rounded">
+        <div className="grid grid-cols-[auto_minmax(0,1.15fr)_auto_auto_auto_minmax(0,1.15fr)_auto] items-stretch">
+          <LogoBlock tone="navy">
+            <MatchupTeamAvatar
+              name={leftName}
+              logo={leftLogo ?? null}
+              platform={platform ?? null}
+              cacheKey={`${leagueKey ?? "tlon"}-left`}
+              size="sm"
+            />
+          </LogoBlock>
 
-          <Panel
-            fillClass="bg-[#111111]"
-            sheenClass="bg-gradient-to-b from-white/10 to-transparent"
-            className="flex min-w-[3.25rem] items-center justify-center gap-1 px-2 py-px sm:min-w-[4.5rem] sm:gap-1.5 sm:px-2.5 sm:py-0.5"
-          >
-            <span className="display-title text-[9px] leading-none tracking-[0.18em] sm:text-[11px] sm:tracking-[0.2em]">
-              TLN
-            </span>
-            {daypart === "LIVE" ? (
-              <span className="relative flex size-1.5 shrink-0">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
+          <TeamInfo
+            name={leftName}
+            rank={leftRank}
+            record={leftRecord}
+            yetToPlay={leftYetToPlay}
+            yetToPlayMax={leftYetToPlayMax}
+            tone="navy"
+            align="left"
+          />
+
+          <ScoreCol
+            score={leftLive}
+            leading={leadingSide === "left"}
+            pulse={scorePulseSide === "left"}
+          />
+
+          {/* Center — TLN + status + win prob */}
+          <div className="flex min-w-[3.75rem] flex-col items-center justify-center gap-[3px] bg-[#111111] px-1.5 py-1 text-center sm:min-w-[5rem] sm:gap-1 sm:px-2.5 sm:py-1.5">
+            <div className="flex items-center justify-center gap-1">
+              <span className="display-title text-[9px] leading-none tracking-[0.16em] text-white sm:text-[11px] sm:tracking-[0.18em]">
+                TLN
               </span>
-            ) : (
-              <span className="text-[8px] font-bold uppercase leading-none tracking-wider text-white/55">
-                {statusLabel}
-              </span>
-            )}
-          </Panel>
-
-          <Panel
-            fillClass="bg-[#b91c1c]"
-            sheenClass="bg-gradient-to-b from-black/20 to-transparent"
-            className="flex items-center justify-end px-2 py-px sm:px-2.5 sm:py-0.5"
-          >
-            <p
-              className="truncate font-display text-[8px] font-bold uppercase leading-none tracking-[0.06em] sm:text-[10px] sm:tracking-[0.1em]"
-              title={rightTitle}
-            >
-              {rightTitle}
-            </p>
-          </Panel>
-        </div>
-
-        {/* Main row */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-stretch">
-          <Panel
-            fillClass="bg-[#1d4ed8]"
-            sheenClass="bg-gradient-to-r from-white/15 via-transparent to-black/20"
-            className="px-1.5 py-1 sm:px-2.5 sm:py-1.5"
-          >
-            <div className="flex h-full items-center justify-between gap-1 sm:gap-2">
-              <div className="flex min-w-0 items-center gap-1 sm:gap-1.5">
-                <span className="shrink-0 rounded ring-1 ring-white/30 [&_span]:h-7 [&_span]:w-7 [&_span]:rounded [&_span]:border-white/15 sm:[&_span]:h-8 sm:[&_span]:w-8">
-                  <MatchupTeamAvatar
-                    name={leftName}
-                    logo={leftLogo ?? null}
-                    platform={platform ?? null}
-                    cacheKey={`${leagueKey ?? "tlon"}-left`}
-                    size="sm"
-                  />
+              {daypart === "LIVE" ? (
+                <span className="relative flex size-1.5 shrink-0">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
+                  <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
                 </span>
-                {leftRecord ? (
-                  <span className="font-display text-[13px] font-extrabold leading-none tabular-nums text-white sm:text-[1.15rem]">
-                    {leftRecord}
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                <YetToPlayTicks
-                  count={leftYetToPlay}
-                  max={Math.max(leftYetToPlayMax, 1)}
-                />
-                <div className="flex min-w-[2.4rem] flex-col items-center sm:min-w-[2.9rem]">
-                  <p
-                    className={cn(
-                      "font-display text-[1.25rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.85rem]",
-                      "transition-transform duration-300 ease-out",
-                      scorePulseSide === "left" && "scale-110 text-emerald-200",
-                    )}
-                  >
-                    {formatScore(leftLive)}
-                  </p>
-                  <LeadMark show={leadingSide === "left"} />
-                </div>
-              </div>
+              ) : null}
             </div>
-          </Panel>
-
-          <Panel
-            fillClass="bg-[#0f0f0f]"
-            sheenClass="bg-gradient-to-b from-white/10 to-transparent"
-            className="flex min-w-[3.5rem] flex-col items-center justify-center border-x border-white/10 px-1.5 py-1 text-center sm:min-w-[5rem] sm:px-2 sm:py-1.5"
-          >
-            <p className="w-full text-center text-[7px] font-bold uppercase tracking-[0.12em] text-amber-300 sm:text-[8px]">
+            <p className="w-full text-center text-[7px] font-bold uppercase tracking-[0.1em] text-amber-300 sm:text-[8px]">
               {statusLabel}
               <span className="text-white/35"> · </span>
               <span className="text-white/85">WK {week}</span>
             </p>
-            <p className="w-full text-center font-display text-[1.15rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.65rem]">
-              {Math.round(favoredPct)}%
+            <p className="w-full text-center leading-none">
+              <span className="font-display text-[0.95rem] font-extrabold tabular-nums text-white sm:text-[1.15rem]">
+                {Math.round(favoredPct)}%
+              </span>
+              <span className="ml-1 text-[6.5px] font-semibold uppercase tracking-wide text-white/50 sm:text-[7.5px]">
+                Win prob
+              </span>
             </p>
-            <p className="w-full text-center text-[7px] font-semibold uppercase tracking-wide text-white/50 sm:text-[8px]">
-              Win prob
-            </p>
-          </Panel>
+          </div>
 
-          <Panel
-            fillClass="bg-[#dc2626]"
-            sheenClass="bg-gradient-to-l from-white/15 via-transparent to-black/20"
-            className="px-1.5 py-1 sm:px-2.5 sm:py-1.5"
-          >
-            <div className="flex h-full items-center justify-between gap-1 sm:gap-2">
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                <div className="flex min-w-[2.4rem] flex-col items-center sm:min-w-[2.9rem]">
-                  <p
-                    className={cn(
-                      "font-display text-[1.25rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.85rem]",
-                      "transition-transform duration-300 ease-out",
-                      scorePulseSide === "right" && "scale-110 text-emerald-200",
-                    )}
-                  >
-                    {formatScore(rightLive)}
-                  </p>
-                  <LeadMark show={leadingSide === "right"} />
-                </div>
-                <YetToPlayTicks
-                  count={rightYetToPlay}
-                  max={Math.max(rightYetToPlayMax, 1)}
-                />
-              </div>
-              <div className="flex min-w-0 items-center justify-end gap-1 sm:gap-1.5">
-                {rightRecord ? (
-                  <span className="font-display text-[13px] font-extrabold leading-none tabular-nums text-white sm:text-[1.15rem]">
-                    {rightRecord}
-                  </span>
-                ) : null}
-                <span className="shrink-0 rounded ring-1 ring-white/30 [&_span]:h-7 [&_span]:w-7 [&_span]:rounded [&_span]:border-white/15 sm:[&_span]:h-8 sm:[&_span]:w-8">
-                  <MatchupTeamAvatar
-                    name={rightName}
-                    logo={rightLogo ?? null}
-                    platform={platform ?? null}
-                    cacheKey={`${leagueKey ?? "tlon"}-right`}
-                    size="sm"
-                  />
-                </span>
-              </div>
-            </div>
-          </Panel>
+          <ScoreCol
+            score={rightLive}
+            leading={leadingSide === "right"}
+            pulse={scorePulseSide === "right"}
+          />
+
+          <TeamInfo
+            name={rightName}
+            rank={rightRank}
+            record={rightRecord}
+            yetToPlay={rightYetToPlay}
+            yetToPlayMax={rightYetToPlayMax}
+            tone="red"
+            align="right"
+          />
+
+          <LogoBlock tone="red">
+            <MatchupTeamAvatar
+              name={rightName}
+              logo={rightLogo ?? null}
+              platform={platform ?? null}
+              cacheKey={`${leagueKey ?? "tlon"}-right`}
+              size="sm"
+            />
+          </LogoBlock>
         </div>
       </div>
     </div>
