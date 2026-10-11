@@ -10,7 +10,7 @@ import type { NflGameProgress } from "@/lib/rolling-live-projection";
 export const TLON_MIN_DELTA = 0.05;
 export const TLON_MAX_EVENTS = 40;
 /** Other-matchup Scoring Update threshold (fantasy points). */
-export const TLON_SCORING_UPDATE_MIN = 6;
+export const TLON_SCORING_UPDATE_MIN = 3;
 
 export type TlonFeedSide = "left" | "right";
 
@@ -301,7 +301,7 @@ export type LeagueMatchupScoreSnap = {
   starters: TlonStarterSnapshot[];
 };
 
-/** Detect ≥6 pt starter spikes on boards other than the watched matchup. */
+/** Detect starter spikes on boards other than the watched matchup. */
 export function diffLeagueScoringUpdates(
   prev: Map<string, TlonStarterSnapshot> | null,
   prevScores: Map<string, { left: number; right: number }> | null,

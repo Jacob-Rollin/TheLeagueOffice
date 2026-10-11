@@ -51,6 +51,7 @@ export function TlonBroadcastStage({
   fieldPlayers,
   fieldScoreEvents,
   scoringUpdate,
+  scoringQueued,
   onScoringUpdateDone,
   onSelectScoringMatchup,
   crawlItems,

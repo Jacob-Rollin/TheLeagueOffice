@@ -605,7 +605,7 @@ function TlonNetwork() {
     });
   }, [starterSnapshots, starterPointsFingerprint, activeLeagueId, activeWeek, selected?.id]);
 
-  // League-wide Scoring Updates (≥6) — skips the selected / on-air matchup.
+  // League-wide Scoring Updates (≥3) — skips the selected / on-air matchup.
   useEffect(() => {
     const starterMap = new Map<string, TlonStarterSnapshot>();
     const scoreMap = new Map<string, { left: number; right: number }>();
@@ -969,6 +969,7 @@ function TlonNetwork() {
               fieldPlayers={fieldPlayers}
               fieldScoreEvents={fieldScoreEvents}
               scoringUpdate={activeScoring}
+              scoringQueued={scoringQueue.length > 0}
               onScoringUpdateDone={() => setActiveScoring(null)}
               onSelectScoringMatchup={(id) => {
                 setViewMatchupId(id);
