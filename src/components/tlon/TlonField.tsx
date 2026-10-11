@@ -5,6 +5,8 @@ const EZ = 8;
 const PLAYABLE = 100 - EZ * 2;
 /** White end-board width in viewBox units (% of field width). */
 const END_BOARD = 2.15;
+/** Sideline chalk thickness in viewBox units (filled rects so corners stay solid). */
+const SIDE_W = 1.55;
 
 /** Map yards from the left goal line (0–100) onto the playable field. */
 function yardToPct(yardsFromLeftGoal: number): number {
@@ -20,9 +22,8 @@ function yardLabel(yardsFromLeftGoal: number): string {
 }
 
 /**
- * Top-down goalposts seated in the white end board (not the painted EZ).
- * Crossbar runs with the end line; uprights point away from the field;
- * near upright is slightly longer for the same slight “camera” depth as the slab.
+ * Top-down goalposts seated entirely in the white end board.
+ * Equal uprights (true plan view); crossbar + stem stay on the chalk.
  */
 function GoalPost({ side, large }: { side: "left" | "right"; large?: boolean }) {
   const left = side === "left";
@@ -31,18 +32,18 @@ function GoalPost({ side, large }: { side: "left" | "right"; large?: boolean }) 
       className={cn(
         "pointer-events-none absolute top-1/2 z-[5] -translate-y-1/2",
         large
-          ? "h-[min(42%,9.5rem)] w-[2.6%] min-h-[4.5rem] min-w-[18px]"
-          : "h-[min(34%,6.5rem)] w-[2.25%] min-h-12 min-w-[14px] sm:h-[min(36%,7.25rem)]",
+          ? "h-[min(42%,9.5rem)] min-h-[4.5rem]"
+          : "h-[min(34%,6.5rem)] min-h-12 sm:h-[min(36%,7.25rem)]",
       )}
       style={
         left
-          ? { left: "0%", width: large ? "2.6%" : "2.25%" }
-          : { left: large ? "97.4%" : "97.75%", width: large ? "2.6%" : "2.25%" }
+          ? { left: "0%", width: `${END_BOARD}%` }
+          : { right: "0%", width: `${END_BOARD}%` }
       }
       aria-hidden
     >
       <svg
-        viewBox="0 0 28 64"
+        viewBox="0 0 24 64"
         className="h-full w-full drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]"
         preserveAspectRatio="xMidYMid meet"
       >
@@ -54,21 +55,20 @@ function GoalPost({ side, large }: { side: "left" | "right"; large?: boolean }) 
         >
           {left ? (
             <>
-              {/* Crossbar on end line (vertical) */}
-              <line x1="18" y1="12" x2="18" y2="52" strokeWidth="2.6" />
-              {/* Far upright (shorter) — away from field */}
-              <line x1="18" y1="12" x2="5" y2="10" strokeWidth="2.2" />
-              {/* Near upright (longer) — matches near-sideline depth */}
-              <line x1="18" y1="52" x2="3" y2="55" strokeWidth="2.5" />
-              {/* Single post to the ground / end board */}
-              <line x1="18" y1="32" x2="24" y2="32" strokeWidth="2.4" />
+              {/* Crossbar centered on white board */}
+              <line x1="13" y1="14" x2="13" y2="50" strokeWidth="2.6" />
+              {/* Equal uprights — away from field */}
+              <line x1="13" y1="14" x2="3" y2="14" strokeWidth="2.4" />
+              <line x1="13" y1="50" x2="3" y2="50" strokeWidth="2.4" />
+              {/* Stem toward field, still on chalk */}
+              <line x1="13" y1="32" x2="20" y2="32" strokeWidth="2.4" />
             </>
           ) : (
             <>
-              <line x1="10" y1="12" x2="10" y2="52" strokeWidth="2.6" />
-              <line x1="10" y1="12" x2="23" y2="10" strokeWidth="2.2" />
-              <line x1="10" y1="52" x2="25" y2="55" strokeWidth="2.5" />
-              <line x1="10" y1="32" x2="4" y2="32" strokeWidth="2.4" />
+              <line x1="11" y1="14" x2="11" y2="50" strokeWidth="2.6" />
+              <line x1="11" y1="14" x2="21" y2="14" strokeWidth="2.4" />
+              <line x1="11" y1="50" x2="21" y2="50" strokeWidth="2.4" />
+              <line x1="11" y1="32" x2="4" y2="32" strokeWidth="2.4" />
             </>
           )}
         </g>
@@ -241,8 +241,8 @@ export function TlonField({
         />
 
         {/*
-          Solid chalk boundaries — above the dim overlays so they stay opaque
-          white (not grey/green from grass showing through).
+          Solid chalk frame — filled rects (not stroked lines) so corners meet
+          with no green leaks. Above the dim overlays so white stays opaque.
         */}
         <svg
           className="pointer-events-none absolute inset-0 z-[2] h-full w-full"
@@ -250,44 +250,16 @@ export function TlonField({
           preserveAspectRatio="none"
           aria-hidden
         >
-          {/* Thick white sidelines */}
-          <line
-            x1="0"
-            y1="0.85"
-            x2="100"
-            y2="0.85"
-            stroke="#ffffff"
-            strokeWidth="1.55"
-          />
-          <line
-            x1="0"
-            y1="49.15"
-            x2="100"
-            y2="49.15"
-            stroke="#ffffff"
-            strokeWidth="1.55"
-          />
-          {/* Thick white end boards (back of each end zone) — goalposts sit here */}
+          {/* Sidelines */}
+          <rect x="0" y="0" width="100" height={SIDE_W} fill="#ffffff" />
+          <rect x="0" y={50 - SIDE_W} width="100" height={SIDE_W} fill="#ffffff" />
+          {/* End boards (back of each end zone) — goalposts sit here */}
           <rect x="0" y="0" width={END_BOARD} height="50" fill="#ffffff" />
           <rect x={100 - END_BOARD} y="0" width={END_BOARD} height="50" fill="#ffffff" />
 
           {/* Goal lines */}
-          <line
-            x1={EZ}
-            y1="0"
-            x2={EZ}
-            y2="50"
-            stroke="#ffffff"
-            strokeWidth="0.55"
-          />
-          <line
-            x1={100 - EZ}
-            y1="0"
-            x2={100 - EZ}
-            y2="50"
-            stroke="#ffffff"
-            strokeWidth="0.55"
-          />
+          <rect x={EZ - 0.28} y="0" width="0.55" height="50" fill="#ffffff" />
+          <rect x={100 - EZ - 0.28} y="0" width="0.55" height="50" fill="#ffffff" />
         </svg>
 
         {/*
