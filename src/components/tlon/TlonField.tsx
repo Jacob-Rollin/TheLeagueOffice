@@ -273,6 +273,19 @@ export function TlonField({
             const [tens = "", ones = ""] = label.split("");
             const tone = yd === 50 ? "text-white/90" : "text-white/75";
             const botTone = yd === 50 ? "text-white/70" : "text-white/55";
+            // 50-stripe is thicker — open the digit gap so "5" / "0" clear the chalk.
+            const tensGap =
+              yd === 50
+                ? fillHeight
+                  ? "right-[9px] sm:right-[11px]"
+                  : "right-[5px] sm:right-[6px]"
+                : "right-[2px]";
+            const onesGap =
+              yd === 50
+                ? fillHeight
+                  ? "left-[9px] sm:left-[11px]"
+                  : "left-[5px] sm:left-[6px]"
+                : "left-[2px]";
             return (
               <span key={`yd-${yd}`}>
                 {/* Zero-width anchors on the yard line; digits sit left/right of it */}
@@ -283,8 +296,8 @@ export function TlonField({
                   )}
                   style={{ left }}
                 >
-                  <span className={cn(yardDigitClass, "right-[2px]", tone)}>{tens}</span>
-                  <span className={cn(yardDigitClass, "left-[2px]", tone)}>{ones}</span>
+                  <span className={cn(yardDigitClass, tensGap, tone)}>{tens}</span>
+                  <span className={cn(yardDigitClass, onesGap, tone)}>{ones}</span>
                 </span>
                 <span
                   className={cn(
@@ -293,8 +306,8 @@ export function TlonField({
                   )}
                   style={{ left }}
                 >
-                  <span className={cn(yardDigitClass, "right-[2px]", botTone)}>{tens}</span>
-                  <span className={cn(yardDigitClass, "left-[2px]", botTone)}>{ones}</span>
+                  <span className={cn(yardDigitClass, tensGap, botTone)}>{tens}</span>
+                  <span className={cn(yardDigitClass, onesGap, botTone)}>{ones}</span>
                 </span>
               </span>
             );

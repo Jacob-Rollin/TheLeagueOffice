@@ -530,7 +530,14 @@ function TlonNetwork() {
       return;
     }
     if (!starterSnapshots.length) return;
-    const incoming = diffStarterPoints(prevSnapshots.current, starterSnapshots);
+    // Seed baseline when the first non-empty board arrives after a key reset.
+    if (!prevSnapshots.current || prevSnapshots.current.size === 0) {
+      prevSnapshots.current = snapshotsToMap(starterSnapshots);
+      return;
+    }
+    const incoming = diffStarterPoints(prevSnapshots.current, starterSnapshots, {
+      minDelta: 0.05,
+    });
     prevSnapshots.current = snapshotsToMap(starterSnapshots);
     if (!incoming.length) return;
 

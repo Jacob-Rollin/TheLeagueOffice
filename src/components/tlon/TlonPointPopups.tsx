@@ -99,9 +99,9 @@ export function TlonPointPopups({
   if (!left.length && !right.length) return null;
 
   return (
-    <>
+    <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
       <div
-        className="pointer-events-none absolute top-[28%] z-20 flex w-[min(42%,13rem)] -translate-x-1/2 flex-col gap-1.5 sm:top-[30%]"
+        className="absolute top-[26%] flex w-[min(42%,13rem)] -translate-x-1/2 flex-col gap-1.5 sm:top-[28%]"
         style={{ left: `${LEFT_20_PCT}%` }}
       >
         {left.map((event) => (
@@ -109,13 +109,13 @@ export function TlonPointPopups({
         ))}
       </div>
       <div
-        className="pointer-events-none absolute top-[28%] z-20 flex w-[min(42%,13rem)] -translate-x-1/2 flex-col items-end gap-1.5 sm:top-[30%]"
+        className="absolute top-[26%] flex w-[min(42%,13rem)] -translate-x-1/2 flex-col items-end gap-1.5 sm:top-[28%]"
         style={{ left: `${RIGHT_20_PCT}%` }}
       >
         {right.map((event) => (
           <PointChip key={event.id} event={event} onDone={onDismiss} />
         ))}
       </div>
-    </>
+    </div>
   );
 }

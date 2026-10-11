@@ -30,13 +30,12 @@ const LIVE_POLL_MS = 30 * 1000;
 /** Between early/late windows — keep ≤60s so TLN field popups don’t stall. */
 const BETWEEN_GAMES_POLL_MS = 60 * 1000;
 /**
- * TLN broadcast stage only — faster Sleeper client polls (~12/min live).
- * Safe with a single RQ timer + ≤4s matchup memory TTL: ~12–14 Sleeper
+ * TLN broadcast stage only — 5s Sleeper client polls (~12/min) on game day.
+ * Safe with a single RQ timer + 3s matchup memory TTL: ~12–14 Sleeper
  * req/min/tab with weekly stats still ≪ 180 soft budget / ~1000 IP.
  * Other pages keep the default pace.
  */
 const BROADCAST_LIVE_POLL_MS = 5 * 1000;
-const BROADCAST_BETWEEN_GAMES_POLL_MS = 20 * 1000;
 /** ESPN/Yahoo polls hit our `/api/data/league` CDN — keep quieter between games. */
 const ESPN_BETWEEN_GAMES_POLL_MS = 5 * 60 * 1000;
 const ALL_FINAL_POLL_MS = 15 * 60 * 1000;
@@ -186,12 +185,13 @@ function liveMatchupPollMs(
 
   if (broadcast) {
     if (week == null) return false;
-    // Known past week — stop. Future / unknown NFL week — keep a gentle poke.
+    // Known past week — stop.
     if (currentWeek != null && week < currentWeek) return false;
-    if (typeof liveMs === "number" && liveMs <= 30_000) return BROADCAST_LIVE_POLL_MS;
-    // Every NFL game is final — do not keep 20s Sleeper pokes all Sunday night.
+    // Every NFL game is final — do not keep 5s Sleeper pokes all Sunday night.
     if (typeof liveMs === "number" && liveMs >= NFL_ALL_FINAL_BAND_MS) return ALL_FINAL_POLL_MS;
-    return BROADCAST_BETWEEN_GAMES_POLL_MS;
+    // Live, between windows, or scoreboard still hydrating — stay on 5s so TLN
+    // scores/popups don't stall when progress maps are empty/late.
+    return BROADCAST_LIVE_POLL_MS;
   }
 
   if (week == null || currentWeek == null || week !== currentWeek) return false;
@@ -231,10 +231,12 @@ export function useActiveMatchups(
     enabled: Boolean(leagueId && safeWeek),
     retry: false,
     // Live boards go stale quickly so RQ refetches on the poll interval.
+    // Broadcast: stale immediately so the 5s interval always hits the network
+    // (memory TTL in sleeper-matchups-client still coalesces sub-interval dupes).
     staleTime: isPastWeek
       ? 10 * 60 * 1000
       : broadcast
-        ? 3 * 1000
+        ? 0
         : isCurrentWeek
           ? 15 * 1000
           : 60 * 1000,

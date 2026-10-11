@@ -6,7 +6,8 @@
 
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
 
-export const TLON_MIN_DELTA = 0.5;
+/** Selected-matchup field popups — catch small PPR/yard ticks between 5s polls. */
+export const TLON_MIN_DELTA = 0.05;
 export const TLON_MAX_EVENTS = 40;
 /** Other-matchup Scoring Update threshold (fantasy points). */
 export const TLON_SCORING_UPDATE_MIN = 6;

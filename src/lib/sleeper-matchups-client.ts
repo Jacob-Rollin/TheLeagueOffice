@@ -13,8 +13,8 @@ import { getCached, writeCache } from "@/lib/sleeper-cache";
 import { sleeperFetchJson, type SleeperFetchKind } from "@/lib/sleeper-http";
 
 const SLEEPER = "https://api.sleeper.app/v1";
-/** In-memory coalescing for live score polls (must be ≤ fastest poller — TLN 5s). */
-const LIVE_MEMORY_TTL_MS = 4 * 1000;
+/** In-memory coalescing for live score polls (must be < fastest poller — TLN 5s). */
+const LIVE_MEMORY_TTL_MS = 3 * 1000;
 
 function sleeperAvatar(id: string | null | undefined): string | null {
   const clean = id?.trim();
