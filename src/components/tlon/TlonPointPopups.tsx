@@ -48,11 +48,11 @@ function PointChip({
   return (
     <div
       className={cn(
-        "flex max-w-[11.5rem] items-center gap-1.5 rounded-lg border px-1.5 py-1 shadow-lg backdrop-blur-md transition-[opacity,transform] duration-300 ease-out sm:max-w-[13rem]",
+        "flex w-full max-w-[11.5rem] items-center gap-1.5 rounded-lg border px-1.5 py-1 shadow-lg backdrop-blur-md transition-[opacity,transform] duration-300 ease-out sm:max-w-[13rem]",
         left
-          ? "border-[#1e3a5f]/60 bg-[#0b1220]/92 origin-left"
-          : "border-[#b91c1c]/60 bg-[#0b1220]/92 origin-right",
-        visible ? "translate-x-0 opacity-100" : left ? "-translate-x-2 opacity-0" : "translate-x-2 opacity-0",
+          ? "border-[#1e3a5f]/60 bg-[#0b1220]/92 origin-center"
+          : "border-[#b91c1c]/60 bg-[#0b1220]/92 origin-center",
+        visible ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0",
       )}
     >
       <img
@@ -99,9 +99,13 @@ export function TlonPointPopups({
   if (!left.length && !right.length) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
+    /*
+      Match TlonField’s grass slab (excludes the 4% front edge) so the 20-yard
+      % anchors line up with the painted yard lines on desktop fullscreen.
+    */
+    <div className="pointer-events-none absolute inset-x-0 top-0 bottom-[4%] z-30 overflow-hidden">
       <div
-        className="absolute top-[26%] flex w-[min(42%,13rem)] -translate-x-1/2 flex-col gap-1.5 sm:top-[28%]"
+        className="absolute top-[30%] flex w-[min(38%,13.5rem)] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5 sm:top-[32%]"
         style={{ left: `${LEFT_20_PCT}%` }}
       >
         {left.map((event) => (
@@ -109,7 +113,7 @@ export function TlonPointPopups({
         ))}
       </div>
       <div
-        className="absolute top-[26%] flex w-[min(42%,13rem)] -translate-x-1/2 flex-col items-end gap-1.5 sm:top-[28%]"
+        className="absolute top-[30%] flex w-[min(38%,13.5rem)] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1.5 sm:top-[32%]"
         style={{ left: `${RIGHT_20_PCT}%` }}
       >
         {right.map((event) => (

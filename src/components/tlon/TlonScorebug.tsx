@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
+import { useCountUp } from "@/hooks/useCountUp";
 import { cn } from "@/lib/utils";
 
 /**
@@ -45,6 +46,49 @@ function YetToPlayDots({
 function formatScore(n: number): string {
   if (!Number.isFinite(n)) return "0.00";
   return (Math.round(n * 100) / 100).toFixed(2);
+}
+
+/** Same ease-out tick as Scoring Update toasts — no hard snap on live polls. */
+function AnimatedScore({
+  score,
+  pulse,
+  expanded,
+}: {
+  score: number;
+  pulse: boolean;
+  expanded?: boolean;
+}) {
+  const target = Math.round((Number.isFinite(score) ? score : 0) * 100) / 100;
+  const prevRef = useRef(target);
+  const [from, setFrom] = useState(target);
+  const [to, setTo] = useState(target);
+  const [animating, setAnimating] = useState(false);
+
+  useEffect(() => {
+    const prev = prevRef.current;
+    if (target === prev) return;
+    setFrom(prev);
+    setTo(target);
+    setAnimating(true);
+    prevRef.current = target;
+    const done = window.setTimeout(() => setAnimating(false), 950);
+    return () => window.clearTimeout(done);
+  }, [target]);
+
+  const display = useCountUp(from, to, animating, 900);
+
+  return (
+    <p
+      className={cn(
+        "relative z-[1] shrink-0 font-display font-extrabold leading-none tabular-nums text-slate-900",
+        "transition-transform duration-300 ease-out",
+        expanded ? "text-[1.55rem] sm:text-[1.85rem]" : "text-[1.05rem] sm:text-[1.45rem]",
+        (pulse || animating) && "scale-110 text-emerald-700",
+      )}
+    >
+      {formatScore(display)}
+    </p>
+  );
 }
 
 function LogoBlock({
@@ -183,16 +227,7 @@ function TeamSide({
           </div>
         </div>
 
-        <p
-          className={cn(
-            "relative z-[1] shrink-0 font-display font-extrabold leading-none tabular-nums text-slate-900",
-            "transition-transform duration-300 ease-out",
-            expanded ? "text-[1.55rem] sm:text-[1.85rem]" : "text-[1.05rem] sm:text-[1.45rem]",
-            pulse && "scale-110 text-emerald-700",
-          )}
-        >
-          {formatScore(score)}
-        </p>
+        <AnimatedScore score={score} pulse={pulse} expanded={expanded} />
       </div>
     </div>
   );

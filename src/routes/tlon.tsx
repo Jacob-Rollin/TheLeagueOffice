@@ -352,8 +352,14 @@ function TlonNetwork() {
   const sumStarterLive = (starters: Player[], map: Record<string, number>) =>
     Math.round(starters.reduce((s, p) => s + (Number(map[p.id] ?? 0) || 0), 0) * 100) / 100;
 
-  const leftLive = sumStarterLive(leftStarters, leftPoints);
-  const rightLive = sumStarterLive(rightStarters, rightPoints);
+  // Prefer Sleeper’s official team total so the scorebug tracks the same number
+  // the matchup payload updates — starter-sum alone can miss ID mismatches.
+  const leftLive = Math.round(
+    (Number(pair.leftEntry?.points) || sumStarterLive(leftStarters, leftPoints) || 0) * 100,
+  ) / 100;
+  const rightLive = Math.round(
+    (Number(pair.rightEntry?.points) || sumStarterLive(rightStarters, rightPoints) || 0) * 100,
+  ) / 100;
 
   const leftProj = useMemo(
     () =>
@@ -397,50 +403,74 @@ function TlonNetwork() {
     });
   }, [selected?.id, winPctLeft]);
 
+  /**
+   * Popup diffs use matchup-entry starter IDs + playerPoints (not roster
+   * fallbacks) so Sleeper point ticks always key the same way as the payload.
+   */
   const starterSnapshots = useMemo((): TlonStarterSnapshot[] => {
     const rows: TlonStarterSnapshot[] = [];
-    for (const p of leftStarters) {
-      const progress = progressForTeam(progressByNflTeam, p.team);
-      const label = gameLabel(progress);
-      const stats = statsFor(p.id);
-      rows.push({
-        playerId: p.id,
-        playerName: p.name,
-        pos: p.pos,
-        team: p.team || "",
-        side: "left",
-        points: Number(leftPoints[p.id] ?? 0) || 0,
-        ...(stats ? { stats } : {}),
-        ...(label ? { gameLabel: label } : {}),
-        ...(selected?.id ? { matchupId: selected.id } : {}),
-      });
-    }
-    for (const p of rightStarters) {
-      const progress = progressForTeam(progressByNflTeam, p.team);
-      const label = gameLabel(progress);
-      const stats = statsFor(p.id);
-      rows.push({
-        playerId: p.id,
-        playerName: p.name,
-        pos: p.pos,
-        team: p.team || "",
-        side: "right",
-        points: Number(rightPoints[p.id] ?? 0) || 0,
-        ...(stats ? { stats } : {}),
-        ...(label ? { gameLabel: label } : {}),
-        ...(selected?.id ? { matchupId: selected.id } : {}),
-      });
-    }
+    const pushSide = (
+      side: "left" | "right",
+      entry: typeof pair.leftEntry,
+      resolved: Player[],
+      points: Record<string, number>,
+    ) => {
+      if (!entry) return;
+      const ids = (entry.starters ?? [])
+        .map((id) => (id && id !== "0" ? String(id) : ""))
+        .filter(Boolean);
+      const names = entry.starterNames ?? [];
+      const useIds = ids.length ? ids : resolved.map((p) => p.id);
+      for (let i = 0; i < useIds.length; i++) {
+        const id = useIds[i]!;
+        const fromCatalog = playersById.get(id);
+        const fromResolved = resolved.find((p) => p.id === id) ?? resolved[i] ?? null;
+        const playerName =
+          fromCatalog?.name ||
+          fromResolved?.name ||
+          names[i]?.trim() ||
+          id;
+        const pos = fromCatalog?.pos || fromResolved?.pos || "";
+        const team = fromCatalog?.team || fromResolved?.team || "";
+        const pts = Number(points[id] ?? points[String(id)] ?? 0) || 0;
+        const progress = progressForTeam(progressByNflTeam, team);
+        const label = gameLabel(progress);
+        const stats = statsFor(id);
+        rows.push({
+          playerId: id,
+          playerName,
+          pos,
+          team: team || "",
+          side,
+          points: Math.round(pts * 100) / 100,
+          ...(stats ? { stats } : {}),
+          ...(label ? { gameLabel: label } : {}),
+          ...(selected?.id ? { matchupId: selected.id } : {}),
+        });
+      }
+    };
+    pushSide("left", pair.leftEntry, leftStarters, leftPoints);
+    pushSide("right", pair.rightEntry, rightStarters, rightPoints);
     return rows;
   }, [
+    pair.leftEntry,
+    pair.rightEntry,
     leftStarters,
     rightStarters,
     leftPoints,
     rightPoints,
+    playersById,
     progressByNflTeam,
     statsFor,
     selected?.id,
   ]);
+
+  /** Stable fingerprint so point-only payload updates always re-run the diff. */
+  const starterPointsFingerprint = useMemo(
+    () =>
+      starterSnapshots.map((r) => `${r.side}:${r.playerId}:${r.points.toFixed(2)}`).join("|"),
+    [starterSnapshots],
+  );
 
   /** All league boards for Scoring Update diffs — same matchups payload. */
   const leagueBoards = useMemo((): LeagueMatchupScoreSnap[] => {
@@ -555,7 +585,7 @@ function TlonNetwork() {
       const next = incoming.filter((e) => !seen.has(e.id));
       return [...next, ...prev].slice(0, 8);
     });
-  }, [starterSnapshots, activeLeagueId, activeWeek, selected?.id]);
+  }, [starterSnapshots, starterPointsFingerprint, activeLeagueId, activeWeek, selected?.id]);
 
   // League-wide Scoring Updates (≥6) — skips the selected / on-air matchup.
   useEffect(() => {
