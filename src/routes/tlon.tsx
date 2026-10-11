@@ -156,7 +156,10 @@ function TlonNetwork() {
   const nflWeek = useNflState();
   const activeWeek = nflWeek.data?.week ?? 1;
   const { projectFor } = useLeagueProjections(activeWeek);
-  const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
+  // Sleeper-only faster client polls on this page; playbook keeps the default pace.
+  const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek, {
+    pace: "broadcast",
+  });
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
   const { statsFor } = useWeeklyActualStats(activeWeek);
   const modalRef = useRef<PlayerModalHandle>(null);

@@ -25,9 +25,17 @@ import type { LeagueWeekMatchups } from "@/lib/league.server";
 const LIVE_POLL_MS = 30 * 1000;
 /** Between early/late windows — keep ≤60s so TLN field popups don’t stall. */
 const BETWEEN_GAMES_POLL_MS = 60 * 1000;
+/**
+ * TLN broadcast stage only — faster Sleeper client polls (~6/min live).
+ * Still well under the per-tab soft budget; other pages keep the default pace.
+ */
+const BROADCAST_LIVE_POLL_MS = 10 * 1000;
+const BROADCAST_BETWEEN_GAMES_POLL_MS = 20 * 1000;
 /** ESPN/Yahoo polls hit our `/api/data/league` CDN — keep quieter between games. */
 const ESPN_BETWEEN_GAMES_POLL_MS = 5 * 60 * 1000;
 const ALL_FINAL_POLL_MS = 15 * 60 * 1000;
+
+export type ActiveMatchupsPace = "default" | "broadcast";
 
 function boardIsDisplayable(board: LeagueWeekMatchups | null | undefined): boolean {
   return boardHasUsableScores(board) || boardHasSchedulePairings(board);
@@ -154,22 +162,37 @@ function liveMatchupPollMs(
   currentWeek: number | null,
   liveMs: number | false,
   platform: string,
+  pace: ActiveMatchupsPace,
 ): number | false {
   if (week == null || currentWeek == null || week !== currentWeek) return false;
   if (liveMs === false) return false;
   // Native polls hit auth serverFns (+ live stats snap) — keep ESPN-quiet cadence.
   const espnish = platform === "espn" || platform === "yahoo" || platform === "native";
   // ESPN/Yahoo polls also hit our CDN route (and sometimes Fluid). Keep them
-  // calmer than Sleeper's browser→api.sleeper.app live path.
-  const inGame = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : LIVE_POLL_MS;
-  const between = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : BETWEEN_GAMES_POLL_MS;
-  if (typeof liveMs === "number" && liveMs <= 30_000) return inGame;
+  // calmer than Sleeper's browser→api.sleeper.app live path — even on TLN.
+  const broadcast = !espnish && pace === "broadcast";
+  const inGame = espnish
+    ? ESPN_BETWEEN_GAMES_POLL_MS
+    : broadcast
+      ? BROADCAST_LIVE_POLL_MS
+      : LIVE_POLL_MS;
+  const between = espnish
+    ? ESPN_BETWEEN_GAMES_POLL_MS
+    : broadcast
+      ? BROADCAST_BETWEEN_GAMES_POLL_MS
+      : BETWEEN_GAMES_POLL_MS;
+  const liveFloor = broadcast ? BROADCAST_LIVE_POLL_MS : 30_000;
+  if (typeof liveMs === "number" && liveMs <= liveFloor) return inGame;
   if (typeof liveMs === "number" && liveMs >= ALL_FINAL_POLL_MS) return ALL_FINAL_POLL_MS;
   return Math.max(inGame, Math.min(between, liveMs));
 }
 
 /** Weekly host matchup rows for the active synced league. */
-export function useActiveMatchups(week: number | null | undefined) {
+export function useActiveMatchups(
+  week: number | null | undefined,
+  opts?: { pace?: ActiveMatchupsPace },
+) {
+  const pace = opts?.pace ?? "default";
   const { activeLeague } = useActiveLeague();
   const id = activeLeague?.id ?? null;
   const leagueId = activeLeague?.leagueId ?? "";
@@ -179,14 +202,20 @@ export function useActiveMatchups(week: number | null | undefined) {
   const isPastWeek = safeWeek != null && currentWeek != null && safeWeek < currentWeek;
   const isCurrentWeek = safeWeek != null && currentWeek != null && safeWeek === currentWeek;
   const liveMs = liveRefreshMs(safeWeek, currentWeek, progressByNflTeam);
-  const pollMs = liveMatchupPollMs(safeWeek, currentWeek, liveMs, platform);
+  const pollMs = liveMatchupPollMs(safeWeek, currentWeek, liveMs, platform, pace);
 
   const query = useQuery({
     queryKey: [...activeMatchupsQueryKey(id, safeWeek ?? 0), currentWeek ?? "na"],
     enabled: Boolean(leagueId && safeWeek),
     retry: false,
     // Live boards go stale quickly so RQ refetches on the poll interval.
-    staleTime: isPastWeek ? 10 * 60 * 1000 : isCurrentWeek ? 15 * 1000 : 60 * 1000,
+    staleTime: isPastWeek
+      ? 10 * 60 * 1000
+      : isCurrentWeek
+        ? pace === "broadcast"
+          ? 5 * 1000
+          : 15 * 1000
+        : 60 * 1000,
     refetchInterval: visibleRefetchInterval(pollMs),
     refetchIntervalInBackground: false,
     // Keep prior week visible while the next week resolves (no blank board).
