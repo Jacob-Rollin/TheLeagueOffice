@@ -51,10 +51,11 @@ export function TlonScoringUpdateToast({
     }
     setVisible(false);
     const enter = window.setTimeout(() => setVisible(true), 20);
+    // Hold long enough to read player + score tick-up (enter/exit animations extra).
     const leave = window.setTimeout(() => {
       setVisible(false);
       window.setTimeout(() => onDone?.(), 320);
-    }, 6500);
+    }, 16_000);
     return () => {
       window.clearTimeout(enter);
       window.clearTimeout(leave);
@@ -92,7 +93,7 @@ export function TlonScoringUpdateToast({
           Scoring Update
         </span>
         <span className="font-display text-lg font-extrabold tabular-nums text-emerald-400">
-          +{update.delta.toFixed(1)}
+          +{update.delta.toFixed(2)}
         </span>
       </div>
       <p className="truncate text-xs font-semibold text-white">
@@ -116,7 +117,7 @@ export function TlonScoringUpdateToast({
                 scoringLeft && "text-emerald-300",
               )}
             >
-              {leftDisplay.toFixed(1)}
+              {leftDisplay.toFixed(2)}
             </p>
           </div>
         </div>
@@ -130,7 +131,7 @@ export function TlonScoringUpdateToast({
                 !scoringLeft && "text-emerald-300",
               )}
             >
-              {rightDisplay.toFixed(1)}
+              {rightDisplay.toFixed(2)}
             </p>
           </div>
           <MatchupTeamAvatar

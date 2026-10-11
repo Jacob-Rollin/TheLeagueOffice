@@ -10,6 +10,8 @@ export const TLON_MIN_DELTA = 0.5;
 export const TLON_MAX_EVENTS = 40;
 /** Other-matchup Scoring Update threshold (fantasy points). */
 export const TLON_SCORING_UPDATE_MIN = 6;
+/** On-air / watched matchup — lower so your game’s score popups fire sooner. */
+export const TLON_WATCHED_SCORING_UPDATE_MIN = 1;
 
 export type TlonFeedSide = "left" | "right";
 
@@ -300,26 +302,32 @@ export type LeagueMatchupScoreSnap = {
   starters: TlonStarterSnapshot[];
 };
 
-/** Detect ≥6 pt starter spikes on boards other than the watched matchup. */
+/**
+ * Detect starter point spikes for Scoring Update toasts.
+ * On-air (watched) matchup uses a lower threshold so your game surfaces
+ * on the next poll (~30s Sleeper live); other boards keep the ≥6 filter.
+ */
 export function diffLeagueScoringUpdates(
   prev: Map<string, TlonStarterSnapshot> | null,
   prevScores: Map<string, { left: number; right: number }> | null,
   boards: LeagueMatchupScoreSnap[],
   watchedMatchupId: string | null,
-  opts?: { minDelta?: number; now?: number },
+  opts?: { minDelta?: number; watchedMinDelta?: number; now?: number },
 ): TlonScoringUpdate[] {
-  const minDelta = opts?.minDelta ?? TLON_SCORING_UPDATE_MIN;
+  const otherMin = opts?.minDelta ?? TLON_SCORING_UPDATE_MIN;
+  const watchedMin = opts?.watchedMinDelta ?? TLON_WATCHED_SCORING_UPDATE_MIN;
   const now = opts?.now ?? Date.now();
   if (!prev || prev.size === 0) return [];
 
   const updates: TlonScoringUpdate[] = [];
   for (const board of boards) {
-    if (watchedMatchupId && board.matchupId === watchedMatchupId) continue;
+    const isWatched = watchedMatchupId != null && board.matchupId === watchedMatchupId;
+    const minDelta = isWatched ? watchedMin : otherMin;
     const prevScore = prevScores?.get(board.matchupId);
     for (const row of board.starters) {
       const before = prev.get(`${board.matchupId}:${row.playerId}`);
       if (!before) continue;
-      const delta = Math.round((row.points - before.points) * 10) / 10;
+      const delta = Math.round((row.points - before.points) * 100) / 100;
       if (delta < minDelta) continue;
       const headline = inferPlayHeadline(before.stats ?? null, row.stats ?? null, delta);
       const leftFrom = prevScore?.left ?? board.leftPoints - (row.side === "left" ? delta : 0);
@@ -337,16 +345,22 @@ export function diffLeagueScoringUpdates(
         headline,
         leftName: board.leftName,
         rightName: board.rightName,
-        leftFrom: Math.max(0, Math.round(leftFrom * 10) / 10),
-        leftTo: Math.round(board.leftPoints * 10) / 10,
-        rightFrom: Math.max(0, Math.round(rightFrom * 10) / 10),
-        rightTo: Math.round(board.rightPoints * 10) / 10,
+        leftFrom: Math.max(0, Math.round(leftFrom * 100) / 100),
+        leftTo: Math.round(board.leftPoints * 100) / 100,
+        rightFrom: Math.max(0, Math.round(rightFrom * 100) / 100),
+        rightTo: Math.round(board.rightPoints * 100) / 100,
         leftLogo: board.leftLogo ?? null,
         rightLogo: board.rightLogo ?? null,
       });
     }
   }
-  updates.sort((a, b) => b.delta - a.delta);
+  // On-air updates first, then by delta size.
+  updates.sort((a, b) => {
+    const aWatch = watchedMatchupId && a.matchupId === watchedMatchupId ? 1 : 0;
+    const bWatch = watchedMatchupId && b.matchupId === watchedMatchupId ? 1 : 0;
+    if (aWatch !== bWatch) return bWatch - aWatch;
+    return b.delta - a.delta;
+  });
   return updates;
 }
 

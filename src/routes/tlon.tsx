@@ -557,7 +557,7 @@ function TlonNetwork() {
     setArcQueue(rest);
   }, [activeArc, arcQueue]);
 
-  // League-wide Scoring Updates (≥6) from the same matchups board.
+  // Scoring Updates from the same matchups board (on-air ≥1 pt; others ≥6).
   useEffect(() => {
     const starterMap = new Map<string, TlonStarterSnapshot>();
     const scoreMap = new Map<string, { left: number; right: number }>();

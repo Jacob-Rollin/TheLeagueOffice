@@ -40,8 +40,8 @@ function YetToPlayDots({
 }
 
 function formatScore(n: number): string {
-  if (!Number.isFinite(n)) return "0.0";
-  return (Math.round(n * 10) / 10).toFixed(1);
+  if (!Number.isFinite(n)) return "0.00";
+  return (Math.round(n * 100) / 100).toFixed(2);
 }
 
 function LogoBlock({
@@ -138,7 +138,7 @@ function TeamSide({
 
         <p
           className={cn(
-            "relative z-[1] shrink-0 font-display text-[1.15rem] font-extrabold leading-none tabular-nums text-slate-900 sm:text-[1.7rem]",
+            "relative z-[1] shrink-0 font-display text-[1.05rem] font-extrabold leading-none tabular-nums text-slate-900 sm:text-[1.45rem]",
             "transition-transform duration-300 ease-out",
             pulse && "scale-110 text-emerald-700",
           )}
