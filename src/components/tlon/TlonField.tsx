@@ -107,7 +107,7 @@ export function TlonField({
       setPhase("idle");
       setActive(null);
       onArcDone?.(arc.id);
-    }, 2900);
+    }, 8000);
     return () => {
       window.clearTimeout(t0);
       window.clearTimeout(t1);
@@ -413,7 +413,7 @@ export function TlonField({
                 <span className="text-emerald-300">
                   {active.yardGain > 0 ? `+${active.yardGain} yd` : active.headline} ·{" "}
                   {active.delta >= 0 ? "+" : ""}
-                  {active.delta.toFixed(1)}
+                  {active.delta.toFixed(2)}
                 </span>
               </div>
             </div>

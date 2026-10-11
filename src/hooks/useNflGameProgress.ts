@@ -6,7 +6,7 @@ import { buildNflGameProgressMap, type NflGameProgress } from "@/lib/rolling-liv
 
 /** In-game floor for live-week polls — keep ≥30s so visitor Sleeper IPs stay under ~1000/min. */
 const LIVE_MS = 30 * 1000;
-const BETWEEN_GAMES_MS = 2 * 60 * 1000;
+const BETWEEN_GAMES_MS = 60 * 1000;
 const ALL_FINAL_MS = 10 * 60 * 1000;
 
 /**

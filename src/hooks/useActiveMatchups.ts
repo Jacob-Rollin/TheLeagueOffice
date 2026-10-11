@@ -23,7 +23,8 @@ import type { LeagueWeekMatchups } from "@/lib/league.server";
  * Hidden tabs never poll. Fluid is not used on the live path.
  */
 const LIVE_POLL_MS = 30 * 1000;
-const BETWEEN_GAMES_POLL_MS = 2 * 60 * 1000;
+/** Between early/late windows — keep ≤60s so TLN field popups don’t stall. */
+const BETWEEN_GAMES_POLL_MS = 60 * 1000;
 /** ESPN/Yahoo polls hit our `/api/data/league` CDN — keep quieter between games. */
 const ESPN_BETWEEN_GAMES_POLL_MS = 5 * 60 * 1000;
 const ALL_FINAL_POLL_MS = 15 * 60 * 1000;

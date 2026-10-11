@@ -10,8 +10,6 @@ export const TLON_MIN_DELTA = 0.5;
 export const TLON_MAX_EVENTS = 40;
 /** Other-matchup Scoring Update threshold (fantasy points). */
 export const TLON_SCORING_UPDATE_MIN = 6;
-/** On-air / watched matchup — lower so your game’s score popups fire sooner. */
-export const TLON_WATCHED_SCORING_UPDATE_MIN = 1;
 
 export type TlonFeedSide = "left" | "right";
 
@@ -302,27 +300,22 @@ export type LeagueMatchupScoreSnap = {
   starters: TlonStarterSnapshot[];
 };
 
-/**
- * Detect starter point spikes for Scoring Update toasts.
- * On-air (watched) matchup uses a lower threshold so your game surfaces
- * on the next poll (~30s Sleeper live); other boards keep the ≥6 filter.
- */
+/** Detect ≥6 pt starter spikes on boards other than the watched matchup. */
 export function diffLeagueScoringUpdates(
   prev: Map<string, TlonStarterSnapshot> | null,
   prevScores: Map<string, { left: number; right: number }> | null,
   boards: LeagueMatchupScoreSnap[],
   watchedMatchupId: string | null,
-  opts?: { minDelta?: number; watchedMinDelta?: number; now?: number },
+  opts?: { minDelta?: number; now?: number },
 ): TlonScoringUpdate[] {
-  const otherMin = opts?.minDelta ?? TLON_SCORING_UPDATE_MIN;
-  const watchedMin = opts?.watchedMinDelta ?? TLON_WATCHED_SCORING_UPDATE_MIN;
+  const minDelta = opts?.minDelta ?? TLON_SCORING_UPDATE_MIN;
   const now = opts?.now ?? Date.now();
   if (!prev || prev.size === 0) return [];
 
   const updates: TlonScoringUpdate[] = [];
   for (const board of boards) {
-    const isWatched = watchedMatchupId != null && board.matchupId === watchedMatchupId;
-    const minDelta = isWatched ? watchedMin : otherMin;
+    // Selected / on-air matchup uses field player arcs — not these toasts.
+    if (watchedMatchupId && board.matchupId === watchedMatchupId) continue;
     const prevScore = prevScores?.get(board.matchupId);
     for (const row of board.starters) {
       const before = prev.get(`${board.matchupId}:${row.playerId}`);
@@ -354,13 +347,7 @@ export function diffLeagueScoringUpdates(
       });
     }
   }
-  // On-air updates first, then by delta size.
-  updates.sort((a, b) => {
-    const aWatch = watchedMatchupId && a.matchupId === watchedMatchupId ? 1 : 0;
-    const bWatch = watchedMatchupId && b.matchupId === watchedMatchupId ? 1 : 0;
-    if (aWatch !== bWatch) return bWatch - aWatch;
-    return b.delta - a.delta;
-  });
+  updates.sort((a, b) => b.delta - a.delta);
   return updates;
 }
 
