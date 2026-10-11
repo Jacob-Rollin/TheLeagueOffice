@@ -34,6 +34,7 @@ function PointChip({
   onDoneRef.current = onDone;
   const left = event.side === "left";
   const sign = event.delta >= 0 ? "+" : "";
+  const up = event.delta >= 0;
 
   useEffect(() => {
     const enter = window.setTimeout(() => setVisible(true), 20);
@@ -50,22 +51,29 @@ function PointChip({
   return (
     <div
       className={cn(
-        "flex w-full items-center shadow-lg backdrop-blur-md transition-[opacity,transform] duration-300 ease-out",
+        "relative flex w-full items-center overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.45)]",
+        "border border-white/15 bg-[#0b1220]/94 backdrop-blur-md",
+        "transition-[opacity,transform] duration-300 ease-out origin-center",
         expanded
-          ? "max-w-[18rem] gap-2.5 rounded-xl border-2 px-2.5 py-2 sm:max-w-[20rem] sm:gap-3 sm:px-3 sm:py-2.5"
-          : "max-w-[12.5rem] gap-1.5 rounded-lg border px-1.5 py-1 sm:max-w-[15rem] sm:gap-2 sm:px-2 sm:py-1.5 lg:max-w-[16.5rem]",
-        left
-          ? "border-[#1e3a5f]/60 bg-[#0b1220]/92 origin-center"
-          : "border-[#b91c1c]/60 bg-[#0b1220]/92 origin-center",
+          ? "max-w-[18rem] gap-2.5 rounded-xl px-2.5 py-2 sm:max-w-[20rem] sm:gap-3 sm:px-3 sm:py-2.5"
+          : "max-w-[12.5rem] gap-1.5 rounded-lg px-1.5 py-1 sm:max-w-[15rem] sm:gap-2 sm:px-2 sm:py-1.5 lg:max-w-[16.5rem]",
         visible ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0",
       )}
     >
+      {/* Team accent rail */}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute inset-y-0 left-0 w-[3px]",
+          left ? "bg-[#1e3a5f]" : "bg-[#b91c1c]",
+        )}
+      />
       <img
         src={playerImage(event.playerId, (event.pos || "WR") as Pos, event.team)}
         alt=""
         className={cn(
-          "shrink-0 rounded-full border border-white/25 object-cover",
-          expanded ? "size-11 sm:size-12" : "size-7 sm:size-9 lg:size-10",
+          "shrink-0 rounded-full border border-white/30 object-cover ring-1 ring-black/40",
+          expanded ? "ml-1 size-11 sm:size-12" : "ml-0.5 size-7 sm:size-9 lg:size-10",
         )}
         onError={(e) => {
           e.currentTarget.style.visibility = "hidden";
@@ -91,9 +99,9 @@ function PointChip({
       </div>
       <span
         className={cn(
-          "shrink-0 font-display font-extrabold leading-none tabular-nums",
-          expanded ? "text-[1.45rem] sm:text-[1.65rem]" : "text-[1.05rem] sm:text-[1.25rem] lg:text-[1.35rem]",
-          event.delta >= 0 ? "text-emerald-300" : "text-rose-300",
+          "shrink-0 rounded-md font-display font-extrabold leading-none tabular-nums",
+          expanded ? "px-2 py-1 text-[1.35rem] sm:text-[1.5rem]" : "px-1.5 py-0.5 text-[1.05rem] sm:text-[1.2rem] lg:text-[1.3rem]",
+          up ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300",
         )}
       >
         {sign}
