@@ -192,6 +192,7 @@ export function TlonBroadcastStage({
           <TlonPointPopups
             events={pointPopups}
             onDismiss={onDismissPointPopup ?? (() => undefined)}
+            expanded={fullscreen}
           />
         </div>
 
