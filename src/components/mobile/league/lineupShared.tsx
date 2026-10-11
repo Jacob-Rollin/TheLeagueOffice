@@ -616,6 +616,7 @@ export function isRuledOut(status: string | null | undefined): boolean {
     s === "SUS" ||
     s === "SUSPENDED" ||
     s === "NA" ||
+    s === "IA" ||
     s === "INACTIVE" ||
     s === "DNR" ||
     /^out\b/i.test(String(status))

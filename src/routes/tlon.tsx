@@ -26,6 +26,7 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player } from "@/lib/draft";
+import { isUnavailableInjury } from "@/lib/injury-badge";
 import {
   computeMatchupPreview,
   matchupSlotLabels,
@@ -37,6 +38,7 @@ import {
   computeTeamDisplayProjection,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
+import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { fetchSnapFantasyNews, fetchSnapInjuryWire } from "@/lib/snap-cdn";
 import {
   diffLeagueScoringUpdates,
@@ -667,11 +669,18 @@ function TlonNetwork() {
       return !phase || phase === "pre" || phase === "in";
     }).length;
 
-  /** Starters whose NFL team has the ball in the red zone right now. */
+  /**
+   * Starters whose NFL team has the ball in the red zone right now.
+   * Stays lit for the full possession+RZ window (no toast dismiss) — clears
+   * only when ESPN reports the drive left the red zone or lost possession.
+   * Out / IA / IR / PUP / SUS / COV / Doubtful (and DST) never appear.
+   */
   const redZonePlayers = useMemo((): TlonRedZonePlayer[] => {
     const out: TlonRedZonePlayer[] = [];
     const push = (starters: Player[], side: "left" | "right") => {
       for (const p of starters) {
+        if (p.pos === "DEF") continue;
+        if (isUnavailableInjury(resolveInjuryStatus(p))) continue;
         const progress = progressForTeam(progressByNflTeam, p.team);
         if (!progress || progress.phase !== "in" || !progress.isRedZone) continue;
         if (!sameNflTeam(progress.possessionAbbr, p.team)) continue;

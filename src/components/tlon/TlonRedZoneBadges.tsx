@@ -71,6 +71,8 @@ function RzChip({
 /**
  * Live red-zone markers inside each side’s 20 — starters whose NFL team
  * currently has possession in the red zone (ESPN scoreboard signal).
+ * Parent feeds a continuous list for the full possession+RZ window; chips
+ * are not toast-timed and clear only when the feed drops the player.
  */
 export function TlonRedZoneBadges({
   players,
