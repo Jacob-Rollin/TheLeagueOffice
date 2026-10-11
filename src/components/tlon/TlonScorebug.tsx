@@ -63,14 +63,14 @@ function LogoBlock({
   return (
     <div
       className={cn(
-        "flex items-center justify-center px-1.5 sm:px-2",
+        "flex w-9 items-center justify-center sm:w-11",
         tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]",
       )}
     >
       <span
         className={cn(
-          "shrink-0 [&_span]:rounded-md [&_span]:border-white/20",
-          "[&_span]:h-8 [&_span]:w-8 sm:[&_span]:h-9 sm:[&_span]:w-9",
+          "shrink-0 [&_span]:rounded [&_span]:border-white/25 [&_span]:bg-white/10",
+          "[&_span]:h-7 [&_span]:w-7 sm:[&_span]:h-8 sm:[&_span]:w-8",
         )}
       >
         {children}
@@ -122,7 +122,7 @@ function TeamInfo({
             {rankLabel}
           </span>
         ) : null}
-        <span className="truncate font-display text-[10px] font-extrabold uppercase tracking-[0.04em] text-slate-900 sm:text-[12px] sm:tracking-[0.06em]">
+        <span className="min-w-0 truncate font-display text-[9px] font-extrabold uppercase tracking-[0.03em] text-slate-900 sm:text-[11px] sm:tracking-[0.05em]">
           {name}
         </span>
       </p>
@@ -227,9 +227,9 @@ export function TlonScorebug({
     daypart === "LIVE" ? "LIVE" : daypart === "FINAL" ? "FINAL" : "PRE";
 
   return (
-    <div className="relative mx-auto w-[min(100%,24rem)] sm:w-[min(100%,32rem)]">
+    <div className="relative mx-auto w-[min(100%,26rem)] sm:w-[min(100%,34rem)]">
       <div className="relative overflow-hidden rounded-sm bg-slate-100 shadow-[0_6px_20px_rgba(0,0,0,0.55)] ring-1 ring-black/20 sm:rounded">
-        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto_auto_minmax(0,1fr)_auto] items-stretch">
+        <div className="grid grid-cols-[auto_minmax(0,1.15fr)_auto_auto_auto_minmax(0,1.15fr)_auto] items-stretch">
           <LogoBlock tone="navy">
             <MatchupTeamAvatar
               name={leftName}
@@ -257,7 +257,7 @@ export function TlonScorebug({
           />
 
           {/* Center — TLN + status + win prob */}
-          <div className="flex min-w-[3.75rem] flex-col items-center justify-center gap-0.5 bg-[#111111] px-1.5 py-1 text-center sm:min-w-[5rem] sm:gap-1 sm:px-2.5 sm:py-1.5">
+          <div className="flex min-w-[3.75rem] flex-col items-center justify-center gap-[3px] bg-[#111111] px-1.5 py-1 text-center sm:min-w-[5rem] sm:gap-1 sm:px-2.5 sm:py-1.5">
             <div className="flex items-center justify-center gap-1">
               <span className="display-title text-[9px] leading-none tracking-[0.16em] text-white sm:text-[11px] sm:tracking-[0.18em]">
                 TLN
@@ -274,11 +274,13 @@ export function TlonScorebug({
               <span className="text-white/35"> · </span>
               <span className="text-white/85">WK {week}</span>
             </p>
-            <p className="w-full text-center font-display text-[0.95rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.2rem]">
-              {Math.round(favoredPct)}%
-            </p>
-            <p className="w-full text-center text-[6.5px] font-semibold uppercase tracking-wide text-white/50 sm:text-[7.5px]">
-              Win prob
+            <p className="w-full text-center leading-none">
+              <span className="font-display text-[0.95rem] font-extrabold tabular-nums text-white sm:text-[1.15rem]">
+                {Math.round(favoredPct)}%
+              </span>
+              <span className="ml-1 text-[6.5px] font-semibold uppercase tracking-wide text-white/50 sm:text-[7.5px]">
+                Win prob
+              </span>
             </p>
           </div>
 
