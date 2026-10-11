@@ -4,8 +4,9 @@ import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
 import { cn } from "@/lib/utils";
 
 /**
- * Starters yet to play — fantasy analogue of broadcast timeout dots.
- * Lit dots = players whose NFL game has not started.
+ * Starters yet to play — same circular dots for every slot.
+ * Lit = NFL game not started; dim = already played / in progress.
+ * Row width matches the record bar beneath it.
  */
 function YetToPlayDots({
   count,
@@ -21,7 +22,7 @@ function YetToPlayDots({
   const lit = tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]";
   return (
     <div
-      className="flex items-center gap-[3px]"
+      className="flex w-full items-center justify-between"
       aria-label={`${n} of ${slots} starters yet to play`}
       title={`${n} of ${slots} starters yet to play`}
     >
@@ -29,7 +30,7 @@ function YetToPlayDots({
         <span
           key={i}
           className={cn(
-            "size-[3px] rounded-full sm:size-[3.5px]",
+            "size-[3.5px] shrink-0 rounded-full sm:size-[4px]",
             i < n ? lit : "bg-slate-300",
           )}
         />
@@ -43,16 +44,6 @@ function formatScore(n: number): string {
   return (Math.round(n * 10) / 10).toFixed(1);
 }
 
-function LeadMark({ show }: { show: boolean }) {
-  if (!show) return <span className="h-[5px]" aria-hidden />;
-  return (
-    <span
-      className="inline-block border-x-[3.5px] border-b-[5px] border-x-transparent border-b-slate-900"
-      aria-label="Leading"
-    />
-  );
-}
-
 function LogoBlock({
   tone,
   children,
@@ -63,7 +54,7 @@ function LogoBlock({
   return (
     <div
       className={cn(
-        "flex w-9 items-center justify-center sm:w-11",
+        "flex w-9 shrink-0 items-center justify-center self-stretch sm:w-11",
         tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]",
       )}
     >
@@ -79,41 +70,39 @@ function LogoBlock({
   );
 }
 
-function TeamInfo({
+function TeamSide({
   name,
   rank,
   record,
+  score,
   yetToPlay,
   yetToPlayMax,
   tone,
   align,
+  pulse,
 }: {
   name: string;
   rank?: number | null;
   record?: string | null;
+  score: number;
   yetToPlay: number;
   yetToPlayMax: number;
   tone: "navy" | "red";
   align: "left" | "right";
+  pulse: boolean;
 }) {
   const rankLabel =
     rank != null && Number.isFinite(rank) && rank >= 1 ? String(Math.floor(rank)) : "";
-  const bar =
-    tone === "navy"
-      ? "bg-[#1e3a5f]"
-      : "bg-[#b91c1c]";
+  const bar = tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]";
+  const right = align === "right";
 
   return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-col justify-center gap-[3px] px-1.5 py-1 sm:gap-1 sm:px-2 sm:py-1.5",
-        align === "right" && "items-end",
-      )}
-    >
+    <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-1.5 py-1 sm:gap-1.5 sm:px-2.5 sm:py-1.5">
+      {/* Top: rank + full team name only */}
       <p
         className={cn(
-          "flex min-w-0 items-baseline gap-1 leading-none",
-          align === "right" && "w-full justify-end",
+          "flex min-w-0 items-baseline gap-1 leading-tight",
+          right && "justify-end text-right",
         )}
         title={rankLabel ? `${rankLabel} ${name}` : name}
       >
@@ -122,52 +111,41 @@ function TeamInfo({
             {rankLabel}
           </span>
         ) : null}
-        <span className="min-w-0 truncate font-display text-[9px] font-extrabold uppercase tracking-[0.03em] text-slate-900 sm:text-[11px] sm:tracking-[0.05em]">
+        <span className="min-w-0 break-words font-display text-[9px] font-extrabold uppercase tracking-[0.03em] text-slate-900 sm:text-[11px] sm:tracking-[0.04em]">
           {name}
         </span>
       </p>
 
-      <YetToPlayDots
-        count={yetToPlay}
-        max={Math.max(yetToPlayMax, 1)}
-        tone={tone}
-      />
-
+      {/* Bottom: dots + record bar, score beside them */}
       <div
         className={cn(
-          "w-full min-w-[3.5rem] rounded-[2px] px-1.5 py-[2px] sm:min-w-[4.25rem] sm:px-2 sm:py-0.5",
-          bar,
+          "flex items-end gap-1.5 sm:gap-2",
+          right && "flex-row-reverse",
         )}
       >
-        <p className="text-center font-display text-[9px] font-bold leading-none tabular-nums tracking-wide text-white sm:text-[11px]">
-          {record?.trim() || "—"}
+        <div className="flex min-w-[4.25rem] flex-1 flex-col gap-[3px] sm:min-w-[5rem] sm:gap-1">
+          <YetToPlayDots
+            count={yetToPlay}
+            max={Math.max(yetToPlayMax, 1)}
+            tone={tone}
+          />
+          <div className={cn("w-full rounded-[2px] px-1.5 py-[2px] sm:px-2 sm:py-0.5", bar)}>
+            <p className="text-center font-display text-[9px] font-bold leading-none tabular-nums tracking-wide text-white sm:text-[11px]">
+              {record?.trim() || "—"}
+            </p>
+          </div>
+        </div>
+
+        <p
+          className={cn(
+            "shrink-0 font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-slate-900 sm:text-[1.7rem]",
+            "transition-transform duration-300 ease-out",
+            pulse && "scale-110 text-emerald-700",
+          )}
+        >
+          {formatScore(score)}
         </p>
       </div>
-    </div>
-  );
-}
-
-function ScoreCol({
-  score,
-  leading,
-  pulse,
-}: {
-  score: number;
-  leading: boolean;
-  pulse: boolean;
-}) {
-  return (
-    <div className="flex min-w-[2.35rem] flex-col items-center justify-center px-1 sm:min-w-[2.85rem] sm:px-1.5">
-      <p
-        className={cn(
-          "font-display text-[1.35rem] font-extrabold leading-none tabular-nums text-slate-900 sm:text-[1.75rem]",
-          "transition-transform duration-300 ease-out",
-          pulse && "scale-110 text-emerald-700",
-        )}
-      >
-        {formatScore(score)}
-      </p>
-      <LeadMark show={leading} />
     </div>
   );
 }
@@ -175,8 +153,8 @@ function ScoreCol({
 export type TlonDaypart = "PRE" | "LIVE" | "FINAL";
 
 export function TlonScorebug({
-  week,
-  daypart,
+  week: _week,
+  daypart: _daypart,
   leftName,
   leftLogo,
   leftRecord,
@@ -195,7 +173,7 @@ export function TlonScorebug({
   winPctRight,
   platform,
   leagueKey,
-  leadingSide,
+  leadingSide: _leadingSide,
   scorePulseSide,
 }: {
   week: number;
@@ -223,13 +201,11 @@ export function TlonScorebug({
 }) {
   const favored = winPctLeft >= winPctRight ? "left" : "right";
   const favoredPct = favored === "left" ? winPctLeft : winPctRight;
-  const statusLabel =
-    daypart === "LIVE" ? "LIVE" : daypart === "FINAL" ? "FINAL" : "PRE";
 
   return (
-    <div className="relative mx-auto w-[min(100%,26rem)] sm:w-[min(100%,34rem)]">
+    <div className="relative mx-auto w-[min(100%,28rem)] sm:w-[min(100%,36rem)]">
       <div className="relative overflow-hidden rounded-sm bg-slate-100 shadow-[0_6px_20px_rgba(0,0,0,0.55)] ring-1 ring-black/20 sm:rounded">
-        <div className="grid grid-cols-[auto_minmax(0,1.15fr)_auto_auto_auto_minmax(0,1.15fr)_auto] items-stretch">
+        <div className="flex items-stretch">
           <LogoBlock tone="navy">
             <MatchupTeamAvatar
               name={leftName}
@@ -240,64 +216,52 @@ export function TlonScorebug({
             />
           </LogoBlock>
 
-          <TeamInfo
+          <TeamSide
             name={leftName}
             rank={leftRank}
             record={leftRecord}
+            score={leftLive}
             yetToPlay={leftYetToPlay}
             yetToPlayMax={leftYetToPlayMax}
             tone="navy"
             align="left"
-          />
-
-          <ScoreCol
-            score={leftLive}
-            leading={leadingSide === "left"}
             pulse={scorePulseSide === "left"}
           />
 
-          {/* Center — TLN + status + win prob */}
-          <div className="flex min-w-[3.75rem] flex-col items-center justify-center gap-[3px] bg-[#111111] px-1.5 py-1 text-center sm:min-w-[5rem] sm:gap-1 sm:px-2.5 sm:py-1.5">
+          {/* Center — highest win % with arrow toward that team */}
+          <div className="flex min-w-[3.5rem] shrink-0 flex-col items-center justify-center gap-0.5 bg-[#111111] px-1.5 py-1 sm:min-w-[4.25rem] sm:gap-1 sm:px-2 sm:py-1.5">
             <div className="flex items-center justify-center gap-1">
-              <span className="display-title text-[9px] leading-none tracking-[0.16em] text-white sm:text-[11px] sm:tracking-[0.18em]">
-                TLN
-              </span>
-              {daypart === "LIVE" ? (
-                <span className="relative flex size-1.5 shrink-0">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-500 opacity-75" />
-                  <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
-                </span>
+              {favored === "left" ? (
+                <span
+                  className="inline-block border-y-[4px] border-r-[5px] border-y-transparent border-r-white"
+                  aria-label="Favored left"
+                />
               ) : null}
-            </div>
-            <p className="w-full text-center text-[7px] font-bold uppercase tracking-[0.1em] text-amber-300 sm:text-[8px]">
-              {statusLabel}
-              <span className="text-white/35"> · </span>
-              <span className="text-white/85">WK {week}</span>
-            </p>
-            <p className="w-full text-center leading-none">
-              <span className="font-display text-[0.95rem] font-extrabold tabular-nums text-white sm:text-[1.15rem]">
+              <span className="font-display text-[1.05rem] font-extrabold leading-none tabular-nums text-white sm:text-[1.25rem]">
                 {Math.round(favoredPct)}%
               </span>
-              <span className="ml-1 text-[6.5px] font-semibold uppercase tracking-wide text-white/50 sm:text-[7.5px]">
-                Win prob
-              </span>
+              {favored === "right" ? (
+                <span
+                  className="inline-block border-y-[4px] border-l-[5px] border-y-transparent border-l-white"
+                  aria-label="Favored right"
+                />
+              ) : null}
+            </div>
+            <p className="w-full text-center text-[6.5px] font-semibold uppercase tracking-wide text-white/55 sm:text-[7.5px]">
+              Win prob
             </p>
           </div>
 
-          <ScoreCol
-            score={rightLive}
-            leading={leadingSide === "right"}
-            pulse={scorePulseSide === "right"}
-          />
-
-          <TeamInfo
+          <TeamSide
             name={rightName}
             rank={rightRank}
             record={rightRecord}
+            score={rightLive}
             yetToPlay={rightYetToPlay}
             yetToPlayMax={rightYetToPlayMax}
             tone="red"
             align="right"
+            pulse={scorePulseSide === "right"}
           />
 
           <LogoBlock tone="red">
