@@ -18,7 +18,8 @@ const RIGHT_30_PCT = yardToPct(70);
 const LEFT_RZ_PCT = yardToPct(12);
 const RIGHT_RZ_PCT = yardToPct(88);
 
-const MAX_PER_STACK = 5;
+/** Enough room for a full skill unit + DST without silently dropping starters. */
+const MAX_PER_STACK = 8;
 const SCORE_HOLD_MS = 20_000;
 
 export type TlonFieldUnit = "offense" | "defense";

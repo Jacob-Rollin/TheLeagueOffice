@@ -16,7 +16,12 @@ import {
   TlonStudio,
   type TlonStudioPlayer,
 } from "@/components/tlon/TlonStudio";
-import { possessionPill } from "@/components/mobile/league/lineupShared";
+import {
+  isRuledOut,
+  possessionPill,
+  progressFor,
+  teamKeys,
+} from "@/components/mobile/league/lineupShared";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
@@ -27,7 +32,6 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player } from "@/lib/draft";
-import { isUnavailableInjury } from "@/lib/injury-badge";
 import {
   computeMatchupPreview,
   matchupSlotLabels,
@@ -39,7 +43,6 @@ import {
   computeTeamDisplayProjection,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
-import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { fetchSnapFantasyNews, fetchSnapInjuryWire } from "@/lib/snap-cdn";
 import {
   diffLeagueScoringUpdates,
@@ -192,6 +195,8 @@ function TlonNetwork() {
   const feedMatchupKey = useRef<string>("");
   const lastWinSample = useRef<number | null>(null);
   const pulseTimer = useRef<number | null>(null);
+  /** Last known ESPN possession per NFL abbr — bridges brief scoreboard gaps. */
+  const stickyPossession = useRef(new Map<string, string>());
 
   const myRosterId = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
   const platform = activeLeague?.platform ?? null;
@@ -676,29 +681,68 @@ function TlonNetwork() {
     [pointPopups],
   );
 
+  // Keep last possession while the game is live so brief ESPN gaps don’t wipe the field.
+  useEffect(() => {
+    for (const [abbr, progress] of progressByNflTeam) {
+      if (progress.phase === "in" && progress.possessionAbbr) {
+        const ball = progress.possessionAbbr.toUpperCase();
+        for (const key of teamKeys(abbr)) stickyPossession.current.set(key, ball);
+        if (progress.opponentAbbr) {
+          for (const key of teamKeys(progress.opponentAbbr)) {
+            stickyPossession.current.set(key, ball);
+          }
+        }
+      } else if (progress.phase !== "in") {
+        for (const key of teamKeys(abbr)) stickyPossession.current.delete(key);
+      }
+    }
+  }, [progressByNflTeam]);
+
   /**
    * On-field starters via the same offense/defense/sideline inference as mobile
    * matchup pills. Offense stacks on the 30; shifts inside the 20 while RZ.
    * DST sits at the bottom. Kickers stay off unless they have a live point tick.
-   * Unavailable designations never appear.
+   * Out / IA / IR use the same isRuledOut gate as mobile (via possessionPill).
    */
   const fieldPlayers = useMemo((): TlonFieldPlayer[] => {
     const out: TlonFieldPlayer[] = [];
+    const progressWithSticky = (team: string): NflGameProgress | undefined => {
+      const raw = progressFor(team, progressByNflTeam);
+      if (!raw || raw.phase !== "in") return raw;
+      if (raw.possessionAbbr) return raw;
+      for (const key of teamKeys(team)) {
+        const sticky = stickyPossession.current.get(key);
+        if (sticky) return { ...raw, possessionAbbr: sticky };
+      }
+      return raw;
+    };
+
     const push = (starters: Player[], side: "left" | "right") => {
       for (const p of starters) {
-        if (isUnavailableInjury(resolveInjuryStatus(p))) continue;
+        // Prefer catalog row so team/injury match mobile matchup pills.
+        const catalog = playersById.get(p.id);
+        const player: Player = catalog
+          ? {
+              ...p,
+              ...catalog,
+              name: catalog.name || p.name,
+              team: catalog.team || p.team,
+              pos: catalog.pos || p.pos,
+            }
+          : p;
         // Kickers only flash on when they actually score.
-        if (p.pos === "K" && !scoringPlayerIds.has(p.id)) continue;
-        const progress = progressForTeam(progressByNflTeam, p.team);
-        const pill = possessionPill(p, progress);
+        if (player.pos === "K" && !scoringPlayerIds.has(player.id)) continue;
+        if (isRuledOut(player.injury_status ?? player.injury)) continue;
+        const progress = progressWithSticky(player.team || "");
+        const pill = possessionPill(player, progress);
         // Scoring kickers still need a lane even if pill briefly reads sideline.
-        if (p.pos === "K" && scoringPlayerIds.has(p.id)) {
+        if (player.pos === "K" && scoringPlayerIds.has(player.id)) {
           const inRedZone = Boolean(progress?.isRedZone && progress.phase === "in");
           out.push({
-            playerId: p.id,
-            playerName: p.name,
-            pos: p.pos,
-            team: p.team || "",
+            playerId: player.id,
+            playerName: player.name,
+            pos: player.pos,
+            team: player.team || "",
             side,
             unit: "offense",
             inRedZone,
@@ -709,10 +753,10 @@ function TlonNetwork() {
         // Red zone = 20 or closer (progress.isRedZone from scoreboard / yardLine).
         const inRedZone = pill === "offense" && Boolean(progress?.isRedZone);
         out.push({
-          playerId: p.id,
-          playerName: p.name,
-          pos: p.pos,
-          team: p.team || "",
+          playerId: player.id,
+          playerName: player.name,
+          pos: player.pos,
+          team: player.team || "",
           side,
           unit: pill,
           inRedZone,
@@ -722,7 +766,7 @@ function TlonNetwork() {
     push(leftStarters, "left");
     push(rightStarters, "right");
     return out;
-  }, [leftStarters, rightStarters, progressByNflTeam, scoringPlayerIds]);
+  }, [leftStarters, rightStarters, progressByNflTeam, scoringPlayerIds, playersById]);
 
   const fieldPlayerIds = useMemo(
     () => new Set(fieldPlayers.map((p) => p.playerId)),

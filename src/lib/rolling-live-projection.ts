@@ -128,13 +128,25 @@ export function buildNflGameProgressMap(scoreboard: unknown): Map<string, NflGam
         roofType.includes("closed"),
     );
 
-    const possessionId = competition.situation?.possession;
+    const possessionRaw = competition.situation?.possession;
     let possessionAbbr: string | undefined;
-    if (possessionId != null) {
-      const holder = (competition.competitors ?? []).find(
-        (c) => String(c?.id ?? "") === String(possessionId),
-      );
+    if (possessionRaw != null && String(possessionRaw).trim() !== "") {
+      const pid = String(possessionRaw).trim();
+      const pidUpper = pid.toUpperCase();
+      const holder = (competition.competitors ?? []).find((c) => {
+        const id = String(c?.id ?? "");
+        const teamId = String((c as { team?: { id?: string | number } })?.team?.id ?? "");
+        const abbr = c?.team?.abbreviation?.trim().toUpperCase() ?? "";
+        return id === pid || teamId === pid || abbr === pidUpper;
+      });
       possessionAbbr = holder?.team?.abbreviation?.trim().toUpperCase() || undefined;
+      // Some payloads already send the abbreviation as possession.
+      if (!possessionAbbr) {
+        const asAbbr = (competition.competitors ?? []).find(
+          (c) => c?.team?.abbreviation?.trim().toUpperCase() === pidUpper,
+        );
+        possessionAbbr = asAbbr?.team?.abbreviation?.trim().toUpperCase() || undefined;
+      }
     }
     const sit = competition.situation;
     const yardLine = Number(sit?.yardLine);
