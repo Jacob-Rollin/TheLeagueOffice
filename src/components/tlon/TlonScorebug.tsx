@@ -335,7 +335,13 @@ export function TlonScorebug({
                 : "w-[2.65rem] gap-[2px] px-0.5 py-1 sm:w-auto sm:min-w-[4.5rem] sm:gap-1 sm:px-2 sm:py-1.5",
             )}
           >
-            <div className="flex items-center justify-center gap-0.5 sm:gap-1">
+            {/* Hairline under TLN — same slate-300 rule as team-name / score split */}
+            <div
+              className={cn(
+                "flex w-full items-center justify-center gap-0.5 border-b border-slate-300 sm:gap-1",
+                expanded ? "pb-1.5 mb-1.5 sm:pb-2 sm:mb-2" : "pb-1 mb-1 sm:pb-1.5 sm:mb-1.5",
+              )}
+            >
               <span
                 className={cn(
                   "display-title leading-none text-white",
