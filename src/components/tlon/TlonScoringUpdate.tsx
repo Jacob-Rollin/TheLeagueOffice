@@ -55,7 +55,7 @@ export function TlonScoringUpdateToast({
     const leave = window.setTimeout(() => {
       setVisible(false);
       window.setTimeout(() => onDone?.(), 320);
-    }, 11_000);
+    }, 16_000);
     return () => {
       window.clearTimeout(enter);
       window.clearTimeout(leave);
