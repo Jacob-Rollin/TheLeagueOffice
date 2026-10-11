@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
+import { useCountUp } from "@/hooks/useCountUp";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,6 +48,49 @@ function formatScore(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
 
+/** Same ease-out tick as Scoring Update toasts — no hard snap on live polls. */
+function AnimatedScore({
+  score,
+  pulse,
+  expanded,
+}: {
+  score: number;
+  pulse: boolean;
+  expanded?: boolean;
+}) {
+  const target = Math.round((Number.isFinite(score) ? score : 0) * 100) / 100;
+  const prevRef = useRef(target);
+  const [from, setFrom] = useState(target);
+  const [to, setTo] = useState(target);
+  const [animating, setAnimating] = useState(false);
+
+  useEffect(() => {
+    const prev = prevRef.current;
+    if (target === prev) return;
+    setFrom(prev);
+    setTo(target);
+    setAnimating(true);
+    prevRef.current = target;
+    const done = window.setTimeout(() => setAnimating(false), 950);
+    return () => window.clearTimeout(done);
+  }, [target]);
+
+  const display = useCountUp(from, to, animating, 900);
+
+  return (
+    <p
+      className={cn(
+        "relative z-[1] shrink-0 font-display font-extrabold leading-none tabular-nums text-slate-900",
+        "transition-transform duration-300 ease-out",
+        expanded ? "text-[1.55rem] sm:text-[1.85rem]" : "text-[1.05rem] sm:text-[1.45rem]",
+        (pulse || animating) && "scale-110 text-emerald-700",
+      )}
+    >
+      {formatScore(display)}
+    </p>
+  );
+}
+
 function LogoBlock({
   tone,
   children,
@@ -59,21 +103,22 @@ function LogoBlock({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center self-stretch",
-        expanded ? "w-12 sm:w-14" : "w-7 sm:w-11",
+        // Even navy/red frame on all four sides — logo fills the inner area.
+        "flex shrink-0 items-stretch self-stretch",
+        expanded ? "w-[3.5rem] p-1.5 sm:w-16 sm:p-2" : "w-10 p-1 sm:w-12 sm:p-[5px]",
         tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]",
       )}
     >
-      <span
+      <div
         className={cn(
-          "shrink-0 [&_span]:rounded [&_span]:border-white/25 [&_span]:bg-white/10",
-          expanded
-            ? "[&_span]:h-9 [&_span]:w-9 sm:[&_span]:h-10 sm:[&_span]:w-10"
-            : "[&_span]:h-6 [&_span]:w-6 sm:[&_span]:h-8 sm:[&_span]:w-8",
+          "min-h-0 min-w-0 flex-1 overflow-hidden rounded-[3px] bg-white/10",
+          // MatchupTeamAvatar renders a sized <span> — force it to fill the frame.
+          "[&>span]:!box-border [&>span]:!h-full [&>span]:!w-full [&>span]:!max-h-none [&>span]:!max-w-none",
+          "[&>span]:!rounded-[3px] [&>span]:!border-0 [&>span]:!bg-transparent",
         )}
       >
         {children}
-      </span>
+      </div>
     </div>
   );
 }
@@ -110,15 +155,14 @@ function TeamSide({
     <div
       className={cn(
         "flex min-w-0 flex-1 flex-col justify-center",
-        expanded
-          ? "gap-1.5 px-2.5 py-2 sm:gap-2 sm:px-3.5 sm:py-2.5"
-          : "gap-1 px-1 py-1 sm:gap-1.5 sm:px-2.5 sm:py-1.5",
+        expanded ? "px-2.5 py-1.5 sm:px-3.5 sm:py-2" : "px-1 py-1 sm:px-2.5 sm:py-1.5",
       )}
     >
-      {/* Top: rank + full team name only */}
+      {/* Top: rank + team name, hairline separates from dots/score */}
       <p
         className={cn(
-          "flex min-w-0 items-baseline gap-1 leading-tight",
+          "flex min-w-0 items-baseline gap-1 leading-tight border-b border-slate-300",
+          expanded ? "pb-1.5 mb-1.5 sm:pb-2 sm:mb-2" : "pb-1 mb-1 sm:pb-1.5 sm:mb-1.5",
           right && "justify-end text-right",
         )}
         title={rankLabel ? `${rankLabel} ${name}` : name}
@@ -183,16 +227,7 @@ function TeamSide({
           </div>
         </div>
 
-        <p
-          className={cn(
-            "relative z-[1] shrink-0 font-display font-extrabold leading-none tabular-nums text-slate-900",
-            "transition-transform duration-300 ease-out",
-            expanded ? "text-[1.55rem] sm:text-[1.85rem]" : "text-[1.05rem] sm:text-[1.45rem]",
-            pulse && "scale-110 text-emerald-700",
-          )}
-        >
-          {formatScore(score)}
-        </p>
+        <AnimatedScore score={score} pulse={pulse} expanded={expanded} />
       </div>
     </div>
   );

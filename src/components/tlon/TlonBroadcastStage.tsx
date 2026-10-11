@@ -179,19 +179,22 @@ export function TlonBroadcastStage({
       )}
     >
       <div className={cn("relative min-h-0", fullscreen && "flex min-h-0 flex-1 flex-col")}>
-        <div className={cn(fullscreen && "min-h-0 flex-1")}>
+        {/*
+          Field + point chips share one box so 20-yard % anchors match the
+          painted field (not the scorebug/crawl chrome below).
+        */}
+        <div className={cn("relative min-h-0", fullscreen && "min-h-0 flex-1")}>
           <TlonField
             fillHeight={fullscreen}
             leftName={leftName}
             rightName={rightName}
           />
+          <TlonPointPopups
+            events={pointPopups}
+            onDismiss={onDismissPointPopup ?? (() => undefined)}
+            expanded={fullscreen}
+          />
         </div>
-
-        {/* Selected-matchup point ticks — stacked on each team’s side */}
-        <TlonPointPopups
-          events={pointPopups}
-          onDismiss={onDismissPointPopup ?? (() => undefined)}
-        />
 
         {/* Scorebug overlay — grows in fullscreen so it tracks the desktop stage */}
         <div

@@ -1,32 +1,9 @@
 import { useEffect, useState } from "react";
 
 import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
+import { useCountUp } from "@/hooks/useCountUp";
 import type { TlonScoringUpdate } from "@/lib/tlon-play-feed";
 import { cn } from "@/lib/utils";
-
-function useCountUp(from: number, to: number, active: boolean, ms = 900): number {
-  const [value, setValue] = useState(from);
-  useEffect(() => {
-    if (!active) {
-      setValue(from);
-      return;
-    }
-    setValue(from);
-    const start = performance.now();
-    let raf = 0;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / ms);
-      // ease-out cubic — smooth, no snap at the end
-      const eased = 1 - (1 - t) ** 3;
-      setValue(from + (to - from) * eased);
-      if (t < 1) raf = requestAnimationFrame(tick);
-      else setValue(to);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [from, to, active, ms]);
-  return value;
-}
 
 export function TlonScoringUpdateToast({
   update,
