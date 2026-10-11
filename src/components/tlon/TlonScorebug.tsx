@@ -103,19 +103,20 @@ function LogoBlock({
   return (
     <div
       className={cn(
-        // Perfect square end cap — height from the scorebug row, width matches.
-        "aspect-square h-auto w-auto shrink-0 self-stretch",
-        "flex items-center justify-center",
-        expanded ? "p-1.5 sm:p-2" : "p-1 sm:p-[5px]",
+        // Fixed-width end caps stretched to row height — avoid aspect-square
+        // (it fights flex stretch and collapses one side into a tall thin strip).
+        "flex shrink-0 items-stretch self-stretch",
+        expanded ? "w-[3.5rem] p-1.5 sm:w-16 sm:p-2" : "w-10 p-1 sm:w-12 sm:p-[5px]",
         tone === "navy" ? "bg-[#1e3a5f]" : "bg-[#b91c1c]",
       )}
     >
       <div
         className={cn(
-          "size-full overflow-hidden rounded-md bg-white/10",
-          // Keep the avatar’s square/circle shape — scale to the square, don’t stretch.
-          "[&>span]:!box-border [&>span]:!h-full [&>span]:!w-full [&>span]:!max-h-full [&>span]:!max-w-full",
-          "[&>span]:!rounded-md [&>span]:!border-0 [&>span]:!bg-transparent",
+          "min-h-0 min-w-0 flex-1 overflow-hidden rounded-[3px] bg-white/10",
+          // MatchupTeamAvatar renders a sized <span> — force it to fill the frame.
+          "[&>span]:!box-border [&>span]:!h-full [&>span]:!w-full [&>span]:!max-h-none [&>span]:!max-w-none",
+          "[&>span]:!rounded-[3px] [&>span]:!border-0 [&>span]:!bg-transparent",
+          "[&>span>img]:!h-full [&>span>img]:!w-full [&>span>img]:!object-cover",
         )}
       >
         {children}
