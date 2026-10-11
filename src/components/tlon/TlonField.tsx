@@ -23,8 +23,62 @@ function yardLabel(yardsFromLeftGoal: number): string {
 }
 
 /**
+ * Top-down goalposts seated in the white end board (not the painted EZ).
+ * Crossbar runs with the end line; uprights point away from the field;
+ * near upright is slightly longer for the same slight “camera” depth as the slab.
+ */
+function GoalPost({ side }: { side: "left" | "right" }) {
+  const left = side === "left";
+  return (
+    <div
+      className="pointer-events-none absolute top-1/2 z-[3] h-[30%] max-h-[4.75rem] min-h-12 w-[2.1%] min-w-[14px] max-w-[22px] -translate-y-1/2"
+      style={
+        left
+          ? { left: "0%", width: "2.15%" }
+          : { left: "97.85%", width: "2.15%" }
+      }
+      aria-hidden
+    >
+      <svg
+        viewBox="0 0 28 64"
+        className="h-full w-full drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <g
+          stroke="#fde047"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        >
+          {left ? (
+            <>
+              {/* Crossbar on end line (vertical) */}
+              <line x1="18" y1="12" x2="18" y2="52" strokeWidth="2.6" />
+              {/* Far upright (shorter) — away from field */}
+              <line x1="18" y1="12" x2="5" y2="10" strokeWidth="2.2" />
+              {/* Near upright (longer) — matches near-sideline depth */}
+              <line x1="18" y1="52" x2="3" y2="55" strokeWidth="2.5" />
+              {/* Single post to the ground / end board */}
+              <line x1="18" y1="32" x2="24" y2="32" strokeWidth="2.4" />
+            </>
+          ) : (
+            <>
+              <line x1="10" y1="12" x2="10" y2="52" strokeWidth="2.6" />
+              <line x1="10" y1="12" x2="23" y2="10" strokeWidth="2.2" />
+              <line x1="10" y1="52" x2="25" y2="55" strokeWidth="2.5" />
+              <line x1="10" y1="32" x2="4" y2="32" strokeWidth="2.4" />
+            </>
+          )}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+/**
  * Stylized 2D field with a single approximate play arc.
  * Positions are theater from box-score + scoreboard — not GPS tracking.
+ * Depth + goalposts are visual only — yardToPct / arcs stay flat 2D.
  */
 export function TlonField({
   arc,
@@ -85,12 +139,17 @@ export function TlonField({
   return (
     <div
       className={cn(
-        "relative w-full overflow-hidden rounded-t-2xl",
+        "relative w-full overflow-hidden rounded-t-2xl bg-[#0b1220]",
         fillHeight
           ? "h-full min-h-[12rem]"
           : "aspect-[1.65/1] min-h-[12.5rem] sm:aspect-[2.4/1] sm:min-h-0",
       )}
     >
+      {/*
+        Field slab — same flat coordinate system as before. Depth is rim +
+        lighting only (no perspective transform), so arcs/yard % stay correct.
+      */}
+      <div className="absolute inset-x-0 top-0 bottom-[4%] overflow-hidden rounded-t-2xl shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
       <div
         className="absolute inset-0"
         style={{
@@ -124,8 +183,39 @@ export function TlonField({
           );
         })}
 
-        <rect x="0" y="0" width={EZ} height="50" fill="#1e3a5f" opacity="0.92" />
-        <rect x={100 - EZ} y="0" width={EZ} height="50" fill="#7f1d1d" opacity="0.92" />
+        {/* Painted end zones — leave room for the white end boards */}
+        <rect x="2.15" y="0" width={EZ - 2.15} height="50" fill="#1e3a5f" opacity="0.92" />
+        <rect
+          x={100 - EZ}
+          y="0"
+          width={EZ - 2.15}
+          height="50"
+          fill="#7f1d1d"
+          opacity="0.92"
+        />
+
+        {/* Thick white sidelines */}
+        <line
+          x1="0"
+          y1="0.85"
+          x2="100"
+          y2="0.85"
+          stroke="white"
+          strokeWidth="1.55"
+          opacity="0.95"
+        />
+        <line
+          x1="0"
+          y1="49.15"
+          x2="100"
+          y2="49.15"
+          stroke="white"
+          strokeWidth="1.55"
+          opacity="0.95"
+        />
+        {/* Thick white end boards (back of each end zone) — goalposts sit here */}
+        <rect x="0" y="0" width="2.15" height="50" fill="white" opacity="0.96" />
+        <rect x="97.85" y="0" width="2.15" height="50" fill="white" opacity="0.96" />
 
         {/* Goal lines */}
         <line
@@ -134,8 +224,8 @@ export function TlonField({
           x2={EZ}
           y2="50"
           stroke="white"
-          strokeWidth="0.35"
-          opacity="0.55"
+          strokeWidth="0.45"
+          opacity="0.65"
         />
         <line
           x1={100 - EZ}
@@ -143,8 +233,8 @@ export function TlonField({
           x2={100 - EZ}
           y2="50"
           stroke="white"
-          strokeWidth="0.35"
-          opacity="0.55"
+          strokeWidth="0.45"
+          opacity="0.65"
         />
 
         {MAJOR_YARDS.map((yd) => {
@@ -235,7 +325,7 @@ export function TlonField({
 
       {/* End zone team names — larger type to fill the end zone */}
       <div
-        className="pointer-events-none absolute inset-y-[1%] left-0 z-[1] flex items-center justify-center overflow-visible px-[2%]"
+        className="pointer-events-none absolute inset-y-[1%] left-0 z-[2] flex items-center justify-center overflow-visible px-[2%]"
         style={{ width: `${EZ}%` }}
       >
         <span
@@ -250,7 +340,7 @@ export function TlonField({
         </span>
       </div>
       <div
-        className="pointer-events-none absolute inset-y-[1%] right-0 z-[1] flex items-center justify-center overflow-visible px-[2%]"
+        className="pointer-events-none absolute inset-y-[1%] right-0 z-[2] flex items-center justify-center overflow-visible px-[2%]"
         style={{ width: `${EZ}%` }}
       >
         <span
@@ -262,7 +352,22 @@ export function TlonField({
         </span>
       </div>
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.4)_100%)]" />
+      <GoalPost side="left" />
+      <GoalPost side="right" />
+
+      {/* Depth lighting — does not change layout coordinates */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.28)_0%,transparent_22%,transparent_72%,rgba(0,0,0,0.22)_100%)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_42%,rgba(0,0,0,0.38)_100%)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-white/15"
+      />
 
       {show && active ? (
         <>
@@ -312,6 +417,17 @@ export function TlonField({
           </div>
         </>
       ) : null}
+      </div>
+
+      {/* Front slab edge — sells thickness without skewing the field plane */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-[4%] bg-[linear-gradient(180deg,#14532d_0%,#052e16_55%,#022c22_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-[2%] bottom-[1%] h-[2px] rounded-full bg-black/35 blur-[1px]"
+      />
     </div>
   );
 }
