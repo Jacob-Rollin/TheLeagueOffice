@@ -350,7 +350,7 @@ function TlonNetwork() {
   ]);
 
   const sumStarterLive = (starters: Player[], map: Record<string, number>) =>
-    Math.round(starters.reduce((s, p) => s + (Number(map[p.id] ?? 0) || 0), 0) * 10) / 10;
+    Math.round(starters.reduce((s, p) => s + (Number(map[p.id] ?? 0) || 0), 0) * 100) / 100;
 
   const leftLive = sumStarterLive(leftStarters, leftPoints);
   const rightLive = sumStarterLive(rightStarters, rightPoints);

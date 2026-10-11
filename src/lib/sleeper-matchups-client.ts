@@ -105,7 +105,7 @@ function buildEntries(
       const playerPoints: Record<string, number> = {};
       if (row.players_points && typeof row.players_points === "object") {
         for (const [pid, pts] of Object.entries(row.players_points)) {
-          playerPoints[String(pid)] = Number(pts) || 0;
+          playerPoints[String(pid)] = roundHundredths(Number(pts) || 0);
         }
       }
       const starters = (Array.isArray(row.starters) ? row.starters : []).map((id) =>
@@ -115,7 +115,7 @@ function buildEntries(
       starters.forEach((id, i) => {
         if (!id || id in playerPoints) return;
         const pts = Number(starterPoints[i]);
-        if (Number.isFinite(pts)) playerPoints[id] = pts;
+        if (Number.isFinite(pts)) playerPoints[id] = roundHundredths(pts);
       });
       const fromPlayers = (Array.isArray(row.players) ? row.players : [])
         .map((id) => (id && id !== "0" ? String(id) : ""))

@@ -173,20 +173,20 @@ export function TlonChaseMeter({
   rightName: string;
   winHistory: number[];
 }) {
-  const liveGap = Math.round((leftLive - rightLive) * 10) / 10;
-  const projGap = Math.round((leftProj - rightProj) * 10) / 10;
+  const liveGap = Math.round((leftLive - rightLive) * 100) / 100;
+  const projGap = Math.round((leftProj - rightProj) * 100) / 100;
   const livePhrase =
     Math.abs(liveGap) < 0.05
       ? "Tied live"
       : liveGap > 0
-        ? `${leftName} leads by ${liveGap.toFixed(1)}`
-        : `${rightName} leads by ${Math.abs(liveGap).toFixed(1)}`;
+        ? `${leftName} leads by ${liveGap.toFixed(2)}`
+        : `${rightName} leads by ${Math.abs(liveGap).toFixed(2)}`;
   const projPhrase =
     Math.abs(projGap) < 0.05
       ? "Projected toss-up"
       : projGap > 0
-        ? `Expected final +${projGap.toFixed(1)} ${leftName}`
-        : `Expected final +${Math.abs(projGap).toFixed(1)} ${rightName}`;
+        ? `Expected final +${projGap.toFixed(2)} ${leftName}`
+        : `Expected final +${Math.abs(projGap).toFixed(2)} ${rightName}`;
 
   const spark = winHistory.slice(-24);
   const w = 160;

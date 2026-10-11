@@ -207,7 +207,7 @@ export function diffStarterPoints(
   for (const row of next) {
     const before = prev.get(row.playerId);
     if (!before) continue;
-    const delta = Math.round((row.points - before.points) * 10) / 10;
+    const delta = Math.round((row.points - before.points) * 100) / 100;
     if (Math.abs(delta) < minDelta) continue;
 
     const yard = extractYardPlay(before.stats ?? null, row.stats ?? null);
