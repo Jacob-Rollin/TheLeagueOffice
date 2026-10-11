@@ -44,6 +44,22 @@ function formatScore(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
 
+/**
+ * Keep two decimals at 100+ without blowing the scorebug:
+ * reserve width for `100.00` (6 tabular chars) and step the type down.
+ */
+function scoreNumeralClass(n: number): string {
+  const abs = Math.abs(Number.isFinite(n) ? n : 0);
+  if (abs >= 1000) {
+    return "min-w-[7ch] text-[0.85rem] sm:min-w-[7ch] sm:text-[1.1rem]";
+  }
+  if (abs >= 100) {
+    return "min-w-[6ch] text-[0.95rem] sm:min-w-[6ch] sm:text-[1.25rem]";
+  }
+  // Reserve triple-digit room early so crossing 100 doesn’t shove the record bar.
+  return "min-w-[6ch] text-[1.05rem] sm:min-w-[6ch] sm:text-[1.45rem]";
+}
+
 function LogoBlock({
   tone,
   children,
@@ -138,8 +154,9 @@ function TeamSide({
 
         <p
           className={cn(
-            "relative z-[1] shrink-0 font-display text-[1.05rem] font-extrabold leading-none tabular-nums text-slate-900 sm:text-[1.45rem]",
+            "relative z-[1] shrink-0 text-right font-display font-extrabold leading-none tabular-nums text-slate-900",
             "transition-transform duration-300 ease-out",
+            scoreNumeralClass(score),
             pulse && "scale-110 text-emerald-700",
           )}
         >

@@ -4,6 +4,13 @@ import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
 import type { TlonScoringUpdate } from "@/lib/tlon-play-feed";
 import { cn } from "@/lib/utils";
 
+/** Step down at 100+ so `100.00` still fits the toast columns. */
+function toastScoreClass(n: number): string {
+  const abs = Math.abs(Number.isFinite(n) ? n : 0);
+  if (abs >= 100) return "text-lg sm:text-xl";
+  return "text-xl";
+}
+
 function useCountUp(from: number, to: number, active: boolean, ms = 900): number {
   const [value, setValue] = useState(from);
   useEffect(() => {
@@ -113,7 +120,8 @@ export function TlonScoringUpdateToast({
             <p className="truncate text-[10px] font-semibold uppercase text-white/70">{update.leftName}</p>
             <p
               className={cn(
-                "font-display text-xl font-extrabold tabular-nums leading-none text-white",
+                "font-display font-extrabold tabular-nums leading-none text-white",
+                toastScoreClass(leftDisplay),
                 scoringLeft && "text-emerald-300",
               )}
             >
@@ -127,7 +135,8 @@ export function TlonScoringUpdateToast({
             <p className="truncate text-[10px] font-semibold uppercase text-white/70">{update.rightName}</p>
             <p
               className={cn(
-                "font-display text-xl font-extrabold tabular-nums leading-none text-white",
+                "font-display font-extrabold tabular-nums leading-none text-white",
+                toastScoreClass(rightDisplay),
                 !scoringLeft && "text-emerald-300",
               )}
             >
