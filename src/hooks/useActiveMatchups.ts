@@ -31,13 +31,15 @@ const LIVE_POLL_MS = 30 * 1000;
 const BETWEEN_GAMES_POLL_MS = 60 * 1000;
 /**
  * TLN broadcast stage only — faster Sleeper client polls (~6/min live).
- * Still well under the per-tab soft budget; other pages keep the default pace.
+ * Still well under the per-tab soft budget (180/min); other pages keep the default pace.
  */
 const BROADCAST_LIVE_POLL_MS = 10 * 1000;
 const BROADCAST_BETWEEN_GAMES_POLL_MS = 20 * 1000;
 /** ESPN/Yahoo polls hit our `/api/data/league` CDN — keep quieter between games. */
 const ESPN_BETWEEN_GAMES_POLL_MS = 5 * 60 * 1000;
 const ALL_FINAL_POLL_MS = 15 * 60 * 1000;
+/** Matches `liveRefreshMs` all-final band in useNflGameProgress. */
+const NFL_ALL_FINAL_BAND_MS = 10 * 60 * 1000;
 
 export type ActiveMatchupsPace = "default" | "broadcast";
 
@@ -185,6 +187,8 @@ function liveMatchupPollMs(
     // Known past week — stop. Future / unknown NFL week — keep a gentle poke.
     if (currentWeek != null && week < currentWeek) return false;
     if (typeof liveMs === "number" && liveMs <= 30_000) return BROADCAST_LIVE_POLL_MS;
+    // Every NFL game is final — do not keep 20s Sleeper pokes all Sunday night.
+    if (typeof liveMs === "number" && liveMs >= NFL_ALL_FINAL_BAND_MS) return ALL_FINAL_POLL_MS;
     return BROADCAST_BETWEEN_GAMES_POLL_MS;
   }
 
@@ -194,7 +198,8 @@ function liveMatchupPollMs(
   const between = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : BETWEEN_GAMES_POLL_MS;
   // liveRefreshMs uses 30s for in-game — map that band onto our page pace.
   if (typeof liveMs === "number" && liveMs <= 30_000) return inGame;
-  if (typeof liveMs === "number" && liveMs >= ALL_FINAL_POLL_MS) return ALL_FINAL_POLL_MS;
+  // liveRefreshMs returns ~10m when every game is post (not 15m).
+  if (typeof liveMs === "number" && liveMs >= NFL_ALL_FINAL_BAND_MS) return ALL_FINAL_POLL_MS;
   return Math.max(inGame, Math.min(between, liveMs));
 }
 
@@ -250,16 +255,16 @@ export function useActiveMatchups(
       }),
   });
 
-  // Belt-and-suspenders for TLN: RQ interval can stay false while NFL week is
-  // hydrating; keep invalidating so scores/popups move without a full refresh.
+  // Only when RQ has no cadence (pollMs false) — e.g. week still resolving.
+  // Running alongside refetchInterval was a second Sleeper poke every cycle.
   useEffect(() => {
     if (!broadcast || !id || !safeWeek || isPastWeek) return;
-    const ms = typeof pollMs === "number" ? pollMs : BROADCAST_LIVE_POLL_MS;
+    if (pollMs !== false) return;
     const tick = () => {
       if (!isPageVisible()) return;
       void queryClient.invalidateQueries({ queryKey: activeMatchupsQueryKey(id, safeWeek) });
     };
-    const t = window.setInterval(tick, ms);
+    const t = window.setInterval(tick, BROADCAST_LIVE_POLL_MS);
     return () => window.clearInterval(t);
   }, [broadcast, id, safeWeek, isPastWeek, pollMs, queryClient]);
 
@@ -267,24 +272,29 @@ export function useActiveMatchups(
   // (mobile often fires visibilitychange without a window focus event).
   useEffect(() => {
     if (!broadcast || !id || !safeWeek || isPastWeek) return;
+    let debounce: number | null = null;
     const onReturn = () => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      clearSleeperLiveMatchupMemory(leagueId, safeWeek);
-      clearPublicScoreboardMemory(safeWeek, 2);
-      void queryClient.invalidateQueries({ queryKey: activeMatchupsQueryKey(id, safeWeek) });
-      void queryClient.invalidateQueries({ queryKey: scoreboardQueryKey(safeWeek, 2) });
-      void queryClient.invalidateQueries({
-        queryKey: ["sleeper-weekly-actual-stats"],
-        refetchType: "active",
-      });
+      if (debounce != null) window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => {
+        clearSleeperLiveMatchupMemory();
+        clearPublicScoreboardMemory(safeWeek, 2);
+        void queryClient.invalidateQueries({ queryKey: activeMatchupsQueryKey(id, safeWeek) });
+        void queryClient.invalidateQueries({ queryKey: scoreboardQueryKey(safeWeek, 2) });
+        void queryClient.invalidateQueries({
+          queryKey: ["sleeper-weekly-actual-stats"],
+          refetchType: "active",
+        });
+      }, 50);
     };
     document.addEventListener("visibilitychange", onReturn);
     window.addEventListener("focus", onReturn);
     return () => {
+      if (debounce != null) window.clearTimeout(debounce);
       document.removeEventListener("visibilitychange", onReturn);
       window.removeEventListener("focus", onReturn);
     };
-  }, [broadcast, id, leagueId, safeWeek, isPastWeek, queryClient]);
+  }, [broadcast, id, safeWeek, isPastWeek, queryClient]);
 
   return {
     matchups: query.data ?? null,
