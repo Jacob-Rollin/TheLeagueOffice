@@ -23,37 +23,53 @@ function yardLabel(yardsFromLeftGoal: number): string {
 }
 
 /**
- * Classic upright silhouette centered on the thick white end line
- * at the back of each end zone (same mid-hash height as a real field).
+ * Top-down goalposts seated in the white end board (not the painted EZ).
+ * Crossbar runs with the end line; uprights point away from the field;
+ * near upright is slightly longer for the same slight “camera” depth as the slab.
  */
 function GoalPost({ side }: { side: "left" | "right" }) {
+  const left = side === "left";
   return (
     <div
-      className="pointer-events-none absolute top-1/2 z-[2] h-[24%] max-h-16 min-h-10 w-[2.4%] min-w-[12px] max-w-[18px]"
+      className="pointer-events-none absolute top-1/2 z-[3] h-[30%] max-h-[4.75rem] min-h-12 w-[2.1%] min-w-[14px] max-w-[22px] -translate-y-1/2"
       style={
-        side === "left"
-          ? { left: "0.65%", transform: "translateY(-50%)" }
-          : { left: "99.35%", transform: "translate(-100%, -50%)" }
+        left
+          ? { left: "0%", width: "2.15%" }
+          : { left: "97.85%", width: "2.15%" }
       }
       aria-hidden
     >
       <svg
-        viewBox="0 0 32 72"
-        className="h-full w-full drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]"
+        viewBox="0 0 28 64"
+        className="h-full w-full drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]"
         preserveAspectRatio="xMidYMid meet"
       >
-        <g stroke="#fde047" strokeLinecap="round" strokeLinejoin="round" fill="none">
-          {/* Uprights */}
-          <line x1="6" y1="4" x2="6" y2="34" strokeWidth="2.8" />
-          <line x1="26" y1="4" x2="26" y2="34" strokeWidth="2.8" />
-          {/* Crossbar */}
-          <line x1="6" y1="34" x2="26" y2="34" strokeWidth="3" />
-          {/* Gooseneck + post */}
-          <path d="M16 34 V48 Q16 54 16 58" strokeWidth="2.6" />
+        <g
+          stroke="#fde047"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        >
+          {left ? (
+            <>
+              {/* Crossbar on end line (vertical) */}
+              <line x1="18" y1="12" x2="18" y2="52" strokeWidth="2.6" />
+              {/* Far upright (shorter) — away from field */}
+              <line x1="18" y1="12" x2="5" y2="10" strokeWidth="2.2" />
+              {/* Near upright (longer) — matches near-sideline depth */}
+              <line x1="18" y1="52" x2="3" y2="55" strokeWidth="2.5" />
+              {/* Single post to the ground / end board */}
+              <line x1="18" y1="32" x2="24" y2="32" strokeWidth="2.4" />
+            </>
+          ) : (
+            <>
+              <line x1="10" y1="12" x2="10" y2="52" strokeWidth="2.6" />
+              <line x1="10" y1="12" x2="23" y2="10" strokeWidth="2.2" />
+              <line x1="10" y1="52" x2="25" y2="55" strokeWidth="2.5" />
+              <line x1="10" y1="32" x2="4" y2="32" strokeWidth="2.4" />
+            </>
+          )}
         </g>
-        {/* Ground pad — sits on the end line */}
-        <rect x="10" y="58" width="12" height="5" rx="1.5" fill="#a16207" />
-        <rect x="8" y="62" width="16" height="3" rx="1" fill="#854d0e" opacity="0.85" />
       </svg>
     </div>
   );
@@ -167,46 +183,39 @@ export function TlonField({
           );
         })}
 
-        <rect x="0" y="0" width={EZ} height="50" fill="#1e3a5f" opacity="0.92" />
-        <rect x={100 - EZ} y="0" width={EZ} height="50" fill="#7f1d1d" opacity="0.92" />
+        {/* Painted end zones — leave room for the white end boards */}
+        <rect x="2.15" y="0" width={EZ - 2.15} height="50" fill="#1e3a5f" opacity="0.92" />
+        <rect
+          x={100 - EZ}
+          y="0"
+          width={EZ - 2.15}
+          height="50"
+          fill="#7f1d1d"
+          opacity="0.92"
+        />
 
-        {/* Thick sidelines + back-of-endzone end lines (field boundary) */}
+        {/* Thick white sidelines */}
         <line
           x1="0"
-          y1="0.7"
+          y1="0.85"
           x2="100"
-          y2="0.7"
+          y2="0.85"
           stroke="white"
-          strokeWidth="1.15"
-          opacity="0.92"
-        />
-        <line
-          x1="0"
-          y1="49.3"
-          x2="100"
-          y2="49.3"
-          stroke="white"
-          strokeWidth="1.15"
-          opacity="0.92"
-        />
-        <line
-          x1="0.65"
-          y1="0"
-          x2="0.65"
-          y2="50"
-          stroke="white"
-          strokeWidth="1.35"
+          strokeWidth="1.55"
           opacity="0.95"
         />
         <line
-          x1="99.35"
-          y1="0"
-          x2="99.35"
-          y2="50"
+          x1="0"
+          y1="49.15"
+          x2="100"
+          y2="49.15"
           stroke="white"
-          strokeWidth="1.35"
+          strokeWidth="1.55"
           opacity="0.95"
         />
+        {/* Thick white end boards (back of each end zone) — goalposts sit here */}
+        <rect x="0" y="0" width="2.15" height="50" fill="white" opacity="0.96" />
+        <rect x="97.85" y="0" width="2.15" height="50" fill="white" opacity="0.96" />
 
         {/* Goal lines */}
         <line
