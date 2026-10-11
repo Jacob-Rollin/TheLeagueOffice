@@ -538,14 +538,18 @@ function TlonNetwork() {
 
     setFeed((prev) => mergeFeedEvents(prev, incoming));
 
-    const top = incoming[0];
-    if (top) {
-      setScorePulseSide(top.side);
+    const lead = incoming[0];
+    if (lead) {
+      setScorePulseSide(lead.side);
       if (pulseTimer.current) window.clearTimeout(pulseTimer.current);
       pulseTimer.current = window.setTimeout(() => setScorePulseSide(null), 700);
-      const progress = progressForTeam(progressByNflTeam, top.team);
-      const arc = buildPlayArc(top, progress);
-      setArcQueue((q) => [...q, arc].slice(-6));
+    }
+    // Queue several scorers from this poll so secondary jumps aren’t waiting another cycle.
+    const arcs = incoming.slice(0, 3).map((ev) =>
+      buildPlayArc(ev, progressForTeam(progressByNflTeam, ev.team)),
+    );
+    if (arcs.length) {
+      setArcQueue((q) => [...q, ...arcs].slice(-6));
     }
   }, [starterSnapshots, activeLeagueId, activeWeek, selected?.id, progressByNflTeam]);
 
@@ -557,7 +561,7 @@ function TlonNetwork() {
     setArcQueue(rest);
   }, [activeArc, arcQueue]);
 
-  // Scoring Updates from the same matchups board (on-air ≥1 pt; others ≥6).
+  // League-wide Scoring Updates (≥6) — skips the selected / on-air matchup.
   useEffect(() => {
     const starterMap = new Map<string, TlonStarterSnapshot>();
     const scoreMap = new Map<string, { left: number; right: number }>();
