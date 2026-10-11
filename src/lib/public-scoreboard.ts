@@ -24,6 +24,18 @@ function scoreboardKey(week?: number | null, seasontype?: number | null): string
   return `${week ?? ""}|${seasontype ?? ""}`;
 }
 
+/** Drop in-tab scoreboard cache so a focus/visibility refetch hits the network. */
+export function clearPublicScoreboardMemory(
+  week?: number | null,
+  seasontype?: number | null,
+): void {
+  if (week == null && seasontype == null) {
+    memory.clear();
+    return;
+  }
+  memory.delete(scoreboardKey(week, seasontype));
+}
+
 export function scoreboardProxyUrl(week?: number | null, seasontype?: number | null): string {
   const params = new URLSearchParams();
   if (week != null && week > 0) params.set("week", String(week));

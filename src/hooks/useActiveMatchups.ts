@@ -13,7 +13,11 @@ import {
   type LeagueMatchupsCdnHit,
 } from "@/lib/league-matchups-cdn";
 import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
-import { fetchSleeperWeekMatchupsClient } from "@/lib/sleeper-matchups-client";
+import { clearPublicScoreboardMemory, scoreboardQueryKey } from "@/lib/public-scoreboard";
+import {
+  clearSleeperLiveMatchupMemory,
+  fetchSleeperWeekMatchupsClient,
+} from "@/lib/sleeper-matchups-client";
 import { sleeperBudgetRemaining } from "@/lib/sleeper-rate-budget";
 import type { LeagueWeekMatchups } from "@/lib/league.server";
 
@@ -258,6 +262,29 @@ export function useActiveMatchups(
     const t = window.setInterval(tick, ms);
     return () => window.clearInterval(t);
   }, [broadcast, id, safeWeek, isPastWeek, pollMs, queryClient]);
+
+  // Hidden tabs pause polls — on return, bust in-tab caches and refetch immediately
+  // (mobile often fires visibilitychange without a window focus event).
+  useEffect(() => {
+    if (!broadcast || !id || !safeWeek || isPastWeek) return;
+    const onReturn = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      clearSleeperLiveMatchupMemory(leagueId, safeWeek);
+      clearPublicScoreboardMemory(safeWeek, 2);
+      void queryClient.invalidateQueries({ queryKey: activeMatchupsQueryKey(id, safeWeek) });
+      void queryClient.invalidateQueries({ queryKey: scoreboardQueryKey(safeWeek, 2) });
+      void queryClient.invalidateQueries({
+        queryKey: ["sleeper-weekly-actual-stats"],
+        refetchType: "active",
+      });
+    };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
+    };
+  }, [broadcast, id, leagueId, safeWeek, isPastWeek, queryClient]);
 
   return {
     matchups: query.data ?? null,

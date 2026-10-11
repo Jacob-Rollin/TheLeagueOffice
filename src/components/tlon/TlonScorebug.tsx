@@ -4,8 +4,8 @@ import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
 import { cn } from "@/lib/utils";
 
 /**
- * Starters yet to play — same circular dots for every slot.
- * Lit = NFL game not started; dim = already played / in progress.
+ * Starter game-status dots — same circle for every slot.
+ * Lit = NFL game not finished (pregame or in progress); grey = final.
  * Row width matches the record bar beneath it.
  */
 function YetToPlayDots({
@@ -23,8 +23,8 @@ function YetToPlayDots({
   return (
     <div
       className="flex w-full items-center justify-between"
-      aria-label={`${n} of ${slots} starters yet to play`}
-      title={`${n} of ${slots} starters yet to play`}
+      aria-label={`${n} of ${slots} starters still playing or yet to play`}
+      title={`${n} of ${slots} starters still playing or yet to play`}
     >
       {Array.from({ length: slots }, (_, i) => (
         <span

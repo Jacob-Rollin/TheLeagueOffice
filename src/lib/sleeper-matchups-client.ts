@@ -146,6 +146,15 @@ function buildEntries(
 
 const liveMemory = new Map<string, { at: number; board: LeagueWeekMatchups }>();
 
+/** Drop live in-memory boards so a focus/visibility refetch hits Sleeper. */
+export function clearSleeperLiveMatchupMemory(leagueId?: string, week?: number): void {
+  if (leagueId == null || week == null) {
+    liveMemory.clear();
+    return;
+  }
+  liveMemory.delete(`${String(leagueId).trim()}|${Math.floor(week)}`);
+}
+
 /** Fill team projected totals from league scoring + week projection bundle. */
 async function enrichProjectedPointsClient(
   leagueId: string,
