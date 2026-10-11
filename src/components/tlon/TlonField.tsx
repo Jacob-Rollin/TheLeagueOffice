@@ -23,17 +23,18 @@ function yardLabel(yardsFromLeftGoal: number): string {
 }
 
 /**
- * Classic upright silhouette at the BACK CENTER of each end zone.
- * Small icon (not top-down brackets) so it reads as a goalpost on a 2D field.
+ * Classic upright silhouette centered on the thick white end line
+ * at the back of each end zone (same mid-hash height as a real field).
  */
 function GoalPost({ side }: { side: "left" | "right" }) {
   return (
     <div
-      className={cn(
-        "pointer-events-none absolute top-1/2 z-[2] h-[24%] max-h-16 min-h-10 w-[2.4%] min-w-[12px] max-w-[18px] -translate-y-1/2",
-        // Back of end zone (EZ = 8%), vertically centered on the hashes
-        side === "left" ? "left-[1.15%]" : "right-[1.15%]",
-      )}
+      className="pointer-events-none absolute top-1/2 z-[2] h-[24%] max-h-16 min-h-10 w-[2.4%] min-w-[12px] max-w-[18px]"
+      style={
+        side === "left"
+          ? { left: "0.65%", transform: "translateY(-50%)" }
+          : { left: "99.35%", transform: "translate(-100%, -50%)" }
+      }
       aria-hidden
     >
       <svg
@@ -50,7 +51,7 @@ function GoalPost({ side }: { side: "left" | "right" }) {
           {/* Gooseneck + post */}
           <path d="M16 34 V48 Q16 54 16 58" strokeWidth="2.6" />
         </g>
-        {/* Ground pad */}
+        {/* Ground pad — sits on the end line */}
         <rect x="10" y="58" width="12" height="5" rx="1.5" fill="#a16207" />
         <rect x="8" y="62" width="16" height="3" rx="1" fill="#854d0e" opacity="0.85" />
       </svg>
@@ -169,6 +170,44 @@ export function TlonField({
         <rect x="0" y="0" width={EZ} height="50" fill="#1e3a5f" opacity="0.92" />
         <rect x={100 - EZ} y="0" width={EZ} height="50" fill="#7f1d1d" opacity="0.92" />
 
+        {/* Thick sidelines + back-of-endzone end lines (field boundary) */}
+        <line
+          x1="0"
+          y1="0.7"
+          x2="100"
+          y2="0.7"
+          stroke="white"
+          strokeWidth="1.15"
+          opacity="0.92"
+        />
+        <line
+          x1="0"
+          y1="49.3"
+          x2="100"
+          y2="49.3"
+          stroke="white"
+          strokeWidth="1.15"
+          opacity="0.92"
+        />
+        <line
+          x1="0.65"
+          y1="0"
+          x2="0.65"
+          y2="50"
+          stroke="white"
+          strokeWidth="1.35"
+          opacity="0.95"
+        />
+        <line
+          x1="99.35"
+          y1="0"
+          x2="99.35"
+          y2="50"
+          stroke="white"
+          strokeWidth="1.35"
+          opacity="0.95"
+        />
+
         {/* Goal lines */}
         <line
           x1={EZ}
@@ -176,8 +215,8 @@ export function TlonField({
           x2={EZ}
           y2="50"
           stroke="white"
-          strokeWidth="0.35"
-          opacity="0.55"
+          strokeWidth="0.45"
+          opacity="0.65"
         />
         <line
           x1={100 - EZ}
@@ -185,8 +224,8 @@ export function TlonField({
           x2={100 - EZ}
           y2="50"
           stroke="white"
-          strokeWidth="0.35"
-          opacity="0.55"
+          strokeWidth="0.45"
+          opacity="0.65"
         />
 
         {MAJOR_YARDS.map((yd) => {
