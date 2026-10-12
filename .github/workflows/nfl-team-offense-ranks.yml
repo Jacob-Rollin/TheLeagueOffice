@@ -33,11 +33,19 @@ jobs:
           UA = {"accept": "application/json", "user-agent": "TheLeagueOffice-snap/1.0"}
           # Match Sleeper app Team Rank chips: ordinal 1..32 by (stat DESC, off_yd DESC).
           # RZ = rz_att (trips), RZ% = rz_conv (RZ scores) — verified vs Sleeper UI.
+          # Include pass + rush + rec so the mobile Team tab can show
+          # position-relevant chips (QB pass / RB rush / WR-TE rec).
           FIELDS = [
               ("offense", "off_yd"),
               ("passAtt", "pass_att"),
               ("passYd", "pass_yd"),
               ("passTd", "pass_td"),
+              ("rushAtt", "rush_att"),
+              ("rushYd", "rush_yd"),
+              ("rushTd", "rush_td"),
+              ("recTgt", "rec_tgt"),
+              ("recYd", "rec_yd"),
+              ("recTd", "rec_td"),
               ("td", "td"),
               ("rz", "rz_att"),
               ("rzPct", "rz_conv"),
@@ -79,14 +87,14 @@ jobs:
           payload = {
               "season": int(season) if season.isdigit() else season,
               "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
-              "source": "sleeper-team-season-stats-v2",
+              "source": "sleeper-team-season-stats-v3",
               "teams": ranked,
           }
           Path("/tmp/nfl-team-offense-ranks.json").write_text(
               json.dumps(payload, separators=(",", ":"))
           )
           Path("/tmp/nfl-team-offense-meta.env").write_text(f"SEASON={season}\n")
-          print(f"season={season} teams={len(ranked)} source=sleeper-team-season-stats")
+          print(f"season={season} teams={len(ranked)} source=sleeper-team-season-stats-v3")
           PY
           # shellcheck disable=SC1091
           source /tmp/nfl-team-offense-meta.env
