@@ -80,8 +80,9 @@ export function MobileBrandSplash({
   );
 }
 
-const BOOT_MIN_MS = 700;
-const BOOT_MAX_MS = 4000;
+/** Hold the boot splash long enough that the first navigation after a cold open feels settled. */
+const BOOT_MIN_MS = 3000;
+const BOOT_MAX_MS = 6000;
 
 /**
  * Boot splash (online, logo only) + offline splash (connection copy).
