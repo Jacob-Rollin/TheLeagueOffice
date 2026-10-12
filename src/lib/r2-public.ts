@@ -64,9 +64,10 @@ export const R2_SNAP_KEYS = {
   /**
    * NFL team offense ranks (Sleeper TEAM_* season stats → snap-cdn).
    * Shared by all visitors — matches Sleeper app Team Rank chips.
+   * Path bump (v2): ordinal + off_yd tie-break; also busts raw CDN stale cache.
    */
   nflTeamOffenseRanks: (season: number | string) =>
-    `snap/nfl-team-offense-ranks-${season}.json`,
+    `snap/nfl-team-offense-ranks-v2-${season}.json`,
   /**
    * Sleeper depth charts for mobile Team tab (depth_chart_position + order).
    * Actions → `/v1/players/nfl` once; visitors hit GitHub raw only.

@@ -55,8 +55,8 @@ export async function fetchNflTeamOffenseRanks(
   season: string | number,
 ): Promise<NflTeamOffenseRanksSnap> {
   const safeSeason = String(season || new Date().getUTCFullYear());
-  // v3: Sleeper TEAM_* ranks (replaces ESPN vendor ordinals).
-  return getCached(`nfl-team-offense-ranks-v3:${safeSeason}`, CLIENT_TTL_MS, async () => {
+  // v4: Sleeper ordinal ranks with off_yd tie-break (matches app Team Rank chips).
+  return getCached(`nfl-team-offense-ranks-v4:${safeSeason}`, CLIENT_TTL_MS, async () => {
     if (!snapCdnPublicBase()) return EMPTY;
     const snap = await fetchSnap(safeSeason);
     if (!snap || Object.keys(snap.teams).length === 0) return EMPTY;

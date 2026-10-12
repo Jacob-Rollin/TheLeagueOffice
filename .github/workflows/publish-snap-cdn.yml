@@ -149,6 +149,8 @@ jobs:
           from pathlib import Path
 
           UA = {"accept": "application/json", "user-agent": "TheLeagueOffice-snap/1.0"}
+          # Match Sleeper app Team Rank chips: ordinal 1..32 by (stat DESC, off_yd DESC).
+          # RZ = rz_att (trips), RZ% = rz_conv (RZ scores) — verified vs Sleeper UI.
           FIELDS = [
               ("offense", "off_yd"),
               ("passAtt", "pass_att"),
@@ -156,27 +158,13 @@ jobs:
               ("passTd", "pass_td"),
               ("td", "td"),
               ("rz", "rz_att"),
-              ("rzPct", "rz_pct"),
+              ("rzPct", "rz_conv"),
           ]
 
           def get(url: str):
               req = urllib.request.Request(url, headers=UA)
               with urllib.request.urlopen(req, timeout=60) as res:
                   return json.load(res)
-
-          def competition_ranks(rows):
-              rows = sorted(rows, key=lambda x: (-x[1], x[0]))
-              out = {}
-              i = 0
-              while i < len(rows):
-                  j = i
-                  while j < len(rows) and rows[j][1] == rows[i][1]:
-                      j += 1
-                  rank = i + 1
-                  for k in range(i, j):
-                      out[rows[k][0]] = rank
-                  i = j
-              return out
 
           season = "${SEASON}"
           raw = get(f"https://api.sleeper.app/v1/stats/nfl/regular/{season}")
@@ -195,19 +183,23 @@ jobs:
 
           ranked = {abbr: {} for abbr in team_stats}
           for chip, field in FIELDS:
-              rows = [(abbr, float(st.get(field) or 0)) for abbr, st in team_stats.items()]
-              for abbr, rank in competition_ranks(rows).items():
-                  ranked[abbr][chip] = rank
+              rows = [
+                  (abbr, float(st.get(field) or 0), float(st.get("off_yd") or 0))
+                  for abbr, st in team_stats.items()
+              ]
+              rows.sort(key=lambda x: (-x[1], -x[2], x[0]))
+              for i, (abbr, _val, _off) in enumerate(rows, 1):
+                  ranked[abbr][chip] = i
 
-          Path(f"out/snap/nfl-team-offense-ranks-{season}.json").write_text(
+          Path(f"out/snap/nfl-team-offense-ranks-v2-{season}.json").write_text(
               json.dumps({
                   "season": int(season) if str(season).isdigit() else season,
                   "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
-                  "source": "sleeper-team-season-stats",
+                  "source": "sleeper-team-season-stats-v2",
                   "teams": ranked,
               }, separators=(",", ":"))
           )
-          print("ok nfl-team-offense-ranks", season, len(ranked), "sleeper")
+          print("ok nfl-team-offense-ranks", season, len(ranked), "sleeper-v2")
           PY
           fi
 
@@ -336,5 +328,5 @@ jobs:
           BASE="https://raw.githubusercontent.com/${REPO}/snap-cdn"
           echo "Public base: $BASE"
           echo "Smoke: ${BASE}/research/fpa-half.json"
-          ls -la snap/nfl-team-offense-ranks-*.json 2>/dev/null || echo "note: no nfl-team-offense-ranks yet (run Publish Snap CDN / NFL Team Offense Ranks)"
+          ls -la snap/nfl-team-offense-ranks-v2-*.json 2>/dev/null || echo "note: no nfl-team-offense-ranks-v2 yet (run Publish Snap CDN / NFL Team Offense Ranks)"
           ls -la snap/nfl-team-depth.json 2>/dev/null || echo "note: no nfl-team-depth yet"

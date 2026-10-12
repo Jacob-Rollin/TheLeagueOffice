@@ -31,7 +31,8 @@ jobs:
           from pathlib import Path
 
           UA = {"accept": "application/json", "user-agent": "TheLeagueOffice-snap/1.0"}
-          # Chip key → Sleeper TEAM_* season-stat field (higher = better rank 1).
+          # Match Sleeper app Team Rank chips: ordinal 1..32 by (stat DESC, off_yd DESC).
+          # RZ = rz_att (trips), RZ% = rz_conv (RZ scores) — verified vs Sleeper UI.
           FIELDS = [
               ("offense", "off_yd"),
               ("passAtt", "pass_att"),
@@ -39,28 +40,13 @@ jobs:
               ("passTd", "pass_td"),
               ("td", "td"),
               ("rz", "rz_att"),
-              ("rzPct", "rz_pct"),
+              ("rzPct", "rz_conv"),
           ]
 
           def get(url: str):
               req = urllib.request.Request(url, headers=UA)
               with urllib.request.urlopen(req, timeout=60) as res:
                   return json.load(res)
-
-          def competition_ranks(rows: list[tuple[str, float]]) -> dict[str, int]:
-              """1-based competition ranking (ties share, next skips)."""
-              rows = sorted(rows, key=lambda x: (-x[1], x[0]))
-              out: dict[str, int] = {}
-              i = 0
-              while i < len(rows):
-                  j = i
-                  while j < len(rows) and rows[j][1] == rows[i][1]:
-                      j += 1
-                  rank = i + 1
-                  for k in range(i, j):
-                      out[rows[k][0]] = rank
-                  i = j
-              return out
 
           state = get("https://api.sleeper.app/v1/state/nfl")
           season = str(state.get("league_season") or state.get("season") or datetime.datetime.utcnow().year)
@@ -82,14 +68,18 @@ jobs:
 
           ranked: dict[str, dict[str, int]] = {abbr: {} for abbr in team_stats}
           for chip, field in FIELDS:
-              rows = [(abbr, float(st.get(field) or 0)) for abbr, st in team_stats.items()]
-              for abbr, rank in competition_ranks(rows).items():
-                  ranked[abbr][chip] = rank
+              rows = [
+                  (abbr, float(st.get(field) or 0), float(st.get("off_yd") or 0))
+                  for abbr, st in team_stats.items()
+              ]
+              rows.sort(key=lambda x: (-x[1], -x[2], x[0]))
+              for i, (abbr, _val, _off) in enumerate(rows, 1):
+                  ranked[abbr][chip] = i
 
           payload = {
               "season": int(season) if season.isdigit() else season,
               "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
-              "source": "sleeper-team-season-stats",
+              "source": "sleeper-team-season-stats-v2",
               "teams": ranked,
           }
           Path("/tmp/nfl-team-offense-ranks.json").write_text(
@@ -109,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
           REPO="${{ github.repository }}"
-          DEST="snap/nfl-team-offense-ranks-${SEASON}.json"
+          DEST="snap/nfl-team-offense-ranks-v2-${SEASON}.json"
           WORK=$(mktemp -d)
           cd "$WORK"
           git init -q

@@ -1145,7 +1145,7 @@ function TeamTab({
 
   // Sleeper TEAM_* ranks via snap-cdn (Actions warm) — not visitor Sleeper/ESPN.
   const { data: offenseRanksBoard, isLoading: ranksLoading } = useQuery({
-    queryKey: ["nfl-team-offense-ranks", "sleeper-v3", season],
+    queryKey: ["nfl-team-offense-ranks", "sleeper-v4", season],
     enabled: Boolean(team),
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
