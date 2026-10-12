@@ -35,7 +35,6 @@ import {
   hasScorableProjectionStats,
   resolveHostOrBoxScore,
   scoreActualLine,
-  type ScoringMap,
 } from "@/lib/scoring-map";
 import { getCached } from "@/lib/sleeper-cache";
 import { sosStarsFromRank, weeklySosMatchupFor, type SosMatchup } from "@/lib/sos-presentation";
