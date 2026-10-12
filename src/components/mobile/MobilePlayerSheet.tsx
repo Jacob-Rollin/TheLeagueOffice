@@ -848,27 +848,14 @@ function PlayerCareerTotals({
   });
 
   const career = useMemo(
-    () => (data?.career ?? []).filter((row) => row.games > 0 || (row.pts[format] ?? 0) > 0),
+    () =>
+      (data?.career ?? []).filter(
+        (row) => row.games > 0 || (row.pts[format] ?? 0) > 0,
+      ) as CareerRow[],
     [data?.career, format],
   );
 
-  const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
-  // One Game Log–style board: Year sticky + Tm/GM/Fpts + position counting stats (horizontal scroll).
-  const cols: TableCol<(typeof career)[number]>[] = [
-    { key: "team", label: "Tm", render: (r) => r.team || "-" },
-    { key: "gm", label: "GM", render: (r) => (r.games > 0 ? String(r.games) : "-") },
-    {
-      key: "fpts",
-      label: "Fpts",
-      highlight: true,
-      render: (r) => (r.pts[format] != null ? Number(r.pts[format]).toFixed(1) : "-"),
-    },
-    ...statCols.map((c) => ({
-      key: c.key,
-      label: c.label,
-      render: (r: (typeof career)[number]) => statValue(r.raw, c.key),
-    })),
-  ];
+  const { leftCols, groups } = careerGroupedCols(pos, format);
 
   return (
     <section className="pb-6">
@@ -880,10 +867,11 @@ function PlayerCareerTotals({
       ) : !career.length ? (
         <p className="px-4 text-sm text-m-muted">No career stats available yet.</p>
       ) : (
-        <StatTable
+        <GroupedStatTable
           title=""
           lead={{ key: "year", label: "Year", render: (r) => r.year }}
-          cols={cols}
+          leftCols={leftCols}
+          groups={groups}
           rows={career}
           rowKey={(r) => `career-${r.year}`}
         />
@@ -1045,16 +1033,6 @@ function positionStatGroups(pos: string): StatGroup[] {
   }
 }
 
-/** Flat counting-stat columns (Career board). */
-const POS_STAT_COLS: Record<string, StatCol[]> = {
-  QB: positionStatGroups("QB").flatMap((g) => g.cols),
-  RB: positionStatGroups("RB").flatMap((g) => g.cols),
-  WR: positionStatGroups("WR").flatMap((g) => g.cols),
-  K: positionStatGroups("K").flatMap((g) => g.cols),
-  DEF: positionStatGroups("DEF").flatMap((g) => g.cols),
-};
-POS_STAT_COLS["TE"] = POS_STAT_COLS["WR"]!;
-
 function posRankStatKey(format: Format): string {
   if (format === "ppr") return "pos_rank_ppr";
   if (format === "std") return "pos_rank_std";
@@ -1091,63 +1069,6 @@ function weeklyPosRankCellClass(rank: number | null | undefined): string | undef
   if (rank <= 10) return "bg-emerald-500/25 font-semibold text-emerald-950";
   if (rank <= 22) return "bg-amber-400/30 font-semibold text-amber-950";
   return "bg-rose-500/25 font-semibold text-rose-950";
-}
-
-/** Players-page style table: sticky first column, horizontally scrolling stat columns. */
-function StatTable<R>({
-  title,
-  lead,
-  cols,
-  rows,
-  rowKey,
-}: {
-  title: string;
-  lead: TableCol<R>;
-  cols: TableCol<R>[];
-  rows: R[];
-  rowKey: (row: R) => string;
-}) {
-  return (
-    <section className={title ? "mt-3" : undefined}>
-      {title ? (
-        <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
-          {title}
-        </h3>
-      ) : null}
-      <div className="overflow-x-auto bg-m-card text-m-card-fg [scrollbar-width:none]">
-        <table className="min-w-max border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-m-border text-[11px] font-semibold uppercase tracking-wide text-m-muted">
-              <th className="sticky left-0 z-10 w-[92px] bg-m-card px-3 py-2.5 text-left">{lead.label}</th>
-              {cols.map((c) => (
-                <th
-                  key={c.key}
-                  className={cn("min-w-[64px] px-3 py-2.5 text-right", c.highlight && "bg-m-rank-col text-m-card-fg")}
-                >
-                  {c.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={rowKey(row)} className="border-b border-m-border last:border-0">
-                <td className="sticky left-0 z-10 bg-m-card px-3 py-2.5 text-left font-semibold">{lead.render(row)}</td>
-                {cols.map((c) => (
-                  <td
-                    key={c.key}
-                    className={cn("px-3 py-2.5 text-right tabnum", c.highlight && "bg-m-rank-col font-semibold")}
-                  >
-                    {c.render(row)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
 }
 
 /**
@@ -1395,6 +1316,49 @@ type GameLogRow = {
   proj: { std: number; half: number; ppr: number } | null;
   raw: Record<string, number>;
 };
+
+type CareerRow = {
+  year: string;
+  team: string;
+  games: number;
+  pts: { std: number | null; half: number | null; ppr: number | null };
+  raw: Record<string, number>;
+};
+
+/** Same Fantasy / Passing / Rushing group headers as Game Log; Year + Tm/GM on the left. */
+function careerGroupedCols(
+  pos: string,
+  format: Format,
+): { leftCols: TableCol<CareerRow>[]; groups: ColGroup<CareerRow>[] } {
+  const leftCols: TableCol<CareerRow>[] = [
+    { key: "team", label: "Tm", render: (r) => r.team || "-" },
+    { key: "gm", label: "GM", render: (r) => (r.games > 0 ? String(r.games) : "-") },
+  ];
+  const fantasy: ColGroup<CareerRow> = {
+    label: "Fantasy",
+    cols: [
+      {
+        key: "fpts",
+        label: "Fpts",
+        highlight: true,
+        render: (r) => (r.pts[format] != null ? Number(r.pts[format]).toFixed(1) : "-"),
+      },
+    ],
+  };
+  const groups: ColGroup<CareerRow>[] = [
+    fantasy,
+    ...positionStatGroups(pos).map((g) => ({
+      label: g.label,
+      cols: g.cols.map((c) => ({
+        key: c.key,
+        label: c.label,
+        render: (r: CareerRow) =>
+          r.games > 0 ? statValue(r.raw, c.key, { zeroIfMissing: true }) : "-",
+      })),
+    })),
+  ];
+  return { leftCols, groups };
+}
 
 function gameLogGroupedCols(
   pos: string,
