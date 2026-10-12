@@ -33,7 +33,7 @@ No trailing slash. Then redeploy a **`main`** deployment (Vite bakes this at bui
 `raw.githubusercontent.com/.../snap-cdn/...` (or your Pages URL), **not**
 `/api/data/research/*` as the first hit.
 
-**Do not** promote / redeploy a deployment from branch `snap-cdn` — that branch is JSON-only and will 404 the whole site. `vercel.json` disables automatic Vercel deploys for `snap-cdn` and agent `cursor/*` branches (Hobby ~100 deploys/day). Production still auto-deploys from `main`.
+**Do not** promote / redeploy a deployment from branch `snap-cdn` — that branch is JSON-only and will 404 the whole site. `vercel.json` disables automatic Vercel deploys for `snap-cdn` and agent `cursor/*` branches (Hobby ~100 deploys/day). Production still auto-deploys from `main` (including `/m/sw.js` + `/m/offline.html` for the mobile offline splash).
 
 (`APP_URL` + `CRON_SECRET` must already exist as GitHub Actions secrets — same as other warm workflows.)
 
