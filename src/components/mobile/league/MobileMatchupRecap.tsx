@@ -145,9 +145,21 @@ export function MobileMatchupRecap({
   const awayDelta = Math.round((awayPts - awayProjected) * 100) / 100;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/50" role="dialog" aria-modal="true" aria-label="Matchup recap">
-      <button type="button" className="min-h-[12vh] flex-1" aria-label="Close recap" onClick={onClose} />
-      <div className="max-h-[88vh] overflow-y-auto rounded-t-2xl bg-m-bg text-m-card-fg shadow-[0_-8px_24px_rgba(0,0,0,0.25)]">
+    // z-[60] above league bottom nav (z-50) so Bench Points / footer aren't covered.
+    <div
+      className="fixed inset-0 z-[60] flex flex-col bg-black/50"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Matchup recap"
+    >
+      <button type="button" className="min-h-[10dvh] flex-1" aria-label="Close recap" onClick={onClose} />
+      <div
+        className="max-h-[min(88dvh,100%)] overflow-y-auto overscroll-contain rounded-t-2xl bg-m-bg text-m-card-fg shadow-[0_-8px_24px_rgba(0,0,0,0.25)]"
+        style={{
+          // Home-indicator clearance so the last section can scroll fully into view.
+          paddingBottom: "max(1.25rem, env(safe-area-inset-bottom, 0px))",
+        }}
+      >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-m-border bg-m-card px-4 py-3">
           <div>
             <p className="font-display text-lg font-bold">Week {week} Recap</p>
@@ -166,7 +178,7 @@ export function MobileMatchupRecap({
           </button>
         </div>
 
-        <div className="space-y-4 px-3 py-4">
+        <div className="space-y-4 px-3 py-4 pb-8">
           {viewerResult === "won" || viewerResult === "lost" || viewerResult === "tied" ? (
             <section className="rounded-xl bg-m-card px-4 py-3.5 text-center shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
               <p
