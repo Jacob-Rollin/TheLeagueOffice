@@ -4,6 +4,7 @@ import { authorizeCronRequest } from "@/lib/cron-auth.server";
 
 /**
  * Process pending native waiver claims (rolling / reverse / FAAB).
+ * AI managers file K/DEF streamer claims first so bye weeks clear in the same run.
  * Also completes trade veto windows whose veto_until has passed.
  * Triggered by GitHub Actions — not per-visitor.
  */
@@ -21,15 +22,24 @@ export const Route = createFileRoute("/api/cron/native-waivers")({
         const leagueId = url.searchParams.get("leagueId")?.trim() || undefined;
         const limit = Number(url.searchParams.get("limit") ?? 20) || 20;
         try {
+          const { submitAiStreamerClaimsForCron } = await import(
+            "@/lib/native-league-ai.server"
+          );
           const {
             processNativeWaiversCron,
             processNativeTradeVetoWindowsCron,
           } = await import("@/lib/native-league-gameplay.server");
+
+          // File AI streamer claims before processing so Wed batch includes them.
+          const aiStreamers = await submitAiStreamerClaimsForCron({
+            ...(leagueId ? { leagueId } : {}),
+            limit,
+          });
           const [waivers, trades] = await Promise.all([
             processNativeWaiversCron({ ...(leagueId ? { leagueId } : {}), limit }),
             processNativeTradeVetoWindowsCron({ limit: 40 }),
           ]);
-          return new Response(JSON.stringify({ ok: true, waivers, trades }), {
+          return new Response(JSON.stringify({ ok: true, aiStreamers, waivers, trades }), {
             status: 200,
             headers: { "content-type": "application/json", "cache-control": "no-store" },
           });

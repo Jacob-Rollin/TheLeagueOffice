@@ -679,7 +679,7 @@ export const runNativeAiDraft = createServerFn({ method: "POST" })
     });
   });
 
-/** Commissioner: set AI team lineups for the week (bye / Out / IR aware). */
+/** Commissioner: set AI team lineups for the week (projection-optimized, bye / Out / IR / lock aware). */
 export const runNativeAiLineups = createServerFn({ method: "POST" })
   .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((input: { linkId: string; week?: number }) => ({

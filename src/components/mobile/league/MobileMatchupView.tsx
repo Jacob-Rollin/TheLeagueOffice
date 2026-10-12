@@ -15,7 +15,7 @@ import type { StandingRow, WeeklyMatchupEntry } from "@/lib/league.server";
 import { getNativeLeagueBoard } from "@/lib/native-league.functions";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
-import { scoreActualLine } from "@/lib/scoring-map";
+import { resolveHostOrBoxScore } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
 import {
@@ -162,12 +162,13 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
   };
 
   const pointsFor = (entry: WeeklyMatchupEntry, player: Player): number => {
-    const host = entryPoints(entry, player.id);
-    if (host !== 0) return host;
-    // Host/CDN often stores 0 for remapped DEF — score the Sleeper box line
-    // with league settings (same path as desktop My Team / player popup).
-    const scored = scoreActualLine(statsFor(sleeperIdFor(player)), scoringMap);
-    return scored ?? host;
+    // Host/CDN often stores 0 for remapped DEF / cold native overlay — score
+    // the Sleeper box line with league settings (TLON / Playbook parity).
+    return resolveHostOrBoxScore(
+      entryPoints(entry, player.id),
+      statsFor(sleeperIdFor(player)),
+      scoringMap,
+    );
   };
 
   /** Header totals follow the same live starter scores as the lineup rows. */

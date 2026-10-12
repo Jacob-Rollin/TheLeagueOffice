@@ -39,20 +39,34 @@ jobs:
           pos = "&".join(f"position[]={p}" for p in ("QB", "RB", "WR", "TE", "K", "DEF"))
           url = f"https://api.sleeper.app/v1/stats/nfl/{season}/{week}?season_type=regular&{pos}"
           raw = json.load(urllib.request.urlopen(url))
+          SKIP_KEYS = {"stats", "player_id", "player", "team", "opponent"}
+
+          def coerce_line(row):
+              if not isinstance(row, dict):
+                  return None
+              nested = row.get("stats")
+              source = nested if isinstance(nested, dict) else row
+              out = {
+                  k: float(v)
+                  for k, v in source.items()
+                  if k not in SKIP_KEYS and isinstance(v, (int, float))
+              }
+              return out or None
+
           stats = {}
           if isinstance(raw, list):
               for row in raw:
                   pid = str((row or {}).get("player_id") or "").strip()
-                  st = (row or {}).get("stats") or {}
-                  if not pid or not isinstance(st, dict):
+                  st = coerce_line(row)
+                  if not pid or not st:
                       continue
-                  stats[pid] = {k: float(v) for k, v in st.items() if isinstance(v, (int, float))}
+                  stats[pid] = st
           elif isinstance(raw, dict):
               for pid, row in raw.items():
-                  st = (row or {}).get("stats") if isinstance(row, dict) else None
-                  if not isinstance(st, dict):
+                  st = coerce_line(row)
+                  if not st:
                       continue
-                  stats[str(pid)] = {k: float(v) for k, v in st.items() if isinstance(v, (int, float))}
+                  stats[str(pid)] = st
           if not stats:
               raise SystemExit("empty week stats from Sleeper")
           payload = {

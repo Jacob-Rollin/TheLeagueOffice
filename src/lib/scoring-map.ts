@@ -361,6 +361,24 @@ export function scoreActualLine(
 }
 
 /**
+ * Prefer non-zero host/matchup points; when the host stored an explicit 0
+ * (native live overlay cold, DEF remap gaps), score the Sleeper box line.
+ * Intended for native leagues (and mobile DEF remaps) — synced desktop boards
+ * should keep host playerPoints untouched.
+ */
+export function resolveHostOrBoxScore(
+  hostPts: number | null | undefined,
+  stats: Record<string, number> | null | undefined,
+  map: ScoringMap,
+): number {
+  const host =
+    hostPts != null && Number.isFinite(Number(hostPts)) ? Number(hostPts) : 0;
+  if (host !== 0) return Math.round(host * 100) / 100;
+  const scored = scoreActualLine(stats, map);
+  return scored ?? host;
+}
+
+/**
  * Weekly fantasy points for a projection row in league scoring.
  * Always applies the league map when present (Sleeper matchup parity).
  * Falls back to published pts_* only when no usable scoring map exists.

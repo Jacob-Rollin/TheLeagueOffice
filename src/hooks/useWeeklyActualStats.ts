@@ -7,6 +7,7 @@ import { getCached } from "@/lib/sleeper-cache";
 import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
 import { isPageVisible, visibleRefetchInterval } from "@/lib/page-visibility";
 import { sleeperFetchJson } from "@/lib/sleeper-http";
+import { parseSleeperWeekStatMap } from "@/lib/sleeper-week-stats";
 
 /** Floor live box-score polls so visitor IPs stay far under Sleeper's ~1000/min. */
 const LIVE_STATS_FLOOR_MS = 45 * 1000;
@@ -15,21 +16,12 @@ async function fetchWeeklyActualStats(
   season: string,
   week: number,
 ): Promise<Map<string, Record<string, number>>> {
-  return getCached(`weekly-actual-stats-v1:${season}|${week}`, 30 * 1000, async () => {
+  // v2: flat Sleeper dict `{ [playerId]: { pass_yd, … } }` (not nested `.stats` / arrays only).
+  return getCached(`weekly-actual-stats-v2:${season}|${week}`, 30 * 1000, async () => {
     const url = `${SLEEPER_BASE}/stats/nfl/${season}/${week}?season_type=regular&${positionsQuery()}`;
     const rows = await sleeperFetchJson<unknown>(url, "live");
-    return parseStats(rows);
+    return parseSleeperWeekStatMap(rows);
   });
-}
-
-function parseStats(rows: unknown): Map<string, Record<string, number>> {
-  const map = new Map<string, Record<string, number>>();
-  if (Array.isArray(rows)) {
-    for (const row of rows as { player_id?: string; stats?: Record<string, number> }[]) {
-      if (row?.player_id && row.stats) map.set(String(row.player_id), row.stats);
-    }
-  }
-  return map;
 }
 
 /**

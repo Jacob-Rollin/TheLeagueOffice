@@ -41,7 +41,9 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player } from "@/lib/draft";
+import { resolveHostOrBoxScore } from "@/lib/scoring-map";
 import { starterRequirements } from "@/lib/power-rankings";
 import {
   computeDynamicWinProbability,
@@ -1281,6 +1283,8 @@ function PlaybookMatchupPage() {
   const { projectFor, scoringMap } = useLeagueProjections(activeWeek);
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
+  const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
+  const { statsFor: actualStatsFor } = useWeeklyActualStats(activeWeek);
   // Warm weeks 1–17 so the week picker is not blank for cold TiDB weeks.
   usePrefetchLeagueMatchupWeeks(Boolean(activeLeague?.leagueId));
 
@@ -1426,6 +1430,49 @@ function PlaybookMatchupPage() {
       hasWeeklyRoster,
     };
   }, [matchups, matchupOptions, viewMatchupId, teams]);
+
+  /**
+   * Native only: fill host 0 from Sleeper box lines when live overlay is cold.
+   * Synced Sleeper/ESPN/Yahoo keep authoritative host playerPoints unchanged.
+   */
+  const livePointMaps = useMemo(() => {
+    if (!isNative) {
+      return {
+        mine: weeklyPair.myPlayerPoints,
+        opp: weeklyPair.oppPlayerPoints,
+      };
+    }
+    const enrich = (host: Record<string, number>, ids: string[]) => {
+      const out: Record<string, number> = { ...host };
+      const keys = new Set(
+        [...Object.keys(host), ...ids].map((id) => String(id ?? "").trim()).filter(Boolean),
+      );
+      for (const id of keys) {
+        out[id] = resolveHostOrBoxScore(out[id], actualStatsFor(id), scoringMap);
+      }
+      return out;
+    };
+    return {
+      mine: enrich(weeklyPair.myPlayerPoints, [
+        ...weeklyPair.myStarterIds,
+        ...weeklyPair.myPlayerIds,
+      ]),
+      opp: enrich(weeklyPair.oppPlayerPoints, [
+        ...weeklyPair.oppStarterIds,
+        ...weeklyPair.oppPlayerIds,
+      ]),
+    };
+  }, [
+    isNative,
+    weeklyPair.myPlayerPoints,
+    weeklyPair.oppPlayerPoints,
+    weeklyPair.myStarterIds,
+    weeklyPair.oppStarterIds,
+    weeklyPair.myPlayerIds,
+    weeklyPair.oppPlayerIds,
+    actualStatsFor,
+    scoringMap,
+  ]);
 
   const leftTeam = useMemo(() => {
     if (weeklyPair.leftRosterId != null) {
@@ -1622,6 +1669,7 @@ function PlaybookMatchupPage() {
     pointsMap: Record<string, number>,
   ): number | null => {
     if (!player) return null;
+    // Synced: trust the host map. Native maps are already box-score enriched.
     return Math.round((Number(pointsMap[player.id] ?? 0) || 0) * 100) / 100;
   };
 
@@ -1780,12 +1828,12 @@ function PlaybookMatchupPage() {
         players.reduce((sum, p) => sum + (Number(map[p.id] ?? 0) || 0), 0) * 100,
       ) / 100;
 
-    const myLive = sumMap(mineStarters, weeklyPair.myPlayerPoints);
-    const oppLive = sumMap(oppStarters, weeklyPair.oppPlayerPoints);
+    const myLive = sumMap(mineStarters, livePointMaps.mine);
+    const oppLive = sumMap(oppStarters, livePointMaps.opp);
 
     const myProj = computeTeamDisplayProjection({
       starters: mineStarters,
-      playerPoints: weeklyPair.myPlayerPoints,
+      playerPoints: livePointMaps.mine,
       projectFor,
       weeklyFallback,
       progressByNflTeam,
@@ -1794,7 +1842,7 @@ function PlaybookMatchupPage() {
     });
     const oppProj = computeTeamDisplayProjection({
       starters: oppStarters,
-      playerPoints: weeklyPair.oppPlayerPoints,
+      playerPoints: livePointMaps.opp,
       projectFor,
       weeklyFallback,
       progressByNflTeam,
@@ -1806,8 +1854,8 @@ function PlaybookMatchupPage() {
       scoreB: oppLive,
       startersA: mineStarters,
       startersB: oppStarters,
-      pointsMapA: weeklyPair.myPlayerPoints,
-      pointsMapB: weeklyPair.oppPlayerPoints,
+      pointsMapA: livePointMaps.mine,
+      pointsMapB: livePointMaps.opp,
       projectFor,
       weeklyFallback,
       progressByNflTeam,
@@ -1822,7 +1870,7 @@ function PlaybookMatchupPage() {
       myWinPct: finalWinPctA,
       oppWinPct: finalWinPctB,
     };
-  }, [starterRows, weeklyPair, projectFor, progressByNflTeam, activeWeek]);
+  }, [starterRows, weeklyPair, livePointMaps, projectFor, progressByNflTeam, activeWeek]);
 
   const myName =
     leftTeam?.team?.trim() ||
@@ -1868,22 +1916,28 @@ function PlaybookMatchupPage() {
       }
       return Math.round(total * 100) / 100;
     };
+    const mineFromStarters = sumLive(starterRows, "mine", livePointMaps.mine);
+    const oppFromStarters = sumLive(starterRows, "opp", livePointMaps.opp);
     return {
       mine:
         myMode === "optimal"
-          ? sumLive(starterRows, "mine", weeklyPair.myPlayerPoints)
-          : weeklyPair.myPoints,
+          ? mineFromStarters
+          : isNative
+            ? Number(weeklyPair.myPoints) || mineFromStarters || 0
+            : weeklyPair.myPoints,
       opp:
         oppMode === "optimal"
-          ? sumLive(starterRows, "opp", weeklyPair.oppPlayerPoints)
-          : weeklyPair.oppPoints,
+          ? oppFromStarters
+          : isNative
+            ? Number(weeklyPair.oppPoints) || oppFromStarters || 0
+            : weeklyPair.oppPoints,
     };
   }, [
     myMode,
     oppMode,
     starterRows,
-    weeklyPair.myPlayerPoints,
-    weeklyPair.oppPlayerPoints,
+    livePointMaps,
+    isNative,
     weeklyPair.myPoints,
     weeklyPair.oppPoints,
   ]);
@@ -2584,8 +2638,8 @@ function PlaybookMatchupPage() {
                   slot={row.slot}
                   mine={row.mine}
                   opp={row.opp}
-                  mineLive={livePtsFor(row.mine, weeklyPair.myPlayerPoints)}
-                  oppLive={livePtsFor(row.opp, weeklyPair.oppPlayerPoints)}
+                  mineLive={livePtsFor(row.mine, livePointMaps.mine)}
+                  oppLive={livePtsFor(row.opp, livePointMaps.opp)}
                   mineProj={projPtsFor(row.mine, weeklyPair.myPlayerPoints)}
                   oppProj={projPtsFor(row.opp, weeklyPair.oppPlayerPoints)}
                   minePhase={phaseFor(row.mine)}
@@ -2613,8 +2667,8 @@ function PlaybookMatchupPage() {
                     slot="BN"
                     mine={row.mine}
                     opp={row.opp}
-                    mineLive={livePtsFor(row.mine, weeklyPair.myPlayerPoints)}
-                    oppLive={livePtsFor(row.opp, weeklyPair.oppPlayerPoints)}
+                    mineLive={livePtsFor(row.mine, livePointMaps.mine)}
+                    oppLive={livePtsFor(row.opp, livePointMaps.opp)}
                     mineProj={projPtsFor(row.mine, weeklyPair.myPlayerPoints)}
                     oppProj={projPtsFor(row.opp, weeklyPair.oppPlayerPoints)}
                     minePhase={phaseFor(row.mine)}
@@ -2647,8 +2701,8 @@ function PlaybookMatchupPage() {
                       slot="IR"
                       mine={row.mine}
                       opp={row.opp}
-                      mineLive={livePtsFor(row.mine, weeklyPair.myPlayerPoints)}
-                      oppLive={livePtsFor(row.opp, weeklyPair.oppPlayerPoints)}
+                      mineLive={livePtsFor(row.mine, livePointMaps.mine)}
+                      oppLive={livePtsFor(row.opp, livePointMaps.opp)}
                       mineProj={projPtsFor(row.mine, weeklyPair.myPlayerPoints, { slot: "IR" })}
                       oppProj={projPtsFor(row.opp, weeklyPair.oppPlayerPoints, { slot: "IR" })}
                       minePhase={phaseFor(row.mine)}

@@ -20,6 +20,7 @@ import {
 } from "@/lib/native-league-ops.server";
 import { countActiveRosterCapacity, starterIdsFromNativeSlots } from "@/lib/native-league-lineup";
 import { scoreActualLine, type ScoringMap } from "@/lib/scoring-map";
+import { parseSleeperWeekStatRows } from "@/lib/sleeper-week-stats";
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
 
 type LeagueRow = {
@@ -91,22 +92,7 @@ export async function fetchSleeperWeekStatsServer(
   try {
     const res = await fetch(url, { headers: { accept: "application/json" } });
     if (!res.ok) return {};
-    const rows = (await res.json()) as Array<{
-      player_id?: string;
-      stats?: Record<string, number>;
-    }>;
-    const out: Record<string, Record<string, number>> = {};
-    for (const row of Array.isArray(rows) ? rows : []) {
-      const id = String(row.player_id ?? "").trim();
-      if (!id || !row.stats) continue;
-      const stats: Record<string, number> = {};
-      for (const [k, v] of Object.entries(row.stats)) {
-        const n = Number(v);
-        if (Number.isFinite(n)) stats[k] = n;
-      }
-      out[id] = stats;
-    }
-    return out;
+    return parseSleeperWeekStatRows(await res.json());
   } catch {
     return {};
   }

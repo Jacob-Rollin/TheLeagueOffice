@@ -31,7 +31,11 @@ import {
 import { MatchupBoardSkeleton } from "@/components/research/ResearchTableSkeleton";
 import { playerHoverPrefetchProps } from "@/lib/prefetch-player-detail";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
-import { hasScorableProjectionStats, scoreStats, type ScoringMap } from "@/lib/scoring-map";
+import {
+  hasScorableProjectionStats,
+  resolveHostOrBoxScore,
+  scoreActualLine,
+} from "@/lib/scoring-map";
 import { getCached } from "@/lib/sleeper-cache";
 import { sosStarsFromRank, weeklySosMatchupFor, type SosMatchup } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
@@ -376,34 +380,6 @@ function fmtProjStat(
   if (raw == null || !Number.isFinite(Number(raw))) return "-";
   const n = Number(raw);
   return digits > 0 ? n.toFixed(digits) : String(Math.round(n));
-}
-
-const PTS_ALLOW_TIERS: [max: number, key: string][] = [
-  [0, "pts_allow_0"],
-  [6, "pts_allow_1_6"],
-  [13, "pts_allow_7_13"],
-  [20, "pts_allow_14_20"],
-  [27, "pts_allow_21_27"],
-  [34, "pts_allow_28_34"],
-  [Infinity, "pts_allow_35p"],
-];
-
-/** Fantasy points for a weekly box score in league scoring; null when the player has no line. */
-function scoreActualLine(
-  stats: Record<string, number> | null,
-  map: ScoringMap,
-): number | null {
-  if (!stats) return null;
-  let line = stats;
-  const allowed = Number(stats["pts_allow"]);
-  const hasTier = PTS_ALLOW_TIERS.some(([, key]) => Number(stats[key]) > 0);
-  // Some defense lines only carry the points-allowed total, not its tier flag.
-  if (Number.isFinite(allowed) && !hasTier) {
-    const tier = PTS_ALLOW_TIERS.find(([max]) => allowed <= max)?.[1];
-    if (tier) line = { ...stats, [tier]: 1 };
-  }
-  const pts = scoreStats(line, map);
-  return pts == null ? null : Math.round(pts * 100) / 100;
 }
 
 /** Live stats: empty / missing / zero → dash. Pre-kickoff forces dash regardless. */
@@ -1011,10 +987,20 @@ function PlaybookMyTeamPage() {
     return map;
   }, [rosteredPlayers, actualStatsFor, scoringMap]);
 
+  const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
   const livePtsOf = (player: Player): number => {
-    const host = Number(myPlayerPoints[player.id]);
-    if (myPlayerPoints[player.id] != null && Number.isFinite(host)) return host;
-    return boxScorePoints.get(player.id) ?? 0;
+    // Synced leagues: host matchup points are authoritative (including explicit 0).
+    // Native only: fall through host 0 to league-scored Sleeper box lines.
+    if (!isNative) {
+      const host = Number(myPlayerPoints[player.id]);
+      if (myPlayerPoints[player.id] != null && Number.isFinite(host)) return host;
+      return boxScorePoints.get(player.id) ?? 0;
+    }
+    return resolveHostOrBoxScore(
+      myPlayerPoints[player.id],
+      actualStatsFor(player.id),
+      scoringMap,
+    );
   };
 
   const offensiveStatRows = useMemo(() => {

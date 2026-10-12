@@ -43,6 +43,7 @@ import {
   computeTeamDisplayProjection,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
+import { resolveHostOrBoxScore } from "@/lib/scoring-map";
 import { fetchSnapFantasyNews, fetchSnapInjuryWire } from "@/lib/snap-cdn";
 import {
   diffLeagueScoringUpdates,
@@ -171,7 +172,7 @@ function TlonNetwork() {
   const { standings } = useActiveStandings();
   const nflWeek = useNflState();
   const activeWeek = nflWeek.data?.week ?? 1;
-  const { projectFor } = useLeagueProjections(activeWeek);
+  const { projectFor, scoringMap } = useLeagueProjections(activeWeek);
   // Sleeper-only faster client polls on this page; playbook keeps the default pace.
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek, {
     pace: "broadcast",
@@ -200,6 +201,7 @@ function TlonNetwork() {
 
   const myRosterId = myTeam?.slot ?? teams.find((t) => t.isMine)?.slot ?? null;
   const platform = activeLeague?.platform ?? null;
+  const isNative = (platform ?? "").toLowerCase() === "native";
   const labels = useMemo(() => matchupSlotLabels(rosterPositions), [rosterPositions]);
 
   const matchupOptions = useMemo((): TlonMatchupOption[] => {
@@ -233,6 +235,23 @@ function TlonNetwork() {
         myRosterId != null &&
         (Number(left.rosterId) === Number(myRosterId) ||
           (right != null && Number(right.rosterId) === Number(myRosterId)));
+      // Native only: host matchup rows can be 0 when live overlay is cold.
+      // Synced leagues already ship authoritative Sleeper/ESPN/Yahoo totals.
+      const sumEntryLive = (entry: typeof left) => {
+        if (!isNative) return Number(entry.points) || 0;
+        const ids = (entry.starters ?? []).map((id) => String(id ?? "").trim()).filter(Boolean);
+        const host = entry.playerPoints ?? {};
+        let sum = 0;
+        let saw = false;
+        for (const id of ids.length ? ids : Object.keys(host)) {
+          const pts = resolveHostOrBoxScore(host[id], statsFor(id), scoringMap);
+          if (!Number.isFinite(pts)) continue;
+          sum += pts;
+          saw = true;
+        }
+        if (saw) return Math.round(sum * 100) / 100;
+        return Number(entry.points) || 0;
+      };
       options.push({
         id: String(matchupId),
         label: right ? `${leftName} vs ${rightName}` : `${leftName} (Bye)`,
@@ -241,8 +260,12 @@ function TlonNetwork() {
         rightName,
         leftLogo: resolveLogo(left.rosterId, left.logo),
         rightLogo: right ? resolveLogo(right.rosterId, right.logo) : null,
-        leftLive: left.points,
-        rightLive: right?.points ?? 0,
+        leftLive: isNative ? Number(left.points) || sumEntryLive(left) || 0 : left.points,
+        rightLive: right
+          ? isNative
+            ? Number(right.points) || sumEntryLive(right) || 0
+            : right.points
+          : 0,
       });
     }
 
@@ -251,7 +274,7 @@ function TlonNetwork() {
       return a.label.localeCompare(b.label);
     });
     return options;
-  }, [matchups, teams, myRosterId]);
+  }, [matchups, teams, myRosterId, statsFor, scoringMap, isNative]);
 
   useEffect(() => {
     setViewMatchupId(null);
@@ -330,8 +353,39 @@ function TlonNetwork() {
     );
   }, [pair, labels, playersById]);
 
-  const leftPoints = pair.leftEntry?.playerPoints ?? {};
-  const rightPoints = pair.rightEntry?.playerPoints ?? {};
+  /**
+   * Host matchup points. Native only: fill host 0 from Sleeper box lines when the
+   * live overlay is cold. Synced leagues keep host playerPoints untouched.
+   */
+  const leftPoints = useMemo(() => {
+    const host = pair.leftEntry?.playerPoints ?? {};
+    if (!isNative) return host;
+    const ids = [
+      ...Object.keys(host),
+      ...(pair.leftEntry?.starters ?? []).map(String),
+      ...leftStarters.map((p) => p.id),
+    ];
+    const out: Record<string, number> = { ...host };
+    for (const id of new Set(ids.map((x) => String(x ?? "").trim()).filter(Boolean))) {
+      out[id] = resolveHostOrBoxScore(out[id], statsFor(id), scoringMap);
+    }
+    return out;
+  }, [pair.leftEntry, leftStarters, statsFor, scoringMap, isNative]);
+
+  const rightPoints = useMemo(() => {
+    const host = pair.rightEntry?.playerPoints ?? {};
+    if (!isNative) return host;
+    const ids = [
+      ...Object.keys(host),
+      ...(pair.rightEntry?.starters ?? []).map(String),
+      ...rightStarters.map((p) => p.id),
+    ];
+    const out: Record<string, number> = { ...host };
+    for (const id of new Set(ids.map((x) => String(x ?? "").trim()).filter(Boolean))) {
+      out[id] = resolveHostOrBoxScore(out[id], statsFor(id), scoringMap);
+    }
+    return out;
+  }, [pair.rightEntry, rightStarters, statsFor, scoringMap, isNative]);
 
   const preview = useMemo(() => {
     if (!pair.leftEntry) return null;
@@ -370,13 +424,17 @@ function TlonNetwork() {
   const sumStarterLive = (starters: Player[], map: Record<string, number>) =>
     Math.round(starters.reduce((s, p) => s + (Number(map[p.id] ?? 0) || 0), 0) * 100) / 100;
 
-  // Prefer Sleeper’s official team total so the scorebug tracks the same number
-  // the matchup payload updates — starter-sum alone can miss ID mismatches.
+  // Prefer the host team total so the scorebug tracks the matchup payload.
+  // Native only: when host total is still 0, sum box-score-filled starter points.
   const leftLive = Math.round(
-    (Number(pair.leftEntry?.points) || sumStarterLive(leftStarters, leftPoints) || 0) * 100,
+    (isNative
+      ? Number(pair.leftEntry?.points) || sumStarterLive(leftStarters, leftPoints) || 0
+      : Number(pair.leftEntry?.points) || 0) * 100,
   ) / 100;
   const rightLive = Math.round(
-    (Number(pair.rightEntry?.points) || sumStarterLive(rightStarters, rightPoints) || 0) * 100,
+    (isNative
+      ? Number(pair.rightEntry?.points) || sumStarterLive(rightStarters, rightPoints) || 0
+      : Number(pair.rightEntry?.points) || 0) * 100,
   ) / 100;
 
   const leftProj = useMemo(
@@ -530,41 +588,54 @@ function TlonNetwork() {
             right.starterNames ?? [],
           )
         : [];
-      const starters: TlonStarterSnapshot[] = [
-        ...leftStarts.map((p) => ({
-          playerId: p.id,
-          playerName: p.name,
-          pos: p.pos,
-          team: p.team || "",
-          side: "left" as const,
-          points: Number(left.playerPoints?.[p.id] ?? 0) || 0,
-          stats: statsFor(p.id),
-          matchupId: String(matchupId),
-        })),
-        ...rightStarts.map((p) => ({
-          playerId: p.id,
-          playerName: p.name,
-          pos: p.pos,
-          team: p.team || "",
-          side: "right" as const,
-          points: Number(right?.playerPoints?.[p.id] ?? 0) || 0,
-          stats: statsFor(p.id),
-          matchupId: String(matchupId),
-        })),
-      ];
+      const leftPtsMap = left.playerPoints ?? {};
+      const rightPtsMap = right?.playerPoints ?? {};
+      const pointOf = (map: Record<string, number>, id: string) =>
+        isNative
+          ? resolveHostOrBoxScore(map[id], statsFor(id), scoringMap)
+          : Number(map[id] ?? 0) || 0;
+      const leftStarterRows = leftStarts.map((p) => ({
+        playerId: p.id,
+        playerName: p.name,
+        pos: p.pos,
+        team: p.team || "",
+        side: "left" as const,
+        points: pointOf(leftPtsMap, p.id),
+        stats: statsFor(p.id),
+        matchupId: String(matchupId),
+      }));
+      const rightStarterRows = rightStarts.map((p) => ({
+        playerId: p.id,
+        playerName: p.name,
+        pos: p.pos,
+        team: p.team || "",
+        side: "right" as const,
+        points: pointOf(rightPtsMap, p.id),
+        stats: statsFor(p.id),
+        matchupId: String(matchupId),
+      }));
+      const starters: TlonStarterSnapshot[] = [...leftStarterRows, ...rightStarterRows];
+      const sumSide = (rows: { points: number }[]) =>
+        Math.round(rows.reduce((s, r) => s + (Number(r.points) || 0), 0) * 100) / 100;
+      const leftLiveTotal = isNative
+        ? Number(left.points) || sumSide(leftStarterRows) || 0
+        : left.points;
+      const rightLiveTotal = isNative
+        ? Number(right?.points) || sumSide(rightStarterRows) || 0
+        : (right?.points ?? 0);
       boards.push({
         matchupId: String(matchupId),
         leftName: leftTeam?.team?.trim() || left.teamName,
         rightName: rightTeam?.team?.trim() || right?.teamName || "Bye",
-        leftPoints: left.points,
-        rightPoints: right?.points ?? 0,
+        leftPoints: leftLiveTotal,
+        rightPoints: rightLiveTotal,
         leftLogo: leftTeam?.logo ?? left.logo ?? null,
         rightLogo: rightTeam?.logo ?? right?.logo ?? null,
         starters,
       });
     }
     return boards;
-  }, [matchups, teams, labels, playersById, statsFor, myRosterId]);
+  }, [matchups, teams, labels, playersById, statsFor, scoringMap, myRosterId, isNative]);
 
   useEffect(() => {
     const key = `${activeLeagueId ?? ""}:${activeWeek}:${selected?.id ?? ""}`;

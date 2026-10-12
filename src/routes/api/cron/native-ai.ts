@@ -3,8 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { authorizeCronRequest } from "@/lib/cron-auth.server";
 
 /**
- * AI manager tick for native leagues (testing): fill on-clock AI draft picks
- * and set weekly AI lineups. Prefer Actions cron (CRON_SECRET).
+ * AI manager tick for native leagues (testing): fill on-clock AI draft picks,
+ * file K/DEF streamer waivers (or immediate FA), and set weekly optimized lineups.
+ * Prefer Actions cron (CRON_SECRET).
  * Uses one shared memoized player catalog per invocation — no visitor Fluid fan-out.
  */
 export const Route = createFileRoute("/api/cron/native-ai")({

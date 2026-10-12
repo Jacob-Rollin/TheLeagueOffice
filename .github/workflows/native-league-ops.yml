@@ -1,6 +1,7 @@
 name: Native League Ops
 
 # Waivers / trade veto / TiDB point snaps / weekly standings / AI managers.
+# native-waivers also files AI K/DEF streamer claims before processing.
 # Live Matchup scores use snap-cdn (native-live-week-stats.yml) — not this workflow.
 # Requires APP_URL + CRON_SECRET.
 
