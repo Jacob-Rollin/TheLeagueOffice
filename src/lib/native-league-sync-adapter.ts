@@ -378,9 +378,21 @@ export async function fetchNativeWeekMatchups(
     const stats = live?.stats;
     if (stats && Object.keys(stats).length > 0) {
       const scoring = (payload.scoringSettings ?? {}) as ScoringMap;
+      // Match display fallback: when saved lineup is empty, score current roster ids
+      // so Matchup / TLON get live points without visiting Team first.
+      const startersForOverlay: Record<string, string[]> = {
+        ...(payload.startersByTeamId ?? {}),
+      };
+      for (const roster of board?.rosters ?? []) {
+        const key = String(roster.teamId);
+        const saved = (startersForOverlay[key] ?? []).map((id) => String(id ?? "").trim()).filter(Boolean);
+        if (saved.length) continue;
+        const rosterIds = (roster.playerIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean);
+        if (rosterIds.length) startersForOverlay[key] = rosterIds;
+      }
       const overlaid = overlayNativeLiveMatchupScores(
         payload.matchups,
-        payload.startersByTeamId,
+        startersForOverlay,
         stats,
         scoring,
       );

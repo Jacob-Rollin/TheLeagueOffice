@@ -24,22 +24,13 @@ async function sleeperJson<T>(url: string): Promise<T | null> {
 }
 
 async function weekStatMap(season: string, week: number): Promise<Map<string, Record<string, number>>> {
-  return getCached(`sleeper-week-stats-v1:${season}:${week}`, STATS_TTL_MS, async () => {
-    const rows = await sleeperJson<Record<string, { stats?: Record<string, number> }> | unknown[]>(
+  // v2: flat Sleeper week-stat dict (playerId → stat line).
+  return getCached(`sleeper-week-stats-v2:${season}:${week}`, STATS_TTL_MS, async () => {
+    const { parseSleeperWeekStatMap } = await import("@/lib/sleeper-week-stats");
+    const rows = await sleeperJson<unknown>(
       `${SLEEPER}/stats/nfl/${season}/${week}?season_type=regular`,
     );
-    const map = new Map<string, Record<string, number>>();
-    if (!rows) return map;
-    if (Array.isArray(rows)) {
-      for (const row of rows as { player_id?: string; stats?: Record<string, number> }[]) {
-        if (row.player_id && row.stats) map.set(String(row.player_id), row.stats);
-      }
-      return map;
-    }
-    for (const [id, row] of Object.entries(rows as Record<string, { stats?: Record<string, number> }>)) {
-      if (row?.stats) map.set(String(id), row.stats);
-    }
-    return map;
+    return parseSleeperWeekStatMap(rows);
   });
 }
 

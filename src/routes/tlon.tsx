@@ -43,6 +43,7 @@ import {
   computeTeamDisplayProjection,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
+import { resolveHostOrBoxScore } from "@/lib/scoring-map";
 import { fetchSnapFantasyNews, fetchSnapInjuryWire } from "@/lib/snap-cdn";
 import {
   diffLeagueScoringUpdates,
@@ -171,7 +172,7 @@ function TlonNetwork() {
   const { standings } = useActiveStandings();
   const nflWeek = useNflState();
   const activeWeek = nflWeek.data?.week ?? 1;
-  const { projectFor } = useLeagueProjections(activeWeek);
+  const { projectFor, scoringMap } = useLeagueProjections(activeWeek);
   // Sleeper-only faster client polls on this page; playbook keeps the default pace.
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek, {
     pace: "broadcast",
@@ -233,6 +234,20 @@ function TlonNetwork() {
         myRosterId != null &&
         (Number(left.rosterId) === Number(myRosterId) ||
           (right != null && Number(right.rosterId) === Number(myRosterId)));
+      const sumEntryLive = (entry: typeof left) => {
+        const ids = (entry.starters ?? []).map((id) => String(id ?? "").trim()).filter(Boolean);
+        const host = entry.playerPoints ?? {};
+        let sum = 0;
+        let saw = false;
+        for (const id of ids.length ? ids : Object.keys(host)) {
+          const pts = resolveHostOrBoxScore(host[id], statsFor(id), scoringMap);
+          if (!Number.isFinite(pts)) continue;
+          sum += pts;
+          saw = true;
+        }
+        if (saw) return Math.round(sum * 100) / 100;
+        return Number(entry.points) || 0;
+      };
       options.push({
         id: String(matchupId),
         label: right ? `${leftName} vs ${rightName}` : `${leftName} (Bye)`,
@@ -241,8 +256,8 @@ function TlonNetwork() {
         rightName,
         leftLogo: resolveLogo(left.rosterId, left.logo),
         rightLogo: right ? resolveLogo(right.rosterId, right.logo) : null,
-        leftLive: left.points,
-        rightLive: right?.points ?? 0,
+        leftLive: Number(left.points) || sumEntryLive(left) || 0,
+        rightLive: right ? Number(right.points) || sumEntryLive(right) || 0 : 0,
       });
     }
 
@@ -251,7 +266,7 @@ function TlonNetwork() {
       return a.label.localeCompare(b.label);
     });
     return options;
-  }, [matchups, teams, myRosterId]);
+  }, [matchups, teams, myRosterId, statsFor, scoringMap]);
 
   useEffect(() => {
     setViewMatchupId(null);
@@ -330,8 +345,34 @@ function TlonNetwork() {
     );
   }, [pair, labels, playersById]);
 
-  const leftPoints = pair.leftEntry?.playerPoints ?? {};
-  const rightPoints = pair.rightEntry?.playerPoints ?? {};
+  /** Host matchup points, with Sleeper box-score fill when host stored 0 (native cold overlay). */
+  const leftPoints = useMemo(() => {
+    const host = pair.leftEntry?.playerPoints ?? {};
+    const ids = [
+      ...Object.keys(host),
+      ...(pair.leftEntry?.starters ?? []).map(String),
+      ...leftStarters.map((p) => p.id),
+    ];
+    const out: Record<string, number> = { ...host };
+    for (const id of new Set(ids.map((x) => String(x ?? "").trim()).filter(Boolean))) {
+      out[id] = resolveHostOrBoxScore(out[id], statsFor(id), scoringMap);
+    }
+    return out;
+  }, [pair.leftEntry, leftStarters, statsFor, scoringMap]);
+
+  const rightPoints = useMemo(() => {
+    const host = pair.rightEntry?.playerPoints ?? {};
+    const ids = [
+      ...Object.keys(host),
+      ...(pair.rightEntry?.starters ?? []).map(String),
+      ...rightStarters.map((p) => p.id),
+    ];
+    const out: Record<string, number> = { ...host };
+    for (const id of new Set(ids.map((x) => String(x ?? "").trim()).filter(Boolean))) {
+      out[id] = resolveHostOrBoxScore(out[id], statsFor(id), scoringMap);
+    }
+    return out;
+  }, [pair.rightEntry, rightStarters, statsFor, scoringMap]);
 
   const preview = useMemo(() => {
     if (!pair.leftEntry) return null;
@@ -530,41 +571,54 @@ function TlonNetwork() {
             right.starterNames ?? [],
           )
         : [];
-      const starters: TlonStarterSnapshot[] = [
-        ...leftStarts.map((p) => ({
+      const leftPtsMap = left.playerPoints ?? {};
+      const rightPtsMap = right?.playerPoints ?? {};
+      const leftStarterRows = leftStarts.map((p) => {
+        const points = resolveHostOrBoxScore(leftPtsMap[p.id], statsFor(p.id), scoringMap);
+        return {
           playerId: p.id,
           playerName: p.name,
           pos: p.pos,
           team: p.team || "",
           side: "left" as const,
-          points: Number(left.playerPoints?.[p.id] ?? 0) || 0,
+          points,
           stats: statsFor(p.id),
           matchupId: String(matchupId),
-        })),
-        ...rightStarts.map((p) => ({
+        };
+      });
+      const rightStarterRows = rightStarts.map((p) => {
+        const points = resolveHostOrBoxScore(rightPtsMap[p.id], statsFor(p.id), scoringMap);
+        return {
           playerId: p.id,
           playerName: p.name,
           pos: p.pos,
           team: p.team || "",
           side: "right" as const,
-          points: Number(right?.playerPoints?.[p.id] ?? 0) || 0,
+          points,
           stats: statsFor(p.id),
           matchupId: String(matchupId),
-        })),
-      ];
+        };
+      });
+      const starters: TlonStarterSnapshot[] = [...leftStarterRows, ...rightStarterRows];
+      const sumSide = (rows: { points: number }[]) =>
+        Math.round(rows.reduce((s, r) => s + (Number(r.points) || 0), 0) * 100) / 100;
+      const leftLiveTotal =
+        Number(left.points) || sumSide(leftStarterRows) || 0;
+      const rightLiveTotal =
+        Number(right?.points) || sumSide(rightStarterRows) || 0;
       boards.push({
         matchupId: String(matchupId),
         leftName: leftTeam?.team?.trim() || left.teamName,
         rightName: rightTeam?.team?.trim() || right?.teamName || "Bye",
-        leftPoints: left.points,
-        rightPoints: right?.points ?? 0,
+        leftPoints: leftLiveTotal,
+        rightPoints: rightLiveTotal,
         leftLogo: leftTeam?.logo ?? left.logo ?? null,
         rightLogo: rightTeam?.logo ?? right?.logo ?? null,
         starters,
       });
     }
     return boards;
-  }, [matchups, teams, labels, playersById, statsFor, myRosterId]);
+  }, [matchups, teams, labels, playersById, statsFor, scoringMap, myRosterId]);
 
   useEffect(() => {
     const key = `${activeLeagueId ?? ""}:${activeWeek}:${selected?.id ?? ""}`;

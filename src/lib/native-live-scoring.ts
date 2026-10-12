@@ -11,6 +11,7 @@
 import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
 import { getCached } from "@/lib/sleeper-cache";
 import { sleeperFetchJson } from "@/lib/sleeper-http";
+import { parseSleeperWeekStatRows } from "@/lib/sleeper-week-stats";
 import { scoreActualLine, type ScoringMap } from "@/lib/scoring-map";
 
 const LIVE_STATS_TTL_MS = 3 * 60 * 1000;
@@ -28,40 +29,6 @@ export type NativeLiveTeamScore = {
   points: number;
   playerPoints: Record<string, number>;
 };
-
-function parseStatRows(
-  rows: unknown,
-): Record<string, Record<string, number>> {
-  const out: Record<string, Record<string, number>> = {};
-  if (!rows) return out;
-  if (Array.isArray(rows)) {
-    for (const row of rows as { player_id?: string; stats?: Record<string, number> }[]) {
-      const id = String(row.player_id ?? "").trim();
-      if (!id || !row.stats) continue;
-      const stats: Record<string, number> = {};
-      for (const [k, v] of Object.entries(row.stats)) {
-        const n = Number(v);
-        if (Number.isFinite(n)) stats[k] = n;
-      }
-      out[id] = stats;
-    }
-    return out;
-  }
-  if (typeof rows === "object") {
-    for (const [id, row] of Object.entries(
-      rows as Record<string, { stats?: Record<string, number> }>,
-    )) {
-      if (!row?.stats) continue;
-      const stats: Record<string, number> = {};
-      for (const [k, v] of Object.entries(row.stats)) {
-        const n = Number(v);
-        if (Number.isFinite(n)) stats[k] = n;
-      }
-      out[String(id)] = stats;
-    }
-  }
-  return out;
-}
 
 async function fetchSnapWeekStats(
   season: number,
@@ -90,7 +57,7 @@ async function fetchSleeperWeekStatsBudgeted(
     .join("&");
   const url = `https://api.sleeper.app/v1/stats/nfl/${season}/${week}?season_type=regular&${positions}`;
   const rows = await sleeperFetchJson<unknown>(url, "live");
-  return parseStatRows(rows);
+  return parseSleeperWeekStatRows(rows);
 }
 
 /**
