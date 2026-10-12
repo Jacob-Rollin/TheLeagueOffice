@@ -17,6 +17,8 @@ import { useMobileLeagueActivity } from "@/components/mobile/league/useMobileLea
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { usePlayerSos } from "@/hooks/usePlayerSos";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
@@ -48,6 +50,7 @@ import {
   fetchNextGameClient,
   fetchPlayerBioClient,
 } from "@/lib/sleeper-client";
+import { sosOppTextClass } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
 /**
@@ -722,7 +725,7 @@ const statValue = (raw: Record<string, number> | undefined, key: string) => {
   return Number.isFinite(v) ? (Number.isInteger(v) ? String(v) : v.toFixed(1)) : "-";
 };
 
-type TableCol<R> = { key: string; label: string; render: (row: R) => string; highlight?: boolean };
+type TableCol<R> = { key: string; label: string; render: (row: R) => ReactNode; highlight?: boolean };
 
 /** Players-page style table: sticky first column, horizontally scrolling stat columns. */
 function StatTable<R>({
@@ -895,7 +898,12 @@ function WeekProjectionsStrip({
   );
 }
 
-function gameLogTableCols(pos: string, format: Format) {
+function gameLogTableCols(
+  pos: string,
+  format: Format,
+  /** Weekly positional SoS ranks (current season only). */
+  sosRankByWeek?: Map<number, number | null> | null,
+) {
   type Log = {
     week: number;
     opp: string | null;
@@ -907,7 +915,17 @@ function gameLogTableCols(pos: string, format: Format) {
   };
   const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
   const cols: TableCol<Log>[] = [
-    { key: "opp", label: "Opp", render: (l) => (l.isBye ? "BYE" : (l.opp ?? "-")) },
+    {
+      key: "opp",
+      label: "Opp",
+      render: (l) => {
+        if (l.isBye) return <span className="text-m-muted">BYE</span>;
+        const label = l.opp ?? "-";
+        const rank = sosRankByWeek?.get(l.week);
+        if (rank == null || !Number.isFinite(rank)) return label;
+        return <span className={cn("font-semibold", sosOppTextClass(rank))}>{label}</span>;
+      },
+    },
     {
       key: "fpts",
       label: "Fpts",
@@ -945,6 +963,15 @@ function GameLogTab({
   const currentSeason = String(nflState.data?.season ?? MOBILE_LOG_SEASONS[0]);
   const { data, isLoading } = usePlayerLogs(id, team, pos);
   const [openPast, setOpenPast] = useState<string | null>(null);
+  const brain = usePlayerBrain();
+  const playerSos = usePlayerSos(brain?.[id] ?? null, team, format, pos);
+  const sosRankByWeek = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const m of playerSos?.matchups ?? []) {
+      map.set(Number(m.week), m.rank);
+    }
+    return map;
+  }, [playerSos]);
 
   const pastSeasons = useMemo(() => {
     // Sleeper years_exp is 0 for rookies, then +1 per completed season.
@@ -968,7 +995,10 @@ function GameLogTab({
 
   // Full 1–18 season board; unplayed weeks stay as "-" until the game is final.
   const logs = data?.logs ?? [];
-  const cols = gameLogTableCols(pos, format);
+  const cols = useMemo(
+    () => gameLogTableCols(pos, format, sosRankByWeek),
+    [pos, format, sosRankByWeek],
+  );
   const seasonLabel = data?.season ?? currentSeason;
 
   if (isLoading) return <p className="px-4 py-8 text-center text-sm text-m-muted">Loading game log...</p>;
