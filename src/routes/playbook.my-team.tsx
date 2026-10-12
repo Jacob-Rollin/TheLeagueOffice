@@ -987,8 +987,21 @@ function PlaybookMyTeamPage() {
     return map;
   }, [rosteredPlayers, actualStatsFor, scoringMap]);
 
-  const livePtsOf = (player: Player): number =>
-    resolveHostOrBoxScore(myPlayerPoints[player.id], actualStatsFor(player.id), scoringMap);
+  const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
+  const livePtsOf = (player: Player): number => {
+    // Synced leagues: host matchup points are authoritative (including explicit 0).
+    // Native only: fall through host 0 to league-scored Sleeper box lines.
+    if (!isNative) {
+      const host = Number(myPlayerPoints[player.id]);
+      if (myPlayerPoints[player.id] != null && Number.isFinite(host)) return host;
+      return boxScorePoints.get(player.id) ?? 0;
+    }
+    return resolveHostOrBoxScore(
+      myPlayerPoints[player.id],
+      actualStatsFor(player.id),
+      scoringMap,
+    );
+  };
 
   const offensiveStatRows = useMemo(() => {
     return projectionSourceRows

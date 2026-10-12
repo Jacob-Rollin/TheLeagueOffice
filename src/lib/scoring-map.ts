@@ -363,7 +363,8 @@ export function scoreActualLine(
 /**
  * Prefer non-zero host/matchup points; when the host stored an explicit 0
  * (native live overlay cold, DEF remap gaps), score the Sleeper box line.
- * Same fallthrough mobile Matchup / Team cards already use.
+ * Intended for native leagues (and mobile DEF remaps) — synced desktop boards
+ * should keep host playerPoints untouched.
  */
 export function resolveHostOrBoxScore(
   hostPts: number | null | undefined,

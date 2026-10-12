@@ -1283,6 +1283,7 @@ function PlaybookMatchupPage() {
   const { projectFor, scoringMap } = useLeagueProjections(activeWeek);
   const { matchups, loading: matchupsLoading } = useActiveMatchups(activeWeek);
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
+  const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
   const { statsFor: actualStatsFor } = useWeeklyActualStats(activeWeek);
   // Warm weeks 1–17 so the week picker is not blank for cold TiDB weeks.
   usePrefetchLeagueMatchupWeeks(Boolean(activeLeague?.leagueId));
@@ -1431,10 +1432,16 @@ function PlaybookMatchupPage() {
   }, [matchups, matchupOptions, viewMatchupId, teams]);
 
   /**
-   * Host playerPoints with Sleeper box-score fill when host stored 0
-   * (native live overlay cold). Keeps Matchup totals / rows in parity with mobile.
+   * Native only: fill host 0 from Sleeper box lines when live overlay is cold.
+   * Synced Sleeper/ESPN/Yahoo keep authoritative host playerPoints unchanged.
    */
   const livePointMaps = useMemo(() => {
+    if (!isNative) {
+      return {
+        mine: weeklyPair.myPlayerPoints,
+        opp: weeklyPair.oppPlayerPoints,
+      };
+    }
     const enrich = (host: Record<string, number>, ids: string[]) => {
       const out: Record<string, number> = { ...host };
       const keys = new Set(
@@ -1456,6 +1463,7 @@ function PlaybookMatchupPage() {
       ]),
     };
   }, [
+    isNative,
     weeklyPair.myPlayerPoints,
     weeklyPair.oppPlayerPoints,
     weeklyPair.myStarterIds,
@@ -1661,12 +1669,8 @@ function PlaybookMatchupPage() {
     pointsMap: Record<string, number>,
   ): number | null => {
     if (!player) return null;
-    // Prefer the enriched map; still resolve so one-off host maps stay correct.
-    return resolveHostOrBoxScore(
-      pointsMap[player.id],
-      actualStatsFor(player.id),
-      scoringMap,
-    );
+    // Synced: trust the host map. Native maps are already box-score enriched.
+    return Math.round((Number(pointsMap[player.id] ?? 0) || 0) * 100) / 100;
   };
 
   const progressFor = (player: Player | null): NflGameProgress | undefined => {
@@ -1918,17 +1922,22 @@ function PlaybookMatchupPage() {
       mine:
         myMode === "optimal"
           ? mineFromStarters
-          : Number(weeklyPair.myPoints) || mineFromStarters || 0,
+          : isNative
+            ? Number(weeklyPair.myPoints) || mineFromStarters || 0
+            : weeklyPair.myPoints,
       opp:
         oppMode === "optimal"
           ? oppFromStarters
-          : Number(weeklyPair.oppPoints) || oppFromStarters || 0,
+          : isNative
+            ? Number(weeklyPair.oppPoints) || oppFromStarters || 0
+            : weeklyPair.oppPoints,
     };
   }, [
     myMode,
     oppMode,
     starterRows,
     livePointMaps,
+    isNative,
     weeklyPair.myPoints,
     weeklyPair.oppPoints,
   ]);
