@@ -397,7 +397,8 @@ function OverviewMarketRow({ id }: { id: string }) {
   const entry = brain?.[id];
   if (!entry) return null;
 
-  const value = scaleValue(entry.value ?? 0);
+  const rawValue = Number(entry.value) || 0;
+  const value = scaleValue(rawValue);
   const trend = Number(entry.trend) || 0;
   // Only FantasyCalc fields — skip empty / template stubs (value 0 + flat trend).
   if (value <= 0 && trend === 0) return null;
@@ -405,44 +406,65 @@ function OverviewMarketRow({ id }: { id: string }) {
   const tone = valueTrendTone(trend);
   const trendClass =
     tone === "up" ? "text-emerald-600" : tone === "down" ? "text-rose-600" : "text-m-muted";
-  const trendArrow = tone === "up" ? "▲" : tone === "down" ? "▼" : "–";
+  // Percent move vs current value (same idea as Trade Desk) — clearer than raw 0.0 stubs.
+  const trendPct =
+    rawValue !== 0 && Number.isFinite(trend) ? (trend / Math.abs(rawValue)) * 100 : null;
 
   return (
     <section className="mx-2.5 mt-3 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
       <div className="grid grid-cols-2 py-3 text-center">
         <div className="border-r border-m-border">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">Value</p>
-          <p className="mt-0.5 font-display text-lg font-semibold tabular-nums">
+          <p className="mt-0.5 font-display text-lg font-semibold tabular-nums text-m-card-fg">
             {value > 0 ? value.toFixed(1) : "-"}
           </p>
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">30d Trend</p>
-          <p className={cn("mt-0.5 font-display text-lg font-semibold tabular-nums", trendClass)}>
-            <span aria-hidden="true" className="mr-0.5 text-[12px]">
-              {trendArrow}
-            </span>
-            {Math.abs(trend).toFixed(1)}
-          </p>
+          {tone === "flat" ? (
+            <p className="mt-0.5 font-display text-lg font-semibold text-m-muted">Flat</p>
+          ) : (
+            <p className={cn("mt-0.5 font-display text-lg font-semibold tabular-nums", trendClass)}>
+              <span aria-hidden="true" className="mr-0.5 text-[13px]">
+                {tone === "up" ? "▲" : "▼"}
+              </span>
+              {trendPct != null ? `${Math.abs(trendPct).toFixed(1)}%` : Math.abs(trend).toFixed(1)}
+            </p>
+          )}
         </div>
       </div>
     </section>
   );
 }
 
-/** Compact injury callout above Overview projections — only when designation or notes exist. */
+/** Compact injury callout above Overview projections — designation + diagnosis + news note. */
 function OverviewInjuryNote({
+  playerId,
   status,
   bodyPart,
   notes,
 }: {
+  playerId: string;
   status: string | null;
   bodyPart: string | null;
   notes: string | null;
 }) {
   const badge = injuryBadgeInfo(status);
   const diagnosis = bodyPart?.trim() || null;
-  const note = notes?.trim() || null;
+  // Same CDN news path as Latest News — reuse for a short medical blurb when Sleeper notes are empty.
+  const { data: news } = useQuery({
+    queryKey: ["player-news", playerId, "cdn-v2"],
+    queryFn: () => fetchPlayerNewsClient(playerId),
+    enabled: Boolean(playerId && (badge || diagnosis || notes)),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+  const newsNote =
+    news?.injury?.note?.trim() ||
+    news?.items?.[0]?.description?.trim() ||
+    news?.items?.[0]?.headline?.trim() ||
+    null;
+  const note = notes?.trim() || newsNote || null;
   if (!badge && !diagnosis && !note) return null;
 
   const critical = badge?.tone === "rose";
@@ -459,7 +481,7 @@ function OverviewInjuryNote({
       <div className="px-3.5 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <p className={cn("font-display text-[11px] font-bold uppercase tracking-[0.1em]", accentLabel)}>
-            Injury
+            Injury Report
           </p>
           {badge ? (
             <span
@@ -473,17 +495,17 @@ function OverviewInjuryNote({
           ) : null}
         </div>
         {diagnosis ? (
-          <p className="mt-1.5 text-[14px] font-semibold capitalize leading-snug text-m-card-fg">
+          <p className="mt-1.5 text-[15px] font-semibold capitalize leading-snug text-m-card-fg">
             {diagnosis}
           </p>
         ) : null}
         {note ? (
-          <p className="mt-1 text-[13px] leading-relaxed text-m-muted">{note}</p>
-        ) : !diagnosis ? (
+          <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-m-muted">{note}</p>
+        ) : (
           <p className="mt-1 text-[13px] leading-relaxed text-m-muted">
-            {badge ? `${badge.text} — monitor before lock.` : "Monitor before lock."}
+            {badge ? `${badge.text} — check news before lock.` : "Check news before lock."}
           </p>
-        ) : null}
+        )}
       </div>
     </section>
   );
@@ -589,6 +611,7 @@ function Overview({
       <OverviewMarketRow id={id} />
 
       <OverviewInjuryNote
+        playerId={id}
         status={injuryStatus}
         bodyPart={injuryBodyPart}
         notes={injuryNotes}
@@ -1228,8 +1251,8 @@ function WeekProjectionsStrip({
               : "text-m-card-fg";
           return (
             <div key={log.week} data-proj-week={log.week} className="w-[7.75rem] shrink-0">
-              <div className="mb-1.5 flex items-center gap-1.5 px-0.5">
-                <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide">
+              <div className="mb-1.5 flex items-center justify-center gap-1.5 px-0.5">
+                <p className="min-w-0 truncate text-center text-[11px] font-semibold uppercase tracking-wide">
                   <span className="text-m-card-fg">Wk {log.week}</span>{" "}
                   {log.isBye ? (
                     <span className="text-m-muted">BYE</span>
@@ -1560,6 +1583,8 @@ function TeamTab({
   const nflState = useNflState();
   const season = nflState.data?.season ?? String(new Date().getUTCFullYear());
   const { data: catalog } = useSleeperPlayers();
+  // Active-week proj (same path as matchup / ATP) — not season ROS from depthChart.
+  const { projectFor } = useLeagueProjections();
   // Same shared week-proj overlay as popup header / ATP / catalog badges.
   const liveInjuries = useLiveInjuryStatuses();
   const playersById = useMemo(() => {
@@ -1714,6 +1739,7 @@ function TeamTab({
                 const badge = injuryBadgeInfo(cell.injury);
                 const { first, last } = splitPlayerName(cell.name);
                 const isActive = cell.id === playerId;
+                const weekProj = projectFor(cell.id);
                 return (
                   <button
                     key={cell.id}
@@ -1743,9 +1769,9 @@ function TeamTab({
                     >
                       {last}
                     </p>
-                    {cell.proj > 0 ? (
+                    {weekProj != null && Number.isFinite(weekProj) && weekProj > 0 ? (
                       <p className="mt-0.5 text-[11px] font-semibold tabular-nums text-m-muted">
-                        {cell.proj.toFixed(1)}
+                        {weekProj.toFixed(1)}
                       </p>
                     ) : null}
                   </button>
