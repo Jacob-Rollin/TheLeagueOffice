@@ -529,7 +529,7 @@ function OverviewMarketRow({ id, format }: { id: string; format: Format }) {
           {tone === "flat" || trendAbs <= 0 ? (
             <p className="mt-0.5 font-display text-lg font-semibold text-m-muted">Flat</p>
           ) : (
-            <div className="mt-0.5">
+            <div className="mt-0.5 flex items-baseline justify-center gap-1.5">
               <p className={cn("font-display text-lg font-semibold tabular-nums", trendClass)}>
                 <span aria-hidden="true" className="mr-0.5 text-[13px]">
                   {tone === "up" ? "▲" : "▼"}
@@ -537,10 +537,17 @@ function OverviewMarketRow({ id, format }: { id: string; format: Format }) {
                 {trendAbs.toFixed(1)}
               </p>
               {pct != null ? (
-                <p className={cn("text-[11px] font-semibold tabular-nums", trendClass)}>
+                <span
+                  className={cn(
+                    "rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                    tone === "up"
+                      ? "bg-emerald-500/15 text-emerald-700"
+                      : "bg-rose-500/15 text-rose-700",
+                  )}
+                >
                   {pct > 0 ? "+" : ""}
                   {pct.toFixed(0)}%
-                </p>
+                </span>
               ) : null}
             </div>
           )}
