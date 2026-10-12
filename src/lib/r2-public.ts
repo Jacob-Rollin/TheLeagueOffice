@@ -67,4 +67,9 @@ export const R2_SNAP_KEYS = {
    */
   nflTeamOffenseRanks: (season: number | string) =>
     `snap/nfl-team-offense-ranks-${season}.json`,
+  /**
+   * Sleeper depth charts for mobile Team tab (depth_chart_position + order).
+   * Actions → `/v1/players/nfl` once; visitors hit GitHub raw only.
+   */
+  nflTeamDepth: () => `snap/nfl-team-depth.json`,
 } as const;

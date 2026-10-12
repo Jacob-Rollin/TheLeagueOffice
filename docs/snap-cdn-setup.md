@@ -63,6 +63,7 @@ raw.githubusercontent.com path.
 - Manual `workflow_dispatch` anytime
 - **Native live week stats** (separate workflow `native-live-week-stats.yml`): every 5 minutes on gameday UTC windows; writes `snap/native-week-stats-{season}-w{week}.json` only (preserves research files)
 - **NFL team offense ranks**: rebuilt inside Publish Snap CDN (ESPN → Actions) and also by `nfl-team-offense-ranks.yml` a few times daily; object key `snap/nfl-team-offense-ranks-{season}.json` for the mobile player Team tab
+- **NFL team depth**: rebuilt inside Publish Snap CDN from Sleeper `/v1/players/nfl` (`depth_chart_position` + `depth_chart_order`); object key `snap/nfl-team-depth.json` for the mobile player Team tab (LWR/RWR/SWR → WR1/WR2/WR3)
 
 Each run **force-pushes an orphan** `snap-cdn` branch (no git history bloat). Before the orphan commit, Publish Snap CDN **seeds the previous tip** so sidecar files from other workflows (offense ranks between publishes, prior week stats) are not wiped; fresh downloads overlay and win.
 
