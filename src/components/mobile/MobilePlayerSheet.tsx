@@ -730,23 +730,32 @@ type TableCol<R> = { key: string; label: string; render: (row: R) => ReactNode; 
 /** Players-page style table: sticky first column, horizontally scrolling stat columns. */
 function StatTable<R>({
   title,
+  titleAction,
   lead,
   cols,
   rows,
   rowKey,
 }: {
   title: string;
+  titleAction?: ReactNode;
   lead: TableCol<R>;
   cols: TableCol<R>[];
   rows: R[];
   rowKey: (row: R) => string;
 }) {
   return (
-    <section className={title ? "mt-3" : undefined}>
-      {title ? (
-        <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
-          {title}
-        </h3>
+    <section className={title || titleAction ? "mt-3" : undefined}>
+      {title || titleAction ? (
+        <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">
+          {title ? (
+            <h3 className="font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+              {title}
+            </h3>
+          ) : (
+            <span />
+          )}
+          {titleAction}
+        </div>
       ) : null}
       <div className="overflow-x-auto bg-m-card text-m-card-fg [scrollbar-width:none]">
         <table className="min-w-max border-collapse text-sm">
@@ -1017,43 +1026,35 @@ function GameLogTab({
         />
       )}
 
-      {pastSeasons.length ? (
-        <section className="mt-2">
-          <h3 className="px-4 pb-1 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
-            Past Seasons
-          </h3>
-          <div className="mx-2.5 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
-            {pastSeasons.map((year, idx) => {
-              const open = openPast === year;
-              return (
-                <div
-                  key={year}
-                  className={cn(idx > 0 && "border-t border-m-border")}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setOpenPast((prev) => (prev === year ? null : year))}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-                  >
-                    <span className="font-display text-base font-bold">{year}</span>
-                    <span
-                      className={cn(
-                        "text-[11px] font-bold uppercase tracking-wide",
-                        open ? "text-m-accent" : "text-m-muted",
-                      )}
-                    >
-                      {open ? "Hide" : "View"}
-                    </span>
-                  </button>
-                  {open ? (
-                    <PastSeasonGameLog id={id} team={team} pos={pos} format={format} season={year} />
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
+      {pastSeasons.map((year) => {
+        const open = openPast === year;
+        if (!open) {
+          return (
+            <button
+              key={year}
+              type="button"
+              onClick={() => setOpenPast(year)}
+              className="mt-1 flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+            >
+              <span className="font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+                {year}
+              </span>
+              <span className="text-[11px] font-bold uppercase tracking-wide text-m-muted">View</span>
+            </button>
+          );
+        }
+        return (
+          <PastSeasonGameLog
+            key={year}
+            id={id}
+            team={team}
+            pos={pos}
+            format={format}
+            season={year}
+            onHide={() => setOpenPast(null)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -1064,38 +1065,65 @@ function PastSeasonGameLog({
   pos,
   format,
   season,
+  onHide,
 }: {
   id: string;
   team: string | null;
   pos: string;
   format: Format;
   season: string;
+  onHide: () => void;
 }) {
   const { data, isLoading } = usePlayerLogs(id, team, pos, season, true);
-  const logs = (data?.logs ?? []).filter((l) => l.played || l.isBye);
+  // Same full week board as the current season (unplayed weeks stay "-").
+  const logs = data?.logs ?? [];
   const cols = gameLogTableCols(pos, format);
+  const hideBtn = (
+    <button
+      type="button"
+      onClick={onHide}
+      className="text-[11px] font-bold uppercase tracking-wide text-m-accent"
+    >
+      Hide
+    </button>
+  );
 
   if (isLoading) {
-    return <p className="border-t border-m-border px-4 py-5 text-sm text-m-muted">Loading {season}...</p>;
+    return (
+      <div className="mt-3">
+        <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">
+          <h3 className="font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+            {season}
+          </h3>
+          {hideBtn}
+        </div>
+        <p className="px-4 py-8 text-center text-sm text-m-muted">Loading {season}...</p>
+      </div>
+    );
   }
   if (!logs.length) {
     return (
-      <p className="border-t border-m-border px-4 py-5 text-sm text-m-muted">
-        No games recorded for {season}.
-      </p>
+      <div className="mt-3">
+        <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3">
+          <h3 className="font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+            {season}
+          </h3>
+          {hideBtn}
+        </div>
+        <p className="px-4 py-8 text-center text-sm text-m-muted">No games recorded for {season}.</p>
+      </div>
     );
   }
 
   return (
-    <div className="border-t border-m-border">
-      <StatTable
-        title=""
-        lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
-        cols={cols}
-        rows={logs}
-        rowKey={(l) => `${season}-${l.week}`}
-      />
-    </div>
+    <StatTable
+      title={season}
+      titleAction={hideBtn}
+      lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
+      cols={cols}
+      rows={logs}
+      rowKey={(l) => `${season}-${l.week}`}
+    />
   );
 }
 
