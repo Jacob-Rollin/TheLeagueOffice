@@ -13,12 +13,15 @@ import {
 } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
+import { useMobileLeagueActivity } from "@/components/mobile/league/useMobileLeague";
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import type { Pos } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
+import type { LeagueActivityEvent, LeagueActivityMove } from "@/lib/league.functions";
 import {
   fetchNflTeamOffenseRanks,
   teamOffenseRanksFor,
@@ -431,7 +434,181 @@ function Overview({
         Latest News
       </h3>
       <PlayerNews id={id} />
+
+      <PlayerTransactionHistory playerId={id} />
+      <PlayerCareerTotals id={id} team={team} pos={pos} format={format} />
     </>
+  );
+}
+
+function txnKindLabel(
+  kind: LeagueActivityEvent["kind"],
+  action: LeagueActivityMove["action"],
+): string {
+  if (kind === "trade") return "Traded";
+  if (kind === "ir") return "IR";
+  if (kind === "waiver") return action === "drop" ? "Dropped" : "Claimed";
+  return action === "drop" ? "Dropped" : "Added";
+}
+
+function formatTxnDate(at: number): string {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" });
+}
+
+/** League transaction rows for this player — reuses the shared activity RQ cache. */
+function PlayerTransactionHistory({ playerId }: { playerId: string }) {
+  const { activeLeague } = useActiveLeague();
+  const { events, loading } = useMobileLeagueActivity();
+
+  const rows = useMemo(() => {
+    const out: {
+      id: string;
+      at: number;
+      label: string;
+      detail: string;
+    }[] = [];
+    for (const event of events) {
+      for (const move of event.moves) {
+        if (String(move.playerId) !== String(playerId)) continue;
+        const label = txnKindLabel(event.kind, move.action);
+        let detail = "";
+        if (event.kind === "trade") {
+          const from = move.fromFantasyTeam?.trim();
+          const to = move.fantasyTeam?.trim() || event.teamName?.trim();
+          if (move.action === "add" && to) detail = `to ${to}`;
+          else if (move.action === "drop" && (from || to)) detail = `from ${from || to}`;
+          else detail = event.text;
+        } else {
+          const team = move.fantasyTeam?.trim() || event.teamName?.trim();
+          detail = team ? `by ${team}` : event.text;
+        }
+        out.push({
+          id: `${event.id}-${move.playerId}-${move.action}`,
+          at: event.at,
+          label,
+          detail,
+        });
+      }
+    }
+    out.sort((a, b) => b.at - a.at);
+    return out.slice(0, 12);
+  }, [events, playerId]);
+
+  return (
+    <section className="mt-2 pb-1">
+      <h3 className="px-4 pb-2 pt-6 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+        Transaction History
+      </h3>
+      {!activeLeague?.leagueId ? (
+        <p className="px-4 text-sm text-m-muted">Sync a league to see this player&apos;s transactions.</p>
+      ) : loading && !rows.length ? (
+        <p className="px-4 text-sm text-m-muted">Loading transactions...</p>
+      ) : !rows.length ? (
+        <p className="px-4 text-sm text-m-muted">No league transactions for this player yet.</p>
+      ) : (
+        <div className="mx-2.5 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
+          {rows.map((row, idx) => (
+            <div
+              key={row.id}
+              className={cn(
+                "flex items-start gap-3 px-3.5 py-3",
+                idx > 0 && "border-t border-m-border",
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-[13px] font-bold uppercase tracking-wide">{row.label}</p>
+                <p className="mt-0.5 truncate text-[13px] text-m-muted">{row.detail}</p>
+              </div>
+              <p className="shrink-0 pt-0.5 text-[11px] tabular-nums text-m-muted">{formatTxnDate(row.at)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Career season totals (current + prior 2) — Sleeper client, IndexedDB coalesced. */
+function PlayerCareerTotals({
+  id,
+  team,
+  pos,
+  format,
+}: {
+  id: string;
+  team: string | null;
+  pos: string;
+  format: Format;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v2"],
+    enabled: Boolean(id && pos),
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+    queryFn: () =>
+      fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", null, { includeCareer: true }),
+  });
+
+  const career = useMemo(
+    () => (data?.career ?? []).filter((row) => row.games > 0 || (row.pts[format] ?? 0) > 0),
+    [data?.career, format],
+  );
+
+  const summaryCols: TableCol<(typeof career)[number]>[] = [
+    { key: "team", label: "Tm", render: (r) => r.team || "-" },
+    { key: "gm", label: "GM", render: (r) => (r.games > 0 ? String(r.games) : "-") },
+    {
+      key: "fpts",
+      label: "Fpts",
+      highlight: true,
+      render: (r) => (r.pts[format] != null ? Number(r.pts[format]).toFixed(1) : "-"),
+    },
+  ];
+
+  const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
+  const countingCols: TableCol<(typeof career)[number]>[] = statCols.map((c) => ({
+    key: c.key,
+    label: c.label,
+    render: (r) => statValue(r.raw, c.key),
+  }));
+
+  return (
+    <section className="pb-6">
+      <h3 className="px-4 pb-2 pt-6 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+        Career
+      </h3>
+      {isLoading ? (
+        <p className="px-4 text-sm text-m-muted">Loading career stats...</p>
+      ) : !career.length ? (
+        <p className="px-4 text-sm text-m-muted">No career stats available yet.</p>
+      ) : (
+        <>
+          <StatTable
+            title=""
+            lead={{ key: "year", label: "Year", render: (r) => r.year }}
+            cols={summaryCols}
+            rows={career}
+            rowKey={(r) => `career-sum-${r.year}`}
+          />
+          {countingCols.length ? (
+            <>
+              <h4 className="px-4 pb-1 pt-4 text-[11px] font-bold uppercase tracking-[0.08em] text-m-muted">
+                {pos === "DEF" || pos === "DST" ? "Defense" : pos === "K" ? "Kicking" : pos === "QB" ? "Pass / Rush" : "Rush / Rec"}
+              </h4>
+              <StatTable
+                title=""
+                lead={{ key: "year", label: "Year", render: (r) => r.year }}
+                cols={countingCols}
+                rows={career}
+                rowKey={(r) => `career-raw-${r.year}`}
+              />
+            </>
+          ) : null}
+        </>
+      )}
+    </section>
   );
 }
 
