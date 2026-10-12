@@ -6,6 +6,8 @@
  *
  * WR rows map Sleeper `depth_chart_position`: LWR→WR1, RWR→WR2, SWR→WR3.
  * Columns are `depth_chart_order` within that slot (Starter / 2nd / 3rd).
+ * Fullbacks slotted on the RB chart (position FB + depth RB) are included as RB.
+ * Defense depth is intentionally omitted (fantasy offense only).
  */
 
 import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
