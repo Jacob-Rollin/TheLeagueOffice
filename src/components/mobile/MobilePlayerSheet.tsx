@@ -1205,7 +1205,7 @@ function TeamTab({
       </h3>
       <div className="mx-2.5 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
         <div className="grid grid-cols-[2.75rem_1fr_1fr_1fr] border-b border-m-border bg-m-row-alt px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-m-muted">
-          <span>Off</span>
+          <span>Pos</span>
           <span>Starter</span>
           <span>2nd</span>
           <span>3rd</span>
