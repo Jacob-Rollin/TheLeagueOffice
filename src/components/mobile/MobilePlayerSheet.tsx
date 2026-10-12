@@ -488,31 +488,23 @@ function StatCell({ label, value }: { label: string; value: string }) {
 
 /**
  * Full-bleed injury wash across the hero (Sleeper-style translucent bar).
- * Solid letter badge + opaque designation text; close control overlays the right edge.
+ * Centered solid full designation badge (Out / Questionable / …); close overlays the right edge.
  */
 function PlayerInjuryTopBar({ info }: { info: InjuryBadgeInfo }) {
-  // Light wash so the hero still reads through — badge/text stay solid.
+  // Light wash so the hero still reads through — badge stays solid.
   const barFill = info.tone === "amber" ? "bg-amber-500/40" : "bg-rose-600/40";
-  const textClass = info.tone === "amber" ? "text-slate-950" : "text-rose-950";
 
   return (
     <div className={cn("relative w-full", barFill)}>
-      <div
-        className={cn(
-          "relative z-[1] flex items-center justify-center gap-2 px-4 py-2.5 pr-14",
-          textClass,
-        )}
-      >
+      <div className="relative z-[1] flex items-center justify-center px-4 py-2.5 pr-14">
         <span
           className={cn(
-            "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px]",
+            "rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide",
             info.className,
           )}
-          aria-hidden="true"
         >
-          {info.letter}
+          {info.text}
         </span>
-        <p className="font-display text-[13px] font-bold uppercase tracking-[0.12em]">{info.text}</p>
       </div>
     </div>
   );
@@ -556,8 +548,13 @@ function OverviewMarketRow({ id, format }: { id: string; format: Format }) {
   const tone = valueTrendTone(rawTrend);
   const trendClass =
     tone === "up" ? "text-emerald-600" : tone === "down" ? "text-rose-600" : "text-m-muted";
+  // % of value 30d ago (current − delta). Vs current value blows up when the
+  // drop is larger than today's Value (e.g. ▼8.3 on Value 4.2 → −198%).
+  const prior = rawValue - rawTrend;
   const pct =
-    rawValue > 0 && Number.isFinite(rawTrend) ? (rawTrend / rawValue) * 100 : null;
+    prior > 0 && Number.isFinite(rawTrend) && rawTrend !== 0
+      ? (rawTrend / prior) * 100
+      : null;
 
   return (
     <section className="mx-2.5 mt-3 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
