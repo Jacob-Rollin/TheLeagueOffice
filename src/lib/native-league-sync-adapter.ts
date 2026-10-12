@@ -348,6 +348,43 @@ export async function fetchNativeLeagueRosters(linkId: string): Promise<LeagueRo
   return nativeBoardToLeagueRosters(board, startersByTeamId);
 }
 
+/**
+ * Fluid matchup/board payloads change rarely (lineups). Live scores come from
+ * Sleeper client overlay — coalesce auth serverFns so broadcast 5s polls do not
+ * burn Fluid Active CPU.
+ */
+const NATIVE_FLUID_MEMORY_TTL_MS = 45 * 1000;
+const nativeMatchupFluidMemory = new Map<string, { at: number; payload: NativeMatchupWeek }>();
+const nativeBoardFluidMemory = new Map<string, { at: number; board: NativeBoard }>();
+
+async function fetchNativeMatchupWeekCached(
+  linkId: string,
+  week: number,
+): Promise<NativeMatchupWeek | null> {
+  const key = `${linkId}|${week}`;
+  const hit = nativeMatchupFluidMemory.get(key);
+  if (hit && Date.now() - hit.at < NATIVE_FLUID_MEMORY_TTL_MS) return hit.payload;
+  try {
+    const payload = (await getNativeMatchupWeek({ data: { linkId, week } })) ?? null;
+    if (payload) nativeMatchupFluidMemory.set(key, { at: Date.now(), payload });
+    return payload;
+  } catch {
+    return hit?.payload ?? null;
+  }
+}
+
+async function fetchNativeBoardCached(linkId: string): Promise<NativeBoard | null> {
+  const hit = nativeBoardFluidMemory.get(linkId);
+  if (hit && Date.now() - hit.at < NATIVE_FLUID_MEMORY_TTL_MS) return hit.board;
+  try {
+    const board = (await getNativeLeagueBoard({ data: { linkId } })) ?? null;
+    if (board) nativeBoardFluidMemory.set(linkId, { at: Date.now(), board });
+    return board;
+  } catch {
+    return hit?.board ?? null;
+  }
+}
+
 export async function fetchNativeWeekMatchups(
   linkId: string,
   week: number,
@@ -356,15 +393,10 @@ export async function fetchNativeWeekMatchups(
   const clean = String(linkId ?? "").trim();
   if (!clean || week < 1) return null;
 
-  let payload: NativeMatchupWeek | null = null;
-  try {
-    payload = (await getNativeMatchupWeek({ data: { linkId: clean, week } })) ?? null;
-  } catch {
-    return null;
-  }
+  let payload = await fetchNativeMatchupWeekCached(clean, week);
   if (!payload) return null;
 
-  const board = await fetchNativeBoardForLink(clean);
+  const board = await fetchNativeBoardCached(clean);
   // Overlay when viewing the NFL current week or the league's own current week
   // (commissioners may advance for testing while NFL week is unchanged).
   const boardWeek = board?.currentWeek ?? null;
@@ -374,6 +406,7 @@ export async function fetchNativeWeekMatchups(
 
   if (isLiveWeek && payload.matchups.length) {
     const seasonYear = payload.seasonYear || board?.summary.seasonYear || new Date().getUTCFullYear();
+    // Always re-overlay — Fluid payload is cached; live stats refresh via Sleeper.
     const live = await fetchNativeLiveWeekStats(seasonYear, week).catch(() => null);
     const stats = live?.stats;
     if (stats && Object.keys(stats).length > 0) {

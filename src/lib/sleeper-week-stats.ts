@@ -6,6 +6,32 @@
  * accept all three so live scoring never silently empties.
  */
 
+import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
+import { getCached } from "@/lib/sleeper-cache";
+import { sleeperFetchJson } from "@/lib/sleeper-http";
+
+/** Shared IndexedDB key — matchup overlay + Statistics tab share one download. */
+export const WEEKLY_ACTUAL_STATS_CACHE_KEY = (season: string | number, week: number) =>
+  `weekly-actual-stats-v3:${season}|${week}`;
+
+/**
+ * Budgeted Sleeper week actuals. Callers pass TTL so broadcast pages (~12s)
+ * and default boards (~30s) coalesce on the same cache key.
+ */
+export async function fetchWeeklyActualStatRows(
+  season: string | number,
+  week: number,
+  ttlMs: number,
+): Promise<Record<string, Record<string, number>>> {
+  const safeSeason = String(season || new Date().getUTCFullYear());
+  const safeWeek = Math.max(1, Math.min(18, Math.floor(week) || 1));
+  return getCached(WEEKLY_ACTUAL_STATS_CACHE_KEY(safeSeason, safeWeek), ttlMs, async () => {
+    const url = `${SLEEPER_BASE}/stats/nfl/${safeSeason}/${safeWeek}?season_type=regular&${positionsQuery()}`;
+    const rows = await sleeperFetchJson<unknown>(url, "live");
+    return parseSleeperWeekStatRows(rows);
+  });
+}
+
 function coerceStatLine(raw: unknown): Record<string, number> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;

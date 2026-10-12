@@ -1,20 +1,19 @@
 /**
  * Native-league live Matchup scoring (client-safe).
  *
- * Prefer snap-cdn week stats (Actions publish). Soft-fallback to budgeted
- * Sleeper via getCached — separate cache key so existing 30m pickup/research
- * week-stats TTLs stay untouched.
+ * Live overlay prefers the shared budgeted Sleeper week-stats cache (same key
+ * as useWeeklyActualStats) so mobile/TLN broadcast polls stay under the soft
+ * 180/min tab budget. Snap-cdn is a free warm fallback when Sleeper misses.
  *
  * Does not use Fluid / createServerFn.
  */
 
 import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
-import { getCached } from "@/lib/sleeper-cache";
-import { sleeperFetchJson } from "@/lib/sleeper-http";
-import { parseSleeperWeekStatRows } from "@/lib/sleeper-week-stats";
+import { fetchWeeklyActualStatRows } from "@/lib/sleeper-week-stats";
 import { scoreActualLine, type ScoringMap } from "@/lib/scoring-map";
 
-const LIVE_STATS_TTL_MS = 3 * 60 * 1000;
+/** Align with broadcast weekly-stats floor — coalesces with useWeeklyActualStats. */
+const LIVE_STATS_TTL_MS = 12 * 1000;
 
 export type NativeWeekStatsSnap = {
   season: number;
@@ -48,22 +47,10 @@ async function fetchSnapWeekStats(
   }
 }
 
-async function fetchSleeperWeekStatsBudgeted(
-  season: number,
-  week: number,
-): Promise<Record<string, Record<string, number>>> {
-  const positions = ["QB", "RB", "WR", "TE", "K", "DEF"]
-    .map((p) => `position[]=${encodeURIComponent(p)}`)
-    .join("&");
-  const url = `https://api.sleeper.app/v1/stats/nfl/${season}/${week}?season_type=regular&${positions}`;
-  const rows = await sleeperFetchJson<unknown>(url, "live");
-  return parseSleeperWeekStatRows(rows);
-}
-
 /**
  * Live week stats for native Matchup overlay.
- * - snap-cdn when `VITE_SNAP_CDN_BASE` is set (miss → soft-empty, no Sleeper storm)
- * - budgeted Sleeper + short IndexedDB TTL only when snap base is unset (local/dev)
+ * - Budgeted Sleeper first (visitor IP + shared weekly-stats cache)
+ * - snap-cdn warm fallback when Sleeper is empty/429
  */
 export async function fetchNativeLiveWeekStats(
   season: number,
@@ -71,6 +58,20 @@ export async function fetchNativeLiveWeekStats(
 ): Promise<NativeWeekStatsSnap | null> {
   const safeSeason = Math.max(2000, Math.floor(season) || new Date().getUTCFullYear());
   const safeWeek = Math.max(1, Math.min(18, Math.floor(week) || 1));
+
+  try {
+    const stats = await fetchWeeklyActualStatRows(safeSeason, safeWeek, LIVE_STATS_TTL_MS);
+    if (stats && Object.keys(stats).length > 0) {
+      return {
+        season: safeSeason,
+        week: safeWeek,
+        updatedAt: new Date().toISOString(),
+        stats,
+      };
+    }
+  } catch {
+    /* fall through to snap */
+  }
 
   if (snapCdnPublicBase()) {
     const snap = await fetchSnapWeekStats(safeSeason, safeWeek);
@@ -83,19 +84,7 @@ export async function fetchNativeLiveWeekStats(
     };
   }
 
-  return getCached(
-    `native-live-week-stats-v1:${safeSeason}:${safeWeek}`,
-    LIVE_STATS_TTL_MS,
-    async () => {
-      const stats = await fetchSleeperWeekStatsBudgeted(safeSeason, safeWeek);
-      return {
-        season: safeSeason,
-        week: safeWeek,
-        updatedAt: new Date().toISOString(),
-        stats,
-      } satisfies NativeWeekStatsSnap;
-    },
-  );
+  return null;
 }
 
 /** Score one team's starters from a shared stats map. */
