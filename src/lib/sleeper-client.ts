@@ -263,7 +263,42 @@ const LOG_KEYS = [
   "pass_td",
   "pass_int",
   "fum_lost",
+  // Snap% / weekly rank (Sleeper Game Log Fantasy columns).
+  "off_snp",
+  "tm_off_snp",
+  "def_snp",
+  "tm_def_snp",
+  "pos_rank_std",
+  "pos_rank_half_ppr",
+  "pos_rank_ppr",
+  // K / DST counting stats used by mobile Game Log groups.
+  "fgm",
+  "fga",
+  "fgm_50p",
+  "xpm",
+  "xpa",
+  "sack",
+  "int",
+  "fum_rec",
+  "def_td",
+  "safe",
+  "pts_allow",
 ] as const;
+
+/** Derive snap% from Sleeper off/def snap counts onto the raw log bag. */
+function attachSnapPct(rawStats: Record<string, number>, stats: Record<string, unknown>) {
+  const off = Number(stats["off_snp"]);
+  const tmOff = Number(stats["tm_off_snp"]);
+  if (Number.isFinite(off) && Number.isFinite(tmOff) && tmOff > 0) {
+    rawStats["snap_pct"] = Math.round((off / tmOff) * 100);
+    return;
+  }
+  const def = Number(stats["def_snp"]);
+  const tmDef = Number(stats["tm_def_snp"]);
+  if (Number.isFinite(def) && Number.isFinite(tmDef) && tmDef > 0) {
+    rawStats["snap_pct"] = Math.round((def / tmDef) * 100);
+  }
+}
 
 type WeekProjBundle = Record<
   string,
@@ -380,6 +415,7 @@ export async function fetchGameLogsClient(
           rawStats[k] = num(stats[k], 0);
         }
       }
+      attachSnapPct(rawStats, stats as Record<string, unknown>);
       byWeek.set(week, {
         week,
         opp,
