@@ -8,6 +8,7 @@ export function MobileOfflineSplash() {
   const [offline, setOffline] = useState(() =>
     typeof navigator !== "undefined" ? navigator.onLine === false : false,
   );
+  const [logoFailed, setLogoFailed] = useState(false);
 
   useEffect(() => {
     const goOffline = () => setOffline(true);
@@ -35,11 +36,18 @@ export function MobileOfflineSplash() {
       aria-live="polite"
       aria-label="No connection"
     >
-      <img
-        src="/m/icons/the-league-logo.png"
-        alt="The League Office"
-        className="m-offline-mark w-[min(58vw,220px)] drop-shadow-[0_8px_24px_rgba(0,0,0,0.18)]"
-      />
+      {logoFailed ? (
+        <p className="m-offline-mark max-w-xs text-center text-[1.35rem] font-extrabold uppercase tracking-wide text-white drop-shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
+          The League Office
+        </p>
+      ) : (
+        <img
+          src="/m/icons/the-league-logo.png"
+          alt="The League Office"
+          className="m-offline-mark w-[min(58vw,220px)] drop-shadow-[0_8px_24px_rgba(0,0,0,0.18)]"
+          onError={() => setLogoFailed(true)}
+        />
+      )}
       <div className="absolute inset-x-0 bottom-0 px-6 pb-[max(1.75rem,env(safe-area-inset-bottom,0px))] text-center text-white">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/80">
           No connection

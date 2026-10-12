@@ -60,6 +60,24 @@
         will-change: transform, opacity;
       }
 
+      .mark-fallback {
+        display: none;
+        margin: 0;
+        max-width: 16rem;
+        font-size: 1.35rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        line-height: 1.15;
+        text-transform: uppercase;
+        color: #fff;
+        text-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+        animation: mark-breathe 1.8s ease-in-out infinite;
+      }
+
+      .mark-fallback.is-visible {
+        display: block;
+      }
+
       @keyframes mark-breathe {
         0%,
         100% {
@@ -127,11 +145,15 @@
     <main class="splash" role="status" aria-live="polite">
       <img
         class="mark"
+        id="mark"
         src="/m/icons/the-league-logo.png"
         alt="The League Office"
         width="220"
         height="146"
       />
+      <p class="mark-fallback" id="markFallback" aria-hidden="true">
+        The League Office
+      </p>
     </main>
     <footer class="footer">
       <p>No connection</p>
@@ -141,6 +163,19 @@
     <script>
       (function () {
         var btn = document.getElementById("retry");
+        var mark = document.getElementById("mark");
+        var fallback = document.getElementById("markFallback");
+        function showFallback() {
+          if (!mark || !fallback) return;
+          mark.style.display = "none";
+          fallback.classList.add("is-visible");
+          fallback.setAttribute("aria-hidden", "false");
+        }
+        if (mark) {
+          mark.addEventListener("error", showFallback);
+          // Cached SW responses can decode async; also guard a stuck broken icon.
+          if (mark.complete && mark.naturalWidth === 0) showFallback();
+        }
         function go() {
           if (navigator.onLine === false) return;
           window.location.replace("/m/");
