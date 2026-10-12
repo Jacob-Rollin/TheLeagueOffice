@@ -721,9 +721,15 @@ const POS_STAT_COLS: Record<string, StatCol[]> = {
 };
 POS_STAT_COLS["TE"] = POS_STAT_COLS["WR"]!;
 
-const statValue = (raw: Record<string, number> | undefined, key: string) => {
+/** Format a counting stat. For played game-log rows, missing keys are 0 (Sleeper-style). */
+const statValue = (
+  raw: Record<string, number> | undefined,
+  key: string,
+  opts?: { zeroIfMissing?: boolean },
+) => {
   const v = Number(raw?.[key]);
-  return Number.isFinite(v) ? (Number.isInteger(v) ? String(v) : v.toFixed(1)) : "-";
+  if (Number.isFinite(v)) return Number.isInteger(v) ? String(v) : v.toFixed(1);
+  return opts?.zeroIfMissing ? "0" : "-";
 };
 
 type TableCol<R> = { key: string; label: string; render: (row: R) => ReactNode; highlight?: boolean };
