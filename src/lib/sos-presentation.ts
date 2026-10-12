@@ -309,6 +309,25 @@ export function sosDifficultyChipClass(tone: SosDifficultyTone): string {
   return "bg-slate-200 font-extrabold text-slate-500";
 }
 
+/**
+ * Text-only SoS tint for opponent labels (game logs, etc.).
+ * Same 5★ tiers as {@link sosDifficultyFromStars}: green soft → amber mid → rose tough.
+ */
+export function sosDifficultyTextClass(tone: SosDifficultyTone): string {
+  if (tone === "elite") return "text-emerald-600";
+  if (tone === "good") return "text-emerald-500";
+  if (tone === "neutral") return "text-amber-500";
+  if (tone === "bad") return "text-rose-400";
+  if (tone === "tough") return "text-rose-600";
+  return "text-slate-400";
+}
+
+/** Opp label class from a weekly positional defensive SoS rank (1 = toughest). */
+export function sosOppTextClass(rank: number | null | undefined): string {
+  const stars = sosStarsFromRank(rank);
+  return sosDifficultyTextClass(sosDifficultyFromStars(stars).tone);
+}
+
 /** Title-case difficulty label for the SOS table Difficulty column. */
 export function sosDifficultyDisplayLabel(label: string | null | undefined): string {
   if (!label) return "—";

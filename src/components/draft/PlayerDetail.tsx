@@ -36,6 +36,7 @@ import {
   sosDifficultyChipClass,
   sosDifficultyDisplayLabel,
   sosDifficultyFromStars,
+  sosOppTextClass,
   sosStarsFromRank,
   type PlayerSos,
   type SosDifficultyTone,
@@ -596,6 +597,7 @@ export function PlayerDetail({
             team={player.team}
             scoringFormat={scoringFormat}
             exp={player.exp}
+            playerSos={playerSos}
           />
         )}
         {tab === "projections" && (
@@ -950,24 +952,38 @@ function GameLogsPanel({
   team,
   scoringFormat,
   exp,
+  playerSos,
 }: {
   id: string;
   pos: string;
   team: string;
   scoringFormat: Scoring;
   exp?: number | null;
+  playerSos?: PlayerSos | null;
 }) {
-  // Parse experience to an integer; default to 1 for rookies or empty values.
-  // Team defenses bypass career limits and unlock the full historical log range.
+  // Sleeper years_exp is 0 for rookies, then +1 per completed season.
+  // Entry year = currentSeason - years_exp (e.g. Daniels exp=2 in 2026 → 2024).
+  // Team defenses unlock the full historical log range; rookies only get the current year.
   const isDefense = pos === "DEF";
-  const yearsExp = Math.max(1, Math.floor(Number(exp)) || 1);
-  const currentSeasonYear = 2026;
-  const rookieEntryYear = isDefense ? 2022 : currentSeasonYear - (yearsExp - 1);
+  const currentSeasonYear = Number.parseInt(currentSeason(), 10) || 2026;
+  const yearsExp = Math.floor(Number(exp));
+  const entryYear = isDefense
+    ? 2022
+    : Number.isFinite(yearsExp) && yearsExp > 0
+      ? currentSeasonYear - yearsExp
+      : currentSeasonYear;
   const availableSeasons = useMemo(
     () =>
-      LOG_SEASONS.filter((yearStr) => Number.parseInt(yearStr, 10) >= rookieEntryYear),
-    [rookieEntryYear],
+      LOG_SEASONS.filter((yearStr) => Number.parseInt(yearStr, 10) >= entryYear),
+    [entryYear],
   );
+  const sosRankByWeek = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const m of playerSos?.matchups ?? []) {
+      map.set(Number(m.week), m.rank);
+    }
+    return map;
+  }, [playerSos]);
 
   const [season, setSeason] = useState<LogSeason>(
     () => availableSeasons[0] ?? "2026",
@@ -1058,6 +1074,21 @@ function GameLogsPanel({
                   });
                   const hasProj = !g.isBye && projVal != null;
                   const isBye = Boolean(g.isBye) || g.opp === "BYE";
+                  const oppLabel =
+                    (g as { isAway?: boolean }).isAway ||
+                    (g as { location?: string }).location === "away" ||
+                    g.opp?.trim().startsWith("@")
+                      ? `@ ${g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ?? ""}`
+                      : g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() || "-";
+                  // Current-season logs: tint Opp with positional SoS (same tiers as Outlook).
+                  const sosRank =
+                    Number.parseInt(season, 10) === currentSeasonYear
+                      ? sosRankByWeek.get(g.week)
+                      : null;
+                  const oppClass =
+                    !isBye && sosRank != null && Number.isFinite(sosRank)
+                      ? sosOppTextClass(sosRank)
+                      : "text-slate-600";
 
                   return (
                     <tr
@@ -1076,13 +1107,7 @@ function GameLogsPanel({
                             BYE
                           </span>
                         ) : (
-                          <span className="text-slate-600">
-                            {(g as { isAway?: boolean }).isAway ||
-                            (g as { location?: string }).location === "away" ||
-                            g.opp?.trim().startsWith("@")
-                              ? `@ ${g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ?? ""}`
-                              : g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() || "-"}
-                          </span>
+                          <span className={oppClass}>{oppLabel}</span>
                         )}
                       </td>
                       <td

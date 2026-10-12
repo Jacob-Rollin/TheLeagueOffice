@@ -17,6 +17,8 @@ import { useMobileLeagueActivity } from "@/components/mobile/league/useMobileLea
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { usePlayerSos } from "@/hooks/usePlayerSos";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
@@ -48,6 +50,7 @@ import {
   fetchNextGameClient,
   fetchPlayerBioClient,
 } from "@/lib/sleeper-client";
+import { sosOppTextClass } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
 /**
@@ -722,7 +725,7 @@ const statValue = (raw: Record<string, number> | undefined, key: string) => {
   return Number.isFinite(v) ? (Number.isInteger(v) ? String(v) : v.toFixed(1)) : "-";
 };
 
-type TableCol<R> = { key: string; label: string; render: (row: R) => string; highlight?: boolean };
+type TableCol<R> = { key: string; label: string; render: (row: R) => ReactNode; highlight?: boolean };
 
 /** Players-page style table: sticky first column, horizontally scrolling stat columns. */
 function StatTable<R>({
@@ -895,7 +898,12 @@ function WeekProjectionsStrip({
   );
 }
 
-function gameLogTableCols(pos: string, format: Format) {
+function gameLogTableCols(
+  pos: string,
+  format: Format,
+  /** Weekly positional SoS ranks (current season only). */
+  sosRankByWeek?: Map<number, number | null> | null,
+) {
   type Log = {
     week: number;
     opp: string | null;
@@ -907,7 +915,17 @@ function gameLogTableCols(pos: string, format: Format) {
   };
   const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
   const cols: TableCol<Log>[] = [
-    { key: "opp", label: "Opp", render: (l) => (l.isBye ? "BYE" : (l.opp ?? "-")) },
+    {
+      key: "opp",
+      label: "Opp",
+      render: (l) => {
+        if (l.isBye) return <span className="text-m-muted">BYE</span>;
+        const label = l.opp ?? "-";
+        const rank = sosRankByWeek?.get(l.week);
+        if (rank == null || !Number.isFinite(rank)) return label;
+        return <span className={cn("font-semibold", sosOppTextClass(rank))}>{label}</span>;
+      },
+    },
     {
       key: "fpts",
       label: "Fpts",
@@ -944,22 +962,42 @@ function GameLogTab({
   const nflState = useNflState();
   const currentSeason = String(nflState.data?.season ?? MOBILE_LOG_SEASONS[0]);
   const { data, isLoading } = usePlayerLogs(id, team, pos);
-  const [openPast, setOpenPast] = useState<string | null>(null);
+  const brain = usePlayerBrain();
+  const playerSos = usePlayerSos(brain?.[id] ?? null, team, format, pos);
+  const sosRankByWeek = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const m of playerSos?.matchups ?? []) {
+      map.set(Number(m.week), m.rank);
+    }
+    return map;
+  }, [playerSos]);
 
   const pastSeasons = useMemo(() => {
+    // Sleeper years_exp is 0 for rookies, then +1 per completed season.
+    // Entry year = currentYear - years_exp (e.g. Daniels exp=2 in 2026 → 2024).
     const isDefense = pos === "DEF";
-    const yearsExp = Math.max(1, Math.floor(Number(exp)) || 1);
     const currentYear = Number.parseInt(currentSeason, 10) || Number(MOBILE_LOG_SEASONS[0]);
-    const rookieEntryYear = isDefense ? 2022 : currentYear - (yearsExp - 1);
+    if (isDefense) {
+      return MOBILE_LOG_SEASONS.filter((y) => {
+        const n = Number.parseInt(y, 10);
+        return n < currentYear && n >= 2022;
+      });
+    }
+    const yearsExp = Math.floor(Number(exp));
+    if (!Number.isFinite(yearsExp) || yearsExp <= 0) return [];
+    const entryYear = currentYear - yearsExp;
     return MOBILE_LOG_SEASONS.filter((y) => {
       const n = Number.parseInt(y, 10);
-      return n < currentYear && n >= rookieEntryYear;
+      return n < currentYear && n >= entryYear;
     });
   }, [currentSeason, exp, pos]);
 
   // Full 1–18 season board; unplayed weeks stay as "-" until the game is final.
   const logs = data?.logs ?? [];
-  const cols = gameLogTableCols(pos, format);
+  const cols = useMemo(
+    () => gameLogTableCols(pos, format, sosRankByWeek),
+    [pos, format, sosRankByWeek],
+  );
   const seasonLabel = data?.season ?? currentSeason;
 
   if (isLoading) return <p className="px-4 py-8 text-center text-sm text-m-muted">Loading game log...</p>;
@@ -978,43 +1016,10 @@ function GameLogTab({
         />
       )}
 
-      {pastSeasons.length ? (
-        <section className="mt-2">
-          <h3 className="px-4 pb-1 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
-            Past Seasons
-          </h3>
-          <div className="mx-2.5 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
-            {pastSeasons.map((year, idx) => {
-              const open = openPast === year;
-              return (
-                <div
-                  key={year}
-                  className={cn(idx > 0 && "border-t border-m-border")}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setOpenPast((prev) => (prev === year ? null : year))}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-                  >
-                    <span className="font-display text-base font-bold">{year}</span>
-                    <span
-                      className={cn(
-                        "text-[11px] font-bold uppercase tracking-wide",
-                        open ? "text-m-accent" : "text-m-muted",
-                      )}
-                    >
-                      {open ? "Hide" : "View"}
-                    </span>
-                  </button>
-                  {open ? (
-                    <PastSeasonGameLog id={id} team={team} pos={pos} format={format} season={year} />
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
+      {/* Same full-bleed StatTable boards as the current season — no card chrome. */}
+      {pastSeasons.map((year) => (
+        <PastSeasonGameLog key={year} id={id} team={team} pos={pos} format={format} season={year} />
+      ))}
     </div>
   );
 }
@@ -1033,30 +1038,39 @@ function PastSeasonGameLog({
   season: string;
 }) {
   const { data, isLoading } = usePlayerLogs(id, team, pos, season, true);
-  const logs = (data?.logs ?? []).filter((l) => l.played || l.isBye);
-  const cols = gameLogTableCols(pos, format);
+  // Same full week board as the current season (unplayed weeks stay "-").
+  const logs = data?.logs ?? [];
+  const cols = useMemo(() => gameLogTableCols(pos, format), [pos, format]);
 
   if (isLoading) {
-    return <p className="border-t border-m-border px-4 py-5 text-sm text-m-muted">Loading {season}...</p>;
+    return (
+      <div className="mt-3">
+        <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+          {season}
+        </h3>
+        <p className="px-4 py-8 text-center text-sm text-m-muted">Loading {season}...</p>
+      </div>
+    );
   }
   if (!logs.length) {
     return (
-      <p className="border-t border-m-border px-4 py-5 text-sm text-m-muted">
-        No games recorded for {season}.
-      </p>
+      <div className="mt-3">
+        <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+          {season}
+        </h3>
+        <p className="px-4 py-8 text-center text-sm text-m-muted">No games recorded for {season}.</p>
+      </div>
     );
   }
 
   return (
-    <div className="border-t border-m-border">
-      <StatTable
-        title=""
-        lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
-        cols={cols}
-        rows={logs}
-        rowKey={(l) => `${season}-${l.week}`}
-      />
-    </div>
+    <StatTable
+      title={season}
+      lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
+      cols={cols}
+      rows={logs}
+      rowKey={(l) => `${season}-${l.week}`}
+    />
   );
 }
 
