@@ -621,7 +621,8 @@ function HalfCard({
   const isLive = phase === "in";
   const isBye = helpers.byeWeek(player);
   const isFinal = phase === "post" || (helpers.showActuals && phase !== "pre" && phase !== "in");
-  const gameFinal = Boolean(isFinal || (helpers.showActuals && !isLive && !isBye));
+  // Bye weeks use the completed-game card (grey final sheet), not yet-to-play.
+  const gameFinal = Boolean(isBye || isFinal || (helpers.showActuals && !isLive));
   const started = helpers.showActuals || phase === "in" || phase === "post";
   const points = started ? helpers.pointsFor(entry, player) : null;
   const projected = helpers.projectedFor(player);
@@ -636,7 +637,9 @@ function HalfCard({
   // Skill/K on offense, DST on defense (not Sideline).
   const showBall = stripShowsFootball(player, progress);
   const finalBox =
-    gameFinal ? formatPlayerFinalBox(progress?.boxScoreLabel ?? strip.game, player.team) : null;
+    !isBye && gameFinal
+      ? formatPlayerFinalBox(progress?.boxScoreLabel ?? strip.game, player.team)
+      : null;
 
   return (
     <article
@@ -721,7 +724,7 @@ function HalfCard({
             {finalBox?.scoreLine || strip.game || "Final"}
           </span>
           <span className="shrink-0 font-bold uppercase tracking-wide text-black [.mobile-theme-dark_&]:text-white">
-            {finalBox?.resultLabel || strip.status || "Final"}
+            {isBye ? "" : finalBox?.resultLabel || strip.status || "Final"}
           </span>
         </div>
       ) : (

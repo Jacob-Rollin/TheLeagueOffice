@@ -1103,7 +1103,7 @@ function LineupCard({
   const phase = progress?.phase ?? "pre";
   const isLive = phase === "in";
   const isFinal = phase === "post" || (showActuals && phase !== "pre" && phase !== "in");
-  // Pre-game matchup context only — live/final use clock/score footers instead.
+  // Pre-game matchup context only — live/final/bye use completed or live footers instead.
   const showMatchupContext = !showActuals && !isBye && phase === "pre";
   const defenseParts = showMatchupContext
     ? matchupDefenseParts({
@@ -1113,8 +1113,10 @@ function LineupCard({
       })
     : null;
   const avgAllowed = showMatchupContext ? avgAllowedFor(player) : null;
+  // Bye weeks use the completed-game card (grey final sheet), not yet-to-play.
+  const gameFinal = Boolean(isBye || isFinal || (showActuals && !isLive));
   const finalBox =
-    isFinal || (showActuals && !isLive)
+    !isBye && gameFinal
       ? formatPlayerFinalBox(progress?.boxScoreLabel ?? strip.game, player.team)
       : null;
 
@@ -1143,8 +1145,6 @@ function LineupCard({
   ) : (
     <span className="size-10 shrink-0" aria-hidden />
   );
-
-  const gameFinal = Boolean(isFinal || (showActuals && !isLive && !isBye));
 
   return (
     <article
@@ -1239,13 +1239,13 @@ function LineupCard({
           </div>
         </div>
       </div>
-      {isFinal || (showActuals && !isLive) ? (
+      {gameFinal ? (
         <div className="flex items-center justify-center gap-3 bg-m-row-alt px-2.5 py-1.5 text-[11px] text-m-card-fg">
           <span className="min-w-0 truncate text-center font-semibold">
             {finalBox?.scoreLine || strip.game || "Final"}
           </span>
           <span className="shrink-0 font-bold uppercase tracking-wide text-black [.mobile-theme-dark_&]:text-white">
-            {finalBox?.resultLabel || strip.status || "Final"}
+            {isBye ? "" : finalBox?.resultLabel || strip.status || "Final"}
           </span>
         </div>
       ) : isLive ? (
