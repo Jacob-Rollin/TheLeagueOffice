@@ -301,7 +301,13 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 format={format}
               />
             ) : tab === "logs" ? (
-              <GameLogTab id={id} team={team} pos={player.pos} format={format} />
+              <GameLogTab
+                id={id}
+                team={team}
+                pos={player.pos}
+                format={format}
+                exp={player.exp}
+              />
             ) : (
               <TeamTab
                 playerId={id}
@@ -544,8 +550,12 @@ function StatTable<R>({
   rowKey: (row: R) => string;
 }) {
   return (
-    <section className="mt-3">
-      <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">{title}</h3>
+    <section className={title ? "mt-3" : undefined}>
+      {title ? (
+        <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+          {title}
+        </h3>
+      ) : null}
       <div className="overflow-x-auto bg-m-card text-m-card-fg [scrollbar-width:none]">
         <table className="min-w-max border-collapse text-sm">
           <thead>
@@ -582,17 +592,30 @@ function StatTable<R>({
   );
 }
 
-function usePlayerLogs(id: string, team: string | null | undefined, pos: string | null | undefined) {
+function usePlayerLogs(
+  id: string,
+  team: string | null | undefined,
+  pos: string | null | undefined,
+  season?: string | null,
+  enabled = true,
+) {
+  const seasonKey = season && /^\d{4}$/.test(season) ? season : "current";
   return useQuery({
     // v2: past-week Proj from shared week projection bundles.
-    queryKey: ["player-logs", id, "current", team ?? "FA", pos ?? "", "proj-v2"],
-    enabled: Boolean(id && pos),
+    // Past seasons: no includeCareer — one year at a time when the user expands VIEW.
+    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "proj-v2"],
+    enabled: Boolean(id && pos && enabled),
     queryFn: () =>
-      fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", null, { includeCareer: false }),
+      fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", seasonKey === "current" ? null : seasonKey, {
+        includeCareer: false,
+      }),
     staleTime: 30 * 60 * 1000,
     retry: false,
   });
 }
+
+/** Seasons available in the Game Log accordion (current first). */
+const MOBILE_LOG_SEASONS = ["2026", "2025", "2024", "2023", "2022"] as const;
 
 function parseOppToken(opp: string | null | undefined): { label: string; abbr: string | null } {
   const raw = String(opp ?? "").trim();
@@ -683,25 +706,16 @@ function WeekProjectionsStrip({
   );
 }
 
-function GameLogTab({
-  id,
-  team,
-  pos,
-  format,
-}: {
-  id: string;
-  team: string | null;
-  pos: string;
-  format: Format;
-}) {
-  const { data, isLoading } = usePlayerLogs(id, team, pos);
-  // Full 1–18 season board; unplayed weeks stay as "-" until the game is final.
-  const logs = data?.logs ?? [];
-
-  if (isLoading) return <p className="px-4 py-8 text-center text-sm text-m-muted">Loading game log...</p>;
-  if (!logs.length) return <p className="px-4 py-8 text-center text-sm text-m-muted">No games played yet this season.</p>;
-
-  type Log = (typeof logs)[number];
+function gameLogTableCols(pos: string, format: Format) {
+  type Log = {
+    week: number;
+    opp: string | null;
+    isBye: boolean;
+    played: boolean;
+    points: { std: number; half: number; ppr: number };
+    proj: { std: number; half: number; ppr: number } | null;
+    raw: Record<string, number>;
+  };
   const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
   const cols: TableCol<Log>[] = [
     { key: "opp", label: "Opp", render: (l) => (l.isBye ? "BYE" : (l.opp ?? "-")) },
@@ -722,15 +736,138 @@ function GameLogTab({
       render: (l: Log) => (l.isBye || !l.played ? "-" : statValue(l.raw, c.key)),
     })),
   ];
+  return cols;
+}
+
+function GameLogTab({
+  id,
+  team,
+  pos,
+  format,
+  exp,
+}: {
+  id: string;
+  team: string | null;
+  pos: string;
+  format: Format;
+  exp: number | null;
+}) {
+  const nflState = useNflState();
+  const currentSeason = String(nflState.data?.season ?? MOBILE_LOG_SEASONS[0]);
+  const { data, isLoading } = usePlayerLogs(id, team, pos);
+  const [openPast, setOpenPast] = useState<string | null>(null);
+
+  const pastSeasons = useMemo(() => {
+    const isDefense = pos === "DEF";
+    const yearsExp = Math.max(1, Math.floor(Number(exp)) || 1);
+    const currentYear = Number.parseInt(currentSeason, 10) || Number(MOBILE_LOG_SEASONS[0]);
+    const rookieEntryYear = isDefense ? 2022 : currentYear - (yearsExp - 1);
+    return MOBILE_LOG_SEASONS.filter((y) => {
+      const n = Number.parseInt(y, 10);
+      return n < currentYear && n >= rookieEntryYear;
+    });
+  }, [currentSeason, exp, pos]);
+
+  // Full 1–18 season board; unplayed weeks stay as "-" until the game is final.
+  const logs = data?.logs ?? [];
+  const cols = gameLogTableCols(pos, format);
+  const seasonLabel = data?.season ?? currentSeason;
+
+  if (isLoading) return <p className="px-4 py-8 text-center text-sm text-m-muted">Loading game log...</p>;
 
   return (
-    <StatTable
-      title={`${data?.season ?? ""} Game Log`.trim()}
-      lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
-      cols={cols}
-      rows={logs}
-      rowKey={(l) => String(l.week)}
-    />
+    <div className="pb-4">
+      {!logs.length ? (
+        <p className="px-4 py-8 text-center text-sm text-m-muted">No games played yet this season.</p>
+      ) : (
+        <StatTable
+          title={seasonLabel}
+          lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
+          cols={cols}
+          rows={logs}
+          rowKey={(l) => String(l.week)}
+        />
+      )}
+
+      {pastSeasons.length ? (
+        <section className="mt-2">
+          <h3 className="px-4 pb-1 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+            Past Seasons
+          </h3>
+          <div className="mx-2.5 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
+            {pastSeasons.map((year, idx) => {
+              const open = openPast === year;
+              return (
+                <div
+                  key={year}
+                  className={cn(idx > 0 && "border-t border-m-border")}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenPast((prev) => (prev === year ? null : year))}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                  >
+                    <span className="font-display text-base font-bold">{year}</span>
+                    <span
+                      className={cn(
+                        "text-[11px] font-bold uppercase tracking-wide",
+                        open ? "text-m-accent" : "text-m-muted",
+                      )}
+                    >
+                      {open ? "Hide" : "View"}
+                    </span>
+                  </button>
+                  {open ? (
+                    <PastSeasonGameLog id={id} team={team} pos={pos} format={format} season={year} />
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function PastSeasonGameLog({
+  id,
+  team,
+  pos,
+  format,
+  season,
+}: {
+  id: string;
+  team: string | null;
+  pos: string;
+  format: Format;
+  season: string;
+}) {
+  const { data, isLoading } = usePlayerLogs(id, team, pos, season, true);
+  const logs = (data?.logs ?? []).filter((l) => l.played || l.isBye);
+  const cols = gameLogTableCols(pos, format);
+
+  if (isLoading) {
+    return <p className="border-t border-m-border px-4 py-5 text-sm text-m-muted">Loading {season}...</p>;
+  }
+  if (!logs.length) {
+    return (
+      <p className="border-t border-m-border px-4 py-5 text-sm text-m-muted">
+        No games recorded for {season}.
+      </p>
+    );
+  }
+
+  return (
+    <div className="border-t border-m-border">
+      <StatTable
+        title=""
+        lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
+        cols={cols}
+        rows={logs}
+        rowKey={(l) => `${season}-${l.week}`}
+      />
+    </div>
   );
 }
 
