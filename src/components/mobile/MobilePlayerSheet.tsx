@@ -224,19 +224,22 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             {logo ? (
               <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-0.5" />
             ) : null}
-            <p className="min-w-0 flex-1 truncate font-display text-[17px] font-bold tracking-wide">
-              {compactPlayerName(player.name)}
-            </p>
-            {injuryInfo ? (
-              <span
-                className={cn(
-                  "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
-                  injuryInfo.className,
-                )}
-              >
-                {injuryInfo.letter}
-              </span>
-            ) : null}
+            {/* Name + full designation sit together; close stays far right. */}
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+              <p className="min-w-0 truncate font-display text-[17px] font-bold tracking-wide">
+                {compactPlayerName(player.name)}
+              </p>
+              {injuryInfo ? (
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
+                    injuryInfo.className,
+                  )}
+                >
+                  {injuryInfo.text}
+                </span>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={onClose}
@@ -251,7 +254,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
 
       <div className="mx-auto w-full max-w-md pb-10">
         <section className="relative overflow-hidden bg-m-card text-m-card-fg">
-          {/* Injury strip lives in the hero (scrolls away); compact uses a letter chip. */}
+          {/* Injury strip lives in the hero (scrolls away); compact uses full designation next to name. */}
           {injuryInfo ? <PlayerInjuryTopBar info={injuryInfo} /> : null}
           {/* Faded team mark: centered in the header, behind name + headshot. */}
           {logo ? (
