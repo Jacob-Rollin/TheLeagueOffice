@@ -178,7 +178,7 @@ function TlonNetwork() {
     pace: "broadcast",
   });
   const { progressByNflTeam } = useNflGameProgress(activeWeek);
-  const { statsFor } = useWeeklyActualStats(activeWeek);
+  const { statsFor } = useWeeklyActualStats(activeWeek, { pace: "broadcast" });
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
 
