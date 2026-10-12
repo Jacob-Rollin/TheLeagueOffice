@@ -24,7 +24,7 @@ import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import type { Pos } from "@/lib/draft";
-import { injuryBadgeInfo } from "@/lib/injury-badge";
+import { injuryBadgeInfo, type InjuryBadgeInfo } from "@/lib/injury-badge";
 import type { LeagueActivityEvent, LeagueActivityMove } from "@/lib/league.functions";
 import {
   fetchNflTeamDepth,
@@ -184,6 +184,8 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
     <div role="dialog" aria-modal="true" aria-label={player?.name ?? "Player"} className="fixed inset-0 z-50 overflow-y-auto bg-m-bg">
       <div className="mx-auto w-full max-w-md pb-10">
         <section className="relative overflow-hidden bg-m-card text-m-card-fg">
+          {/* Sleeper-style injury strip — our amber/rose badge colors, full width. */}
+          {injuryInfo ? <PlayerInjuryTopBar info={injuryInfo} /> : null}
           {/* Faded team mark: centered in the header, behind name + headshot. */}
           {logo ? (
             <img
@@ -197,7 +199,10 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             type="button"
             onClick={onClose}
             aria-label="Close player"
-            className="absolute right-3 top-3 z-10 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+            className={cn(
+              "absolute right-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg",
+              injuryInfo ? "top-[3.25rem]" : "top-3",
+            )}
           >
             <X className="size-5" strokeWidth={2.5} />
           </button>
@@ -231,18 +236,11 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                   </div>
                 </div>
                 {fantasyOwner ? (
-                  <p className="mt-2 truncate text-[13px] font-medium text-m-card-fg">
-                    {fantasyOwner}
-                  </p>
-                ) : null}
-                {injuryInfo ? (
-                  <span
-                    className={cn(
-                      "mt-3 inline-block rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wide",
-                      injuryInfo.className,
-                    )}
-                  >
-                    {injuryInfo.text}
+                  <span className="mt-2.5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full border border-m-border bg-m-chip px-2.5 py-1 text-[12px] font-semibold text-m-chip-fg">
+                    <span className="font-display text-[11px] font-bold uppercase tracking-wide text-m-accent">
+                      On
+                    </span>
+                    <span className="truncate">{fantasyOwner}</span>
                   </span>
                 ) : null}
               </div>
@@ -373,6 +371,31 @@ function StatCell({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">{label}</p>
       <p className="mt-0.5 font-display text-lg font-semibold tabnum">{value}</p>
+    </div>
+  );
+}
+
+/** Full-width injury strip at the top of the player header (Sleeper layout, our badge colors). */
+function PlayerInjuryTopBar({ info }: { info: InjuryBadgeInfo }) {
+  const barClass =
+    info.tone === "amber" ? "bg-amber-500 text-slate-950" : "bg-rose-600 text-white";
+  const discClass =
+    info.tone === "amber"
+      ? "bg-slate-950/15 text-slate-950"
+      : "bg-white/20 text-white";
+
+  return (
+    <div className={cn("relative z-10 flex items-center justify-center gap-2 px-4 py-2.5", barClass)}>
+      <span
+        className={cn(
+          "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black",
+          discClass,
+        )}
+        aria-hidden="true"
+      >
+        {info.letter}
+      </span>
+      <p className="font-display text-[13px] font-bold uppercase tracking-[0.12em]">{info.text}</p>
     </div>
   );
 }
