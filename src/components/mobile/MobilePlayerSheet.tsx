@@ -947,13 +947,22 @@ function GameLogTab({
   const [openPast, setOpenPast] = useState<string | null>(null);
 
   const pastSeasons = useMemo(() => {
+    // Sleeper years_exp is 0 for rookies, then +1 per completed season.
+    // Entry year = currentYear - years_exp (e.g. Daniels exp=2 in 2026 → 2024).
     const isDefense = pos === "DEF";
-    const yearsExp = Math.max(1, Math.floor(Number(exp)) || 1);
     const currentYear = Number.parseInt(currentSeason, 10) || Number(MOBILE_LOG_SEASONS[0]);
-    const rookieEntryYear = isDefense ? 2022 : currentYear - (yearsExp - 1);
+    if (isDefense) {
+      return MOBILE_LOG_SEASONS.filter((y) => {
+        const n = Number.parseInt(y, 10);
+        return n < currentYear && n >= 2022;
+      });
+    }
+    const yearsExp = Math.floor(Number(exp));
+    if (!Number.isFinite(yearsExp) || yearsExp <= 0) return [];
+    const entryYear = currentYear - yearsExp;
     return MOBILE_LOG_SEASONS.filter((y) => {
       const n = Number.parseInt(y, 10);
-      return n < currentYear && n >= rookieEntryYear;
+      return n < currentYear && n >= entryYear;
     });
   }, [currentSeason, exp, pos]);
 

@@ -957,16 +957,21 @@ function GameLogsPanel({
   scoringFormat: Scoring;
   exp?: number | null;
 }) {
-  // Parse experience to an integer; default to 1 for rookies or empty values.
-  // Team defenses bypass career limits and unlock the full historical log range.
+  // Sleeper years_exp is 0 for rookies, then +1 per completed season.
+  // Entry year = currentSeason - years_exp (e.g. Daniels exp=2 in 2026 → 2024).
+  // Team defenses unlock the full historical log range; rookies only get the current year.
   const isDefense = pos === "DEF";
-  const yearsExp = Math.max(1, Math.floor(Number(exp)) || 1);
-  const currentSeasonYear = 2026;
-  const rookieEntryYear = isDefense ? 2022 : currentSeasonYear - (yearsExp - 1);
+  const currentSeasonYear = Number.parseInt(currentSeason(), 10) || 2026;
+  const yearsExp = Math.floor(Number(exp));
+  const entryYear = isDefense
+    ? 2022
+    : Number.isFinite(yearsExp) && yearsExp > 0
+      ? currentSeasonYear - yearsExp
+      : currentSeasonYear;
   const availableSeasons = useMemo(
     () =>
-      LOG_SEASONS.filter((yearStr) => Number.parseInt(yearStr, 10) >= rookieEntryYear),
-    [rookieEntryYear],
+      LOG_SEASONS.filter((yearStr) => Number.parseInt(yearStr, 10) >= entryYear),
+    [entryYear],
   );
 
   const [season, setSeason] = useState<LogSeason>(
