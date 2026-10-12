@@ -388,16 +388,19 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
   );
 }
 
-/** Market Value / ECR / 30d trend from player brain — silent until hydrate finishes. */
+/**
+ * Market Value / 30d Trend from FantasyCalc via player brain.
+ * Do not surface brain.ecr — that FantasyPros field is unpaid/incomplete.
+ */
 function OverviewMarketRow({ id }: { id: string }) {
   const brain = usePlayerBrain();
   const entry = brain?.[id];
   if (!entry) return null;
 
   const value = scaleValue(entry.value ?? 0);
-  const ecr = entry.ecr > 0 ? Math.round(entry.ecr) : null;
   const trend = Number(entry.trend) || 0;
-  if (value <= 0 && ecr == null && trend === 0) return null;
+  // Only FantasyCalc fields — skip empty / template stubs (value 0 + flat trend).
+  if (value <= 0 && trend === 0) return null;
 
   const tone = valueTrendTone(trend);
   const trendClass =
@@ -406,17 +409,11 @@ function OverviewMarketRow({ id }: { id: string }) {
 
   return (
     <section className="mx-2.5 mt-3 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-      <div className="grid grid-cols-3 py-3 text-center">
-        <div>
+      <div className="grid grid-cols-2 py-3 text-center">
+        <div className="border-r border-m-border">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">Value</p>
           <p className="mt-0.5 font-display text-lg font-semibold tabular-nums">
             {value > 0 ? value.toFixed(1) : "-"}
-          </p>
-        </div>
-        <div className="border-x border-m-border">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">ECR</p>
-          <p className="mt-0.5 font-display text-lg font-semibold tabular-nums">
-            {ecr != null ? ecr : "-"}
           </p>
         </div>
         <div>
