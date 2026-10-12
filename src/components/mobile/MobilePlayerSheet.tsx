@@ -44,8 +44,13 @@ import {
 } from "@/lib/sleeper-client";
 import { cn } from "@/lib/utils";
 
-/** Pointy-top hexagon for the raised position-rank badge. */
-const RANK_HEX_CLIP = "polygon(50% 0%, 100% 24%, 100% 76%, 50% 100%, 0% 76%, 0% 24%)";
+/**
+ * Pointy-top hexagon path for the raised position-rank badge.
+ * Prefer SVG fill+stroke over CSS clip-path + filter:drop-shadow — dual
+ * drop-shadow on a clipped shape flickers on mobile scroll compositors
+ * (left/right outline “blinks” away).
+ */
+const RANK_HEX_POINTS = "40,2 78,24 78,68 40,90 2,68 2,24";
 const HOUR = 60 * 60 * 1000;
 
 type OpenPlayer = (id: string) => void;
@@ -249,23 +254,39 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
 
         {player ? (
           <>
-            <div className="relative grid grid-cols-5 items-center border-y border-m-border bg-m-card py-3 text-center text-m-card-fg">
+            <div className="relative grid grid-cols-5 items-center overflow-visible border-y border-m-border bg-m-card py-3 text-center text-m-card-fg">
               <StatCell label="Bye Wk" value={player.bye != null ? String(player.bye) : "-"} />
               <StatCell label="Avg Pts" value={avgPts != null ? avgPts.toFixed(2) : "-"} />
-              <div className="relative flex justify-center self-stretch">
-                <div
-                  className="absolute -top-[38px] z-[2]"
-                  style={{ filter: "drop-shadow(0 3px 5px rgba(0,0,0,0.16)) drop-shadow(0 0 1px rgba(0,0,0,0.22))" }}
-                >
-                  <span
-                    className="flex h-[92px] w-[80px] flex-col items-center justify-center bg-m-card"
-                    style={{ clipPath: RANK_HEX_CLIP }}
-                  >
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">
-                      {player.pos} Rnk
-                    </span>
-                    <span className="mt-0.5 font-display text-[34px] font-bold leading-none">{posRank ?? "-"}</span>
-                  </span>
+              <div className="relative z-10 flex justify-center self-stretch overflow-visible">
+                <div className="pointer-events-none absolute -top-[38px] left-1/2 z-10 w-[80px] -translate-x-1/2">
+                  <div className="relative h-[92px] w-[80px]">
+                    <svg
+                      viewBox="0 0 80 92"
+                      className="absolute inset-0 size-full"
+                      aria-hidden="true"
+                    >
+                      {/* Soft lift without filter:drop-shadow (avoids mobile edge flicker). */}
+                      <polygon
+                        points={RANK_HEX_POINTS}
+                        className="fill-black/[0.14]"
+                        transform="translate(0 2)"
+                      />
+                      <polygon
+                        points={RANK_HEX_POINTS}
+                        className="fill-m-card stroke-black/20"
+                        strokeWidth="1"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </svg>
+                    <div className="relative z-[1] flex h-full flex-col items-center justify-center px-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">
+                        {player.pos} Rnk
+                      </span>
+                      <span className="mt-0.5 font-display text-[34px] font-bold leading-none">
+                        {posRank ?? "-"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <StatCell label="Own %" value={ownedPct != null ? `${Math.round(Number(ownedPct))}` : "-"} />
