@@ -563,20 +563,31 @@ function OverviewInjuryNote({
   notes: string | null;
 }) {
   const badge = injuryBadgeInfo(status);
-  // Gate on designation — healthy players must not get an Injury Report card.
-  if (!badge) return null;
+  const brain = usePlayerBrain();
+  const brainEntry = brain?.[playerId] ?? null;
 
-  const diagnosis = bodyPart?.trim() || null;
-  const sleeperNote = notes?.trim() || null;
   // Injury-wire note only (same CDN path as Latest News) — not the first news headline.
+  // Hooks must stay unconditional; gate the fetch + the card on designation.
   const { data: news } = useQuery({
     queryKey: ["player-news", playerId, "cdn-v2"],
     queryFn: () => fetchPlayerNewsClient(playerId),
-    enabled: Boolean(playerId),
+    enabled: Boolean(playerId) && Boolean(badge),
     staleTime: 10 * 60 * 1000,
     retry: false,
   });
+
+  if (!badge) return null;
+
+  const diagnosis =
+    bodyPart?.trim() ||
+    brainEntry?.injuryType?.trim() ||
+    null;
+  const sleeperNote =
+    notes?.trim() ||
+    brainEntry?.injuryNotes?.trim() ||
+    null;
   const wireNote = news?.injury?.note?.trim() || null;
+  // Prefer Sleeper / brain medical notes; wire injury.note only — never headlines.
   const note = sleeperNote || wireNote || null;
 
   const critical = badge.tone === "rose";
