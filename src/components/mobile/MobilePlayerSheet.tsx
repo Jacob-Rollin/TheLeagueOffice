@@ -670,56 +670,132 @@ function PlayerNews({ id }: { id: string }) {
 }
 
 type StatCol = { key: string; label: string };
+type StatGroup = { label: string; cols: StatCol[] };
 
-/** Counting-stat columns per fantasy position (Sleeper raw stat keys). */
+/** Position-specific counting groups (Sleeper-style Fantasy / Pass / Rush headers). */
+function positionStatGroups(pos: string): StatGroup[] {
+  switch ((pos || "").toUpperCase()) {
+    case "QB":
+      return [
+        {
+          label: "Passing",
+          cols: [
+            { key: "pass_cmp", label: "Cmp" },
+            { key: "pass_att", label: "Att" },
+            { key: "pass_yd", label: "Yd" },
+            { key: "pass_td", label: "TD" },
+            { key: "pass_int", label: "Int" },
+          ],
+        },
+        {
+          label: "Rushing",
+          cols: [
+            { key: "rush_att", label: "Att" },
+            { key: "rush_yd", label: "Yd" },
+            { key: "rush_td", label: "TD" },
+          ],
+        },
+      ];
+    case "RB":
+      return [
+        {
+          label: "Rushing",
+          cols: [
+            { key: "rush_att", label: "Att" },
+            { key: "rush_yd", label: "Yd" },
+            { key: "rush_td", label: "TD" },
+          ],
+        },
+        {
+          label: "Receiving",
+          cols: [
+            { key: "rec_tgt", label: "Tgt" },
+            { key: "rec", label: "Rec" },
+            { key: "rec_yd", label: "Yd" },
+            { key: "rec_td", label: "TD" },
+          ],
+        },
+        {
+          label: "Fumble",
+          cols: [{ key: "fum_lost", label: "Lost" }],
+        },
+      ];
+    case "K":
+      return [
+        {
+          label: "Field Goals",
+          cols: [
+            { key: "fgm", label: "FGM" },
+            { key: "fga", label: "FGA" },
+            { key: "fgm_50p", label: "50+" },
+          ],
+        },
+        {
+          label: "Extra Points",
+          cols: [
+            { key: "xpm", label: "XPM" },
+            { key: "xpa", label: "XPA" },
+          ],
+        },
+      ];
+    case "DEF":
+      return [
+        {
+          label: "Defense",
+          cols: [
+            { key: "sack", label: "Sack" },
+            { key: "int", label: "Int" },
+            { key: "fum_rec", label: "FR" },
+            { key: "def_td", label: "TD" },
+            { key: "safe", label: "Sfty" },
+            { key: "pts_allow", label: "PA" },
+          ],
+        },
+      ];
+    case "WR":
+    case "TE":
+    default:
+      return [
+        {
+          label: "Receiving",
+          cols: [
+            { key: "rec_tgt", label: "Tgt" },
+            { key: "rec", label: "Rec" },
+            { key: "rec_yd", label: "Yd" },
+            { key: "rec_td", label: "TD" },
+          ],
+        },
+        {
+          label: "Rushing",
+          cols: [
+            { key: "rush_att", label: "Att" },
+            { key: "rush_yd", label: "Yd" },
+            { key: "rush_td", label: "TD" },
+          ],
+        },
+        {
+          label: "Fumble",
+          cols: [{ key: "fum_lost", label: "Lost" }],
+        },
+      ];
+  }
+}
+
+/** Flat counting-stat columns (Career board). */
 const POS_STAT_COLS: Record<string, StatCol[]> = {
-  QB: [
-    { key: "pass_cmp", label: "Cmp" },
-    { key: "pass_att", label: "Att" },
-    { key: "pass_yd", label: "Pass Yd" },
-    { key: "pass_td", label: "Pass TD" },
-    { key: "pass_int", label: "Int" },
-    { key: "rush_att", label: "Rush" },
-    { key: "rush_yd", label: "Rush Yd" },
-    { key: "rush_td", label: "Rush TD" },
-  ],
-  RB: [
-    { key: "rush_att", label: "Rush" },
-    { key: "rush_yd", label: "Rush Yd" },
-    { key: "rush_td", label: "Rush TD" },
-    { key: "rec_tgt", label: "Tgt" },
-    { key: "rec", label: "Rec" },
-    { key: "rec_yd", label: "Rec Yd" },
-    { key: "rec_td", label: "Rec TD" },
-    { key: "fum_lost", label: "Fum" },
-  ],
-  WR: [
-    { key: "rec_tgt", label: "Tgt" },
-    { key: "rec", label: "Rec" },
-    { key: "rec_yd", label: "Rec Yd" },
-    { key: "rec_td", label: "Rec TD" },
-    { key: "rush_att", label: "Rush" },
-    { key: "rush_yd", label: "Rush Yd" },
-    { key: "rush_td", label: "Rush TD" },
-    { key: "fum_lost", label: "Fum" },
-  ],
-  K: [
-    { key: "fgm", label: "FGM" },
-    { key: "fga", label: "FGA" },
-    { key: "fgm_50p", label: "50+" },
-    { key: "xpm", label: "XPM" },
-    { key: "xpa", label: "XPA" },
-  ],
-  DEF: [
-    { key: "sack", label: "Sack" },
-    { key: "int", label: "Int" },
-    { key: "fum_rec", label: "FR" },
-    { key: "def_td", label: "TD" },
-    { key: "safe", label: "Safety" },
-    { key: "pts_allow", label: "Pts Alw" },
-  ],
+  QB: positionStatGroups("QB").flatMap((g) => g.cols),
+  RB: positionStatGroups("RB").flatMap((g) => g.cols),
+  WR: positionStatGroups("WR").flatMap((g) => g.cols),
+  K: positionStatGroups("K").flatMap((g) => g.cols),
+  DEF: positionStatGroups("DEF").flatMap((g) => g.cols),
 };
 POS_STAT_COLS["TE"] = POS_STAT_COLS["WR"]!;
+
+function posRankStatKey(format: Format): string {
+  if (format === "ppr") return "pos_rank_ppr";
+  if (format === "std") return "pos_rank_std";
+  return "pos_rank_half_ppr";
+}
 
 /** Format a counting stat. For played game-log rows, missing keys are 0 (Sleeper-style). */
 const statValue = (
@@ -733,6 +809,7 @@ const statValue = (
 };
 
 type TableCol<R> = { key: string; label: string; render: (row: R) => ReactNode; highlight?: boolean };
+type ColGroup<R> = { label: string; cols: TableCol<R>[] };
 
 /** Players-page style table: sticky first column, horizontally scrolling stat columns. */
 function StatTable<R>({
@@ -791,6 +868,108 @@ function StatTable<R>({
   );
 }
 
+/**
+ * Sleeper-style double-tier Game Log: category row (Fantasy / Passing / …)
+ * with a hairline gap between groups, then micro column labels.
+ */
+function GroupedStatTable<R>({
+  title,
+  lead,
+  leftCols,
+  groups,
+  rows,
+  rowKey,
+}: {
+  title: string;
+  lead: TableCol<R>;
+  leftCols: TableCol<R>[];
+  groups: ColGroup<R>[];
+  rows: R[];
+  rowKey: (row: R) => string;
+}) {
+  const leftSpan = 1 + leftCols.length;
+  return (
+    <section className={title ? "mt-3" : undefined}>
+      {title ? (
+        <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+          {title}
+        </h3>
+      ) : null}
+      <div className="overflow-x-auto bg-m-card text-m-card-fg [scrollbar-width:none]">
+        <table className="min-w-max border-collapse text-sm">
+          <thead>
+            <tr className="text-[10px] font-bold uppercase tracking-[0.12em] text-m-muted">
+              <th colSpan={leftSpan} className="sticky left-0 z-10 bg-m-card px-3 py-1.5 text-left" aria-hidden />
+              {groups.map((g, gi) => (
+                <th
+                  key={g.label}
+                  colSpan={g.cols.length}
+                  className={cn(
+                    "border-b border-m-border px-2 py-1.5 text-center",
+                    gi > 0 && "border-l border-m-border/70",
+                  )}
+                >
+                  {g.label}
+                </th>
+              ))}
+            </tr>
+            <tr className="border-b border-m-border text-[11px] font-semibold uppercase tracking-wide text-m-muted">
+              <th className="sticky left-0 z-10 w-[92px] bg-m-card px-3 py-2.5 text-left">{lead.label}</th>
+              {leftCols.map((c) => (
+                <th key={c.key} className="min-w-[64px] px-3 py-2.5 text-right">
+                  {c.label}
+                </th>
+              ))}
+              {groups.map((g, gi) =>
+                g.cols.map((c, ci) => (
+                  <th
+                    key={`${g.label}-${c.key}`}
+                    className={cn(
+                      "min-w-[56px] px-3 py-2.5 text-right",
+                      ci === 0 && gi > 0 && "border-l border-m-border/70",
+                      c.highlight && "bg-m-rank-col text-m-card-fg",
+                    )}
+                  >
+                    {c.label}
+                  </th>
+                )),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={rowKey(row)} className="border-b border-m-border last:border-0">
+                <td className="sticky left-0 z-10 bg-m-card px-3 py-2.5 text-left font-semibold">
+                  {lead.render(row)}
+                </td>
+                {leftCols.map((c) => (
+                  <td key={c.key} className="px-3 py-2.5 text-right tabnum">
+                    {c.render(row)}
+                  </td>
+                ))}
+                {groups.map((g, gi) =>
+                  g.cols.map((c, ci) => (
+                    <td
+                      key={`${g.label}-${c.key}`}
+                      className={cn(
+                        "px-3 py-2.5 text-right tabnum",
+                        ci === 0 && gi > 0 && "border-l border-m-border/70",
+                        c.highlight && "bg-m-rank-col font-semibold",
+                      )}
+                    >
+                      {c.render(row)}
+                    </td>
+                  )),
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function usePlayerLogs(
   id: string,
   team: string | null | undefined,
@@ -800,9 +979,9 @@ function usePlayerLogs(
 ) {
   const seasonKey = season && /^\d{4}$/.test(season) ? season : "current";
   return useQuery({
-    // v2: past-week Proj from shared week projection bundles.
+    // v3: snap% + weekly pos rank on raw; Fantasy / Pass / Rush grouped headers.
     // Past seasons: no includeCareer — one year at a time when the user expands VIEW.
-    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "proj-v2"],
+    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "logs-v3"],
     enabled: Boolean(id && pos && enabled),
     queryFn: () =>
       fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", seasonKey === "current" ? null : seasonKey, {
@@ -905,23 +1084,24 @@ function WeekProjectionsStrip({
   );
 }
 
-function gameLogTableCols(
+type GameLogRow = {
+  week: number;
+  opp: string | null;
+  isBye: boolean;
+  played: boolean;
+  points: { std: number; half: number; ppr: number };
+  proj: { std: number; half: number; ppr: number } | null;
+  raw: Record<string, number>;
+};
+
+function gameLogGroupedCols(
   pos: string,
   format: Format,
   /** Weekly positional SoS ranks (current season only). */
   sosRankByWeek?: Map<number, number | null> | null,
-) {
-  type Log = {
-    week: number;
-    opp: string | null;
-    isBye: boolean;
-    played: boolean;
-    points: { std: number; half: number; ppr: number };
-    proj: { std: number; half: number; ppr: number } | null;
-    raw: Record<string, number>;
-  };
-  const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
-  const cols: TableCol<Log>[] = [
+): { leftCols: TableCol<GameLogRow>[]; groups: ColGroup<GameLogRow>[] } {
+  const rankKey = posRankStatKey(format);
+  const leftCols: TableCol<GameLogRow>[] = [
     {
       key: "opp",
       label: "Opp",
@@ -933,24 +1113,55 @@ function gameLogTableCols(
         return <span className={cn("font-semibold", sosOppTextClass(rank))}>{label}</span>;
       },
     },
-    {
-      key: "fpts",
-      label: "Fpts",
-      highlight: true,
-      render: (l) => (l.isBye || !l.played ? "-" : l.points[format].toFixed(1)),
-    },
-    {
-      key: "proj",
-      label: "Proj",
-      render: (l) => (l.isBye || l.proj?.[format] == null ? "-" : l.proj[format]!.toFixed(1)),
-    },
-    ...statCols.map((c) => ({
-      key: c.key,
-      label: c.label,
-      render: (l: Log) => (l.isBye || !l.played ? "-" : statValue(l.raw, c.key)),
+  ];
+  const fantasy: ColGroup<GameLogRow> = {
+    label: "Fantasy",
+    cols: [
+      {
+        key: "fpts",
+        label: "Fpts",
+        highlight: true,
+        render: (l) => (l.isBye || !l.played ? "-" : l.points[format].toFixed(1)),
+      },
+      {
+        key: "snap_pct",
+        label: "Snp%",
+        render: (l) => {
+          if (l.isBye || !l.played) return "-";
+          const v = Number(l.raw?.snap_pct);
+          return Number.isFinite(v) ? `${Math.round(v)}%` : "-";
+        },
+      },
+      {
+        key: "rank",
+        label: "Rank",
+        render: (l) => {
+          if (l.isBye || !l.played) return "-";
+          const v = Number(l.raw?.[rankKey]);
+          return Number.isFinite(v) && v > 0 ? String(Math.round(v)) : "-";
+        },
+      },
+      {
+        key: "proj",
+        label: "Proj",
+        render: (l) => (l.isBye || l.proj?.[format] == null ? "-" : l.proj[format]!.toFixed(1)),
+      },
+    ],
+  };
+  const groups: ColGroup<GameLogRow>[] = [
+    fantasy,
+    ...positionStatGroups(pos).map((g) => ({
+      label: g.label,
+      cols: g.cols.map((c) => ({
+        key: c.key,
+        label: c.label,
+        // Played games: show 0 for omitted zero stats (e.g. INT / Pass TD), not "-".
+        render: (l: GameLogRow) =>
+          l.isBye || !l.played ? "-" : statValue(l.raw, c.key, { zeroIfMissing: true }),
+      })),
     })),
   ];
-  return cols;
+  return { leftCols, groups };
 }
 
 function GameLogTab({
@@ -1002,8 +1213,8 @@ function GameLogTab({
 
   // Full 1–18 season board; unplayed weeks stay as "-" until the game is final.
   const logs = data?.logs ?? [];
-  const cols = useMemo(
-    () => gameLogTableCols(pos, format, sosRankByWeek),
+  const { leftCols, groups } = useMemo(
+    () => gameLogGroupedCols(pos, format, sosRankByWeek),
     [pos, format, sosRankByWeek],
   );
   const seasonLabel = data?.season ?? currentSeason;
@@ -1015,10 +1226,11 @@ function GameLogTab({
       {!logs.length ? (
         <p className="px-4 py-8 text-center text-sm text-m-muted">No games played yet this season.</p>
       ) : (
-        <StatTable
+        <GroupedStatTable
           title={seasonLabel}
           lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
-          cols={cols}
+          leftCols={leftCols}
+          groups={groups}
           rows={logs}
           rowKey={(l) => String(l.week)}
         />
@@ -1076,7 +1288,7 @@ function PastSeasonGameLog({
   const { data, isLoading } = usePlayerLogs(id, team, pos, season, true);
   // Same full week board as the current season (unplayed weeks stay "-").
   const logs = data?.logs ?? [];
-  const cols = useMemo(() => gameLogTableCols(pos, format), [pos, format]);
+  const { leftCols, groups } = useMemo(() => gameLogGroupedCols(pos, format), [pos, format]);
 
   if (isLoading) {
     return <p className="px-4 py-8 text-center text-sm text-m-muted">Loading {season}...</p>;
@@ -1086,10 +1298,11 @@ function PastSeasonGameLog({
   }
 
   return (
-    <StatTable
+    <GroupedStatTable
       title=""
       lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
-      cols={cols}
+      leftCols={leftCols}
+      groups={groups}
       rows={logs}
       rowKey={(l) => `${season}-${l.week}`}
     />
