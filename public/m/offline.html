@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1ba3c6" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>The League Office</title>
+    <style>
+      :root {
+        --splash-bg: #1ba3c6;
+        --splash-fg: #ffffff;
+        --splash-muted: rgba(255, 255, 255, 0.82);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        height: 100%;
+        background: var(--splash-bg);
+        color: var(--splash-fg);
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .splash {
+        min-height: 100dvh;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding:
+          max(1.5rem, env(safe-area-inset-top, 0px))
+          1.5rem
+          max(2rem, env(safe-area-inset-bottom, 0px));
+        text-align: center;
+      }
+
+      .mark {
+        width: min(58vw, 220px);
+        height: auto;
+        display: block;
+        filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.18));
+        animation: mark-breathe 1.8s ease-in-out infinite;
+        will-change: transform, opacity;
+      }
+
+      @keyframes mark-breathe {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1.06);
+          opacity: 0.88;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .mark {
+          animation: none;
+        }
+      }
+
+      .footer {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 0 1.5rem max(1.75rem, env(safe-area-inset-bottom, 0px));
+        text-align: center;
+      }
+
+      .footer p {
+        margin: 0;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--splash-muted);
+      }
+
+      .footer strong {
+        display: block;
+        margin-top: 0.45rem;
+        font-size: 1.05rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        color: var(--splash-fg);
+      }
+
+      .retry {
+        margin-top: 1rem;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+        color: var(--splash-fg);
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0.7rem 1.25rem;
+      }
+
+      .retry:active {
+        background: rgba(255, 255, 255, 0.28);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="splash" role="status" aria-live="polite">
+      <img
+        class="mark"
+        src="/m/icons/the-league-logo.png"
+        alt="The League Office"
+        width="220"
+        height="146"
+      />
+    </main>
+    <footer class="footer">
+      <p>No connection</p>
+      <strong>Trying again when you’re back online</strong>
+      <button class="retry" type="button" id="retry">Retry</button>
+    </footer>
+    <script>
+      (function () {
+        var btn = document.getElementById("retry");
+        function go() {
+          if (navigator.onLine === false) return;
+          window.location.replace("/m/");
+        }
+        btn.addEventListener("click", function () {
+          window.location.reload();
+        });
+        window.addEventListener("online", go);
+      })();
+    </script>
+  </body>
+</html>

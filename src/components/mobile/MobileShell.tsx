@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { adminGateStatus, useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/utils";
 
+import { MobileOfflineSplash } from "./MobileOfflineSplash";
 import { MobilePlayerSheetProvider } from "./MobilePlayerSheet";
 import { MobileSettingsOverlay } from "./MobileSettings";
 import { MobileThemeProvider, useMobileTheme } from "./MobileThemeContext";
@@ -44,6 +45,7 @@ function MobileFrame({ children }: { children: ReactNode }) {
         "min-h-screen bg-m-bg font-sans text-m-card-fg",
       )}
     >
+      <MobileOfflineSplash />
       <div className="mx-auto w-full max-w-md">
         <MobileHeader />
         {gate === "loading" ? (
