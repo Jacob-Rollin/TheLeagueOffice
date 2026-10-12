@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
@@ -15,15 +16,20 @@ import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
+import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos } from "@/lib/draft";
+import { injuryBadgeInfo, injuryLetter } from "@/lib/injury-badge";
 import { teamFullName } from "@/lib/nfl-teams";
 import { detailQuery } from "@/lib/player-detail-query";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
-import type { SeasonLine } from "@/lib/players.server";
+import type { Player } from "@/lib/players-build";
 import { prefetchPlayerDetail } from "@/lib/prefetch-player-detail";
-import { fetchResearchFpa } from "@/lib/research-cdn";
+import {
+  fetchResearchFpa,
+  fetchResearchRedZone,
+  RESEARCH_CLIENT_STALE_MS,
+} from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
-import { injuryBadgeInfo } from "@/lib/injury-badge";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { projectionPoints } from "@/lib/scoring-map";
 import {
@@ -84,8 +90,11 @@ export function MobilePlayerSheetProvider({ children }: { children: ReactNode })
 
 const AVATAR_POS = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
 
+type SheetTab = "overview" | "logs" | "team";
+
 function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void }) {
-  const [tab, setTab] = useState<"overview" | "stats" | "logs">("overview");
+  const [tab, setTab] = useState<SheetTab>("overview");
+  const openPlayer = useOpenMobilePlayer();
   // Reuses the league-rosters React Query cache — no catalog fetch required.
   const { ownerByPlayerId } = useLeagueRosters([]);
   const fantasyOwner = ownerByPlayerId.get(id) ?? null;
@@ -101,6 +110,11 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
       window.removeEventListener("keydown", onKey);
     };
   }, [onClose]);
+
+  // Keep Team tab when hopping via depth chart; otherwise land on Overview.
+  useEffect(() => {
+    setTab((prev) => (prev === "team" ? "team" : "overview"));
+  }, [id]);
 
   // Same cache key as desktop PlayerDetail / hover prefetch.
   const detail = useQuery(detailQuery(id));
@@ -257,8 +271,8 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
               {(
                 [
                   ["overview", "Overview"],
-                  ["stats", "Stats"],
                   ["logs", "Game Log"],
+                  ["team", "Team"],
                 ] as const
               ).map(([key, label]) => (
                 <button
@@ -283,19 +297,17 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 nextGame={nextGame ?? null}
                 projected={projectFor(id)}
                 sosGrade={detail.data?.sos?.grade ?? null}
-              />
-            ) : tab === "stats" ? (
-              <StatsTab
-                id={id}
-                team={team}
-                pos={player.pos}
                 format={format}
-                seasonToDate={detail.data?.seasonToDate ?? null}
-                projection={detail.data?.projection ?? null}
-                history={detail.data?.history ?? []}
               />
-            ) : (
+            ) : tab === "logs" ? (
               <GameLogTab id={id} team={team} pos={player.pos} format={format} />
+            ) : (
+              <TeamTab
+                playerId={id}
+                team={team}
+                depthChart={detail.data?.depthChart ?? []}
+                onSelectPlayer={openPlayer}
+              />
             )}
           </>
         ) : null}
@@ -331,6 +343,8 @@ function rankTone(rank: number | null) {
   return "text-amber-500";
 }
 
+type Format = "std" | "half" | "ppr";
+
 function Overview({
   id,
   pos,
@@ -338,6 +352,7 @@ function Overview({
   nextGame,
   projected,
   sosGrade,
+  format,
 }: {
   id: string;
   pos: string;
@@ -345,6 +360,7 @@ function Overview({
   nextGame: Awaited<ReturnType<typeof fetchNextGameClient>> | null;
   projected: number | null;
   sosGrade: string | null;
+  format: Format;
 }) {
   const { rankFor: defenseRank } = usePositionalDefenseRanks();
   const { data: fpa } = useQuery({
@@ -357,6 +373,8 @@ function Overview({
   const vsRank = defenseRank(pos, opp);
   const fpaPos = (pos === "DST" ? "DEF" : pos) as "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
   const allowed = fpa?.rows.find((r) => r.team.toUpperCase() === opp?.toUpperCase())?.cells[fpaPos]?.pa ?? null;
+  const focusWeek =
+    nextGame?.seasonType === "regular" && nextGame.week > 0 ? nextGame.week : null;
 
   return (
     <>
@@ -399,6 +417,8 @@ function Overview({
           </div>
         </Card>
       ) : null}
+
+      <WeekProjectionsStrip id={id} team={team} pos={pos} format={format} focusWeek={focusWeek} />
 
       <h3 className="px-4 pb-1 pt-6 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
         Latest News
@@ -449,7 +469,6 @@ function PlayerNews({ id }: { id: string }) {
   );
 }
 
-type Format = "std" | "half" | "ppr";
 type StatCol = { key: string; label: string };
 
 /** Counting-stat columns per fantasy position (Sleeper raw stat keys). */
@@ -562,63 +581,6 @@ function StatTable<R>({
   );
 }
 
-type SeasonRow = { label: string; line: SeasonLine };
-
-function StatsTab({
-  id,
-  team,
-  pos,
-  format,
-  seasonToDate,
-  projection,
-  history,
-}: {
-  id: string;
-  team: string | null;
-  pos: string;
-  format: Format;
-  seasonToDate: SeasonLine | null;
-  projection: SeasonLine | null;
-  history: SeasonLine[];
-}) {
-  const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
-  const actual: SeasonRow[] = [
-    ...(seasonToDate ? [{ label: seasonToDate.season, line: seasonToDate }] : []),
-    ...history.filter((h) => h.season !== seasonToDate?.season).map((h) => ({ label: h.season, line: h })),
-  ];
-  const cols: TableCol<SeasonRow>[] = [
-    { key: "fpts", label: "Fpts", highlight: true, render: (r) => r.line.points[format].toFixed(1) },
-    {
-      key: "avg",
-      label: "Avg",
-      render: (r) => (r.line.games ? (r.line.points[format] / r.line.games).toFixed(1) : "-"),
-    },
-    { key: "gp", label: "GP", render: (r) => (r.line.games ? String(r.line.games) : "-") },
-    { key: "rank", label: "Pos Rk", render: (r) => (r.line.posRank ? String(r.line.posRank) : "-") },
-    ...statCols.map((c) => ({ key: c.key, label: c.label, render: (r: SeasonRow) => statValue(r.line.raw, c.key) })),
-  ];
-  const lead: TableCol<SeasonRow> = { key: "season", label: "Season", render: (r) => r.label };
-
-  return (
-    <>
-      {!actual.length && !projection ? (
-        <p className="px-4 py-8 text-center text-sm text-m-muted">No season stats available yet.</p>
-      ) : null}
-      {actual.length ? <StatTable title="Season Stats" lead={lead} cols={cols} rows={actual} rowKey={(r) => r.label} /> : null}
-      {projection ? (
-        <StatTable
-          title="Projection"
-          lead={lead}
-          cols={cols.filter((c) => c.key !== "rank")}
-          rows={[{ label: projection.season, line: projection }]}
-          rowKey={(r) => r.label}
-        />
-      ) : null}
-      <WeeklyProjections id={id} team={team} pos={pos} format={format} />
-    </>
-  );
-}
-
 function usePlayerLogs(id: string, team: string | null | undefined, pos: string | null | undefined) {
   return useQuery({
     // v2: past-week Proj from shared week projection bundles.
@@ -631,52 +593,92 @@ function usePlayerLogs(id: string, team: string | null | undefined, pos: string 
   });
 }
 
-/** Season weeks with a Sleeper projected line (played + upcoming). */
-function WeeklyProjections({
+function parseOppToken(opp: string | null | undefined): { label: string; abbr: string | null } {
+  const raw = String(opp ?? "").trim();
+  if (!raw || raw.toUpperCase() === "BYE") return { label: "BYE", abbr: null };
+  const m = raw.match(/^(vs|@)\s+([A-Z]{2,3})$/i);
+  if (m) return { label: `${m[1]!.toLowerCase() === "vs" ? "vs" : "@"} ${m[2]!.toUpperCase()}`, abbr: m[2]!.toUpperCase() };
+  return { label: raw, abbr: null };
+}
+
+/** Horizontal week cards under Overview matchup — current week starts on the left. */
+function WeekProjectionsStrip({
   id,
   team,
   pos,
   format,
+  focusWeek,
 }: {
   id: string;
   team: string | null;
   pos: string;
   format: Format;
+  focusWeek: number | null;
 }) {
   const { data, isLoading } = usePlayerLogs(id, team, pos);
-  // Include past weeks that have a proj line (game-log / proj tab parity).
-  const weeks = (data?.logs ?? []).filter(
-    (l) => l.isBye || l.proj != null || (l.projRaw && Object.keys(l.projRaw).length > 0) || !l.played,
-  );
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const weeks = data?.logs ?? [];
+  const startWeek = focusWeek ?? weeks.find((l) => !l.played && !l.isBye)?.week ?? weeks[0]?.week ?? 1;
 
-  if (isLoading) return <p className="px-4 py-6 text-center text-sm text-m-muted">Loading weekly projections...</p>;
+  useEffect(() => {
+    const root = scrollerRef.current;
+    if (!root || !weeks.length) return;
+    const target = root.querySelector<HTMLElement>(`[data-proj-week="${startWeek}"]`);
+    if (!target) return;
+    // Keep current week flush left; past weeks sit to the left for swipe-back.
+    root.scrollLeft = Math.max(0, target.offsetLeft - 16);
+  }, [startWeek, weeks.length, id]);
+
+  if (isLoading) {
+    return <p className="px-4 py-5 text-sm text-m-muted">Loading projections...</p>;
+  }
   if (!weeks.length) return null;
 
-  type Log = (typeof weeks)[number];
-  const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
-  const cols: TableCol<Log>[] = [
-    { key: "opp", label: "Opp", render: (l) => (l.isBye ? "BYE" : (l.opp ?? "-")) },
-    {
-      key: "proj",
-      label: "Proj",
-      highlight: true,
-      render: (l) => (l.isBye || l.proj?.[format] == null ? "-" : l.proj[format]!.toFixed(1)),
-    },
-    ...statCols.map((c) => ({
-      key: c.key,
-      label: c.label,
-      render: (l: Log) => (l.isBye || !l.projRaw ? "-" : statValue(l.projRaw, c.key)),
-    })),
-  ];
-
   return (
-    <StatTable
-      title="Weekly Projections"
-      lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
-      cols={cols}
-      rows={weeks}
-      rowKey={(l) => String(l.week)}
-    />
+    <section className="mt-4">
+      <h3 className="px-4 pb-2 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+        Projections
+      </h3>
+      <div
+        ref={scrollerRef}
+        className="flex gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {weeks.map((log) => {
+          const opp = parseOppToken(log.opp);
+          const logo = opp.abbr ? teamLogo(opp.abbr) : null;
+          const proj =
+            log.isBye || log.proj?.[format] == null ? null : Number(log.proj[format]);
+          const finalPts =
+            log.isBye || !log.played ? null : Number(log.points[format]);
+          return (
+            <div key={log.week} data-proj-week={log.week} className="w-[7.75rem] shrink-0">
+              <div className="mb-1.5 flex items-center gap-1.5 px-0.5">
+                <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-m-card-fg">
+                  Wk {log.week} {log.isBye ? "BYE" : opp.label}
+                </p>
+                {logo ? (
+                  <img src={logo} alt="" className="size-4 shrink-0 rounded-full object-contain" />
+                ) : null}
+              </div>
+              <div className="overflow-hidden rounded-lg border border-m-border bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
+                <div className="flex items-baseline justify-between gap-2 px-2.5 py-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">Proj</span>
+                  <span className="font-display text-[15px] font-bold tabular-nums">
+                    {proj != null && Number.isFinite(proj) ? proj.toFixed(2) : "-"}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-2 border-t border-m-border bg-m-row-alt px-2.5 py-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">Final</span>
+                  <span className="font-display text-[15px] font-bold tabular-nums">
+                    {finalPts != null && Number.isFinite(finalPts) ? finalPts.toFixed(2) : "-"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -728,6 +730,296 @@ function GameLogTab({
       rows={logs}
       rowKey={(l) => String(l.week)}
     />
+  );
+}
+
+function ordinal(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+/** Lower rank = better offense production (1st best). */
+function offenseRankTone(rank: number | null): string {
+  if (rank == null) return "bg-m-chip text-m-chip-fg";
+  if (rank <= 10) return "bg-emerald-500 text-white";
+  if (rank <= 22) return "bg-amber-400 text-slate-950";
+  return "bg-rose-500 text-white";
+}
+
+type TeamRankChip = { key: string; label: string; rank: number };
+
+function rankTeamsByMetric(
+  totals: Map<string, number>,
+  higherIsBetter = true,
+): Map<string, number> {
+  const ranked = [...totals.entries()]
+    .filter(([, v]) => Number.isFinite(v))
+    .sort((a, b) => (higherIsBetter ? b[1] - a[1] : a[1] - b[1]));
+  const out = new Map<string, number>();
+  ranked.forEach(([team], i) => out.set(team, i + 1));
+  return out;
+}
+
+function splitPlayerName(name: string): { first: string; last: string } {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { first: "", last: parts[0] ?? name };
+  return { first: parts[0]!, last: parts.slice(1).join(" ") };
+}
+
+const POS_LABEL_CLASS: Record<string, string> = {
+  QB: "text-qb",
+  RB: "text-rb",
+  WR: "text-wr",
+  WR1: "text-wr",
+  WR2: "text-wr",
+  WR3: "text-wr",
+  TE: "text-te",
+  K: "text-k",
+  DEF: "text-def",
+};
+
+type DepthEntry = {
+  id: string;
+  name: string;
+  pos: string;
+  proj: number;
+  injury: string | null;
+};
+
+function TeamTab({
+  playerId,
+  team,
+  depthChart,
+  onSelectPlayer,
+}: {
+  playerId: string;
+  team: string | null;
+  depthChart: DepthEntry[];
+  onSelectPlayer: (id: string) => void;
+}) {
+  const { seasonStats } = useLeagueProjections(null);
+  const { data: catalog } = useSleeperPlayers();
+  const playersById = useMemo(() => {
+    const map = new Map<string, Player>();
+    for (const p of catalog?.players ?? []) map.set(p.id, p);
+    return map;
+  }, [catalog?.players]);
+
+  const { data: redzone } = useQuery({
+    queryKey: ["research-redzone", "team-ranks", 20],
+    enabled: Boolean(team),
+    staleTime: RESEARCH_CLIENT_STALE_MS,
+    placeholderData: (prev) => prev,
+    retry: false,
+    queryFn: () => fetchResearchRedZone({ yardline: 20 }),
+  });
+
+  const rankChips = useMemo(() => {
+    if (!team || !seasonStats) return [] as TeamRankChip[];
+    const passAtt = new Map<string, number>();
+    const passYd = new Map<string, number>();
+    const passTd = new Map<string, number>();
+    const totalTd = new Map<string, number>();
+    const offenseYd = new Map<string, number>();
+
+    for (const row of seasonStats.values()) {
+      const abbr = String(row.team ?? "").trim().toUpperCase();
+      if (!abbr || abbr === "FA") continue;
+      const st = row.stats ?? {};
+      const add = (map: Map<string, number>, key: string) => {
+        const n = Number(st[key] ?? 0);
+        if (!Number.isFinite(n) || n === 0) return;
+        map.set(abbr, (map.get(abbr) ?? 0) + n);
+      };
+      add(passAtt, "pass_att");
+      add(passYd, "pass_yd");
+      add(passTd, "pass_td");
+      // Pass + rush only — receiving TDs duplicate pass TDs at the team level.
+      const tds = Number(st.pass_td ?? 0) + Number(st.rush_td ?? 0);
+      if (Number.isFinite(tds) && tds !== 0) totalTd.set(abbr, (totalTd.get(abbr) ?? 0) + tds);
+      const yards = Number(st.pass_yd ?? 0) + Number(st.rush_yd ?? 0);
+      if (Number.isFinite(yards) && yards !== 0) {
+        offenseYd.set(abbr, (offenseYd.get(abbr) ?? 0) + yards);
+      }
+    }
+
+    const rzTd = new Map<string, number>();
+    const rzPlays = new Map<string, number>();
+    for (const rows of Object.values(redzone?.rowsByPos ?? {})) {
+      for (const row of rows) {
+        const abbr = String(row.team ?? "").trim().toUpperCase();
+        if (!abbr) continue;
+        // Pass + rush RZ TDs (receiving duplicates pass at team level).
+        const tds = Number(row.passTd ?? 0) + Number(row.rushTd ?? 0);
+        const plays = Number(row.passAtt ?? 0) + Number(row.rushAtt ?? 0);
+        if (tds) rzTd.set(abbr, (rzTd.get(abbr) ?? 0) + tds);
+        if (plays) rzPlays.set(abbr, (rzPlays.get(abbr) ?? 0) + plays);
+      }
+    }
+    const rzPct = new Map<string, number>();
+    for (const [abbr, tds] of rzTd) {
+      const plays = rzPlays.get(abbr) ?? 0;
+      if (plays > 0) rzPct.set(abbr, tds / plays);
+    }
+
+    const keys: { key: string; label: string; ranks: Map<string, number> }[] = [
+      { key: "offense", label: "Offense", ranks: rankTeamsByMetric(offenseYd) },
+      { key: "pass_att", label: "Pass Att", ranks: rankTeamsByMetric(passAtt) },
+      { key: "pass_yd", label: "Pass Yd", ranks: rankTeamsByMetric(passYd) },
+      { key: "pass_td", label: "Pass TD", ranks: rankTeamsByMetric(passTd) },
+      { key: "td", label: "TD", ranks: rankTeamsByMetric(totalTd) },
+      { key: "rz", label: "RZ", ranks: rankTeamsByMetric(rzTd) },
+      { key: "rz_pct", label: "RZ %", ranks: rankTeamsByMetric(rzPct) },
+    ];
+
+    const abbr = team.toUpperCase();
+    return keys
+      .map((k) => {
+        const rank = k.ranks.get(abbr);
+        return rank != null ? { key: k.key, label: k.label, rank } : null;
+      })
+      .filter((x): x is TeamRankChip => x != null);
+  }, [team, seasonStats, redzone]);
+
+  const depthRows = useMemo(() => {
+    const byPos = {
+      QB: depthChart.filter((d) => d.pos === "QB").sort((a, b) => b.proj - a.proj),
+      RB: depthChart.filter((d) => d.pos === "RB").sort((a, b) => b.proj - a.proj),
+      WR: depthChart.filter((d) => d.pos === "WR").sort((a, b) => b.proj - a.proj),
+      TE: depthChart.filter((d) => d.pos === "TE").sort((a, b) => b.proj - a.proj),
+      K: depthChart.filter((d) => d.pos === "K").sort((a, b) => b.proj - a.proj),
+    };
+    const take3 = (list: DepthEntry[]) => [list[0] ?? null, list[1] ?? null, list[2] ?? null] as const;
+    const wr = byPos.WR;
+    return [
+      { label: "QB", cells: take3(byPos.QB) },
+      { label: "RB", cells: take3(byPos.RB) },
+      { label: "WR1", cells: [wr[0] ?? null, wr[3] ?? null, wr[6] ?? null] as const },
+      { label: "WR2", cells: [wr[1] ?? null, wr[4] ?? null, wr[7] ?? null] as const },
+      { label: "WR3", cells: [wr[2] ?? null, wr[5] ?? null, wr[8] ?? null] as const },
+      { label: "TE", cells: take3(byPos.TE) },
+      { label: "K", cells: take3(byPos.K) },
+    ];
+  }, [depthChart]);
+
+  if (!team) {
+    return <p className="px-4 py-8 text-center text-sm text-m-muted">No team depth chart for free agents.</p>;
+  }
+
+  return (
+    <div className="pb-6">
+      <h3 className="px-4 pb-2 pt-4 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+        Team Rank
+      </h3>
+      {rankChips.length ? (
+        <div className="flex gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {rankChips.map((chip) => (
+            <div key={chip.key} className="w-[4.75rem] shrink-0 text-center">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-m-muted">{chip.label}</p>
+              <div
+                className={cn(
+                  "rounded-md px-2 py-2 font-display text-sm font-bold tabular-nums",
+                  offenseRankTone(chip.rank),
+                )}
+              >
+                {ordinal(chip.rank)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="px-4 text-sm text-m-muted">Team ranks load with season stats.</p>
+      )}
+
+      <h3 className="px-4 pb-2 pt-5 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+        Depth Chart
+      </h3>
+      <div className="mx-2.5 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
+        <div className="grid grid-cols-[2.75rem_1fr_1fr_1fr] border-b border-m-border bg-m-row-alt px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-m-muted">
+          <span>Off</span>
+          <span>Starter</span>
+          <span>2nd</span>
+          <span>3rd</span>
+        </div>
+        {depthRows.every((r) => r.cells.every((c) => c == null)) ? (
+          <p className="px-4 py-6 text-center text-sm text-m-muted">No depth chart available.</p>
+        ) : (
+          depthRows.map((row, idx) => (
+            <div
+              key={row.label}
+              className={cn(
+                "grid grid-cols-[2.75rem_1fr_1fr_1fr] border-b border-m-border px-2 py-2.5 last:border-0",
+                idx % 2 === 1 && "bg-m-row-alt/60",
+              )}
+            >
+              <div className={cn("pt-0.5 text-xs font-black", POS_LABEL_CLASS[row.label] ?? "text-m-muted")}>
+                {row.label}
+              </div>
+              {row.cells.map((cell, col) => {
+                if (!cell) {
+                  return <div key={`${row.label}-${col}`} />;
+                }
+                const meta = playersById.get(cell.id);
+                const age = meta?.age;
+                const isRookie = meta?.exp === 0;
+                const badge = injuryLetter(cell.injury ?? meta?.injury_status ?? meta?.injury);
+                const { first, last } = splitPlayerName(cell.name);
+                const isActive = cell.id === playerId;
+                return (
+                  <button
+                    key={cell.id}
+                    type="button"
+                    onClick={() => onSelectPlayer(cell.id)}
+                    className={cn(
+                      "min-w-0 rounded-md px-1 py-0.5 text-left",
+                      isActive && "bg-m-highlight",
+                    )}
+                  >
+                    <div className="flex items-center gap-1">
+                      {age != null ? (
+                        <span className="text-[10px] text-m-muted">{age} y/o</span>
+                      ) : null}
+                      {isRookie ? (
+                        <span className="rounded bg-violet-600 px-1 text-[9px] font-black text-white">R</span>
+                      ) : null}
+                      {badge ? (
+                        <span
+                          className={cn(
+                            "rounded px-1 text-[9px] font-black text-white",
+                            badge === "Q" ? "bg-amber-500 text-slate-950" : "bg-rose-600",
+                          )}
+                        >
+                          {badge}
+                        </span>
+                      ) : null}
+                    </div>
+                    {first ? <p className="truncate text-[10px] leading-tight text-m-muted">{first}</p> : null}
+                    <p
+                      className={cn(
+                        "truncate text-[12px] font-bold leading-tight",
+                        isActive ? "text-m-accent" : "text-m-card-fg",
+                      )}
+                    >
+                      {last}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 
