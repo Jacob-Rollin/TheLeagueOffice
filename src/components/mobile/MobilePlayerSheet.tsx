@@ -16,12 +16,19 @@ import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { useMobileLeagueActivity } from "@/components/mobile/league/useMobileLeague";
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
+import { useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import type { Pos } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
 import type { LeagueActivityEvent, LeagueActivityMove } from "@/lib/league.functions";
+import {
+  fetchNflTeamDepth,
+  teamDepthFor,
+  type TeamDepthEntry,
+  type TeamDepthSlot,
+} from "@/lib/nfl-team-depth";
 import {
   fetchNflTeamOffenseRanks,
   teamOffenseRanksFor,
@@ -32,8 +39,7 @@ import { detailQuery } from "@/lib/player-detail-query";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
 import type { Player } from "@/lib/players-build";
 import { prefetchPlayerDetail } from "@/lib/prefetch-player-detail";
-import { fetchResearchFpa, fetchResearchSosAnalysis, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
-import type { DepthChartEntry } from "@/lib/players.server";
+import { fetchResearchFpa } from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { projectionPoints } from "@/lib/scoring-map";
@@ -1129,15 +1135,17 @@ function TeamTab({
   const nflState = useNflState();
   const season = nflState.data?.season ?? String(new Date().getUTCFullYear());
   const { data: catalog } = useSleeperPlayers();
+  // Same shared week-proj overlay as popup header / ATP / catalog badges.
+  const liveInjuries = useLiveInjuryStatuses();
   const playersById = useMemo(() => {
     const map = new Map<string, Player>();
     for (const p of catalog?.players ?? []) map.set(p.id, p);
     return map;
   }, [catalog?.players]);
 
-  // Official ESPN team ranks via snap-cdn (Actions warm) — not visitor Sleeper/ESPN.
+  // Sleeper TEAM_* ranks via snap-cdn (Actions warm) — not visitor Sleeper/ESPN.
   const { data: offenseRanksBoard, isLoading: ranksLoading } = useQuery({
-    queryKey: ["nfl-team-offense-ranks", season],
+    queryKey: ["nfl-team-offense-ranks", "sleeper-v3", season],
     enabled: Boolean(team),
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -1145,14 +1153,14 @@ function TeamTab({
     queryFn: () => fetchNflTeamOffenseRanks(season),
   });
 
-  // Sleeper depth_chart_order lives on SOS Analysis CDN (not proj-sorted detail depth).
-  const { data: sosAnalysis } = useQuery({
-    queryKey: ["sos-analysis", "half", "mobile-depth"],
+  // Sleeper depth_chart_position + order via dedicated snap (not SOS / not proj-sorted).
+  const { data: depthBoard, isLoading: depthLoading } = useQuery({
+    queryKey: ["nfl-team-depth", "v1"],
     enabled: Boolean(team),
-    staleTime: RESEARCH_CLIENT_STALE_MS,
+    staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
     retry: false,
-    queryFn: () => fetchResearchSosAnalysis("half"),
+    queryFn: () => fetchNflTeamDepth(),
   });
 
   const rankChips = useMemo(() => {
@@ -1164,63 +1172,52 @@ function TeamTab({
     }).filter((x): x is TeamRankChip => x != null);
   }, [offenseRanksBoard, team]);
 
-  const depthRows = useMemo(() => {
-    const abbr = String(team ?? "")
-      .trim()
-      .toUpperCase();
-    const sosDepth =
-      sosAnalysis?.rows.find((r) => String(r.team).toUpperCase() === abbr)?.depth ?? null;
+  /** Injury token for depth cells — same path as popup header (live overlay + resolveInjuryStatus). Never snap/proj injury. */
+  const injuryStatusFor = useCallback(
+    (id: string): string | null => {
+      const live = liveInjuries.data?.[id];
+      const meta = playersById.get(id);
+      const carrier =
+        live !== undefined
+          ? {
+              injury_status: live.status?.trim() || null,
+              injury: live.status?.trim() || null,
+            }
+          : meta
+            ? meta
+            : null;
+      if (!carrier) return null;
+      return resolveInjuryStatus(carrier) ?? carrier.injury_status ?? null;
+    },
+    [liveInjuries.data, playersById],
+  );
 
-    const mergePos = (pos: "QB" | "RB" | "WR" | "TE" | "K"): DepthEntry[] => {
-      const projList = depthChart.filter((d) => d.pos === pos);
-      const byId = new Map(projList.map((d) => [d.id, d]));
-      const ordered: DepthEntry[] = [];
-      const seen = new Set<string>();
-      const sosList: DepthChartEntry[] = sosDepth?.[pos] ?? [];
-      // Prefer Sleeper depth_chart_order from SOS snap.
-      for (const entry of sosList) {
-        const id = String(entry.id ?? "").trim();
-        if (!id || seen.has(id)) continue;
-        seen.add(id);
-        const hit = byId.get(id);
-        ordered.push({
-          id,
-          name: entry.name || hit?.name || id,
-          pos,
+  const depthRows = useMemo(() => {
+    const chart = teamDepthFor(depthBoard, team);
+    const projById = new Map(depthChart.map((d) => [d.id, d]));
+
+    const toCells = (slot: TeamDepthSlot, entries: TeamDepthEntry[] | undefined) => {
+      const top = (entries ?? []).slice(0, 3);
+      const cells = [0, 1, 2].map((i) => {
+        const entry = top[i];
+        if (!entry) return null;
+        const hit = projById.get(entry.id);
+        const meta = playersById.get(entry.id);
+        // Snap owns starter/2nd/3rd order only; injury comes from Sleeper client overlay.
+        return {
+          id: entry.id,
+          name: entry.name || hit?.name || meta?.name || entry.id,
+          pos: slot.startsWith("WR") ? "WR" : slot,
           proj: hit?.proj ?? 0,
-          injury: entry.injury ?? hit?.injury ?? null,
-        });
-      }
-      // Fill remaining slots from proj-sorted detail depth (players SOS truncated).
-      const remainder = projList
-        .filter((d) => !seen.has(d.id))
-        .slice()
-        .sort((a, b) => b.proj - a.proj);
-      for (const d of remainder) {
-        if (seen.has(d.id)) continue;
-        seen.add(d.id);
-        ordered.push(d);
-      }
-      return ordered;
+          injury: injuryStatusFor(entry.id),
+        } satisfies DepthEntry;
+      });
+      return cells as [DepthEntry | null, DepthEntry | null, DepthEntry | null];
     };
 
-    const take3 = (list: DepthEntry[]) => [list[0] ?? null, list[1] ?? null, list[2] ?? null] as const;
-    const qb = mergePos("QB");
-    const rb = mergePos("RB");
-    const wr = mergePos("WR");
-    const te = mergePos("TE");
-    const k = mergePos("K");
-    // WR1/WR2/WR3 = Sleeper's top three WRs; deeper WRs fill 2nd/3rd across those rows.
-    return [
-      { label: "QB", cells: take3(qb) },
-      { label: "RB", cells: take3(rb) },
-      { label: "WR1", cells: [wr[0] ?? null, wr[3] ?? null, wr[6] ?? null] as const },
-      { label: "WR2", cells: [wr[1] ?? null, wr[4] ?? null, wr[7] ?? null] as const },
-      { label: "WR3", cells: [wr[2] ?? null, wr[5] ?? null, wr[8] ?? null] as const },
-      { label: "TE", cells: take3(te) },
-      { label: "K", cells: take3(k) },
-    ];
-  }, [depthChart, sosAnalysis, team]);
+    const slots: TeamDepthSlot[] = ["QB", "RB", "WR1", "WR2", "WR3", "TE", "K"];
+    return slots.map((label) => ({ label, cells: toCells(label, chart?.[label]) }));
+  }, [depthBoard, depthChart, injuryStatusFor, playersById, team]);
 
   if (!team) {
     return <p className="px-4 py-8 text-center text-sm text-m-muted">No team depth chart for free agents.</p>;
@@ -1264,7 +1261,9 @@ function TeamTab({
           <span>3rd</span>
         </div>
         {depthRows.every((r) => r.cells.every((c) => c == null)) ? (
-          <p className="px-4 py-6 text-center text-sm text-m-muted">No depth chart available.</p>
+          <p className="px-4 py-6 text-center text-sm text-m-muted">
+            {depthLoading ? "Loading depth chart..." : "No depth chart available."}
+          </p>
         ) : (
           depthRows.map((row, idx) => (
             <div
@@ -1283,7 +1282,8 @@ function TeamTab({
                 }
                 const meta = playersById.get(cell.id);
                 const age = meta?.age;
-                const badge = injuryBadgeInfo(cell.injury ?? meta?.injury_status ?? meta?.injury);
+                // Same badge path as popup header: resolveInjuryStatus → injuryBadgeInfo.
+                const badge = injuryBadgeInfo(cell.injury);
                 const { first, last } = splitPlayerName(cell.name);
                 const isActive = cell.id === playerId;
                 return (

@@ -1031,7 +1031,15 @@ async function computeMatchupsGuide(
   };
 }
 
-export type DepthChartEntry = { id: string; name: string; injury: string | null };
+export type DepthChartEntry = {
+  id: string;
+  name: string;
+  injury: string | null;
+  /** Sleeper `depth_chart_order` (lower = higher on chart). */
+  order?: number;
+  /** Sleeper `depth_chart_position` (e.g. LWR / RWR / SWR for WRs). */
+  depthPos?: string | null;
+};
 
 /** Team -> position -> active players in Sleeper depth chart order. */
 const depthCharts = memo<Map<string, Map<Pos, DepthChartEntry[]>>>(6 * HOUR, async () => {
@@ -1048,6 +1056,7 @@ const depthCharts = memo<Map<string, Map<Pos, DepthChartEntry[]>>>(6 * HOUR, asy
       status?: string | null;
       injury_status?: string | null;
       depth_chart_order?: number | null;
+      depth_chart_position?: string | null;
     }
   >;
   const listed: { team: string; pos: Pos; order: number; entry: DepthChartEntry }[] = [];
@@ -1057,11 +1066,19 @@ const depthCharts = memo<Map<string, Map<Pos, DepthChartEntry[]>>>(6 * HOUR, asy
     const order = p?.depth_chart_order;
     if (!team || pos === "DEF" || !POSITIONS.includes(pos)) continue;
     if (typeof order !== "number" || p?.status !== "Active") continue;
+    // WRs need a chart slot (LWR/RWR/SWR); bare WR with no position is practice-squad noise.
+    const depthPos = (p.depth_chart_position ?? "").trim().toUpperCase() || null;
+    if (pos === "WR" && !depthPos) continue;
     const name = (p.full_name || `${p.first_name ?? ""} ${p.last_name ?? ""}`).trim();
     if (!name) continue;
-    listed.push({ team, pos, order, entry: { id, name, injury: p.injury_status ?? null } });
+    listed.push({
+      team,
+      pos,
+      order,
+      entry: { id, name, injury: p.injury_status ?? null, order, depthPos },
+    });
   }
-  listed.sort((a, b) => a.order - b.order);
+  listed.sort((a, b) => a.order - b.order || a.entry.name.localeCompare(b.entry.name));
   const byTeam = new Map<string, Map<Pos, DepthChartEntry[]>>();
   for (const { team, pos, entry } of listed) {
     let byPos = byTeam.get(team);
@@ -1074,7 +1091,7 @@ const depthCharts = memo<Map<string, Map<Pos, DepthChartEntry[]>>>(6 * HOUR, asy
 });
 
 /** Depth slots published on SOS Analysis (Sleeper `depth_chart_order`). */
-const SOS_DEPTH_SLOTS: Record<Pos, number> = { QB: 3, RB: 4, WR: 6, TE: 3, K: 2, DEF: 0 };
+const SOS_DEPTH_SLOTS: Record<Pos, number> = { QB: 3, RB: 4, WR: 9, TE: 3, K: 2, DEF: 0 };
 
 export type SosAnalysisCell = {
   /** 1 = toughest remaining schedule for the position, 32 = easiest. */

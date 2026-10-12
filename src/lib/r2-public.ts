@@ -62,9 +62,14 @@ export const R2_SNAP_KEYS = {
   nativeWeekStats: (season: number | string, week: number) =>
     `snap/native-week-stats-${season}-w${week}.json`,
   /**
-   * Official NFL team offense ranks (ESPN team season stats → snap-cdn).
-   * Shared by all visitors — not per-player and not Sleeper player rollups.
+   * NFL team offense ranks (Sleeper TEAM_* season stats → snap-cdn).
+   * Shared by all visitors — matches Sleeper app Team Rank chips.
    */
   nflTeamOffenseRanks: (season: number | string) =>
     `snap/nfl-team-offense-ranks-${season}.json`,
+  /**
+   * Sleeper depth charts for mobile Team tab (depth_chart_position + order).
+   * Actions → `/v1/players/nfl` once; visitors hit GitHub raw only.
+   */
+  nflTeamDepth: () => `snap/nfl-team-depth.json`,
 } as const;
