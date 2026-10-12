@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { adminGateStatus, useIsAdmin } from "@/hooks/useIsAdmin";
 import { cn } from "@/lib/utils";
 
-import { MobileOfflineSplash } from "./MobileOfflineSplash";
+import { MobileSplashHost } from "./MobileBrandSplash";
 import { MobilePlayerSheetProvider } from "./MobilePlayerSheet";
 import { MobileSettingsOverlay } from "./MobileSettings";
 import { MobileThemeProvider, useMobileTheme } from "./MobileThemeContext";
@@ -45,11 +45,13 @@ function MobileFrame({ children }: { children: ReactNode }) {
         "min-h-screen bg-m-bg font-sans text-m-card-fg",
       )}
     >
-      <MobileOfflineSplash />
+      {/* Boot: logo-only while auth/admin preload. Offline: same mark + connection copy. */}
+      <MobileSplashHost gateLoading={gate === "loading"} />
       <div className="mx-auto w-full max-w-md">
         <MobileHeader />
         {gate === "loading" ? (
-          <MobileNotice>Checking access...</MobileNotice>
+          // Boot splash covers this; keep a quiet fallback if splash is dismissed early.
+          <MobileNotice>Loading...</MobileNotice>
         ) : gate === "allowed" ? (
           <MobilePlayerSheetProvider>{children}</MobilePlayerSheetProvider>
         ) : gate === "signed_out" ? (
