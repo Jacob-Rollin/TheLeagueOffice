@@ -254,8 +254,6 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
 
       <div className="mx-auto w-full max-w-md pb-10">
         <section className="relative overflow-hidden bg-m-card text-m-card-fg">
-          {/* Injury strip lives in the hero (scrolls away); compact uses full designation next to name. */}
-          {injuryInfo ? <PlayerInjuryTopBar info={injuryInfo} /> : null}
           {/* Faded team mark: centered in the header, behind name + headshot. */}
           {logo ? (
             <img
@@ -265,70 +263,111 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
               className="pointer-events-none absolute left-1/2 top-[48%] z-0 size-[22rem] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.1]"
             />
           ) : null}
-          {!compactHeader ? (
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close player"
-              className={cn(
-                "absolute right-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg",
-                injuryInfo ? "top-[3.25rem]" : "top-3",
-              )}
-            >
-              <X className="size-5" strokeWidth={2.5} />
-            </button>
-          ) : null}
 
           {detail.isLoading ? (
-            <p className="relative z-[1] px-5 py-24 text-center text-sm text-m-muted">Loading player...</p>
+            <>
+              {!compactHeader ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close player"
+                  className="absolute right-3 top-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+                >
+                  <X className="size-5" strokeWidth={2.5} />
+                </button>
+              ) : null}
+              <p className="relative z-[1] px-5 py-24 text-center text-sm text-m-muted">Loading player...</p>
+            </>
           ) : !player ? (
-            <p className="relative z-[1] px-5 py-24 text-center text-sm text-m-muted">Player details are unavailable.</p>
+            <>
+              {!compactHeader ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close player"
+                  className="absolute right-3 top-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+                >
+                  <X className="size-5" strokeWidth={2.5} />
+                </button>
+              ) : null}
+              <p className="relative z-[1] px-5 py-24 text-center text-sm text-m-muted">Player details are unavailable.</p>
+            </>
           ) : (
-            <div className="relative z-[1] flex min-h-[220px] items-end">
-              <div className="min-w-0 flex-1 py-6 pl-5 pr-2">
-                <h2 className="font-display text-[34px] font-bold leading-[1.02]">
-                  {first}
-                  {rest.length ? (
-                    <>
-                      <br />
-                      {rest.join(" ")}
-                    </>
-                  ) : null}
-                </h2>
-                <div className="mt-3 flex items-center gap-2.5">
-                  {logo ? (
-                    <img src={logo} alt="" className="size-9 shrink-0 rounded-full bg-m-chip object-contain p-1" />
-                  ) : null}
-                  <div className="min-w-0 text-[13px] leading-tight">
-                    <p className="truncate">{team ? teamFullName(team) : "Free Agent"}</p>
-                    <p className="text-m-muted">
-                      {player.pos}
-                      {bio?.number != null ? ` • #${bio.number}` : ""}
-                    </p>
+            <div className="relative z-[1]">
+              {/* Injury + close share one row above the name (not a full-bleed top chrome). */}
+              {injuryInfo ? (
+                <div className="flex items-center gap-2 px-3 pt-3">
+                  <div className="min-w-0 flex-1">
+                    <PlayerInjuryTopBar info={injuryInfo} />
                   </div>
+                  {!compactHeader ? (
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      aria-label="Close player"
+                      className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+                    >
+                      <X className="size-5" strokeWidth={2.5} />
+                    </button>
+                  ) : null}
                 </div>
-                {fantasyOwner ? (
-                  <span className="mt-2.5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full border border-m-border bg-m-chip px-2.5 py-1 text-[12px] font-semibold text-m-chip-fg">
-                    <span className="font-display text-[11px] font-bold uppercase tracking-wide text-m-accent">
-                      On
+              ) : !compactHeader ? (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close player"
+                  className="absolute right-3 top-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+                >
+                  <X className="size-5" strokeWidth={2.5} />
+                </button>
+              ) : null}
+
+              <div className="flex min-h-[220px] items-end">
+                <div className="min-w-0 flex-1 py-6 pl-5 pr-2">
+                  <h2 className="font-display text-[34px] font-bold leading-[1.02]">
+                    {first}
+                    {rest.length ? (
+                      <>
+                        <br />
+                        {rest.join(" ")}
+                      </>
+                    ) : null}
+                  </h2>
+                  <div className="mt-3 flex items-center gap-2.5">
+                    {logo ? (
+                      <img src={logo} alt="" className="size-9 shrink-0 rounded-full bg-m-chip object-contain p-1" />
+                    ) : null}
+                    <div className="min-w-0 text-[13px] leading-tight">
+                      <p className="truncate">{team ? teamFullName(team) : "Free Agent"}</p>
+                      <p className="text-m-muted">
+                        {player.pos}
+                        {bio?.number != null ? ` • #${bio.number}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  {fantasyOwner ? (
+                    <span className="mt-2.5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full border border-m-border bg-m-chip px-2.5 py-1 text-[12px] font-semibold text-m-chip-fg">
+                      <span className="font-display text-[11px] font-bold uppercase tracking-wide text-m-accent">
+                        On
+                      </span>
+                      <span className="truncate">{fantasyOwner}</span>
                     </span>
-                    <span className="truncate">{fantasyOwner}</span>
-                  </span>
+                  ) : null}
+                </div>
+                {image ? (
+                  <img
+                    src={image}
+                    alt=""
+                    className={cn(
+                      "shrink-0 object-contain object-bottom",
+                      pos === "DEF" ? "mb-6 mr-6 size-28" : "h-48 w-44 object-cover",
+                    )}
+                    onError={(e) => {
+                      e.currentTarget.style.visibility = "hidden";
+                    }}
+                  />
                 ) : null}
               </div>
-              {image ? (
-                <img
-                  src={image}
-                  alt=""
-                  className={cn(
-                    "shrink-0 object-contain object-bottom",
-                    pos === "DEF" ? "mb-6 mr-6 size-28" : "h-48 w-44 object-cover",
-                  )}
-                  onError={(e) => {
-                    e.currentTarget.style.visibility = "hidden";
-                  }}
-                />
-              ) : null}
             </div>
           )}
           {/* Sentinel at end of hero — compact overlays after this leaves the viewport. */}
@@ -449,27 +488,32 @@ function StatCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Full-width injury strip at the top of the player header (Sleeper layout, our badge colors). */
+/**
+ * Injury strip above the player name (aligned with the close control).
+ * Bar fill is translucent; letter + label stay fully opaque.
+ */
 function PlayerInjuryTopBar({ info }: { info: InjuryBadgeInfo }) {
-  const barClass =
-    info.tone === "amber" ? "bg-amber-500 text-slate-950" : "bg-rose-600 text-white";
+  const barFill = info.tone === "amber" ? "bg-amber-500/70" : "bg-rose-600/70";
+  const textClass = info.tone === "amber" ? "text-slate-950" : "text-white";
   const discClass =
     info.tone === "amber"
-      ? "bg-slate-950/15 text-slate-950"
-      : "bg-white/20 text-white";
+      ? "bg-slate-950/20 text-slate-950"
+      : "bg-white/25 text-white";
 
   return (
-    <div className={cn("relative z-10 flex items-center justify-center gap-2 px-4 py-2.5", barClass)}>
-      <span
-        className={cn(
-          "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black",
-          discClass,
-        )}
-        aria-hidden="true"
-      >
-        {info.letter}
-      </span>
-      <p className="font-display text-[13px] font-bold uppercase tracking-[0.12em]">{info.text}</p>
+    <div className={cn("relative overflow-hidden rounded-lg", barFill)}>
+      <div className={cn("relative z-[1] flex items-center justify-center gap-2 px-3 py-2", textClass)}>
+        <span
+          className={cn(
+            "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black",
+            discClass,
+          )}
+          aria-hidden="true"
+        >
+          {info.letter}
+        </span>
+        <p className="font-display text-[13px] font-bold uppercase tracking-[0.12em]">{info.text}</p>
+      </div>
     </div>
   );
 }
@@ -529,7 +573,7 @@ function OverviewMarketRow({ id, format }: { id: string; format: Format }) {
           {tone === "flat" || trendAbs <= 0 ? (
             <p className="mt-0.5 font-display text-lg font-semibold text-m-muted">Flat</p>
           ) : (
-            <div className="mt-0.5">
+            <div className="mt-0.5 flex items-baseline justify-center gap-1.5">
               <p className={cn("font-display text-lg font-semibold tabular-nums", trendClass)}>
                 <span aria-hidden="true" className="mr-0.5 text-[13px]">
                   {tone === "up" ? "▲" : "▼"}
@@ -537,10 +581,17 @@ function OverviewMarketRow({ id, format }: { id: string; format: Format }) {
                 {trendAbs.toFixed(1)}
               </p>
               {pct != null ? (
-                <p className={cn("text-[11px] font-semibold tabular-nums", trendClass)}>
+                <span
+                  className={cn(
+                    "rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                    tone === "up"
+                      ? "bg-emerald-500/15 text-emerald-700"
+                      : "bg-rose-500/15 text-rose-700",
+                  )}
+                >
                   {pct > 0 ? "+" : ""}
                   {pct.toFixed(0)}%
-                </p>
+                </span>
               ) : null}
             </div>
           )}
@@ -1097,6 +1148,16 @@ function weeklyPosRankCellClass(rank: number | null | undefined): string | undef
 }
 
 /**
+ * Sleeper stamps unranked / DNP weeks as 999 (desktop treats ≥900 as empty).
+ * Return a display rank or null so Game Log never shows the sentinel.
+ */
+function weeklyPosRankDisplay(raw: unknown): number | null {
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v <= 0 || v >= 900) return null;
+  return Math.round(v);
+}
+
+/**
  * Sleeper-style double-tier Game Log: category row (Fantasy / Passing / …)
  * with a hairline gap between groups, then micro column labels.
  */
@@ -1428,13 +1489,12 @@ function gameLogGroupedCols(
         label: "Rank",
         cellClass: (l) => {
           if (l.isBye || !l.played) return undefined;
-          const v = Number(l.raw?.[rankKey]);
-          return Number.isFinite(v) && v > 0 ? weeklyPosRankCellClass(v) : undefined;
+          return weeklyPosRankCellClass(weeklyPosRankDisplay(l.raw?.[rankKey]));
         },
         render: (l) => {
           if (l.isBye || !l.played) return "-";
-          const v = Number(l.raw?.[rankKey]);
-          return Number.isFinite(v) && v > 0 ? String(Math.round(v)) : "-";
+          const v = weeklyPosRankDisplay(l.raw?.[rankKey]);
+          return v != null ? String(v) : "-";
         },
       },
       {
