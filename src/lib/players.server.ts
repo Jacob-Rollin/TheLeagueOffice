@@ -1073,7 +1073,8 @@ const depthCharts = memo<Map<string, Map<Pos, DepthChartEntry[]>>>(6 * HOUR, asy
   return byTeam;
 });
 
-const SOS_DEPTH_SLOTS: Record<Pos, number> = { QB: 2, RB: 3, WR: 3, TE: 2, K: 1, DEF: 0 };
+/** Depth slots published on SOS Analysis (Sleeper `depth_chart_order`). */
+const SOS_DEPTH_SLOTS: Record<Pos, number> = { QB: 3, RB: 4, WR: 6, TE: 3, K: 2, DEF: 0 };
 
 export type SosAnalysisCell = {
   /** 1 = toughest remaining schedule for the position, 32 = easiest. */

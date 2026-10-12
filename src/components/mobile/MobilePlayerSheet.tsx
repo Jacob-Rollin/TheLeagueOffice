@@ -13,22 +13,27 @@ import {
 } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
-import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useMobileLeagueActivity } from "@/components/mobile/league/useMobileLeague";
+import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import type { Pos } from "@/lib/draft";
-import { injuryBadgeInfo, injuryLetter } from "@/lib/injury-badge";
+import { injuryBadgeInfo } from "@/lib/injury-badge";
+import type { LeagueActivityEvent, LeagueActivityMove } from "@/lib/league.functions";
+import {
+  fetchNflTeamOffenseRanks,
+  teamOffenseRanksFor,
+  type TeamOffenseRankKey,
+} from "@/lib/nfl-team-offense-ranks";
 import { teamFullName } from "@/lib/nfl-teams";
 import { detailQuery } from "@/lib/player-detail-query";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
 import type { Player } from "@/lib/players-build";
 import { prefetchPlayerDetail } from "@/lib/prefetch-player-detail";
-import {
-  fetchResearchFpa,
-  fetchResearchRedZone,
-  RESEARCH_CLIENT_STALE_MS,
-} from "@/lib/research-cdn";
+import { fetchResearchFpa, fetchResearchSosAnalysis, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
+import type { DepthChartEntry } from "@/lib/players.server";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { projectionPoints } from "@/lib/scoring-map";
@@ -39,8 +44,13 @@ import {
 } from "@/lib/sleeper-client";
 import { cn } from "@/lib/utils";
 
-/** Pointy-top hexagon for the raised position-rank badge. */
-const RANK_HEX_CLIP = "polygon(50% 0%, 100% 24%, 100% 76%, 50% 100%, 0% 76%, 0% 24%)";
+/**
+ * Pointy-top hexagon path for the raised position-rank badge.
+ * Prefer SVG fill+stroke over CSS clip-path + filter:drop-shadow — dual
+ * drop-shadow on a clipped shape flickers on mobile scroll compositors
+ * (left/right outline “blinks” away).
+ */
+const RANK_HEX_POINTS = "40,2 78,24 78,68 40,90 2,68 2,24";
 const HOUR = 60 * 60 * 1000;
 
 type OpenPlayer = (id: string) => void;
@@ -244,23 +254,39 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
 
         {player ? (
           <>
-            <div className="relative grid grid-cols-5 items-center border-y border-m-border bg-m-card py-3 text-center text-m-card-fg">
+            <div className="relative grid grid-cols-5 items-center overflow-visible border-y border-m-border bg-m-card py-3 text-center text-m-card-fg">
               <StatCell label="Bye Wk" value={player.bye != null ? String(player.bye) : "-"} />
               <StatCell label="Avg Pts" value={avgPts != null ? avgPts.toFixed(2) : "-"} />
-              <div className="relative flex justify-center self-stretch">
-                <div
-                  className="absolute -top-[38px] z-[2]"
-                  style={{ filter: "drop-shadow(0 3px 5px rgba(0,0,0,0.16)) drop-shadow(0 0 1px rgba(0,0,0,0.22))" }}
-                >
-                  <span
-                    className="flex h-[92px] w-[80px] flex-col items-center justify-center bg-m-card"
-                    style={{ clipPath: RANK_HEX_CLIP }}
-                  >
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">
-                      {player.pos} Rnk
-                    </span>
-                    <span className="mt-0.5 font-display text-[34px] font-bold leading-none">{posRank ?? "-"}</span>
-                  </span>
+              <div className="relative z-10 flex justify-center self-stretch overflow-visible">
+                <div className="pointer-events-none absolute -top-[38px] left-1/2 z-10 w-[80px] -translate-x-1/2">
+                  <div className="relative h-[92px] w-[80px]">
+                    <svg
+                      viewBox="0 0 80 92"
+                      className="absolute inset-0 size-full"
+                      aria-hidden="true"
+                    >
+                      {/* Soft lift without filter:drop-shadow (avoids mobile edge flicker). */}
+                      <polygon
+                        points={RANK_HEX_POINTS}
+                        className="fill-black/[0.14]"
+                        transform="translate(0 2)"
+                      />
+                      <polygon
+                        points={RANK_HEX_POINTS}
+                        className="fill-m-card stroke-black/20"
+                        strokeWidth="1"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </svg>
+                    <div className="relative z-[1] flex h-full flex-col items-center justify-center px-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">
+                        {player.pos} Rnk
+                      </span>
+                      <span className="mt-0.5 font-display text-[34px] font-bold leading-none">
+                        {posRank ?? "-"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <StatCell label="Own %" value={ownedPct != null ? `${Math.round(Number(ownedPct))}` : "-"} />
@@ -300,7 +326,13 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 format={format}
               />
             ) : tab === "logs" ? (
-              <GameLogTab id={id} team={team} pos={player.pos} format={format} />
+              <GameLogTab
+                id={id}
+                team={team}
+                pos={player.pos}
+                format={format}
+                exp={player.exp}
+              />
             ) : (
               <TeamTab
                 playerId={id}
@@ -424,7 +456,181 @@ function Overview({
         Latest News
       </h3>
       <PlayerNews id={id} />
+
+      <PlayerTransactionHistory playerId={id} />
+      <PlayerCareerTotals id={id} team={team} pos={pos} format={format} />
     </>
+  );
+}
+
+function txnKindLabel(
+  kind: LeagueActivityEvent["kind"],
+  action: LeagueActivityMove["action"],
+): string {
+  if (kind === "trade") return "Traded";
+  if (kind === "ir") return "IR";
+  if (kind === "waiver") return action === "drop" ? "Dropped" : "Claimed";
+  return action === "drop" ? "Dropped" : "Added";
+}
+
+function formatTxnDate(at: number): string {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" });
+}
+
+/** League transaction rows for this player — reuses the shared activity RQ cache. */
+function PlayerTransactionHistory({ playerId }: { playerId: string }) {
+  const { activeLeague } = useActiveLeague();
+  const { events, loading } = useMobileLeagueActivity();
+
+  const rows = useMemo(() => {
+    const out: {
+      id: string;
+      at: number;
+      label: string;
+      detail: string;
+    }[] = [];
+    for (const event of events) {
+      for (const move of event.moves) {
+        if (String(move.playerId) !== String(playerId)) continue;
+        const label = txnKindLabel(event.kind, move.action);
+        let detail = "";
+        if (event.kind === "trade") {
+          const from = move.fromFantasyTeam?.trim();
+          const to = move.fantasyTeam?.trim() || event.teamName?.trim();
+          if (move.action === "add" && to) detail = `to ${to}`;
+          else if (move.action === "drop" && (from || to)) detail = `from ${from || to}`;
+          else detail = event.text;
+        } else {
+          const team = move.fantasyTeam?.trim() || event.teamName?.trim();
+          detail = team ? `by ${team}` : event.text;
+        }
+        out.push({
+          id: `${event.id}-${move.playerId}-${move.action}`,
+          at: event.at,
+          label,
+          detail,
+        });
+      }
+    }
+    out.sort((a, b) => b.at - a.at);
+    return out.slice(0, 12);
+  }, [events, playerId]);
+
+  return (
+    <section className="mt-2 pb-1">
+      <h3 className="px-4 pb-2 pt-6 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+        Transaction History
+      </h3>
+      {!activeLeague?.leagueId ? (
+        <p className="px-4 text-sm text-m-muted">Sync a league to see this player&apos;s transactions.</p>
+      ) : loading && !rows.length ? (
+        <p className="px-4 text-sm text-m-muted">Loading transactions...</p>
+      ) : !rows.length ? (
+        <p className="px-4 text-sm text-m-muted">No league transactions for this player yet.</p>
+      ) : (
+        <div className="mx-2.5 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
+          {rows.map((row, idx) => (
+            <div
+              key={row.id}
+              className={cn(
+                "flex items-start gap-3 px-3.5 py-3",
+                idx > 0 && "border-t border-m-border",
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-[13px] font-bold uppercase tracking-wide">{row.label}</p>
+                <p className="mt-0.5 truncate text-[13px] text-m-muted">{row.detail}</p>
+              </div>
+              <p className="shrink-0 pt-0.5 text-[11px] tabular-nums text-m-muted">{formatTxnDate(row.at)}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Career season totals (current + prior 2) — Sleeper client, IndexedDB coalesced. */
+function PlayerCareerTotals({
+  id,
+  team,
+  pos,
+  format,
+}: {
+  id: string;
+  team: string | null;
+  pos: string;
+  format: Format;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v2"],
+    enabled: Boolean(id && pos),
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+    queryFn: () =>
+      fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", null, { includeCareer: true }),
+  });
+
+  const career = useMemo(
+    () => (data?.career ?? []).filter((row) => row.games > 0 || (row.pts[format] ?? 0) > 0),
+    [data?.career, format],
+  );
+
+  const summaryCols: TableCol<(typeof career)[number]>[] = [
+    { key: "team", label: "Tm", render: (r) => r.team || "-" },
+    { key: "gm", label: "GM", render: (r) => (r.games > 0 ? String(r.games) : "-") },
+    {
+      key: "fpts",
+      label: "Fpts",
+      highlight: true,
+      render: (r) => (r.pts[format] != null ? Number(r.pts[format]).toFixed(1) : "-"),
+    },
+  ];
+
+  const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
+  const countingCols: TableCol<(typeof career)[number]>[] = statCols.map((c) => ({
+    key: c.key,
+    label: c.label,
+    render: (r) => statValue(r.raw, c.key),
+  }));
+
+  return (
+    <section className="pb-6">
+      <h3 className="px-4 pb-2 pt-6 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+        Career
+      </h3>
+      {isLoading ? (
+        <p className="px-4 text-sm text-m-muted">Loading career stats...</p>
+      ) : !career.length ? (
+        <p className="px-4 text-sm text-m-muted">No career stats available yet.</p>
+      ) : (
+        <>
+          <StatTable
+            title=""
+            lead={{ key: "year", label: "Year", render: (r) => r.year }}
+            cols={summaryCols}
+            rows={career}
+            rowKey={(r) => `career-sum-${r.year}`}
+          />
+          {countingCols.length ? (
+            <>
+              <h4 className="px-4 pb-1 pt-4 text-[11px] font-bold uppercase tracking-[0.08em] text-m-muted">
+                {pos === "DEF" || pos === "DST" ? "Defense" : pos === "K" ? "Kicking" : pos === "QB" ? "Pass / Rush" : "Rush / Rec"}
+              </h4>
+              <StatTable
+                title=""
+                lead={{ key: "year", label: "Year", render: (r) => r.year }}
+                cols={countingCols}
+                rows={career}
+                rowKey={(r) => `career-raw-${r.year}`}
+              />
+            </>
+          ) : null}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -543,8 +749,12 @@ function StatTable<R>({
   rowKey: (row: R) => string;
 }) {
   return (
-    <section className="mt-3">
-      <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">{title}</h3>
+    <section className={title ? "mt-3" : undefined}>
+      {title ? (
+        <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+          {title}
+        </h3>
+      ) : null}
       <div className="overflow-x-auto bg-m-card text-m-card-fg [scrollbar-width:none]">
         <table className="min-w-max border-collapse text-sm">
           <thead>
@@ -581,17 +791,30 @@ function StatTable<R>({
   );
 }
 
-function usePlayerLogs(id: string, team: string | null | undefined, pos: string | null | undefined) {
+function usePlayerLogs(
+  id: string,
+  team: string | null | undefined,
+  pos: string | null | undefined,
+  season?: string | null,
+  enabled = true,
+) {
+  const seasonKey = season && /^\d{4}$/.test(season) ? season : "current";
   return useQuery({
     // v2: past-week Proj from shared week projection bundles.
-    queryKey: ["player-logs", id, "current", team ?? "FA", pos ?? "", "proj-v2"],
-    enabled: Boolean(id && pos),
+    // Past seasons: no includeCareer — one year at a time when the user expands VIEW.
+    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "proj-v2"],
+    enabled: Boolean(id && pos && enabled),
     queryFn: () =>
-      fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", null, { includeCareer: false }),
+      fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", seasonKey === "current" ? null : seasonKey, {
+        includeCareer: false,
+      }),
     staleTime: 30 * 60 * 1000,
     retry: false,
   });
 }
+
+/** Seasons available in the Game Log accordion (current first). */
+const MOBILE_LOG_SEASONS = ["2026", "2025", "2024", "2023", "2022"] as const;
 
 function parseOppToken(opp: string | null | undefined): { label: string; abbr: string | null } {
   const raw = String(opp ?? "").trim();
@@ -682,25 +905,16 @@ function WeekProjectionsStrip({
   );
 }
 
-function GameLogTab({
-  id,
-  team,
-  pos,
-  format,
-}: {
-  id: string;
-  team: string | null;
-  pos: string;
-  format: Format;
-}) {
-  const { data, isLoading } = usePlayerLogs(id, team, pos);
-  // Full 1–18 season board; unplayed weeks stay as "-" until the game is final.
-  const logs = data?.logs ?? [];
-
-  if (isLoading) return <p className="px-4 py-8 text-center text-sm text-m-muted">Loading game log...</p>;
-  if (!logs.length) return <p className="px-4 py-8 text-center text-sm text-m-muted">No games played yet this season.</p>;
-
-  type Log = (typeof logs)[number];
+function gameLogTableCols(pos: string, format: Format) {
+  type Log = {
+    week: number;
+    opp: string | null;
+    isBye: boolean;
+    played: boolean;
+    points: { std: number; half: number; ppr: number };
+    proj: { std: number; half: number; ppr: number } | null;
+    raw: Record<string, number>;
+  };
   const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
   const cols: TableCol<Log>[] = [
     { key: "opp", label: "Opp", render: (l) => (l.isBye ? "BYE" : (l.opp ?? "-")) },
@@ -721,15 +935,138 @@ function GameLogTab({
       render: (l: Log) => (l.isBye || !l.played ? "-" : statValue(l.raw, c.key)),
     })),
   ];
+  return cols;
+}
+
+function GameLogTab({
+  id,
+  team,
+  pos,
+  format,
+  exp,
+}: {
+  id: string;
+  team: string | null;
+  pos: string;
+  format: Format;
+  exp: number | null;
+}) {
+  const nflState = useNflState();
+  const currentSeason = String(nflState.data?.season ?? MOBILE_LOG_SEASONS[0]);
+  const { data, isLoading } = usePlayerLogs(id, team, pos);
+  const [openPast, setOpenPast] = useState<string | null>(null);
+
+  const pastSeasons = useMemo(() => {
+    const isDefense = pos === "DEF";
+    const yearsExp = Math.max(1, Math.floor(Number(exp)) || 1);
+    const currentYear = Number.parseInt(currentSeason, 10) || Number(MOBILE_LOG_SEASONS[0]);
+    const rookieEntryYear = isDefense ? 2022 : currentYear - (yearsExp - 1);
+    return MOBILE_LOG_SEASONS.filter((y) => {
+      const n = Number.parseInt(y, 10);
+      return n < currentYear && n >= rookieEntryYear;
+    });
+  }, [currentSeason, exp, pos]);
+
+  // Full 1–18 season board; unplayed weeks stay as "-" until the game is final.
+  const logs = data?.logs ?? [];
+  const cols = gameLogTableCols(pos, format);
+  const seasonLabel = data?.season ?? currentSeason;
+
+  if (isLoading) return <p className="px-4 py-8 text-center text-sm text-m-muted">Loading game log...</p>;
 
   return (
-    <StatTable
-      title={`${data?.season ?? ""} Game Log`.trim()}
-      lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
-      cols={cols}
-      rows={logs}
-      rowKey={(l) => String(l.week)}
-    />
+    <div className="pb-4">
+      {!logs.length ? (
+        <p className="px-4 py-8 text-center text-sm text-m-muted">No games played yet this season.</p>
+      ) : (
+        <StatTable
+          title={seasonLabel}
+          lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
+          cols={cols}
+          rows={logs}
+          rowKey={(l) => String(l.week)}
+        />
+      )}
+
+      {pastSeasons.length ? (
+        <section className="mt-2">
+          <h3 className="px-4 pb-1 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+            Past Seasons
+          </h3>
+          <div className="mx-2.5 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
+            {pastSeasons.map((year, idx) => {
+              const open = openPast === year;
+              return (
+                <div
+                  key={year}
+                  className={cn(idx > 0 && "border-t border-m-border")}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenPast((prev) => (prev === year ? null : year))}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                  >
+                    <span className="font-display text-base font-bold">{year}</span>
+                    <span
+                      className={cn(
+                        "text-[11px] font-bold uppercase tracking-wide",
+                        open ? "text-m-accent" : "text-m-muted",
+                      )}
+                    >
+                      {open ? "Hide" : "View"}
+                    </span>
+                  </button>
+                  {open ? (
+                    <PastSeasonGameLog id={id} team={team} pos={pos} format={format} season={year} />
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function PastSeasonGameLog({
+  id,
+  team,
+  pos,
+  format,
+  season,
+}: {
+  id: string;
+  team: string | null;
+  pos: string;
+  format: Format;
+  season: string;
+}) {
+  const { data, isLoading } = usePlayerLogs(id, team, pos, season, true);
+  const logs = (data?.logs ?? []).filter((l) => l.played || l.isBye);
+  const cols = gameLogTableCols(pos, format);
+
+  if (isLoading) {
+    return <p className="border-t border-m-border px-4 py-5 text-sm text-m-muted">Loading {season}...</p>;
+  }
+  if (!logs.length) {
+    return (
+      <p className="border-t border-m-border px-4 py-5 text-sm text-m-muted">
+        No games recorded for {season}.
+      </p>
+    );
+  }
+
+  return (
+    <div className="border-t border-m-border">
+      <StatTable
+        title=""
+        lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
+        cols={cols}
+        rows={logs}
+        rowKey={(l) => `${season}-${l.week}`}
+      />
+    </div>
   );
 }
 
@@ -758,17 +1095,15 @@ function offenseRankTone(rank: number | null): string {
 
 type TeamRankChip = { key: string; label: string; rank: number };
 
-function rankTeamsByMetric(
-  totals: Map<string, number>,
-  higherIsBetter = true,
-): Map<string, number> {
-  const ranked = [...totals.entries()]
-    .filter(([, v]) => Number.isFinite(v))
-    .sort((a, b) => (higherIsBetter ? b[1] - a[1] : a[1] - b[1]));
-  const out = new Map<string, number>();
-  ranked.forEach(([team], i) => out.set(team, i + 1));
-  return out;
-}
+const TEAM_RANK_CHIP_META: { key: TeamOffenseRankKey; label: string }[] = [
+  { key: "offense", label: "Offense" },
+  { key: "passAtt", label: "Pass Att" },
+  { key: "passYd", label: "Pass Yd" },
+  { key: "passTd", label: "Pass TD" },
+  { key: "td", label: "TD" },
+  { key: "rz", label: "RZ" },
+  { key: "rzPct", label: "RZ %" },
+];
 
 function splitPlayerName(name: string): { first: string; last: string } {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -807,7 +1142,8 @@ function TeamTab({
   depthChart: DepthEntry[];
   onSelectPlayer: (id: string) => void;
 }) {
-  const { seasonStats } = useLeagueProjections(null);
+  const nflState = useNflState();
+  const season = nflState.data?.season ?? String(new Date().getUTCFullYear());
   const { data: catalog } = useSleeperPlayers();
   const playersById = useMemo(() => {
     const map = new Map<string, Player>();
@@ -815,102 +1151,92 @@ function TeamTab({
     return map;
   }, [catalog?.players]);
 
-  const { data: redzone } = useQuery({
-    queryKey: ["research-redzone", "team-ranks", 20],
+  // Official ESPN team ranks via snap-cdn (Actions warm) — not visitor Sleeper/ESPN.
+  const { data: offenseRanksBoard, isLoading: ranksLoading } = useQuery({
+    queryKey: ["nfl-team-offense-ranks", season],
+    enabled: Boolean(team),
+    staleTime: 30 * 60 * 1000,
+    placeholderData: (prev) => prev,
+    retry: false,
+    queryFn: () => fetchNflTeamOffenseRanks(season),
+  });
+
+  // Sleeper depth_chart_order lives on SOS Analysis CDN (not proj-sorted detail depth).
+  const { data: sosAnalysis } = useQuery({
+    queryKey: ["sos-analysis", "half", "mobile-depth"],
     enabled: Boolean(team),
     staleTime: RESEARCH_CLIENT_STALE_MS,
     placeholderData: (prev) => prev,
     retry: false,
-    queryFn: () => fetchResearchRedZone({ yardline: 20 }),
+    queryFn: () => fetchResearchSosAnalysis("half"),
   });
 
   const rankChips = useMemo(() => {
-    if (!team || !seasonStats) return [] as TeamRankChip[];
-    const passAtt = new Map<string, number>();
-    const passYd = new Map<string, number>();
-    const passTd = new Map<string, number>();
-    const totalTd = new Map<string, number>();
-    const offenseYd = new Map<string, number>();
-
-    for (const row of seasonStats.values()) {
-      const abbr = String(row.team ?? "").trim().toUpperCase();
-      if (!abbr || abbr === "FA") continue;
-      const st = row.stats ?? {};
-      const add = (map: Map<string, number>, key: string) => {
-        const n = Number(st[key] ?? 0);
-        if (!Number.isFinite(n) || n === 0) return;
-        map.set(abbr, (map.get(abbr) ?? 0) + n);
-      };
-      add(passAtt, "pass_att");
-      add(passYd, "pass_yd");
-      add(passTd, "pass_td");
-      // Pass + rush only — receiving TDs duplicate pass TDs at the team level.
-      const tds = Number(st.pass_td ?? 0) + Number(st.rush_td ?? 0);
-      if (Number.isFinite(tds) && tds !== 0) totalTd.set(abbr, (totalTd.get(abbr) ?? 0) + tds);
-      const yards = Number(st.pass_yd ?? 0) + Number(st.rush_yd ?? 0);
-      if (Number.isFinite(yards) && yards !== 0) {
-        offenseYd.set(abbr, (offenseYd.get(abbr) ?? 0) + yards);
-      }
-    }
-
-    const rzTd = new Map<string, number>();
-    const rzPlays = new Map<string, number>();
-    for (const rows of Object.values(redzone?.rowsByPos ?? {})) {
-      for (const row of rows) {
-        const abbr = String(row.team ?? "").trim().toUpperCase();
-        if (!abbr) continue;
-        // Pass + rush RZ TDs (receiving duplicates pass at team level).
-        const tds = Number(row.passTd ?? 0) + Number(row.rushTd ?? 0);
-        const plays = Number(row.passAtt ?? 0) + Number(row.rushAtt ?? 0);
-        if (tds) rzTd.set(abbr, (rzTd.get(abbr) ?? 0) + tds);
-        if (plays) rzPlays.set(abbr, (rzPlays.get(abbr) ?? 0) + plays);
-      }
-    }
-    const rzPct = new Map<string, number>();
-    for (const [abbr, tds] of rzTd) {
-      const plays = rzPlays.get(abbr) ?? 0;
-      if (plays > 0) rzPct.set(abbr, tds / plays);
-    }
-
-    const keys: { key: string; label: string; ranks: Map<string, number> }[] = [
-      { key: "offense", label: "Offense", ranks: rankTeamsByMetric(offenseYd) },
-      { key: "pass_att", label: "Pass Att", ranks: rankTeamsByMetric(passAtt) },
-      { key: "pass_yd", label: "Pass Yd", ranks: rankTeamsByMetric(passYd) },
-      { key: "pass_td", label: "Pass TD", ranks: rankTeamsByMetric(passTd) },
-      { key: "td", label: "TD", ranks: rankTeamsByMetric(totalTd) },
-      { key: "rz", label: "RZ", ranks: rankTeamsByMetric(rzTd) },
-      { key: "rz_pct", label: "RZ %", ranks: rankTeamsByMetric(rzPct) },
-    ];
-
-    const abbr = team.toUpperCase();
-    return keys
-      .map((k) => {
-        const rank = k.ranks.get(abbr);
-        return rank != null ? { key: k.key, label: k.label, rank } : null;
-      })
-      .filter((x): x is TeamRankChip => x != null);
-  }, [team, seasonStats, redzone]);
+    const ranks = teamOffenseRanksFor(offenseRanksBoard, team);
+    if (!ranks) return [] as TeamRankChip[];
+    return TEAM_RANK_CHIP_META.map(({ key, label }) => {
+      const rank = ranks[key];
+      return rank != null && rank > 0 ? { key, label, rank } : null;
+    }).filter((x): x is TeamRankChip => x != null);
+  }, [offenseRanksBoard, team]);
 
   const depthRows = useMemo(() => {
-    const byPos = {
-      QB: depthChart.filter((d) => d.pos === "QB").sort((a, b) => b.proj - a.proj),
-      RB: depthChart.filter((d) => d.pos === "RB").sort((a, b) => b.proj - a.proj),
-      WR: depthChart.filter((d) => d.pos === "WR").sort((a, b) => b.proj - a.proj),
-      TE: depthChart.filter((d) => d.pos === "TE").sort((a, b) => b.proj - a.proj),
-      K: depthChart.filter((d) => d.pos === "K").sort((a, b) => b.proj - a.proj),
+    const abbr = String(team ?? "")
+      .trim()
+      .toUpperCase();
+    const sosDepth =
+      sosAnalysis?.rows.find((r) => String(r.team).toUpperCase() === abbr)?.depth ?? null;
+
+    const mergePos = (pos: "QB" | "RB" | "WR" | "TE" | "K"): DepthEntry[] => {
+      const projList = depthChart.filter((d) => d.pos === pos);
+      const byId = new Map(projList.map((d) => [d.id, d]));
+      const ordered: DepthEntry[] = [];
+      const seen = new Set<string>();
+      const sosList: DepthChartEntry[] = sosDepth?.[pos] ?? [];
+      // Prefer Sleeper depth_chart_order from SOS snap.
+      for (const entry of sosList) {
+        const id = String(entry.id ?? "").trim();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const hit = byId.get(id);
+        ordered.push({
+          id,
+          name: entry.name || hit?.name || id,
+          pos,
+          proj: hit?.proj ?? 0,
+          injury: entry.injury ?? hit?.injury ?? null,
+        });
+      }
+      // Fill remaining slots from proj-sorted detail depth (players SOS truncated).
+      const remainder = projList
+        .filter((d) => !seen.has(d.id))
+        .slice()
+        .sort((a, b) => b.proj - a.proj);
+      for (const d of remainder) {
+        if (seen.has(d.id)) continue;
+        seen.add(d.id);
+        ordered.push(d);
+      }
+      return ordered;
     };
+
     const take3 = (list: DepthEntry[]) => [list[0] ?? null, list[1] ?? null, list[2] ?? null] as const;
-    const wr = byPos.WR;
+    const qb = mergePos("QB");
+    const rb = mergePos("RB");
+    const wr = mergePos("WR");
+    const te = mergePos("TE");
+    const k = mergePos("K");
+    // WR1/WR2/WR3 = Sleeper's top three WRs; deeper WRs fill 2nd/3rd across those rows.
     return [
-      { label: "QB", cells: take3(byPos.QB) },
-      { label: "RB", cells: take3(byPos.RB) },
+      { label: "QB", cells: take3(qb) },
+      { label: "RB", cells: take3(rb) },
       { label: "WR1", cells: [wr[0] ?? null, wr[3] ?? null, wr[6] ?? null] as const },
       { label: "WR2", cells: [wr[1] ?? null, wr[4] ?? null, wr[7] ?? null] as const },
       { label: "WR3", cells: [wr[2] ?? null, wr[5] ?? null, wr[8] ?? null] as const },
-      { label: "TE", cells: take3(byPos.TE) },
-      { label: "K", cells: take3(byPos.K) },
+      { label: "TE", cells: take3(te) },
+      { label: "K", cells: take3(k) },
     ];
-  }, [depthChart]);
+  }, [depthChart, sosAnalysis, team]);
 
   if (!team) {
     return <p className="px-4 py-8 text-center text-sm text-m-muted">No team depth chart for free agents.</p>;
@@ -938,7 +1264,9 @@ function TeamTab({
           ))}
         </div>
       ) : (
-        <p className="px-4 text-sm text-m-muted">Team ranks load with season stats.</p>
+        <p className="px-4 text-sm text-m-muted">
+          {ranksLoading ? "Loading team ranks..." : "Team ranks unavailable."}
+        </p>
       )}
 
       <h3 className="px-4 pb-2 pt-5 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
@@ -946,7 +1274,7 @@ function TeamTab({
       </h3>
       <div className="mx-2.5 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
         <div className="grid grid-cols-[2.75rem_1fr_1fr_1fr] border-b border-m-border bg-m-row-alt px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-m-muted">
-          <span>Off</span>
+          <span>Pos</span>
           <span>Starter</span>
           <span>2nd</span>
           <span>3rd</span>
@@ -971,8 +1299,7 @@ function TeamTab({
                 }
                 const meta = playersById.get(cell.id);
                 const age = meta?.age;
-                const isRookie = meta?.exp === 0;
-                const badge = injuryLetter(cell.injury ?? meta?.injury_status ?? meta?.injury);
+                const badge = injuryBadgeInfo(cell.injury ?? meta?.injury_status ?? meta?.injury);
                 const { first, last } = splitPlayerName(cell.name);
                 const isActive = cell.id === playerId;
                 return (
@@ -989,17 +1316,9 @@ function TeamTab({
                       {age != null ? (
                         <span className="text-[10px] text-m-muted">{age} y/o</span>
                       ) : null}
-                      {isRookie ? (
-                        <span className="rounded bg-violet-600 px-1 text-[9px] font-black text-white">R</span>
-                      ) : null}
                       {badge ? (
-                        <span
-                          className={cn(
-                            "rounded px-1 text-[9px] font-black text-white",
-                            badge === "Q" ? "bg-amber-500 text-slate-950" : "bg-rose-600",
-                          )}
-                        >
-                          {badge}
+                        <span className={cn("rounded px-1 text-[9px] font-black", badge.className)}>
+                          {badge.letter}
                         </span>
                       ) : null}
                     </div>
@@ -1019,7 +1338,48 @@ function TeamTab({
           ))
         )}
       </div>
+
+      <InjuryStatusLegend />
     </div>
+  );
+}
+
+/** Status key for depth-chart badges — same chips/colors as the rest of the app. */
+const TEAM_STATUS_LEGEND: { status: string; label: string }[] = [
+  { status: "IR", label: "Injured Reserve" },
+  { status: "PUP", label: "Physically Unable to Perform" },
+  { status: "SUS", label: "Suspended" },
+  { status: "O", label: "Out" },
+  { status: "D", label: "Doubtful" },
+  { status: "Q", label: "Questionable" },
+];
+
+function InjuryStatusLegend() {
+  return (
+    <section className="mx-2.5 mt-4 overflow-hidden rounded-xl border border-m-border bg-m-card px-4 py-3 text-m-card-fg">
+      <h4 className="mb-2.5 font-display text-xs font-bold uppercase tracking-[0.08em] text-m-muted">
+        Status Legend
+      </h4>
+      <ul className="space-y-2">
+        {TEAM_STATUS_LEGEND.map((row) => {
+          const badge = injuryBadgeInfo(row.status);
+          if (!badge) return null;
+          return (
+            <li key={row.status} className="flex items-center gap-3">
+              <span
+                className={cn(
+                  "inline-flex min-w-[2.25rem] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-black",
+                  badge.className,
+                )}
+              >
+                {badge.letter}
+              </span>
+              <span className="text-[13px] text-m-muted">{row.label}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

@@ -1,0 +1,167 @@
+name: NFL Team Offense Ranks
+
+# Publishes official ESPN team-season offense ranks to snap-cdn for the mobile
+# player Team tab. One Actions fan-out (32 teams) — visitors only hit GitHub
+# raw once. No Vercel Fluid / TiDB / visitor Sleeper budget.
+
+on:
+  schedule:
+    # Season ranks move slowly — a few times per day is enough.
+    - cron: "20 7,13,19,1 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nfl-team-offense-ranks
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Build team offense ranks from ESPN
+        id: build
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import datetime, json, re, time, urllib.request
+          from pathlib import Path
+
+          UA = {"accept": "application/json", "user-agent": "TheLeagueOffice-snap/1.0"}
+
+          def get(url: str):
+            req = urllib.request.Request(url, headers=UA)
+            with urllib.request.urlopen(req, timeout=30) as res:
+              return json.load(res)
+
+          # ESPN WSH → our WAS (Sleeper / app catalog).
+          ABBR_FIX = {"WSH": "WAS"}
+
+          def parse_rank(stat: dict) -> int | None:
+            raw = stat.get("rank")
+            if isinstance(raw, (int, float)) and raw > 0:
+              return int(raw)
+            disp = str(stat.get("rankDisplayValue") or "")
+            m = re.search(r"(\d+)", disp)
+            return int(m.group(1)) if m else None
+
+          def pick_stat(categories: list, category: str, name: str) -> dict | None:
+            for cat in categories:
+              if str(cat.get("name") or "") != category:
+                continue
+              for st in cat.get("stats") or []:
+                if str(st.get("name") or "") == name:
+                  return st
+            return None
+
+          state = get("https://api.sleeper.app/v1/state/nfl")
+          season = str(state.get("league_season") or state.get("season") or datetime.datetime.utcnow().year)
+
+          teams_payload = get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams?limit=50")
+          team_rows = (
+            teams_payload.get("sports", [{}])[0]
+            .get("leagues", [{}])[0]
+            .get("teams", [])
+          )
+          teams = []
+          for row in team_rows:
+            tm = row.get("team") or {}
+            tid = str(tm.get("id") or "").strip()
+            abbr = str(tm.get("abbreviation") or "").strip().upper()
+            if not tid or not abbr:
+              continue
+            teams.append((tid, ABBR_FIX.get(abbr, abbr)))
+
+          if len(teams) < 30:
+            raise SystemExit(f"expected ~32 ESPN teams, got {len(teams)}")
+
+          # Map: category/name for each chip (ESPN already includes league ranks).
+          FIELDS = [
+            ("offense", "passing", "netTotalYards"),
+            ("passAtt", "passing", "passingAttempts"),
+            ("passYd", "passing", "netPassingYards"),
+            ("passTd", "passing", "passingTouchdowns"),
+            ("td", "scoring", "totalTouchdowns"),
+            ("rz", "miscellaneous", "redzoneScoringPct"),
+            ("rzPct", "miscellaneous", "redzoneTouchdownPct"),
+          ]
+
+          out_teams: dict[str, dict[str, int]] = {}
+          for i, (tid, abbr) in enumerate(teams):
+            url = (
+              "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/"
+              f"seasons/{season}/types/2/teams/{tid}/statistics"
+            )
+            try:
+              payload = get(url)
+            except Exception as exc:
+              print(f"skip {abbr}: {exc}")
+              time.sleep(0.15)
+              continue
+            cats = ((payload.get("splits") or {}).get("categories")) or []
+            ranks: dict[str, int] = {}
+            for key, cat, name in FIELDS:
+              st = pick_stat(cats, cat, name)
+              rank = parse_rank(st) if st else None
+              if rank is not None:
+                ranks[key] = rank
+            if ranks:
+              out_teams[abbr] = ranks
+            if i < len(teams) - 1:
+              time.sleep(0.12)
+
+          if len(out_teams) < 28:
+            raise SystemExit(f"too few team rank rows: {len(out_teams)}")
+
+          payload = {
+            "season": int(season) if str(season).isdigit() else season,
+            "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            "source": "espn-team-season-stats",
+            "teams": out_teams,
+          }
+          Path("/tmp/nfl-team-offense-ranks.json").write_text(
+            json.dumps(payload, separators=(",", ":"))
+          )
+          Path("/tmp/nfl-team-offense-meta.env").write_text(f"SEASON={season}\n")
+          print(f"season={season} teams={len(out_teams)}")
+          PY
+          # shellcheck disable=SC1091
+          source /tmp/nfl-team-offense-meta.env
+          echo "season=$SEASON" >> "$GITHUB_OUTPUT"
+
+      - name: Update snap-cdn file
+        env:
+          SEASON: ${{ steps.build.outputs.season }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          DEST="snap/nfl-team-offense-ranks-${SEASON}.json"
+          WORK=$(mktemp -d)
+          cd "$WORK"
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
+          if git ls-remote --exit-code --heads "$REMOTE" snap-cdn >/dev/null 2>&1; then
+            git fetch --depth=1 "$REMOTE" snap-cdn
+            git checkout -q FETCH_HEAD
+            git checkout -q -B snap-cdn
+          else
+            git checkout -q -b snap-cdn
+            touch .nojekyll
+            echo "# Snap CDN" > README.md
+          fi
+          mkdir -p snap
+          cp /tmp/nfl-team-offense-ranks.json "$DEST"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No content change — skip push."
+            exit 0
+          fi
+          git commit -q -m "NFL team offense ranks ${SEASON} $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push --force "$REMOTE" snap-cdn
+          echo "Published ${DEST}"
