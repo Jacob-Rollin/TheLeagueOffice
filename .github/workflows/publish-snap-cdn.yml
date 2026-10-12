@@ -142,99 +142,72 @@ jobs:
           PY
             fi
 
-            # Mobile Team tab offense ranks — also owned by nfl-team-offense-ranks.yml.
-            # Rebuild here so orphan publish never drops the file if the sidecar ran first
-            # (or restore after a wipe). Soft-skip on ESPN failure; preserve step keeps stale.
+            # Mobile Team tab offense ranks — Sleeper TEAM_* season board (matches app chips).
+            # Also owned by nfl-team-offense-ranks.yml. One Actions pull; soft-skip on miss.
             python3 <<PY || echo "warn: nfl-team-offense-ranks miss"
-          import datetime, json, re, time, urllib.request
+          import datetime, json, urllib.request
           from pathlib import Path
 
           UA = {"accept": "application/json", "user-agent": "TheLeagueOffice-snap/1.0"}
-          ABBR_FIX = {"WSH": "WAS"}
           FIELDS = [
-              ("offense", "passing", "netTotalYards"),
-              ("passAtt", "passing", "passingAttempts"),
-              ("passYd", "passing", "netPassingYards"),
-              ("passTd", "passing", "passingTouchdowns"),
-              ("td", "scoring", "totalTouchdowns"),
-              ("rz", "miscellaneous", "redzoneScoringPct"),
-              ("rzPct", "miscellaneous", "redzoneTouchdownPct"),
+              ("offense", "off_yd"),
+              ("passAtt", "pass_att"),
+              ("passYd", "pass_yd"),
+              ("passTd", "pass_td"),
+              ("td", "td"),
+              ("rz", "rz_att"),
+              ("rzPct", "rz_pct"),
           ]
 
           def get(url: str):
               req = urllib.request.Request(url, headers=UA)
-              with urllib.request.urlopen(req, timeout=30) as res:
+              with urllib.request.urlopen(req, timeout=60) as res:
                   return json.load(res)
 
-          def parse_rank(stat):
-              raw = stat.get("rank")
-              if isinstance(raw, (int, float)) and raw > 0:
-                  return int(raw)
-              m = re.search(r"(\d+)", str(stat.get("rankDisplayValue") or ""))
-              return int(m.group(1)) if m else None
-
-          def pick_stat(categories, category, name):
-              for cat in categories:
-                  if str(cat.get("name") or "") != category:
-                      continue
-                  for st in cat.get("stats") or []:
-                      if str(st.get("name") or "") == name:
-                          return st
-              return None
+          def competition_ranks(rows):
+              rows = sorted(rows, key=lambda x: (-x[1], x[0]))
+              out = {}
+              i = 0
+              while i < len(rows):
+                  j = i
+                  while j < len(rows) and rows[j][1] == rows[i][1]:
+                      j += 1
+                  rank = i + 1
+                  for k in range(i, j):
+                      out[rows[k][0]] = rank
+                  i = j
+              return out
 
           season = "${SEASON}"
-          teams_payload = get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams?limit=50")
-          team_rows = (
-              teams_payload.get("sports", [{}])[0]
-              .get("leagues", [{}])[0]
-              .get("teams", [])
-          )
-          teams = []
-          for row in team_rows:
-              tm = row.get("team") or {}
-              tid = str(tm.get("id") or "").strip()
-              abbr = str(tm.get("abbreviation") or "").strip().upper()
-              if tid and abbr:
-                  teams.append((tid, ABBR_FIX.get(abbr, abbr)))
-          if len(teams) < 30:
-              raise SystemExit(f"expected ~32 ESPN teams, got {len(teams)}")
+          raw = get(f"https://api.sleeper.app/v1/stats/nfl/regular/{season}")
+          team_stats = {}
+          if isinstance(raw, dict):
+              for key, st in raw.items():
+                  if not str(key).startswith("TEAM_") or not isinstance(st, dict):
+                      continue
+                  abbr = str(key).removeprefix("TEAM_").strip().upper()
+                  if abbr == "WSH":
+                      abbr = "WAS"
+                  if abbr:
+                      team_stats[abbr] = st
+          if len(team_stats) < 28:
+              raise SystemExit(f"too few TEAM_* rows: {len(team_stats)}")
 
-          out_teams = {}
-          for i, (tid, abbr) in enumerate(teams):
-              url = (
-                  "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/"
-                  f"seasons/{season}/types/2/teams/{tid}/statistics"
-              )
-              try:
-                  payload = get(url)
-              except Exception as exc:
-                  print(f"skip {abbr}: {exc}")
-                  time.sleep(0.15)
-                  continue
-              cats = ((payload.get("splits") or {}).get("categories")) or []
-              ranks = {}
-              for key, cat, name in FIELDS:
-                  st = pick_stat(cats, cat, name)
-                  rank = parse_rank(st) if st else None
-                  if rank is not None:
-                      ranks[key] = rank
-              if ranks:
-                  out_teams[abbr] = ranks
-              if i < len(teams) - 1:
-                  time.sleep(0.12)
-
-          if len(out_teams) < 28:
-              raise SystemExit(f"too few team rank rows: {len(out_teams)}")
+          ranked = {abbr: {} for abbr in team_stats}
+          for chip, field in FIELDS:
+              rows = [(abbr, float(st.get(field) or 0)) for abbr, st in team_stats.items()]
+              for abbr, rank in competition_ranks(rows).items():
+                  ranked[abbr][chip] = rank
 
           Path(f"out/snap/nfl-team-offense-ranks-{season}.json").write_text(
               json.dumps({
                   "season": int(season) if str(season).isdigit() else season,
                   "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
-                  "source": "espn-team-season-stats",
-                  "teams": out_teams,
+                  "source": "sleeper-team-season-stats",
+                  "teams": ranked,
               }, separators=(",", ":"))
           )
-          print("ok nfl-team-offense-ranks", season, len(out_teams))
+          print("ok nfl-team-offense-ranks", season, len(ranked), "sleeper")
           PY
           fi
 
@@ -363,5 +336,5 @@ jobs:
           BASE="https://raw.githubusercontent.com/${REPO}/snap-cdn"
           echo "Public base: $BASE"
           echo "Smoke: ${BASE}/research/fpa-half.json"
-          ls -la snap/nfl-team-offense-ranks-*.json 2>/dev/null || echo "note: no nfl-team-offense-ranks yet (run NFL Team Offense Ranks workflow)"
+          ls -la snap/nfl-team-offense-ranks-*.json 2>/dev/null || echo "note: no nfl-team-offense-ranks yet (run Publish Snap CDN / NFL Team Offense Ranks)"
           ls -la snap/nfl-team-depth.json 2>/dev/null || echo "note: no nfl-team-depth yet"

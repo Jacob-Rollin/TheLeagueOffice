@@ -1143,9 +1143,9 @@ function TeamTab({
     return map;
   }, [catalog?.players]);
 
-  // Official ESPN team ranks via snap-cdn (Actions warm) — not visitor Sleeper/ESPN.
+  // Sleeper TEAM_* ranks via snap-cdn (Actions warm) — not visitor Sleeper/ESPN.
   const { data: offenseRanksBoard, isLoading: ranksLoading } = useQuery({
-    queryKey: ["nfl-team-offense-ranks", season],
+    queryKey: ["nfl-team-offense-ranks", "sleeper-v3", season],
     enabled: Boolean(team),
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,

@@ -1,8 +1,9 @@
 /**
- * Official NFL team offense ranks for the mobile player Team tab.
+ * NFL team offense ranks for the mobile player Team tab.
  *
- * Prefer snap-cdn (Actions → ESPN team season stats). Soft-empty on miss —
- * never Fluid, never per-visitor ESPN fan-out, never Sleeper player rollups.
+ * Prefer snap-cdn (Actions → Sleeper TEAM_* season stats, ranked to match the
+ * Sleeper app chips). Soft-empty on miss — never Fluid, never per-visitor
+ * ESPN/Sleeper fan-out.
  */
 
 import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
@@ -54,8 +55,8 @@ export async function fetchNflTeamOffenseRanks(
   season: string | number,
 ): Promise<NflTeamOffenseRanksSnap> {
   const safeSeason = String(season || new Date().getUTCFullYear());
-  // v2: bust IndexedDB empties cached while snap-cdn orphan publishes wiped ranks.
-  return getCached(`nfl-team-offense-ranks-v2:${safeSeason}`, CLIENT_TTL_MS, async () => {
+  // v3: Sleeper TEAM_* ranks (replaces ESPN vendor ordinals).
+  return getCached(`nfl-team-offense-ranks-v3:${safeSeason}`, CLIENT_TTL_MS, async () => {
     if (!snapCdnPublicBase()) return EMPTY;
     const snap = await fetchSnap(safeSeason);
     if (!snap || Object.keys(snap.teams).length === 0) return EMPTY;
