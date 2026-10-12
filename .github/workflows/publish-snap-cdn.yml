@@ -235,17 +235,24 @@ jobs:
               team = str(p.get("team") or "").strip().upper()
               order = p.get("depth_chart_order")
               status = p.get("status")
-              if not team or team == "FA" or pos not in POS_OK:
+              depth_pos = str(p.get("depth_chart_position") or "").strip().upper() or None
+              if not team or team == "FA":
                   continue
+              # Match Sleeper app offense depth: Active + numeric depth_chart_order.
               if status != "Active" or not isinstance(order, (int, float)):
                   continue
-              depth_pos = str(p.get("depth_chart_position") or "").strip().upper() or None
+              # Fantasy offense slots only (Sleeper also shows DEF — we skip that).
+              # FB on the RB chart (e.g. Hunter Luepke) must map to RB — not drop.
               if pos == "WR":
                   slot = WR_SLOT.get(depth_pos or "")
                   if not slot:
                       continue
-              else:
+              elif pos in POS_OK:
                   slot = pos
+              elif pos == "FB" and (depth_pos in (None, "RB", "FB")):
+                  slot = "RB"
+              else:
+                  continue
               name = (p.get("full_name") or f"{p.get('first_name') or ''} {p.get('last_name') or ''}").strip()
               if not name:
                   continue

@@ -24,7 +24,7 @@ import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import type { Pos } from "@/lib/draft";
-import { injuryBadgeInfo } from "@/lib/injury-badge";
+import { injuryBadgeInfo, type InjuryBadgeInfo } from "@/lib/injury-badge";
 import type { LeagueActivityEvent, LeagueActivityMove } from "@/lib/league.functions";
 import {
   fetchNflTeamDepth,
@@ -113,8 +113,18 @@ const AVATAR_POS = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
 
 type SheetTab = "overview" | "logs" | "team";
 
+function compactPlayerName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "";
+  if (parts.length === 1) return parts[0]!.toUpperCase();
+  return `${parts[0]![0]!.toUpperCase()}. ${parts.slice(1).join(" ").toUpperCase()}`;
+}
+
 function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const [tab, setTab] = useState<SheetTab>("overview");
+  const [compactHeader, setCompactHeader] = useState(false);
+  const scrollRootRef = useRef<HTMLDivElement>(null);
+  const heroSentinelRef = useRef<HTMLDivElement>(null);
   const openPlayer = useOpenMobilePlayer();
   // Reuses the league-rosters React Query cache — no catalog fetch required.
   const { ownerByPlayerId } = useLeagueRosters([]);
@@ -135,6 +145,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   // Keep Team tab when hopping via depth chart; otherwise land on Overview.
   useEffect(() => {
     setTab((prev) => (prev === "team" ? "team" : "overview"));
+    setCompactHeader(false);
   }, [id]);
 
   // Same cache key as desktop PlayerDetail / hover prefetch.
@@ -180,9 +191,54 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   const logo = teamLogo(team);
   const image = player ? playerImage(player.id, AVATAR_POS.has(pos) ? pos : "WR", player.team) : null;
 
+  // Compact sticky bar once the hero name scrolls out of the sheet viewport.
+  useEffect(() => {
+    const root = scrollRootRef.current;
+    const sentinel = heroSentinelRef.current;
+    if (!root || !sentinel || !player) {
+      setCompactHeader(false);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => setCompactHeader(!entry?.isIntersecting),
+      { root, threshold: 0, rootMargin: "-8px 0px 0px 0px" },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [id, player]);
+
   return (
-    <div role="dialog" aria-modal="true" aria-label={player?.name ?? "Player"} className="fixed inset-0 z-50 overflow-y-auto bg-m-bg">
+    <div
+      ref={scrollRootRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={player?.name ?? "Player"}
+      className="fixed inset-0 z-50 overflow-y-auto bg-m-bg"
+    >
       <div className="mx-auto w-full max-w-md pb-10">
+        {/* Sticky stack: injury strip (when listed) + compact identity after hero scrolls away. */}
+        <div className="sticky top-0 z-40">
+          {injuryInfo ? <PlayerInjuryTopBar info={injuryInfo} /> : null}
+          {compactHeader && player ? (
+            <div className="flex items-center gap-2.5 border-b border-m-border bg-m-card/95 px-3 py-2.5 text-m-card-fg shadow-sm backdrop-blur-sm">
+              {logo ? (
+                <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-0.5" />
+              ) : null}
+              <p className="min-w-0 flex-1 truncate font-display text-[17px] font-bold tracking-wide">
+                {compactPlayerName(player.name)}
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close player"
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+              >
+                <X className="size-4" strokeWidth={2.5} />
+              </button>
+            </div>
+          ) : null}
+        </div>
+
         <section className="relative overflow-hidden bg-m-card text-m-card-fg">
           {/* Faded team mark: centered in the header, behind name + headshot. */}
           {logo ? (
@@ -193,14 +249,16 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
               className="pointer-events-none absolute left-1/2 top-[48%] z-0 size-[22rem] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.1]"
             />
           ) : null}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close player"
-            className="absolute right-3 top-3 z-10 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
-          >
-            <X className="size-5" strokeWidth={2.5} />
-          </button>
+          {!compactHeader ? (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close player"
+              className="absolute right-3 top-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+            >
+              <X className="size-5" strokeWidth={2.5} />
+            </button>
+          ) : null}
 
           {detail.isLoading ? (
             <p className="relative z-[1] px-5 py-24 text-center text-sm text-m-muted">Loading player...</p>
@@ -218,6 +276,8 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                     </>
                   ) : null}
                 </h2>
+                {/* Sentinel: compact bar appears once this leaves the sheet viewport. */}
+                <div ref={heroSentinelRef} className="h-px w-px" aria-hidden="true" />
                 <div className="mt-3 flex items-center gap-2.5">
                   {logo ? (
                     <img src={logo} alt="" className="size-9 shrink-0 rounded-full bg-m-chip object-contain p-1" />
@@ -231,18 +291,11 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                   </div>
                 </div>
                 {fantasyOwner ? (
-                  <p className="mt-2 truncate text-[13px] font-medium text-m-card-fg">
-                    {fantasyOwner}
-                  </p>
-                ) : null}
-                {injuryInfo ? (
-                  <span
-                    className={cn(
-                      "mt-3 inline-block rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wide",
-                      injuryInfo.className,
-                    )}
-                  >
-                    {injuryInfo.text}
+                  <span className="mt-2.5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full border border-m-border bg-m-chip px-2.5 py-1 text-[12px] font-semibold text-m-chip-fg">
+                    <span className="font-display text-[11px] font-bold uppercase tracking-wide text-m-accent">
+                      On
+                    </span>
+                    <span className="truncate">{fantasyOwner}</span>
                   </span>
                 ) : null}
               </div>
@@ -377,6 +430,31 @@ function StatCell({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Full-width injury strip at the top of the player header (Sleeper layout, our badge colors). */
+function PlayerInjuryTopBar({ info }: { info: InjuryBadgeInfo }) {
+  const barClass =
+    info.tone === "amber" ? "bg-amber-500 text-slate-950" : "bg-rose-600 text-white";
+  const discClass =
+    info.tone === "amber"
+      ? "bg-slate-950/15 text-slate-950"
+      : "bg-white/20 text-white";
+
+  return (
+    <div className={cn("relative z-10 flex items-center justify-center gap-2 px-4 py-2.5", barClass)}>
+      <span
+        className={cn(
+          "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black",
+          discClass,
+        )}
+        aria-hidden="true"
+      >
+        {info.letter}
+      </span>
+      <p className="font-display text-[13px] font-bold uppercase tracking-[0.12em]">{info.text}</p>
+    </div>
+  );
+}
+
 function Card({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <section className="mx-2.5 mt-3 overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.1)]">
@@ -397,7 +475,8 @@ function OverviewMarketRow({ id }: { id: string }) {
   const entry = brain?.[id];
   if (!entry) return null;
 
-  const value = scaleValue(entry.value ?? 0);
+  const rawValue = Number(entry.value) || 0;
+  const value = scaleValue(rawValue);
   const trend = Number(entry.trend) || 0;
   // Only FantasyCalc fields — skip empty / template stubs (value 0 + flat trend).
   if (value <= 0 && trend === 0) return null;
@@ -405,44 +484,65 @@ function OverviewMarketRow({ id }: { id: string }) {
   const tone = valueTrendTone(trend);
   const trendClass =
     tone === "up" ? "text-emerald-600" : tone === "down" ? "text-rose-600" : "text-m-muted";
-  const trendArrow = tone === "up" ? "▲" : tone === "down" ? "▼" : "–";
+  // Percent move vs current value (same idea as Trade Desk) — clearer than raw 0.0 stubs.
+  const trendPct =
+    rawValue !== 0 && Number.isFinite(trend) ? (trend / Math.abs(rawValue)) * 100 : null;
 
   return (
     <section className="mx-2.5 mt-3 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
       <div className="grid grid-cols-2 py-3 text-center">
         <div className="border-r border-m-border">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">Value</p>
-          <p className="mt-0.5 font-display text-lg font-semibold tabular-nums">
+          <p className="mt-0.5 font-display text-lg font-semibold tabular-nums text-m-card-fg">
             {value > 0 ? value.toFixed(1) : "-"}
           </p>
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">30d Trend</p>
-          <p className={cn("mt-0.5 font-display text-lg font-semibold tabular-nums", trendClass)}>
-            <span aria-hidden="true" className="mr-0.5 text-[12px]">
-              {trendArrow}
-            </span>
-            {Math.abs(trend).toFixed(1)}
-          </p>
+          {tone === "flat" ? (
+            <p className="mt-0.5 font-display text-lg font-semibold text-m-muted">Flat</p>
+          ) : (
+            <p className={cn("mt-0.5 font-display text-lg font-semibold tabular-nums", trendClass)}>
+              <span aria-hidden="true" className="mr-0.5 text-[13px]">
+                {tone === "up" ? "▲" : "▼"}
+              </span>
+              {trendPct != null ? `${Math.abs(trendPct).toFixed(1)}%` : Math.abs(trend).toFixed(1)}
+            </p>
+          )}
         </div>
       </div>
     </section>
   );
 }
 
-/** Compact injury callout above Overview projections — only when designation or notes exist. */
+/** Compact injury callout above Overview projections — designation + diagnosis + news note. */
 function OverviewInjuryNote({
+  playerId,
   status,
   bodyPart,
   notes,
 }: {
+  playerId: string;
   status: string | null;
   bodyPart: string | null;
   notes: string | null;
 }) {
   const badge = injuryBadgeInfo(status);
   const diagnosis = bodyPart?.trim() || null;
-  const note = notes?.trim() || null;
+  // Same CDN news path as Latest News — reuse for a short medical blurb when Sleeper notes are empty.
+  const { data: news } = useQuery({
+    queryKey: ["player-news", playerId, "cdn-v2"],
+    queryFn: () => fetchPlayerNewsClient(playerId),
+    enabled: Boolean(playerId && (badge || diagnosis || notes)),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+  const newsNote =
+    news?.injury?.note?.trim() ||
+    news?.items?.[0]?.description?.trim() ||
+    news?.items?.[0]?.headline?.trim() ||
+    null;
+  const note = notes?.trim() || newsNote || null;
   if (!badge && !diagnosis && !note) return null;
 
   const critical = badge?.tone === "rose";
@@ -459,7 +559,7 @@ function OverviewInjuryNote({
       <div className="px-3.5 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <p className={cn("font-display text-[11px] font-bold uppercase tracking-[0.1em]", accentLabel)}>
-            Injury
+            Injury Report
           </p>
           {badge ? (
             <span
@@ -473,17 +573,17 @@ function OverviewInjuryNote({
           ) : null}
         </div>
         {diagnosis ? (
-          <p className="mt-1.5 text-[14px] font-semibold capitalize leading-snug text-m-card-fg">
+          <p className="mt-1.5 text-[15px] font-semibold capitalize leading-snug text-m-card-fg">
             {diagnosis}
           </p>
         ) : null}
         {note ? (
-          <p className="mt-1 text-[13px] leading-relaxed text-m-muted">{note}</p>
-        ) : !diagnosis ? (
+          <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-m-muted">{note}</p>
+        ) : (
           <p className="mt-1 text-[13px] leading-relaxed text-m-muted">
-            {badge ? `${badge.text} — monitor before lock.` : "Monitor before lock."}
+            {badge ? `${badge.text} — check news before lock.` : "Check news before lock."}
           </p>
-        ) : null}
+        )}
       </div>
     </section>
   );
@@ -589,6 +689,7 @@ function Overview({
       <OverviewMarketRow id={id} />
 
       <OverviewInjuryNote
+        playerId={id}
         status={injuryStatus}
         bodyPart={injuryBodyPart}
         notes={injuryNotes}
@@ -1228,8 +1329,8 @@ function WeekProjectionsStrip({
               : "text-m-card-fg";
           return (
             <div key={log.week} data-proj-week={log.week} className="w-[7.75rem] shrink-0">
-              <div className="mb-1.5 flex items-center gap-1.5 px-0.5">
-                <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide">
+              <div className="mb-1.5 flex items-center justify-center gap-1.5 px-0.5">
+                <p className="min-w-0 truncate text-center text-[11px] font-semibold uppercase tracking-wide">
                   <span className="text-m-card-fg">Wk {log.week}</span>{" "}
                   {log.isBye ? (
                     <span className="text-m-muted">BYE</span>
@@ -1560,6 +1661,8 @@ function TeamTab({
   const nflState = useNflState();
   const season = nflState.data?.season ?? String(new Date().getUTCFullYear());
   const { data: catalog } = useSleeperPlayers();
+  // Active-week proj (same path as matchup / ATP) — not season ROS from depthChart.
+  const { projectFor } = useLeagueProjections();
   // Same shared week-proj overlay as popup header / ATP / catalog badges.
   const liveInjuries = useLiveInjuryStatuses();
   const playersById = useMemo(() => {
@@ -1714,6 +1817,7 @@ function TeamTab({
                 const badge = injuryBadgeInfo(cell.injury);
                 const { first, last } = splitPlayerName(cell.name);
                 const isActive = cell.id === playerId;
+                const weekProj = projectFor(cell.id);
                 return (
                   <button
                     key={cell.id}
@@ -1743,9 +1847,9 @@ function TeamTab({
                     >
                       {last}
                     </p>
-                    {cell.proj > 0 ? (
+                    {weekProj != null && Number.isFinite(weekProj) && weekProj > 0 ? (
                       <p className="mt-0.5 text-[11px] font-semibold tabular-nums text-m-muted">
-                        {cell.proj.toFixed(1)}
+                        {weekProj.toFixed(1)}
                       </p>
                     ) : null}
                   </button>
