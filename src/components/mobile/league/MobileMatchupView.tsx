@@ -89,11 +89,12 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
   }, [week, isNative, boardWeek, nflWeek]);
   const activeWeek = week ?? (isNative ? (boardWeek ?? nflWeek) : nflWeek) ?? 1;
 
-  const { matchups, loading } = useActiveMatchups(activeWeek);
+  // Same TLN broadcast pace for Sleeper + native (Sleeper client pools).
+  const { matchups, loading } = useActiveMatchups(activeWeek, { pace: "broadcast" });
   const { progressByNflTeam, currentWeek } = useNflGameProgress(activeWeek);
   const { data: schedule = [] } = useNflSchedule();
   const { scoringMap } = useLeagueScoringMeta();
-  const { statsFor } = useWeeklyActualStats(activeWeek);
+  const { statsFor } = useWeeklyActualStats(activeWeek, { pace: "broadcast" });
   const isPastWeek = currentWeek != null && activeWeek < currentWeek;
 
   const [view, setView] = useState<"matchup" | "scoreboard">("matchup");

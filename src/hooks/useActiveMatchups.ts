@@ -30,9 +30,10 @@ const LIVE_POLL_MS = 30 * 1000;
 /** Between early/late windows — keep ≤60s so TLN field popups don’t stall. */
 const BETWEEN_GAMES_POLL_MS = 60 * 1000;
 /**
- * TLN broadcast stage only — 5s Sleeper client polls (~12/min) on game day.
+ * TLN + mobile broadcast — 5s Sleeper client polls (~12/min) on game day.
  * Safe with a single RQ timer + 3s matchup memory TTL: ~12–14 Sleeper
  * req/min/tab with weekly stats still ≪ 180 soft budget / ~1000 IP.
+ * Native uses the same pace; Fluid board is coalesced separately (~45s).
  * Other pages keep the default pace.
  */
 const BROADCAST_LIVE_POLL_MS = 5 * 1000;
@@ -177,10 +178,12 @@ function liveMatchupPollMs(
   platform: string,
   pace: ActiveMatchupsPace,
 ): number | false {
-  // Native polls hit auth serverFns (+ live stats snap) — keep ESPN-quiet cadence.
-  const espnish = platform === "espn" || platform === "yahoo" || platform === "native";
-  // ESPN/Yahoo polls also hit our CDN route (and sometimes Fluid). Keep them
-  // calmer than Sleeper's browser→api.sleeper.app live path — even on TLN.
+  // ESPN/Yahoo polls hit our CDN route (and sometimes Fluid) — never broadcast.
+  const espnish = platform === "espn" || platform === "yahoo";
+  // Native default stays quiet (Fluid board), but broadcast is allowed: Fluid
+  // matchup payload is memory-coalesced (~45s) while Sleeper client pools
+  // refresh the live overlay at TLN pace.
+  const nativeQuiet = platform === "native";
   const broadcast = !espnish && pace === "broadcast";
 
   if (broadcast) {
@@ -196,8 +199,9 @@ function liveMatchupPollMs(
 
   if (week == null || currentWeek == null || week !== currentWeek) return false;
   if (liveMs === false) return false;
-  const inGame = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : LIVE_POLL_MS;
-  const between = espnish ? ESPN_BETWEEN_GAMES_POLL_MS : BETWEEN_GAMES_POLL_MS;
+  const quiet = espnish || nativeQuiet;
+  const inGame = quiet ? ESPN_BETWEEN_GAMES_POLL_MS : LIVE_POLL_MS;
+  const between = quiet ? ESPN_BETWEEN_GAMES_POLL_MS : BETWEEN_GAMES_POLL_MS;
   // liveRefreshMs uses 30s for in-game — map that band onto our page pace.
   if (typeof liveMs === "number" && liveMs <= 30_000) return inGame;
   // liveRefreshMs returns ~10m when every game is post (not 15m).
