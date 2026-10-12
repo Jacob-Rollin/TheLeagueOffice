@@ -46,6 +46,7 @@ import { fetchResearchFpa } from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { projectionPoints } from "@/lib/scoring-map";
+import { fetchSnapTradeMarket } from "@/lib/snap-cdn";
 import {
   fetchGameLogsClient,
   fetchNextGameClient,
@@ -191,7 +192,8 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   const logo = teamLogo(team);
   const image = player ? playerImage(player.id, AVATAR_POS.has(pos) ? pos : "WR", player.team) : null;
 
-  // Compact sticky bar once the hero name scrolls out of the sheet viewport.
+  // Compact overlay once the hero identity block leaves the sheet viewport.
+  // Fixed overlay (not sticky-in-flow) so appearing does not shift scroll / shake.
   useEffect(() => {
     const root = scrollRootRef.current;
     const sentinel = heroSentinelRef.current;
@@ -201,7 +203,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
     }
     const io = new IntersectionObserver(
       ([entry]) => setCompactHeader(!entry?.isIntersecting),
-      { root, threshold: 0, rootMargin: "-8px 0px 0px 0px" },
+      { root, threshold: 0, rootMargin: "0px" },
     );
     io.observe(sentinel);
     return () => io.disconnect();
@@ -215,31 +217,42 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
       aria-label={player?.name ?? "Player"}
       className="fixed inset-0 z-50 overflow-y-auto bg-m-bg"
     >
-      <div className="mx-auto w-full max-w-md pb-10">
-        {/* Sticky stack: injury strip (when listed) + compact identity after hero scrolls away. */}
-        <div className="sticky top-0 z-40">
-          {injuryInfo ? <PlayerInjuryTopBar info={injuryInfo} /> : null}
-          {compactHeader && player ? (
-            <div className="flex items-center gap-2.5 border-b border-m-border bg-m-card/95 px-3 py-2.5 text-m-card-fg shadow-sm backdrop-blur-sm">
-              {logo ? (
-                <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-0.5" />
-              ) : null}
-              <p className="min-w-0 flex-1 truncate font-display text-[17px] font-bold tracking-wide">
-                {compactPlayerName(player.name)}
-              </p>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close player"
-                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+      {/* Fixed overlay — does not consume document flow (avoids hero↔compact jump). */}
+      {compactHeader && player ? (
+        <div className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex justify-center">
+          <div className="pointer-events-auto flex w-full max-w-md items-center gap-2 border-b border-m-border bg-m-card/95 px-3 py-2.5 text-m-card-fg shadow-sm backdrop-blur-sm">
+            {logo ? (
+              <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-0.5" />
+            ) : null}
+            <p className="min-w-0 flex-1 truncate font-display text-[17px] font-bold tracking-wide">
+              {compactPlayerName(player.name)}
+            </p>
+            {injuryInfo ? (
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
+                  injuryInfo.className,
+                )}
               >
-                <X className="size-4" strokeWidth={2.5} />
-              </button>
-            </div>
-          ) : null}
+                {injuryInfo.letter}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close player"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+            >
+              <X className="size-4" strokeWidth={2.5} />
+            </button>
+          </div>
         </div>
+      ) : null}
 
+      <div className="mx-auto w-full max-w-md pb-10">
         <section className="relative overflow-hidden bg-m-card text-m-card-fg">
+          {/* Injury strip lives in the hero (scrolls away); compact uses a letter chip. */}
+          {injuryInfo ? <PlayerInjuryTopBar info={injuryInfo} /> : null}
           {/* Faded team mark: centered in the header, behind name + headshot. */}
           {logo ? (
             <img
@@ -254,7 +267,10 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
               type="button"
               onClick={onClose}
               aria-label="Close player"
-              className="absolute right-3 top-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+              className={cn(
+                "absolute right-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg",
+                injuryInfo ? "top-[3.25rem]" : "top-3",
+              )}
             >
               <X className="size-5" strokeWidth={2.5} />
             </button>
@@ -276,8 +292,6 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                     </>
                   ) : null}
                 </h2>
-                {/* Sentinel: compact bar appears once this leaves the sheet viewport. */}
-                <div ref={heroSentinelRef} className="h-px w-px" aria-hidden="true" />
                 <div className="mt-3 flex items-center gap-2.5">
                   {logo ? (
                     <img src={logo} alt="" className="size-9 shrink-0 rounded-full bg-m-chip object-contain p-1" />
@@ -314,6 +328,8 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
               ) : null}
             </div>
           )}
+          {/* Sentinel at end of hero — compact overlays after this leaves the viewport. */}
+          <div ref={heroSentinelRef} className="h-px w-full" aria-hidden="true" />
         </section>
 
         {player ? (
@@ -467,26 +483,32 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
 }
 
 /**
- * Market Value / 30d Trend from FantasyCalc via player brain.
- * Do not surface brain.ecr — that FantasyPros field is unpaid/incomplete.
+ * Market Value / 30d Trend from FantasyCalc.
+ * Trends come from the trade-market snap (brain/players-export has no trends array).
+ * Do not surface brain.ecr — FantasyPros field is unpaid/incomplete.
  */
-function OverviewMarketRow({ id }: { id: string }) {
+function OverviewMarketRow({ id, format }: { id: string; format: Format }) {
   const brain = usePlayerBrain();
-  const entry = brain?.[id];
-  if (!entry) return null;
+  const market = useQuery({
+    // Same key as Trade Market Values — shared RQ cache, no extra download.
+    queryKey: ["trade-market", format],
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+    placeholderData: (prev) => prev,
+    queryFn: () => fetchSnapTradeMarket(format),
+  });
+  const marketRow = market.data?.rows?.find((r) => r.id === id) ?? null;
+  const brainEntry = brain?.[id] ?? null;
 
-  const rawValue = Number(entry.value) || 0;
+  const rawValue = Number(marketRow?.value ?? brainEntry?.value ?? 0) || 0;
   const value = scaleValue(rawValue);
-  const trend = Number(entry.trend) || 0;
-  // Only FantasyCalc fields — skip empty / template stubs (value 0 + flat trend).
+  // Prefer snap trend30 (real FantasyCalc delta); brain.trend is usually 0 on TiDB export.
+  const trend = Number(marketRow?.trend30 ?? brainEntry?.trend ?? 0) || 0;
   if (value <= 0 && trend === 0) return null;
 
   const tone = valueTrendTone(trend);
   const trendClass =
     tone === "up" ? "text-emerald-600" : tone === "down" ? "text-rose-600" : "text-m-muted";
-  // Percent move vs current value (same idea as Trade Desk) — clearer than raw 0.0 stubs.
-  const trendPct =
-    rawValue !== 0 && Number.isFinite(trend) ? (trend / Math.abs(rawValue)) * 100 : null;
 
   return (
     <section className="mx-2.5 mt-3 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -506,7 +528,7 @@ function OverviewMarketRow({ id }: { id: string }) {
               <span aria-hidden="true" className="mr-0.5 text-[13px]">
                 {tone === "up" ? "▲" : "▼"}
               </span>
-              {trendPct != null ? `${Math.abs(trendPct).toFixed(1)}%` : Math.abs(trend).toFixed(1)}
+              {Math.abs(trend).toFixed(1)}
             </p>
           )}
         </div>
@@ -686,7 +708,7 @@ function Overview({
         </Card>
       ) : null}
 
-      <OverviewMarketRow id={id} />
+      <OverviewMarketRow id={id} format={format} />
 
       <OverviewInjuryNote
         playerId={id}
