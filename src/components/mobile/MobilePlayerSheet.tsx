@@ -496,7 +496,8 @@ function PlayerInjuryTopBar({ info }: { info: InjuryBadgeInfo }) {
 
   return (
     <div className={cn("relative w-full", barFill)}>
-      <div className="relative z-[1] flex items-center justify-center px-4 py-2.5 pr-14">
+      {/* Symmetric padding — close is absolute, so do not add pr-* or the badge drifts left. */}
+      <div className="relative z-[1] flex items-center justify-center px-4 py-2.5">
         <span
           className={cn(
             "rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide",
