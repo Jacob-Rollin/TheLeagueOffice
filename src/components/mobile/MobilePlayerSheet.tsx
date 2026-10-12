@@ -14,6 +14,7 @@ import {
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { useMobileLeagueActivity } from "@/components/mobile/league/useMobileLeague";
+import { valueTrendTone } from "@/components/research/ValueTrendCell";
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
@@ -51,6 +52,7 @@ import {
   fetchPlayerBioClient,
 } from "@/lib/sleeper-client";
 import { sosOppTextClass } from "@/lib/sos-presentation";
+import { scaleValue } from "@/lib/trade-engine";
 import { cn } from "@/lib/utils";
 
 /**
@@ -332,7 +334,15 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 nextGame={nextGame ?? null}
                 projected={projectFor(id)}
                 sosGrade={detail.data?.sos?.grade ?? null}
+                sosOpponents={detail.data?.sos?.opponents ?? null}
                 format={format}
+                injuryStatus={resolveInjuryStatus(player) ?? player.injury_status ?? null}
+                injuryBodyPart={
+                  (player as { injury_body_part?: string | null }).injury_body_part ?? null
+                }
+                injuryNotes={
+                  (player as { injury_notes?: string | null }).injury_notes?.trim() || null
+                }
               />
             ) : tab === "logs" ? (
               <GameLogTab
@@ -378,6 +388,107 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
   );
 }
 
+/**
+ * Market Value / 30d Trend from FantasyCalc via player brain.
+ * Do not surface brain.ecr — that FantasyPros field is unpaid/incomplete.
+ */
+function OverviewMarketRow({ id }: { id: string }) {
+  const brain = usePlayerBrain();
+  const entry = brain?.[id];
+  if (!entry) return null;
+
+  const value = scaleValue(entry.value ?? 0);
+  const trend = Number(entry.trend) || 0;
+  // Only FantasyCalc fields — skip empty / template stubs (value 0 + flat trend).
+  if (value <= 0 && trend === 0) return null;
+
+  const tone = valueTrendTone(trend);
+  const trendClass =
+    tone === "up" ? "text-emerald-600" : tone === "down" ? "text-rose-600" : "text-m-muted";
+  const trendArrow = tone === "up" ? "▲" : tone === "down" ? "▼" : "–";
+
+  return (
+    <section className="mx-2.5 mt-3 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+      <div className="grid grid-cols-2 py-3 text-center">
+        <div className="border-r border-m-border">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">Value</p>
+          <p className="mt-0.5 font-display text-lg font-semibold tabular-nums">
+            {value > 0 ? value.toFixed(1) : "-"}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">30d Trend</p>
+          <p className={cn("mt-0.5 font-display text-lg font-semibold tabular-nums", trendClass)}>
+            <span aria-hidden="true" className="mr-0.5 text-[12px]">
+              {trendArrow}
+            </span>
+            {Math.abs(trend).toFixed(1)}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Compact injury callout above Overview projections — only when designation or notes exist. */
+function OverviewInjuryNote({
+  status,
+  bodyPart,
+  notes,
+}: {
+  status: string | null;
+  bodyPart: string | null;
+  notes: string | null;
+}) {
+  const badge = injuryBadgeInfo(status);
+  const diagnosis = bodyPart?.trim() || null;
+  const note = notes?.trim() || null;
+  if (!badge && !diagnosis && !note) return null;
+
+  const critical = badge?.tone === "rose";
+  const accentBorder = critical ? "border-l-rose-500" : "border-l-amber-400";
+  const accentLabel = critical ? "text-rose-600" : "text-amber-600";
+
+  return (
+    <section
+      className={cn(
+        "mx-2.5 mt-3 overflow-hidden rounded-xl border border-m-border border-l-4 bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.08)]",
+        accentBorder,
+      )}
+    >
+      <div className="px-3.5 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className={cn("font-display text-[11px] font-bold uppercase tracking-[0.1em]", accentLabel)}>
+            Injury
+          </p>
+          {badge ? (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
+                badge.className,
+              )}
+            >
+              {badge.text}
+            </span>
+          ) : null}
+        </div>
+        {diagnosis ? (
+          <p className="mt-1.5 text-[14px] font-semibold capitalize leading-snug text-m-card-fg">
+            {diagnosis}
+          </p>
+        ) : null}
+        {note ? (
+          <p className="mt-1 text-[13px] leading-relaxed text-m-muted">{note}</p>
+        ) : !diagnosis ? (
+          <p className="mt-1 text-[13px] leading-relaxed text-m-muted">
+            {badge ? `${badge.text} — monitor before lock.` : "Monitor before lock."}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function rankTone(rank: number | null) {
   if (rank == null) return "";
   if (rank <= 10) return "text-red-500";
@@ -394,7 +505,11 @@ function Overview({
   nextGame,
   projected,
   sosGrade,
+  sosOpponents,
   format,
+  injuryStatus,
+  injuryBodyPart,
+  injuryNotes,
 }: {
   id: string;
   pos: string;
@@ -402,7 +517,11 @@ function Overview({
   nextGame: Awaited<ReturnType<typeof fetchNextGameClient>> | null;
   projected: number | null;
   sosGrade: string | null;
+  sosOpponents: Array<{ week: number; opp: string; rank: number | null }> | null;
   format: Format;
+  injuryStatus: string | null;
+  injuryBodyPart: string | null;
+  injuryNotes: string | null;
 }) {
   const { rankFor: defenseRank } = usePositionalDefenseRanks();
   const { data: fpa } = useQuery({
@@ -417,6 +536,13 @@ function Overview({
   const allowed = fpa?.rows.find((r) => r.team.toUpperCase() === opp?.toUpperCase())?.cells[fpaPos]?.pa ?? null;
   const focusWeek =
     nextGame?.seasonType === "regular" && nextGame.week > 0 ? nextGame.week : null;
+  const sosRankByWeek = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const m of sosOpponents ?? []) {
+      map.set(Number(m.week), m.rank);
+    }
+    return map;
+  }, [sosOpponents]);
 
   return (
     <>
@@ -460,7 +586,22 @@ function Overview({
         </Card>
       ) : null}
 
-      <WeekProjectionsStrip id={id} team={team} pos={pos} format={format} focusWeek={focusWeek} />
+      <OverviewMarketRow id={id} />
+
+      <OverviewInjuryNote
+        status={injuryStatus}
+        bodyPart={injuryBodyPart}
+        notes={injuryNotes}
+      />
+
+      <WeekProjectionsStrip
+        id={id}
+        team={team}
+        pos={pos}
+        format={format}
+        focusWeek={focusWeek}
+        sosRankByWeek={sosRankByWeek}
+      />
 
       <h3 className="px-4 pb-1 pt-6 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
         Latest News
@@ -808,8 +949,26 @@ const statValue = (
   return opts?.zeroIfMissing ? "0" : "-";
 };
 
-type TableCol<R> = { key: string; label: string; render: (row: R) => ReactNode; highlight?: boolean };
+type TableCol<R> = {
+  key: string;
+  label: string;
+  render: (row: R) => ReactNode;
+  highlight?: boolean;
+  /** Per-cell tone (e.g. weekly pos-rank heat). Overrides highlight bg when set. */
+  cellClass?: (row: R) => string | undefined;
+};
 type ColGroup<R> = { label: string; cols: TableCol<R>[] };
+
+/**
+ * Soft heat for weekly Sleeper pos_rank_* (1 = best at position that week).
+ * Same 10 / 22 bands as Team Rank chips — no extra data fetch.
+ */
+function weeklyPosRankCellClass(rank: number | null | undefined): string | undefined {
+  if (rank == null || !Number.isFinite(rank) || rank <= 0) return undefined;
+  if (rank <= 10) return "bg-emerald-500/25 font-semibold text-emerald-950";
+  if (rank <= 22) return "bg-amber-400/30 font-semibold text-amber-950";
+  return "bg-rose-500/25 font-semibold text-rose-950";
+}
 
 /** Players-page style table: sticky first column, horizontally scrolling stat columns. */
 function StatTable<R>({
@@ -887,7 +1046,6 @@ function GroupedStatTable<R>({
   rows: R[];
   rowKey: (row: R) => string;
 }) {
-  const leftSpan = 1 + leftCols.length;
   return (
     <section className={title ? "mt-3" : undefined}>
       {title ? (
@@ -899,7 +1057,11 @@ function GroupedStatTable<R>({
         <table className="min-w-max border-collapse text-sm">
           <thead>
             <tr className="text-[10px] font-bold uppercase tracking-[0.12em] text-m-muted">
-              <th colSpan={leftSpan} className="sticky left-0 z-10 bg-m-card px-3 py-1.5 text-left" aria-hidden />
+              {/* Sticky Week only — same clip edge as body rows (Opp + Fantasy slide under it). */}
+              <th className="sticky left-0 z-10 w-[92px] bg-m-card px-3 py-1.5" aria-hidden />
+              {leftCols.map((c) => (
+                <th key={`cat-left-${c.key}`} className="min-w-[64px] px-3 py-1.5" aria-hidden />
+              ))}
               {groups.map((g, gi) => (
                 <th
                   key={g.label}
@@ -948,18 +1110,22 @@ function GroupedStatTable<R>({
                   </td>
                 ))}
                 {groups.map((g, gi) =>
-                  g.cols.map((c, ci) => (
-                    <td
-                      key={`${g.label}-${c.key}`}
-                      className={cn(
-                        "px-3 py-2.5 text-right tabnum",
-                        ci === 0 && gi > 0 && "border-l border-m-border/70",
-                        c.highlight && "bg-m-rank-col font-semibold",
-                      )}
-                    >
-                      {c.render(row)}
-                    </td>
-                  )),
+                  g.cols.map((c, ci) => {
+                    const heat = c.cellClass?.(row);
+                    return (
+                      <td
+                        key={`${g.label}-${c.key}`}
+                        className={cn(
+                          "px-3 py-2.5 text-right tabnum",
+                          ci === 0 && gi > 0 && "border-l border-m-border/70",
+                          !heat && c.highlight && "bg-m-rank-col font-semibold",
+                          heat,
+                        )}
+                      >
+                        {c.render(row)}
+                      </td>
+                    );
+                  }),
                 )}
               </tr>
             ))}
@@ -1010,12 +1176,15 @@ function WeekProjectionsStrip({
   pos,
   format,
   focusWeek,
+  sosRankByWeek,
 }: {
   id: string;
   team: string | null;
   pos: string;
   format: Format;
   focusWeek: number | null;
+  /** Weekly positional SoS ranks from detail SOS board (current season). */
+  sosRankByWeek?: Map<number, number | null> | null;
 }) {
   const { data, isLoading } = usePlayerLogs(id, team, pos);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -1052,11 +1221,21 @@ function WeekProjectionsStrip({
             log.isBye || log.proj?.[format] == null ? null : Number(log.proj[format]);
           const finalPts =
             log.isBye || !log.played ? null : Number(log.points[format]);
+          const sosRank = sosRankByWeek?.get(log.week);
+          const oppClass =
+            !log.isBye && sosRank != null && Number.isFinite(sosRank)
+              ? cn("font-semibold", sosOppTextClass(sosRank))
+              : "text-m-card-fg";
           return (
             <div key={log.week} data-proj-week={log.week} className="w-[7.75rem] shrink-0">
               <div className="mb-1.5 flex items-center gap-1.5 px-0.5">
-                <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-m-card-fg">
-                  Wk {log.week} {log.isBye ? "BYE" : opp.label}
+                <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide">
+                  <span className="text-m-card-fg">Wk {log.week}</span>{" "}
+                  {log.isBye ? (
+                    <span className="text-m-muted">BYE</span>
+                  ) : (
+                    <span className={oppClass}>{opp.label}</span>
+                  )}
                 </p>
                 {logo ? (
                   <img src={logo} alt="" className="size-4 shrink-0 rounded-full object-contain" />
@@ -1135,6 +1314,11 @@ function gameLogGroupedCols(
       {
         key: "rank",
         label: "Rank",
+        cellClass: (l) => {
+          if (l.isBye || !l.played) return undefined;
+          const v = Number(l.raw?.[rankKey]);
+          return Number.isFinite(v) && v > 0 ? weeklyPosRankCellClass(v) : undefined;
+        },
         render: (l) => {
           if (l.isBye || !l.played) return "-";
           const v = Number(l.raw?.[rankKey]);
@@ -1559,6 +1743,11 @@ function TeamTab({
                     >
                       {last}
                     </p>
+                    {cell.proj > 0 ? (
+                      <p className="mt-0.5 text-[11px] font-semibold tabular-nums text-m-muted">
+                        {cell.proj.toFixed(1)}
+                      </p>
+                    ) : null}
                   </button>
                 );
               })}
