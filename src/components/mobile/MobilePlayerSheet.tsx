@@ -294,18 +294,16 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             </>
           ) : (
             <div className="relative z-[1]">
-              {/* Injury + close share one row above the name (not a full-bleed top chrome). */}
+              {/* Full-bleed translucent strip above the name; close overlays the right edge. */}
               {injuryInfo ? (
-                <div className="flex items-center gap-2 px-3 pt-3">
-                  <div className="min-w-0 flex-1">
-                    <PlayerInjuryTopBar info={injuryInfo} />
-                  </div>
+                <div className="relative">
+                  <PlayerInjuryTopBar info={injuryInfo} />
                   {!compactHeader ? (
                     <button
                       type="button"
                       onClick={onClose}
                       aria-label="Close player"
-                      className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+                      className="absolute right-3 top-1/2 z-20 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg shadow-sm"
                     >
                       <X className="size-5" strokeWidth={2.5} />
                     </button>
@@ -489,24 +487,26 @@ function StatCell({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * Injury strip above the player name (aligned with the close control).
- * Bar fill is translucent; letter + label stay fully opaque.
+ * Full-bleed injury wash across the hero (Sleeper-style translucent bar).
+ * Solid letter badge + opaque designation text; close control overlays the right edge.
  */
 function PlayerInjuryTopBar({ info }: { info: InjuryBadgeInfo }) {
-  const barFill = info.tone === "amber" ? "bg-amber-500/70" : "bg-rose-600/70";
-  const textClass = info.tone === "amber" ? "text-slate-950" : "text-white";
-  const discClass =
-    info.tone === "amber"
-      ? "bg-slate-950/20 text-slate-950"
-      : "bg-white/25 text-white";
+  // Light wash so the hero still reads through — badge/text stay solid.
+  const barFill = info.tone === "amber" ? "bg-amber-500/40" : "bg-rose-600/40";
+  const textClass = info.tone === "amber" ? "text-slate-950" : "text-rose-950";
 
   return (
-    <div className={cn("relative overflow-hidden rounded-lg", barFill)}>
-      <div className={cn("relative z-[1] flex items-center justify-center gap-2 px-3 py-2", textClass)}>
+    <div className={cn("relative w-full", barFill)}>
+      <div
+        className={cn(
+          "relative z-[1] flex items-center justify-center gap-2 px-4 py-2.5 pr-14",
+          textClass,
+        )}
+      >
         <span
           className={cn(
-            "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black",
-            discClass,
+            "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px]",
+            info.className,
           )}
           aria-hidden="true"
         >
