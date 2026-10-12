@@ -113,8 +113,18 @@ const AVATAR_POS = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
 
 type SheetTab = "overview" | "logs" | "team";
 
+function compactPlayerName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "";
+  if (parts.length === 1) return parts[0]!.toUpperCase();
+  return `${parts[0]![0]!.toUpperCase()}. ${parts.slice(1).join(" ").toUpperCase()}`;
+}
+
 function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const [tab, setTab] = useState<SheetTab>("overview");
+  const [compactHeader, setCompactHeader] = useState(false);
+  const scrollRootRef = useRef<HTMLDivElement>(null);
+  const heroSentinelRef = useRef<HTMLDivElement>(null);
   const openPlayer = useOpenMobilePlayer();
   // Reuses the league-rosters React Query cache — no catalog fetch required.
   const { ownerByPlayerId } = useLeagueRosters([]);
@@ -135,6 +145,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   // Keep Team tab when hopping via depth chart; otherwise land on Overview.
   useEffect(() => {
     setTab((prev) => (prev === "team" ? "team" : "overview"));
+    setCompactHeader(false);
   }, [id]);
 
   // Same cache key as desktop PlayerDetail / hover prefetch.
@@ -180,12 +191,55 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   const logo = teamLogo(team);
   const image = player ? playerImage(player.id, AVATAR_POS.has(pos) ? pos : "WR", player.team) : null;
 
+  // Compact sticky bar once the hero name scrolls out of the sheet viewport.
+  useEffect(() => {
+    const root = scrollRootRef.current;
+    const sentinel = heroSentinelRef.current;
+    if (!root || !sentinel || !player) {
+      setCompactHeader(false);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => setCompactHeader(!entry?.isIntersecting),
+      { root, threshold: 0, rootMargin: "-8px 0px 0px 0px" },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [id, player]);
+
   return (
-    <div role="dialog" aria-modal="true" aria-label={player?.name ?? "Player"} className="fixed inset-0 z-50 overflow-y-auto bg-m-bg">
+    <div
+      ref={scrollRootRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={player?.name ?? "Player"}
+      className="fixed inset-0 z-50 overflow-y-auto bg-m-bg"
+    >
       <div className="mx-auto w-full max-w-md pb-10">
-        <section className="relative overflow-hidden bg-m-card text-m-card-fg">
-          {/* Sleeper-style injury strip — our amber/rose badge colors, full width. */}
+        {/* Sticky stack: injury strip (when listed) + compact identity after hero scrolls away. */}
+        <div className="sticky top-0 z-40">
           {injuryInfo ? <PlayerInjuryTopBar info={injuryInfo} /> : null}
+          {compactHeader && player ? (
+            <div className="flex items-center gap-2.5 border-b border-m-border bg-m-card/95 px-3 py-2.5 text-m-card-fg shadow-sm backdrop-blur-sm">
+              {logo ? (
+                <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-0.5" />
+              ) : null}
+              <p className="min-w-0 flex-1 truncate font-display text-[17px] font-bold tracking-wide">
+                {compactPlayerName(player.name)}
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close player"
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+              >
+                <X className="size-4" strokeWidth={2.5} />
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        <section className="relative overflow-hidden bg-m-card text-m-card-fg">
           {/* Faded team mark: centered in the header, behind name + headshot. */}
           {logo ? (
             <img
@@ -195,17 +249,16 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
               className="pointer-events-none absolute left-1/2 top-[48%] z-0 size-[22rem] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain opacity-[0.1]"
             />
           ) : null}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close player"
-            className={cn(
-              "absolute right-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg",
-              injuryInfo ? "top-[3.25rem]" : "top-3",
-            )}
-          >
-            <X className="size-5" strokeWidth={2.5} />
-          </button>
+          {!compactHeader ? (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close player"
+              className="absolute right-3 top-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+            >
+              <X className="size-5" strokeWidth={2.5} />
+            </button>
+          ) : null}
 
           {detail.isLoading ? (
             <p className="relative z-[1] px-5 py-24 text-center text-sm text-m-muted">Loading player...</p>
@@ -223,6 +276,8 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                     </>
                   ) : null}
                 </h2>
+                {/* Sentinel: compact bar appears once this leaves the sheet viewport. */}
+                <div ref={heroSentinelRef} className="h-px w-px" aria-hidden="true" />
                 <div className="mt-3 flex items-center gap-2.5">
                   {logo ? (
                     <img src={logo} alt="" className="size-9 shrink-0 rounded-full bg-m-chip object-contain p-1" />
