@@ -70,6 +70,7 @@ export const R2_SNAP_KEYS = {
   /**
    * Sleeper depth charts for mobile Team tab (depth_chart_position + order).
    * Actions → `/v1/players/nfl` once; visitors hit GitHub raw only.
+   * Path bump (v1) busts raw.githubusercontent.com negative cache after first publish.
    */
-  nflTeamDepth: () => `snap/nfl-team-depth.json`,
+  nflTeamDepth: () => `snap/nfl-team-depth-v1.json`,
 } as const;

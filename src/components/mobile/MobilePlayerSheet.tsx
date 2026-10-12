@@ -1155,7 +1155,7 @@ function TeamTab({
 
   // Sleeper depth_chart_position + order via dedicated snap (not SOS / not proj-sorted).
   const { data: depthBoard, isLoading: depthLoading } = useQuery({
-    queryKey: ["nfl-team-depth", "v1"],
+    queryKey: ["nfl-team-depth", "snap-v1"],
     enabled: Boolean(team),
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
