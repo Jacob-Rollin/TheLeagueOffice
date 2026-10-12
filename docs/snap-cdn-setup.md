@@ -33,7 +33,7 @@ No trailing slash. Then redeploy a **`main`** deployment (Vite bakes this at bui
 `raw.githubusercontent.com/.../snap-cdn/...` (or your Pages URL), **not**
 `/api/data/research/*` as the first hit.
 
-**Do not** promote / redeploy a deployment from branch `snap-cdn` — that branch is JSON-only and will 404 the whole site. `vercel.json` disables automatic Vercel deploys for `snap-cdn` and agent `cursor/*` branches (Hobby ~100 deploys/day). Production still auto-deploys from `main`.
+**Do not** promote / redeploy a deployment from branch `snap-cdn` — that branch is JSON-only and will 404 the whole site. `vercel.json` disables automatic Vercel deploys for `snap-cdn` and agent `cursor/*` branches (Hobby ~100 deploys/day). Production still auto-deploys from `main` (including `/m/sw.js` + `/m/offline.html` for the mobile offline splash).
 
 (`APP_URL` + `CRON_SECRET` must already exist as GitHub Actions secrets — same as other warm workflows.)
 
@@ -62,7 +62,7 @@ raw.githubusercontent.com path.
 - Gameday evenings **19:45 UTC** (Sun/Mon/Thu)
 - Manual `workflow_dispatch` anytime
 - **Native live week stats** (separate workflow `native-live-week-stats.yml`): every 5 minutes on gameday UTC windows; writes `snap/native-week-stats-{season}-w{week}.json` only (preserves research files)
-- **NFL team offense ranks**: rebuilt inside Publish Snap CDN from Sleeper `TEAM_*` season stats (and also by `nfl-team-offense-ranks.yml` a few times daily); object key `snap/nfl-team-offense-ranks-v2-{season}.json` — ordinal ranks by `(stat, off_yd)` to match Sleeper app Team Rank chips (RZ=`rz_att`, RZ%=`rz_conv`)
+- **NFL team offense ranks**: rebuilt inside Publish Snap CDN from Sleeper `TEAM_*` season stats (and also by `nfl-team-offense-ranks.yml` a few times daily); object key `snap/nfl-team-offense-ranks-v2-{season}.json` — ordinal ranks by `(stat, off_yd)` for pass + rush + rec chips (mobile Team tab picks the set by player position; RZ=`rz_att`, RZ%=`rz_conv`)
 - **NFL team depth**: rebuilt inside Publish Snap CDN from Sleeper `/v1/players/nfl` (`depth_chart_position` + `depth_chart_order`); object key `snap/nfl-team-depth-v1.json` for the mobile player Team tab (LWR/RWR/SWR → WR1/WR2/WR3)
 
 Each run **force-pushes an orphan** `snap-cdn` branch (no git history bloat). Before the orphan commit, Publish Snap CDN **seeds the previous tip** so sidecar files from other workflows (offense ranks between publishes, prior week stats) are not wiped; fresh downloads overlay and win.

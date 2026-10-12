@@ -34,7 +34,7 @@ import {
 import {
   fetchNflTeamOffenseRanks,
   teamOffenseRanksFor,
-  type TeamOffenseRankKey,
+  teamRankChipsForPos,
 } from "@/lib/nfl-team-offense-ranks";
 import { teamFullName } from "@/lib/nfl-teams";
 import { detailQuery } from "@/lib/player-detail-query";
@@ -345,6 +345,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             ) : (
               <TeamTab
                 playerId={id}
+                pos={player.pos}
                 team={team}
                 depthChart={detail.data?.depthChart ?? []}
                 onSelectPlayer={openPlayer}
@@ -1114,16 +1115,6 @@ function offenseRankTone(rank: number | null): string {
 
 type TeamRankChip = { key: string; label: string; rank: number };
 
-const TEAM_RANK_CHIP_META: { key: TeamOffenseRankKey; label: string }[] = [
-  { key: "offense", label: "Offense" },
-  { key: "passAtt", label: "Pass Att" },
-  { key: "passYd", label: "Pass Yd" },
-  { key: "passTd", label: "Pass TD" },
-  { key: "td", label: "TD" },
-  { key: "rz", label: "RZ" },
-  { key: "rzPct", label: "RZ %" },
-];
-
 function splitPlayerName(name: string): { first: string; last: string } {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length <= 1) return { first: "", last: parts[0] ?? name };
@@ -1152,11 +1143,13 @@ type DepthEntry = {
 
 function TeamTab({
   playerId,
+  pos,
   team,
   depthChart,
   onSelectPlayer,
 }: {
   playerId: string;
+  pos: string;
   team: string | null;
   depthChart: DepthEntry[];
   onSelectPlayer: (id: string) => void;
@@ -1174,7 +1167,7 @@ function TeamTab({
 
   // Sleeper TEAM_* ranks via snap-cdn (Actions warm) — not visitor Sleeper/ESPN.
   const { data: offenseRanksBoard, isLoading: ranksLoading } = useQuery({
-    queryKey: ["nfl-team-offense-ranks", "sleeper-v4", season],
+    queryKey: ["nfl-team-offense-ranks", "sleeper-v5", season],
     enabled: Boolean(team),
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -1195,11 +1188,14 @@ function TeamTab({
   const rankChips = useMemo(() => {
     const ranks = teamOffenseRanksFor(offenseRanksBoard, team);
     if (!ranks) return [] as TeamRankChip[];
-    return TEAM_RANK_CHIP_META.map(({ key, label }) => {
-      const rank = ranks[key];
-      return rank != null && rank > 0 ? { key, label, rank } : null;
-    }).filter((x): x is TeamRankChip => x != null);
-  }, [offenseRanksBoard, team]);
+    // Match Sleeper: chips follow the viewed player's position (not always pass).
+    return teamRankChipsForPos(pos)
+      .map(({ key, label }) => {
+        const rank = ranks[key];
+        return rank != null && rank > 0 ? { key, label, rank } : null;
+      })
+      .filter((x): x is TeamRankChip => x != null);
+  }, [offenseRanksBoard, pos, team]);
 
   /** Injury token for depth cells — same path as popup header (live overlay + resolveInjuryStatus). Never snap/proj injury. */
   const injuryStatusFor = useCallback(
