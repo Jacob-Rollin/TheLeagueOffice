@@ -1,5 +1,7 @@
 /**
- * Register a /m/-scoped service worker for installability only.
+ * Register the /m/-scoped service worker (installability + offline splash).
+ * The SW only precaches /m/offline.html + logo and falls back on failed
+ * navigations — it does not cache APIs or desktop routes.
  * Safe no-op outside browsers / unsupported environments.
  */
 export function registerMobilePwa(): void {
@@ -9,6 +11,6 @@ export function registerMobilePwa(): void {
   if (path !== "/m" && !path.startsWith("/m/")) return;
 
   void navigator.serviceWorker.register("/m/sw.js", { scope: "/m/" }).catch(() => {
-    /* installability is optional — never block the app */
+    /* installability / offline splash is optional — never block the app */
   });
 }
