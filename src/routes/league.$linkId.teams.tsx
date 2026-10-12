@@ -239,8 +239,9 @@ function NativeLeagueTeamsPage() {
         </p>
         {board.canManage && allowAi ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            AI managers draft by ADP and set weekly lineups (sit bye / Out / IR). Enable in Settings
-            first. {aiTeamCount} AI seat{aiTeamCount === 1 ? "" : "s"} assigned.
+            AI managers draft by ADP and set weekly optimized lineups (projections, sit bye / Out /
+            IR, respect locks). Enable in Settings first. {aiTeamCount} AI seat
+            {aiTeamCount === 1 ? "" : "s"} assigned.
             {board.summary.draftStatus === "complete" ? (
               <>
                 {" "}

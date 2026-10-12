@@ -1,6 +1,7 @@
 /**
  * Client-safe AI lineup ranking for native leagues (no DB / network).
- * Prefer healthy, non-bye starters; park IR-eligible sitters on IR.
+ * Optimize by weekly projection when present; still prefer healthy, non-bye
+ * starters and park IR-eligible sitters on IR.
  */
 
 import type { RosterSlotKey } from "@/lib/league-settings";
@@ -23,8 +24,10 @@ export type AiLineupPlayerMeta = {
   team?: string | null;
   bye?: number | null;
   injury?: string | null;
-  /** Lower is better (ADP / rank). */
+  /** Lower is better (ADP / rank). Used when weeklyProj is unavailable. */
   rank?: number | null;
+  /** Weekly fantasy projection in league format — primary optimize signal. */
+  weeklyProj?: number | null;
 };
 
 /** True when the player should not start if a healthier option exists. */
@@ -58,10 +61,16 @@ export function isUnstartableThisWeek(
   return false;
 }
 
-function startPriority(meta: AiLineupPlayerMeta | undefined, week: number): number {
+/** Exported for tests — higher is better. */
+export function aiStartPriority(meta: AiLineupPlayerMeta | undefined, week: number): number {
   if (!meta) return -1e9;
+  const proj =
+    meta.weeklyProj != null && Number.isFinite(Number(meta.weeklyProj))
+      ? Number(meta.weeklyProj)
+      : null;
   const rank = meta.rank != null && Number.isFinite(meta.rank) ? Number(meta.rank) : 400;
-  let score = 1000 - Math.min(999, rank);
+  // Weekly proj dominates ADP so AI lineups match Optimize; ADP is cold fallback.
+  let score = proj != null ? proj * 100 : 1000 - Math.min(999, rank);
   if (isUnstartableThisWeek(meta, week)) score -= 10_000;
   const injury = String(meta.injury ?? "").toUpperCase();
   if (/\bQUESTIONABLE\b/.test(injury) || injury === "Q") score -= 40;
@@ -69,7 +78,8 @@ function startPriority(meta: AiLineupPlayerMeta | undefined, week: number): numb
 }
 
 /**
- * Build a lineup that avoids bye / Out / IR / Doubtful starters when possible.
+ * Build a projection-optimized lineup that still avoids bye / Out / IR /
+ * Doubtful starters when a healthier option exists.
  */
 export function buildAiLineupSlots(input: {
   rosterPlayerIds: string[];
@@ -81,8 +91,8 @@ export function buildAiLineupSlots(input: {
   const allowed = input.irAllowedStatuses ?? DEFAULT_IR_ALLOWED_STATUSES;
   const ranked = [...input.rosterPlayerIds].sort(
     (a, b) =>
-      startPriority(input.metaById[b], input.week) -
-      startPriority(input.metaById[a], input.week),
+      aiStartPriority(input.metaById[b], input.week) -
+      aiStartPriority(input.metaById[a], input.week),
   );
 
   const views = expandLineupSlots(input.counts);

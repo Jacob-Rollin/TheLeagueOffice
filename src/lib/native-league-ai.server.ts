@@ -1,10 +1,13 @@
 /**
- * Native-league AI managers (testing): ADP draft picks + weekly lineups.
+ * Native-league AI managers (testing): ADP draft picks + weekly optimized lineups.
  *
  * Free-tier rules:
  * - Batch work runs from Actions → /api/cron/native-ai (CRON_SECRET), not page-load Fluid.
- * - One shared memoized player catalog per tick (loadPlayers), no per-team Sleeper fan-out.
+ * - One shared memoized player catalog + one week-projection bundle per tick
+ *   (loadPlayers / Sleeper projections), no per-team Sleeper fan-out.
  * - Commissioner mutations only toggle seats / trigger a bounded draft/lineup tick.
+ * - Lineups optimize by weekly projection (same signal as Optimize), still
+ *   respecting bye / Out / IR and kickoff locks.
  */
 
 import {
@@ -47,6 +50,8 @@ type LeagueAiRow = {
   roster_slots?: string | Record<string, unknown> | null;
   allow_ai_teams?: number | boolean;
   status?: string;
+  roster_lock_type?: string | null;
+  scoring_settings?: string | Record<string, unknown> | null;
 };
 
 type TeamAiRow = {
@@ -83,16 +88,88 @@ async function loadCatalogPlayers(): Promise<Player[]> {
 function metaFromCatalog(
   players: Player[],
   scoring: Scoring,
+  weeklyProjById?: Record<string, number>,
 ): Record<string, AiLineupPlayerMeta> {
   const out: Record<string, AiLineupPlayerMeta> = {};
   for (const p of players) {
+    const weekly = weeklyProjById?.[p.id];
     out[p.id] = {
       pos: p.pos,
       team: p.team,
       bye: p.bye,
       injury: p.injury_status ?? p.injury ?? null,
       rank: p.rank?.[scoring] ?? p.adp?.[scoring] ?? 400,
+      ...(weekly != null && Number.isFinite(weekly) ? { weeklyProj: weekly } : {}),
     };
+  }
+  return out;
+}
+
+function ptsKeyForScoring(scoring: Scoring): "pts_std" | "pts_half_ppr" | "pts_ppr" {
+  if (scoring === "ppr") return "pts_ppr";
+  if (scoring === "std") return "pts_std";
+  return "pts_half_ppr";
+}
+
+/**
+ * One shared Sleeper week-projection map for the AI tick (preset pts_*).
+ * Soft-empty on miss — lineup builder falls back to ADP/rank.
+ */
+async function loadWeekProjectionPoints(
+  season: number,
+  week: number,
+  scoring: Scoring,
+): Promise<Record<string, number>> {
+  const { SLEEPER_BASE, positionsQuery } = await import("@/lib/players-build");
+  const safeSeason = Math.max(2000, Math.floor(season) || new Date().getUTCFullYear());
+  const safeWeek = Math.max(1, Math.min(18, Math.floor(week) || 1));
+  const url = `${SLEEPER_BASE}/projections/nfl/${safeSeason}/${safeWeek}?season_type=regular&${positionsQuery()}`;
+  try {
+    const res = await fetch(url, { headers: { accept: "application/json" } });
+    if (!res.ok) return {};
+    const rows = (await res.json()) as unknown;
+    const key = ptsKeyForScoring(scoring);
+    const out: Record<string, number> = {};
+    if (Array.isArray(rows)) {
+      for (const row of rows as { player_id?: string; stats?: Record<string, number> }[]) {
+        const id = String(row?.player_id ?? "").trim();
+        const pts = Number(row?.stats?.[key]);
+        if (!id || !Number.isFinite(pts)) continue;
+        out[id] = Math.round(pts * 100) / 100;
+      }
+      return out;
+    }
+    if (rows && typeof rows === "object") {
+      for (const [id, row] of Object.entries(rows as Record<string, { stats?: Record<string, number> }>)) {
+        const clean = String(id ?? "").trim();
+        const pts = Number(row?.stats?.[key] ?? (row as { [k: string]: unknown })?.[key]);
+        if (!clean || !Number.isFinite(pts)) continue;
+        out[clean] = Math.round(pts * 100) / 100;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function parseSlotsJson(raw: unknown): Record<string, Array<string | null>> | null {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const out: Record<string, Array<string | null>> = {};
+  for (const [key, bucket] of Object.entries(value as Record<string, unknown>)) {
+    if (!Array.isArray(bucket)) continue;
+    out[key] = bucket.map((id) => {
+      const s = String(id ?? "").trim();
+      return s.length ? s : null;
+    });
   }
   return out;
 }
@@ -378,7 +455,7 @@ async function applyAiLineupForTeam(input: {
     return { ok: false, error: "empty_roster" };
   }
 
-  const slots = buildAiLineupSlots({
+  const optimized = buildAiLineupSlots({
     rosterPlayerIds: input.rosterPlayerIds,
     metaById: input.metaById,
     counts,
@@ -388,13 +465,37 @@ async function applyAiLineupForTeam(input: {
 
   const posById: Record<string, string> = {};
   const injuryById: Record<string, string | null> = {};
+  const teamByPlayerId: Record<string, string | null> = {};
   for (const id of input.rosterPlayerIds) {
     posById[id] = input.metaById[id]?.pos ?? "";
     injuryById[id] = input.metaById[id]?.injury ?? null;
+    teamByPlayerId[id] = input.metaById[id]?.team ?? null;
   }
 
+  const seasonYear = Number(input.league.season_year);
+  const week = input.week;
+  const existing = await tidbExecute<{ version: number; slots: unknown }>(
+    `SELECT version, slots FROM native_lineups
+     WHERE league_id = ? AND team_id = ? AND season_year = ? AND week = ?
+     LIMIT 1`,
+    [input.league.id, input.teamId, seasonYear, week],
+  );
+  const currentVersion = Number(existing[0]?.version ?? 0) || 0;
+  const nextVersion = currentVersion + 1;
+
+  // Preserve kickoff-locked players (same gate as human Optimize / save).
+  const { filterLockedLineupSlots } = await import("@/lib/native-league-gameplay.server");
+  const locked = await filterLockedLineupSlots({
+    league: input.league as Parameters<typeof filterLockedLineupSlots>[0]["league"],
+    week,
+    nextSlots: optimized,
+    prevSlots: parseSlotsJson(existing[0]?.slots),
+    teamByPlayerId,
+  });
+  if (!locked.ok) return { ok: false, error: locked.error ?? "lock_failed" };
+
   const validated = validateNativeLineupSlots({
-    slots,
+    slots: locked.slots ?? optimized,
     counts,
     rosterPlayerIds: input.rosterPlayerIds,
     posById,
@@ -408,17 +509,6 @@ async function applyAiLineupForTeam(input: {
   if (activePlayerIds.length > capacity) {
     return { ok: false, error: "over_capacity" };
   }
-
-  const seasonYear = Number(input.league.season_year);
-  const week = input.week;
-  const existing = await tidbExecute<{ version: number }>(
-    `SELECT version FROM native_lineups
-     WHERE league_id = ? AND team_id = ? AND season_year = ? AND week = ?
-     LIMIT 1`,
-    [input.league.id, input.teamId, seasonYear, week],
-  );
-  const currentVersion = Number(existing[0]?.version ?? 0) || 0;
-  const nextVersion = currentVersion + 1;
 
   if (currentVersion === 0) {
     await tidbExecute(
@@ -468,7 +558,10 @@ async function setAiLineupsForLeague(
   if (String(league.draft_status) !== "complete") return { teams: 0, errors: [] };
 
   const scoring = scoringFromPreset(String(league.scoring_preset ?? "half"));
-  const metaById = metaFromCatalog(catalog, scoring);
+  const seasonYear = Number(league.season_year) || new Date().getUTCFullYear();
+  // One shared week-projection download for every AI team in this league tick.
+  const weeklyProjById = await loadWeekProjectionPoints(seasonYear, week, scoring);
+  const metaById = metaFromCatalog(catalog, scoring, weeklyProjById);
 
   const teamRows = await tidbExecute<TeamAiRow>(
     `SELECT id, team_name, user_id, draft_slot, is_ai, ai_persona
