@@ -16,6 +16,7 @@ import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { useMobileLeagueActivity } from "@/components/mobile/league/useMobileLeague";
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
+import { useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
@@ -1134,6 +1135,8 @@ function TeamTab({
   const nflState = useNflState();
   const season = nflState.data?.season ?? String(new Date().getUTCFullYear());
   const { data: catalog } = useSleeperPlayers();
+  // Same shared week-proj overlay as popup header / ATP / catalog badges.
+  const liveInjuries = useLiveInjuryStatuses();
   const playersById = useMemo(() => {
     const map = new Map<string, Player>();
     for (const p of catalog?.players ?? []) map.set(p.id, p);
@@ -1169,6 +1172,26 @@ function TeamTab({
     }).filter((x): x is TeamRankChip => x != null);
   }, [offenseRanksBoard, team]);
 
+  /** Injury token for depth cells — same path as popup header (live overlay + resolveInjuryStatus). Never snap/proj injury. */
+  const injuryStatusFor = useCallback(
+    (id: string): string | null => {
+      const live = liveInjuries.data?.[id];
+      const meta = playersById.get(id);
+      const carrier =
+        live !== undefined
+          ? {
+              injury_status: live.status?.trim() || null,
+              injury: live.status?.trim() || null,
+            }
+          : meta
+            ? meta
+            : null;
+      if (!carrier) return null;
+      return resolveInjuryStatus(carrier) ?? carrier.injury_status ?? null;
+    },
+    [liveInjuries.data, playersById],
+  );
+
   const depthRows = useMemo(() => {
     const chart = teamDepthFor(depthBoard, team);
     const projById = new Map(depthChart.map((d) => [d.id, d]));
@@ -1180,14 +1203,13 @@ function TeamTab({
         if (!entry) return null;
         const hit = projById.get(entry.id);
         const meta = playersById.get(entry.id);
-        // Prefer live catalog injury overlay; snap order owns starter/2nd/3rd.
-        const injury = meta?.injury_status ?? meta?.injury ?? entry.injury ?? hit?.injury ?? null;
+        // Snap owns starter/2nd/3rd order only; injury comes from Sleeper client overlay.
         return {
           id: entry.id,
           name: entry.name || hit?.name || meta?.name || entry.id,
           pos: slot.startsWith("WR") ? "WR" : slot,
           proj: hit?.proj ?? 0,
-          injury,
+          injury: injuryStatusFor(entry.id),
         } satisfies DepthEntry;
       });
       return cells as [DepthEntry | null, DepthEntry | null, DepthEntry | null];
@@ -1195,7 +1217,7 @@ function TeamTab({
 
     const slots: TeamDepthSlot[] = ["QB", "RB", "WR1", "WR2", "WR3", "TE", "K"];
     return slots.map((label) => ({ label, cells: toCells(label, chart?.[label]) }));
-  }, [depthBoard, depthChart, playersById, team]);
+  }, [depthBoard, depthChart, injuryStatusFor, playersById, team]);
 
   if (!team) {
     return <p className="px-4 py-8 text-center text-sm text-m-muted">No team depth chart for free agents.</p>;
@@ -1260,7 +1282,8 @@ function TeamTab({
                 }
                 const meta = playersById.get(cell.id);
                 const age = meta?.age;
-                const badge = injuryBadgeInfo(cell.injury ?? meta?.injury_status ?? meta?.injury);
+                // Same badge path as popup header: resolveInjuryStatus → injuryBadgeInfo.
+                const badge = injuryBadgeInfo(cell.injury);
                 const { first, last } = splitPlayerName(cell.name);
                 const isActive = cell.id === playerId;
                 return (
