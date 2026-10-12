@@ -887,7 +887,6 @@ function GroupedStatTable<R>({
   rows: R[];
   rowKey: (row: R) => string;
 }) {
-  const leftSpan = 1 + leftCols.length;
   return (
     <section className={title ? "mt-3" : undefined}>
       {title ? (
@@ -899,7 +898,11 @@ function GroupedStatTable<R>({
         <table className="min-w-max border-collapse text-sm">
           <thead>
             <tr className="text-[10px] font-bold uppercase tracking-[0.12em] text-m-muted">
-              <th colSpan={leftSpan} className="sticky left-0 z-10 bg-m-card px-3 py-1.5 text-left" aria-hidden />
+              {/* Sticky Week only — same clip edge as body rows (Opp + Fantasy slide under it). */}
+              <th className="sticky left-0 z-10 w-[92px] bg-m-card px-3 py-1.5" aria-hidden />
+              {leftCols.map((c) => (
+                <th key={`cat-left-${c.key}`} className="min-w-[64px] px-3 py-1.5" aria-hidden />
+              ))}
               {groups.map((g, gi) => (
                 <th
                   key={g.label}
