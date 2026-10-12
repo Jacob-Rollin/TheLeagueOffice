@@ -578,7 +578,9 @@ function PlayerCareerTotals({
     [data?.career, format],
   );
 
-  const summaryCols: TableCol<(typeof career)[number]>[] = [
+  const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
+  // One Game Log–style board: Year sticky + Tm/GM/Fpts + position counting stats (horizontal scroll).
+  const cols: TableCol<(typeof career)[number]>[] = [
     { key: "team", label: "Tm", render: (r) => r.team || "-" },
     { key: "gm", label: "GM", render: (r) => (r.games > 0 ? String(r.games) : "-") },
     {
@@ -587,14 +589,12 @@ function PlayerCareerTotals({
       highlight: true,
       render: (r) => (r.pts[format] != null ? Number(r.pts[format]).toFixed(1) : "-"),
     },
+    ...statCols.map((c) => ({
+      key: c.key,
+      label: c.label,
+      render: (r: (typeof career)[number]) => statValue(r.raw, c.key),
+    })),
   ];
-
-  const statCols = POS_STAT_COLS[pos] ?? POS_STAT_COLS["WR"]!;
-  const countingCols: TableCol<(typeof career)[number]>[] = statCols.map((c) => ({
-    key: c.key,
-    label: c.label,
-    render: (r) => statValue(r.raw, c.key),
-  }));
 
   return (
     <section className="pb-6">
@@ -606,29 +606,13 @@ function PlayerCareerTotals({
       ) : !career.length ? (
         <p className="px-4 text-sm text-m-muted">No career stats available yet.</p>
       ) : (
-        <>
-          <StatTable
-            title=""
-            lead={{ key: "year", label: "Year", render: (r) => r.year }}
-            cols={summaryCols}
-            rows={career}
-            rowKey={(r) => `career-sum-${r.year}`}
-          />
-          {countingCols.length ? (
-            <>
-              <h4 className="px-4 pb-1 pt-4 text-[11px] font-bold uppercase tracking-[0.08em] text-m-muted">
-                {pos === "DEF" || pos === "DST" ? "Defense" : pos === "K" ? "Kicking" : pos === "QB" ? "Pass / Rush" : "Rush / Rec"}
-              </h4>
-              <StatTable
-                title=""
-                lead={{ key: "year", label: "Year", render: (r) => r.year }}
-                cols={countingCols}
-                rows={career}
-                rowKey={(r) => `career-raw-${r.year}`}
-              />
-            </>
-          ) : null}
-        </>
+        <StatTable
+          title=""
+          lead={{ key: "year", label: "Year", render: (r) => r.year }}
+          cols={cols}
+          rows={career}
+          rowKey={(r) => `career-${r.year}`}
+        />
       )}
     </section>
   );
