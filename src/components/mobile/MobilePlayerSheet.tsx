@@ -18,7 +18,7 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos } from "@/lib/draft";
-import { injuryBadgeInfo, injuryLetter } from "@/lib/injury-badge";
+import { injuryBadgeInfo } from "@/lib/injury-badge";
 import { teamFullName } from "@/lib/nfl-teams";
 import { detailQuery } from "@/lib/player-detail-query";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
@@ -971,7 +971,7 @@ function TeamTab({
                 }
                 const meta = playersById.get(cell.id);
                 const age = meta?.age;
-                const badge = injuryLetter(cell.injury ?? meta?.injury_status ?? meta?.injury);
+                const badge = injuryBadgeInfo(cell.injury ?? meta?.injury_status ?? meta?.injury);
                 const { first, last } = splitPlayerName(cell.name);
                 const isActive = cell.id === playerId;
                 return (
@@ -989,13 +989,8 @@ function TeamTab({
                         <span className="text-[10px] text-m-muted">{age} y/o</span>
                       ) : null}
                       {badge ? (
-                        <span
-                          className={cn(
-                            "rounded px-1 text-[9px] font-black text-white",
-                            badge === "Q" ? "bg-amber-500 text-slate-950" : "bg-rose-600",
-                          )}
-                        >
-                          {badge}
+                        <span className={cn("rounded px-1 text-[9px] font-black", badge.className)}>
+                          {badge.letter}
                         </span>
                       ) : null}
                     </div>
@@ -1015,7 +1010,48 @@ function TeamTab({
           ))
         )}
       </div>
+
+      <InjuryStatusLegend />
     </div>
+  );
+}
+
+/** Status key for depth-chart badges — same chips/colors as the rest of the app. */
+const TEAM_STATUS_LEGEND: { status: string; label: string }[] = [
+  { status: "IR", label: "Injured Reserve" },
+  { status: "PUP", label: "Physically Unable to Perform" },
+  { status: "SUS", label: "Suspended" },
+  { status: "O", label: "Out" },
+  { status: "D", label: "Doubtful" },
+  { status: "Q", label: "Questionable" },
+];
+
+function InjuryStatusLegend() {
+  return (
+    <section className="mx-2.5 mt-4 overflow-hidden rounded-xl border border-m-border bg-m-card px-4 py-3 text-m-card-fg">
+      <h4 className="mb-2.5 font-display text-xs font-bold uppercase tracking-[0.08em] text-m-muted">
+        Status Legend
+      </h4>
+      <ul className="space-y-2">
+        {TEAM_STATUS_LEGEND.map((row) => {
+          const badge = injuryBadgeInfo(row.status);
+          if (!badge) return null;
+          return (
+            <li key={row.status} className="flex items-center gap-3">
+              <span
+                className={cn(
+                  "inline-flex min-w-[2.25rem] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-black",
+                  badge.className,
+                )}
+              >
+                {badge.letter}
+              </span>
+              <span className="text-[13px] text-m-muted">{row.label}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
