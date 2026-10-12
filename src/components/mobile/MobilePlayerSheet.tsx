@@ -808,8 +808,26 @@ const statValue = (
   return opts?.zeroIfMissing ? "0" : "-";
 };
 
-type TableCol<R> = { key: string; label: string; render: (row: R) => ReactNode; highlight?: boolean };
+type TableCol<R> = {
+  key: string;
+  label: string;
+  render: (row: R) => ReactNode;
+  highlight?: boolean;
+  /** Per-cell tone (e.g. weekly pos-rank heat). Overrides highlight bg when set. */
+  cellClass?: (row: R) => string | undefined;
+};
 type ColGroup<R> = { label: string; cols: TableCol<R>[] };
+
+/**
+ * Soft heat for weekly Sleeper pos_rank_* (1 = best at position that week).
+ * Same 10 / 22 bands as Team Rank chips — no extra data fetch.
+ */
+function weeklyPosRankCellClass(rank: number | null | undefined): string | undefined {
+  if (rank == null || !Number.isFinite(rank) || rank <= 0) return undefined;
+  if (rank <= 10) return "bg-emerald-500/25 font-semibold text-emerald-950";
+  if (rank <= 22) return "bg-amber-400/30 font-semibold text-amber-950";
+  return "bg-rose-500/25 font-semibold text-rose-950";
+}
 
 /** Players-page style table: sticky first column, horizontally scrolling stat columns. */
 function StatTable<R>({
@@ -951,18 +969,22 @@ function GroupedStatTable<R>({
                   </td>
                 ))}
                 {groups.map((g, gi) =>
-                  g.cols.map((c, ci) => (
-                    <td
-                      key={`${g.label}-${c.key}`}
-                      className={cn(
-                        "px-3 py-2.5 text-right tabnum",
-                        ci === 0 && gi > 0 && "border-l border-m-border/70",
-                        c.highlight && "bg-m-rank-col font-semibold",
-                      )}
-                    >
-                      {c.render(row)}
-                    </td>
-                  )),
+                  g.cols.map((c, ci) => {
+                    const heat = c.cellClass?.(row);
+                    return (
+                      <td
+                        key={`${g.label}-${c.key}`}
+                        className={cn(
+                          "px-3 py-2.5 text-right tabnum",
+                          ci === 0 && gi > 0 && "border-l border-m-border/70",
+                          !heat && c.highlight && "bg-m-rank-col font-semibold",
+                          heat,
+                        )}
+                      >
+                        {c.render(row)}
+                      </td>
+                    );
+                  }),
                 )}
               </tr>
             ))}
@@ -1138,6 +1160,11 @@ function gameLogGroupedCols(
       {
         key: "rank",
         label: "Rank",
+        cellClass: (l) => {
+          if (l.isBye || !l.played) return undefined;
+          const v = Number(l.raw?.[rankKey]);
+          return Number.isFinite(v) && v > 0 ? weeklyPosRankCellClass(v) : undefined;
+        },
         render: (l) => {
           if (l.isBye || !l.played) return "-";
           const v = Number(l.raw?.[rankKey]);
