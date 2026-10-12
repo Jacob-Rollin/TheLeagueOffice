@@ -962,6 +962,7 @@ function GameLogTab({
   const nflState = useNflState();
   const currentSeason = String(nflState.data?.season ?? MOBILE_LOG_SEASONS[0]);
   const { data, isLoading } = usePlayerLogs(id, team, pos);
+  const [openPast, setOpenPast] = useState<string | null>(null);
   const brain = usePlayerBrain();
   const playerSos = usePlayerSos(brain?.[id] ?? null, team, format, pos);
   const sosRankByWeek = useMemo(() => {
@@ -1016,10 +1017,38 @@ function GameLogTab({
         />
       )}
 
-      {/* Same full-bleed StatTable boards as the current season — no card chrome. */}
-      {pastSeasons.map((year) => (
-        <PastSeasonGameLog key={year} id={id} team={team} pos={pos} format={format} season={year} />
-      ))}
+      {pastSeasons.length ? (
+        <section className="mt-2">
+          <h3 className="px-4 pb-1 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+            Past Seasons
+          </h3>
+          {pastSeasons.map((year) => {
+            const open = openPast === year;
+            return (
+              <div key={year}>
+                <button
+                  type="button"
+                  onClick={() => setOpenPast((prev) => (prev === year ? null : year))}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                >
+                  <span className="font-display text-base font-bold">{year}</span>
+                  <span
+                    className={cn(
+                      "text-[11px] font-bold uppercase tracking-wide",
+                      open ? "text-m-accent" : "text-m-muted",
+                    )}
+                  >
+                    {open ? "Hide" : "View"}
+                  </span>
+                </button>
+                {open ? (
+                  <PastSeasonGameLog id={id} team={team} pos={pos} format={format} season={year} />
+                ) : null}
+              </div>
+            );
+          })}
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -1043,29 +1072,15 @@ function PastSeasonGameLog({
   const cols = useMemo(() => gameLogTableCols(pos, format), [pos, format]);
 
   if (isLoading) {
-    return (
-      <div className="mt-3">
-        <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
-          {season}
-        </h3>
-        <p className="px-4 py-8 text-center text-sm text-m-muted">Loading {season}...</p>
-      </div>
-    );
+    return <p className="px-4 py-8 text-center text-sm text-m-muted">Loading {season}...</p>;
   }
   if (!logs.length) {
-    return (
-      <div className="mt-3">
-        <h3 className="px-4 pb-2 pt-3 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
-          {season}
-        </h3>
-        <p className="px-4 py-8 text-center text-sm text-m-muted">No games recorded for {season}.</p>
-      </div>
-    );
+    return <p className="px-4 py-8 text-center text-sm text-m-muted">No games recorded for {season}.</p>;
   }
 
   return (
     <StatTable
-      title={season}
+      title=""
       lead={{ key: "week", label: "Week", render: (l) => `Week ${l.week}` }}
       cols={cols}
       rows={logs}
