@@ -240,8 +240,9 @@ function NativeLeagueTeamsPage() {
         {board.canManage && allowAi ? (
           <p className="mt-2 text-xs text-muted-foreground">
             AI managers draft by ADP, stream K/DEF on bye via waivers/FA, and set weekly optimized
-            lineups (projections, sit bye / Out / IR, respect locks). Enable in Settings first.{" "}
-            {aiTeamCount} AI seat{aiTeamCount === 1 ? "" : "s"} assigned.
+            lineups (projections, sit bye / Out / IR). Kickoff locks match human lineup rules —
+            AI will not move or drop a player once their game has started. Enable in Settings
+            first. {aiTeamCount} AI seat{aiTeamCount === 1 ? "" : "s"} assigned.
             {board.summary.draftStatus === "complete" ? (
               <>
                 {" "}

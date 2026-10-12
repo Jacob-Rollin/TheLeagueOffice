@@ -52,6 +52,26 @@ describe("planAiStreamerClaims", () => {
     expect(plans[0]?.dropPlayerId).toBe("rbBye");
   });
 
+  it("never drops a kickoff-locked player", () => {
+    const metaById: Record<string, AiLineupPlayerMeta> = {
+      kBye: { pos: "K", bye: 5, weeklyProj: 0, rank: 100 },
+      defOk: { pos: "DEF", bye: 9, weeklyProj: 8, rank: 80 },
+      qb1: { pos: "QB", weeklyProj: 20, rank: 10 },
+    };
+    const plans = planAiStreamerClaims({
+      week: 5,
+      rosterPlayerIds: ["kBye", "defOk", "qb1"],
+      metaById,
+      freeAgents: [{ id: "kFa", meta: { pos: "K", bye: 12, weeklyProj: 9, rank: 120 } }],
+      needK: 1,
+      needDef: 1,
+      requiresDrop: true,
+      lockedPlayerIds: new Set(["kBye"]),
+    });
+    // Bye K is locked (already started) — cannot stream-drop them.
+    expect(plans.every((p) => p.dropPlayerId !== "kBye")).toBe(true);
+  });
+
   it("skips when startable K/DEF already cover slots", () => {
     const metaById: Record<string, AiLineupPlayerMeta> = {
       kOk: { pos: "K", bye: 12, weeklyProj: 8, rank: 100 },

@@ -58,8 +58,13 @@ export function planAiStreamerClaims(input: {
   needDef: number;
   /** True when active roster is full (add requires a drop). */
   requiresDrop: boolean;
+  /**
+   * Kickoff-locked roster ids (same as human lineup/FA rules) — never drop these.
+   */
+  lockedPlayerIds?: ReadonlySet<string>;
 }): AiStreamerClaimPlan[] {
   const week = Math.max(1, Math.min(18, Math.floor(input.week) || 1));
+  const locked = input.lockedPlayerIds ?? new Set<string>();
   const plans: AiStreamerClaimPlan[] = [];
   const reservedAdds = new Set<string>();
   const reservedDrops = new Set<string>();
@@ -90,7 +95,9 @@ export function planAiStreamerClaims(input: {
     const unstartable = owned
       .filter(
         (id) =>
-          !reservedDrops.has(id) && isUnstartableThisWeek(input.metaById[id], week),
+          !reservedDrops.has(id) &&
+          !locked.has(id) &&
+          isUnstartableThisWeek(input.metaById[id], week),
       )
       .sort((a, b) => rankValue(input.metaById[a]) - rankValue(input.metaById[b]));
     if (unstartable[0]) {
@@ -104,8 +111,7 @@ export function planAiStreamerClaims(input: {
     // player that is not a scarce startable skill piece we just filled for.
     const disposable = input.rosterPlayerIds
       .filter((id) => {
-        if (reservedDrops.has(id)) return false;
-        const p = normalizePos(input.metaById[id]?.pos);
+        if (reservedDrops.has(id) || locked.has(id)) return false;
         // Prefer dropping bye/out of any pos, then deep bench K/DEF of the other slot,
         // then lowest-ranked skill players (never drop the only startable QB).
         return true;

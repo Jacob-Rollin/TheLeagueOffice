@@ -26,6 +26,38 @@ describe("buildAiLineupSlots", () => {
     expect(new Set(slots.RB)).toEqual(new Set(["rb1", "rb2"]));
   });
 
+  it("keeps kickoff-locked players in their previous slots", () => {
+    const metaById: Record<string, AiLineupPlayerMeta> = {
+      qbLocked: { pos: "QB", weeklyProj: 5, rank: 80 },
+      qbBench: { pos: "QB", weeklyProj: 22, rank: 10 },
+      rb1: { pos: "RB", weeklyProj: 18, rank: 5 },
+      rb2: { pos: "RB", weeklyProj: 14, rank: 20 },
+      wr1: { pos: "WR", weeklyProj: 16, rank: 8 },
+      wr2: { pos: "WR", weeklyProj: 11, rank: 25 },
+      te1: { pos: "TE", weeklyProj: 9, rank: 12 },
+      k1: { pos: "K", weeklyProj: 8, rank: 100 },
+      def1: { pos: "DEF", weeklyProj: 7, rank: 90 },
+    };
+    const slots = buildAiLineupSlots({
+      rosterPlayerIds: Object.keys(metaById),
+      metaById,
+      counts: { QB: 1, RB: 2, WR: 2, TE: 1, K: 1, DEF: 1, BN: 2 },
+      week: 5,
+      immovableIds: new Set(["qbLocked"]),
+      previousSlots: {
+        QB: ["qbLocked"],
+        RB: ["rb1", "rb2"],
+        WR: ["wr1", "wr2"],
+        TE: ["te1"],
+        K: ["k1"],
+        DEF: ["def1"],
+        BN: ["qbBench", null],
+      },
+    });
+    expect(slots.QB?.[0]).toBe("qbLocked");
+    expect(slots.BN ?? []).toContain("qbBench");
+  });
+
   it("still benches bye / Out players when a healthier option exists", () => {
     const metaById: Record<string, AiLineupPlayerMeta> = {
       qbBye: { pos: "QB", team: "KC", bye: 5, rank: 1, weeklyProj: 30 },
