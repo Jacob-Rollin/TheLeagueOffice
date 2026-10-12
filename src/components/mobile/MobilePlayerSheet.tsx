@@ -483,9 +483,9 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
 }
 
 /**
- * Market Value / 30d Trend from FantasyCalc.
- * Trends come from the trade-market snap (brain/players-export has no trends array).
- * Do not surface brain.ecr — FantasyPros field is unpaid/incomplete.
+ * Market Value / 30d Trend from FantasyCalc trade-market snap.
+ * Both numbers use scaleValue so Trend is in the same units as Value
+ * (raw FC deltas like 183 were reading as nonsense next to Value 15.4).
  */
 function OverviewMarketRow({ id, format }: { id: string; format: Format }) {
   const brain = usePlayerBrain();
@@ -501,14 +501,16 @@ function OverviewMarketRow({ id, format }: { id: string; format: Format }) {
   const brainEntry = brain?.[id] ?? null;
 
   const rawValue = Number(marketRow?.value ?? brainEntry?.value ?? 0) || 0;
+  const rawTrend = Number(marketRow?.trend30 ?? brainEntry?.trend ?? 0) || 0;
   const value = scaleValue(rawValue);
-  // Prefer snap trend30 (real FantasyCalc delta); brain.trend is usually 0 on TiDB export.
-  const trend = Number(marketRow?.trend30 ?? brainEntry?.trend ?? 0) || 0;
-  if (value <= 0 && trend === 0) return null;
+  const trendAbs = scaleValue(Math.abs(rawTrend));
+  if (value <= 0 && trendAbs <= 0) return null;
 
-  const tone = valueTrendTone(trend);
+  const tone = valueTrendTone(rawTrend);
   const trendClass =
     tone === "up" ? "text-emerald-600" : tone === "down" ? "text-rose-600" : "text-m-muted";
+  const pct =
+    rawValue > 0 && Number.isFinite(rawTrend) ? (rawTrend / rawValue) * 100 : null;
 
   return (
     <section className="mx-2.5 mt-3 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -521,15 +523,23 @@ function OverviewMarketRow({ id, format }: { id: string; format: Format }) {
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">30d Trend</p>
-          {tone === "flat" ? (
+          {tone === "flat" || trendAbs <= 0 ? (
             <p className="mt-0.5 font-display text-lg font-semibold text-m-muted">Flat</p>
           ) : (
-            <p className={cn("mt-0.5 font-display text-lg font-semibold tabular-nums", trendClass)}>
-              <span aria-hidden="true" className="mr-0.5 text-[13px]">
-                {tone === "up" ? "▲" : "▼"}
-              </span>
-              {Math.abs(trend).toFixed(1)}
-            </p>
+            <div className="mt-0.5">
+              <p className={cn("font-display text-lg font-semibold tabular-nums", trendClass)}>
+                <span aria-hidden="true" className="mr-0.5 text-[13px]">
+                  {tone === "up" ? "▲" : "▼"}
+                </span>
+                {trendAbs.toFixed(1)}
+              </p>
+              {pct != null ? (
+                <p className={cn("text-[11px] font-semibold tabular-nums", trendClass)}>
+                  {pct > 0 ? "+" : ""}
+                  {pct.toFixed(0)}%
+                </p>
+              ) : null}
+            </div>
           )}
         </div>
       </div>
@@ -537,7 +547,10 @@ function OverviewMarketRow({ id, format }: { id: string; format: Format }) {
   );
 }
 
-/** Compact injury callout above Overview projections — designation + diagnosis + news note. */
+/**
+ * Injury callout — only when the player has a real designation (Q/O/IR/…).
+ * Body part + Sleeper/injury-wire notes only; never generic Latest News copy.
+ */
 function OverviewInjuryNote({
   playerId,
   status,
@@ -550,24 +563,23 @@ function OverviewInjuryNote({
   notes: string | null;
 }) {
   const badge = injuryBadgeInfo(status);
+  // Gate on designation — healthy players must not get an Injury Report card.
+  if (!badge) return null;
+
   const diagnosis = bodyPart?.trim() || null;
-  // Same CDN news path as Latest News — reuse for a short medical blurb when Sleeper notes are empty.
+  const sleeperNote = notes?.trim() || null;
+  // Injury-wire note only (same CDN path as Latest News) — not the first news headline.
   const { data: news } = useQuery({
     queryKey: ["player-news", playerId, "cdn-v2"],
     queryFn: () => fetchPlayerNewsClient(playerId),
-    enabled: Boolean(playerId && (badge || diagnosis || notes)),
+    enabled: Boolean(playerId),
     staleTime: 10 * 60 * 1000,
     retry: false,
   });
-  const newsNote =
-    news?.injury?.note?.trim() ||
-    news?.items?.[0]?.description?.trim() ||
-    news?.items?.[0]?.headline?.trim() ||
-    null;
-  const note = notes?.trim() || newsNote || null;
-  if (!badge && !diagnosis && !note) return null;
+  const wireNote = news?.injury?.note?.trim() || null;
+  const note = sleeperNote || wireNote || null;
 
-  const critical = badge?.tone === "rose";
+  const critical = badge.tone === "rose";
   const accentBorder = critical ? "border-l-rose-500" : "border-l-amber-400";
   const accentLabel = critical ? "text-rose-600" : "text-amber-600";
 
@@ -583,16 +595,14 @@ function OverviewInjuryNote({
           <p className={cn("font-display text-[11px] font-bold uppercase tracking-[0.1em]", accentLabel)}>
             Injury Report
           </p>
-          {badge ? (
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
-                badge.className,
-              )}
-            >
-              {badge.text}
-            </span>
-          ) : null}
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
+              badge.className,
+            )}
+          >
+            {badge.text}
+          </span>
         </div>
         {diagnosis ? (
           <p className="mt-1.5 text-[15px] font-semibold capitalize leading-snug text-m-card-fg">
@@ -603,7 +613,8 @@ function OverviewInjuryNote({
           <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-m-muted">{note}</p>
         ) : (
           <p className="mt-1 text-[13px] leading-relaxed text-m-muted">
-            {badge ? `${badge.text} — check news before lock.` : "Check news before lock."}
+            Listed {badge.text.toLowerCase()}
+            {diagnosis ? ` (${diagnosis})` : ""} — check Latest News before lock.
           </p>
         )}
       </div>
