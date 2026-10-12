@@ -333,6 +333,13 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 projected={projectFor(id)}
                 sosGrade={detail.data?.sos?.grade ?? null}
                 format={format}
+                injuryStatus={resolveInjuryStatus(player) ?? player.injury_status ?? null}
+                injuryBodyPart={
+                  (player as { injury_body_part?: string | null }).injury_body_part ?? null
+                }
+                injuryNotes={
+                  (player as { injury_notes?: string | null }).injury_notes?.trim() || null
+                }
               />
             ) : tab === "logs" ? (
               <GameLogTab
@@ -378,6 +385,65 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
   );
 }
 
+/** Compact injury callout above Overview projections — only when designation or notes exist. */
+function OverviewInjuryNote({
+  status,
+  bodyPart,
+  notes,
+}: {
+  status: string | null;
+  bodyPart: string | null;
+  notes: string | null;
+}) {
+  const badge = injuryBadgeInfo(status);
+  const diagnosis = bodyPart?.trim() || null;
+  const note = notes?.trim() || null;
+  if (!badge && !diagnosis && !note) return null;
+
+  const critical = badge?.tone === "rose";
+  const accentBorder = critical ? "border-l-rose-500" : "border-l-amber-400";
+  const accentLabel = critical ? "text-rose-600" : "text-amber-600";
+
+  return (
+    <section
+      className={cn(
+        "mx-2.5 mt-3 overflow-hidden rounded-xl border border-m-border border-l-4 bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.08)]",
+        accentBorder,
+      )}
+    >
+      <div className="px-3.5 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className={cn("font-display text-[11px] font-bold uppercase tracking-[0.1em]", accentLabel)}>
+            Injury
+          </p>
+          {badge ? (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
+                badge.className,
+              )}
+            >
+              {badge.text}
+            </span>
+          ) : null}
+        </div>
+        {diagnosis ? (
+          <p className="mt-1.5 text-[14px] font-semibold capitalize leading-snug text-m-card-fg">
+            {diagnosis}
+          </p>
+        ) : null}
+        {note ? (
+          <p className="mt-1 text-[13px] leading-relaxed text-m-muted">{note}</p>
+        ) : !diagnosis ? (
+          <p className="mt-1 text-[13px] leading-relaxed text-m-muted">
+            {badge ? `${badge.text} — monitor before lock.` : "Monitor before lock."}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function rankTone(rank: number | null) {
   if (rank == null) return "";
   if (rank <= 10) return "text-red-500";
@@ -395,6 +461,9 @@ function Overview({
   projected,
   sosGrade,
   format,
+  injuryStatus,
+  injuryBodyPart,
+  injuryNotes,
 }: {
   id: string;
   pos: string;
@@ -403,6 +472,9 @@ function Overview({
   projected: number | null;
   sosGrade: string | null;
   format: Format;
+  injuryStatus: string | null;
+  injuryBodyPart: string | null;
+  injuryNotes: string | null;
 }) {
   const { rankFor: defenseRank } = usePositionalDefenseRanks();
   const { data: fpa } = useQuery({
@@ -459,6 +531,12 @@ function Overview({
           </div>
         </Card>
       ) : null}
+
+      <OverviewInjuryNote
+        status={injuryStatus}
+        bodyPart={injuryBodyPart}
+        notes={injuryNotes}
+      />
 
       <WeekProjectionsStrip id={id} team={team} pos={pos} format={format} focusWeek={focusWeek} />
 
