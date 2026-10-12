@@ -32,7 +32,8 @@ import { detailQuery } from "@/lib/player-detail-query";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
 import type { Player } from "@/lib/players-build";
 import { prefetchPlayerDetail } from "@/lib/prefetch-player-detail";
-import { fetchResearchFpa } from "@/lib/research-cdn";
+import { fetchResearchFpa, fetchResearchSosAnalysis, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
+import type { DepthChartEntry } from "@/lib/players.server";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { projectionPoints } from "@/lib/scoring-map";
@@ -1139,6 +1140,16 @@ function TeamTab({
     queryFn: () => fetchNflTeamOffenseRanks(season),
   });
 
+  // Sleeper depth_chart_order lives on SOS Analysis CDN (not proj-sorted detail depth).
+  const { data: sosAnalysis } = useQuery({
+    queryKey: ["sos-analysis", "half", "mobile-depth"],
+    enabled: Boolean(team),
+    staleTime: RESEARCH_CLIENT_STALE_MS,
+    placeholderData: (prev) => prev,
+    retry: false,
+    queryFn: () => fetchResearchSosAnalysis("half"),
+  });
+
   const rankChips = useMemo(() => {
     const ranks = teamOffenseRanksFor(offenseRanksBoard, team);
     if (!ranks) return [] as TeamRankChip[];
@@ -1149,25 +1160,62 @@ function TeamTab({
   }, [offenseRanksBoard, team]);
 
   const depthRows = useMemo(() => {
-    const byPos = {
-      QB: depthChart.filter((d) => d.pos === "QB").sort((a, b) => b.proj - a.proj),
-      RB: depthChart.filter((d) => d.pos === "RB").sort((a, b) => b.proj - a.proj),
-      WR: depthChart.filter((d) => d.pos === "WR").sort((a, b) => b.proj - a.proj),
-      TE: depthChart.filter((d) => d.pos === "TE").sort((a, b) => b.proj - a.proj),
-      K: depthChart.filter((d) => d.pos === "K").sort((a, b) => b.proj - a.proj),
+    const abbr = String(team ?? "")
+      .trim()
+      .toUpperCase();
+    const sosDepth =
+      sosAnalysis?.rows.find((r) => String(r.team).toUpperCase() === abbr)?.depth ?? null;
+
+    const mergePos = (pos: "QB" | "RB" | "WR" | "TE" | "K"): DepthEntry[] => {
+      const projList = depthChart.filter((d) => d.pos === pos);
+      const byId = new Map(projList.map((d) => [d.id, d]));
+      const ordered: DepthEntry[] = [];
+      const seen = new Set<string>();
+      const sosList: DepthChartEntry[] = sosDepth?.[pos] ?? [];
+      // Prefer Sleeper depth_chart_order from SOS snap.
+      for (const entry of sosList) {
+        const id = String(entry.id ?? "").trim();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const hit = byId.get(id);
+        ordered.push({
+          id,
+          name: entry.name || hit?.name || id,
+          pos,
+          proj: hit?.proj ?? 0,
+          injury: entry.injury ?? hit?.injury ?? null,
+        });
+      }
+      // Fill remaining slots from proj-sorted detail depth (players SOS truncated).
+      const remainder = projList
+        .filter((d) => !seen.has(d.id))
+        .slice()
+        .sort((a, b) => b.proj - a.proj);
+      for (const d of remainder) {
+        if (seen.has(d.id)) continue;
+        seen.add(d.id);
+        ordered.push(d);
+      }
+      return ordered;
     };
+
     const take3 = (list: DepthEntry[]) => [list[0] ?? null, list[1] ?? null, list[2] ?? null] as const;
-    const wr = byPos.WR;
+    const qb = mergePos("QB");
+    const rb = mergePos("RB");
+    const wr = mergePos("WR");
+    const te = mergePos("TE");
+    const k = mergePos("K");
+    // WR1/WR2/WR3 = Sleeper's top three WRs; deeper WRs fill 2nd/3rd across those rows.
     return [
-      { label: "QB", cells: take3(byPos.QB) },
-      { label: "RB", cells: take3(byPos.RB) },
+      { label: "QB", cells: take3(qb) },
+      { label: "RB", cells: take3(rb) },
       { label: "WR1", cells: [wr[0] ?? null, wr[3] ?? null, wr[6] ?? null] as const },
       { label: "WR2", cells: [wr[1] ?? null, wr[4] ?? null, wr[7] ?? null] as const },
       { label: "WR3", cells: [wr[2] ?? null, wr[5] ?? null, wr[8] ?? null] as const },
-      { label: "TE", cells: take3(byPos.TE) },
-      { label: "K", cells: take3(byPos.K) },
+      { label: "TE", cells: take3(te) },
+      { label: "K", cells: take3(k) },
     ];
-  }, [depthChart]);
+  }, [depthChart, sosAnalysis, team]);
 
   if (!team) {
     return <p className="px-4 py-8 text-center text-sm text-m-muted">No team depth chart for free agents.</p>;
