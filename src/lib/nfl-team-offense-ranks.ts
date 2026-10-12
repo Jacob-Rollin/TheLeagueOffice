@@ -54,7 +54,8 @@ export async function fetchNflTeamOffenseRanks(
   season: string | number,
 ): Promise<NflTeamOffenseRanksSnap> {
   const safeSeason = String(season || new Date().getUTCFullYear());
-  return getCached(`nfl-team-offense-ranks-v1:${safeSeason}`, CLIENT_TTL_MS, async () => {
+  // v2: bust IndexedDB empties cached while snap-cdn orphan publishes wiped ranks.
+  return getCached(`nfl-team-offense-ranks-v2:${safeSeason}`, CLIENT_TTL_MS, async () => {
     if (!snapCdnPublicBase()) return EMPTY;
     const snap = await fetchSnap(safeSeason);
     if (!snap || Object.keys(snap.teams).length === 0) return EMPTY;

@@ -141,6 +141,101 @@ jobs:
               print("ok native week stats", season, week, len(stats))
           PY
             fi
+
+            # Mobile Team tab offense ranks — also owned by nfl-team-offense-ranks.yml.
+            # Rebuild here so orphan publish never drops the file if the sidecar ran first
+            # (or restore after a wipe). Soft-skip on ESPN failure; preserve step keeps stale.
+            python3 <<PY || echo "warn: nfl-team-offense-ranks miss"
+          import datetime, json, re, time, urllib.request
+          from pathlib import Path
+
+          UA = {"accept": "application/json", "user-agent": "TheLeagueOffice-snap/1.0"}
+          ABBR_FIX = {"WSH": "WAS"}
+          FIELDS = [
+              ("offense", "passing", "netTotalYards"),
+              ("passAtt", "passing", "passingAttempts"),
+              ("passYd", "passing", "netPassingYards"),
+              ("passTd", "passing", "passingTouchdowns"),
+              ("td", "scoring", "totalTouchdowns"),
+              ("rz", "miscellaneous", "redzoneScoringPct"),
+              ("rzPct", "miscellaneous", "redzoneTouchdownPct"),
+          ]
+
+          def get(url: str):
+              req = urllib.request.Request(url, headers=UA)
+              with urllib.request.urlopen(req, timeout=30) as res:
+                  return json.load(res)
+
+          def parse_rank(stat):
+              raw = stat.get("rank")
+              if isinstance(raw, (int, float)) and raw > 0:
+                  return int(raw)
+              m = re.search(r"(\d+)", str(stat.get("rankDisplayValue") or ""))
+              return int(m.group(1)) if m else None
+
+          def pick_stat(categories, category, name):
+              for cat in categories:
+                  if str(cat.get("name") or "") != category:
+                      continue
+                  for st in cat.get("stats") or []:
+                      if str(st.get("name") or "") == name:
+                          return st
+              return None
+
+          season = "${SEASON}"
+          teams_payload = get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams?limit=50")
+          team_rows = (
+              teams_payload.get("sports", [{}])[0]
+              .get("leagues", [{}])[0]
+              .get("teams", [])
+          )
+          teams = []
+          for row in team_rows:
+              tm = row.get("team") or {}
+              tid = str(tm.get("id") or "").strip()
+              abbr = str(tm.get("abbreviation") or "").strip().upper()
+              if tid and abbr:
+                  teams.append((tid, ABBR_FIX.get(abbr, abbr)))
+          if len(teams) < 30:
+              raise SystemExit(f"expected ~32 ESPN teams, got {len(teams)}")
+
+          out_teams = {}
+          for i, (tid, abbr) in enumerate(teams):
+              url = (
+                  "https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/"
+                  f"seasons/{season}/types/2/teams/{tid}/statistics"
+              )
+              try:
+                  payload = get(url)
+              except Exception as exc:
+                  print(f"skip {abbr}: {exc}")
+                  time.sleep(0.15)
+                  continue
+              cats = ((payload.get("splits") or {}).get("categories")) or []
+              ranks = {}
+              for key, cat, name in FIELDS:
+                  st = pick_stat(cats, cat, name)
+                  rank = parse_rank(st) if st else None
+                  if rank is not None:
+                      ranks[key] = rank
+              if ranks:
+                  out_teams[abbr] = ranks
+              if i < len(teams) - 1:
+                  time.sleep(0.12)
+
+          if len(out_teams) < 28:
+              raise SystemExit(f"too few team rank rows: {len(out_teams)}")
+
+          Path(f"out/snap/nfl-team-offense-ranks-{season}.json").write_text(
+              json.dumps({
+                  "season": int(season) if str(season).isdigit() else season,
+                  "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+                  "source": "espn-team-season-stats",
+                  "teams": out_teams,
+              }, separators=(",", ":"))
+          )
+          print("ok nfl-team-offense-ranks", season, len(out_teams))
+          PY
           fi
 
           count=$(find out -type f -name '*.json' | wc -l | tr -d ' ')
@@ -158,7 +253,24 @@ jobs:
         run: |
           set -euo pipefail
           REPO="${{ github.repository }}"
+          REMOTE="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
           WORK=$(mktemp -d)
+
+          # Seed from the previous tip so sidecar snaps from other workflows survive
+          # this orphan force-push (e.g. nfl-team-offense-ranks-*.json from
+          # nfl-team-offense-ranks.yml, prior native-week-stats weeks). Fresh
+          # downloads in out/ overlay and win on conflict; soft-misses keep stale.
+          if git ls-remote --exit-code --heads "$REMOTE" snap-cdn >/dev/null 2>&1; then
+            PREV=$(mktemp -d)
+            (
+              cd "$PREV"
+              git init -q
+              git fetch --depth=1 "$REMOTE" snap-cdn
+              git archive --format=tar FETCH_HEAD | tar -x -C "$WORK"
+            )
+            echo "Seeded previous snap-cdn tip into publish tree"
+          fi
+
           cp -a out/. "$WORK/"
           # Marker so GitHub Pages (optional) serves JSON as-is.
           touch "$WORK/.nojekyll"
@@ -182,8 +294,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -q -m "Publish research/snap CDN $(date -u +%Y-%m-%dT%H:%MZ)"
-          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" snap-cdn
+          git push --force "$REMOTE" snap-cdn
 
           BASE="https://raw.githubusercontent.com/${REPO}/snap-cdn"
           echo "Public base: $BASE"
           echo "Smoke: ${BASE}/research/fpa-half.json"
+          ls -la snap/nfl-team-offense-ranks-*.json 2>/dev/null || echo "note: no nfl-team-offense-ranks yet (run NFL Team Offense Ranks workflow)"
