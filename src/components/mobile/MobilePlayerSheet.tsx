@@ -14,6 +14,7 @@ import {
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { useMobileLeagueActivity } from "@/components/mobile/league/useMobileLeague";
+import { valueTrendTone } from "@/components/research/ValueTrendCell";
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
@@ -51,6 +52,7 @@ import {
   fetchPlayerBioClient,
 } from "@/lib/sleeper-client";
 import { sosOppTextClass } from "@/lib/sos-presentation";
+import { scaleValue } from "@/lib/trade-engine";
 import { cn } from "@/lib/utils";
 
 /**
@@ -332,6 +334,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 nextGame={nextGame ?? null}
                 projected={projectFor(id)}
                 sosGrade={detail.data?.sos?.grade ?? null}
+                sosOpponents={detail.data?.sos?.opponents ?? null}
                 format={format}
                 injuryStatus={resolveInjuryStatus(player) ?? player.injury_status ?? null}
                 injuryBodyPart={
@@ -381,6 +384,51 @@ function Card({ title, children }: { title?: string; children: ReactNode }) {
         <h3 className="px-4 pt-4 font-display text-lg font-bold uppercase tracking-[0.06em]">{title}</h3>
       ) : null}
       {children}
+    </section>
+  );
+}
+
+/** Market Value / ECR / 30d trend from player brain — silent until hydrate finishes. */
+function OverviewMarketRow({ id }: { id: string }) {
+  const brain = usePlayerBrain();
+  const entry = brain?.[id];
+  if (!entry) return null;
+
+  const value = scaleValue(entry.value ?? 0);
+  const ecr = entry.ecr > 0 ? Math.round(entry.ecr) : null;
+  const trend = Number(entry.trend) || 0;
+  if (value <= 0 && ecr == null && trend === 0) return null;
+
+  const tone = valueTrendTone(trend);
+  const trendClass =
+    tone === "up" ? "text-emerald-600" : tone === "down" ? "text-rose-600" : "text-m-muted";
+  const trendArrow = tone === "up" ? "▲" : tone === "down" ? "▼" : "–";
+
+  return (
+    <section className="mx-2.5 mt-3 overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+      <div className="grid grid-cols-3 py-3 text-center">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">Value</p>
+          <p className="mt-0.5 font-display text-lg font-semibold tabular-nums">
+            {value > 0 ? value.toFixed(1) : "-"}
+          </p>
+        </div>
+        <div className="border-x border-m-border">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">ECR</p>
+          <p className="mt-0.5 font-display text-lg font-semibold tabular-nums">
+            {ecr != null ? ecr : "-"}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-m-muted">30d Trend</p>
+          <p className={cn("mt-0.5 font-display text-lg font-semibold tabular-nums", trendClass)}>
+            <span aria-hidden="true" className="mr-0.5 text-[12px]">
+              {trendArrow}
+            </span>
+            {Math.abs(trend).toFixed(1)}
+          </p>
+        </div>
+      </div>
     </section>
   );
 }
@@ -460,6 +508,7 @@ function Overview({
   nextGame,
   projected,
   sosGrade,
+  sosOpponents,
   format,
   injuryStatus,
   injuryBodyPart,
@@ -471,6 +520,7 @@ function Overview({
   nextGame: Awaited<ReturnType<typeof fetchNextGameClient>> | null;
   projected: number | null;
   sosGrade: string | null;
+  sosOpponents: Array<{ week: number; opp: string; rank: number | null }> | null;
   format: Format;
   injuryStatus: string | null;
   injuryBodyPart: string | null;
@@ -489,6 +539,13 @@ function Overview({
   const allowed = fpa?.rows.find((r) => r.team.toUpperCase() === opp?.toUpperCase())?.cells[fpaPos]?.pa ?? null;
   const focusWeek =
     nextGame?.seasonType === "regular" && nextGame.week > 0 ? nextGame.week : null;
+  const sosRankByWeek = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const m of sosOpponents ?? []) {
+      map.set(Number(m.week), m.rank);
+    }
+    return map;
+  }, [sosOpponents]);
 
   return (
     <>
@@ -532,13 +589,22 @@ function Overview({
         </Card>
       ) : null}
 
+      <OverviewMarketRow id={id} />
+
       <OverviewInjuryNote
         status={injuryStatus}
         bodyPart={injuryBodyPart}
         notes={injuryNotes}
       />
 
-      <WeekProjectionsStrip id={id} team={team} pos={pos} format={format} focusWeek={focusWeek} />
+      <WeekProjectionsStrip
+        id={id}
+        team={team}
+        pos={pos}
+        format={format}
+        focusWeek={focusWeek}
+        sosRankByWeek={sosRankByWeek}
+      />
 
       <h3 className="px-4 pb-1 pt-6 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
         Latest News
@@ -1113,12 +1179,15 @@ function WeekProjectionsStrip({
   pos,
   format,
   focusWeek,
+  sosRankByWeek,
 }: {
   id: string;
   team: string | null;
   pos: string;
   format: Format;
   focusWeek: number | null;
+  /** Weekly positional SoS ranks from detail SOS board (current season). */
+  sosRankByWeek?: Map<number, number | null> | null;
 }) {
   const { data, isLoading } = usePlayerLogs(id, team, pos);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -1155,11 +1224,21 @@ function WeekProjectionsStrip({
             log.isBye || log.proj?.[format] == null ? null : Number(log.proj[format]);
           const finalPts =
             log.isBye || !log.played ? null : Number(log.points[format]);
+          const sosRank = sosRankByWeek?.get(log.week);
+          const oppClass =
+            !log.isBye && sosRank != null && Number.isFinite(sosRank)
+              ? cn("font-semibold", sosOppTextClass(sosRank))
+              : "text-m-card-fg";
           return (
             <div key={log.week} data-proj-week={log.week} className="w-[7.75rem] shrink-0">
               <div className="mb-1.5 flex items-center gap-1.5 px-0.5">
-                <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide text-m-card-fg">
-                  Wk {log.week} {log.isBye ? "BYE" : opp.label}
+                <p className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-wide">
+                  <span className="text-m-card-fg">Wk {log.week}</span>{" "}
+                  {log.isBye ? (
+                    <span className="text-m-muted">BYE</span>
+                  ) : (
+                    <span className={oppClass}>{opp.label}</span>
+                  )}
                 </p>
                 {logo ? (
                   <img src={logo} alt="" className="size-4 shrink-0 rounded-full object-contain" />
@@ -1667,6 +1746,11 @@ function TeamTab({
                     >
                       {last}
                     </p>
+                    {cell.proj > 0 ? (
+                      <p className="mt-0.5 text-[11px] font-semibold tabular-nums text-m-muted">
+                        {cell.proj.toFixed(1)}
+                      </p>
+                    ) : null}
                   </button>
                 );
               })}
