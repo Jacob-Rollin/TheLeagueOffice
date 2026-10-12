@@ -324,9 +324,9 @@ export async function weekProjectionBundle(season: string, week: number): Promis
 
 /**
  * Season game logs from the browser (actuals + schedule + weekly projs).
- * Current-season weeks 1–18 use shared IndexedDB projection bundles (capped
- * concurrency) — including played weeks for the game-log Proj column and the
- * Projections sub-tab. No Fluid fan-out.
+ * Weeks 1–18 use shared IndexedDB projection bundles (capped concurrency) for
+ * the requested season — including past seasons when expanded — for the
+ * game-log Proj column. No Fluid fan-out.
  */
 export async function fetchGameLogsClient(
   id: string,
@@ -343,11 +343,6 @@ export async function fetchGameLogsClient(
   const season = requested && /^\d{4}$/.test(requested) ? requested : current;
   const upperTeam = (team || "").toUpperCase() || "FA";
   const upperPos = (pos || "").toUpperCase() as Pos;
-  const state = await fetchNflStateClient().catch(() => ({
-    season: current,
-    week: 1,
-    displayWeek: 1,
-  }));
 
   const careerYears = includeCareer
     ? [current, String(Number(current) - 1), String(Number(current) - 2)].filter(
@@ -403,13 +398,10 @@ export async function fetchGameLogsClient(
       });
     }
 
-    // Current season: weeks 1–18 (played + upcoming). Bundles are shared in
-    // IndexedDB across every player popup; concurrency stays capped.
+    // Weeks 1–18 projection bundles (current + past seasons when requested).
+    // Shared in IndexedDB across every player popup; concurrency stays capped.
     // Past weeks are immutable — still fine under the shared 30m bundle TTL.
-    const projWeeks =
-      withProj && year === state.season
-        ? Array.from({ length: 18 }, (_, i) => i + 1)
-        : [];
+    const projWeeks = withProj ? Array.from({ length: 18 }, (_, i) => i + 1) : [];
     const projHits = await mapPool(projWeeks, PROJ_WEEK_CONCURRENCY, async (w) => {
       const bundle = await weekProjectionBundle(year, w);
       return [w, bundle[clean] ?? null] as const;
