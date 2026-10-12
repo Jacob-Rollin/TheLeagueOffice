@@ -61,4 +61,10 @@ export const R2_SNAP_KEYS = {
    */
   nativeWeekStats: (season: number | string, week: number) =>
     `snap/native-week-stats-${season}-w${week}.json`,
+  /**
+   * Official NFL team offense ranks (ESPN team season stats → snap-cdn).
+   * Shared by all visitors — not per-player and not Sleeper player rollups.
+   */
+  nflTeamOffenseRanks: (season: number | string) =>
+    `snap/nfl-team-offense-ranks-${season}.json`,
 } as const;

@@ -13,22 +13,23 @@ import {
 } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
-import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
+import {
+  fetchNflTeamOffenseRanks,
+  teamOffenseRanksFor,
+  type TeamOffenseRankKey,
+} from "@/lib/nfl-team-offense-ranks";
 import { teamFullName } from "@/lib/nfl-teams";
 import { detailQuery } from "@/lib/player-detail-query";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
 import type { Player } from "@/lib/players-build";
 import { prefetchPlayerDetail } from "@/lib/prefetch-player-detail";
-import {
-  fetchResearchFpa,
-  fetchResearchRedZone,
-  RESEARCH_CLIENT_STALE_MS,
-} from "@/lib/research-cdn";
+import { fetchResearchFpa } from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { projectionPoints } from "@/lib/scoring-map";
@@ -758,17 +759,15 @@ function offenseRankTone(rank: number | null): string {
 
 type TeamRankChip = { key: string; label: string; rank: number };
 
-function rankTeamsByMetric(
-  totals: Map<string, number>,
-  higherIsBetter = true,
-): Map<string, number> {
-  const ranked = [...totals.entries()]
-    .filter(([, v]) => Number.isFinite(v))
-    .sort((a, b) => (higherIsBetter ? b[1] - a[1] : a[1] - b[1]));
-  const out = new Map<string, number>();
-  ranked.forEach(([team], i) => out.set(team, i + 1));
-  return out;
-}
+const TEAM_RANK_CHIP_META: { key: TeamOffenseRankKey; label: string }[] = [
+  { key: "offense", label: "Offense" },
+  { key: "passAtt", label: "Pass Att" },
+  { key: "passYd", label: "Pass Yd" },
+  { key: "passTd", label: "Pass TD" },
+  { key: "td", label: "TD" },
+  { key: "rz", label: "RZ" },
+  { key: "rzPct", label: "RZ %" },
+];
 
 function splitPlayerName(name: string): { first: string; last: string } {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -807,7 +806,8 @@ function TeamTab({
   depthChart: DepthEntry[];
   onSelectPlayer: (id: string) => void;
 }) {
-  const { seasonStats } = useLeagueProjections(null);
+  const nflState = useNflState();
+  const season = nflState.data?.season ?? String(new Date().getUTCFullYear());
   const { data: catalog } = useSleeperPlayers();
   const playersById = useMemo(() => {
     const map = new Map<string, Player>();
@@ -815,81 +815,24 @@ function TeamTab({
     return map;
   }, [catalog?.players]);
 
-  const { data: redzone } = useQuery({
-    queryKey: ["research-redzone", "team-ranks", 20],
+  // Official ESPN team ranks via snap-cdn (Actions warm) — not visitor Sleeper/ESPN.
+  const { data: offenseRanksBoard, isLoading: ranksLoading } = useQuery({
+    queryKey: ["nfl-team-offense-ranks", season],
     enabled: Boolean(team),
-    staleTime: RESEARCH_CLIENT_STALE_MS,
+    staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
     retry: false,
-    queryFn: () => fetchResearchRedZone({ yardline: 20 }),
+    queryFn: () => fetchNflTeamOffenseRanks(season),
   });
 
   const rankChips = useMemo(() => {
-    if (!team || !seasonStats) return [] as TeamRankChip[];
-    const passAtt = new Map<string, number>();
-    const passYd = new Map<string, number>();
-    const passTd = new Map<string, number>();
-    const totalTd = new Map<string, number>();
-    const offenseYd = new Map<string, number>();
-
-    for (const row of seasonStats.values()) {
-      const abbr = String(row.team ?? "").trim().toUpperCase();
-      if (!abbr || abbr === "FA") continue;
-      const st = row.stats ?? {};
-      const add = (map: Map<string, number>, key: string) => {
-        const n = Number(st[key] ?? 0);
-        if (!Number.isFinite(n) || n === 0) return;
-        map.set(abbr, (map.get(abbr) ?? 0) + n);
-      };
-      add(passAtt, "pass_att");
-      add(passYd, "pass_yd");
-      add(passTd, "pass_td");
-      // Pass + rush only — receiving TDs duplicate pass TDs at the team level.
-      const tds = Number(st.pass_td ?? 0) + Number(st.rush_td ?? 0);
-      if (Number.isFinite(tds) && tds !== 0) totalTd.set(abbr, (totalTd.get(abbr) ?? 0) + tds);
-      const yards = Number(st.pass_yd ?? 0) + Number(st.rush_yd ?? 0);
-      if (Number.isFinite(yards) && yards !== 0) {
-        offenseYd.set(abbr, (offenseYd.get(abbr) ?? 0) + yards);
-      }
-    }
-
-    const rzTd = new Map<string, number>();
-    const rzPlays = new Map<string, number>();
-    for (const rows of Object.values(redzone?.rowsByPos ?? {})) {
-      for (const row of rows) {
-        const abbr = String(row.team ?? "").trim().toUpperCase();
-        if (!abbr) continue;
-        // Pass + rush RZ TDs (receiving duplicates pass at team level).
-        const tds = Number(row.passTd ?? 0) + Number(row.rushTd ?? 0);
-        const plays = Number(row.passAtt ?? 0) + Number(row.rushAtt ?? 0);
-        if (tds) rzTd.set(abbr, (rzTd.get(abbr) ?? 0) + tds);
-        if (plays) rzPlays.set(abbr, (rzPlays.get(abbr) ?? 0) + plays);
-      }
-    }
-    const rzPct = new Map<string, number>();
-    for (const [abbr, tds] of rzTd) {
-      const plays = rzPlays.get(abbr) ?? 0;
-      if (plays > 0) rzPct.set(abbr, tds / plays);
-    }
-
-    const keys: { key: string; label: string; ranks: Map<string, number> }[] = [
-      { key: "offense", label: "Offense", ranks: rankTeamsByMetric(offenseYd) },
-      { key: "pass_att", label: "Pass Att", ranks: rankTeamsByMetric(passAtt) },
-      { key: "pass_yd", label: "Pass Yd", ranks: rankTeamsByMetric(passYd) },
-      { key: "pass_td", label: "Pass TD", ranks: rankTeamsByMetric(passTd) },
-      { key: "td", label: "TD", ranks: rankTeamsByMetric(totalTd) },
-      { key: "rz", label: "RZ", ranks: rankTeamsByMetric(rzTd) },
-      { key: "rz_pct", label: "RZ %", ranks: rankTeamsByMetric(rzPct) },
-    ];
-
-    const abbr = team.toUpperCase();
-    return keys
-      .map((k) => {
-        const rank = k.ranks.get(abbr);
-        return rank != null ? { key: k.key, label: k.label, rank } : null;
-      })
-      .filter((x): x is TeamRankChip => x != null);
-  }, [team, seasonStats, redzone]);
+    const ranks = teamOffenseRanksFor(offenseRanksBoard, team);
+    if (!ranks) return [] as TeamRankChip[];
+    return TEAM_RANK_CHIP_META.map(({ key, label }) => {
+      const rank = ranks[key];
+      return rank != null && rank > 0 ? { key, label, rank } : null;
+    }).filter((x): x is TeamRankChip => x != null);
+  }, [offenseRanksBoard, team]);
 
   const depthRows = useMemo(() => {
     const byPos = {
@@ -938,7 +881,9 @@ function TeamTab({
           ))}
         </div>
       ) : (
-        <p className="px-4 text-sm text-m-muted">Team ranks load with season stats.</p>
+        <p className="px-4 text-sm text-m-muted">
+          {ranksLoading ? "Loading team ranks..." : "Team ranks unavailable."}
+        </p>
       )}
 
       <h3 className="px-4 pb-2 pt-5 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
