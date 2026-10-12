@@ -265,14 +265,14 @@ jobs:
           if len(teams) < 28:
               raise SystemExit(f"too few team depth charts: {len(teams)}")
 
-          Path("out/snap/nfl-team-depth.json").write_text(
+          Path("out/snap/nfl-team-depth-v1.json").write_text(
               json.dumps({
                   "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
                   "source": "sleeper-players-depth",
                   "teams": teams,
               }, separators=(",", ":"))
           )
-          print("ok nfl-team-depth", len(teams))
+          print("ok nfl-team-depth-v1", len(teams))
           PY
 
           count=$(find out -type f -name '*.json' | wc -l | tr -d ' ')
