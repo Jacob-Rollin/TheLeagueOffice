@@ -971,7 +971,6 @@ function TeamTab({
                 }
                 const meta = playersById.get(cell.id);
                 const age = meta?.age;
-                const isRookie = meta?.exp === 0;
                 const badge = injuryLetter(cell.injury ?? meta?.injury_status ?? meta?.injury);
                 const { first, last } = splitPlayerName(cell.name);
                 const isActive = cell.id === playerId;
@@ -988,9 +987,6 @@ function TeamTab({
                     <div className="flex items-center gap-1">
                       {age != null ? (
                         <span className="text-[10px] text-m-muted">{age} y/o</span>
-                      ) : null}
-                      {isRookie ? (
-                        <span className="rounded bg-violet-600 px-1 text-[9px] font-black text-white">R</span>
                       ) : null}
                       {badge ? (
                         <span
