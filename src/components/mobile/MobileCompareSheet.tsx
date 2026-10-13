@@ -658,12 +658,11 @@ function CompareSection({
 
   return (
     <section className="overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-m-border px-3 py-2.5">
-        <div />
+      <div className="relative flex items-center justify-center border-b border-m-border px-3 py-2.5">
         <h3 className="text-center font-display text-sm font-bold uppercase tracking-[0.12em] text-m-section">
           {section.title}
         </h3>
-        <div className="flex items-center justify-end gap-1">
+        <div className="absolute inset-y-0 right-3 flex items-center gap-1">
           <ModeBtn active={mode === "table"} label="Table" onClick={() => setMode("table")}>
             <List className="size-4" strokeWidth={2.25} />
           </ModeBtn>
