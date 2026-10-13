@@ -176,8 +176,18 @@ export function planAiStreamerClaims(input: {
   /** Free-agent candidates (any streamer pos; filtered inside). */
   freeAgents: Array<{ id: string; meta: AiLineupPlayerMeta }>;
   starterNeeds: Partial<Record<RosterSlotKey, number>>;
-  /** True when active roster is full (add requires a drop). */
-  requiresDrop: boolean;
+  /**
+   * Active (non-IR) roster size. When `>= rosterCapacity`, every add must
+   * include a drop — same rule as human FA / waiver processing.
+   */
+  activeRosterCount: number;
+  /** Active roster capacity (starters + bench + taxi; IR excluded). */
+  rosterCapacity: number;
+  /**
+   * @deprecated Prefer activeRosterCount + rosterCapacity. Still honored when
+   * capacity fields are omitted by older callers.
+   */
+  requiresDrop?: boolean;
   /**
    * Kickoff-locked roster ids (same as human lineup/FA rules) — never drop these.
    */
@@ -195,6 +205,22 @@ export function planAiStreamerClaims(input: {
     if (!metaById[fa.id]) metaById[fa.id] = fa.meta;
   }
   let working = input.rosterPlayerIds.filter((id) => !reservedDrops.has(id));
+  const capacity = Math.max(
+    1,
+    Math.floor(
+      Number.isFinite(input.rosterCapacity)
+        ? Number(input.rosterCapacity)
+        : input.rosterPlayerIds.length,
+    ) || 1,
+  );
+  let workingActive = Math.max(
+    0,
+    Math.floor(
+      Number.isFinite(input.activeRosterCount)
+        ? Number(input.activeRosterCount)
+        : input.rosterPlayerIds.length,
+    ) || 0,
+  );
 
   const pickAdd = (preferred: AiStreamerPos[]): { id: string; pos: AiStreamerPos } | null => {
     const preferredSet = new Set(preferred);
@@ -220,8 +246,9 @@ export function planAiStreamerClaims(input: {
     roster: string[],
     addId: string,
     addPos: AiStreamerPos,
+    mustDrop: boolean,
   ): { id: string | null; reason: "bye" | "out" | "missing" } => {
-    if (!input.requiresDrop) return { id: null, reason: "missing" };
+    if (!mustDrop) return { id: null, reason: "missing" };
 
     type Cand = {
       id: string;
@@ -320,8 +347,14 @@ export function planAiStreamerClaims(input: {
     const add = pickAdd(preferred);
     if (!add) break;
 
-    const drop = pickDrop(working, add.id, add.pos);
-    if (input.requiresDrop && !drop.id) break;
+    // Same roster-limit rule as humans: full active roster → drop required.
+    const hasCapacityInputs =
+      Number.isFinite(input.activeRosterCount) && Number.isFinite(input.rosterCapacity);
+    const dropRequired = hasCapacityInputs
+      ? workingActive >= capacity
+      : Boolean(input.requiresDrop);
+    const drop = pickDrop(working, add.id, add.pos, dropRequired);
+    if (dropRequired && !drop.id) break;
 
     // Reason = why we needed the add (hole's unstartable / missing), not only drop.
     const holePos = preferred[0]!;
@@ -350,6 +383,9 @@ export function planAiStreamerClaims(input: {
     if (drop.id) {
       reservedDrops.add(drop.id);
       working = working.filter((id) => id !== drop.id);
+      // Swap keeps active count flat.
+    } else {
+      workingActive += 1;
     }
     working = [...working, add.id];
   }

@@ -38,7 +38,8 @@ describe("planAiStreamerClaims", () => {
         { id: "kFaBye", meta: { pos: "K", bye: 5, weeklyProj: 10, rank: 110 } },
       ],
       starterNeeds: standardNeeds,
-      requiresDrop: true,
+      activeRosterCount: Object.keys(metaById).length,
+      rosterCapacity: Object.keys(metaById).length,
     });
     expect(plans).toHaveLength(1);
     expect(plans[0]).toMatchObject({
@@ -71,7 +72,8 @@ describe("planAiStreamerClaims", () => {
         { id: "teFaBye", meta: { pos: "TE", bye: 5, weeklyProj: 8, rank: 85 } },
       ],
       starterNeeds: standardNeeds,
-      requiresDrop: true,
+      activeRosterCount: Object.keys(metaById).length,
+      rosterCapacity: Object.keys(metaById).length,
     });
     expect(plans).toHaveLength(1);
     expect(plans[0]).toMatchObject({
@@ -100,7 +102,8 @@ describe("planAiStreamerClaims", () => {
       metaById,
       freeAgents: [{ id: "defFa", meta: { pos: "DEF", bye: 8, weeklyProj: 7, rank: 90 } }],
       starterNeeds: standardNeeds,
-      requiresDrop: true,
+      activeRosterCount: Object.keys(metaById).length,
+      rosterCapacity: Object.keys(metaById).length,
     });
     expect(plans).toHaveLength(1);
     expect(plans[0]?.pos).toBe("DEF");
@@ -127,7 +130,8 @@ describe("planAiStreamerClaims", () => {
       metaById,
       freeAgents: [{ id: "kFa", meta: { pos: "K", bye: 12, weeklyProj: 9, rank: 120 } }],
       starterNeeds: standardNeeds,
-      requiresDrop: true,
+      activeRosterCount: Object.keys(metaById).length,
+      rosterCapacity: Object.keys(metaById).length,
       lockedPlayerIds: new Set(["kBye"]),
     });
     expect(plans.every((p) => p.dropPlayerId !== "kBye")).toBe(true);
@@ -154,9 +158,37 @@ describe("planAiStreamerClaims", () => {
       metaById,
       freeAgents: [{ id: "kFa", meta: { pos: "K", weeklyProj: 9, rank: 120 } }],
       starterNeeds: standardNeeds,
-      requiresDrop: true,
+      activeRosterCount: Object.keys(metaById).length,
+      rosterCapacity: Object.keys(metaById).length,
     });
     expect(plans).toEqual([]);
+  });
+
+  it("requires a drop once open roster slots are exhausted", () => {
+    const metaById: Record<string, AiLineupPlayerMeta> = {
+      qb1: { pos: "QB", weeklyProj: 20, rank: 10 },
+      rb1: { pos: "RB", weeklyProj: 15, rank: 20 },
+      // Missing WR/TE/K/DEF starters — need multiple adds, only 1 open slot.
+      wrBye: { pos: "WR", bye: 5, weeklyProj: 0, rank: 40 },
+    };
+    const plans = planAiStreamerClaims({
+      week: 5,
+      rosterPlayerIds: Object.keys(metaById),
+      metaById,
+      freeAgents: [
+        { id: "wrFa", meta: { pos: "WR", bye: 10, weeklyProj: 10, rank: 50 } },
+        { id: "teFa", meta: { pos: "TE", bye: 11, weeklyProj: 7, rank: 60 } },
+        { id: "kFa", meta: { pos: "K", bye: 12, weeklyProj: 6, rank: 100 } },
+        { id: "defFa", meta: { pos: "DEF", bye: 8, weeklyProj: 5, rank: 90 } },
+      ],
+      starterNeeds: { QB: 1, RB: 1, WR: 1, TE: 1, K: 1, DEF: 1 },
+      // 3 rostered, capacity 4 → first add may omit drop; later adds must drop.
+      activeRosterCount: 3,
+      rosterCapacity: 4,
+    });
+    expect(plans.length).toBeGreaterThan(0);
+    expect(plans[0]?.dropPlayerId).toBeNull();
+    expect(plans.slice(1).every((p) => p.dropPlayerId != null)).toBe(true);
   });
 
   it("protects next-week depth: drops low WR instead of only startable next-week TE", () => {
@@ -182,7 +214,8 @@ describe("planAiStreamerClaims", () => {
       metaById,
       freeAgents: [{ id: "teFa", meta: { pos: "TE", bye: 11, weeklyProj: 6, rank: 95 } }],
       starterNeeds: standardNeeds,
-      requiresDrop: true,
+      activeRosterCount: Object.keys(metaById).length,
+      rosterCapacity: Object.keys(metaById).length,
       lockedPlayerIds: new Set(["teBye"]),
     });
     expect(plans).toHaveLength(1);
