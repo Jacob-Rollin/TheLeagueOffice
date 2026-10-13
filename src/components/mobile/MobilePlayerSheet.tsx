@@ -375,24 +375,13 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                     {logo ? (
                       <img src={logo} alt="" className="size-9 shrink-0 rounded-full bg-m-chip object-contain p-1" />
                     ) : null}
-                    <div className="min-w-0 flex-1 text-[13px] leading-tight">
+                    <div className="min-w-0 text-[13px] leading-tight">
                       <p className="truncate">{team ? teamFullName(team) : "Free Agent"}</p>
                       <p className="text-m-muted">
                         {player.pos}
                         {bio?.number != null ? ` • #${bio.number}` : ""}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCompareReplaceSide(null);
-                        setComparePickerOpen(true);
-                      }}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-m-accent/40 bg-m-accent/10 px-2.5 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide text-m-accent"
-                    >
-                      <Columns2 className="size-3.5" strokeWidth={2.5} />
-                      Compare
-                    </button>
                   </div>
                   {fantasyOwner ? (
                     <div className="mt-2.5 max-w-full">
@@ -465,6 +454,18 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
               <StatCell label="Own %" value={ownedPct != null ? `${Math.round(Number(ownedPct))}` : "-"} />
               <StatCell label="Start %" value={startedPct != null ? `${Math.round(Number(startedPct))}` : "-"} />
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCompareReplaceSide(null);
+                setComparePickerOpen(true);
+              }}
+              className="flex w-full items-center justify-center gap-2 border-b border-m-border bg-m-card py-2.5 font-display text-[13px] font-bold uppercase tracking-[0.08em] text-m-accent"
+            >
+              <Columns2 className="size-4" strokeWidth={2.5} />
+              Compare
+            </button>
 
             <div className="grid grid-cols-3 border-b border-m-border bg-m-card">
               {(
