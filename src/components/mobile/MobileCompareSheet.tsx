@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChartLine, List, X } from "lucide-react";
+import { ChartLine, ChevronRight, List, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -244,12 +244,14 @@ type WeekPoint = {
   fpts: number;
   raw: Record<string, number>;
   played: boolean;
+  isBye: boolean;
 };
 
 function usePlayerWeekSeries(player: Player | null | undefined, format: Format) {
   return useQuery({
     queryKey: [
       "mobile-compare-logs",
+      "v2-keep-bye",
       player?.id ?? "",
       player?.team ?? "FA",
       player?.pos ?? "",
@@ -269,12 +271,12 @@ function usePlayerWeekSeries(player: Player | null | undefined, format: Format) 
       );
       const logs = payload?.logs ?? [];
       return logs
-        .filter((l) => !l.isBye)
         .map((l) => ({
           week: l.week,
-          fpts: Number(l.points?.[format] ?? 0) || 0,
+          fpts: l.isBye ? 0 : Number(l.points?.[format] ?? 0) || 0,
           raw: (l.raw ?? {}) as Record<string, number>,
-          played: Boolean(l.played),
+          played: Boolean(l.played) && !l.isBye,
+          isBye: Boolean(l.isBye),
         }))
         .sort((x, y) => x.week - y.week);
     },
@@ -321,28 +323,25 @@ function metricSeasonValue(metric: MetricDef, weeks: WeekPoint[]): number | null
   return null;
 }
 
-function metricWeekValue(metric: MetricDef, week: WeekPoint | undefined): number | null {
-  if (!week || !week.played) return null;
-  if (metric.kind === "fpts") return week.fpts;
+/** Graph points always numeric — bye / no-play / missing stat → 0. */
+function metricWeekValueForGraph(metric: MetricDef, week: WeekPoint | undefined): number {
+  if (!week || week.isBye || !week.played) return 0;
+  if (metric.kind === "fpts") return Number.isFinite(week.fpts) ? week.fpts : 0;
   if (metric.kind === "sum") {
     let total = 0;
-    let any = false;
     for (const k of metric.rawKeys ?? []) {
       const v = Number(week.raw[k]);
-      if (Number.isFinite(v)) {
-        total += v;
-        any = true;
-      }
+      if (Number.isFinite(v)) total += v;
     }
-    return any ? total : null;
+    return total;
   }
   if (metric.kind === "rate") {
     const n = Number(week.raw[metric.numKey ?? ""]);
     const d = Number(week.raw[metric.denKey ?? ""]);
-    if (!(Number.isFinite(d) && d > 0 && Number.isFinite(n))) return null;
+    if (!(Number.isFinite(d) && d > 0 && Number.isFinite(n))) return 0;
     return metric.key === "catch_pct" ? (n / d) * 100 : n / d;
   }
-  return null;
+  return 0;
 }
 
 function formatMetric(v: number | null, decimals = 1): string {
@@ -354,6 +353,35 @@ function compactName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length <= 1) return (parts[0] ?? "").toUpperCase();
   return `${parts[0]![0]!.toUpperCase()}. ${parts.slice(1).join(" ").toUpperCase()}`;
+}
+
+/** Show every week on the X-axis: "WK 1 2 3 …" (not even weeks only). */
+function WeekAxisTick({
+  x,
+  y,
+  payload,
+  index,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: number | string };
+  index?: number;
+}) {
+  const week = payload?.value;
+  if (week == null || x == null || y == null) return null;
+  const text = index === 0 ? `WK ${week}` : String(week);
+  return (
+    <text
+      x={x}
+      y={y + 10}
+      textAnchor="middle"
+      fill="var(--m-muted)"
+      fontSize={9}
+      fontWeight={600}
+    >
+      {text}
+    </text>
+  );
 }
 
 function useMobileThemeClass() {
@@ -393,7 +421,8 @@ export function MobileCompareSheet({
   }, [playersPayload]);
   const left = playersById.get(leftId) ?? null;
   const right = playersById.get(rightId) ?? null;
-  const { format, rankFor } = useLeagueProjections();
+  const { format, rankFor, nflWeek } = useLeagueProjections();
+  const currentWeek = Math.max(1, Math.min(18, Math.floor(Number(nflWeek ?? 1) || 1)));
 
   const leftLogs = usePlayerWeekSeries(left, format);
   const rightLogs = usePlayerWeekSeries(right, format);
@@ -464,6 +493,7 @@ export function MobileCompareSheet({
                 rightRank={rankFor(rightId).pos}
                 leftPos={left?.pos ?? ""}
                 rightPos={right?.pos ?? ""}
+                currentWeek={currentWeek}
               />
             ))
           )}
@@ -490,7 +520,7 @@ function CompareHero({
       <button
         type="button"
         onClick={onPress}
-        className="flex min-h-[120px] flex-col items-center justify-center gap-1 px-3 py-4 text-sm text-m-muted"
+        className="flex min-h-[72px] items-center justify-center px-3 py-3 text-sm text-m-muted"
       >
         Tap to select
       </button>
@@ -509,15 +539,15 @@ function CompareHero({
       type="button"
       onClick={onPress}
       className={cn(
-        "relative flex min-h-[120px] flex-col items-center px-3 pb-3 pt-4 text-center",
+        "relative flex min-h-[72px] items-center gap-2.5 px-3 py-2.5 text-left",
         side === "right" && "border-l border-m-border",
       )}
     >
       {r != null ? (
         <span
           className={cn(
-            "absolute top-2 flex size-7 items-center justify-center rounded-full bg-m-pos-rank-bg font-display text-xs font-bold text-m-pos-rank-fg",
-            side === "left" ? "left-3" : "right-3",
+            "absolute top-1.5 flex size-6 items-center justify-center rounded-full bg-m-pos-rank-bg font-display text-[11px] font-bold text-m-pos-rank-fg",
+            side === "left" ? "left-1.5" : "right-1.5",
           )}
         >
           {r}
@@ -527,21 +557,32 @@ function CompareHero({
         <img
           src={image}
           alt=""
-          className="mb-1 h-16 w-16 object-contain object-bottom"
+          className={cn(
+            "size-12 shrink-0 object-contain object-bottom",
+            side === "left" ? "ml-1" : "mr-1",
+          )}
           onError={(e) => {
             e.currentTarget.style.visibility = "hidden";
           }}
         />
       ) : logo ? (
-        <img src={logo} alt="" className="mb-1 size-12 rounded-full bg-m-chip object-contain p-1" />
-      ) : null}
-      <p className="font-display text-[15px] font-bold leading-tight tracking-wide">
-        {compactName(player.name)}
-      </p>
-      <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-m-muted">
-        {player.team || "FA"} - {player.pos === "DEF" ? "DST" : player.pos}
-      </p>
-      <span className="mt-2 h-1 w-12 rounded-full" style={{ background: accent }} />
+        <img
+          src={logo}
+          alt=""
+          className="size-10 shrink-0 rounded-full bg-m-chip object-contain p-1"
+        />
+      ) : (
+        <span className="size-12 shrink-0 rounded-full bg-m-chip" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-display text-[14px] font-bold leading-tight tracking-wide">
+          {compactName(player.name)}
+        </p>
+        <p className="mt-0.5 truncate text-[11px] font-semibold uppercase tracking-wide text-m-muted">
+          {player.team || "FA"} - {player.pos === "DEF" ? "DST" : player.pos}
+        </p>
+        <span className="mt-1.5 block h-0.5 w-10 rounded-full" style={{ background: accent }} />
+      </div>
     </button>
   );
 }
@@ -556,6 +597,7 @@ function CompareSection({
   rightRank,
   leftPos,
   rightPos,
+  currentWeek,
 }: {
   section: SectionDef;
   leftName: string;
@@ -566,41 +608,44 @@ function CompareSection({
   rightRank: number | null | undefined;
   leftPos: string;
   rightPos: string;
+  currentWeek: number;
 }) {
   const [mode, setMode] = useState<ViewMode>("table");
   const [metricKey, setMetricKey] = useState(section.metrics[0]?.key ?? "fpts");
   const activeMetric = section.metrics.find((m) => m.key === metricKey) ?? section.metrics[0]!;
 
-  const leftTotal = metricSeasonValue(activeMetric, leftWeeks);
-  const rightTotal = metricSeasonValue(activeMetric, rightWeeks);
+  const leftTotal = metricSeasonValue(activeMetric, leftWeeks) ?? 0;
+  const rightTotal = metricSeasonValue(activeMetric, rightWeeks) ?? 0;
   const leftWins =
-    leftTotal != null &&
-    rightTotal != null &&
-    (activeMetric.higherIsBetter === false
+    activeMetric.higherIsBetter === false
       ? leftTotal < rightTotal - 0.05
-      : leftTotal > rightTotal + 0.05);
+      : leftTotal > rightTotal + 0.05;
   const rightWins =
-    leftTotal != null &&
-    rightTotal != null &&
-    (activeMetric.higherIsBetter === false
+    activeMetric.higherIsBetter === false
       ? rightTotal < leftTotal - 0.05
-      : rightTotal > leftTotal + 0.05);
+      : rightTotal > leftTotal + 0.05;
+  const isTie = !leftWins && !rightWins;
 
   const chartData = useMemo(() => {
-    const weeks = new Set<number>();
-    for (const w of leftWeeks) weeks.add(w.week);
-    for (const w of rightWeeks) weeks.add(w.week);
     const leftBy = new Map(leftWeeks.map((w) => [w.week, w]));
     const rightBy = new Map(rightWeeks.map((w) => [w.week, w]));
-    return [...weeks]
-      .sort((a, b) => a - b)
-      .map((week) => ({
+    const through = Math.max(1, Math.min(18, currentWeek));
+    return Array.from({ length: through }, (_, i) => {
+      const week = i + 1;
+      return {
         week,
         label: `WK ${week}`,
-        left: metricWeekValue(activeMetric, leftBy.get(week)) ?? null,
-        right: metricWeekValue(activeMetric, rightBy.get(week)) ?? null,
-      }));
-  }, [leftWeeks, rightWeeks, activeMetric]);
+        left: metricWeekValueForGraph(activeMetric, leftBy.get(week)),
+        right: metricWeekValueForGraph(activeMetric, rightBy.get(week)),
+      };
+    });
+  }, [leftWeeks, rightWeeks, activeMetric, currentWeek]);
+
+  const posLabel = (pos: string) => (pos === "DEF" ? "DST" : pos || "RNK");
+  const leftRankLabel =
+    leftRank != null && leftRank > 0 && leftRank < 900 ? String(leftRank) : "—";
+  const rightRankLabel =
+    rightRank != null && rightRank > 0 && rightRank < 900 ? String(rightRank) : "—";
 
   return (
     <section className="overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
@@ -612,11 +657,11 @@ function CompareSection({
           {section.title}
         </h3>
         <div className="flex items-center gap-1">
-          <ModeBtn active={mode === "graph"} label="Graph" onClick={() => setMode("graph")}>
-            <ChartLine className="size-4" strokeWidth={2.25} />
-          </ModeBtn>
           <ModeBtn active={mode === "table"} label="Table" onClick={() => setMode("table")}>
             <List className="size-4" strokeWidth={2.25} />
+          </ModeBtn>
+          <ModeBtn active={mode === "graph"} label="Graph" onClick={() => setMode("graph")}>
+            <ChartLine className="size-4" strokeWidth={2.25} />
           </ModeBtn>
         </div>
       </div>
@@ -646,18 +691,24 @@ function CompareSection({
               <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
                 <CartesianGrid stroke="var(--m-border)" strokeDasharray="3 3" />
                 <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 10, fill: "var(--m-muted)" }}
+                  dataKey="week"
+                  type="category"
+                  interval={0}
+                  tick={<WeekAxisTick />}
                   tickLine={false}
                   axisLine={false}
+                  height={22}
                 />
                 <YAxis
                   width={32}
                   tick={{ fontSize: 10, fill: "var(--m-muted)" }}
                   tickLine={false}
                   axisLine={false}
+                  domain={[0, "auto"]}
+                  allowDecimals
                 />
                 <Tooltip
+                  labelFormatter={(week) => `Week ${week}`}
                   contentStyle={{
                     background: "var(--m-card)",
                     border: "1px solid var(--m-border)",
@@ -672,7 +723,7 @@ function CompareSection({
                   stroke={LEFT_COLOR}
                   strokeWidth={2.25}
                   dot={{ r: 3, fill: LEFT_COLOR }}
-                  connectNulls
+                  isAnimationActive={false}
                 />
                 <Line
                   type="monotone"
@@ -681,7 +732,7 @@ function CompareSection({
                   stroke={RIGHT_COLOR}
                   strokeWidth={2.25}
                   dot={{ r: 3, fill: RIGHT_COLOR }}
-                  connectNulls
+                  isAnimationActive={false}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -731,25 +782,85 @@ function CompareSection({
         </table>
       )}
 
-      <div className="flex items-center justify-between gap-2 border-t border-m-border bg-m-row-alt px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-m-muted">
-        <span style={{ color: LEFT_COLOR }}>
-          {leftRank != null && leftRank < 900 ? `#${leftRank} ${leftPos || "RNK"}` : leftPos || "—"}
-        </span>
-        <span className="tabnum text-m-card-fg">
-          <span style={{ color: leftWins ? LEFT_COLOR : undefined }}>
-            {formatMetric(leftTotal, activeMetric.decimals ?? 1)}
-          </span>
-          <span className="mx-2 text-m-muted">·</span>
-          <span style={{ color: rightWins ? RIGHT_COLOR : undefined }}>
-            {formatMetric(rightTotal, activeMetric.decimals ?? 1)}
-          </span>
-          <span className="ml-1 text-m-muted">Total</span>
-        </span>
-        <span style={{ color: RIGHT_COLOR }}>
-          {rightRank != null && rightRank < 900
-            ? `#${rightRank} ${rightPos || "RNK"}`
-            : rightPos || "—"}
-        </span>
+      {/* Winner footer: rank | total | arrow | total | rank — arrow centered. */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 border-t border-m-border bg-m-card px-2 py-3">
+        <div
+          className={cn(
+            "grid grid-cols-2 items-center gap-1 text-center",
+            leftWins ? "text-m-card-fg" : "text-m-muted",
+          )}
+        >
+          <div>
+            <p
+              className={cn(
+                "font-display text-lg leading-none tabnum",
+                leftWins ? "font-bold" : "font-semibold",
+              )}
+            >
+              #{leftRankLabel}
+            </p>
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide">
+              {posLabel(leftPos)} Rnk
+            </p>
+          </div>
+          <div>
+            <p
+              className={cn(
+                "font-display text-lg leading-none tabnum",
+                leftWins ? "font-bold" : "font-semibold",
+              )}
+            >
+              {formatMetric(leftTotal, activeMetric.decimals ?? 1)}
+            </p>
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide">Total</p>
+          </div>
+        </div>
+
+        <div className="flex w-8 shrink-0 items-center justify-center" aria-hidden>
+          {!isTie ? (
+            <ChevronRight
+              className={cn(
+                "size-5 text-m-muted",
+                leftWins && "rotate-180",
+              )}
+              strokeWidth={2.5}
+            />
+          ) : (
+            <span className="size-5" />
+          )}
+        </div>
+
+        <div
+          className={cn(
+            "grid grid-cols-2 items-center gap-1 text-center",
+            rightWins ? "text-m-card-fg" : "text-m-muted",
+          )}
+        >
+          <div>
+            <p
+              className={cn(
+                "font-display text-lg leading-none tabnum",
+                rightWins ? "font-bold" : "font-semibold",
+              )}
+            >
+              {formatMetric(rightTotal, activeMetric.decimals ?? 1)}
+            </p>
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide">Total</p>
+          </div>
+          <div>
+            <p
+              className={cn(
+                "font-display text-lg leading-none tabnum",
+                rightWins ? "font-bold" : "font-semibold",
+              )}
+            >
+              #{rightRankLabel}
+            </p>
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide">
+              {posLabel(rightPos)} Rnk
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );
