@@ -334,7 +334,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             </>
           ) : (
             <div className="relative z-[1]">
-              {/* Injury strip / close only — Compare sits beside the player name. */}
+              {/* Injury strip / close only — Compare sits above the sheet tabs. */}
               {injuryInfo ? (
                 <div className="relative">
                   <PlayerInjuryTopBar info={injuryInfo} />
@@ -461,9 +461,9 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 setCompareReplaceSide(null);
                 setComparePickerOpen(true);
               }}
-              className="flex w-full items-center justify-center gap-2 border-b border-m-border bg-m-card py-2.5 font-display text-[13px] font-bold uppercase tracking-[0.08em] text-m-accent"
+              className="flex w-full items-center justify-center gap-1.5 border-b border-m-border bg-m-row-alt/70 py-1.5 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-m-accent"
             >
-              <Columns2 className="size-4" strokeWidth={2.5} />
+              <Columns2 className="size-3.5" strokeWidth={2.25} />
               Compare
             </button>
 
