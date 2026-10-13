@@ -253,22 +253,11 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             {logo ? (
               <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-0.5" />
             ) : null}
-            {/* Name + Compare stay together; close alone on the far right. */}
+            {/* Name + injury; Compare lives on the strip above tabs only. */}
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <p className="min-w-0 truncate font-display text-[17px] font-bold tracking-wide">
                 {compactPlayerName(player.name)}
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setCompareReplaceSide(null);
-                  setComparePickerOpen(true);
-                }}
-                aria-label="Compare players"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent"
-              >
-                <Columns2 className="size-3.5" strokeWidth={2.5} />
-              </button>
               {injuryInfo ? (
                 <span
                   className={cn(
