@@ -204,9 +204,18 @@ export function MobileComparePicker({
                 rows.slice(0, 80).map((p) => {
                   const mine = myIds.has(p.id);
                   const owner = ownerByPlayerId.get(p.id);
+                  const rowBg = mine ? "bg-m-highlight" : "bg-m-card";
                   return (
-                    <div key={p.id} className="flex border-b border-m-border last:border-0">
-                      <div className="sticky left-0 z-10 flex w-[230px] shrink-0 items-center gap-2.5 bg-m-card px-2.5 py-2.5">
+                    <div
+                      key={p.id}
+                      className={cn("flex border-b border-m-border last:border-0", rowBg)}
+                    >
+                      <div
+                        className={cn(
+                          "sticky left-0 z-10 flex w-[230px] shrink-0 items-center gap-2.5 px-2.5 py-2.5",
+                          rowBg,
+                        )}
+                      >
                         <button
                           type="button"
                           aria-label={`Compare with ${shortName(p)}`}
