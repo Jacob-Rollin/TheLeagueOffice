@@ -462,7 +462,7 @@ export function MobileCompareSheet({
           </button>
         </header>
 
-        <div className="grid shrink-0 grid-cols-2 border-b border-m-border bg-m-card">
+        <div className="grid shrink-0 grid-cols-2 bg-m-card">
           <CompareHero
             player={left}
             rank={rankFor(leftId).pos}
@@ -515,18 +515,22 @@ function CompareHero({
   side: "left" | "right";
   onPress: () => void;
 }) {
+  const accent = side === "left" ? LEFT_COLOR : RIGHT_COLOR;
   if (!player) {
     return (
       <button
         type="button"
         onClick={onPress}
-        className="flex min-h-[72px] items-center justify-center px-3 py-3 text-sm text-m-muted"
+        className={cn(
+          "relative flex min-h-[72px] items-center justify-center px-3 py-3 pb-4 text-sm text-m-muted",
+          side === "right" && "border-l border-m-border",
+        )}
       >
         Tap to select
+        <span className="absolute inset-x-0 bottom-0 h-1 bg-m-border" aria-hidden />
       </button>
     );
   }
-  const accent = side === "left" ? LEFT_COLOR : RIGHT_COLOR;
   const image = playerImage(
     player.id,
     AVATAR_POS.has(player.pos) ? player.pos : "WR",
@@ -539,14 +543,14 @@ function CompareHero({
       type="button"
       onClick={onPress}
       className={cn(
-        "relative flex min-h-[72px] items-center gap-2.5 px-3 py-2.5 text-left",
+        "relative flex min-h-[72px] items-center gap-2.5 px-3 py-2.5 pb-4 text-left",
         side === "right" && "border-l border-m-border",
       )}
     >
       {r != null ? (
         <span
           className={cn(
-            "absolute top-1.5 flex size-6 items-center justify-center rounded-full bg-m-pos-rank-bg font-display text-[11px] font-bold text-m-pos-rank-fg",
+            "absolute top-1.5 z-[1] flex size-6 items-center justify-center rounded-full bg-m-pos-rank-bg font-display text-[11px] font-bold text-m-pos-rank-fg",
             side === "left" ? "left-1.5" : "right-1.5",
           )}
         >
@@ -581,8 +585,12 @@ function CompareHero({
         <p className="mt-0.5 truncate text-[11px] font-semibold uppercase tracking-wide text-m-muted">
           {player.team || "FA"} - {player.pos === "DEF" ? "DST" : player.pos}
         </p>
-        <span className="mt-1.5 block h-0.5 w-10 rounded-full" style={{ background: accent }} />
       </div>
+      <span
+        className="absolute inset-x-0 bottom-0 h-1"
+        style={{ background: accent }}
+        aria-hidden
+      />
     </button>
   );
 }
@@ -629,7 +637,8 @@ function CompareSection({
   const chartData = useMemo(() => {
     const leftBy = new Map(leftWeeks.map((w) => [w.week, w]));
     const rightBy = new Map(rightWeeks.map((w) => [w.week, w]));
-    const through = Math.max(1, Math.min(18, currentWeek));
+    // Only completed weeks — exclude the in-progress NFL week (shows as 0s).
+    const through = Math.max(0, Math.min(18, currentWeek - 1));
     return Array.from({ length: through }, (_, i) => {
       const week = i + 1;
       return {
@@ -649,14 +658,11 @@ function CompareSection({
 
   return (
     <section className="overflow-hidden rounded-xl border border-m-border bg-m-card text-m-card-fg">
-      <div className="flex items-center gap-2 border-b border-m-border px-3 py-2.5">
-        <span className="flex size-5 items-center justify-center rounded-full border border-m-border text-[10px] font-bold text-m-muted">
-          i
-        </span>
-        <h3 className="min-w-0 flex-1 text-center font-display text-sm font-bold uppercase tracking-[0.12em] text-m-section">
+      <div className="relative flex items-center justify-center border-b border-m-border px-3 py-2.5">
+        <h3 className="text-center font-display text-sm font-bold uppercase tracking-[0.12em] text-m-section">
           {section.title}
         </h3>
-        <div className="flex items-center gap-1">
+        <div className="absolute inset-y-0 right-3 flex items-center gap-1">
           <ModeBtn active={mode === "table"} label="Table" onClick={() => setMode("table")}>
             <List className="size-4" strokeWidth={2.25} />
           </ModeBtn>
