@@ -355,6 +355,35 @@ function compactName(name: string): string {
   return `${parts[0]![0]!.toUpperCase()}. ${parts.slice(1).join(" ").toUpperCase()}`;
 }
 
+/** Show every week on the X-axis: "WK 1 2 3 …" (not even weeks only). */
+function WeekAxisTick({
+  x,
+  y,
+  payload,
+  index,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: number | string };
+  index?: number;
+}) {
+  const week = payload?.value;
+  if (week == null || x == null || y == null) return null;
+  const text = index === 0 ? `WK ${week}` : String(week);
+  return (
+    <text
+      x={x}
+      y={y + 10}
+      textAnchor="middle"
+      fill="var(--m-muted)"
+      fontSize={9}
+      fontWeight={600}
+    >
+      {text}
+    </text>
+  );
+}
+
 function useMobileThemeClass() {
   const { theme } = useMobileTheme();
   return theme === "dark" ? "mobile-theme-dark" : "mobile-theme-light";
@@ -662,10 +691,13 @@ function CompareSection({
               <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
                 <CartesianGrid stroke="var(--m-border)" strokeDasharray="3 3" />
                 <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 10, fill: "var(--m-muted)" }}
+                  dataKey="week"
+                  type="category"
+                  interval={0}
+                  tick={<WeekAxisTick />}
                   tickLine={false}
                   axisLine={false}
+                  height={22}
                 />
                 <YAxis
                   width={32}
@@ -676,6 +708,7 @@ function CompareSection({
                   allowDecimals
                 />
                 <Tooltip
+                  labelFormatter={(week) => `Week ${week}`}
                   contentStyle={{
                     background: "var(--m-card)",
                     border: "1px solid var(--m-border)",
