@@ -362,39 +362,37 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
 
               <div className="flex min-h-[220px] items-end">
                 <div className="min-w-0 flex-1 py-6 pl-5 pr-2">
-                  <div className="flex items-start gap-2.5">
-                    <h2 className="min-w-0 flex-1 font-display text-[34px] font-bold leading-[1.02]">
-                      {first}
-                      {rest.length ? (
-                        <>
-                          <br />
-                          {rest.join(" ")}
-                        </>
-                      ) : null}
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCompareReplaceSide(null);
-                        setComparePickerOpen(true);
-                      }}
-                      aria-label="Compare players"
-                      className="mt-1 inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent"
-                    >
-                      <Columns2 className="size-4" strokeWidth={2.5} />
-                    </button>
-                  </div>
+                  <h2 className="font-display text-[34px] font-bold leading-[1.02]">
+                    {first}
+                    {rest.length ? (
+                      <>
+                        <br />
+                        {rest.join(" ")}
+                      </>
+                    ) : null}
+                  </h2>
                   <div className="mt-3 flex items-center gap-2.5">
                     {logo ? (
                       <img src={logo} alt="" className="size-9 shrink-0 rounded-full bg-m-chip object-contain p-1" />
                     ) : null}
-                    <div className="min-w-0 text-[13px] leading-tight">
+                    <div className="min-w-0 flex-1 text-[13px] leading-tight">
                       <p className="truncate">{team ? teamFullName(team) : "Free Agent"}</p>
                       <p className="text-m-muted">
                         {player.pos}
                         {bio?.number != null ? ` • #${bio.number}` : ""}
                       </p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCompareReplaceSide(null);
+                        setComparePickerOpen(true);
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-m-accent/40 bg-m-accent/10 px-2.5 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide text-m-accent"
+                    >
+                      <Columns2 className="size-3.5" strokeWidth={2.5} />
+                      Compare
+                    </button>
                   </div>
                   {fantasyOwner ? (
                     <div className="mt-2.5 max-w-full">
