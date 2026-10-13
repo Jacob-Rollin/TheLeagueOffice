@@ -4,7 +4,7 @@ import { authorizeCronRequest } from "@/lib/cron-auth.server";
 
 /**
  * AI manager tick for native leagues (testing): fill on-clock AI draft picks,
- * file K/DEF streamer waivers (or immediate FA), and set weekly optimized lineups.
+ * file starter-hole streamer waivers (or immediate FA), and set weekly optimized lineups.
  * Prefer Actions cron (CRON_SECRET).
  * Uses one shared memoized player catalog per invocation — no visitor Fluid fan-out.
  */

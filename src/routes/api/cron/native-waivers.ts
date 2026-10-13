@@ -4,7 +4,7 @@ import { authorizeCronRequest } from "@/lib/cron-auth.server";
 
 /**
  * Process pending native waiver claims (rolling / reverse / FAAB).
- * AI managers file K/DEF streamer claims first so bye weeks clear in the same run.
+ * AI managers file starter-hole streamer claims first so bye weeks clear in the same run.
  * Also completes trade veto windows whose veto_until has passed.
  * Triggered by GitHub Actions — not per-visitor.
  */

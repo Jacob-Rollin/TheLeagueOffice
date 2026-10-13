@@ -1,6 +1,6 @@
 /**
- * Native-league AI managers (testing): ADP draft picks, K/DEF streamer
- * waivers/FA, and weekly optimized lineups.
+ * Native-league AI managers (testing): ADP draft picks, starter-hole streamer
+ * waivers/FA (any pos), and weekly optimized lineups.
  *
  * Free-tier rules:
  * - Batch work runs from Actions → /api/cron/native-ai (CRON_SECRET), not page-load Fluid.
@@ -10,8 +10,11 @@
  * - Lineups optimize by weekly projection (same signal as Optimize), still
  *   respecting bye / Out / IR. Kickoff-locked players are pinned exactly like
  *   human Optimize / lineup save (game_time / first_game).
- * - Streamer claims (K/DEF bye or missing) submit before waiver process; immediate
- *   FA when the league is not on follow_waiver_rules. Locked players are never dropped.
+ * - Streamer claims fill bye / Out / missing starter slots (QB–DEF) before waiver
+ *   process; immediate FA only when the league is not on follow_waiver_rules
+ *   (same assertFaMoveAllowed gate as humans). Full rosters always require a drop;
+ *   AI never bypasses waiver routing or roster capacity. Drops prefer least-effective
+ *   players without breaking this- or next-week depth. Locked players are never dropped.
  */
 
 import {
@@ -62,6 +65,9 @@ type LeagueAiRow = {
   waiver_period_days?: number | null;
   waiver_budget?: number | null;
   post_draft_player_status?: string | null;
+  lock_fa_on_gametime?: number | boolean | null;
+  max_adds_per_week?: number | null;
+  max_adds_per_season?: number | null;
 };
 
 type TeamAiRow = {
@@ -714,13 +720,13 @@ async function upsertAiWaiverClaim(input: {
     );
     return "updated";
   }
-  // Cap pending streamer claims per AI team (K + DEF).
+  // Cap pending streamer claims per AI team (multi-hole bye weeks).
   const pendingCount = await tidbExecute<{ c: number }>(
     `SELECT COUNT(*) AS c FROM native_waiver_claims
      WHERE league_id = ? AND team_id = ? AND status = 'pending'`,
     [input.leagueId, input.teamId],
   );
-  if (Number(pendingCount[0]?.c ?? 0) >= 4) return "skipped";
+  if (Number(pendingCount[0]?.c ?? 0) >= 8) return "skipped";
 
   await tidbExecute(
     `INSERT INTO native_waiver_claims
@@ -744,22 +750,57 @@ async function applyAiFreeAgentSwap(input: {
   week: number;
   addId: string;
   dropId: string | null;
+  /** NFL team for add player — gametime FA lock (same as human FA). */
+  addPlayerTeam?: string | null;
   /** NFL team for drop player — used for kickoff lock (same as human FA). */
   dropPlayerTeam?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Never immediate-add when the league routes players through waivers.
+  if (waiversRequired(input.league)) {
+    return { ok: false, error: "waivers_required" };
+  }
+  const { assertFaMoveAllowed } = await import("@/lib/native-league-gameplay.server");
+  const gate = await assertFaMoveAllowed({
+    league: input.league as Parameters<typeof assertFaMoveAllowed>[0]["league"],
+    addPlayerId: input.addId,
+    addPlayerTeam: input.addPlayerTeam ?? null,
+    week: input.week,
+  });
+  if (!gate.ok) return { ok: false, error: gate.error ?? "fa_blocked" };
+
   const capacity = countActiveRosterCapacity(parseRosterSlots(input.league.roster_slots));
   const seasonYear = Number(input.league.season_year);
-  const rosterRows = await tidbExecute<{
-    player_ids: unknown;
-    reserve_ir: unknown;
-    version: number;
-  }>(
-    `SELECT player_ids, reserve_ir, version FROM native_rosters
-     WHERE league_id = ? AND team_id = ? LIMIT 1`,
-    [input.league.id, input.teamId],
-  );
+  const [rosterRows, teamMeta] = await Promise.all([
+    tidbExecute<{
+      player_ids: unknown;
+      reserve_ir: unknown;
+      version: number;
+    }>(
+      `SELECT player_ids, reserve_ir, version FROM native_rosters
+       WHERE league_id = ? AND team_id = ? LIMIT 1`,
+      [input.league.id, input.teamId],
+    ),
+    tidbExecute<{ adds_this_week: number; adds_this_season: number }>(
+      `SELECT adds_this_week, adds_this_season FROM native_teams
+       WHERE id = ? AND league_id = ? LIMIT 1`,
+      [input.teamId, input.league.id],
+    ),
+  ]);
   const roster = rosterRows[0];
   if (!roster) return { ok: false, error: "roster_missing" };
+
+  const maxWeek =
+    input.league.max_adds_per_week == null ? null : Number(input.league.max_adds_per_week);
+  const maxSeason =
+    input.league.max_adds_per_season == null ? null : Number(input.league.max_adds_per_season);
+  const addsWeek = Number(teamMeta[0]?.adds_this_week ?? 0) || 0;
+  const addsSeason = Number(teamMeta[0]?.adds_this_season ?? 0) || 0;
+  if (maxWeek != null && Number.isFinite(maxWeek) && addsWeek >= maxWeek) {
+    return { ok: false, error: "weekly_add_limit" };
+  }
+  if (maxSeason != null && Number.isFinite(maxSeason) && addsSeason >= maxSeason) {
+    return { ok: false, error: "season_add_limit" };
+  }
 
   let active = parsePlayerIdList(roster.player_ids);
   let ir = parsePlayerIdList(roster.reserve_ir);
@@ -796,6 +837,7 @@ async function applyAiFreeAgentSwap(input: {
     active = active.filter((id) => id !== input.dropId);
     ir = ir.filter((id) => id !== input.dropId);
   } else if (active.length >= capacity) {
+    // Human parity: roster full with no drop → reject (no silent overflow).
     return { ok: false, error: "roster_full" };
   }
 
@@ -861,7 +903,7 @@ async function applyAiFreeAgentSwap(input: {
 }
 
 /**
- * AI K/DEF streamers: submit waiver claims when the league uses waivers,
+ * AI starter-hole streamers: submit waiver claims when the league uses waivers,
  * otherwise immediate FA add/drop. Shared by AI cron and waiver cron (pre-process).
  */
 export async function submitAiStreamerMovesForLeague(
@@ -880,9 +922,20 @@ export async function submitAiStreamerMovesForLeague(
     weeklyProjById ?? (await loadWeekProjectionPoints(seasonYear, week, scoring));
   const metaById = metaFromCatalog(catalog, scoring, proj);
   const counts = parseRosterSlotCounts(parseRosterSlots(league.roster_slots) ?? undefined);
-  const needK = Math.max(0, Number(counts.K ?? 0) || 0);
-  const needDef = Math.max(0, Number(counts.DEF ?? 0) || 0);
-  if (needK <= 0 && needDef <= 0) return { claims: 0, faMoves: 0, errors: [] };
+  const starterNeeds = {
+    QB: Math.max(0, Number(counts.QB ?? 0) || 0),
+    RB: Math.max(0, Number(counts.RB ?? 0) || 0),
+    WR: Math.max(0, Number(counts.WR ?? 0) || 0),
+    TE: Math.max(0, Number(counts.TE ?? 0) || 0),
+    FLEX: Math.max(0, Number(counts.FLEX ?? 0) || 0),
+    WRRB: Math.max(0, Number(counts.WRRB ?? 0) || 0),
+    WRTE: Math.max(0, Number(counts.WRTE ?? 0) || 0),
+    SFLEX: Math.max(0, Number(counts.SFLEX ?? 0) || 0),
+    K: Math.max(0, Number(counts.K ?? 0) || 0),
+    DEF: Math.max(0, Number(counts.DEF ?? 0) || 0),
+  };
+  const starterSlotTotal = Object.values(starterNeeds).reduce((n, v) => n + v, 0);
+  if (starterSlotTotal <= 0) return { claims: 0, faMoves: 0, errors: [] };
 
   const capacity = countActiveRosterCapacity(counts);
   const useWaivers = waiversRequired(league);
@@ -917,19 +970,21 @@ export async function submitAiStreamerMovesForLeague(
   ]);
   const ownedLeagueWide = new Set<string>();
   const rosterByTeam = new Map<number, string[]>();
+  const activeCountByTeam = new Map<number, number>();
   for (const row of rosterRows) {
-    const ids = [
-      ...parsePlayerIdList(row.player_ids),
-      ...parsePlayerIdList(row.reserve_ir),
-    ];
-    rosterByTeam.set(Number(row.team_id), ids);
+    const teamId = Number(row.team_id);
+    const active = parsePlayerIdList(row.player_ids);
+    const ids = [...active, ...parsePlayerIdList(row.reserve_ir)];
+    rosterByTeam.set(teamId, ids);
+    activeCountByTeam.set(teamId, active.length);
     for (const id of ids) ownedLeagueWide.add(id);
   }
 
+  const streamerPos = new Set(["QB", "RB", "WR", "TE", "K", "DEF", "DST", "D/ST"]);
   const freeAgents = catalog
     .filter((p) => {
       const pos = String(p.pos ?? "").toUpperCase();
-      if (pos !== "K" && pos !== "DEF") return false;
+      if (!streamerPos.has(pos)) return false;
       if (ownedLeagueWide.has(p.id)) return false;
       // Don't add a FA whose NFL game has already locked.
       if (nflTeamHasLocked(p.team, kickoffs)) return false;
@@ -947,9 +1002,7 @@ export async function submitAiStreamerMovesForLeague(
   for (const team of teamRows) {
     const teamId = Number(team.id);
     const rosterPlayerIds = rosterByTeam.get(teamId) ?? [];
-    const activeCount = parsePlayerIdList(
-      rosterRows.find((r) => Number(r.team_id) === teamId)?.player_ids,
-    ).length;
+    let activeCount = activeCountByTeam.get(teamId) ?? 0;
     const lockedPlayerIds = new Set<string>();
     for (const id of rosterPlayerIds) {
       if (
@@ -967,14 +1020,19 @@ export async function submitAiStreamerMovesForLeague(
       rosterPlayerIds,
       metaById,
       freeAgents: freeAgents.filter((fa) => !claimedAdds.has(fa.id)),
-      needK,
-      needDef,
-      requiresDrop: activeCount >= capacity,
+      starterNeeds,
+      activeRosterCount: activeCount,
+      rosterCapacity: capacity,
       lockedPlayerIds,
     });
 
     for (const plan of plans) {
       if (claimedAdds.has(plan.addPlayerId)) continue;
+      // Human parity: full roster without a drop is never allowed.
+      if (activeCount >= capacity && !plan.dropPlayerId) {
+        errors.push(`team ${teamId}: roster_full_needs_drop`);
+        continue;
+      }
       if (useWaivers) {
         const priority = Number(team.waiver_priority ?? 99) || 99;
         let bid: number | null = null;
@@ -995,6 +1053,10 @@ export async function submitAiStreamerMovesForLeague(
             claims += 1;
             claimedAdds.add(plan.addPlayerId);
             ownedLeagueWide.add(plan.addPlayerId);
+            // Pending claims reserve the add; active count only changes on process,
+            // but keep local capacity so later plans in this tick still require drops.
+            if (!plan.dropPlayerId) activeCount += 1;
+            activeCountByTeam.set(teamId, activeCount);
           }
         } catch (error) {
           errors.push(
@@ -1002,24 +1064,14 @@ export async function submitAiStreamerMovesForLeague(
           );
         }
       } else {
-        // Immediate FA path (free_agents / waivers disabled).
-        const { assertFaMoveAllowed } = await import("@/lib/native-league-gameplay.server");
-        const gate = await assertFaMoveAllowed({
-          league: league as Parameters<typeof assertFaMoveAllowed>[0]["league"],
-          addPlayerId: plan.addPlayerId,
-          addPlayerTeam: metaById[plan.addPlayerId]?.team ?? null,
-          week,
-        });
-        if (!gate.ok) {
-          errors.push(`team ${teamId} fa: ${gate.error ?? "blocked"}`);
-          continue;
-        }
+        // Immediate FA only when league is not on waiver rules (assertFaMoveAllowed inside).
         const moved = await applyAiFreeAgentSwap({
           league,
           teamId,
           week,
           addId: plan.addPlayerId,
           dropId: plan.dropPlayerId,
+          addPlayerTeam: metaById[plan.addPlayerId]?.team ?? null,
           dropPlayerTeam: plan.dropPlayerId
             ? (metaById[plan.dropPlayerId]?.team ?? null)
             : null,
@@ -1028,11 +1080,14 @@ export async function submitAiStreamerMovesForLeague(
           faMoves += 1;
           claimedAdds.add(plan.addPlayerId);
           ownedLeagueWide.add(plan.addPlayerId);
-          if (plan.dropPlayerId) {
-            const next = (rosterByTeam.get(teamId) ?? []).filter((id) => id !== plan.dropPlayerId);
-            next.push(plan.addPlayerId);
-            rosterByTeam.set(teamId, next);
-          }
+          const prev = rosterByTeam.get(teamId) ?? [];
+          const next = plan.dropPlayerId
+            ? prev.filter((id) => id !== plan.dropPlayerId)
+            : prev.slice();
+          next.push(plan.addPlayerId);
+          rosterByTeam.set(teamId, next);
+          if (!plan.dropPlayerId) activeCount += 1;
+          activeCountByTeam.set(teamId, activeCount);
         } else {
           errors.push(`team ${teamId} fa: ${moved.error}`);
         }
@@ -1160,7 +1215,7 @@ export async function processNativeAiCron(opts?: {
   };
 }
 
-/** Pre-waiver hook: let AI file K/DEF streamer claims before claims are processed. */
+/** Pre-waiver hook: let AI file starter-hole streamer claims before claims are processed. */
 export async function submitAiStreamerClaimsForCron(opts?: {
   leagueId?: string;
   limit?: number;
