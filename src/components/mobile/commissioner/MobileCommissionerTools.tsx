@@ -163,7 +163,11 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
         return;
       }
       toast.success(`Moved to week ${result.week}.`);
-      await queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] }),
+        queryClient.invalidateQueries({ queryKey: ["active-standings"] }),
+        queryClient.invalidateQueries({ queryKey: ["native-matchup", linkId] }),
+      ]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not advance week.");
     } finally {

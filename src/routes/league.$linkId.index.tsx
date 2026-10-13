@@ -49,9 +49,12 @@ function NativeLeagueDashboard() {
   const maxJump = 18;
 
   const refreshBoard = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] });
-    await queryClient.invalidateQueries({ queryKey: ["native-draft-state", linkId] });
-    await queryClient.invalidateQueries({ queryKey: ["native-matchup", linkId] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] }),
+      queryClient.invalidateQueries({ queryKey: ["native-draft-state", linkId] }),
+      queryClient.invalidateQueries({ queryKey: ["native-matchup", linkId] }),
+      queryClient.invalidateQueries({ queryKey: ["active-standings"] }),
+    ]);
   };
 
   const advanceWeek = async (toWeek?: number) => {

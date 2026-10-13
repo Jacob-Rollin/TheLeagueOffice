@@ -7,8 +7,8 @@ import { authorizeCronRequest } from "@/lib/cron-auth.server";
  * Live Matchup display uses snap-cdn week stats + client overlay — not this route.
  *
  * Query: mode=points|standings|both (default points)
- * - points: week fantasy totals → native_matchup_results (infrequent)
- * - standings: finalize W–L snap after the week’s games (weekly)
+ * - points: week fantasy totals → native_matchup_results; also unsticks leagues behind Sleeper week
+ * - standings: finalize completed weeks → W–L/PF/PA snap, then roll current_week to Sleeper week
  * - both: points then standings
  */
 export const Route = createFileRoute("/api/cron/native-scoring")({

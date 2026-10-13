@@ -104,16 +104,24 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const boardQuery = useQuery({
     queryKey: ["native-league-board", linkId],
     enabled: Boolean(linkId),
-    staleTime: 60_000,
+    // Week rolls via Tuesday cron — refetch on mount so Team doesn't stay on last session's week.
+    staleTime: isNative ? 30_000 : 60_000,
+    refetchOnMount: isNative ? true : undefined,
     queryFn: () => getNativeLeagueBoard({ data: { linkId: linkId! } }),
   });
   const boardWeek = boardQuery.data?.currentWeek ?? null;
 
   useEffect(() => {
+    if (isNative && boardWeek != null) {
+      // Follow league week forward when cron/commissioner advances (e.g. Tue → week 6).
+      setWeek((prev) => {
+        if (prev == null || boardWeek > prev) return Math.min(boardWeek, REGULAR_SEASON_WEEKS);
+        return prev;
+      });
+      return;
+    }
     if (week != null) return;
-    // Native leagues may advance ahead of the NFL calendar — prefer board week.
-    const fallback = isNative ? (boardWeek ?? nflWeek) : nflWeek;
-    if (fallback != null) setWeek(Math.min(fallback, REGULAR_SEASON_WEEKS));
+    if (nflWeek != null) setWeek(Math.min(nflWeek, REGULAR_SEASON_WEEKS));
   }, [week, isNative, boardWeek, nflWeek]);
   const activeWeek = week ?? (isNative ? (boardWeek ?? nflWeek) : nflWeek) ?? 1;
 

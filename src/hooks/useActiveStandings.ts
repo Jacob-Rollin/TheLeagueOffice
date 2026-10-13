@@ -20,15 +20,17 @@ export function useActiveStandings() {
   const leagueId = activeLeague?.leagueId ?? "";
   const platform = (activeLeague?.platform ?? "sleeper").trim().toLowerCase();
 
+  const isNative = platform === "native";
   const query = useQuery({
     queryKey: ["active-standings", id],
     enabled: Boolean(leagueId),
     retry: false,
-    staleTime: 15 * 60 * 1000,
-    refetchOnMount: false,
+    // Native W–L/PF/PA land via Tuesday cron — keep fresher than synced host caches.
+    staleTime: isNative ? 60 * 1000 : 15 * 60 * 1000,
+    refetchOnMount: isNative ? true : false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      if (platform === "native") {
+      if (isNative) {
         const linkId = String(id ?? "").trim();
         if (!linkId) return null;
         const { fetchNativeStandings } = await import("@/lib/native-league-sync-adapter");
