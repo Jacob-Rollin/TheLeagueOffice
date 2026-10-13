@@ -629,7 +629,8 @@ function CompareSection({
   const chartData = useMemo(() => {
     const leftBy = new Map(leftWeeks.map((w) => [w.week, w]));
     const rightBy = new Map(rightWeeks.map((w) => [w.week, w]));
-    const through = Math.max(1, Math.min(18, currentWeek));
+    // Only completed weeks — exclude the in-progress NFL week (shows as 0s).
+    const through = Math.max(0, Math.min(18, currentWeek - 1));
     return Array.from({ length: through }, (_, i) => {
       const week = i + 1;
       return {
