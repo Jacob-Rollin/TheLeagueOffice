@@ -253,11 +253,22 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             {logo ? (
               <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-0.5" />
             ) : null}
-            {/* Name + full designation sit together; actions stay far right. */}
+            {/* Name + Compare stay together; close alone on the far right. */}
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <p className="min-w-0 truncate font-display text-[17px] font-bold tracking-wide">
                 {compactPlayerName(player.name)}
               </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setCompareReplaceSide(null);
+                  setComparePickerOpen(true);
+                }}
+                aria-label="Compare players"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent"
+              >
+                <Columns2 className="size-3.5" strokeWidth={2.5} />
+              </button>
               {injuryInfo ? (
                 <span
                   className={cn(
@@ -269,17 +280,6 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 </span>
               ) : null}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setCompareReplaceSide(null);
-                setComparePickerOpen(true);
-              }}
-              aria-label="Compare players"
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent"
-            >
-              <Columns2 className="size-4" strokeWidth={2.5} />
-            </button>
             <button
               type="button"
               onClick={onClose}
@@ -334,69 +334,56 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             </>
           ) : (
             <div className="relative z-[1]">
-              {/* Full-bleed translucent strip above the name; Compare + close sit top-right. */}
+              {/* Injury strip / close only — Compare sits beside the player name. */}
               {injuryInfo ? (
                 <div className="relative">
                   <PlayerInjuryTopBar info={injuryInfo} />
                   {!compactHeader ? (
-                    <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCompareReplaceSide(null);
-                          setComparePickerOpen(true);
-                        }}
-                        aria-label="Compare players"
-                        className="inline-flex size-10 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent shadow-sm"
-                      >
-                        <Columns2 className="size-5" strokeWidth={2.5} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onClose}
-                        aria-label="Close player"
-                        className="inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg shadow-sm"
-                      >
-                        <X className="size-5" strokeWidth={2.5} />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      aria-label="Close player"
+                      className="absolute right-3 top-1/2 z-20 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg shadow-sm"
+                    >
+                      <X className="size-5" strokeWidth={2.5} />
+                    </button>
                   ) : null}
                 </div>
               ) : !compactHeader ? (
-                <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCompareReplaceSide(null);
-                      setComparePickerOpen(true);
-                    }}
-                    aria-label="Compare players"
-                    className="inline-flex size-10 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent"
-                  >
-                    <Columns2 className="size-5" strokeWidth={2.5} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    aria-label="Close player"
-                    className="inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
-                  >
-                    <X className="size-5" strokeWidth={2.5} />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close player"
+                  className="absolute right-3 top-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+                >
+                  <X className="size-5" strokeWidth={2.5} />
+                </button>
               ) : null}
 
               <div className="flex min-h-[220px] items-end">
                 <div className="min-w-0 flex-1 py-6 pl-5 pr-2">
-                  <h2 className="font-display text-[34px] font-bold leading-[1.02]">
-                    {first}
-                    {rest.length ? (
-                      <>
-                        <br />
-                        {rest.join(" ")}
-                      </>
-                    ) : null}
-                  </h2>
+                  <div className="flex items-start gap-2.5">
+                    <h2 className="min-w-0 flex-1 font-display text-[34px] font-bold leading-[1.02]">
+                      {first}
+                      {rest.length ? (
+                        <>
+                          <br />
+                          {rest.join(" ")}
+                        </>
+                      ) : null}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCompareReplaceSide(null);
+                        setComparePickerOpen(true);
+                      }}
+                      aria-label="Compare players"
+                      className="mt-1 inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent"
+                    >
+                      <Columns2 className="size-4" strokeWidth={2.5} />
+                    </button>
+                  </div>
                   <div className="mt-3 flex items-center gap-2.5">
                     {logo ? (
                       <img src={logo} alt="" className="size-9 shrink-0 rounded-full bg-m-chip object-contain p-1" />
