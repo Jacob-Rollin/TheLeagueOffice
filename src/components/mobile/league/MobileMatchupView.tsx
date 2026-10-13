@@ -70,7 +70,9 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
   const boardQuery = useQuery({
     queryKey: ["native-league-board", linkId],
     enabled: Boolean(linkId),
-    staleTime: 60_000,
+    // Week rolls via Tuesday cron — refetch on mount so Matchup tracks the new board week.
+    staleTime: isNative ? 30_000 : 60_000,
+    refetchOnMount: isNative ? true : undefined,
     queryFn: () => getNativeLeagueBoard({ data: { linkId: linkId! } }),
   });
   const boardWeek = boardQuery.data?.currentWeek ?? null;
