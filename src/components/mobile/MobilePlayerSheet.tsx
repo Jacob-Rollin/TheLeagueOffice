@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Columns2, X } from "lucide-react";
+import { ArrowLeftRight, Columns2, Minus, Plus, X } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -15,6 +15,7 @@ import {
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { MobileComparePicker } from "@/components/mobile/MobileComparePicker";
 import { MobileCompareSheet } from "@/components/mobile/MobileCompareSheet";
+import { useNativeRosterActions } from "@/components/mobile/league/nativeRosterActions";
 import { useMobileLeagueActivity } from "@/components/mobile/league/useMobileLeague";
 import { valueTrendTone } from "@/components/research/ValueTrendCell";
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
@@ -140,6 +141,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
   // Reuses the league-rosters React Query cache — no catalog fetch required.
   const { ownerByPlayerId } = useLeagueRosters([]);
   const fantasyOwner = ownerByPlayerId.get(id) ?? null;
+  const nativeActions = useNativeRosterActions();
   const { data: catalogPayload } = useSleeperPlayers();
   const catalogById = useMemo(() => {
     const m = new Map<string, Player>();
@@ -253,22 +255,11 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             {logo ? (
               <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-0.5" />
             ) : null}
-            {/* Name + Compare stay together; close alone on the far right. */}
+            {/* Name + injury; Compare / roster actions live on the strip above tabs. */}
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <p className="min-w-0 truncate font-display text-[17px] font-bold tracking-wide">
                 {compactPlayerName(player.name)}
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setCompareReplaceSide(null);
-                  setComparePickerOpen(true);
-                }}
-                aria-label="Compare players"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent"
-              >
-                <Columns2 className="size-3.5" strokeWidth={2.5} />
-              </button>
               {injuryInfo ? (
                 <span
                   className={cn(
@@ -455,17 +446,19 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
               <StatCell label="Start %" value={startedPct != null ? `${Math.round(Number(startedPct))}` : "-"} />
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
+            <PlayerActionStrip
+              isNative={nativeActions.isNative}
+              ownership={nativeActions.ownershipFor(id)}
+              busy={nativeActions.busy}
+              onCompare={() => {
                 setCompareReplaceSide(null);
                 setComparePickerOpen(true);
               }}
-              className="flex w-full items-center justify-center gap-1.5 border-b border-m-border bg-m-row-alt/70 py-1.5 font-display text-[11px] font-semibold uppercase tracking-[0.1em] text-m-accent"
-            >
-              <Columns2 className="size-3.5" strokeWidth={2.25} />
-              Compare
-            </button>
+              onAdd={() => nativeActions.requestAdd(player)}
+              onDrop={() => nativeActions.requestDrop(player)}
+              onTradeFor={() => nativeActions.requestTradeFor(player)}
+              onTradeAway={() => nativeActions.requestTradeAway(player)}
+            />
 
             <div className="grid grid-cols-3 border-b border-m-border bg-m-card">
               {(
@@ -573,6 +566,115 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
           }}
         />
       ) : null}
+
+      {nativeActions.isNative ? nativeActions.modals : null}
+    </div>
+  );
+}
+
+/**
+ * Native leagues: ownership-aware Add/Drop/Trade + Compare.
+ * Synced leagues: centered Compare only (mutations live on host platforms).
+ */
+function PlayerActionStrip({
+  isNative,
+  ownership,
+  busy,
+  onCompare,
+  onAdd,
+  onDrop,
+  onTradeFor,
+  onTradeAway,
+}: {
+  isNative: boolean;
+  ownership: "mine" | "fa" | "other";
+  busy: boolean;
+  onCompare: () => void;
+  onAdd: () => void;
+  onDrop: () => void;
+  onTradeFor: () => void;
+  onTradeAway: () => void;
+}) {
+  const stripBtn =
+    "inline-flex items-center justify-center gap-1.5 font-display text-[11px] font-semibold uppercase tracking-[0.1em] disabled:opacity-50";
+
+  if (!isNative) {
+    return (
+      <button
+        type="button"
+        onClick={onCompare}
+        className={cn(
+          stripBtn,
+          "w-full border-b border-m-border bg-m-row-alt/70 py-1.5 text-m-accent",
+        )}
+      >
+        <Columns2 className="size-3.5" strokeWidth={2.25} />
+        Compare
+      </button>
+    );
+  }
+
+  if (ownership === "mine") {
+    return (
+      <div className="grid grid-cols-3 border-b border-m-border bg-m-row-alt/70 py-1.5">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onDrop}
+          className={cn(stripBtn, "text-[#e8551f]")}
+        >
+          <Minus className="size-3.5" strokeWidth={2.25} />
+          Drop
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onTradeAway}
+          className={cn(stripBtn, "text-[#f08a24]")}
+        >
+          <ArrowLeftRight className="size-3.5" strokeWidth={2.25} />
+          Trade
+        </button>
+        <button type="button" onClick={onCompare} className={cn(stripBtn, "text-m-accent")}>
+          <Columns2 className="size-3.5" strokeWidth={2.25} />
+          Compare
+        </button>
+      </div>
+    );
+  }
+
+  // FA: Add + Compare · other roster: Trade + Compare — even edge/gap spacing.
+  return (
+    <div className="flex items-center justify-evenly border-b border-m-border bg-m-row-alt/70 px-4 py-1.5">
+      {ownership === "fa" ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onAdd}
+          className={cn(stripBtn, "min-w-[6.5rem] text-[#1fae5b]")}
+        >
+          <Plus className="size-3.5" strokeWidth={2.25} />
+          Add
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onTradeFor}
+          className={cn(stripBtn, "min-w-[6.5rem] text-[#f08a24]")}
+        >
+          <ArrowLeftRight className="size-3.5" strokeWidth={2.25} />
+          Trade
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onCompare}
+        className={cn(stripBtn, "min-w-[6.5rem] text-m-accent")}
+      >
+        <Columns2 className="size-3.5" strokeWidth={2.25} />
+        Compare
+      </button>
     </div>
   );
 }
