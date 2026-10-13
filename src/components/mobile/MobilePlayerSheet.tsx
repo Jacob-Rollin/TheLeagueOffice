@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { Columns2, X } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -253,7 +253,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             {logo ? (
               <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-0.5" />
             ) : null}
-            {/* Name + full designation sit together; close stays far right. */}
+            {/* Name + full designation sit together; actions stay far right. */}
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <p className="min-w-0 truncate font-display text-[17px] font-bold tracking-wide">
                 {compactPlayerName(player.name)}
@@ -269,6 +269,17 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 </span>
               ) : null}
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                setCompareReplaceSide(null);
+                setComparePickerOpen(true);
+              }}
+              aria-label="Compare players"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent"
+            >
+              <Columns2 className="size-4" strokeWidth={2.5} />
+            </button>
             <button
               type="button"
               onClick={onClose}
@@ -323,30 +334,56 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
             </>
           ) : (
             <div className="relative z-[1]">
-              {/* Full-bleed translucent strip above the name; close overlays the right edge. */}
+              {/* Full-bleed translucent strip above the name; Compare + close sit top-right. */}
               {injuryInfo ? (
                 <div className="relative">
                   <PlayerInjuryTopBar info={injuryInfo} />
                   {!compactHeader ? (
-                    <button
-                      type="button"
-                      onClick={onClose}
-                      aria-label="Close player"
-                      className="absolute right-3 top-1/2 z-20 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg shadow-sm"
-                    >
-                      <X className="size-5" strokeWidth={2.5} />
-                    </button>
+                    <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCompareReplaceSide(null);
+                          setComparePickerOpen(true);
+                        }}
+                        aria-label="Compare players"
+                        className="inline-flex size-10 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent shadow-sm"
+                      >
+                        <Columns2 className="size-5" strokeWidth={2.5} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close player"
+                        className="inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg shadow-sm"
+                      >
+                        <X className="size-5" strokeWidth={2.5} />
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               ) : !compactHeader ? (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  aria-label="Close player"
-                  className="absolute right-3 top-3 z-20 inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
-                >
-                  <X className="size-5" strokeWidth={2.5} />
-                </button>
+                <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompareReplaceSide(null);
+                      setComparePickerOpen(true);
+                    }}
+                    aria-label="Compare players"
+                    className="inline-flex size-10 items-center justify-center rounded-full border border-m-accent/35 bg-m-accent/10 text-m-accent"
+                  >
+                    <Columns2 className="size-5" strokeWidth={2.5} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Close player"
+                    className="inline-flex size-10 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+                  >
+                    <X className="size-5" strokeWidth={2.5} />
+                  </button>
+                </div>
               ) : null}
 
               <div className="flex min-h-[220px] items-end">
@@ -372,26 +409,16 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                       </p>
                     </div>
                   </div>
-                  <div className="mt-2.5 flex max-w-full flex-wrap items-center gap-2">
-                    {fantasyOwner ? (
+                  {fantasyOwner ? (
+                    <div className="mt-2.5 max-w-full">
                       <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full border border-m-border bg-m-chip px-2.5 py-1 text-[12px] font-semibold text-m-chip-fg">
                         <span className="font-display text-[11px] font-bold uppercase tracking-wide text-m-accent">
                           On
                         </span>
                         <span className="truncate">{fantasyOwner}</span>
                       </span>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCompareReplaceSide(null);
-                        setComparePickerOpen(true);
-                      }}
-                      className="inline-flex items-center rounded-full border border-m-accent/40 bg-m-accent/10 px-2.5 py-1 font-display text-[11px] font-bold uppercase tracking-wide text-m-accent"
-                    >
-                      Compare
-                    </button>
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
                 {image ? (
                   <img
