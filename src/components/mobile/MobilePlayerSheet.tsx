@@ -13,6 +13,8 @@ import {
 } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
+import { MobileComparePicker } from "@/components/mobile/MobileComparePicker";
+import { MobileCompareSheet } from "@/components/mobile/MobileCompareSheet";
 import { useMobileLeagueActivity } from "@/components/mobile/league/useMobileLeague";
 import { valueTrendTone } from "@/components/research/ValueTrendCell";
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
@@ -124,29 +126,56 @@ function compactPlayerName(name: string): string {
 function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const [tab, setTab] = useState<SheetTab>("overview");
   const [compactHeader, setCompactHeader] = useState(false);
+  /** Compare picker open (anchor = this sheet's player). */
+  const [comparePickerOpen, setComparePickerOpen] = useState(false);
+  /** Active compare pair — sheet portals above the player popup. */
+  const [comparePair, setComparePair] = useState<{ leftId: string; rightId: string } | null>(
+    null,
+  );
+  /** Which side to replace when reopening the picker from Compare. */
+  const [compareReplaceSide, setCompareReplaceSide] = useState<"left" | "right" | null>(null);
   const scrollRootRef = useRef<HTMLDivElement>(null);
   const heroSentinelRef = useRef<HTMLDivElement>(null);
   const openPlayer = useOpenMobilePlayer();
   // Reuses the league-rosters React Query cache — no catalog fetch required.
   const { ownerByPlayerId } = useLeagueRosters([]);
   const fantasyOwner = ownerByPlayerId.get(id) ?? null;
+  const { data: catalogPayload } = useSleeperPlayers();
+  const catalogById = useMemo(() => {
+    const m = new Map<string, Player>();
+    for (const p of catalogPayload?.players ?? []) m.set(p.id, p);
+    return m;
+  }, [catalogPayload]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (comparePickerOpen) {
+        setComparePickerOpen(false);
+        setCompareReplaceSide(null);
+        return;
+      }
+      if (comparePair) {
+        setComparePair(null);
+        return;
+      }
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = "";
       window.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, [onClose, comparePickerOpen, comparePair]);
 
   // Keep Team tab when hopping via depth chart; otherwise land on Overview.
   useEffect(() => {
     setTab((prev) => (prev === "team" ? "team" : "overview"));
     setCompactHeader(false);
+    setComparePickerOpen(false);
+    setCompareReplaceSide(null);
+    // Keep an open compare sheet when hopping players from Team tab depth chart.
   }, [id]);
 
   // Same cache key as desktop PlayerDetail / hover prefetch.
@@ -343,14 +372,26 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                       </p>
                     </div>
                   </div>
-                  {fantasyOwner ? (
-                    <span className="mt-2.5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full border border-m-border bg-m-chip px-2.5 py-1 text-[12px] font-semibold text-m-chip-fg">
-                      <span className="font-display text-[11px] font-bold uppercase tracking-wide text-m-accent">
-                        On
+                  <div className="mt-2.5 flex max-w-full flex-wrap items-center gap-2">
+                    {fantasyOwner ? (
+                      <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full border border-m-border bg-m-chip px-2.5 py-1 text-[12px] font-semibold text-m-chip-fg">
+                        <span className="font-display text-[11px] font-bold uppercase tracking-wide text-m-accent">
+                          On
+                        </span>
+                        <span className="truncate">{fantasyOwner}</span>
                       </span>
-                      <span className="truncate">{fantasyOwner}</span>
-                    </span>
-                  ) : null}
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCompareReplaceSide(null);
+                        setComparePickerOpen(true);
+                      }}
+                      className="inline-flex items-center rounded-full border border-m-accent/40 bg-m-accent/10 px-2.5 py-1 font-display text-[11px] font-bold uppercase tracking-wide text-m-accent"
+                    >
+                      Compare
+                    </button>
+                  </div>
                 </div>
                 {image ? (
                   <img
@@ -473,6 +514,52 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
           </>
         ) : null}
       </div>
+
+      {comparePickerOpen && player ? (
+        <MobileComparePicker
+          anchorPlayer={
+            compareReplaceSide === "right" && comparePair
+              ? (catalogById.get(comparePair.leftId) ?? player)
+              : compareReplaceSide === "left" && comparePair
+                ? (catalogById.get(comparePair.rightId) ?? player)
+                : player
+          }
+          excludeId={
+            compareReplaceSide === "right" && comparePair
+              ? comparePair.leftId
+              : compareReplaceSide === "left" && comparePair
+                ? comparePair.rightId
+                : player.id
+          }
+          onClose={() => {
+            setComparePickerOpen(false);
+            setCompareReplaceSide(null);
+          }}
+          onSelect={(picked) => {
+            if (compareReplaceSide === "left" && comparePair) {
+              setComparePair({ leftId: picked.id, rightId: comparePair.rightId });
+            } else if (compareReplaceSide === "right" && comparePair) {
+              setComparePair({ leftId: comparePair.leftId, rightId: picked.id });
+            } else {
+              setComparePair({ leftId: id, rightId: picked.id });
+            }
+            setComparePickerOpen(false);
+            setCompareReplaceSide(null);
+          }}
+        />
+      ) : null}
+
+      {comparePair ? (
+        <MobileCompareSheet
+          leftId={comparePair.leftId}
+          rightId={comparePair.rightId}
+          onClose={() => setComparePair(null)}
+          onChangeSide={(side) => {
+            setCompareReplaceSide(side);
+            setComparePickerOpen(true);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
