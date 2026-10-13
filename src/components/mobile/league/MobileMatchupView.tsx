@@ -82,10 +82,16 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
     }
   }, [initialWeek]);
   useEffect(() => {
+    if (isNative && boardWeek != null) {
+      // Follow league week forward when cron/commissioner advances (e.g. Tue → week 6).
+      setWeek((prev) => {
+        if (prev == null || boardWeek > prev) return Math.min(boardWeek, REGULAR_SEASON_WEEKS);
+        return prev;
+      });
+      return;
+    }
     if (week != null) return;
-    // Native: prefer league board week (may be advanced for testing) over NFL calendar.
-    const fallback = isNative ? (boardWeek ?? nflWeek) : nflWeek;
-    if (fallback != null) setWeek(Math.min(fallback, REGULAR_SEASON_WEEKS));
+    if (nflWeek != null) setWeek(Math.min(nflWeek, REGULAR_SEASON_WEEKS));
   }, [week, isNative, boardWeek, nflWeek]);
   const activeWeek = week ?? (isNative ? (boardWeek ?? nflWeek) : nflWeek) ?? 1;
 

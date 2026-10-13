@@ -1659,6 +1659,21 @@ export async function setNativeLeagueWeekForUser(
     return { ok: false, error: `Week cannot be before season start (week ${seasonStart})` };
   }
 
+  // Leaving a week behind: score it + materialize W–L / PF / PA before rolling forward.
+  if (next > current) {
+    try {
+      const { processNativeScoringCron } = await import("@/lib/native-league-gameplay.server");
+      await processNativeScoringCron({
+        leagueId: membership.leagueId,
+        week: current,
+        mode: "both",
+        limit: 1,
+      });
+    } catch {
+      /* best-effort finalize — still allow the week bump */
+    }
+  }
+
   // Ensure schedule rows exist for the target week (round-robin fill if missing).
   const seasonYear = Number(league.season_year);
   const existing = await tidbExecute<{ c: number }>(

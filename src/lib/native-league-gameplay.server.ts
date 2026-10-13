@@ -19,6 +19,7 @@ import {
   type NativeMutationResult,
 } from "@/lib/native-league-ops.server";
 import { countActiveRosterCapacity, starterIdsFromNativeSlots } from "@/lib/native-league-lineup";
+import { buildNativeSeasonSchedule } from "@/lib/native-league-schedule";
 import { scoreActualLine, type ScoringMap } from "@/lib/scoring-map";
 import { parseSleeperWeekStatRows } from "@/lib/sleeper-week-stats";
 import { tidbConfigured, tidbExecute } from "@/lib/tidb";
@@ -27,6 +28,8 @@ type LeagueRow = {
   id: string;
   season_year: number;
   current_week?: number;
+  season_start_week?: number;
+  playoff_start_week?: number;
   status: string;
   draft_status: string;
   waiver_type?: string;
@@ -95,6 +98,49 @@ export async function fetchSleeperWeekStatsServer(
     return parseSleeperWeekStatRows(await res.json());
   } catch {
     return {};
+  }
+}
+
+/** Sleeper fantasy week (rolls Tuesday). Used to finalize completed weeks + roll current_week. */
+export async function fetchSleeperFantasyWeekServer(): Promise<number | null> {
+  try {
+    const res = await fetch("https://api.sleeper.app/v1/state/nfl", {
+      headers: { accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { week?: unknown; season_type?: unknown };
+    const week = Number(json.week);
+    if (!Number.isFinite(week) || week < 1) return null;
+    return Math.max(1, Math.min(18, Math.round(week)));
+  } catch {
+    return null;
+  }
+}
+
+async function ensureScheduleForWeek(league: LeagueRow, week: number): Promise<void> {
+  const playoffWeek = Math.max(2, Math.min(18, Number(league.playoff_start_week ?? 15) || 15));
+  if (week >= playoffWeek) return;
+  const seasonYear = Number(league.season_year);
+  const existing = await tidbExecute<{ c: number }>(
+    `SELECT COUNT(*) AS c FROM native_schedules
+     WHERE league_id = ? AND season_year = ? AND week = ?`,
+    [league.id, seasonYear, week],
+  );
+  if (Number(existing[0]?.c ?? 0) > 0) return;
+  const teams = await tidbExecute<{ id: number }>(
+    `SELECT id FROM native_teams WHERE league_id = ? ORDER BY draft_slot ASC`,
+    [league.id],
+  );
+  const teamIds = teams.map((t) => Number(t.id));
+  if (teamIds.length < 2) return;
+  const schedule = buildNativeSeasonSchedule(teamIds, week, week + 1);
+  for (const m of schedule) {
+    await tidbExecute(
+      `INSERT INTO native_schedules (league_id, season_year, week, matchup_id, home_team_id, away_team_id)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE home_team_id = VALUES(home_team_id), away_team_id = VALUES(away_team_id)`,
+      [league.id, seasonYear, m.week, m.matchupId, m.homeTeamId, m.awayTeamId],
+    );
   }
 }
 
@@ -1541,8 +1587,12 @@ function parseStandingsFull(raw: unknown): NativeStandingRow[] {
 /**
  * Cron modes for native scoring (live Matchup overlay is separate — snap-cdn).
  * - points: write week fantasy totals to TiDB (infrequent; not needed for live UI)
- * - standings: finalize W–L / PF / PA snap from stored week results (weekly)
+ * - standings: finalize completed weeks → W–L / PF / PA snap, then roll current_week to Sleeper week
  * - both: points then standings (Tue finalize / manual)
+ *
+ * Without an explicit `week`, standings mode finalizes every week through
+ * min(league.current_week, sleeperWeek - 1), materializes the snap, and advances
+ * `current_week` to the Sleeper fantasy week so Team/Matchup flip on Tuesday.
  */
 export async function processNativeScoringCron(opts?: {
   leagueId?: string;
@@ -1554,6 +1604,7 @@ export async function processNativeScoringCron(opts?: {
   leagues: number;
   teamsScored: number;
   standingsUpdated: number;
+  weeksAdvanced: number;
   mode: "points" | "standings" | "both";
   error?: string;
 }> {
@@ -1564,6 +1615,7 @@ export async function processNativeScoringCron(opts?: {
       leagues: 0,
       teamsScored: 0,
       standingsUpdated: 0,
+      weeksAdvanced: 0,
       mode,
       error: "TiDB not configured",
     };
@@ -1583,30 +1635,62 @@ export async function processNativeScoringCron(opts?: {
 
   let teamsScored = 0;
   let standingsUpdated = 0;
+  let weeksAdvanced = 0;
   const statsCache = new Map<string, Record<string, Record<string, number>>>();
   const writePoints = mode === "points" || mode === "both";
   const writeStandings = mode === "standings" || mode === "both";
+  // Always read Sleeper week when cron doesn't pin a week — daily points can unstick lagging leagues.
+  const sleeperWeek = opts?.week == null ? await fetchSleeperFantasyWeekServer() : null;
 
   for (const league of leagues) {
-    const week =
-      opts?.week != null
-        ? Math.max(1, Math.min(18, Math.round(Number(opts.week))))
-        : Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
     const seasonYear = Number(league.season_year);
+    const seasonStart = Math.max(1, Math.min(14, Number(league.season_start_week ?? 1) || 1));
+    const current = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
 
-    if (writePoints) {
-      const cacheKey = `${seasonYear}:${week}`;
-      let stats = statsCache.get(cacheKey);
-      if (!stats) {
-        stats = await fetchSleeperWeekStatsServer(seasonYear, week);
-        statsCache.set(cacheKey, stats);
+    /** Weeks to score into TiDB this pass. */
+    let weeksToScore: number[];
+    /** Standings as-of week (inclusive). */
+    let asOfWeek: number | null = null;
+    /** Roll league.current_week forward to this (Sleeper calendar). */
+    let targetWeek: number | null = null;
+
+    if (opts?.week != null) {
+      const week = Math.max(1, Math.min(18, Math.round(Number(opts.week))));
+      if (writeStandings) {
+        // Backfill prior weeks so W–L/PF/PA aren't stuck at 0-0 when older results were missed.
+        weeksToScore = [];
+        for (let w = seasonStart; w <= week; w += 1) weeksToScore.push(w);
+        asOfWeek = week;
+      } else {
+        weeksToScore = [week];
+        asOfWeek = null;
       }
-      teamsScored += await scoreLeagueWeek(league, week, stats);
+    } else if (sleeperWeek != null && (writeStandings || sleeperWeek > current)) {
+      // Completed fantasy weeks only (Sleeper week has already rolled past them).
+      const finalizeThrough = Math.max(seasonStart, Math.min(current, sleeperWeek - 1));
+      weeksToScore = [];
+      for (let w = seasonStart; w <= finalizeThrough; w += 1) weeksToScore.push(w);
+      // Live-week points catch-up once the league is on the Sleeper calendar.
+      if (writePoints && current >= sleeperWeek) {
+        weeksToScore.push(current);
+      }
+      asOfWeek = finalizeThrough >= seasonStart ? finalizeThrough : null;
+      targetWeek = Math.max(current, Math.min(18, sleeperWeek));
+    } else {
+      weeksToScore = [current];
+      asOfWeek = writeStandings ? current : null;
     }
 
-    if (writeStandings) {
-      // Prefer a fresh points write when finalizing so W–L uses complete week totals.
-      if (!writePoints) {
+    // Dedupe weeks while preserving order.
+    const seen = new Set<number>();
+    weeksToScore = weeksToScore.filter((w) => {
+      if (seen.has(w)) return false;
+      seen.add(w);
+      return w >= 1 && w <= 18;
+    });
+
+    if (writePoints || writeStandings) {
+      for (const week of weeksToScore) {
         const cacheKey = `${seasonYear}:${week}`;
         let stats = statsCache.get(cacheKey);
         if (!stats) {
@@ -1615,11 +1699,31 @@ export async function processNativeScoringCron(opts?: {
         }
         teamsScored += await scoreLeagueWeek(league, week, stats);
       }
-      await materializeStandingsSnap(league, week);
+    }
+
+    // Materialize whenever we finalized completed weeks (standings cron or points catch-up).
+    if (asOfWeek != null && asOfWeek >= seasonStart) {
+      await materializeStandingsSnap(league, asOfWeek);
       standingsUpdated += 1;
     }
+
+    if (targetWeek != null && targetWeek > current) {
+      await ensureScheduleForWeek(league, targetWeek);
+      await tidbExecute(`UPDATE native_leagues SET current_week = ? WHERE id = ?`, [
+        targetWeek,
+        league.id,
+      ]);
+      weeksAdvanced += 1;
+    }
   }
-  return { ok: true, leagues: leagues.length, teamsScored, standingsUpdated, mode };
+  return {
+    ok: true,
+    leagues: leagues.length,
+    teamsScored,
+    standingsUpdated,
+    weeksAdvanced,
+    mode,
+  };
 }
 
 async function scoreLeagueWeek(

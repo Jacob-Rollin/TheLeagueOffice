@@ -99,5 +99,6 @@ jobs:
             standings) run_standings ;;
             ai) run_ai ;;
             all) run_waivers; run_points; run_standings; run_ai ;;
-            *) run_waivers; run_points ;;
+            # Default / both: include standings so manual runs finalize W–L + roll the week.
+            *) run_waivers; run_points; run_standings ;;
           esac
