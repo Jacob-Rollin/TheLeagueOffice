@@ -40,6 +40,15 @@ function toPosFilter(pos: string | null | undefined): PosFilter {
 
 type Col = { key: string; label: string; value: (p: Player) => number | null; decimals: number };
 
+/** Opaque card + optional roster highlight (rgba alone would leak scrolled text). */
+function pickerRowClass(mine: boolean, extra?: string) {
+  return cn(
+    "border-b border-m-border bg-m-card last:border-0",
+    mine && "[background-image:linear-gradient(var(--m-highlight),var(--m-highlight))]",
+    extra,
+  );
+}
+
 /**
  * Full-screen picker for Compare — Players-list chrome with a compare icon
  * instead of add/drop/trade. Defaults to the anchor player's position; the
@@ -182,106 +191,141 @@ export function MobileComparePicker({
           ))}
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-m-border bg-m-card">
-          <div className="overflow-x-auto [scrollbar-width:none]">
-            <div className="min-w-max">
-              <div className="flex border-b border-m-border text-[11px] font-semibold uppercase tracking-wide text-m-muted">
-                <div className="sticky left-0 z-10 w-[230px] shrink-0 bg-m-card" />
-                <div className="flex">
-                  {cols.map((c) => (
-                    <div key={c.key} className="flex w-[76px] items-center justify-end px-3 py-2.5">
-                      {c.label}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {playersLoading ? (
-                <p className="px-5 py-10 text-center text-sm text-m-muted">Loading players...</p>
-              ) : rows.length === 0 ? (
-                <p className="px-5 py-10 text-center text-sm text-m-muted">No players match.</p>
-              ) : (
-                rows.slice(0, 80).map((p) => {
-                  const mine = myIds.has(p.id);
-                  const owner = ownerByPlayerId.get(p.id);
-                  const rowBg = mine ? "bg-m-highlight" : "bg-m-card";
-                  return (
-                    <div
-                      key={p.id}
-                      className={cn("flex border-b border-m-border last:border-0", rowBg)}
-                    >
-                      <div
-                        className={cn(
-                          "sticky left-0 z-10 flex w-[230px] shrink-0 items-center gap-2.5 px-2.5 py-2.5",
-                          rowBg,
-                        )}
-                      >
-                        <button
-                          type="button"
-                          aria-label={`Compare with ${shortName(p)}`}
-                          onClick={() => onSelect(p)}
-                          className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-m-accent text-m-accent-fg shadow-[inset_0_-3px_0_rgba(0,0,0,0.18)]"
-                        >
-                          <Columns2 className="size-5" strokeWidth={2.5} />
-                        </button>
-                        <button
-                          type="button"
-                          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                          onClick={() => onSelect(p)}
-                        >
-                          <div className="relative shrink-0">
-                            <PlayerAvatar
-                              id={p.id}
-                              pos={p.pos}
-                              team={p.team}
-                              name={p.name}
-                              className="size-11"
-                              logoClassName="hidden"
-                            />
-                            {(() => {
-                              const r = rankFor(p.id).pos;
-                              if (r == null || r <= 0 || r >= 900) return null;
-                              return (
-                                <span
-                                  className="absolute -left-1.5 -top-1.5 flex size-6 items-center justify-center bg-m-pos-rank-bg font-display text-[11px] font-bold text-m-pos-rank-fg shadow-[0_0_0_1px_rgba(0,0,0,0.08)]"
-                                  style={{ clipPath: HEX_CLIP }}
-                                >
-                                  {r}
-                                </span>
-                              );
-                            })()}
-                            <InjuryAvatarBadge status={p.injury_status ?? p.injury} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-[15px] font-semibold leading-tight">
-                              {shortName(p)}
-                            </p>
-                            <p className="truncate text-xs text-m-muted">
-                              {p.team || "FA"} - {p.pos === "DEF" ? "DST" : p.pos}
-                              {mine ? " · You" : owner ? ` · ${owner}` : rosteredIds.has(p.id) ? "" : " · FA"}
-                            </p>
-                          </div>
-                        </button>
-                      </div>
-                      {cols.map((c) => {
-                        const v = c.value(p);
-                        return (
-                          <div
-                            key={c.key}
-                            className="flex w-[76px] items-center justify-end px-3 text-[15px] tabnum"
-                          >
-                            {v == null ? "-" : v.toFixed(c.decimals)}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })
-              )}
-            </div>
+        {playersLoading ? (
+          <div className="overflow-hidden rounded-xl border border-m-border bg-m-card">
+            <p className="px-5 py-10 text-center text-sm text-m-muted">Loading players...</p>
           </div>
-        </div>
+        ) : rows.length === 0 ? (
+          <div className="overflow-hidden rounded-xl border border-m-border bg-m-card">
+            <p className="px-5 py-10 text-center text-sm text-m-muted">No players match.</p>
+          </div>
+        ) : (
+          <ComparePickerTable
+            rows={rows.slice(0, 80)}
+            cols={cols}
+            myIds={myIds}
+            rosteredIds={rosteredIds}
+            ownerByPlayerId={ownerByPlayerId}
+            rankFor={rankFor}
+            onSelect={onSelect}
+          />
+        )}
       </div>
     </MobileFullScreenPicker>
+  );
+}
+
+/**
+ * Identity column is outside the horizontal scroller so Season/Avg/Pos Rnk
+ * clip at the divider instead of sliding over player names.
+ */
+function ComparePickerTable({
+  rows,
+  cols,
+  myIds,
+  rosteredIds,
+  ownerByPlayerId,
+  rankFor,
+  onSelect,
+}: {
+  rows: Player[];
+  cols: Col[];
+  myIds: Set<string>;
+  rosteredIds: Set<string>;
+  ownerByPlayerId: Map<string, string>;
+  rankFor: (id: string) => { pos?: number | null };
+  onSelect: (player: Player) => void;
+}) {
+  return (
+    <div className="flex overflow-hidden rounded-xl border border-m-border bg-m-card">
+      <div className="relative z-10 w-[230px] shrink-0 border-r border-m-border bg-m-card shadow-[4px_0_10px_-4px_rgba(0,0,0,0.14)]">
+        <div className="h-10 border-b border-m-border bg-m-card" aria-hidden />
+        {rows.map((p) => {
+          const mine = myIds.has(p.id);
+          const owner = ownerByPlayerId.get(p.id);
+          return (
+            <div
+              key={p.id}
+              className={pickerRowClass(mine, "flex h-[68px] items-center gap-2.5 px-2.5")}
+            >
+              <button
+                type="button"
+                aria-label={`Compare with ${shortName(p)}`}
+                onClick={() => onSelect(p)}
+                className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-m-accent text-m-accent-fg shadow-[inset_0_-3px_0_rgba(0,0,0,0.18)]"
+              >
+                <Columns2 className="size-5" strokeWidth={2.5} />
+              </button>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                onClick={() => onSelect(p)}
+              >
+                <div className="relative shrink-0">
+                  <PlayerAvatar
+                    id={p.id}
+                    pos={p.pos}
+                    team={p.team}
+                    name={p.name}
+                    className="size-11"
+                    logoClassName="hidden"
+                  />
+                  {(() => {
+                    const r = rankFor(p.id).pos;
+                    if (r == null || r <= 0 || r >= 900) return null;
+                    return (
+                      <span
+                        className="absolute -left-1.5 -top-1.5 flex size-6 items-center justify-center bg-m-pos-rank-bg font-display text-[11px] font-bold text-m-pos-rank-fg shadow-[0_0_0_1px_rgba(0,0,0,0.08)]"
+                        style={{ clipPath: HEX_CLIP }}
+                      >
+                        {r}
+                      </span>
+                    );
+                  })()}
+                  <InjuryAvatarBadge status={p.injury_status ?? p.injury} />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-[15px] font-semibold leading-tight">{shortName(p)}</p>
+                  <p className="truncate text-xs text-m-muted">
+                    {p.team || "FA"} - {p.pos === "DEF" ? "DST" : p.pos}
+                    {mine ? " · You" : owner ? ` · ${owner}` : rosteredIds.has(p.id) ? "" : " · FA"}
+                  </p>
+                </div>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]">
+        <div className="min-w-max">
+          <div className="flex h-10 border-b border-m-border text-[11px] font-semibold uppercase tracking-wide text-m-muted">
+            {cols.map((c) => (
+              <div key={c.key} className="flex w-[84px] items-center justify-end px-3">
+                {c.label}
+              </div>
+            ))}
+          </div>
+          {rows.map((p) => {
+            const mine = myIds.has(p.id);
+            return (
+              <div key={p.id} className={pickerRowClass(mine, "flex h-[68px] items-center")}>
+                {cols.map((c) => {
+                  const v = c.value(p);
+                  return (
+                    <div
+                      key={c.key}
+                      className="flex w-[84px] items-center justify-end px-3 text-[15px] tabnum"
+                    >
+                      {v == null ? "-" : v.toFixed(c.decimals)}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
