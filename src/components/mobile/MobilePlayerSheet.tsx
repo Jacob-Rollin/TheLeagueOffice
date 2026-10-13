@@ -1555,6 +1555,11 @@ function gameLogGroupedCols(
     label: "Fantasy",
     cols: [
       {
+        key: "proj",
+        label: "Proj",
+        render: (l) => (l.isBye || l.proj?.[format] == null ? "-" : l.proj[format]!.toFixed(1)),
+      },
+      {
         key: "fpts",
         label: "Fpts",
         highlight: true,
@@ -1565,7 +1570,7 @@ function gameLogGroupedCols(
         label: "Snp%",
         render: (l) => {
           if (l.isBye || !l.played) return "-";
-          const v = Number(l.raw?.snap_pct);
+          const v = Number(l.raw?.["snap_pct"]);
           return Number.isFinite(v) ? `${Math.round(v)}%` : "-";
         },
       },
@@ -1581,11 +1586,6 @@ function gameLogGroupedCols(
           const v = weeklyPosRankDisplay(l.raw?.[rankKey]);
           return v != null ? String(v) : "-";
         },
-      },
-      {
-        key: "proj",
-        label: "Proj",
-        render: (l) => (l.isBye || l.proj?.[format] == null ? "-" : l.proj[format]!.toFixed(1)),
       },
     ],
   };
