@@ -18,7 +18,12 @@ import {
   syncLineupAfterRosterChange,
   type NativeMutationResult,
 } from "@/lib/native-league-ops.server";
-import { countActiveRosterCapacity, starterIdsFromNativeSlots } from "@/lib/native-league-lineup";
+import {
+  countActiveRosterCapacity,
+  expandLineupSlots,
+  parseRosterSlotCounts,
+  starterIdsFromNativeSlots,
+} from "@/lib/native-league-lineup";
 import { buildNativeSeasonSchedule } from "@/lib/native-league-schedule";
 import { scoreActualLine, type ScoringMap } from "@/lib/scoring-map";
 import { parseSleeperWeekStatRows } from "@/lib/sleeper-week-stats";
@@ -82,16 +87,21 @@ export async function fetchWeekKickoffsServer(
   }
 }
 
-/** Sleeper week actuals map player_id → stats (server; cron only). */
+/**
+ * Sleeper week actuals map player_id → stats (server; cron only).
+ * Path must be `/stats/nfl/regular/{season}/{week}` — the query-string form
+ * `?season_type=regular` returns empty `{}` rows and zeros every official score.
+ */
 export async function fetchSleeperWeekStatsServer(
   season: number,
   week: number,
 ): Promise<Record<string, Record<string, number>>> {
+  const safeSeason = Math.max(2000, Math.floor(season) || new Date().getUTCFullYear());
   const safeWeek = Math.max(1, Math.min(18, Math.floor(week) || 1));
   const positions = ["QB", "RB", "WR", "TE", "K", "DEF"]
     .map((p) => `position[]=${p}`)
     .join("&");
-  const url = `https://api.sleeper.app/v1/stats/nfl/${season}/${safeWeek}?season_type=regular&${positions}`;
+  const url = `https://api.sleeper.app/v1/stats/nfl/regular/${safeSeason}/${safeWeek}?${positions}`;
   try {
     const res = await fetch(url, { headers: { accept: "application/json" } });
     if (!res.ok) return {};
@@ -1735,7 +1745,15 @@ async function scoreLeagueWeek(
   const seasonYear = Number(league.season_year);
   const scoring = parseScoringSettingsJson(league.scoring_settings) as ScoringMap;
 
-  const [lineups, schedules, teams] = await Promise.all([
+  // Never stamp official 0-0 ties from an empty Sleeper payload (bad URL / outage).
+  if (Object.keys(statsByPlayer).length === 0) {
+    console.warn(
+      `[native-scoring] empty week stats — skip write league=${leagueId} week=${week}`,
+    );
+    return 0;
+  }
+
+  const [lineups, schedules, teams, rosters] = await Promise.all([
     tidbExecute<{ team_id: number; slots: unknown }>(
       `SELECT team_id, slots FROM native_lineups
        WHERE league_id = ? AND season_year = ? AND week = ?`,
@@ -1751,9 +1769,21 @@ async function scoreLeagueWeek(
       [leagueId, seasonYear, week],
     ),
     tidbExecute<{ id: number }>(`SELECT id FROM native_teams WHERE league_id = ?`, [leagueId]),
+    tidbExecute<{ team_id: number; player_ids: unknown }>(
+      `SELECT team_id, player_ids FROM native_rosters WHERE league_id = ?`,
+      [leagueId],
+    ),
   ]);
 
   const lineupByTeam = new Map(lineups.map((l) => [Number(l.team_id), l.slots]));
+  const rosterByTeam = new Map(
+    rosters.map((r) => [Number(r.team_id), parsePlayerIdList(r.player_ids)] as const),
+  );
+  const slotCounts = parseRosterSlotCounts(parseRosterSlots(league.roster_slots) ?? {});
+  const starterCap = Math.max(
+    1,
+    expandLineupSlots(slotCounts).filter((row) => row.starter).length || 9,
+  );
   const matchupOf = new Map<number, { matchupId: number; opponentId: number }>();
   for (const s of schedules) {
     matchupOf.set(Number(s.home_team_id), {
@@ -1767,10 +1797,16 @@ async function scoreLeagueWeek(
   }
 
   let scored = 0;
+  let nonZeroTeams = 0;
   for (const team of teams) {
     const teamId = Number(team.id);
     const slotsRaw = lineupByTeam.get(teamId);
-    const starters = starterIdsFromNativeSlots(slotsRaw);
+    // Empty saved lineup → starter-sized roster prefix (Matchup overlay parity).
+    // Never sum the whole bench into official PF/PA.
+    let starters = starterIdsFromNativeSlots(slotsRaw);
+    if (!starters.length) {
+      starters = (rosterByTeam.get(teamId) ?? []).slice(0, starterCap);
+    }
     const playerPoints: Record<string, number> = {};
     let total = 0;
     for (const playerId of starters) {
@@ -1779,6 +1815,7 @@ async function scoreLeagueWeek(
       total += pts;
     }
     total = Math.round(total * 100) / 100;
+    if (total > 0) nonZeroTeams += 1;
     const meta = matchupOf.get(teamId);
 
     await tidbExecute(
@@ -1813,6 +1850,11 @@ async function scoreLeagueWeek(
       ],
     );
     scored++;
+  }
+  if (scored > 0 && nonZeroTeams === 0) {
+    console.warn(
+      `[native-scoring] all-zero week league=${leagueId} week=${week} teams=${scored} statsPlayers=${Object.keys(statsByPlayer).length}`,
+    );
   }
   return scored;
 }

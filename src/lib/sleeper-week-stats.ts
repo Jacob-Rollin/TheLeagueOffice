@@ -1,9 +1,12 @@
 /**
- * Parse Sleeper `/stats/nfl/{season}/{week}` payloads.
+ * Parse Sleeper `/stats/nfl/regular/{season}/{week}` payloads.
  *
  * Sleeper usually returns a flat dict: `{ [playerId]: { pass_yd, … } }`.
  * Some callers / older shapes use arrays or nested `{ stats: { … } }` —
  * accept all three so live scoring never silently empties.
+ *
+ * Note: `/stats/nfl/{season}/{week}?season_type=regular` returns empty `{}`
+ * rows in current Sleeper — always use the `/regular/` path segment.
  */
 
 import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
@@ -12,7 +15,7 @@ import { sleeperFetchJson } from "@/lib/sleeper-http";
 
 /** Shared IndexedDB key — matchup overlay + Statistics tab share one download. */
 export const WEEKLY_ACTUAL_STATS_CACHE_KEY = (season: string | number, week: number) =>
-  `weekly-actual-stats-v3:${season}|${week}`;
+  `weekly-actual-stats-v4-regular-path:${season}|${week}`;
 
 /**
  * Budgeted Sleeper week actuals. Callers pass TTL so broadcast pages (~12s)
@@ -26,7 +29,7 @@ export async function fetchWeeklyActualStatRows(
   const safeSeason = String(season || new Date().getUTCFullYear());
   const safeWeek = Math.max(1, Math.min(18, Math.floor(week) || 1));
   return getCached(WEEKLY_ACTUAL_STATS_CACHE_KEY(safeSeason, safeWeek), ttlMs, async () => {
-    const url = `${SLEEPER_BASE}/stats/nfl/${safeSeason}/${safeWeek}?season_type=regular&${positionsQuery()}`;
+    const url = `${SLEEPER_BASE}/stats/nfl/regular/${safeSeason}/${safeWeek}?${positionsQuery()}`;
     const rows = await sleeperFetchJson<unknown>(url, "live");
     return parseSleeperWeekStatRows(rows);
   });
@@ -35,7 +38,7 @@ export async function fetchWeeklyActualStatRows(
 function coerceStatLine(raw: unknown): Record<string, number> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;
-  const nested = record.stats;
+  const nested = record["stats"];
   const source =
     nested && typeof nested === "object" && !Array.isArray(nested)
       ? (nested as Record<string, unknown>)
