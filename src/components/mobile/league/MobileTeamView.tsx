@@ -61,7 +61,7 @@ import {
 } from "./lineupShared";
 import { MobileTeamLogo } from "./MobileStandings";
 import { MobileWeekSelect } from "./MobileWeekSelect";
-import { useMobileLeagueStandings } from "./useMobileLeague";
+import { useMobileLeagueStandings, useNativePendingTrades } from "./useMobileLeague";
 
 function viewKey(row: NativeLineupSlotView): string {
   return `${row.key}:${row.index}`;
@@ -92,6 +92,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const playersById = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const { myTeam, rosterPositions, loading: rostersLoading } = useLeagueRosters(players);
   const { rows: standingsRows } = useMobileLeagueStandings();
+  const { badgeCount: pendingTradeBadge } = useNativePendingTrades();
   const [week, setWeek] = useState<number | null>(null);
   const [showOptimized, setShowOptimized] = useState(false);
   const [nativeViews, setNativeViews] = useState<NativeLineupSlotView[]>([]);
@@ -731,6 +732,7 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
             leagueId={leagueId}
             label="Trades"
             icon={<ArrowLeftRight className="size-6" />}
+            {...(pendingTradeBadge > 0 ? { badge: pendingTradeBadge } : {})}
           />
           <HeroAction
             to="/m/league/$leagueId/waivers"
@@ -939,19 +941,32 @@ function HeroAction({
   leagueId,
   label,
   icon,
+  badge,
 }: {
   to: "/m/league/$leagueId/trades" | "/m/league/$leagueId/waivers";
   leagueId: string;
   label: string;
   icon: ReactNode;
+  /** Circular count badge (e.g. pending trades involving this manager). */
+  badge?: number;
 }) {
   return (
     <Link
       to={to}
       params={{ leagueId }}
-      className="flex flex-col items-center gap-2 rounded-lg bg-white/12 px-2 py-3.5 font-display text-sm font-bold uppercase tracking-wide"
+      className="relative flex flex-col items-center gap-2 rounded-lg bg-white/12 px-2 py-3.5 font-display text-sm font-bold uppercase tracking-wide"
     >
-      {icon}
+      <span className="relative">
+        {icon}
+        {badge != null && badge > 0 ? (
+          <span
+            className="absolute -right-2.5 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-m-accent px-1 text-[11px] font-bold leading-none text-m-accent-fg shadow-[0_0_0_2px_rgba(0,0,0,0.15)]"
+            aria-label={`${badge} pending trade${badge === 1 ? "" : "s"}`}
+          >
+            {badge > 99 ? "99+" : badge}
+          </span>
+        ) : null}
+      </span>
       {label}
     </Link>
   );

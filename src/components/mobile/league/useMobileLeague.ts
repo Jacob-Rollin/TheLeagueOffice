@@ -1,11 +1,65 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
+import { useAuth } from "@/hooks/useAuth";
 import { fetchLeagueTransactionLogForConnection } from "@/lib/league-activity-fetch";
 import { fetchLeagueSettingsForConnection } from "@/lib/league-settings-fetch";
 import type { LeagueTransactionLog } from "@/lib/league.functions";
+import { listNativeTrades } from "@/lib/native-league.functions";
+
+const PENDING_TRADE_STATUSES = new Set(["proposed", "veto_window"]);
+
+/**
+ * Pending native trades involving the signed-in manager (proposer or acceptor).
+ * Used for Team Trades badge + MobileTradesView pending list.
+ */
+export function useNativePendingTrades() {
+  const { activeLeague } = useActiveLeague();
+  const { user } = useAuth();
+  const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
+  const linkId = isNative ? (activeLeague?.id ?? null) : null;
+
+  const query = useQuery({
+    queryKey: ["native-trades", linkId],
+    enabled: Boolean(user?.id && linkId),
+    staleTime: 15_000,
+    queryFn: () => listNativeTrades({ data: { linkId: linkId! } }),
+  });
+
+  const myTeamId = query.data?.myTeamId ?? null;
+  const pendingAll = useMemo(
+    () =>
+      (query.data?.trades ?? []).filter((t) =>
+        PENDING_TRADE_STATUSES.has(String(t.status).toLowerCase()),
+      ),
+    [query.data?.trades],
+  );
+  /** Trades that involve this manager — drives the notification badge count. */
+  const pendingForUser = useMemo(
+    () =>
+      myTeamId == null
+        ? []
+        : pendingAll.filter(
+            (t) => t.proposerTeamId === myTeamId || t.acceptorTeamId === myTeamId,
+          ),
+    [pendingAll, myTeamId],
+  );
+
+  return {
+    isNative,
+    linkId,
+    myTeamId,
+    canVeto: Boolean(query.data?.canVeto),
+    pendingAll,
+    pendingForUser,
+    /** Count of proposed/review trades involving this user. */
+    badgeCount: pendingForUser.length,
+    isLoading: query.isLoading,
+    data: query.data,
+  };
+}
 
 /** Host league settings (playoffs, waivers, trades) for the active league. */
 export function useMobileLeagueSettings() {
