@@ -54,7 +54,7 @@ function sectionsForPos(pos: string): SectionDef[] {
         id: "stats",
         title: "Season Stats",
         metrics: [
-          { key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 1 },
+          { key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 2 },
           { key: "pass_yd", label: "Pass Yds", kind: "sum", rawKeys: ["pass_yd"], decimals: 0 },
           { key: "pass_td", label: "Pass TD", kind: "sum", rawKeys: ["pass_td"], decimals: 0 },
           {
@@ -85,7 +85,7 @@ function sectionsForPos(pos: string): SectionDef[] {
         id: "stats",
         title: "Season Stats",
         metrics: [
-          { key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 1 },
+          { key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 2 },
           { key: "rush_yd", label: "Rush Yds", kind: "sum", rawKeys: ["rush_yd"], decimals: 0 },
           { key: "rush_td", label: "Rush TD", kind: "sum", rawKeys: ["rush_td"], decimals: 0 },
           {
@@ -123,7 +123,7 @@ function sectionsForPos(pos: string): SectionDef[] {
         id: "stats",
         title: "Season Stats",
         metrics: [
-          { key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 1 },
+          { key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 2 },
           { key: "rec", label: "Rec", kind: "sum", rawKeys: ["rec"], decimals: 0 },
           { key: "rec_yd", label: "Rec Yds", kind: "sum", rawKeys: ["rec_yd"], decimals: 0 },
           { key: "rec_td", label: "Rec TD", kind: "sum", rawKeys: ["rec_td"], decimals: 0 },
@@ -142,7 +142,7 @@ function sectionsForPos(pos: string): SectionDef[] {
             kind: "rate",
             numKey: "rec",
             denKey: "rec_tgt",
-            decimals: 0,
+            decimals: 1,
           },
           {
             key: "touches",
@@ -161,7 +161,7 @@ function sectionsForPos(pos: string): SectionDef[] {
         id: "stats",
         title: "Season Stats",
         metrics: [
-          { key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 1 },
+          { key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 2 },
           { key: "fgm", label: "FGM", kind: "sum", rawKeys: ["fgm"], decimals: 0 },
           { key: "fga", label: "FGA", kind: "sum", rawKeys: ["fga"], decimals: 0 },
           { key: "xpm", label: "XPM", kind: "sum", rawKeys: ["xpm"], decimals: 0 },
@@ -183,7 +183,7 @@ function sectionsForPos(pos: string): SectionDef[] {
         id: "stats",
         title: "Season Stats",
         metrics: [
-          { key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 1 },
+          { key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 2 },
           { key: "sack", label: "Sack", kind: "sum", rawKeys: ["sack"], decimals: 0 },
           { key: "int", label: "INT", kind: "sum", rawKeys: ["int"], decimals: 0 },
           { key: "fum_rec", label: "FR", kind: "sum", rawKeys: ["fum_rec"], decimals: 0 },
@@ -211,7 +211,7 @@ function sectionsForPos(pos: string): SectionDef[] {
     {
       id: "stats",
       title: "Season Stats",
-      metrics: [{ key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 1 }],
+      metrics: [{ key: "fpts", label: "Fan Pts", kind: "fpts", decimals: 2 }],
     },
   ];
 }
@@ -316,7 +316,7 @@ function metricSeasonValue(metric: MetricDef, weeks: WeekPoint[]): number | null
     }
     if (!(den > 0)) return null;
     const ratio = num / den;
-    // Catch % shown as whole percent.
+    // Catch % as 0–100 for display (decimals set on the metric).
     if (metric.key === "catch_pct") return ratio * 100;
     return ratio;
   }
@@ -344,9 +344,88 @@ function metricWeekValueForGraph(metric: MetricDef, week: WeekPoint | undefined)
   return 0;
 }
 
+/** Absence label for a 0 graph point — omit when the player was active (true goose egg). */
+function weekAbsenceNote(week: WeekPoint | undefined): "BYE" | "Out" | null {
+  if (!week) return "Out";
+  if (week.isBye) return "BYE";
+  if (!week.played) return "Out";
+  return null;
+}
+
 function formatMetric(v: number | null, decimals = 1): string {
   if (v == null || !Number.isFinite(v)) return "-";
   return decimals === 0 ? String(Math.round(v)) : v.toFixed(decimals);
+}
+
+type ChartWeekRow = {
+  week: number;
+  label: string;
+  left: number;
+  right: number;
+  leftNote: "BYE" | "Out" | null;
+  rightNote: "BYE" | "Out" | null;
+};
+
+function CompareGraphTooltip({
+  active,
+  label,
+  payload,
+  metric,
+}: {
+  active?: boolean;
+  label?: string | number;
+  payload?: Array<{
+    dataKey?: string | number;
+    name?: string;
+    value?: number | string;
+    color?: string;
+    payload?: ChartWeekRow;
+  }>;
+  metric: MetricDef;
+}) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  const decimals = metric.decimals ?? 1;
+
+  return (
+    <div
+      className="rounded-lg border border-m-border bg-m-card px-2.5 py-2 text-xs shadow-sm"
+      style={{ minWidth: 128 }}
+    >
+      <p className="mb-1.5 font-semibold text-m-card-fg">Week {label}</p>
+      <ul className="space-y-1.5">
+        {payload.map((entry) => {
+          const key = String(entry.dataKey ?? "");
+          const n = typeof entry.value === "number" ? entry.value : Number(entry.value);
+          const formatted = formatMetric(n, decimals);
+          const valueLabel =
+            metric.key === "catch_pct" && Number.isFinite(n) ? `${formatted}%` : formatted;
+          const note =
+            Number.isFinite(n) && n === 0
+              ? key === "left"
+                ? (row?.leftNote ?? null)
+                : key === "right"
+                  ? (row?.rightNote ?? null)
+                  : null
+              : null;
+          return (
+            <li key={key} className="leading-tight">
+              <p style={{ color: entry.color }}>
+                <span className="font-semibold">{entry.name}</span>
+                <span className="text-m-muted"> : </span>
+                <span className="font-semibold tabnum">{valueLabel}</span>
+              </p>
+              {note ? (
+                <p className="mt-0.5 pl-0.5 text-[10px] font-semibold uppercase tracking-wide text-m-muted">
+                  {note}
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 function compactName(name: string): string {
@@ -634,18 +713,22 @@ function CompareSection({
       : rightTotal > leftTotal + 0.05;
   const isTie = !leftWins && !rightWins;
 
-  const chartData = useMemo(() => {
+  const chartData = useMemo((): ChartWeekRow[] => {
     const leftBy = new Map(leftWeeks.map((w) => [w.week, w]));
     const rightBy = new Map(rightWeeks.map((w) => [w.week, w]));
     // Only completed weeks — exclude the in-progress NFL week (shows as 0s).
     const through = Math.max(0, Math.min(18, currentWeek - 1));
     return Array.from({ length: through }, (_, i) => {
       const week = i + 1;
+      const leftWeek = leftBy.get(week);
+      const rightWeek = rightBy.get(week);
       return {
         week,
         label: `WK ${week}`,
-        left: metricWeekValueForGraph(activeMetric, leftBy.get(week)),
-        right: metricWeekValueForGraph(activeMetric, rightBy.get(week)),
+        left: metricWeekValueForGraph(activeMetric, leftWeek),
+        right: metricWeekValueForGraph(activeMetric, rightWeek),
+        leftNote: weekAbsenceNote(leftWeek),
+        rightNote: weekAbsenceNote(rightWeek),
       };
     });
   }, [leftWeeks, rightWeeks, activeMetric, currentWeek]);
@@ -714,13 +797,7 @@ function CompareSection({
                   allowDecimals
                 />
                 <Tooltip
-                  labelFormatter={(week) => `Week ${week}`}
-                  contentStyle={{
-                    background: "var(--m-card)",
-                    border: "1px solid var(--m-border)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
+                  content={<CompareGraphTooltip metric={activeMetric} />}
                 />
                 <Line
                   type="monotone"
@@ -817,6 +894,7 @@ function CompareSection({
               )}
             >
               {formatMetric(leftTotal, activeMetric.decimals ?? 1)}
+              {activeMetric.key === "catch_pct" ? "%" : ""}
             </p>
             <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide">Total</p>
           </div>
@@ -850,6 +928,7 @@ function CompareSection({
               )}
             >
               {formatMetric(rightTotal, activeMetric.decimals ?? 1)}
+              {activeMetric.key === "catch_pct" ? "%" : ""}
             </p>
             <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide">Total</p>
           </div>
