@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 
 import { MobileTeamLogo } from "./MobileStandings";
 import { FootballIcon, HelmetIcon } from "./mobileNavIcons";
-import { useMobileLeagueActivity } from "./useMobileLeague";
+import { useMobileLeagueActivity, useNativePendingTrades } from "./useMobileLeague";
 
 /** Bottom tab bar height, excluding the device safe area. */
 const NAV_HEIGHT = "3.5rem";
@@ -75,6 +75,7 @@ const TABS: { to: TabPath; label: string; icon: LucideIcon; segment: string | nu
 export function MobileLeagueBottomNav({ leagueId }: { leagueId: string }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const segment = pathname.replace(/\/+$/, "").split("/")[4] ?? null;
+  const { badgeCount: pendingTradeBadge } = useNativePendingTrades();
 
   return (
     <nav
@@ -90,6 +91,7 @@ export function MobileLeagueBottomNav({ leagueId }: { leagueId: string }) {
             tab.segment === segment ||
             (tab.segment === "team" && (segment === "waivers" || segment === "trades"));
           const Icon = tab.icon;
+          const showTradeBadge = tab.segment === "team" && pendingTradeBadge > 0;
           return (
             <Link
               key={tab.label}
@@ -100,7 +102,17 @@ export function MobileLeagueBottomNav({ leagueId }: { leagueId: string }) {
                 active ? "text-m-nav-active" : "text-m-nav-fg",
               )}
             >
-              <Icon className="size-5" strokeWidth={active ? 2.5 : 2} />
+              <span className="relative">
+                <Icon className="size-5" strokeWidth={active ? 2.5 : 2} />
+                {showTradeBadge ? (
+                  <span
+                    className="absolute -right-2.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-m-accent px-1 text-[10px] font-bold leading-none text-m-accent-fg"
+                    aria-label={`${pendingTradeBadge} pending trade${pendingTradeBadge === 1 ? "" : "s"}`}
+                  >
+                    {pendingTradeBadge > 99 ? "99+" : pendingTradeBadge}
+                  </span>
+                ) : null}
+              </span>
               {tab.label}
             </Link>
           );
