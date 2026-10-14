@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
+import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
   FantasyActivityList,
   type FantasyActivityItem,
@@ -12,6 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { listNativeTransactions } from "@/lib/native-league.functions";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
+import type { Player } from "@/lib/players-build";
 
 export const Route = createFileRoute("/league/$linkId/transactions")({
   ssr: false,
@@ -42,6 +44,7 @@ function NativeTransactionsPage() {
   const { linkId } = Route.useParams();
   const { user } = useAuth();
   const [filter, setFilter] = useState<TxFilter>("all");
+  const modalRef = useRef<PlayerModalHandle>(null);
 
   const cache = useSleeperPlayers();
   const fallback = useQuery({
@@ -51,14 +54,14 @@ function NativeTransactionsPage() {
     staleTime: 1000 * 60 * 30,
   });
   const players = cache.data?.players ?? fallback.data?.players ?? [];
-  const nameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const p of players) map.set(p.id, p.name);
+  const playersById = useMemo(() => {
+    const map = new Map<string, Player>();
+    for (const p of players) map.set(p.id, p);
     return map;
   }, [players]);
 
   const resolveName = (playerId: string | null) =>
-    playerId ? (nameById.get(playerId) ?? playerId) : null;
+    playerId ? (playersById.get(playerId)?.name ?? playerId) : null;
 
   const { data: rows, isLoading } = useQuery({
     queryKey: ["native-transactions", linkId],
@@ -74,6 +77,7 @@ function NativeTransactionsPage() {
 
   return (
     <section className="space-y-4">
+      <PlayerModalHost ref={modalRef} />
       <div>
         <h2 className="display-title text-2xl text-slate-900">
           League <span className="text-primary">Transactions</span>
@@ -99,7 +103,9 @@ function NativeTransactionsPage() {
       ) : (
         <FantasyActivityList
           items={filtered}
+          playersById={playersById}
           resolveName={resolveName}
+          onOpenPlayer={(id) => modalRef.current?.open(id)}
           emptyMessage={
             filter === "all"
               ? "No transactions yet."

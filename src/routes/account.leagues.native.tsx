@@ -1,10 +1,11 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
 
-/** Legacy URL — create lives at /account/leagues/setup. */
+/**
+ * Layout for `/account/leagues/native/*`.
+ * Exact `/account/leagues/native` redirects from the index child — do not Navigate
+ * here or `$linkId` settings will never render.
+ */
 export const Route = createFileRoute("/account/leagues/native")({
   ssr: false,
-  head: () => ({
-    meta: [{ title: "Create League — The League Office" }, { name: "robots", content: "noindex" }],
-  }),
-  component: () => <Navigate to="/account/leagues/setup" replace />,
+  component: () => <Outlet />,
 });

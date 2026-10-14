@@ -203,8 +203,12 @@ function activityHeadline(event: LeagueActivityEvent): string {
   const kind = resolveActivityKind(event);
   const manager = (event.teamName ?? "").trim() || "Manager Team";
   if (kind === "trade") {
+    const vetoed = /^TRADE VETOED/i.test(event.text ?? "");
     const teams = tradeTeams(event.moves ?? []);
-    if (teams.length === 2) return `${teams[0]} and ${teams[1]} completed a trade`;
+    if (teams.length === 2) {
+      return `${teams[0]} and ${teams[1]} ${vetoed ? "had a trade vetoed" : "completed a trade"}`;
+    }
+    if (vetoed) return event.teamName ? `${manager} had a trade vetoed` : "Trade vetoed";
     return event.teamName ? `${manager} completed a trade` : "Trade completed";
   }
   if (kind === "ir") {

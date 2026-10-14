@@ -88,6 +88,7 @@ import { Route as LeagueLinkIdTradesRouteImport } from './routes/league.$linkId.
 import { Route as LeagueLinkIdTransactionsRouteImport } from './routes/league.$linkId.transactions'
 import { Route as LeagueLinkIdWaiversRouteImport } from './routes/league.$linkId.waivers'
 import { Route as MLeagueLeagueIdRouteImport } from './routes/m.league.$leagueId'
+import { Route as AccountLeaguesNativeIndexRouteImport } from './routes/account.leagues.native.index'
 import { Route as AccountLeaguesNativeLinkIdRouteImport } from './routes/account.leagues.native.$linkId'
 import { Route as ApiAuthYahooCallbackRouteImport } from './routes/api/auth/yahoo/callback'
 import { Route as ApiAuthYahooConnectRouteImport } from './routes/api/auth/yahoo/connect'
@@ -505,6 +506,12 @@ const MLeagueLeagueIdRoute = MLeagueLeagueIdRouteImport.update({
   path: '/league/$leagueId',
   getParentRoute: () => MRoute,
 } as any)
+const AccountLeaguesNativeIndexRoute =
+  AccountLeaguesNativeIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AccountLeaguesNativeRoute,
+  } as any)
 const AccountLeaguesNativeLinkIdRoute =
   AccountLeaguesNativeLinkIdRouteImport.update({
     id: '/$linkId',
@@ -670,6 +677,7 @@ export interface FileRoutesByFullPath {
   '/m/league/$leagueId/team': typeof MLeagueLeagueIdTeamRoute
   '/m/league/$leagueId/trades': typeof MLeagueLeagueIdTradesRoute
   '/m/league/$leagueId/waivers': typeof MLeagueLeagueIdWaiversRoute
+  '/account/leagues/native/': typeof AccountLeaguesNativeIndexRoute
   '/m/league/$leagueId/': typeof MLeagueLeagueIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -720,7 +728,6 @@ export interface FileRoutesByTo {
   '/playbook': typeof PlaybookIndexRoute
   '/account/leagues/$connectionId': typeof AccountLeaguesConnectionIdRoute
   '/account/leagues/join': typeof AccountLeaguesJoinRoute
-  '/account/leagues/native': typeof AccountLeaguesNativeRouteWithChildren
   '/account/leagues/setup': typeof AccountLeaguesSetupRoute
   '/api/admin/seed-player-warehouse': typeof ApiAdminSeedPlayerWarehouseRoute
   '/api/admin/tidb-migrate': typeof ApiAdminTidbMigrateRoute
@@ -761,6 +768,7 @@ export interface FileRoutesByTo {
   '/m/league/$leagueId/team': typeof MLeagueLeagueIdTeamRoute
   '/m/league/$leagueId/trades': typeof MLeagueLeagueIdTradesRoute
   '/m/league/$leagueId/waivers': typeof MLeagueLeagueIdWaiversRoute
+  '/account/leagues/native': typeof AccountLeaguesNativeIndexRoute
   '/m/league/$leagueId': typeof MLeagueLeagueIdIndexRoute
 }
 export interface FileRoutesById {
@@ -857,6 +865,7 @@ export interface FileRoutesById {
   '/m/league/$leagueId/team': typeof MLeagueLeagueIdTeamRoute
   '/m/league/$leagueId/trades': typeof MLeagueLeagueIdTradesRoute
   '/m/league/$leagueId/waivers': typeof MLeagueLeagueIdWaiversRoute
+  '/account/leagues/native/': typeof AccountLeaguesNativeIndexRoute
   '/m/league/$leagueId/': typeof MLeagueLeagueIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -954,6 +963,7 @@ export interface FileRouteTypes {
     | '/m/league/$leagueId/team'
     | '/m/league/$leagueId/trades'
     | '/m/league/$leagueId/waivers'
+    | '/account/leagues/native/'
     | '/m/league/$leagueId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1004,7 +1014,6 @@ export interface FileRouteTypes {
     | '/playbook'
     | '/account/leagues/$connectionId'
     | '/account/leagues/join'
-    | '/account/leagues/native'
     | '/account/leagues/setup'
     | '/api/admin/seed-player-warehouse'
     | '/api/admin/tidb-migrate'
@@ -1045,6 +1054,7 @@ export interface FileRouteTypes {
     | '/m/league/$leagueId/team'
     | '/m/league/$leagueId/trades'
     | '/m/league/$leagueId/waivers'
+    | '/account/leagues/native'
     | '/m/league/$leagueId'
   id:
     | '__root__'
@@ -1140,6 +1150,7 @@ export interface FileRouteTypes {
     | '/m/league/$leagueId/team'
     | '/m/league/$leagueId/trades'
     | '/m/league/$leagueId/waivers'
+    | '/account/leagues/native/'
     | '/m/league/$leagueId/'
   fileRoutesById: FileRoutesById
 }
@@ -1765,6 +1776,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MLeagueLeagueIdRouteImport
       parentRoute: typeof MRoute
     }
+    '/account/leagues/native/': {
+      id: '/account/leagues/native/'
+      path: '/'
+      fullPath: '/account/leagues/native/'
+      preLoaderRoute: typeof AccountLeaguesNativeIndexRouteImport
+      parentRoute: typeof AccountLeaguesNativeRoute
+    }
     '/account/leagues/native/$linkId': {
       id: '/account/leagues/native/$linkId'
       path: '/$linkId'
@@ -1962,10 +1980,12 @@ const LeagueLinkIdRouteWithChildren = LeagueLinkIdRoute._addFileChildren(
 
 interface AccountLeaguesNativeRouteChildren {
   AccountLeaguesNativeLinkIdRoute: typeof AccountLeaguesNativeLinkIdRoute
+  AccountLeaguesNativeIndexRoute: typeof AccountLeaguesNativeIndexRoute
 }
 
 const AccountLeaguesNativeRouteChildren: AccountLeaguesNativeRouteChildren = {
   AccountLeaguesNativeLinkIdRoute: AccountLeaguesNativeLinkIdRoute,
+  AccountLeaguesNativeIndexRoute: AccountLeaguesNativeIndexRoute,
 }
 
 const AccountLeaguesNativeRouteWithChildren =

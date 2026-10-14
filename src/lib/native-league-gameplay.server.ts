@@ -1120,11 +1120,40 @@ export async function respondNativeTradeForUser(
       [tradeId, membership.leagueId],
     );
     await clearTradeHolds(membership.leagueId, allPlayers);
+    const teamIds = [
+      ...new Set([
+        Number(trade.proposer_team_id),
+        Number(trade.acceptor_team_id),
+        ...legs.map((l) => l.teamId),
+      ]),
+    ].filter((id) => id > 0);
+    const teamRows =
+      teamIds.length > 0
+        ? await tidbExecute<{ id: number; team_name: string | null }>(
+            `SELECT id, team_name FROM native_teams
+             WHERE league_id = ? AND id IN (${teamIds.map(() => "?").join(",")})`,
+            [membership.leagueId, ...teamIds],
+          )
+        : [];
+    const teamNameById = new Map(
+      teamRows.map((t) => [Number(t.id), String(t.team_name ?? "").trim() || `Team ${t.id}`]),
+    );
     await tidbExecute(
       `INSERT INTO native_transactions
          (league_id, team_id, type, status, payload, created_by, processed_at)
        VALUES (?, NULL, 'trade_vetoed', 'completed', ?, ?, UTC_TIMESTAMP())`,
-      [membership.leagueId, JSON.stringify({ tradeId }), userId],
+      [
+        membership.leagueId,
+        JSON.stringify({
+          tradeId,
+          legs,
+          proposerTeamId: Number(trade.proposer_team_id),
+          acceptorTeamId: Number(trade.acceptor_team_id),
+          proposerName: teamNameById.get(Number(trade.proposer_team_id)) ?? null,
+          acceptorName: teamNameById.get(Number(trade.acceptor_team_id)) ?? null,
+        }),
+        userId,
+      ],
     );
     return { ok: true };
   }
@@ -1282,6 +1311,13 @@ async function commitNativeTrade(
   );
   await clearTradeHolds(leagueId, [...a.playerIds, ...b.playerIds]);
 
+  const teamRows = await tidbExecute<{ id: number; team_name: string | null }>(
+    `SELECT id, team_name FROM native_teams WHERE league_id = ? AND id IN (?, ?)`,
+    [leagueId, a.teamId, b.teamId],
+  );
+  const teamNameById = new Map(
+    teamRows.map((t) => [Number(t.id), String(t.team_name ?? "").trim() || `Team ${t.id}`]),
+  );
   await tidbExecute(
     `INSERT INTO native_transactions
        (league_id, team_id, type, status, payload, created_by, processed_at)
@@ -1294,6 +1330,10 @@ async function commitNativeTrade(
         legs,
         week,
         seasonYear,
+        proposerTeamId: a.teamId,
+        acceptorTeamId: b.teamId,
+        proposerName: teamNameById.get(a.teamId) ?? null,
+        acceptorName: teamNameById.get(b.teamId) ?? null,
       }),
     ],
   );

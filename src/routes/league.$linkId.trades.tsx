@@ -130,6 +130,8 @@ function NativeTradesPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["native-trades", linkId] }),
         queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] }),
+        queryClient.invalidateQueries({ queryKey: ["league-transaction-log", linkId] }),
+        queryClient.invalidateQueries({ queryKey: ["native-transactions", linkId] }),
       ]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update trade.");

@@ -6,10 +6,14 @@ import { toast } from "sonner";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
   FantasyBoard,
+  FantasyDropButton,
+  FantasyPlayerChip,
+  FantasySaveLineupButton,
   FantasySectionTitle,
   fantasyOutlineBtn,
   fantasyPrimaryBtn,
 } from "@/components/native/fantasy";
+import type { Player } from "@/lib/players-build";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
@@ -37,9 +41,6 @@ export const Route = createFileRoute("/league/$linkId/my-team")({
   ssr: false,
   component: NativeMyTeamPage,
 });
-
-const dangerOutlineClass =
-  "rounded-md border border-red-300 bg-white px-3 py-1.5 font-display text-xs uppercase tracking-wide text-red-700 disabled:opacity-60";
 
 const QUICK_LINKS = [
   { label: "Matchup", to: "/league/$linkId/matchup" as const },
@@ -79,6 +80,11 @@ function NativeMyTeamPage() {
   const nameById = useMemo(() => {
     const map = new Map<string, { name: string; pos: string; team: string }>();
     for (const p of players) map.set(p.id, { name: p.name, pos: p.pos, team: p.team });
+    return map;
+  }, [players]);
+  const playersById = useMemo(() => {
+    const map = new Map<string, Player>();
+    for (const p of players) map.set(p.id, p);
     return map;
   }, [players]);
 
@@ -325,14 +331,12 @@ function NativeMyTeamPage() {
                   : ""}
           </p>
         </div>
-        <button
-          type="button"
-          className={fantasyPrimaryBtn}
+        <FantasySaveLineupButton
           disabled={!lineup.canEdit || saving || !dirty || hasIrViolations}
           onClick={() => void save()}
         >
           {saving ? "Saving…" : "Save Lineup"}
-        </button>
+        </FantasySaveLineupButton>
       </div>
 
       <nav className="flex flex-wrap gap-2" aria-label="Team quick links">
@@ -390,28 +394,25 @@ function NativeMyTeamPage() {
                       className="rounded-lg border border-red-200 bg-white px-3 py-3"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <button
-                            type="button"
-                            className="font-medium text-slate-900 hover:text-primary hover:underline"
+                        <div className="min-w-0 flex-1">
+                          <FantasyPlayerChip
+                            player={playersById.get(row.playerId)}
+                            fallbackName={meta?.name ?? row.playerId}
                             onClick={() => modalRef.current?.open(row.playerId)}
-                          >
-                            {meta?.name ?? row.playerId}
-                          </button>
-                          <p className="text-xs text-muted-foreground">
-                            {(meta?.pos === "DEF" ? "DST" : meta?.pos) ?? "—"} · {meta?.team || "—"} ·
-                            Status: {tag}
-                          </p>
+                            trailing={
+                              <span className="shrink-0 text-[10px] font-bold uppercase text-red-700">
+                                {tag}
+                              </span>
+                            }
+                          />
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            className={dangerOutlineClass}
+                          <FantasyDropButton
                             disabled={busy || !!resolvingId}
                             onClick={() => void resolveIr(row.playerId, "drop")}
                           >
-                            {busy ? "…" : "Drop player"}
-                          </button>
+                            {busy ? "…" : "Drop"}
+                          </FantasyDropButton>
                           <button
                             type="button"
                             className={fantasyOutlineBtn}
@@ -491,8 +492,7 @@ function NativeMyTeamPage() {
             title="Starters"
             rows={starters}
             selectedKey={selectedKey}
-            nameById={nameById}
-            injuryById={injuryById}
+            playersById={playersById}
             ineligibleIds={new Set(ineligibleIr.map((r) => r.playerId))}
             canEdit={lineup.canEdit && !hasIrViolations}
             onSlotClick={onSlotClick}
@@ -502,8 +502,7 @@ function NativeMyTeamPage() {
             title="Bench / IR"
             rows={reserves}
             selectedKey={selectedKey}
-            nameById={nameById}
-            injuryById={injuryById}
+            playersById={playersById}
             ineligibleIds={new Set(ineligibleIr.map((r) => r.playerId))}
             canEdit={lineup.canEdit && !hasIrViolations}
             onSlotClick={onSlotClick}
@@ -521,8 +520,7 @@ function LineupSection({
   title,
   rows,
   selectedKey,
-  nameById,
-  injuryById,
+  playersById,
   ineligibleIds,
   canEdit,
   onSlotClick,
@@ -531,8 +529,7 @@ function LineupSection({
   title: string;
   rows: NativeLineupSlotView[];
   selectedKey: string | null;
-  nameById: Map<string, { name: string; pos: string; team: string }>;
-  injuryById: Record<string, string | null>;
+  playersById: Map<string, Player>;
   ineligibleIds: Set<string>;
   canEdit: boolean;
   onSlotClick: (row: NativeLineupSlotView) => void;
@@ -544,10 +541,9 @@ function LineupSection({
       <ul>
         {rows.map((row) => {
           const key = `${row.key}:${row.index}`;
-          const meta = row.playerId ? nameById.get(row.playerId) : null;
+          const player = row.playerId ? playersById.get(row.playerId) : null;
           const selected = selectedKey === key;
           const violated = Boolean(row.playerId && ineligibleIds.has(row.playerId));
-          const injury = row.playerId ? injuryById[row.playerId] : null;
           const posBadge = row.label;
           return (
             <li key={key}>
@@ -579,24 +575,20 @@ function LineupSection({
                 >
                   {posBadge}
                 </span>
-                {row.playerId && meta ? (
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 text-left"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpen(row.playerId!);
-                    }}
-                  >
-                    <span className="block truncate font-medium text-slate-900 hover:text-primary hover:underline">
-                      {meta.name}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {meta.pos === "DEF" ? "DST" : meta.pos} · {meta.team || "—"}
-                      {injury ? ` · ${injury}` : ""}
-                      {violated ? " · IR ineligible" : ""}
-                    </span>
-                  </button>
+                {row.playerId ? (
+                  <FantasyPlayerChip
+                    player={player}
+                    fallbackName={row.playerId}
+                    className="min-w-0 flex-1"
+                    onClick={() => onOpen(row.playerId!)}
+                    trailing={
+                      violated ? (
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                          IR
+                        </span>
+                      ) : null
+                    }
+                  />
                 ) : (
                   <span className="flex-1 text-sm text-muted-foreground">Empty slot</span>
                 )}
