@@ -23,3 +23,17 @@ export {
   type FantasyMatchupCard,
   type FantasyMatchupTeamSide,
 } from "@/components/native/fantasy/matchup-cards";
+
+export { FantasyPlayerChip } from "@/components/native/fantasy/player-chip";
+
+export {
+  FantasyAddButton,
+  FantasyDropButton,
+  FantasyTradeButton,
+  FantasySaveLineupButton,
+  FantasyOptimizeButton,
+  fantasyAddBtn,
+  fantasyDropBtn,
+  fantasyTradeBtn,
+  fantasySaveLineupBtn,
+} from "@/components/native/fantasy/action-buttons";

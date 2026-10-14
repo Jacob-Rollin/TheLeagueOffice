@@ -4,7 +4,9 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
+  FantasyAddButton,
   FantasyBoard,
+  FantasyPlayerChip,
   FantasyPosChip,
   FantasyPosChipRow,
   fantasyOutlineBtn,
@@ -309,20 +311,10 @@ function NativeLeagueDraftPage() {
                   key={player.id}
                   className="flex items-center justify-between gap-2 rounded-md border border-transparent px-2 py-1.5 hover:border-border hover:bg-muted/40"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{player.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {player.pos === "DEF" ? "DST" : player.pos} · {player.team || "FA"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className={fantasyPrimaryBtn}
-                    disabled={busy}
-                    onClick={() => void assign(player)}
-                  >
+                  <FantasyPlayerChip player={player} className="min-w-0" />
+                  <FantasyAddButton disabled={busy} onClick={() => void assign(player)}>
                     Assign
-                  </button>
+                  </FantasyAddButton>
                 </li>
               ))}
               {available.length === 0 ? (

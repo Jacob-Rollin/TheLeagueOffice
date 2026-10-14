@@ -6,9 +6,13 @@ import { toast } from "sonner";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { useNativeRosterActions } from "@/components/mobile/league/nativeRosterActions";
 import {
+  FantasyAddButton,
   FantasyBoard,
+  FantasyDropButton,
+  FantasyPlayerChip,
   FantasyPosChip,
   FantasyPosChipRow,
+  FantasyTradeButton,
   fantasyOutlineBtn,
 } from "@/components/native/fantasy";
 import { Toaster } from "@/components/ui/sonner";
@@ -22,7 +26,6 @@ import {
 } from "@/lib/native-league.functions";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
-import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$linkId/players")({
   ssr: false,
@@ -31,13 +34,6 @@ export const Route = createFileRoute("/league/$linkId/players")({
 
 const POS_FILTERS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
 type PoolFilter = "available" | "rostered" | "mine" | "all";
-
-const addBtnClass =
-  "rounded-md border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition-colors hover:bg-emerald-700 disabled:opacity-60";
-const dropBtnClass =
-  "rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-red-700 transition-colors hover:border-red-200 hover:bg-red-50 disabled:opacity-60";
-const tradeBtnClass =
-  "rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60";
 
 function NativeLeaguePlayersPage() {
   const { linkId } = Route.useParams();
@@ -304,19 +300,12 @@ function NativeLeaguePlayersPage() {
 
                 return (
                   <tr key={player.id} className="border-t border-slate-100 hover:bg-slate-50/80">
-                    <td
-                      className={cn(
-                        "sticky left-0 z-10 bg-white px-3 py-2",
-                        "hover:bg-slate-50/80",
-                      )}
-                    >
-                      <button
-                        type="button"
+                    <td className="sticky left-0 z-10 bg-white px-3 py-2.5">
+                      <FantasyPlayerChip
+                        player={player}
+                        showMeta={false}
                         onClick={() => modalRef.current?.open(player.id)}
-                        className="text-left font-medium text-slate-900 hover:text-primary hover:underline"
-                      >
-                        {player.name}
-                      </button>
+                      />
                     </td>
                     <td className="px-3 py-2 text-slate-700">{player.team || "—"}</td>
                     <td className="px-3 py-2 text-slate-700">
@@ -326,34 +315,24 @@ function NativeLeaguePlayersPage() {
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-1.5">
                         {canAddFa && isFa ? (
-                          <button
-                            type="button"
-                            className={addBtnClass}
+                          <FantasyAddButton
                             disabled={busy}
                             onClick={() => onAddClick(player)}
                           >
                             {openSlots > 0 ? "Add" : "Add / Drop"}
-                          </button>
+                          </FantasyAddButton>
                         ) : null}
                         {canMutate && isMine ? (
-                          <button
-                            type="button"
-                            className={dropBtnClass}
+                          <FantasyDropButton
                             disabled={busy}
                             onClick={() => onDropClick(player)}
-                          >
-                            Drop
-                          </button>
+                          />
                         ) : null}
                         {hookLinked && rosterActions.canMutateNative && isOther ? (
-                          <button
-                            type="button"
-                            className={tradeBtnClass}
+                          <FantasyTradeButton
                             disabled={busy}
                             onClick={() => onTradeClick(player)}
-                          >
-                            Trade
-                          </button>
+                          />
                         ) : null}
                         {!((canAddFa && isFa) || (canMutate && isMine) || (hookLinked && rosterActions.canMutateNative && isOther)) ? (
                           <span className="text-xs text-muted-foreground">—</span>
@@ -409,14 +388,12 @@ function NativeLeaguePlayersPage() {
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className={addBtnClass}
+              <FantasyAddButton
                 disabled={busy || !dropId}
                 onClick={() => void runAdd(pendingAdd.id, dropId)}
               >
                 {busy ? "Submitting…" : "Confirm Add / Drop"}
-              </button>
+              </FantasyAddButton>
             </div>
           </div>
         </div>
@@ -446,14 +423,12 @@ function NativeLeaguePlayersPage() {
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className={dropBtnClass}
+              <FantasyDropButton
                 disabled={busy}
                 onClick={() => void runDrop(pendingDrop.id)}
               >
                 {busy ? "Dropping…" : "Confirm Drop"}
-              </button>
+              </FantasyDropButton>
             </div>
           </div>
         </div>

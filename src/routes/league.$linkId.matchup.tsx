@@ -6,6 +6,7 @@ import {
   FantasyBoard,
   FantasyMatchupScoreCard,
   FantasyMatchupWeekList,
+  FantasyPlayerChip,
   FantasyWeekSelect,
   nativeMatchupViewToCard,
 } from "@/components/native/fantasy";
@@ -22,6 +23,7 @@ import {
 } from "@/lib/native-league-lineup";
 import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
+import type { Player } from "@/lib/players-build";
 import type { ScoringMap } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
@@ -88,9 +90,9 @@ function NativeMatchupPage() {
     enabled: Boolean(cache.error) && !cache.data,
     staleTime: 1000 * 60 * 30,
   });
-  const nameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const p of cache.data?.players ?? fallback.data?.players ?? []) map.set(p.id, p.name);
+  const playersById = useMemo(() => {
+    const map = new Map<string, Player>();
+    for (const p of cache.data?.players ?? fallback.data?.players ?? []) map.set(p.id, p);
     return map;
   }, [cache.data?.players, fallback.data?.players]);
 
@@ -219,7 +221,7 @@ function NativeMatchupPage() {
                         <StarterCell
                           playerId={row.homeId}
                           points={row.homePts}
-                          nameById={nameById}
+                          playersById={playersById}
                           align="left"
                         />
                       </td>
@@ -232,7 +234,7 @@ function NativeMatchupPage() {
                         <StarterCell
                           playerId={row.awayId}
                           points={row.awayPts}
-                          nameById={nameById}
+                          playersById={playersById}
                           align="right"
                         />
                       </td>
@@ -251,14 +253,16 @@ function NativeMatchupPage() {
 function StarterCell({
   playerId,
   points,
-  nameById,
+  playersById,
   align,
 }: {
   playerId: string | null;
   points: number | null;
-  nameById: Map<string, string>;
+  playersById: Map<string, Player>;
   align: "left" | "right";
 }) {
+  const pts =
+    points != null && Number.isFinite(points) ? points.toFixed(1) : "—";
   if (!playerId) {
     return (
       <span
@@ -271,13 +275,22 @@ function StarterCell({
       </span>
     );
   }
-  const name = nameById.get(playerId) ?? playerId;
-  const pts =
-    points != null && Number.isFinite(points) ? points.toFixed(1) : "—";
+  const player = playersById.get(playerId) ?? null;
   return (
-    <div className={cn(align === "right" && "text-right")}>
-      <span className="font-medium text-slate-900">{name}</span>
-      <span className="ml-2 font-display italic text-slate-700">{pts}</span>
+    <div
+      className={cn(
+        "flex items-center gap-2",
+        align === "right" && "flex-row-reverse text-right",
+      )}
+    >
+      <FantasyPlayerChip
+        player={player}
+        fallbackName={playerId}
+        size="sm"
+        showMeta={false}
+        className="min-w-0"
+      />
+      <span className="shrink-0 font-display text-sm italic text-slate-700">{pts}</span>
     </div>
   );
 }
