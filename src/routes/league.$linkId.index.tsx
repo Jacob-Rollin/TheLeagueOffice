@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
   FantasyActivityList,
   type FantasyActivityItem,
@@ -28,6 +29,7 @@ import {
   setNativeLeagueWeek,
 } from "@/lib/native-league.functions";
 import { visibleRefetchInterval } from "@/lib/page-visibility";
+import type { Player } from "@/lib/players-build";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { ScoringMap } from "@/lib/scoring-map";
 
@@ -43,6 +45,7 @@ type NativeBoard = NonNullable<Awaited<ReturnType<typeof getNativeLeagueBoard>>>
 function NativeLeagueDashboard() {
   const { linkId } = Route.useParams();
   const { user } = useAuth();
+  const modalRef = useRef<PlayerModalHandle>(null);
 
   const { data: board } = useQuery({
     queryKey: ["native-league-board", linkId],
@@ -173,13 +176,18 @@ function NativeLeagueDashboardBody({
     enabled: Boolean(cache.error) && !cache.data,
     staleTime: 1000 * 60 * 30,
   });
-  const nameById = useMemo(() => {
-    const map = new Map<string, string>();
+  const playersById = useMemo(() => {
+    const map = new Map<string, Player>();
     for (const p of cache.data?.players ?? catalogFallback.data?.players ?? []) {
-      map.set(p.id, p.name);
+      map.set(p.id, p);
     }
     return map;
   }, [cache.data?.players, catalogFallback.data?.players]);
+  const nameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [id, p] of playersById) map.set(id, p.name);
+    return map;
+  }, [playersById]);
 
   const { data: recentTx } = useQuery({
     queryKey: ["native-transactions", linkId, "dashboard"],
@@ -314,6 +322,7 @@ function NativeLeagueDashboardBody({
   return (
     <div className="space-y-4">
       <Toaster />
+      <PlayerModalHost ref={modalRef} />
 
       {myMatchupScored ? (
         <FantasyMatchupScoreCard
@@ -412,7 +421,9 @@ function NativeLeagueDashboardBody({
           </div>
           <FantasyActivityList
             items={activityItems}
+            playersById={playersById}
             resolveName={(id) => (id ? (nameById.get(id) ?? id) : null)}
+            onOpenPlayer={(id) => modalRef.current?.open(id)}
             emptyMessage="No transactions yet."
           />
         </div>
