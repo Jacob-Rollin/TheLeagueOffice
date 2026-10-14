@@ -10,6 +10,7 @@ import {
   subscribeResearchQueryPersist,
 } from "@/lib/research-query-persist";
 import { ScoreTicker } from "@/components/league/ScoreTicker";
+import { FantasyNavLink } from "@/components/nav/FantasyNavLink";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { ActiveLeagueProvider } from "@/context/ActiveLeagueContext";
 import { LeagueSyncBootstrap } from "@/hooks/useLeagueSync";
@@ -149,9 +150,12 @@ function SiteNav() {
           </Link>
         </div>
 
-        {/* Far-right utilities: search expands leftward, profile stays pinned */}
-        <div className="flex shrink-0 items-center gap-2">
-          <GlobalSearch />
+        {/* Far-right utilities: Fantasy sits left of search; expanded search covers it. */}
+        <div className="relative flex shrink-0 items-center gap-2">
+          <FantasyNavLink />
+          <div className="relative z-10">
+            <GlobalSearch />
+          </div>
           <ProfileMenu />
         </div>
       </nav>
