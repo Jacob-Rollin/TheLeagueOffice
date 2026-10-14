@@ -22,6 +22,7 @@ type NativeSegment =
   | "my-team"
   | "matchup"
   | "standings"
+  | "teams"
   | "players"
   | "waivers"
   | "trades"
@@ -36,6 +37,7 @@ export type NativeSubNavLink = {
     | "/league/$linkId/my-team"
     | "/league/$linkId/matchup"
     | "/league/$linkId/standings"
+    | "/league/$linkId/teams"
     | "/league/$linkId/players"
     | "/league/$linkId/waivers"
     | "/league/$linkId/trades"
@@ -48,6 +50,7 @@ export const NATIVE_LEAGUE_SUBNAV_LINKS: NativeSubNavLink[] = [
   { segment: "my-team", label: "My Team", to: "/league/$linkId/my-team" },
   { segment: "matchup", label: "Matchup", to: "/league/$linkId/matchup" },
   { segment: "standings", label: "Standings", to: "/league/$linkId/standings" },
+  { segment: "teams", label: "Teams", to: "/league/$linkId/teams" },
   { segment: "players", label: "Players", to: "/league/$linkId/players" },
   { segment: "waivers", label: "Waivers", to: "/league/$linkId/waivers" },
   { segment: "trades", label: "Trades", to: "/league/$linkId/trades" },

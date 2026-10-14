@@ -6,11 +6,10 @@ import { navLinkClass } from "@/components/nav/NavMenus";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { listNativeLeagueSummaries } from "@/lib/native-league.functions";
-import { cn } from "@/lib/utils";
 
 /**
  * Top-nav entry into desktop native Fantasy (left of GlobalSearch).
- * Search expands leftward and covers this control when open.
+ * SiteNav hides this while search is open; expanded search uses an opaque field.
  */
 export function FantasyNavLink() {
   const { user, ready } = useAuth();
@@ -45,7 +44,7 @@ export function FantasyNavLink() {
     return (
       <Link
         to="/account/leagues"
-        className={cn(navLinkClass, "relative z-0")}
+        className={navLinkClass}
         data-status={active ? "active" : undefined}
       >
         Fantasy
@@ -58,7 +57,7 @@ export function FantasyNavLink() {
       to="/league/$linkId"
       params={{ linkId: targetLinkId }}
       preload="intent"
-      className={cn(navLinkClass, "relative z-0")}
+      className={navLinkClass}
       data-status={active ? "active" : undefined}
       onClick={() => setActiveLeagueId(targetLinkId)}
     >

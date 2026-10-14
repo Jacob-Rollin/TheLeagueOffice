@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, Link, createRootRouteWithContext, useRouter, useRouterState, HeadContent, Scripts } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import { scheduleIdleSnapPrefetch } from "@/lib/idle-snap-prefetch";
@@ -128,6 +128,8 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 function SiteNav() {
+  const [searchOpen, setSearchOpen] = useState(false);
+
   return (
     <header className="border-b-4 border-accent bg-primary text-primary-foreground">
       <nav className="mx-auto flex w-full max-w-shell items-center gap-2 px-3 py-1.5">
@@ -150,11 +152,16 @@ function SiteNav() {
           </Link>
         </div>
 
-        {/* Far-right utilities: Fantasy sits left of search; expanded search covers it. */}
+        {/* Far-right: Fantasy left of search; search expands left and fully covers it. */}
         <div className="relative flex shrink-0 items-center gap-2">
-          <FantasyNavLink />
+          <div
+            className={searchOpen ? "invisible pointer-events-none" : undefined}
+            aria-hidden={searchOpen || undefined}
+          >
+            <FantasyNavLink />
+          </div>
           <div className="relative z-10">
-            <GlobalSearch />
+            <GlobalSearch onOpenChange={setSearchOpen} />
           </div>
           <ProfileMenu />
         </div>
