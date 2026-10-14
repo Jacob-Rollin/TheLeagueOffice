@@ -134,7 +134,9 @@ const timeLabel = (at: number) => new Date(at).toLocaleTimeString(undefined, { h
 function eventSummary(event: LeagueActivityEvent) {
   const add = event.moves.find((m) => m.action === "add");
   const drop = event.moves.find((m) => m.action === "drop");
-  if (event.kind === "trade") return "Trade completed";
+  if (event.kind === "trade") {
+    return /^TRADE VETOED/i.test(event.text) ? "Trade vetoed" : "Trade completed";
+  }
   const team = event.teamName ?? "A team";
   if (add) return `${team} added ${add.name}`;
   if (drop) return `${team} dropped ${drop.name}`;
@@ -456,10 +458,15 @@ function TradeCard({ event, rows }: { event: LeagueActivityEvent; rows: MoveRowH
   const teams = tradeTeams(moves);
   const adds = moves.filter((m) => m.action === "add");
   const releases = moves.filter((m) => m.action === "drop");
+  const vetoed = /^TRADE VETOED/i.test(event.text);
 
   return (
     <article className="overflow-hidden rounded-xl border border-m-border bg-m-card">
-      <CardHeader title={teams.length === 2 ? `${teams[0]} and ${teams[1]}` : "Trade"} kind="Trade" at={event.at} />
+      <CardHeader
+        title={teams.length === 2 ? `${teams[0]} and ${teams[1]}` : vetoed ? "Trade Vetoed" : "Trade"}
+        kind={vetoed ? "Trade Vetoed" : "Trade"}
+        at={event.at}
+      />
       <div className="divide-y divide-m-border pb-1">
         {teams.map((team) => {
           const received = adds.filter((m) => m.fantasyTeam?.trim() === team);

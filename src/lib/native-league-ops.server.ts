@@ -2772,6 +2772,11 @@ export async function resolveNativeIrViolationForUser(
   }
 }
 
+export type NativeTradeLeg = {
+  teamId: number;
+  playerIds: string[];
+};
+
 export type NativeTransactionRow = {
   id: number;
   teamId: number | null;
@@ -2780,8 +2785,50 @@ export type NativeTransactionRow = {
   status: string;
   addPlayerId: string | null;
   dropPlayerId: string | null;
+  /** Present on trade / trade_vetoed rows when payload (or trade join) has legs. */
+  tradeId: number | null;
+  tradeLegs: NativeTradeLeg[];
+  proposerTeamId: number | null;
+  acceptorTeamId: number | null;
+  proposerName: string | null;
+  acceptorName: string | null;
   createdAt: string;
 };
+
+function parseTxnPayload(raw: unknown): Record<string, unknown> {
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  if (raw && typeof raw === "object") return raw as Record<string, unknown>;
+  return {};
+}
+
+function parseTxnTradeLegs(raw: unknown): NativeTradeLeg[] {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((leg) => ({
+      teamId: Number((leg as { teamId?: number }).teamId),
+      playerIds: Array.isArray((leg as { playerIds?: unknown }).playerIds)
+        ? ((leg as { playerIds: unknown[] }).playerIds)
+            .map((id) => String(id ?? "").trim())
+            .filter(Boolean)
+            .slice(0, 20)
+        : [],
+    }))
+    .filter((l) => l.teamId > 0);
+}
 
 export async function listNativeTransactionsForLink(
   userId: string,
@@ -2811,17 +2858,20 @@ export async function listNativeTransactionsForLink(
     [membership.leagueId],
   );
 
-  return rows.map((r) => {
-    let payload: Record<string, unknown> = {};
-    if (typeof r.payload === "string") {
-      try {
-        payload = JSON.parse(r.payload) as Record<string, unknown>;
-      } catch {
-        payload = {};
-      }
-    } else if (r.payload && typeof r.payload === "object") {
-      payload = r.payload as Record<string, unknown>;
-    }
+  const mapped = rows.map((r) => {
+    const payload = parseTxnPayload(r.payload);
+    const tradeIdRaw = payload["tradeId"];
+    const tradeId =
+      tradeIdRaw != null && Number.isFinite(Number(tradeIdRaw)) ? Math.floor(Number(tradeIdRaw)) : null;
+    const legs = parseTxnTradeLegs(payload["legs"]);
+    const proposerTeamId =
+      payload["proposerTeamId"] != null && Number.isFinite(Number(payload["proposerTeamId"]))
+        ? Math.floor(Number(payload["proposerTeamId"]))
+        : null;
+    const acceptorTeamId =
+      payload["acceptorTeamId"] != null && Number.isFinite(Number(payload["acceptorTeamId"]))
+        ? Math.floor(Number(payload["acceptorTeamId"]))
+        : null;
     return {
       id: Number(r.id),
       teamId: r.team_id == null ? null : Number(r.team_id),
@@ -2830,7 +2880,72 @@ export async function listNativeTransactionsForLink(
       status: String(r.status),
       addPlayerId: payload["addPlayerId"] != null ? String(payload["addPlayerId"]) : null,
       dropPlayerId: payload["dropPlayerId"] != null ? String(payload["dropPlayerId"]) : null,
+      tradeId,
+      tradeLegs: legs,
+      proposerTeamId,
+      acceptorTeamId,
+      proposerName:
+        payload["proposerName"] != null ? String(payload["proposerName"]).trim() || null : null,
+      acceptorName:
+        payload["acceptorName"] != null ? String(payload["acceptorName"]).trim() || null : null,
       createdAt: String(r.created_at),
+    };
+  });
+
+  // Legacy trade_vetoed rows only stored { tradeId } — join native_trades for legs/names.
+  const missingTradeIds = [
+    ...new Set(
+      mapped
+        .filter((r) => {
+          const t = r.type.toLowerCase();
+          return (t === "trade" || t === "trade_vetoed") && r.tradeId != null && r.tradeLegs.length < 2;
+        })
+        .map((r) => r.tradeId!)
+        .filter((id) => id > 0),
+    ),
+  ];
+  if (missingTradeIds.length === 0) return mapped;
+
+  const tradeRows = await tidbExecute<{
+    id: number;
+    proposer_team_id: number;
+    acceptor_team_id: number;
+    legs: unknown;
+    proposer_name: string | null;
+    acceptor_name: string | null;
+  }>(
+    `SELECT tr.id, tr.proposer_team_id, tr.acceptor_team_id, tr.legs,
+            tp.team_name AS proposer_name, ta.team_name AS acceptor_name
+     FROM native_trades tr
+     LEFT JOIN native_teams tp ON tp.id = tr.proposer_team_id AND tp.league_id = tr.league_id
+     LEFT JOIN native_teams ta ON ta.id = tr.acceptor_team_id AND ta.league_id = tr.league_id
+     WHERE tr.league_id = ? AND tr.id IN (${missingTradeIds.map(() => "?").join(",")})`,
+    [membership.leagueId, ...missingTradeIds],
+  );
+  const tradeById = new Map(
+    tradeRows.map((tr) => [
+      Number(tr.id),
+      {
+        legs: parseTxnTradeLegs(tr.legs),
+        proposerTeamId: Number(tr.proposer_team_id),
+        acceptorTeamId: Number(tr.acceptor_team_id),
+        proposerName: tr.proposer_name?.trim() || null,
+        acceptorName: tr.acceptor_name?.trim() || null,
+      },
+    ]),
+  );
+
+  return mapped.map((r) => {
+    if (r.tradeLegs.length >= 2 || r.tradeId == null) return r;
+    const join = tradeById.get(r.tradeId);
+    if (!join) return r;
+    return {
+      ...r,
+      tradeLegs: join.legs.length >= 2 ? join.legs : r.tradeLegs,
+      proposerTeamId: r.proposerTeamId ?? join.proposerTeamId,
+      acceptorTeamId: r.acceptorTeamId ?? join.acceptorTeamId,
+      proposerName: r.proposerName ?? join.proposerName,
+      acceptorName: r.acceptorName ?? join.acceptorName,
     };
   });
 }

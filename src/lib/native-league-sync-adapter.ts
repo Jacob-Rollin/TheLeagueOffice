@@ -94,6 +94,34 @@ function stubMove(playerId: string, action: LeagueActivityMove["action"]): Leagu
   };
 }
 
+/** Build TradeCard moves: each add is received by fantasyTeam from fromFantasyTeam. */
+export function tradeMovesFromNativeLegs(
+  legs: { teamId: number; playerIds: string[] }[],
+  nameByTeamId: Map<number, string>,
+): LeagueActivityMove[] {
+  if (legs.length < 2) return [];
+  const a = legs[0]!;
+  const b = legs[1]!;
+  const nameA = nameByTeamId.get(a.teamId)?.trim() || `Team ${a.teamId}`;
+  const nameB = nameByTeamId.get(b.teamId)?.trim() || `Team ${b.teamId}`;
+  const moves: LeagueActivityMove[] = [];
+  for (const playerId of a.playerIds) {
+    moves.push({
+      ...stubMove(playerId, "add"),
+      fantasyTeam: nameB,
+      fromFantasyTeam: nameA,
+    });
+  }
+  for (const playerId of b.playerIds) {
+    moves.push({
+      ...stubMove(playerId, "add"),
+      fantasyTeam: nameA,
+      fromFantasyTeam: nameB,
+    });
+  }
+  return moves;
+}
+
 type NativeBoard = NonNullable<Awaited<ReturnType<typeof getNativeLeagueBoard>>>;
 type NativeMatchupWeek = NonNullable<Awaited<ReturnType<typeof getNativeMatchupWeek>>>;
 type NativeStandingsPayload = NonNullable<Awaited<ReturnType<typeof getNativeStandings>>>;
@@ -293,9 +321,51 @@ export function nativeTransactionsToLeagueTransactionLog(
   board: NativeBoard,
 ): LeagueTransactionLog {
   const teamNames = board.teams.map((t) => t.teamName);
+  const nameByTeamId = new Map(board.teams.map((t) => [t.id, t.teamName]));
   const events: LeagueActivityEvent[] = rows.map((r) => {
     const kind = mapTxnKind(r.type);
     const team = r.teamName?.trim() || null;
+    const at = Date.parse(r.createdAt);
+    const typeLower = String(r.type ?? "").toLowerCase();
+
+    if (kind === "trade") {
+      const legs = Array.isArray(r.tradeLegs) ? r.tradeLegs : [];
+      if (r.proposerTeamId != null && r.proposerName) {
+        nameByTeamId.set(r.proposerTeamId, r.proposerName);
+      }
+      if (r.acceptorTeamId != null && r.acceptorName) {
+        nameByTeamId.set(r.acceptorTeamId, r.acceptorName);
+      }
+      const moves = tradeMovesFromNativeLegs(legs, nameByTeamId);
+      const sideA =
+        (r.proposerName?.trim() ||
+          (r.proposerTeamId != null ? nameByTeamId.get(r.proposerTeamId) : null) ||
+          (legs[0] ? nameByTeamId.get(legs[0].teamId) : null) ||
+          "").trim();
+      const sideB =
+        (r.acceptorName?.trim() ||
+          (r.acceptorTeamId != null ? nameByTeamId.get(r.acceptorTeamId) : null) ||
+          (legs[1] ? nameByTeamId.get(legs[1].teamId) : null) ||
+          "").trim();
+      const prefix = typeLower.includes("veto") ? "TRADE VETOED" : "TRADE COMPLETED";
+      const parts =
+        sideA && sideB
+          ? `${sideA} and ${sideB}`
+          : moves.length
+            ? "trade"
+            : typeLower.includes("veto")
+              ? "trade vetoed"
+              : "trade completed";
+      return {
+        id: `native-txn-${r.id}`,
+        at: Number.isFinite(at) ? at : Date.now(),
+        kind: "trade" as const,
+        text: `${prefix}: ${parts}`,
+        teamName: null,
+        moves,
+      };
+    }
+
     const moves: LeagueActivityMove[] = [];
     if (r.addPlayerId) moves.push(stubMove(r.addPlayerId, "add"));
     if (r.dropPlayerId) {
@@ -305,7 +375,6 @@ export function nativeTransactionsToLeagueTransactionLog(
     const dropBit = r.dropPlayerId ? `dropped ${r.dropPlayerId}` : "";
     const action = [addBit, dropBit].filter(Boolean).join(", ") || r.type;
     const text = team ? `${team} ${action}` : action;
-    const at = Date.parse(r.createdAt);
     return {
       id: `native-txn-${r.id}`,
       at: Number.isFinite(at) ? at : Date.now(),
