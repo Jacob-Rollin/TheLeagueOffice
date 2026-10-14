@@ -1,7 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import {
+  FantasyBoard,
+  FantasyMatchupScoreCard,
+  FantasyMatchupWeekList,
+  FantasyWeekSelect,
+  nativeMatchupViewToCard,
+} from "@/components/native/fantasy";
 import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { getNativeLeagueBoard, getNativeMatchupWeek } from "@/lib/native-league.functions";
@@ -9,6 +16,10 @@ import {
   fetchNativeLiveWeekStats,
   overlayNativeLiveMatchupScores,
 } from "@/lib/native-live-scoring";
+import {
+  expandLineupSlots,
+  parseRosterSlotCounts,
+} from "@/lib/native-league-lineup";
 import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { ScoringMap } from "@/lib/scoring-map";
@@ -26,6 +37,7 @@ function NativeMatchupPage() {
   const { linkId } = Route.useParams();
   const { user } = useAuth();
   const [week, setWeek] = useState<number | null>(null);
+  const [selectedMatchupId, setSelectedMatchupId] = useState<number | null>(null);
 
   const { data: board } = useQuery({
     queryKey: ["native-league-board", linkId],
@@ -83,19 +95,68 @@ function NativeMatchupPage() {
   }, [cache.data?.players, fallback.data?.players]);
 
   const myTeamId = data?.myTeamId ?? board?.summary.teamId ?? null;
+
+  const matchupCards = useMemo(
+    () => scoredMatchups.map((m) => nativeMatchupViewToCard(m)),
+    [scoredMatchups],
+  );
+
+  const defaultMatchupId = useMemo(() => {
+    const mine = scoredMatchups.find(
+      (m) => m.home.teamId === myTeamId || m.away.teamId === myTeamId,
+    );
+    return mine?.matchupId ?? scoredMatchups[0]?.matchupId ?? null;
+  }, [scoredMatchups, myTeamId]);
+
+  useEffect(() => {
+    setSelectedMatchupId(null);
+  }, [activeWeek]);
+
+  const focusMatchupId = selectedMatchupId ?? defaultMatchupId;
   const focus =
-    scoredMatchups.find((m) => m.home.teamId === myTeamId || m.away.teamId === myTeamId) ??
-    scoredMatchups[0] ??
-    null;
+    scoredMatchups.find((m) => m.matchupId === focusMatchupId) ?? scoredMatchups[0] ?? null;
+
+  const starterSlotLabels = useMemo(() => {
+    const counts = parseRosterSlotCounts(board?.rosterSlots);
+    return expandLineupSlots(counts)
+      .filter((row) => row.starter)
+      .map((row) => row.label);
+  }, [board?.rosterSlots]);
+
+  const headToHeadRows = useMemo(() => {
+    if (!focus || !data?.startersByTeamId) return [];
+    const homeIds = data.startersByTeamId[String(focus.home.teamId)] ?? [];
+    const awayIds = data.startersByTeamId[String(focus.away.teamId)] ?? [];
+    const len = Math.max(homeIds.length, awayIds.length);
+    const rows: Array<{
+      slot: string;
+      homeId: string | null;
+      awayId: string | null;
+      homePts: number | null;
+      awayPts: number | null;
+    }> = [];
+    for (let i = 0; i < len; i++) {
+      const homeId = homeIds[i] ?? null;
+      const awayId = awayIds[i] ?? null;
+      rows.push({
+        slot: starterSlotLabels[i] ?? `S${i + 1}`,
+        homeId,
+        awayId,
+        homePts: homeId ? (focus.home.playerPoints[homeId] ?? null) : null,
+        awayPts: awayId ? (focus.away.playerPoints[awayId] ?? null) : null,
+      });
+    }
+    return rows;
+  }, [focus, data?.startersByTeamId, starterSlotLabels]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="display-title text-2xl text-slate-900">
+          <h2 className="display-title text-3xl text-slate-900">
             Week <span className="text-primary">Matchup</span>
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             {liveActive
               ? "Live scores from shared week stats (refreshes about every minute while this tab is open)."
               : "Official scores update when the scoring cron writes TiDB snaps. Live overlay appears once week-stats snap is published."}
@@ -106,20 +167,7 @@ function NativeMatchupPage() {
             </p>
           ) : null}
         </div>
-        <label className="text-sm">
-          <span className="sr-only">Week</span>
-          <select
-            className="rounded-md border border-border bg-white px-3 py-2 text-sm"
-            value={activeWeek}
-            onChange={(e) => setWeek(Number(e.target.value))}
-          >
-            {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
-              <option key={w} value={w}>
-                Week {w}
-              </option>
-            ))}
-          </select>
-        </label>
+        <FantasyWeekSelect week={activeWeek} onWeekChange={(w) => setWeek(w)} />
       </div>
 
       {isLoading ? (
@@ -130,131 +178,106 @@ function NativeMatchupPage() {
         </p>
       ) : (
         <>
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="grid gap-4 sm:grid-cols-3 sm:items-center">
-              <TeamScore
-                name={focus.home.teamName}
-                points={focus.home.points}
-                mine={focus.home.teamId === myTeamId}
-                align="left"
-                live={liveActive}
-              />
-              <p className="text-center font-display text-sm uppercase tracking-wide text-slate-500">
-                Week {activeWeek}
-                {liveActive ? (
-                  <span className="mt-1 block text-[10px] font-semibold tracking-wider text-accent">
-                    Live
-                  </span>
-                ) : null}
-              </p>
-              <TeamScore
-                name={focus.away.teamName}
-                points={focus.away.points}
-                mine={focus.away.teamId === myTeamId}
-                align="right"
-                live={liveActive}
-              />
-            </div>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <StarterList
-                title={focus.home.teamName}
-                points={focus.home.playerPoints}
-                nameById={nameById}
-              />
-              <StarterList
-                title={focus.away.teamName}
-                points={focus.away.playerPoints}
-                nameById={nameById}
-              />
-            </div>
-          </section>
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+            <FantasyMatchupScoreCard
+              home={nativeMatchupViewToCard(focus).home}
+              away={nativeMatchupViewToCard(focus).away}
+              myTeamId={myTeamId}
+              weekLabel={
+                <span className="font-display text-xs font-bold uppercase tracking-widest text-slate-500">
+                  Week {activeWeek}
+                </span>
+              }
+              status={liveActive ? "live" : null}
+            />
+            <FantasyMatchupWeekList
+              matchups={matchupCards}
+              myTeamId={myTeamId}
+              selectedMatchupId={focusMatchupId}
+              onSelectMatchup={setSelectedMatchupId}
+            />
+          </div>
 
-          {scoredMatchups.length > 1 ? (
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 px-4 py-2">
-                <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900">
-                  All matchups
-                </h3>
-              </div>
-              <ul className="divide-y divide-slate-100">
-                {scoredMatchups.map((m) => (
-                  <li
-                    key={m.matchupId}
-                    className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
-                  >
-                    <span>
-                      {m.home.teamName}{" "}
-                      <span className="font-semibold">{m.home.points.toFixed(1)}</span>
-                    </span>
-                    <span className="text-muted-foreground">vs</span>
-                    <span className="text-right">
-                      <span className="font-semibold">{m.away.points.toFixed(1)}</span>{" "}
-                      {m.away.teamName}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
+          <FantasyBoard title="Starter comparison" bodyClassName="overflow-x-auto">
+            {headToHeadRows.length === 0 ? (
+              <p className="px-4 py-5 text-sm text-muted-foreground">
+                No starter lineups saved for this matchup yet.
+              </p>
+            ) : (
+              <table className="w-full min-w-[32rem] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-4 py-2.5 font-semibold">Home</th>
+                    <th className="px-3 py-2.5 text-center font-semibold">Slot</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">Away</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {headToHeadRows.map((row) => (
+                    <tr key={row.slot} className="border-b border-slate-50 last:border-0">
+                      <td className="px-4 py-2.5">
+                        <StarterCell
+                          playerId={row.homeId}
+                          points={row.homePts}
+                          nameById={nameById}
+                          align="left"
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          {row.slot}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <StarterCell
+                          playerId={row.awayId}
+                          points={row.awayPts}
+                          nameById={nameById}
+                          align="right"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </FantasyBoard>
         </>
       )}
     </div>
   );
 }
 
-function TeamScore({
-  name,
-  points,
-  mine,
-  align,
-  live,
-}: {
-  name: string;
-  points: number;
-  mine: boolean;
-  align: "left" | "right";
-  live?: boolean;
-}) {
-  return (
-    <div className={cn(align === "right" && "sm:text-right")}>
-      <p className={cn("font-medium text-slate-900", mine && "text-primary")}>{name}</p>
-      <p
-        className={cn(
-          "font-display text-3xl font-semibold tracking-wide text-slate-900",
-          live && "text-slate-900",
-        )}
-      >
-        {points.toFixed(1)}
-      </p>
-    </div>
-  );
-}
-
-function StarterList({
-  title,
+function StarterCell({
+  playerId,
   points,
   nameById,
+  align,
 }: {
-  title: string;
-  points: Record<string, number>;
+  playerId: string | null;
+  points: number | null;
   nameById: Map<string, string>;
+  align: "left" | "right";
 }) {
-  const rows = Object.entries(points);
+  if (!playerId) {
+    return (
+      <span
+        className={cn(
+          "block text-muted-foreground",
+          align === "right" && "text-right",
+        )}
+      >
+        —
+      </span>
+    );
+  }
+  const name = nameById.get(playerId) ?? playerId;
+  const pts =
+    points != null && Number.isFinite(points) ? points.toFixed(1) : "—";
   return (
-    <div>
-      <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">{title}</h4>
-      {rows.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">No scored starters yet.</p>
-      ) : (
-        <ul className="mt-2 space-y-1 text-sm">
-          {rows.map(([id, pts]) => (
-            <li key={id} className="flex justify-between gap-2">
-              <span className="truncate">{nameById.get(id) ?? id}</span>
-              <span className="shrink-0 font-medium">{pts.toFixed(1)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className={cn(align === "right" && "text-right")}>
+      <span className="font-medium text-slate-900">{name}</span>
+      <span className="ml-2 font-display italic text-slate-700">{pts}</span>
     </div>
   );
 }

@@ -1,8 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
+import {
+  FantasyBoard,
+  FantasyStandingsTable,
+  type FantasyStandingsRow,
+  fantasyOutlineBtn,
+} from "@/components/native/fantasy";
 import { useAuth } from "@/hooks/useAuth";
-import { getNativeStandings } from "@/lib/native-league.functions";
+import { getNativeLeagueBoard, getNativeStandings } from "@/lib/native-league.functions";
 
 export const Route = createFileRoute("/league/$linkId/standings")({
   ssr: false,
@@ -12,6 +19,14 @@ export const Route = createFileRoute("/league/$linkId/standings")({
 function NativeStandingsPage() {
   const { linkId } = Route.useParams();
   const { user } = useAuth();
+
+  const { data: board } = useQuery({
+    queryKey: ["native-league-board", linkId],
+    enabled: Boolean(user?.id && linkId),
+    staleTime: 60_000,
+    queryFn: () => getNativeLeagueBoard({ data: { linkId } }),
+  });
+
   const { data, isLoading } = useQuery({
     queryKey: ["native-standings", linkId],
     enabled: Boolean(user?.id && linkId),
@@ -19,51 +34,77 @@ function NativeStandingsPage() {
     queryFn: () => getNativeStandings({ data: { linkId } }),
   });
 
+  const playoffTeams =
+    board?.commissioner.playoffTeams ??
+    (board && board.summary.teamCount >= 10 ? 6 : 4);
+
+  const myTeamId = board?.summary.teamId ?? null;
+
+  const rows = useMemo((): FantasyStandingsRow[] => {
+    const avatarById = new Map((board?.teams ?? []).map((t) => [t.id, t.avatarUrl]));
+    const list = [...(data?.standings ?? [])].sort(
+      (a, b) =>
+        (a.rank ?? 0) - (b.rank ?? 0) ||
+        b.wins - a.wins ||
+        b.pointsFor - a.pointsFor ||
+        a.teamId - b.teamId,
+    );
+    return list.map((r) => ({
+      teamId: r.teamId,
+      teamName: r.teamName,
+      wins: r.wins,
+      losses: r.losses,
+      ties: r.ties,
+      pointsFor: r.pointsFor,
+      pointsAgainst: r.pointsAgainst,
+      rank: r.rank,
+      avatarUrl: avatarById.get(r.teamId) ?? null,
+    }));
+  }, [board?.teams, data?.standings]);
+
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="display-title text-2xl text-slate-900">
-          League <span className="text-primary">Standings</span>
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {data ? `Through week ${data.week}` : "Standings update after scoring cron runs."}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="display-title text-2xl text-slate-900">
+            League <span className="text-primary">Standings</span>
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {data
+              ? `Through week ${data.week}`
+              : "Standings update after scoring cron runs."}
+          </p>
+        </div>
+        <Link to="/league/$linkId" params={{ linkId }} className={fantasyOutlineBtn}>
+          Dashboard
+        </Link>
       </div>
 
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading standings…</p>
-      ) : (
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[28rem] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2 font-semibold">Rk</th>
-                  <th className="px-3 py-2 font-semibold">Team</th>
-                  <th className="px-3 py-2 font-semibold">W</th>
-                  <th className="px-3 py-2 font-semibold">L</th>
-                  <th className="px-3 py-2 font-semibold">T</th>
-                  <th className="px-3 py-2 font-semibold">PF</th>
-                  <th className="px-3 py-2 font-semibold">PA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.standings ?? []).map((row) => (
-                  <tr key={row.teamId} className="border-b border-slate-50">
-                    <td className="px-3 py-2 text-slate-500">{row.rank}</td>
-                    <td className="px-3 py-2 font-medium text-slate-900">{row.teamName}</td>
-                    <td className="px-3 py-2">{row.wins}</td>
-                    <td className="px-3 py-2">{row.losses}</td>
-                    <td className="px-3 py-2">{row.ties}</td>
-                    <td className="px-3 py-2">{row.pointsFor.toFixed(1)}</td>
-                    <td className="px-3 py-2">{row.pointsAgainst.toFixed(1)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+      <FantasyBoard
+        title="Season standings"
+        bodyClassName="p-0"
+        action={
+          playoffTeams > 0 ? (
+            <span className="text-xs text-muted-foreground">
+              Top {playoffTeams} make playoffs
+            </span>
+          ) : null
+        }
+      >
+        {isLoading ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">Loading standings…</p>
+        ) : rows.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">
+            No standings yet. Complete the draft to start the season.
+          </p>
+        ) : (
+          <FantasyStandingsTable
+            rows={rows}
+            playoffTeams={playoffTeams}
+            myTeamId={myTeamId}
+          />
+        )}
+      </FantasyBoard>
     </div>
   );
 }

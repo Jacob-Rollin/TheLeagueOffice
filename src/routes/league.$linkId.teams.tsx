@@ -225,9 +225,11 @@ function NativeLeagueTeamsPage() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <Toaster />
-        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">Teams</h2>
+      <Toaster />
+      <div>
+        <h2 className="display-title text-2xl text-slate-900">
+          League <span className="text-primary">Teams</span>
+        </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Rename seats
           {board.canManage
@@ -237,6 +239,8 @@ function NativeLeagueTeamsPage() {
             : ""}
           .
         </p>
+      </div>
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         {board.canManage && allowAi ? (
           <p className="mt-2 text-xs text-muted-foreground">
             AI managers draft by ADP, stream K/DEF on bye via waivers/FA, and set weekly optimized

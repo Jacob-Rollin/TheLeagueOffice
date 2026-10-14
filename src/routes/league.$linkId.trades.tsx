@@ -1,8 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  FantasyBoard,
+  fantasyOutlineBtn,
+  fantasyPrimaryBtn,
+} from "@/components/native/fantasy";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
@@ -19,11 +24,6 @@ export const Route = createFileRoute("/league/$linkId/trades")({
   ssr: false,
   component: NativeTradesPage,
 });
-
-const buttonClass =
-  "rounded-md bg-primary px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-primary-foreground disabled:opacity-60";
-const outlineClass =
-  "rounded-md border border-border bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-800 disabled:opacity-60";
 
 function NativeTradesPage() {
   const { linkId } = Route.useParams();
@@ -55,6 +55,11 @@ function NativeTradesPage() {
     staleTime: 15_000,
     queryFn: () => listNativeTrades({ data: { linkId } }),
   });
+
+  const commissioner = board?.commissioner;
+  const tradeReviewHours = commissioner?.tradeReviewHours ?? data?.tradeReviewHours ?? 24;
+  const tradeVetoMode = commissioner?.tradeVetoMode ?? data?.tradeVetoMode ?? "none";
+  const tradeDeadlineWeek = commissioner?.tradeDeadlineWeek ?? data?.tradeDeadlineWeek ?? null;
 
   const myTeamId = data?.myTeamId ?? null;
   const myRoster = board?.rosters.find((r) => r.teamId === myTeamId);
@@ -135,27 +140,54 @@ function NativeTradesPage() {
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading trades…</p>;
 
+  const trades = data?.trades ?? [];
+
   return (
     <div className="space-y-4">
       <Toaster />
       <div>
-        <h2 className="display-title text-2xl text-slate-900">
-          Trade <span className="text-primary">Desk</span>
-        </h2>
+        <h2 className="display-title text-3xl text-slate-900">Trades</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Review {data?.tradeReviewHours ?? 24}h
-          {data?.tradeVetoMode === "commissioner" ? " · Commissioner veto" : " · No veto"}
-          {data?.tradeDeadlineWeek != null ? ` · Deadline week ${data.tradeDeadlineWeek}` : ""}
+          Propose multi-player deals with league mates. Accepted trades may enter a review window
+          before processing.
         </p>
       </div>
 
+      <FantasyBoard bodyClassName="px-4 py-3">
+        <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Review window
+            </dt>
+            <dd className="font-medium text-slate-900">{tradeReviewHours} hours</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Veto mode
+            </dt>
+            <dd className="font-medium text-slate-900 capitalize">
+              {tradeVetoMode === "commissioner" ? "Commissioner veto" : "No league veto"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Deadline
+            </dt>
+            <dd className="font-medium text-slate-900">
+              {tradeDeadlineWeek != null ? `Week ${tradeDeadlineWeek}` : "No deadline"}
+            </dd>
+          </div>
+        </dl>
+      </FantasyBoard>
+
       {data?.canPropose ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900">Propose trade</h3>
-          <label className="mt-3 block text-sm">
-            <span className="text-muted-foreground">Trade with</span>
+        <FantasyBoard title="Propose trade" bodyClassName="p-4">
+          <label className="block text-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Trade with
+            </span>
             <select
-              className="mt-1 w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+              className="mt-1 w-full max-w-md rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary"
               value={partnerId === "" ? "" : String(partnerId)}
               onChange={(e) => {
                 setPartnerId(e.target.value ? Number(e.target.value) : "");
@@ -172,36 +204,40 @@ function NativeTradesPage() {
                 ))}
             </select>
           </label>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-semibold uppercase text-slate-500">You give</p>
-              <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-700">You give</p>
+              <ul className="mt-2 max-h-52 space-y-1.5 overflow-y-auto">
                 {(myRoster?.playerIds ?? []).map((id) => (
                   <li key={id}>
-                    <label className="flex items-center gap-2 text-sm">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-sm hover:bg-white">
                       <input
                         type="checkbox"
+                        className="rounded border-slate-300"
                         checked={give.includes(id)}
                         onChange={() => toggle(give, id, setGive)}
                       />
-                      {nameById.get(id) ?? id}
+                      <span className="text-slate-900">{nameById.get(id) ?? id}</span>
                     </label>
                   </li>
                 ))}
               </ul>
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase text-slate-500">You receive</p>
-              <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+            <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-700">
+                You receive
+              </p>
+              <ul className="mt-2 max-h-52 space-y-1.5 overflow-y-auto">
                 {(partnerRoster?.playerIds ?? []).map((id) => (
                   <li key={id}>
-                    <label className="flex items-center gap-2 text-sm">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-sm hover:bg-white">
                       <input
                         type="checkbox"
+                        className="rounded border-slate-300"
                         checked={receive.includes(id)}
                         onChange={() => toggle(receive, id, setReceive)}
                       />
-                      {nameById.get(id) ?? id}
+                      <span className="text-slate-900">{nameById.get(id) ?? id}</span>
                     </label>
                   </li>
                 ))}
@@ -217,32 +253,60 @@ function NativeTradesPage() {
           ) : null}
           <button
             type="button"
-            className={`${buttonClass} mt-3`}
+            className={cn(fantasyPrimaryBtn, "mt-4")}
             disabled={!partnerId || !give.length || !receive.length || busy || myOver || theirOver}
             onClick={() => void propose()}
           >
             Propose Trade
           </button>
-        </section>
+        </FantasyBoard>
       ) : (
-        <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-          Trades unlock after the draft (and before the deadline) once you have a team seat.
-        </p>
+        <FantasyBoard bodyClassName="px-4 py-5">
+          <p className="text-sm text-slate-600">
+            Trades unlock after the draft (and before the deadline) once you have a team seat.
+          </p>
+          <Link
+            to="/league/$linkId/players"
+            params={{ linkId }}
+            className={cn(fantasyOutlineBtn, "mt-4 inline-flex")}
+          >
+            Browse Players
+          </Link>
+        </FantasyBoard>
       )}
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-2">
-          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900">Trade activity</h3>
-        </div>
-        {(data?.trades ?? []).length === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">No trades yet.</p>
+      <FantasyBoard title="Trade activity" bodyClassName="divide-y divide-slate-100">
+        {trades.length === 0 ? (
+          <div className="px-4 py-10 text-center">
+            <p className="text-sm text-muted-foreground">No trades yet.</p>
+            {data?.canPropose ? (
+              <p className="mt-2 text-sm text-slate-600">
+                Use the form above to send your first offer.
+              </p>
+            ) : (
+              <Link
+                to="/league/$linkId/players"
+                params={{ linkId }}
+                className={cn(fantasyOutlineBtn, "mt-4 inline-flex")}
+              >
+                Open Players
+              </Link>
+            )}
+          </div>
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {(data?.trades ?? []).map((t) => {
+          <ul>
+            {trades.map((t) => {
               const giveLeg = t.legs.find((l) => l.teamId === t.proposerTeamId);
               const getLeg = t.legs.find((l) => l.teamId === t.acceptorTeamId);
+              const proposerGives = (giveLeg?.playerIds ?? [])
+                .map((id) => nameById.get(id) ?? id)
+                .join(", ");
+              const acceptorGives = (getLeg?.playerIds ?? [])
+                .map((id) => nameById.get(id) ?? id)
+                .join(", ");
+
               return (
-                <li key={t.id} className="space-y-2 px-4 py-3 text-sm">
+                <li key={t.id} className="space-y-3 px-4 py-4 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium text-slate-900">
                       {t.proposerName ?? "Team"} ↔ {t.acceptorName ?? "Team"}
@@ -260,29 +324,58 @@ function NativeTradesPage() {
                       {t.status.replace("_", " ")}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Gives: {(giveLeg?.playerIds ?? []).map((id) => nameById.get(id) ?? id).join(", ") || "—"}
-                    <br />
-                    Gets: {(getLeg?.playerIds ?? []).map((id) => nameById.get(id) ?? id).join(", ") || "—"}
-                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-md border border-slate-100 bg-slate-50/60 px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        {t.proposerName ?? "Proposer"} gives
+                      </p>
+                      <p className="mt-1 text-slate-900">{proposerGives || "—"}</p>
+                    </div>
+                    <div className="rounded-md border border-slate-100 bg-slate-50/60 px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        {t.acceptorName ?? "Acceptor"} gives
+                      </p>
+                      <p className="mt-1 text-slate-900">{acceptorGives || "—"}</p>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {t.status === "proposed" && t.acceptorTeamId === myTeamId ? (
                       <>
-                        <button type="button" className={buttonClass} disabled={busy} onClick={() => void respond(t.id, "accept")}>
+                        <button
+                          type="button"
+                          className={fantasyPrimaryBtn}
+                          disabled={busy}
+                          onClick={() => void respond(t.id, "accept")}
+                        >
                           Accept
                         </button>
-                        <button type="button" className={outlineClass} disabled={busy} onClick={() => void respond(t.id, "reject")}>
+                        <button
+                          type="button"
+                          className={fantasyOutlineBtn}
+                          disabled={busy}
+                          onClick={() => void respond(t.id, "reject")}
+                        >
                           Reject
                         </button>
                       </>
                     ) : null}
                     {t.status === "proposed" && t.proposerTeamId === myTeamId ? (
-                      <button type="button" className={outlineClass} disabled={busy} onClick={() => void respond(t.id, "cancel")}>
+                      <button
+                        type="button"
+                        className={fantasyOutlineBtn}
+                        disabled={busy}
+                        onClick={() => void respond(t.id, "cancel")}
+                      >
                         Cancel
                       </button>
                     ) : null}
                     {(t.status === "veto_window" || t.status === "proposed") && data?.canVeto ? (
-                      <button type="button" className={outlineClass} disabled={busy} onClick={() => void respond(t.id, "veto")}>
+                      <button
+                        type="button"
+                        className={fantasyOutlineBtn}
+                        disabled={busy}
+                        onClick={() => void respond(t.id, "veto")}
+                      >
                         Veto
                       </button>
                     ) : null}
@@ -292,7 +385,7 @@ function NativeTradesPage() {
             })}
           </ul>
         )}
-      </section>
+      </FantasyBoard>
     </div>
   );
 }

@@ -1,7 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
+import {
+  FantasyActivityList,
+  type FantasyActivityItem,
+  FantasyPosChip,
+  FantasyPosChipRow,
+} from "@/components/native/fantasy";
 import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { listNativeTransactions } from "@/lib/native-league.functions";
@@ -12,9 +18,31 @@ export const Route = createFileRoute("/league/$linkId/transactions")({
   component: NativeTransactionsPage,
 });
 
+type TxFilter = "all" | "adds" | "waivers" | "trades" | "ir";
+
+const FILTER_CHIPS: { id: TxFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "adds", label: "Adds" },
+  { id: "waivers", label: "Waivers" },
+  { id: "trades", label: "Trades" },
+  { id: "ir", label: "IR" },
+];
+
+function matchesTxFilter(tx: FantasyActivityItem, filter: TxFilter): boolean {
+  if (filter === "all") return true;
+  const t = tx.type.toLowerCase();
+  if (filter === "adds") return t === "add" || t === "add_drop" || t === "drop";
+  if (filter === "waivers") return t === "waiver_won" || t === "waiver";
+  if (filter === "trades") return t.startsWith("trade");
+  if (filter === "ir") return t.startsWith("ir_");
+  return true;
+}
+
 function NativeTransactionsPage() {
   const { linkId } = Route.useParams();
   const { user } = useAuth();
+  const [filter, setFilter] = useState<TxFilter>("all");
+
   const cache = useSleeperPlayers();
   const fallback = useQuery({
     queryKey: ["players-catalog"],
@@ -29,12 +57,20 @@ function NativeTransactionsPage() {
     return map;
   }, [players]);
 
+  const resolveName = (playerId: string | null) =>
+    playerId ? (nameById.get(playerId) ?? playerId) : null;
+
   const { data: rows, isLoading } = useQuery({
     queryKey: ["native-transactions", linkId],
     enabled: Boolean(user?.id && linkId),
     staleTime: 15_000,
-    queryFn: () => listNativeTransactions({ data: { linkId, limit: 50 } }),
+    queryFn: () => listNativeTransactions({ data: { linkId, limit: 80 } }),
   });
+
+  const filtered = useMemo(() => {
+    const list = (rows ?? []) as FantasyActivityItem[];
+    return list.filter((tx) => matchesTxFilter(tx, filter));
+  }, [rows, filter]);
 
   return (
     <section className="space-y-4">
@@ -47,53 +83,30 @@ function NativeTransactionsPage() {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {isLoading ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">Loading transactions…</p>
-        ) : !rows?.length ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">No transactions yet.</p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {rows.map((tx) => {
-              const addName = tx.addPlayerId
-                ? (nameById.get(tx.addPlayerId) ?? tx.addPlayerId)
-                : null;
-              const dropName = tx.dropPlayerId
-                ? (nameById.get(tx.dropPlayerId) ?? tx.dropPlayerId)
-                : null;
-              const label =
-                tx.type === "add_drop"
-                  ? `Add ${addName ?? "player"} / Drop ${dropName ?? "player"}`
-                  : tx.type === "add"
-                    ? `Add ${addName ?? "player"}`
-                    : tx.type === "waiver_won"
-                      ? `Waiver: +${addName ?? "player"}${dropName ? ` / −${dropName}` : ""}`
-                      : tx.type === "trade"
-                        ? "Trade completed"
-                        : tx.type === "trade_vetoed"
-                          ? "Trade vetoed"
-                          : tx.type === "ir_force_drop"
-                            ? `IR drop ${dropName ?? addName ?? "player"}`
-                            : tx.type === "ir_force_activate"
-                              ? `IR activate ${addName ?? "player"}`
-                              : tx.type;
-              return (
-                <li key={tx.id} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-3">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {tx.teamName ?? "Team"} · {tx.status}
-                    </p>
-                  </div>
-                  <time className="text-xs text-muted-foreground">
-                    {new Date(tx.createdAt).toLocaleString()}
-                  </time>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+      <FantasyPosChipRow>
+        {FILTER_CHIPS.map((chip) => (
+          <FantasyPosChip
+            key={chip.id}
+            label={chip.label}
+            active={filter === chip.id}
+            onClick={() => setFilter(chip.id)}
+          />
+        ))}
+      </FantasyPosChipRow>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading transactions…</p>
+      ) : (
+        <FantasyActivityList
+          items={filtered}
+          resolveName={resolveName}
+          emptyMessage={
+            filter === "all"
+              ? "No transactions yet."
+              : `No ${FILTER_CHIPS.find((c) => c.id === filter)?.label?.toLowerCase() ?? "matching"} transactions yet.`
+          }
+        />
+      )}
     </section>
   );
 }

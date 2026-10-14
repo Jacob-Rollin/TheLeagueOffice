@@ -4,11 +4,22 @@ import { useDeferredValue, useMemo, useRef, useState, startTransition } from "re
 import { toast } from "sonner";
 
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
-import { PLAYER_LIST_HEADER_ROW } from "@/components/research/SortHeader";
+import { useNativeRosterActions } from "@/components/mobile/league/nativeRosterActions";
+import {
+  FantasyBoard,
+  FantasyPosChip,
+  FantasyPosChipRow,
+  fantasyOutlineBtn,
+} from "@/components/native/fantasy";
 import { Toaster } from "@/components/ui/sonner";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import { getNativeLeagueBoard, submitNativeFreeAgentMove } from "@/lib/native-league.functions";
+import {
+  getNativeLeagueBoard,
+  submitNativeFreeAgentDrop,
+  submitNativeFreeAgentMove,
+} from "@/lib/native-league.functions";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
 import { cn } from "@/lib/utils";
@@ -21,17 +32,24 @@ export const Route = createFileRoute("/league/$linkId/players")({
 const POS_FILTERS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
 type PoolFilter = "available" | "rostered" | "mine" | "all";
 
-const outlineClass =
-  "rounded-md border border-border bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-800 disabled:opacity-60";
-const buttonClass =
-  "rounded-md bg-primary px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-primary-foreground disabled:opacity-60";
+const addBtnClass =
+  "rounded-md border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white transition-colors hover:bg-emerald-700 disabled:opacity-60";
+const dropBtnClass =
+  "rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-red-700 transition-colors hover:border-red-200 hover:bg-red-50 disabled:opacity-60";
+const tradeBtnClass =
+  "rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-blue-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60";
 
 function NativeLeaguePlayersPage() {
   const { linkId } = Route.useParams();
   const { user } = useAuth();
+  const { activeLeague } = useActiveLeague();
   const queryClient = useQueryClient();
   const modalRef = useRef<PlayerModalHandle>(null);
   const cache = useSleeperPlayers();
+  const rosterActions = useNativeRosterActions();
+  const hookLinked =
+    (activeLeague?.platform ?? "").toLowerCase() === "native" && activeLeague?.id === linkId;
+
   const fallback = useQuery({
     queryKey: ["players-catalog"],
     queryFn: () => loadPlayersCatalog(),
@@ -52,6 +70,7 @@ function NativeLeaguePlayersPage() {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [pendingAdd, setPendingAdd] = useState<Player | null>(null);
+  const [pendingDrop, setPendingDrop] = useState<Player | null>(null);
   const [dropId, setDropId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -64,6 +83,7 @@ function NativeLeaguePlayersPage() {
     ? Math.max(0, capacity - (myRoster.activePlayerIds?.length ?? myRoster.playerIds.length))
     : 0;
   const canAddFa = Boolean(draftDone && myTeamId != null && myRoster);
+  const canMutate = canAddFa;
 
   const nameById = useMemo(() => {
     const map = new Map<string, Player>();
@@ -142,8 +162,33 @@ function NativeLeaguePlayersPage() {
     }
   };
 
+  const runDrop = async (playerId: string) => {
+    if (!myRoster || submitting) return;
+    setSubmitting(true);
+    try {
+      const result = await submitNativeFreeAgentDrop({
+        data: { linkId, dropPlayerId: playerId, rosterVersion: myRoster.version },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Player dropped.");
+      setPendingDrop(null);
+      await refreshBoard();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not drop player.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const onAddClick = (player: Player) => {
     if (!canAddFa) return;
+    if (hookLinked && rosterActions.canMutateNative) {
+      rosterActions.requestAdd(player);
+      return;
+    }
     if (openSlots > 0) {
       void runAdd(player.id, null);
       return;
@@ -152,35 +197,46 @@ function NativeLeaguePlayersPage() {
     setDropId(dropCandidates[0]?.id ?? "");
   };
 
+  const onDropClick = (player: Player) => {
+    if (!canMutate) return;
+    if (hookLinked && rosterActions.canMutateNative) {
+      rosterActions.requestDrop(player);
+      return;
+    }
+    setPendingDrop(player);
+  };
+
+  const onTradeClick = (player: Player) => {
+    if (!hookLinked || !rosterActions.canMutateNative) return;
+    rosterActions.requestTradeFor(player);
+  };
+
   if (isLoading || !board) {
     return <p className="text-sm text-muted-foreground">Loading players…</p>;
   }
 
   const ownedCount = Object.keys(ownership).length;
+  const busy = submitting || rosterActions.busy;
 
   return (
     <div className="space-y-4">
       <Toaster />
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="display-title text-2xl text-slate-900">
-            League <span className="text-primary">Players</span>
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Ownership from your league (TiDB). Names and NFL context from the shared player catalog.
-            {!draftDone
-              ? " Draft is not complete — available list mirrors undrafted players."
-              : ` ${ownedCount} rostered.`}
-            {canAddFa
-              ? openSlots > 0
-                ? ` You have ${openSlots} open roster slot${openSlots === 1 ? "" : "s"}.`
-                : " Roster full — adds require a drop."
-              : ""}
-          </p>
-        </div>
+      <div>
+        <h2 className="display-title text-3xl text-slate-900">League Players</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Ownership from your league roster. Names and NFL context from the shared player catalog.
+          {!draftDone
+            ? " Draft is not complete — available list mirrors undrafted players."
+            : ` ${ownedCount} rostered.`}
+          {canAddFa
+            ? openSlots > 0
+              ? ` You have ${openSlots} open roster slot${openSlots === 1 ? "" : "s"}.`
+              : " Roster full — adds require a drop."
+            : ""}
+        </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <FantasyPosChipRow>
         {(
           [
             ["available", "Available"],
@@ -189,116 +245,130 @@ function NativeLeaguePlayersPage() {
             ["all", "All"],
           ] as const
         ).map(([key, label]) => (
-          <button
+          <FantasyPosChip
             key={key}
-            type="button"
+            label={label}
+            active={pool === key}
             onClick={() => startTransition(() => setPool(key))}
-            className={cn(
-              "rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide",
-              pool === key
-                ? "border-blue-600 bg-blue-600 text-white"
-                : "border-slate-200 bg-white text-blue-700",
-            )}
-          >
-            {label}
-          </button>
+          />
         ))}
-      </div>
+      </FantasyPosChipRow>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search name or team"
           className="w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary sm:w-64"
         />
-        <div className="flex flex-wrap gap-1">
+        <FantasyPosChipRow>
           {POS_FILTERS.map((p) => (
-            <button
+            <FantasyPosChip
               key={p}
-              type="button"
+              label={p === "DEF" ? "DST" : p}
+              active={pos === p}
               onClick={() => startTransition(() => setPos(p))}
-              className={cn(
-                "rounded-md border px-2.5 py-1 text-xs font-semibold",
-                pos === p
-                  ? "border-blue-600 bg-blue-600 text-white"
-                  : "border-slate-200 bg-white text-blue-700",
-              )}
-            >
-              {p === "DEF" ? "DST" : p}
-            </button>
+            />
           ))}
-        </div>
+        </FantasyPosChipRow>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
-            <thead>
-              <tr className={PLAYER_LIST_HEADER_ROW}>
-                <th className="px-3 py-2 font-semibold text-slate-600">Player</th>
-                <th className="px-3 py-2 font-semibold text-slate-600">Pos</th>
-                <th className="px-3 py-2 font-semibold text-slate-600">NFL</th>
-                <th className="px-3 py-2 font-semibold text-slate-600">Owner</th>
-                <th className="px-3 py-2 font-semibold text-slate-600">Action</th>
+      <FantasyBoard bodyClassName="overflow-x-auto">
+        <table className="w-full min-w-[44rem] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
+              <th className="sticky left-0 z-20 bg-white px-3 py-2 font-semibold">Player</th>
+              <th className="px-3 py-2 font-semibold">Team</th>
+              <th className="px-3 py-2 font-semibold">Pos</th>
+              <th className="px-3 py-2 font-semibold">Owner</th>
+              <th className="px-3 py-2 font-semibold">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  No players match these filters.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
-                    No players match these filters.
-                  </td>
-                </tr>
-              ) : (
-                rows.map(({ player, ownerTeamId }) => {
-                  const isFa = ownerTeamId == null;
-                  return (
-                    <tr key={player.id} className="border-t border-slate-100 hover:bg-slate-50/80">
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() => modalRef.current?.open(player.id)}
-                          className="text-left font-medium text-slate-900 hover:text-primary hover:underline"
-                        >
-                          {player.name}
-                        </button>
-                      </td>
-                      <td className="px-3 py-2 text-slate-700">
-                        {player.pos === "DEF" ? "DST" : player.pos}
-                      </td>
-                      <td className="px-3 py-2 text-slate-700">{player.team || "—"}</td>
-                      <td className="px-3 py-2 text-slate-600">
-                        {isFa
-                          ? "Free agent"
-                          : myTeamId != null && ownerTeamId === myTeamId
-                            ? "My team"
-                            : (teamNameById.get(ownerTeamId) ?? `Team ${ownerTeamId}`)}
-                      </td>
-                      <td className="px-3 py-2">
+            ) : (
+              rows.map(({ player, ownerTeamId }) => {
+                const isFa = ownerTeamId == null;
+                const isMine = myTeamId != null && ownerTeamId === myTeamId;
+                const isOther = ownerTeamId != null && !isMine;
+                const ownerLabel = isFa
+                  ? "Free agent"
+                  : isMine
+                    ? "My team"
+                    : (teamNameById.get(ownerTeamId) ?? `Team ${ownerTeamId}`);
+
+                return (
+                  <tr key={player.id} className="border-t border-slate-100 hover:bg-slate-50/80">
+                    <td
+                      className={cn(
+                        "sticky left-0 z-10 bg-white px-3 py-2",
+                        "hover:bg-slate-50/80",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => modalRef.current?.open(player.id)}
+                        className="text-left font-medium text-slate-900 hover:text-primary hover:underline"
+                      >
+                        {player.name}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">{player.team || "—"}</td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {player.pos === "DEF" ? "DST" : player.pos}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">{ownerLabel}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1.5">
                         {canAddFa && isFa ? (
                           <button
                             type="button"
-                            className={buttonClass}
-                            disabled={submitting}
+                            className={addBtnClass}
+                            disabled={busy}
                             onClick={() => onAddClick(player)}
                           >
                             {openSlots > 0 ? "Add" : "Add / Drop"}
                           </button>
-                        ) : (
+                        ) : null}
+                        {canMutate && isMine ? (
+                          <button
+                            type="button"
+                            className={dropBtnClass}
+                            disabled={busy}
+                            onClick={() => onDropClick(player)}
+                          >
+                            Drop
+                          </button>
+                        ) : null}
+                        {hookLinked && rosterActions.canMutateNative && isOther ? (
+                          <button
+                            type="button"
+                            className={tradeBtnClass}
+                            disabled={busy}
+                            onClick={() => onTradeClick(player)}
+                          >
+                            Trade
+                          </button>
+                        ) : null}
+                        {!((canAddFa && isFa) || (canMutate && isMine) || (hookLinked && rosterActions.canMutateNative && isOther)) ? (
                           <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </FantasyBoard>
 
-      {pendingAdd ? (
+      {pendingAdd && !hookLinked ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div
             role="dialog"
@@ -330,8 +400,8 @@ function NativeLeaguePlayersPage() {
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
-                className={outlineClass}
-                disabled={submitting}
+                className={fantasyOutlineBtn}
+                disabled={busy}
                 onClick={() => {
                   setPendingAdd(null);
                   setDropId("");
@@ -341,16 +411,55 @@ function NativeLeaguePlayersPage() {
               </button>
               <button
                 type="button"
-                className={buttonClass}
-                disabled={submitting || !dropId}
+                className={addBtnClass}
+                disabled={busy || !dropId}
                 onClick={() => void runAdd(pendingAdd.id, dropId)}
               >
-                {submitting ? "Submitting…" : "Confirm Add / Drop"}
+                {busy ? "Submitting…" : "Confirm Add / Drop"}
               </button>
             </div>
           </div>
         </div>
       ) : null}
+
+      {pendingDrop && !hookLinked ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm drop"
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-lg"
+          >
+            <h3 className="display-title text-xl text-slate-900">
+              Confirm <span className="text-primary">Drop</span>
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Send <span className="font-medium text-slate-900">{pendingDrop.name}</span> to free
+              agency? You have {openSlots} open slot{openSlots === 1 ? "" : "s"} of {capacity}.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className={fantasyOutlineBtn}
+                disabled={busy}
+                onClick={() => setPendingDrop(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={dropBtnClass}
+                disabled={busy}
+                onClick={() => void runDrop(pendingDrop.id)}
+              >
+                {busy ? "Dropping…" : "Confirm Drop"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {hookLinked ? rosterActions.modals : null}
 
       <PlayerModalHost ref={modalRef} />
     </div>

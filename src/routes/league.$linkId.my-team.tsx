@@ -4,6 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import {
+  FantasyBoard,
+  FantasySectionTitle,
+  fantasyOutlineBtn,
+  fantasyPrimaryBtn,
+} from "@/components/native/fantasy";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
@@ -17,7 +23,9 @@ import {
   type NativeLineupSlotView,
 } from "@/lib/native-league-lineup";
 import {
+  getNativeLeagueBoard,
   getNativeLineup,
+  getNativeStandings,
   resolveNativeIrViolation,
   saveNativeLineup,
 } from "@/lib/native-league.functions";
@@ -30,12 +38,15 @@ export const Route = createFileRoute("/league/$linkId/my-team")({
   component: NativeMyTeamPage,
 });
 
-const buttonClass =
-  "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
-const outlineClass =
-  "rounded-md border border-border bg-white px-4 py-2 font-display text-sm uppercase tracking-wide text-slate-800 disabled:opacity-60";
 const dangerOutlineClass =
   "rounded-md border border-red-300 bg-white px-3 py-1.5 font-display text-xs uppercase tracking-wide text-red-700 disabled:opacity-60";
+
+const QUICK_LINKS = [
+  { label: "Matchup", to: "/league/$linkId/matchup" as const },
+  { label: "Players", to: "/league/$linkId/players" as const },
+  { label: "Waivers", to: "/league/$linkId/waivers" as const },
+  { label: "Trades", to: "/league/$linkId/trades" as const },
+];
 
 function NativeMyTeamPage() {
   const { linkId } = Route.useParams();
@@ -70,6 +81,20 @@ function NativeMyTeamPage() {
     for (const p of players) map.set(p.id, { name: p.name, pos: p.pos, team: p.team });
     return map;
   }, [players]);
+
+  const { data: board } = useQuery({
+    queryKey: ["native-league-board", linkId],
+    enabled: Boolean(user?.id && linkId),
+    staleTime: 60_000,
+    queryFn: () => getNativeLeagueBoard({ data: { linkId } }),
+  });
+
+  const { data: standings } = useQuery({
+    queryKey: ["native-standings", linkId],
+    enabled: Boolean(user?.id && linkId),
+    staleTime: 30_000,
+    queryFn: () => getNativeStandings({ data: { linkId } }),
+  });
 
   const { data: lineup, isLoading } = useQuery({
     queryKey: ["native-lineup", linkId],
@@ -121,7 +146,6 @@ function NativeMyTeamPage() {
     setDropPick("");
   }, [lineup, posById, injuryById, allowedStatuses]);
 
-  // Source of truth is reserve_ir (irPlayerIds), not just current lineup slot placement.
   const ineligibleIr = useMemo(() => {
     const ids = lineup?.irPlayerIds ?? [];
     return ids
@@ -136,6 +160,13 @@ function NativeMyTeamPage() {
     (lineup?.activePlayerIds.length ?? 0) >= (lineup?.rosterCapacity ?? 0);
 
   const selectedIndex = views.findIndex((v) => `${v.key}:${v.index}` === selectedKey);
+
+  const myStanding = useMemo(() => {
+    if (!standings?.standings?.length) return null;
+    const teamId = lineup?.teamId ?? board?.summary.teamId;
+    if (teamId == null) return null;
+    return standings.standings.find((r) => r.teamId === teamId) ?? null;
+  }, [standings?.standings, lineup?.teamId, board?.summary.teamId]);
 
   const onSlotClick = (row: NativeLineupSlotView) => {
     if (!lineup?.canEdit || hasIrViolations) return;
@@ -252,7 +283,11 @@ function NativeMyTeamPage() {
           No team seat is linked to your account in this league. Claim a seat from Teams or join with
           an invite code.
         </p>
-        <Link to="/league/$linkId/teams" params={{ linkId }} className={`${outlineClass} mt-4 inline-flex`}>
+        <Link
+          to="/league/$linkId/teams"
+          params={{ linkId }}
+          className={`${fantasyOutlineBtn} mt-4 inline-flex`}
+        >
           Open Teams
         </Link>
       </div>
@@ -266,16 +301,21 @@ function NativeMyTeamPage() {
     .map((v) => v.playerId!)
     .filter((id, i, arr) => arr.indexOf(id) === i);
 
+  const recordLabel =
+    myStanding != null
+      ? `${myStanding.wins}-${myStanding.losses}${myStanding.ties ? `-${myStanding.ties}` : ""}`
+      : null;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <Toaster />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="display-title text-2xl text-slate-900">
+          <h2 className="display-title text-3xl text-slate-900">
             My <span className="text-primary">Team</span>
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {lineup.teamName} · Week {lineup.week}
+            Week {lineup.week ?? board?.currentWeek ?? "—"}
             {!lineup.draftComplete
               ? " · Lineups unlock after the draft is complete"
               : hasIrViolations
@@ -285,23 +325,45 @@ function NativeMyTeamPage() {
                   : ""}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={buttonClass}
-            disabled={!lineup.canEdit || saving || !dirty || hasIrViolations}
-            onClick={() => void save()}
-          >
-            {saving ? "Saving…" : "Save Lineup"}
-          </button>
-        </div>
+        <button
+          type="button"
+          className={fantasyPrimaryBtn}
+          disabled={!lineup.canEdit || saving || !dirty || hasIrViolations}
+          onClick={() => void save()}
+        >
+          {saving ? "Saving…" : "Save Lineup"}
+        </button>
       </div>
+
+      <nav className="flex flex-wrap gap-2" aria-label="Team quick links">
+        {QUICK_LINKS.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            params={{ linkId }}
+            className={fantasyOutlineBtn}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+
+      <section className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Your roster</p>
+        <p className="mt-1 font-display text-2xl font-semibold uppercase tracking-wide text-slate-900">
+          {lineup.teamName}
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {recordLabel ? `Record ${recordLabel}` : "Record updates after scored weeks"}
+          {myStanding != null ? ` · ${myStanding.pointsFor.toFixed(1)} PF` : ""}
+        </p>
+      </section>
 
       {!lineup.draftComplete ? (
         <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
           Finish the draft first, then set your weekly lineup here.
           <div className="mt-3">
-            <Link to="/league/$linkId/draft" params={{ linkId }} className={outlineClass}>
+            <Link to="/league/$linkId/draft" params={{ linkId }} className={fantasyOutlineBtn}>
               Open Draft
             </Link>
           </div>
@@ -310,9 +372,7 @@ function NativeMyTeamPage() {
         <>
           {hasIrViolations ? (
             <section className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-red-800">
-                IR action required
-              </h3>
+              <FantasySectionTitle className="text-red-800">IR action required</FantasySectionTitle>
               <p className="mt-1 text-sm text-red-900/80">
                 These players no longer match the commissioner IR tags (
                 {allowedStatuses.join(", ")}). Drop them, or move them off IR
@@ -354,7 +414,7 @@ function NativeMyTeamPage() {
                           </button>
                           <button
                             type="button"
-                            className={outlineClass}
+                            className={fantasyOutlineBtn}
                             disabled={busy || !!resolvingId}
                             onClick={() => {
                               if (activeFull) {
@@ -376,7 +436,7 @@ function NativeMyTeamPage() {
                             activated.
                           </p>
                           <select
-                            className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+                            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                             value={dropPick}
                             onChange={(e) => setDropPick(e.target.value)}
                           >
@@ -394,7 +454,7 @@ function NativeMyTeamPage() {
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              className={buttonClass}
+                              className={fantasyPrimaryBtn}
                               disabled={!dropPick || busy}
                               onClick={() => void resolveIr(row.playerId, "activate", dropPick)}
                             >
@@ -402,7 +462,7 @@ function NativeMyTeamPage() {
                             </button>
                             <button
                               type="button"
-                              className={outlineClass}
+                              className={fantasyOutlineBtn}
                               disabled={busy}
                               onClick={() => {
                                 setActivateDropFor(null);
@@ -424,7 +484,7 @@ function NativeMyTeamPage() {
           <p className="text-sm text-muted-foreground">
             {hasIrViolations
               ? "Resolve IR violations above before editing or saving your lineup."
-              : "Tap a player, then tap another slot to swap. Empty slots can receive a selected player. Game-time locks ship with scoring."}
+              : "Click a player, then click another slot to swap. Empty slots can receive a selected player. Game-time locks ship with scoring."}
           </p>
 
           <LineupSection
@@ -480,25 +540,24 @@ function LineupSection({
 }) {
   if (rows.length === 0) return null;
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 px-4 py-2">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900">{title}</h3>
-      </div>
-      <ul className="divide-y divide-slate-100">
+    <FantasyBoard title={title} bodyClassName="divide-y divide-slate-100">
+      <ul>
         {rows.map((row) => {
           const key = `${row.key}:${row.index}`;
           const meta = row.playerId ? nameById.get(row.playerId) : null;
           const selected = selectedKey === key;
           const violated = Boolean(row.playerId && ineligibleIds.has(row.playerId));
           const injury = row.playerId ? injuryById[row.playerId] : null;
+          const posBadge = row.label;
           return (
             <li key={key}>
               <div
                 className={cn(
-                  "flex items-center gap-3 px-4 py-2.5",
-                  selected && "bg-blue-50",
-                  violated && "bg-red-50",
-                  canEdit && "cursor-pointer hover:bg-slate-50",
+                  "flex items-center gap-3 border-l-4 border-transparent px-4 py-3",
+                  selected && "border-primary bg-primary/5",
+                  !selected && violated && "border-red-400 bg-red-50",
+                  !selected && !violated && "border-slate-200",
+                  canEdit && !selected && "cursor-pointer hover:bg-slate-50",
                 )}
                 onClick={() => onSlotClick(row)}
                 onKeyDown={(e) => {
@@ -510,8 +569,15 @@ function LineupSection({
                 role={canEdit ? "button" : undefined}
                 tabIndex={canEdit ? 0 : undefined}
               >
-                <span className="w-14 shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {row.label}
+                <span
+                  className={cn(
+                    "flex h-8 w-12 shrink-0 items-center justify-center rounded-md border text-xs font-bold uppercase tracking-wide",
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-slate-200 bg-slate-50 text-slate-600",
+                  )}
+                >
+                  {posBadge}
                 </span>
                 {row.playerId && meta ? (
                   <button
@@ -532,13 +598,13 @@ function LineupSection({
                     </span>
                   </button>
                 ) : (
-                  <span className="flex-1 text-sm text-muted-foreground">Empty</span>
+                  <span className="flex-1 text-sm text-muted-foreground">Empty slot</span>
                 )}
               </div>
             </li>
           );
         })}
       </ul>
-    </section>
+    </FantasyBoard>
   );
 }

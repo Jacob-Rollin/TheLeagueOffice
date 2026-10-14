@@ -3,6 +3,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  FantasyBoard,
+  FantasyPosChip,
+  FantasyPosChipRow,
+  fantasyOutlineBtn,
+  fantasyPrimaryBtn,
+} from "@/components/native/fantasy";
 import { Toaster } from "@/components/ui/sonner";
 import {
   AlertDialog,
@@ -33,11 +40,6 @@ export const Route = createFileRoute("/league/$linkId/draft")({
   ssr: false,
   component: NativeLeagueDraftPage,
 });
-
-const buttonClass =
-  "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
-const outlineClass =
-  "rounded-md border border-border bg-white px-4 py-2 font-display text-sm uppercase tracking-wide text-slate-800 disabled:opacity-60";
 
 const POS_FILTERS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
 
@@ -209,54 +211,63 @@ function NativeLeagueDraftPage() {
   return (
     <div className="space-y-4">
       <Toaster />
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-900">
-              {done ? "Draft Complete" : "Offline Draft Entry"}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {done
-                ? "Rosters and the regular-season schedule are locked in."
-                : liveDraftDeferred
-                  ? "Live snake clock comes later — enter picks here from your external draft (same offline board)."
-                  : "Assign players to teams as you draft offline. Undo last pick anytime before you complete."}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {picks.length}/{totalPicks} picks · {board.picksPerTeam} per team
-            </p>
-          </div>
-          {!done && board.canManage ? (
+      <div>
+        <h2 className="display-title text-2xl text-slate-900">
+          League <span className="text-primary">Draft</span>
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {picks.length}/{totalPicks} picks · {board.picksPerTeam} per team
+        </p>
+      </div>
+
+      <FantasyBoard
+        title={done ? "Draft Complete" : "Offline Draft Entry"}
+        action={
+          !done && board.canManage ? (
             <div className="flex flex-wrap gap-2">
               {board.commissioner.allowAiTeams && board.teams.some((t) => t.isAi) ? (
                 <button
                   type="button"
-                  className={outlineClass}
+                  className={fantasyOutlineBtn}
                   disabled={busy}
                   onClick={() => void runAiPicks()}
                 >
                   Run AI Picks
                 </button>
               ) : null}
-              <button type="button" className={outlineClass} disabled={busy || picks.length === 0} onClick={() => void undo()}>
+              <button
+                type="button"
+                className={fantasyOutlineBtn}
+                disabled={busy || picks.length === 0}
+                onClick={() => void undo()}
+              >
                 Undo Last
               </button>
               <button
                 type="button"
-                className={buttonClass}
+                className={fantasyPrimaryBtn}
                 disabled={busy || !canComplete}
                 onClick={() => setConfirmComplete(true)}
               >
                 Complete Draft
               </button>
             </div>
-          ) : null}
-        </div>
-      </section>
+          ) : null
+        }
+        bodyClassName="px-4 py-4"
+      >
+        <p className="text-sm text-muted-foreground">
+          {done
+            ? "Rosters and the regular-season schedule are locked in."
+            : liveDraftDeferred
+              ? "Live snake clock comes later — enter picks here from your external draft (same offline board)."
+              : "Assign players to teams as you draft offline. Undo last pick anytime before you complete."}
+        </p>
+      </FantasyBoard>
 
       {!done && canAssign ? (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <FantasyBoard title="Available Players" bodyClassName="p-5">
             <div className="flex flex-wrap items-end gap-3">
               <label className="block min-w-[12rem] flex-1 text-sm font-medium text-slate-800">
                 Assign to team
@@ -282,23 +293,16 @@ function NativeLeagueDraftPage() {
                 />
               </label>
             </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
+            <FantasyPosChipRow className="mt-3">
               {POS_FILTERS.map((p) => (
-                <button
+                <FantasyPosChip
                   key={p}
-                  type="button"
+                  label={p === "DEF" ? "DST" : p}
+                  active={pos === p}
                   onClick={() => setPos(p)}
-                  className={cn(
-                    "rounded-md border px-2.5 py-1 text-xs font-semibold",
-                    pos === p
-                      ? "border-blue-600 bg-blue-600 text-white"
-                      : "border-slate-200 bg-white text-blue-700",
-                  )}
-                >
-                  {p === "DEF" ? "DST" : p}
-                </button>
+                />
               ))}
-            </div>
+            </FantasyPosChipRow>
             <ul className="mt-4 max-h-[28rem] space-y-1 overflow-y-auto">
               {available.map((player) => (
                 <li
@@ -313,7 +317,7 @@ function NativeLeagueDraftPage() {
                   </div>
                   <button
                     type="button"
-                    className={buttonClass}
+                    className={fantasyPrimaryBtn}
                     disabled={busy}
                     onClick={() => void assign(player)}
                   >
@@ -325,11 +329,10 @@ function NativeLeagueDraftPage() {
                 <li className="px-2 py-6 text-sm text-muted-foreground">No matching available players.</li>
               ) : null}
             </ul>
-          </section>
+          </FantasyBoard>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">Pick Log</h3>
-            <ol className="mt-3 max-h-[32rem] space-y-1 overflow-y-auto text-sm">
+          <FantasyBoard title="Pick Log" bodyClassName="p-5">
+            <ol className="max-h-[32rem] space-y-1 overflow-y-auto text-sm">
               {[...picks].reverse().map((pick) => {
                 const player = pick.playerId ? byId.get(pick.playerId) : null;
                 return (
@@ -344,12 +347,11 @@ function NativeLeagueDraftPage() {
                 <li className="py-4 text-muted-foreground">No picks yet.</li>
               ) : null}
             </ol>
-          </section>
+          </FantasyBoard>
         </div>
       ) : (
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">Pick Log</h3>
-          <ol className="mt-3 columns-1 gap-4 sm:columns-2 text-sm">
+        <FantasyBoard title="Pick Log" bodyClassName="p-5">
+          <ol className="columns-1 gap-4 text-sm sm:columns-2">
             {picks.map((pick) => {
               const player = pick.playerId ? byId.get(pick.playerId) : null;
               return (
@@ -364,7 +366,7 @@ function NativeLeagueDraftPage() {
           {!canAssign && !done ? (
             <p className="mt-4 text-sm text-muted-foreground">Only commissioners can assign offline picks.</p>
           ) : null}
-        </section>
+        </FantasyBoard>
       )}
 
       <AlertDialog open={confirmComplete} onOpenChange={setConfirmComplete}>
