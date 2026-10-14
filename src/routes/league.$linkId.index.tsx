@@ -45,7 +45,6 @@ type NativeBoard = NonNullable<Awaited<ReturnType<typeof getNativeLeagueBoard>>>
 function NativeLeagueDashboard() {
   const { linkId } = Route.useParams();
   const { user } = useAuth();
-  const modalRef = useRef<PlayerModalHandle>(null);
 
   const { data: board } = useQuery({
     queryKey: ["native-league-board", linkId],
@@ -69,6 +68,7 @@ function NativeLeagueDashboardBody({
   userId: string | null;
 }) {
   const queryClient = useQueryClient();
+  const modalRef = useRef<PlayerModalHandle>(null);
   const [weekBusy, setWeekBusy] = useState(false);
   const [jumpWeek, setJumpWeek] = useState<number | "">("");
 
