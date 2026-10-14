@@ -58,13 +58,23 @@ const PAGES: { label: string; to: string; hint: string }[] = [
   { label: "Hall of Fame", to: "/hof", hint: "League history" },
 ];
 
-export function GlobalSearch() {
+type GlobalSearchProps = {
+  /** Fires when the search field opens or collapses (SiteNav hides Fantasy while open). */
+  onOpenChange?: (open: boolean) => void;
+};
+
+export function GlobalSearch({ onOpenChange }: GlobalSearchProps = {}) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  const setOpenState = (next: boolean) => {
+    setOpen(next);
+    onOpenChange?.(next);
+  };
 
   // 300ms debounce — prevents typing spikes from re-filtering / re-querying every keystroke.
   useEffect(() => {
@@ -145,7 +155,7 @@ export function GlobalSearch() {
 
   const collapse = () => {
     setQ("");
-    setOpen(false);
+    setOpenState(false);
   };
 
   const term = debouncedQ.trim().toLowerCase();
@@ -211,13 +221,14 @@ export function GlobalSearch() {
           className={cn(
             "absolute right-0 top-0 flex h-8 origin-right items-center justify-end overflow-hidden rounded-full border transition-[width,background-color,border-color] duration-300 ease-in-out",
             open
-              ? "w-56 border-primary-foreground/30 bg-primary-foreground/15 sm:w-72"
+              ? // Opaque primary so Fantasy (left of search) cannot show through.
+                "w-56 border-primary-foreground/30 bg-primary sm:w-72"
               : "w-8 border-transparent bg-transparent",
           )}
         >
         <button
           type="button"
-          onClick={() => (open ? inputRef.current?.focus() : setOpen(true))}
+          onClick={() => (open ? inputRef.current?.focus() : setOpenState(true))}
           aria-label="Search teams, players or pages"
           className="grid size-8 shrink-0 place-items-center text-primary-foreground/80 transition-colors hover:text-primary-foreground"
         >
