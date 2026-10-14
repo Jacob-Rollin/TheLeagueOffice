@@ -956,17 +956,15 @@ function HeroAction({
       params={{ leagueId }}
       className="relative flex flex-col items-center gap-2 rounded-lg bg-white/12 px-2 py-3.5 font-display text-sm font-bold uppercase tracking-wide"
     >
-      <span className="relative">
-        {icon}
-        {badge != null && badge > 0 ? (
-          <span
-            className="absolute -right-2.5 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-m-accent px-1 text-[11px] font-bold leading-none text-m-accent-fg shadow-[0_0_0_2px_rgba(0,0,0,0.15)]"
-            aria-label={`${badge} pending trade${badge === 1 ? "" : "s"}`}
-          >
-            {badge > 99 ? "99+" : badge}
-          </span>
-        ) : null}
-      </span>
+      {badge != null && badge > 0 ? (
+        <span
+          className="absolute right-1.5 top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-m-accent px-1 text-[11px] font-bold leading-none text-m-accent-fg shadow-[0_0_0_2px_rgba(0,0,0,0.15)]"
+          aria-label={`${badge} pending trade${badge === 1 ? "" : "s"}`}
+        >
+          {badge > 99 ? "99+" : badge}
+        </span>
+      ) : null}
+      {icon}
       {label}
     </Link>
   );
