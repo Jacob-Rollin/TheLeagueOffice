@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
-import { InjuryAvatarBadge } from "@/components/injury/InjuryAvatarBadge";
-import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
+import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 
 type PlayerLike = {
@@ -27,8 +26,8 @@ type FantasyPlayerChipProps = {
 };
 
 /**
- * Desktop Fantasy player cell: avatar + injury badge + name/meta.
- * Mirrors mobile native league lists without mobile-theme tokens.
+ * Desktop Fantasy player cell — Playbook My Team style:
+ * headshot + small corner team logo; injury micro-badge beside the name.
  */
 export function FantasyPlayerChip({
   player,
@@ -39,13 +38,16 @@ export function FantasyPlayerChip({
   className,
   showMeta = true,
 }: FantasyPlayerChipProps) {
-  const avatarSize = size === "sm" ? "size-8" : "size-10";
+  // Match playbook.my-team roster thumbs (size-9/10 + logo size-3/3.5).
+  const avatarSize = size === "sm" ? "size-9" : "size-10";
+  const logoClassName = size === "sm" ? "size-3" : "size-3.5";
   const name = player?.name ?? fallbackName ?? "Empty";
   const pos = player?.pos === "DEF" ? "DST" : (player?.pos ?? null);
   const team = player?.team?.trim() || null;
   const injury = player
     ? resolveInjuryStatus(player) ?? player.injury_status ?? player.injury ?? null
     : null;
+  const badge = injuryMicroBadge(injury);
 
   const body = (
     <>
@@ -57,6 +59,7 @@ export function FantasyPlayerChip({
             team={player.team ?? ""}
             pos={(player.pos as "QB" | "RB" | "WR" | "TE" | "K" | "DEF") || "WR"}
             className={cn(avatarSize, "rounded-full")}
+            logoClassName={logoClassName}
           />
         ) : (
           <span
@@ -68,12 +71,25 @@ export function FantasyPlayerChip({
             —
           </span>
         )}
-        <InjuryAvatarBadge status={injury} className="ring-white" />
       </span>
       <span className="min-w-0 flex-1 text-left">
-        <span className="block truncate text-sm font-semibold text-slate-900">{name}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-sm font-semibold text-slate-900">{name}</span>
+          {badge ? (
+            <span
+              title={injury ?? badge.label}
+              aria-label={`Injury status ${badge.label}`}
+              className={cn(
+                "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[2px] px-1 text-[9px] font-bold text-white",
+                badge.className,
+              )}
+            >
+              {badge.label}
+            </span>
+          ) : null}
+        </span>
         {showMeta ? (
-          <span className="block truncate text-xs text-muted-foreground">
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
             {[pos, team].filter(Boolean).join(" · ") || "—"}
           </span>
         ) : null}
