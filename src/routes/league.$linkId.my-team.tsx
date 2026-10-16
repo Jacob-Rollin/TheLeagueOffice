@@ -1,27 +1,48 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowUpDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
+  FantasyAddButton,
   FantasyBoard,
   FantasyDropButton,
+  FantasyMatchupScoreCard,
+  FantasyOptimizeButton,
   FantasyPlayerChip,
   FantasySaveLineupButton,
   FantasySectionTitle,
+  FantasyWeekSelect,
   fantasyOutlineBtn,
   fantasyPrimaryBtn,
+  nativeMatchupViewToCard,
 } from "@/components/native/fantasy";
-import type { Player } from "@/lib/players-build";
+import { PLAYER_LIST_HEADER_ROW } from "@/components/research/SortHeader";
+import {
+  buildProjectedOptimalLineup,
+  gameStripLabels,
+  progressFor as nflProgressFor,
+  scheduleOpponent,
+  sumLineupProjection,
+  useNflSchedule,
+} from "@/components/mobile/league/lineupShared";
 import { Toaster } from "@/components/ui/sonner";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
+import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useNflGameProgress } from "@/hooks/useNflGameProgress";
+import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
+import type { RosterSlotKey } from "@/lib/league-settings";
 import {
   buildDefaultLineupSlots,
   classifyIrStatus,
   parseRosterSlotCounts,
   playerEligibleForIr,
+  slotAcceptsPos,
   slotsRecordFromViews,
   viewsFromSlotsRecord,
   type NativeLineupSlotView,
@@ -29,12 +50,21 @@ import {
 import {
   getNativeLeagueBoard,
   getNativeLineup,
+  getNativeMatchupWeek,
   getNativeStandings,
   resolveNativeIrViolation,
   saveNativeLineup,
 } from "@/lib/native-league.functions";
+import {
+  fetchNativeLiveWeekStats,
+  overlayNativeLiveMatchupScores,
+} from "@/lib/native-live-scoring";
 import { DEFAULT_IR_ALLOWED_STATUSES } from "@/lib/native-league-settings";
+import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
+import type { Player } from "@/lib/players-build";
+import type { NflGameProgress } from "@/lib/rolling-live-projection";
+import { projectionPoints, type ScoringMap } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$linkId/my-team")({
@@ -42,16 +72,29 @@ export const Route = createFileRoute("/league/$linkId/my-team")({
   component: NativeMyTeamPage,
 });
 
-const QUICK_LINKS = [
-  { label: "Matchup", to: "/league/$linkId/matchup" as const },
-  { label: "Players", to: "/league/$linkId/players" as const },
-  { label: "Waivers", to: "/league/$linkId/waivers" as const },
-  { label: "Trades", to: "/league/$linkId/trades" as const },
-];
+const LIVE_STATS_POLL_MS = 60_000;
+
+const thClass =
+  "px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500";
+const thRightClass =
+  "px-2.5 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-500";
+const tdClass = "px-2.5 py-2.5 align-middle text-sm text-slate-800";
+const tdRightClass = "px-2.5 py-2.5 align-middle text-right text-sm tabular-nums text-slate-800";
+
+function viewKey(row: NativeLineupSlotView) {
+  return `${row.key}:${row.index}`;
+}
+
+function ptsField(format: string): string {
+  if (format === "ppr") return "pts_ppr";
+  if (format === "std") return "pts_std";
+  return "pts_half_ppr";
+}
 
 function NativeMyTeamPage() {
   const { linkId } = Route.useParams();
   const { user } = useAuth();
+  const { setActiveLeagueId } = useActiveLeague();
   const queryClient = useQueryClient();
   const modalRef = useRef<PlayerModalHandle>(null);
   const cache = useSleeperPlayers();
@@ -62,6 +105,11 @@ function NativeMyTeamPage() {
     staleTime: 1000 * 60 * 30,
   });
   const players = cache.data?.players ?? fallback.data?.players ?? [];
+  const playersById = useMemo(() => {
+    const map = new Map<string, Player>();
+    for (const p of players) map.set(p.id, p);
+    return map;
+  }, [players]);
   const posById = useMemo(() => {
     const map: Record<string, string> = {};
     for (const p of players) map[p.id] = p.pos;
@@ -82,11 +130,10 @@ function NativeMyTeamPage() {
     for (const p of players) map.set(p.id, { name: p.name, pos: p.pos, team: p.team });
     return map;
   }, [players]);
-  const playersById = useMemo(() => {
-    const map = new Map<string, Player>();
-    for (const p of players) map.set(p.id, p);
-    return map;
-  }, [players]);
+
+  useEffect(() => {
+    if (linkId) setActiveLeagueId(linkId);
+  }, [linkId, setActiveLeagueId]);
 
   const { data: board } = useQuery({
     queryKey: ["native-league-board", linkId],
@@ -94,6 +141,17 @@ function NativeMyTeamPage() {
     staleTime: 60_000,
     queryFn: () => getNativeLeagueBoard({ data: { linkId } }),
   });
+
+  const [week, setWeek] = useState<number | null>(null);
+  const boardWeek = board?.currentWeek ?? null;
+  useEffect(() => {
+    if (boardWeek == null) return;
+    setWeek((prev) => {
+      if (prev == null || boardWeek > prev) return Math.min(boardWeek, 18);
+      return prev;
+    });
+  }, [boardWeek]);
+  const activeWeek = week ?? boardWeek ?? 1;
 
   const { data: standings } = useQuery({
     queryKey: ["native-standings", linkId],
@@ -103,12 +161,76 @@ function NativeMyTeamPage() {
   });
 
   const { data: lineup, isLoading } = useQuery({
-    queryKey: ["native-lineup", linkId],
+    queryKey: ["native-lineup", linkId, activeWeek],
     enabled: Boolean(user?.id && linkId),
     staleTime: 15_000,
     retry: false,
-    queryFn: () => getNativeLineup({ data: { linkId } }),
+    queryFn: () => getNativeLineup({ data: { linkId, week: activeWeek } }),
   });
+
+  const { data: matchupWeek } = useQuery({
+    queryKey: ["native-matchup-week", linkId, activeWeek],
+    enabled: Boolean(user?.id && linkId && lineup?.draftComplete),
+    staleTime: 30_000,
+    queryFn: () => getNativeMatchupWeek({ data: { linkId, week: activeWeek } }),
+  });
+
+  const lastWeekNum = Math.max(1, activeWeek - 1);
+  const { data: lastMatchupWeek } = useQuery({
+    queryKey: ["native-matchup-week", linkId, lastWeekNum],
+    enabled: Boolean(user?.id && linkId && lineup?.draftComplete && activeWeek > 1),
+    staleTime: 60_000,
+    queryFn: () => getNativeMatchupWeek({ data: { linkId, week: lastWeekNum } }),
+  });
+
+  const seasonYear =
+    matchupWeek?.seasonYear ?? board?.summary.seasonYear ?? new Date().getUTCFullYear();
+  const isLeagueCurrentWeek = activeWeek === (boardWeek ?? activeWeek);
+
+  const liveStats = useQuery({
+    queryKey: ["native-live-week-stats", seasonYear, activeWeek],
+    enabled: Boolean(matchupWeek && isLeagueCurrentWeek),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchInterval: visibleRefetchInterval(LIVE_STATS_POLL_MS),
+    refetchIntervalInBackground: false,
+    retry: false,
+    queryFn: () => fetchNativeLiveWeekStats(seasonYear, activeWeek),
+  });
+
+  const scoredMatchups = useMemo(() => {
+    const base = matchupWeek?.matchups ?? [];
+    const stats = liveStats.data?.stats;
+    const starters = matchupWeek?.startersByTeamId ?? {};
+    const scoring = (matchupWeek?.scoringSettings ?? {}) as ScoringMap;
+    if (!stats || Object.keys(stats).length === 0) return base;
+    return overlayNativeLiveMatchupScores(base, starters, stats, scoring);
+  }, [
+    matchupWeek?.matchups,
+    matchupWeek?.startersByTeamId,
+    matchupWeek?.scoringSettings,
+    liveStats.data?.stats,
+  ]);
+
+  const {
+    projectFor,
+    rankFor,
+    sleeperIdFor,
+    seasonStats,
+    format,
+    nflWeek,
+    scoringMap,
+  } = useLeagueProjections(activeWeek);
+  const { statsFor: weekStatLine } = useWeeklyActualStats(activeWeek, { pace: "broadcast" });
+  const { progressByNflTeam, currentWeek: nflCurrentWeek } = useNflGameProgress(activeWeek);
+  const { data: schedule = [] } = useNflSchedule();
+  const { rankFor: defenseRankFor } = usePositionalDefenseRanks();
+
+  const projectPlayer = (player: Player) => {
+    const id = sleeperIdFor(player);
+    const v = projectFor(id);
+    return v != null && Number.isFinite(v) ? v : null;
+  };
 
   const [views, setViews] = useState<NativeLineupSlotView[]>([]);
   const [version, setVersion] = useState(0);
@@ -119,6 +241,7 @@ function NativeMyTeamPage() {
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [activateDropFor, setActivateDropFor] = useState<string | null>(null);
   const [dropPick, setDropPick] = useState("");
+  const [optimizing, setOptimizing] = useState(false);
 
   const allowedStatuses = useMemo(
     () =>
@@ -165,20 +288,80 @@ function NativeMyTeamPage() {
   const activeFull =
     (lineup?.activePlayerIds.length ?? 0) >= (lineup?.rosterCapacity ?? 0);
 
-  const selectedIndex = views.findIndex((v) => `${v.key}:${v.index}` === selectedKey);
+  const selectedIndex = views.findIndex((v) => viewKey(v) === selectedKey);
+  const selectedRow = selectedIndex >= 0 ? views[selectedIndex] : null;
+  const selectedPos = selectedRow?.playerId
+    ? posById[selectedRow.playerId] ?? ""
+    : "";
 
+  const myTeamId = lineup?.teamId ?? board?.summary.teamId ?? null;
   const myStanding = useMemo(() => {
-    if (!standings?.standings?.length) return null;
-    const teamId = lineup?.teamId ?? board?.summary.teamId;
-    if (teamId == null) return null;
-    return standings.standings.find((r) => r.teamId === teamId) ?? null;
-  }, [standings?.standings, lineup?.teamId, board?.summary.teamId]);
+    if (!standings?.standings?.length || myTeamId == null) return null;
+    return standings.standings.find((r) => r.teamId === myTeamId) ?? null;
+  }, [standings?.standings, myTeamId]);
+
+  const myTeamMeta = useMemo(
+    () => board?.teams.find((t) => t.id === myTeamId) ?? null,
+    [board?.teams, myTeamId],
+  );
+
+  const findMyMatchup = (list: typeof scoredMatchups) =>
+    list.find((m) => m.home.teamId === myTeamId || m.away.teamId === myTeamId) ?? null;
+
+  const thisMatchup = findMyMatchup(scoredMatchups);
+  const lastMatchup = useMemo(() => {
+    const base = lastMatchupWeek?.matchups ?? [];
+    return findMyMatchup(base);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMatchupWeek?.matchups, myTeamId]);
+
+  const myPlayerPoints = useMemo(() => {
+    if (!thisMatchup || myTeamId == null) return {} as Record<string, number>;
+    const side = thisMatchup.home.teamId === myTeamId ? thisMatchup.home : thisMatchup.away;
+    return side.playerPoints ?? {};
+  }, [thisMatchup, myTeamId]);
+
+  const actualPointsFor = (player: Player): number | null => {
+    const sid = sleeperIdFor(player);
+    const fromMatchup = myPlayerPoints[player.id] ?? myPlayerPoints[sid];
+    if (fromMatchup != null && Number.isFinite(fromMatchup)) return fromMatchup;
+    const line = weekStatLine(sid);
+    if (!line) return null;
+    const scored = projectionPoints(line, scoringMap, format);
+    return scored != null && Number.isFinite(scored) ? scored : null;
+  };
+
+  const liveActive = Boolean(
+    isLeagueCurrentWeek && liveStats.data && Object.keys(liveStats.data.stats).length > 0,
+  );
+
+  const isPlayerLocked = (player: Player | null | undefined) => {
+    if (!player) return false;
+    if (nflCurrentWeek != null && activeWeek < nflCurrentWeek) return true;
+    const progress = nflProgressFor(player.team || "", progressByNflTeam);
+    return progress?.phase === "in" || progress?.phase === "post";
+  };
+
+  const slotEligible = (target: NativeLineupSlotView) => {
+    if (!selectedRow?.playerId) return false;
+    if (viewKey(target) === selectedKey) return true;
+    if (!slotAcceptsPos(target.key, selectedPos)) return false;
+    if (target.key === "IR") {
+      return playerEligibleForIr(injuryById[selectedRow.playerId], allowedStatuses);
+    }
+    return true;
+  };
 
   const onSlotClick = (row: NativeLineupSlotView) => {
     if (!lineup?.canEdit || hasIrViolations) return;
-    const key = `${row.key}:${row.index}`;
+    const key = viewKey(row);
     if (selectedKey == null) {
       if (!row.playerId) return;
+      const player = playersById.get(row.playerId);
+      if (isPlayerLocked(player)) {
+        toast.error("That player’s game has started.");
+        return;
+      }
       setSelectedKey(key);
       return;
     }
@@ -187,10 +370,44 @@ function NativeMyTeamPage() {
       return;
     }
     const from = selectedIndex;
-    const to = views.findIndex((v) => `${v.key}:${v.index}` === key);
+    const to = views.findIndex((v) => viewKey(v) === key);
     if (from < 0 || to < 0) {
       setSelectedKey(null);
       return;
+    }
+    const fromRow = views[from]!;
+    const toRow = views[to]!;
+    if (fromRow.playerId) {
+      const moving = playersById.get(fromRow.playerId);
+      if (isPlayerLocked(moving)) {
+        toast.error("That player’s game has started.");
+        setSelectedKey(null);
+        return;
+      }
+    }
+    if (toRow.playerId) {
+      const sitting = playersById.get(toRow.playerId);
+      if (isPlayerLocked(sitting)) {
+        toast.error("Cannot swap with a locked player.");
+        setSelectedKey(null);
+        return;
+      }
+    }
+    if (!slotEligible(toRow)) {
+      toast.error("That player cannot fill this slot.");
+      return;
+    }
+    // Also verify reverse eligibility when swapping occupied slots.
+    if (toRow.playerId && fromRow.key) {
+      const otherPos = posById[toRow.playerId] ?? "";
+      if (!slotAcceptsPos(fromRow.key, otherPos)) {
+        toast.error("Swap is not legal for these slots.");
+        return;
+      }
+      if (fromRow.key === "IR" && !playerEligibleForIr(injuryById[toRow.playerId], allowedStatuses)) {
+        toast.error("That player is not IR-eligible.");
+        return;
+      }
     }
     setViews((prev) => {
       const next = prev.map((v) => ({ ...v }));
@@ -248,16 +465,17 @@ function NativeMyTeamPage() {
     }
   };
 
-  const save = async () => {
-    if (!lineup?.canEdit || saving || hasIrViolations) return;
+  const save = async (nextViews?: NativeLineupSlotView[]) => {
+    if (!lineup?.canEdit || saving || hasIrViolations) return false;
+    const toSave = nextViews ?? views;
     setSaving(true);
     try {
       const result = await saveNativeLineup({
         data: {
           linkId,
-          week: lineup.week,
+          week: lineup.week ?? activeWeek,
           version,
-          slots: slotsRecordFromViews(views),
+          slots: slotsRecordFromViews(toSave),
           posById,
           injuryById,
           teamByPlayerId,
@@ -265,16 +483,129 @@ function NativeMyTeamPage() {
       });
       if (!result.ok) {
         toast.error(result.error);
-        return;
+        return false;
       }
       if (result.version != null) setVersion(result.version);
       setDirty(false);
       toast.success("Lineup saved.");
       await queryClient.invalidateQueries({ queryKey: ["native-lineup", linkId] });
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save lineup.");
+      return false;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const optimizePlan = useMemo(() => {
+    if (!lineup?.canEdit || hasIrViolations || !lineup.draftComplete) return null;
+    const starters = views.filter((v) => v.starter);
+    const labels = starters.map((v) => (v.key === "DEF" ? "DST" : v.label));
+    const pool = views
+      .map((v) => (v.playerId ? playersById.get(v.playerId) : null))
+      .filter((p): p is Player => Boolean(p));
+    if (!pool.length || !labels.length) return null;
+
+    const immovableIds = new Set<string>();
+    const pinnedStarters = starters.map((row) => {
+      if (!row.playerId) return null;
+      const p = playersById.get(row.playerId);
+      if (p && isPlayerLocked(p)) {
+        immovableIds.add(p.id);
+        return p;
+      }
+      return null;
+    });
+    for (const row of views) {
+      if (!row.playerId) continue;
+      const p = playersById.get(row.playerId);
+      if (p && isPlayerLocked(p)) immovableIds.add(p.id);
+    }
+
+    const optimal = buildProjectedOptimalLineup(labels, pool, projectPlayer, {
+      pinnedStarters,
+      immovableIds,
+    });
+    const currentStarterRows = starters.map((row) => ({
+      slot: row.label,
+      player: row.playerId ? playersById.get(row.playerId) ?? null : null,
+    }));
+    const currentTotal = sumLineupProjection(currentStarterRows, projectPlayer);
+    const gain = Math.round((optimal.total - currentTotal) * 100) / 100;
+    if (gain < 0.05) return null;
+    return { gain, optimal };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views, playersById, lineup?.canEdit, hasIrViolations, lineup?.draftComplete, activeWeek, progressByNflTeam]);
+
+  const applyOptimize = async () => {
+    if (!optimizePlan || !lineup?.canEdit || optimizing) return;
+    setOptimizing(true);
+    try {
+      const next = views.map((v) => ({ ...v }));
+      const lockedByKey = new Map<string, string>();
+      for (const v of next) {
+        if (!v.playerId) continue;
+        const p = playersById.get(v.playerId);
+        if (isPlayerLocked(p)) lockedByKey.set(viewKey(v), v.playerId);
+      }
+      for (const v of next) {
+        if (lockedByKey.has(viewKey(v))) continue;
+        v.playerId = null;
+      }
+
+      const placed = new Set(lockedByKey.values());
+      const starterQueues = new Map<string, string[]>();
+      for (const row of optimizePlan.optimal.starters) {
+        if (!row.player || placed.has(row.player.id)) continue;
+        const key = (row.slot === "DST" ? "DEF" : row.slot) as RosterSlotKey;
+        const q = starterQueues.get(key) ?? [];
+        q.push(row.player.id);
+        starterQueues.set(key, q);
+      }
+      for (const v of next) {
+        if (!v.starter || v.playerId) continue;
+        const q = starterQueues.get(v.key);
+        if (!q?.length) continue;
+        const id = q.shift() ?? null;
+        if (!id) continue;
+        v.playerId = id;
+        placed.add(id);
+      }
+
+      const leftover = views
+        .map((v) => v.playerId)
+        .filter((id): id is string => Boolean(id) && !placed.has(id));
+      for (const v of next) {
+        if (v.playerId || (v.key !== "BN" && v.key !== "IR" && v.key !== "TAXI")) continue;
+        if (v.key === "IR") {
+          const idx = leftover.findIndex((id) =>
+            playerEligibleForIr(injuryById[id], allowedStatuses),
+          );
+          if (idx < 0) continue;
+          v.playerId = leftover.splice(idx, 1)[0] ?? null;
+          if (v.playerId) placed.add(v.playerId);
+          continue;
+        }
+        if (!leftover.length) break;
+        const id = leftover.shift()!;
+        v.playerId = id;
+        placed.add(id);
+      }
+      for (const v of next) {
+        if (v.playerId || v.key !== "BN") continue;
+        if (!leftover.length) break;
+        const id = leftover.shift()!;
+        v.playerId = id;
+        placed.add(id);
+      }
+
+      setViews(next);
+      setDirty(true);
+      setSelectedKey(null);
+      await save(next);
+    } finally {
+      setOptimizing(false);
     }
   };
 
@@ -301,7 +632,8 @@ function NativeMyTeamPage() {
   }
 
   const starters = views.filter((v) => v.starter);
-  const reserves = views.filter((v) => !v.starter);
+  const bench = views.filter((v) => !v.starter && v.key !== "IR" && v.key !== "TAXI");
+  const irRows = views.filter((v) => v.key === "IR" || v.key === "TAXI");
   const dropCandidates = views
     .filter((v) => v.key !== "IR" && v.playerId && v.playerId !== activateDropFor)
     .map((v) => v.playerId!)
@@ -311,57 +643,160 @@ function NativeMyTeamPage() {
     myStanding != null
       ? `${myStanding.wins}-${myStanding.losses}${myStanding.ties ? `-${myStanding.ties}` : ""}`
       : null;
+  const rankLabel =
+    myStanding != null && myStanding.rank > 0
+      ? `${myStanding.rank}${ordinalSuffix(myStanding.rank)} of ${standings?.standings.length ?? board?.summary.teamCount ?? "—"}`
+      : null;
+
+  const seasonPtsKey = ptsField(format);
+  const rowHelpers: RowHelpers = {
+    projectPlayer,
+    actualPointsFor,
+    rankFor,
+    sleeperIdFor,
+    seasonStats,
+    seasonPtsKey,
+    schedule,
+    activeWeek,
+    progressByNflTeam,
+    defenseRankFor,
+    playersById,
+  };
 
   return (
     <div className="space-y-5">
       <Toaster />
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="display-title text-3xl text-slate-900">
-            My <span className="text-primary">Team</span>
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Week {lineup.week ?? board?.currentWeek ?? "—"}
-            {!lineup.draftComplete
-              ? " · Lineups unlock after the draft is complete"
-              : hasIrViolations
-                ? " · IR action required"
-                : dirty
-                  ? " · Unsaved changes"
-                  : ""}
-          </p>
+
+      {/* Team header */}
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+              {myTeamMeta?.avatarUrl ? (
+                <img
+                  src={myTeamMeta.avatarUrl}
+                  alt=""
+                  className="size-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <span className="font-display text-lg font-bold uppercase text-slate-500">
+                  {(lineup.teamName ?? "TM").slice(0, 2).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate font-display text-2xl font-bold uppercase tracking-wide text-slate-900 md:text-3xl">
+                {lineup.teamName}
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                {recordLabel ? (
+                  <span className="font-semibold text-slate-800">{recordLabel}</span>
+                ) : (
+                  "Record updates after scored weeks"
+                )}
+                {rankLabel ? <span className="text-slate-500"> · {rankLabel}</span> : null}
+                {myStanding != null ? (
+                  <span className="text-slate-500"> · {myStanding.pointsFor.toFixed(2)} PF</span>
+                ) : null}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium text-blue-700">
+                <Link to="/league/$linkId/settings" params={{ linkId }} className="hover:underline">
+                  Team Settings
+                </Link>
+                <Link to="/league/$linkId" params={{ linkId }} className="hover:underline">
+                  {board?.summary.name ?? "League"}
+                </Link>
+                <Link to="/league/$linkId/waivers" params={{ linkId }} className="hover:underline">
+                  Waivers
+                </Link>
+                <Link to="/league/$linkId/trades" params={{ linkId }} className="hover:underline">
+                  Trades
+                </Link>
+              </div>
+            </div>
+          </div>
+          <FantasyWeekSelect
+            week={activeWeek}
+            onWeekChange={setWeek}
+            maxWeek={18}
+            label={
+              nflWeek != null && activeWeek === nflWeek
+                ? "This Week"
+                : `Week ${activeWeek}`
+            }
+          />
         </div>
-        <FantasySaveLineupButton
-          disabled={!lineup.canEdit || saving || !dirty || hasIrViolations}
-          onClick={() => void save()}
-        >
-          {saving ? "Saving…" : "Save Lineup"}
-        </FantasySaveLineupButton>
-      </div>
-
-      <nav className="flex flex-wrap gap-2" aria-label="Team quick links">
-        {QUICK_LINKS.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            params={{ linkId }}
-            className={fantasyOutlineBtn}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-
-      <section className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Your roster</p>
-        <p className="mt-1 font-display text-2xl font-semibold uppercase tracking-wide text-slate-900">
-          {lineup.teamName}
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {recordLabel ? `Record ${recordLabel}` : "Record updates after scored weeks"}
-          {myStanding != null ? ` · ${myStanding.pointsFor.toFixed(1)} PF` : ""}
-        </p>
       </section>
+
+      {/* Last / current matchup strip */}
+      {lineup.draftComplete ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          {activeWeek > 1 ? (
+            <MatchupMiniCard
+              label={`Last · Week ${lastWeekNum}`}
+              matchup={lastMatchup}
+              myTeamId={myTeamId}
+              linkId={linkId}
+            />
+          ) : null}
+          <MatchupMiniCard
+            label={
+              liveActive
+                ? `Live · Week ${activeWeek}`
+                : activeWeek === (boardWeek ?? activeWeek)
+                  ? `This Week · Week ${activeWeek}`
+                  : `Week ${activeWeek}`
+            }
+            matchup={thisMatchup}
+            myTeamId={myTeamId}
+            linkId={linkId}
+            status={liveActive ? "live" : undefined}
+          />
+        </div>
+      ) : null}
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/league/$linkId/players" params={{ linkId }}>
+            <FantasyAddButton>Add</FantasyAddButton>
+          </Link>
+          <Link to="/league/$linkId/players" params={{ linkId }} className={fantasyOutlineBtn}>
+            Drop
+          </Link>
+          <Link to="/league/$linkId/players" params={{ linkId }} className={fantasyOutlineBtn}>
+            IR
+          </Link>
+          {optimizePlan ? (
+            <FantasyOptimizeButton
+              gain={optimizePlan.gain}
+              busy={optimizing || saving}
+              disabled={!lineup.canEdit || hasIrViolations}
+              onClick={() => void applyOptimize()}
+            />
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs text-slate-500">
+            {!lineup.draftComplete
+              ? "Lineups unlock after the draft"
+              : hasIrViolations
+                ? "IR action required"
+                : dirty
+                  ? "Unsaved changes"
+                  : selectedKey
+                    ? "Select a slot to swap"
+                    : "Click Move, then another slot to swap"}
+          </p>
+          <FantasySaveLineupButton
+            disabled={!lineup.canEdit || saving || !dirty || hasIrViolations}
+            onClick={() => void save()}
+          >
+            {saving ? "Saving…" : "Save Lineup"}
+          </FantasySaveLineupButton>
+        </div>
+      </div>
 
       {!lineup.draftComplete ? (
         <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
@@ -375,139 +810,59 @@ function NativeMyTeamPage() {
       ) : (
         <>
           {hasIrViolations ? (
-            <section className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
-              <FantasySectionTitle className="text-red-800">IR action required</FantasySectionTitle>
-              <p className="mt-1 text-sm text-red-900/80">
-                These players no longer match the commissioner IR tags (
-                {allowedStatuses.join(", ")}). Drop them, or move them off IR
-                {activeFull ? " by dropping someone else from your active roster" : ""}.
-              </p>
-              <ul className="mt-3 space-y-3">
-                {ineligibleIr.map((row) => {
-                  const meta = nameById.get(row.playerId);
-                  const tag = classifyIrStatus(row.injury) ?? row.injury ?? "Healthy";
-                  const busy = resolvingId === row.playerId;
-                  const pickingDrop = activateDropFor === row.playerId;
-                  return (
-                    <li
-                      key={row.playerId}
-                      className="rounded-lg border border-red-200 bg-white px-3 py-3"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <FantasyPlayerChip
-                            player={playersById.get(row.playerId)}
-                            fallbackName={meta?.name ?? row.playerId}
-                            onClick={() => modalRef.current?.open(row.playerId)}
-                            trailing={
-                              <span className="shrink-0 text-[10px] font-bold uppercase text-red-700">
-                                {tag}
-                              </span>
-                            }
-                          />
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <FantasyDropButton
-                            disabled={busy || !!resolvingId}
-                            onClick={() => void resolveIr(row.playerId, "drop")}
-                          >
-                            {busy ? "…" : "Drop"}
-                          </FantasyDropButton>
-                          <button
-                            type="button"
-                            className={fantasyOutlineBtn}
-                            disabled={busy || !!resolvingId}
-                            onClick={() => {
-                              if (activeFull) {
-                                setActivateDropFor(row.playerId);
-                                setDropPick("");
-                              } else {
-                                void resolveIr(row.playerId, "activate");
-                              }
-                            }}
-                          >
-                            Move off IR
-                          </button>
-                        </div>
-                      </div>
-                      {pickingDrop ? (
-                        <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-                          <p className="text-xs text-slate-600">
-                            Active roster is full. Choose a player to drop so this IR player can be
-                            activated.
-                          </p>
-                          <select
-                            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                            value={dropPick}
-                            onChange={(e) => setDropPick(e.target.value)}
-                          >
-                            <option value="">Select player to drop…</option>
-                            {dropCandidates.map((id) => {
-                              const m = nameById.get(id);
-                              return (
-                                <option key={id} value={id}>
-                                  {m?.name ?? id}
-                                  {m ? ` (${m.pos === "DEF" ? "DST" : m.pos})` : ""}
-                                </option>
-                              );
-                            })}
-                          </select>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className={fantasyPrimaryBtn}
-                              disabled={!dropPick || busy}
-                              onClick={() => void resolveIr(row.playerId, "activate", dropPick)}
-                            >
-                              Confirm activate
-                            </button>
-                            <button
-                              type="button"
-                              className={fantasyOutlineBtn}
-                              disabled={busy}
-                              onClick={() => {
-                                setActivateDropFor(null);
-                                setDropPick("");
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
+            <IrViolationsPanel
+              ineligibleIr={ineligibleIr}
+              nameById={nameById}
+              playersById={playersById}
+              allowedStatuses={allowedStatuses}
+              activeFull={activeFull}
+              resolvingId={resolvingId}
+              activateDropFor={activateDropFor}
+              dropPick={dropPick}
+              dropCandidates={dropCandidates}
+              setActivateDropFor={setActivateDropFor}
+              setDropPick={setDropPick}
+              resolveIr={resolveIr}
+              onOpen={(id) => modalRef.current?.open(id)}
+            />
           ) : null}
 
-          <p className="text-sm text-muted-foreground">
-            {hasIrViolations
-              ? "Resolve IR violations above before editing or saving your lineup."
-              : "Click a player, then click another slot to swap. Empty slots can receive a selected player. Game-time locks ship with scoring."}
-          </p>
-
-          <LineupSection
+          <LineupTable
             title="Starters"
             rows={starters}
             selectedKey={selectedKey}
-            playersById={playersById}
-            ineligibleIds={new Set(ineligibleIr.map((r) => r.playerId))}
             canEdit={lineup.canEdit && !hasIrViolations}
+            slotEligible={slotEligible}
             onSlotClick={onSlotClick}
             onOpen={(id) => modalRef.current?.open(id)}
+            isPlayerLocked={isPlayerLocked}
+            helpers={rowHelpers}
+            showTotals
           />
-          <LineupSection
-            title="Bench / IR"
-            rows={reserves}
+          <LineupTable
+            title="Bench"
+            rows={bench}
             selectedKey={selectedKey}
-            playersById={playersById}
-            ineligibleIds={new Set(ineligibleIr.map((r) => r.playerId))}
             canEdit={lineup.canEdit && !hasIrViolations}
+            slotEligible={slotEligible}
             onSlotClick={onSlotClick}
             onOpen={(id) => modalRef.current?.open(id)}
+            isPlayerLocked={isPlayerLocked}
+            helpers={rowHelpers}
           />
+          {irRows.length > 0 ? (
+            <LineupTable
+              title="IR / Reserve"
+              rows={irRows}
+              selectedKey={selectedKey}
+              canEdit={lineup.canEdit && !hasIrViolations}
+              slotEligible={slotEligible}
+              onSlotClick={onSlotClick}
+              onOpen={(id) => modalRef.current?.open(id)}
+              isPlayerLocked={isPlayerLocked}
+              helpers={rowHelpers}
+            />
+          ) : null}
         </>
       )}
 
@@ -516,87 +871,420 @@ function NativeMyTeamPage() {
   );
 }
 
-function LineupSection({
+function ordinalSuffix(n: number) {
+  const j = n % 10;
+  const k = n % 100;
+  if (j === 1 && k !== 11) return "st";
+  if (j === 2 && k !== 12) return "nd";
+  if (j === 3 && k !== 13) return "rd";
+  return "th";
+}
+
+type MatchupLike = {
+  matchupId: number;
+  home: { teamId: number; teamName: string; points: number };
+  away: { teamId: number; teamName: string; points: number };
+};
+
+function MatchupMiniCard({
+  label,
+  matchup,
+  myTeamId,
+  linkId,
+  status,
+}: {
+  label: string;
+  matchup: MatchupLike | null | undefined;
+  myTeamId: number | null;
+  linkId: string;
+  status?: "live";
+}) {
+  if (!matchup) {
+    return (
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+        <p className="mt-2 text-sm text-slate-500">No matchup scheduled.</p>
+      </section>
+    );
+  }
+  const card = nativeMatchupViewToCard(matchup);
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2 px-0.5">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+        <Link
+          to="/league/$linkId/matchup"
+          params={{ linkId }}
+          className="text-xs font-semibold text-blue-700 hover:underline"
+        >
+          View Matchup
+        </Link>
+      </div>
+      <FantasyMatchupScoreCard
+        home={card.home}
+        away={card.away}
+        myTeamId={myTeamId}
+        {...(status ? { status } : {})}
+        className="p-4"
+      />
+    </div>
+  );
+}
+
+type RowHelpers = {
+  projectPlayer: (player: Player) => number | null;
+  actualPointsFor: (player: Player) => number | null;
+  rankFor: (playerId: string) => { overall: number | null; pos: number | null };
+  sleeperIdFor: (player: { id: string; name: string; pos: string }) => string;
+  seasonStats: Map<string, { stats: Record<string, number> }> | undefined;
+  seasonPtsKey: string;
+  schedule: Parameters<typeof scheduleOpponent>[0];
+  activeWeek: number;
+  progressByNflTeam: Map<string, NflGameProgress>;
+  defenseRankFor: (pos: string | null | undefined, opp: string | null | undefined) => number | null;
+  playersById: Map<string, Player>;
+};
+
+function LineupTable({
   title,
   rows,
   selectedKey,
-  playersById,
-  ineligibleIds,
   canEdit,
+  slotEligible,
   onSlotClick,
   onOpen,
+  isPlayerLocked,
+  helpers,
+  showTotals,
 }: {
   title: string;
   rows: NativeLineupSlotView[];
   selectedKey: string | null;
-  playersById: Map<string, Player>;
-  ineligibleIds: Set<string>;
   canEdit: boolean;
+  slotEligible: (row: NativeLineupSlotView) => boolean;
   onSlotClick: (row: NativeLineupSlotView) => void;
   onOpen: (id: string) => void;
+  isPlayerLocked: (player: Player | null | undefined) => boolean;
+  helpers: RowHelpers;
+  showTotals?: boolean;
 }) {
   if (rows.length === 0) return null;
+
+  let projTotal = 0;
+  let scoreTotal = 0;
+  let fptsTotal = 0;
+  let scored = 0;
+
+  const body = rows.map((row) => {
+    const key = viewKey(row);
+    const player = row.playerId ? helpers.playersById.get(row.playerId) : null;
+    const selected = selectedKey === key;
+    const eligible = selectedKey != null && slotEligible(row);
+    const locked = isPlayerLocked(player);
+    const bye =
+      player != null &&
+      player.bye != null &&
+      Number(player.bye) === helpers.activeWeek;
+    const opp = bye
+      ? "BYE"
+      : player
+        ? scheduleOpponent(helpers.schedule, helpers.activeWeek, player.team || "")
+        : null;
+    const progress = player
+      ? nflProgressFor(player.team || "", helpers.progressByNflTeam)
+      : undefined;
+    const strip = gameStripLabels(progress, {
+      bye: Boolean(bye),
+      opponent: opp,
+      team: player?.team ?? null,
+    });
+    const sid = player ? helpers.sleeperIdFor(player) : null;
+    const proj = player ? helpers.projectPlayer(player) : null;
+    const score = player ? helpers.actualPointsFor(player) : null;
+    const oprk =
+      player && opp && opp !== "BYE"
+        ? helpers.defenseRankFor(player.pos, opp)
+        : null;
+    const ranks = sid ? helpers.rankFor(sid) : { overall: null, pos: null };
+    const seasonPts =
+      sid && helpers.seasonStats?.get(sid)?.stats
+        ? Number(helpers.seasonStats.get(sid)!.stats[helpers.seasonPtsKey] ?? NaN)
+        : NaN;
+
+    if (proj != null && Number.isFinite(proj)) projTotal += proj;
+    if (score != null && Number.isFinite(score)) {
+      scoreTotal += score;
+      scored += 1;
+    }
+    if (Number.isFinite(seasonPts)) fptsTotal += seasonPts;
+
+    return (
+      <tr
+        key={key}
+        className={cn(
+          "border-b border-slate-100 last:border-b-0",
+          selected && "bg-blue-50",
+          !selected && eligible && selectedKey && "bg-emerald-50/70",
+          !selected && !eligible && selectedKey && canEdit && "opacity-60",
+        )}
+      >
+        <td className={tdClass}>
+          <span className="inline-flex min-w-10 items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+            {row.label}
+          </span>
+        </td>
+        <td className={cn(tdClass, "min-w-[12rem]")}>
+          {row.playerId ? (
+            <FantasyPlayerChip
+              player={player}
+              fallbackName={row.playerId}
+              size="sm"
+              onClick={() => onOpen(row.playerId!)}
+            />
+          ) : (
+            <span className="text-sm text-slate-400">Empty slot</span>
+          )}
+        </td>
+        <td className={tdClass}>
+          {canEdit && row.playerId && !locked ? (
+            <button
+              type="button"
+              onClick={() => onSlotClick(row)}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-bold uppercase tracking-wide",
+                selected
+                  ? "border-blue-600 bg-blue-600 text-white"
+                  : "border-blue-600 bg-white text-blue-700 hover:bg-blue-50",
+              )}
+            >
+              <ArrowUpDown className="size-3" aria-hidden />
+              Move
+            </button>
+          ) : canEdit && selectedKey && !row.playerId && eligible ? (
+            <button
+              type="button"
+              onClick={() => onSlotClick(row)}
+              className="inline-flex items-center rounded-md border border-emerald-600 bg-emerald-50 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-800"
+            >
+              Here
+            </button>
+          ) : locked && row.playerId ? (
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Locked
+            </span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          )}
+        </td>
+        <td className={cn(tdClass, "whitespace-nowrap font-medium", bye && "text-slate-400")}>
+          {opp ?? "—"}
+        </td>
+        <td className={cn(tdClass, "whitespace-nowrap text-xs text-slate-600")}>
+          {bye ? "Bye" : strip.status || strip.game || "—"}
+        </td>
+        <td className={tdRightClass}>
+          {bye ? "—" : proj != null ? proj.toFixed(2) : "—"}
+        </td>
+        <td className={tdRightClass}>
+          {bye ? "—" : score != null ? score.toFixed(2) : "—"}
+        </td>
+        <td
+          className={cn(
+            tdRightClass,
+            oprk != null && oprk <= 10 && "font-semibold text-red-600",
+            oprk != null && oprk >= 23 && "font-semibold text-emerald-600",
+          )}
+        >
+          {oprk != null && oprk > 0 ? oprk : "—"}
+        </td>
+        <td className={tdRightClass}>
+          {ranks.pos != null && ranks.pos > 0 && ranks.pos < 900 ? ranks.pos : "—"}
+        </td>
+        <td className={tdRightClass}>
+          {Number.isFinite(seasonPts) ? seasonPts.toFixed(2) : "—"}
+        </td>
+      </tr>
+    );
+  });
+
   return (
-    <FantasyBoard title={title} bodyClassName="divide-y divide-slate-100">
-      <ul>
-        {rows.map((row) => {
-          const key = `${row.key}:${row.index}`;
-          const player = row.playerId ? playersById.get(row.playerId) : null;
-          const selected = selectedKey === key;
-          const violated = Boolean(row.playerId && ineligibleIds.has(row.playerId));
-          const posBadge = row.label;
-          return (
-            <li key={key}>
-              <div
-                className={cn(
-                  "flex items-center gap-3 border-l-4 border-transparent px-4 py-3",
-                  selected && "border-primary bg-primary/5",
-                  !selected && violated && "border-red-400 bg-red-50",
-                  !selected && !violated && "border-slate-200",
-                  canEdit && !selected && "cursor-pointer hover:bg-slate-50",
-                )}
-                onClick={() => onSlotClick(row)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSlotClick(row);
-                  }
-                }}
-                role={canEdit ? "button" : undefined}
-                tabIndex={canEdit ? 0 : undefined}
-              >
-                <span
-                  className={cn(
-                    "flex h-8 w-12 shrink-0 items-center justify-center rounded-md border text-xs font-bold uppercase tracking-wide",
-                    selected
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-slate-200 bg-slate-50 text-slate-600",
-                  )}
-                >
-                  {posBadge}
+    <FantasyBoard title={title} bodyClassName="overflow-x-auto">
+      <table className="w-full min-w-[56rem] border-collapse text-sm">
+        <thead>
+          <tr className={PLAYER_LIST_HEADER_ROW}>
+            <th className={thClass}>Slot</th>
+            <th className={thClass}>Player</th>
+            <th className={thClass}>Action</th>
+            <th className={thClass}>Opp</th>
+            <th className={thClass}>Status</th>
+            <th className={thRightClass}>Proj</th>
+            <th className={thRightClass}>Score</th>
+            <th className={thRightClass}>Oprk</th>
+            <th className={thRightClass}>Prk</th>
+            <th className={thRightClass}>Fpts</th>
+          </tr>
+        </thead>
+        <tbody>{body}</tbody>
+        {showTotals ? (
+          <tfoot>
+            <tr className="border-t border-slate-200 bg-slate-50">
+              <td className={tdClass} colSpan={5}>
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-600">
+                  Totals
                 </span>
-                {row.playerId ? (
+              </td>
+              <td className={cn(tdRightClass, "font-semibold")}>{projTotal.toFixed(2)}</td>
+              <td className={cn(tdRightClass, "font-semibold")}>
+                {scored > 0 ? scoreTotal.toFixed(2) : "—"}
+              </td>
+              <td className={tdRightClass} colSpan={2} />
+              <td className={cn(tdRightClass, "font-semibold")}>{fptsTotal.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        ) : null}
+      </table>
+    </FantasyBoard>
+  );
+}
+
+function IrViolationsPanel({
+  ineligibleIr,
+  nameById,
+  playersById,
+  allowedStatuses,
+  activeFull,
+  resolvingId,
+  activateDropFor,
+  dropPick,
+  dropCandidates,
+  setActivateDropFor,
+  setDropPick,
+  resolveIr,
+  onOpen,
+}: {
+  ineligibleIr: Array<{ playerId: string; injury: string | null }>;
+  nameById: Map<string, { name: string; pos: string; team: string }>;
+  playersById: Map<string, Player>;
+  allowedStatuses: readonly string[];
+  activeFull: boolean;
+  resolvingId: string | null;
+  activateDropFor: string | null;
+  dropPick: string;
+  dropCandidates: string[];
+  setActivateDropFor: (id: string | null) => void;
+  setDropPick: (id: string) => void;
+  resolveIr: (
+    playerId: string,
+    action: "drop" | "activate",
+    dropPlayerId?: string | null,
+  ) => Promise<void>;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <section className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
+      <FantasySectionTitle className="text-red-800">IR action required</FantasySectionTitle>
+      <p className="mt-1 text-sm text-red-900/80">
+        These players no longer match the commissioner IR tags ({allowedStatuses.join(", ")}). Drop
+        them, or move them off IR
+        {activeFull ? " by dropping someone else from your active roster" : ""}.
+      </p>
+      <ul className="mt-3 space-y-3">
+        {ineligibleIr.map((row) => {
+          const meta = nameById.get(row.playerId);
+          const tag = classifyIrStatus(row.injury) ?? row.injury ?? "Healthy";
+          const busy = resolvingId === row.playerId;
+          const pickingDrop = activateDropFor === row.playerId;
+          return (
+            <li
+              key={row.playerId}
+              className="rounded-lg border border-red-200 bg-white px-3 py-3"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
                   <FantasyPlayerChip
-                    player={player}
-                    fallbackName={row.playerId}
-                    className="min-w-0 flex-1"
-                    onClick={() => onOpen(row.playerId!)}
+                    player={playersById.get(row.playerId)}
+                    fallbackName={meta?.name ?? row.playerId}
+                    onClick={() => onOpen(row.playerId)}
                     trailing={
-                      violated ? (
-                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-red-700">
-                          IR
-                        </span>
-                      ) : null
+                      <span className="shrink-0 text-[10px] font-bold uppercase text-red-700">
+                        {tag}
+                      </span>
                     }
                   />
-                ) : (
-                  <span className="flex-1 text-sm text-muted-foreground">Empty slot</span>
-                )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <FantasyDropButton
+                    disabled={busy || !!resolvingId}
+                    onClick={() => void resolveIr(row.playerId, "drop")}
+                  >
+                    {busy ? "…" : "Drop"}
+                  </FantasyDropButton>
+                  <button
+                    type="button"
+                    className={fantasyOutlineBtn}
+                    disabled={busy || !!resolvingId}
+                    onClick={() => {
+                      if (activeFull) {
+                        setActivateDropFor(row.playerId);
+                        setDropPick("");
+                      } else {
+                        void resolveIr(row.playerId, "activate");
+                      }
+                    }}
+                  >
+                    Move off IR
+                  </button>
+                </div>
               </div>
+              {pickingDrop ? (
+                <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                  <p className="text-xs text-slate-600">
+                    Active roster is full. Choose a player to drop so this IR player can be
+                    activated.
+                  </p>
+                  <select
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={dropPick}
+                    onChange={(e) => setDropPick(e.target.value)}
+                  >
+                    <option value="">Select player to drop…</option>
+                    {dropCandidates.map((id) => {
+                      const m = nameById.get(id);
+                      return (
+                        <option key={id} value={id}>
+                          {m?.name ?? id}
+                          {m ? ` (${m.pos === "DEF" ? "DST" : m.pos})` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={fantasyPrimaryBtn}
+                      disabled={!dropPick || busy}
+                      onClick={() => void resolveIr(row.playerId, "activate", dropPick)}
+                    >
+                      Confirm activate
+                    </button>
+                    <button
+                      type="button"
+                      className={fantasyOutlineBtn}
+                      disabled={busy}
+                      onClick={() => {
+                        setActivateDropFor(null);
+                        setDropPick("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </li>
           );
         })}
       </ul>
-    </FantasyBoard>
+    </section>
   );
 }
