@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { FantasyArticlesColumn } from "@/components/fantasy/FantasyArticlesColumn";
+import { FantasyJoinAnotherCard } from "@/components/fantasy/FantasyJoinAnotherCard";
 import { FantasyLeaguesBox } from "@/components/fantasy/FantasyLeaguesBox";
 import { useAuth } from "@/hooks/useAuth";
 import { listNativeLeagueSummaries } from "@/lib/native-league.functions";
@@ -64,6 +65,7 @@ function FantasyDashboardPage() {
           ) : (
             <FantasyLeaguesBox leagues={leagues} loading={isLoading} />
           )}
+          <FantasyJoinAnotherCard />
         </aside>
       </div>
     </main>

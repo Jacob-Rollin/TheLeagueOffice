@@ -2,7 +2,6 @@ import { Link } from "@tanstack/react-router";
 
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import type { NativeMemberLeagueSummary } from "@/lib/native-league.functions";
-import { cn } from "@/lib/utils";
 
 function formatScore(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "0.00";
