@@ -80,28 +80,9 @@ export function FantasyLeaguesBox({
       {loading ? (
         <p className="px-3 py-6 text-sm text-slate-500">Loading your leagues…</p>
       ) : leagues.length === 0 ? (
-        <div className="space-y-3 px-3 py-5">
-          <p className="text-sm text-slate-600">
-            You are not in a League Office league yet.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              to="/account/leagues/setup"
-              className="inline-flex items-center rounded-md border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white hover:bg-blue-700"
-            >
-              Create a League
-            </Link>
-            <Link
-              to="/account/leagues/join"
-              className={cn(
-                "inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5",
-                "text-xs font-semibold uppercase tracking-wide text-blue-700 hover:border-blue-600",
-              )}
-            >
-              Join a League
-            </Link>
-          </div>
-        </div>
+        <p className="px-3 py-5 text-sm text-slate-600">
+          You are not in a League Office league yet. Create or join one below.
+        </p>
       ) : (
         <div>
           {leagues.map((league) => (
