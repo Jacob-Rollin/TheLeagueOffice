@@ -1,6 +1,4 @@
-import { Fragment } from "react";
-
-import { LeagueAvatar } from "@/components/league/LeagueAvatar";
+import { TeamAvatarBadge } from "@/components/playbook/panels";
 import { cn } from "@/lib/utils";
 
 export type FantasyStandingsRow = {
@@ -22,116 +20,163 @@ type FantasyStandingsTableProps = {
   playoffTeams: number;
   myTeamId?: number | null;
   className?: string;
+  /** Cache namespace for avatar remounts (e.g. league link id). */
+  leagueKey?: string;
 };
 
 function formatRecord(wins: number, losses: number, ties: number) {
-  return `${wins}-${losses}${ties > 0 ? `-${ties}` : ""}`;
+  if (ties > 0) return `${wins}-${losses}-${ties}`;
+  return `${wins}-${losses}`;
 }
 
+function winPercentage(wins: number, losses: number, ties: number): number {
+  const games = wins + losses + ties;
+  if (games <= 0) return 0;
+  return (wins / games) * 100;
+}
+
+/**
+ * Playbook Actual-style standings: Rank / Team / W-L / PF / PA / Win %.
+ * Dark highlight for the viewer's team; dashed playoff cut under the last seed.
+ * Trend / Streak / analytics columns are omitted (native has no power-rank data yet).
+ */
 export function FantasyStandingsTable({
   rows,
   playoffTeams,
   myTeamId,
   className,
+  leagueKey = "native",
 }: FantasyStandingsTableProps) {
-  const cut = Math.max(0, Math.floor(playoffTeams));
+  const cut =
+    playoffTeams > 0 && playoffTeams < rows.length ? Math.floor(playoffTeams) : null;
 
   return (
-    <div className={cn("overflow-x-auto", className)}>
-      <table className="w-full min-w-[28rem] border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-slate-100 text-xs uppercase tracking-wide text-slate-500">
-            <th className="sticky left-0 z-20 bg-white px-3 py-2 font-semibold">Rk</th>
-            <th className="px-3 py-2 font-semibold">Team</th>
-            <th className="px-3 py-2 font-semibold">W</th>
-            <th className="px-3 py-2 font-semibold">L</th>
-            <th className="px-3 py-2 font-semibold">T</th>
-            <th className="px-3 py-2 font-semibold">PF</th>
-            <th className="px-3 py-2 font-semibold">PA</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => {
-            const rank = row.rank ?? index + 1;
-            const mine = myTeamId != null && row.teamId === myTeamId;
-            const seed = cut > 0 && index < cut;
-            const showCutLine = cut > 0 && index === cut;
+    <div className={cn("overflow-x-auto overflow-y-hidden", className)}>
+      <div className="min-w-[720px]">
+        <div className="flex items-center justify-between border-b border-border bg-slate-50/50 px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 select-none">
+          <div className="flex min-w-0 flex-1 items-center">
+            <span className="w-12 text-center">Rank</span>
+            <span className="pl-6">Team</span>
+          </div>
+          <div className="flex shrink-0 items-center space-x-10 pr-2">
+            <span className="w-20 text-center">W-L</span>
+            <span className="w-16 text-right">PF</span>
+            <span className="w-16 text-right">PA</span>
+            <span className="w-16 text-right">Win %</span>
+          </div>
+        </div>
 
-            return (
-              <Fragment key={row.teamId}>
-                {showCutLine ? (
-                  <tr aria-hidden>
-                    <td colSpan={7} className="relative h-0 p-0">
-                      <div className="absolute inset-x-0 top-0 z-10 flex -translate-y-1/2 items-center px-3">
-                        <span className="flex-1 border-t-2 border-dashed border-accent" />
-                        <span className="rounded-full bg-white px-2 font-display text-[10px] font-bold uppercase leading-none tracking-widest text-accent">
-                          Playoff line
-                        </span>
-                        <span className="flex-1 border-t-2 border-dashed border-accent" />
-                      </div>
-                    </td>
-                  </tr>
-                ) : null}
-                <tr
+        {rows.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">
+            No standings available for this league yet.
+          </p>
+        ) : (
+          <ul>
+            {rows.map((row, index) => {
+              const rank = row.rank ?? index + 1;
+              const mine = myTeamId != null && row.teamId === myTeamId;
+              const pctLabel = `${winPercentage(row.wins, row.losses, row.ties).toFixed(1)}%`;
+              const belowCut = cut != null && rank === cut + 1;
+
+              return (
+                <li
+                  key={row.teamId}
                   className={cn(
-                    "border-b border-slate-50",
-                    mine && "bg-primary/5",
-                    showCutLine && "border-t-0",
+                    "relative border-t",
+                    belowCut ? "border-dashed border-emerald-400" : "border-border",
                   )}
                 >
-                  <td
+                  <div
                     className={cn(
-                      "sticky left-0 z-10 px-3 py-2",
-                      mine ? "bg-primary/5" : "bg-white",
+                      "flex items-center justify-between px-4 py-2.5",
+                      mine
+                        ? "bg-slate-700 text-white font-black rounded-none"
+                        : "bg-white text-slate-800 hover:bg-slate-50/60",
                     )}
                   >
-                    <span
+                    <div className="flex min-w-0 flex-1 items-center">
+                      <span
+                        className={cn(
+                          "w-12 text-center text-sm font-semibold tabular-nums",
+                          mine
+                            ? "text-white"
+                            : cut == null
+                              ? "text-slate-500"
+                              : rank > cut
+                                ? "text-slate-400"
+                                : "text-slate-900",
+                        )}
+                      >
+                        {rank}
+                      </span>
+                      <div
+                        className={cn(
+                          "flex min-w-0 flex-1 items-center pl-6",
+                          mine ? "text-white" : "text-foreground",
+                        )}
+                      >
+                        <TeamAvatarBadge
+                          key={`${leagueKey}-${row.teamId}-${row.avatarUrl ?? "fallback"}`}
+                          name={row.teamName}
+                          logo={row.avatarUrl}
+                          platform="native"
+                          cacheKey={`${leagueKey}-${row.teamId}`}
+                        />
+                        <span className="min-w-0">
+                          <span
+                            className={cn(
+                              "block truncate text-sm",
+                              mine ? "font-black text-white" : "font-medium text-foreground",
+                            )}
+                          >
+                            {row.teamName}
+                          </span>
+                          <span
+                            className={cn(
+                              "block truncate text-xs",
+                              mine ? "font-bold text-white/80" : "text-muted-foreground",
+                            )}
+                          >
+                            {row.owner?.trim() || "Owner"}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                    <div
                       className={cn(
-                        "inline-flex size-7 items-center justify-center rounded-full font-display text-sm font-bold tabular-nums",
-                        seed ? "bg-primary text-primary-foreground" : "text-slate-500",
+                        "flex shrink-0 items-center space-x-10 pr-2 select-none text-sm tabular-nums",
+                        mine ? "font-semibold text-white" : "font-semibold text-foreground",
                       )}
                     >
-                      {rank}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      {row.avatarUrl ? (
-                        <LeagueAvatar
-                          platform="native"
-                          src={row.avatarUrl}
-                          alt=""
-                          className="size-8 max-h-8 max-w-8"
-                        />
-                      ) : null}
-                      <span className="min-w-0">
-                        <span
-                          className={cn(
-                            "block truncate font-medium text-slate-900",
-                            mine && "text-primary",
-                          )}
-                        >
-                          {row.teamName}
-                        </span>
-                        {row.owner ? (
-                          <span className="block truncate text-xs text-muted-foreground">{row.owner}</span>
-                        ) : null}
+                      <span className="w-20 text-center">
+                        {formatRecord(row.wins, row.losses, row.ties)}
                       </span>
+                      <span className="w-16 text-right">{row.pointsFor.toFixed(1)}</span>
+                      <span
+                        className={cn(
+                          "w-16 text-right font-normal",
+                          mine ? "text-white/80" : "text-slate-500",
+                        )}
+                      >
+                        {row.pointsAgainst.toFixed(1)}
+                      </span>
+                      <span className="w-16 text-right">{pctLabel}</span>
                     </div>
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">{row.wins}</td>
-                  <td className="px-3 py-2 tabular-nums">{row.losses}</td>
-                  <td className="px-3 py-2 tabular-nums">{row.ties}</td>
-                  <td className="px-3 py-2 tabular-nums">{row.pointsFor.toFixed(1)}</td>
-                  <td className="px-3 py-2 tabular-nums text-muted-foreground">
-                    {row.pointsAgainst.toFixed(1)}
-                  </td>
-                </tr>
-              </Fragment>
-            );
-          })}
-        </tbody>
-      </table>
+                  </div>
+                  {belowCut ? (
+                    <span
+                      className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 bg-white px-2 text-[9px] font-black uppercase leading-none tracking-widest text-emerald-600"
+                      aria-label="Playoff line"
+                    >
+                      Playoff Line
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

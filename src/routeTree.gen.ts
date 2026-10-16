@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AreTheyPlayingRouteImport } from './routes/are-they-playing'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as DraftRouteImport } from './routes/draft'
+import { Route as FantasyRouteImport } from './routes/fantasy'
 import { Route as FantasyLeadersRouteImport } from './routes/fantasy-leaders'
 import { Route as FantasyPointsAllowedRouteImport } from './routes/fantasy-points-allowed'
 import { Route as HofRouteImport } from './routes/hof'
@@ -122,6 +123,11 @@ const AuthRoute = AuthRouteImport.update({
 const DraftRoute = DraftRouteImport.update({
   id: '/draft',
   path: '/draft',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FantasyRoute = FantasyRouteImport.update({
+  id: '/fantasy',
+  path: '/fantasy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FantasyLeadersRoute = FantasyLeadersRouteImport.update({
@@ -589,6 +595,7 @@ export interface FileRoutesByFullPath {
   '/are-they-playing': typeof AreTheyPlayingRoute
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
+  '/fantasy': typeof FantasyRoute
   '/fantasy-leaders': typeof FantasyLeadersRoute
   '/fantasy-points-allowed': typeof FantasyPointsAllowedRoute
   '/hof': typeof HofRoute
@@ -685,6 +692,7 @@ export interface FileRoutesByTo {
   '/are-they-playing': typeof AreTheyPlayingRoute
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
+  '/fantasy': typeof FantasyRoute
   '/fantasy-leaders': typeof FantasyLeadersRoute
   '/fantasy-points-allowed': typeof FantasyPointsAllowedRoute
   '/hof': typeof HofRoute
@@ -777,6 +785,7 @@ export interface FileRoutesById {
   '/are-they-playing': typeof AreTheyPlayingRoute
   '/auth': typeof AuthRoute
   '/draft': typeof DraftRoute
+  '/fantasy': typeof FantasyRoute
   '/fantasy-leaders': typeof FantasyLeadersRoute
   '/fantasy-points-allowed': typeof FantasyPointsAllowedRoute
   '/hof': typeof HofRoute
@@ -875,6 +884,7 @@ export interface FileRouteTypes {
     | '/are-they-playing'
     | '/auth'
     | '/draft'
+    | '/fantasy'
     | '/fantasy-leaders'
     | '/fantasy-points-allowed'
     | '/hof'
@@ -971,6 +981,7 @@ export interface FileRouteTypes {
     | '/are-they-playing'
     | '/auth'
     | '/draft'
+    | '/fantasy'
     | '/fantasy-leaders'
     | '/fantasy-points-allowed'
     | '/hof'
@@ -1062,6 +1073,7 @@ export interface FileRouteTypes {
     | '/are-they-playing'
     | '/auth'
     | '/draft'
+    | '/fantasy'
     | '/fantasy-leaders'
     | '/fantasy-points-allowed'
     | '/hof'
@@ -1159,6 +1171,7 @@ export interface RootRouteChildren {
   AreTheyPlayingRoute: typeof AreTheyPlayingRoute
   AuthRoute: typeof AuthRoute
   DraftRoute: typeof DraftRoute
+  FantasyRoute: typeof FantasyRoute
   FantasyLeadersRoute: typeof FantasyLeadersRoute
   FantasyPointsAllowedRoute: typeof FantasyPointsAllowedRoute
   HofRoute: typeof HofRoute
@@ -1249,6 +1262,13 @@ declare module '@tanstack/react-router' {
       path: '/draft'
       fullPath: '/draft'
       preLoaderRoute: typeof DraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fantasy': {
+      id: '/fantasy'
+      path: '/fantasy'
+      fullPath: '/fantasy'
+      preLoaderRoute: typeof FantasyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fantasy-leaders': {
@@ -1996,6 +2016,7 @@ const rootRouteChildren: RootRouteChildren = {
   AreTheyPlayingRoute: AreTheyPlayingRoute,
   AuthRoute: AuthRoute,
   DraftRoute: DraftRoute,
+  FantasyRoute: FantasyRoute,
   FantasyLeadersRoute: FantasyLeadersRoute,
   FantasyPointsAllowedRoute: FantasyPointsAllowedRoute,
   HofRoute: HofRoute,
@@ -2060,13 +2081,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
