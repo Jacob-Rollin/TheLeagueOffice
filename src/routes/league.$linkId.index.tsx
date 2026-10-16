@@ -402,6 +402,7 @@ function NativeLeagueDashboardBody({
               rows={compactStandings}
               playoffTeams={playoffTeams}
               myTeamId={myTeamId}
+              leagueKey={linkId}
             />
           )}
         </FantasyBoard>

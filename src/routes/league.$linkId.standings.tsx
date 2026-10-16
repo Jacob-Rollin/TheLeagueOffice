@@ -102,6 +102,7 @@ function NativeStandingsPage() {
             rows={rows}
             playoffTeams={playoffTeams}
             myTeamId={myTeamId}
+            leagueKey={linkId}
           />
         )}
       </FantasyBoard>
