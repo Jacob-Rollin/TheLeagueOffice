@@ -178,6 +178,12 @@ export type NativeMemberLeagueSummary = {
   updatedAt: string | null;
   createdAt: string;
   canEditInvite: boolean;
+  teamName: string | null;
+  avatarUrl: string | null;
+  currentWeek: number;
+  opponentName: string | null;
+  myPoints: number | null;
+  opponentPoints: number | null;
 };
 
 export const getNativeLeagueSummary = createServerFn({ method: "GET" })

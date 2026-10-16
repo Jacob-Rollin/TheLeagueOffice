@@ -367,6 +367,14 @@ export type NativeMemberLeagueSummary = {
   updatedAt: string | null;
   createdAt: string;
   canEditInvite: boolean;
+  /** Manager's team display name (Fantasy hub box). */
+  teamName: string | null;
+  avatarUrl: string | null;
+  currentWeek: number;
+  /** Current-week opponent name when a schedule pairing exists. */
+  opponentName: string | null;
+  myPoints: number | null;
+  opponentPoints: number | null;
 };
 
 export async function assertMembershipLink(
@@ -543,6 +551,13 @@ function summaryFromParts(
   membership: { linkId: string; leagueId: string; role: string; teamId: number | null },
   league: LeagueCoreRow,
   filledTeams: number,
+  extras?: {
+    teamName?: string | null;
+    avatarUrl?: string | null;
+    opponentName?: string | null;
+    myPoints?: number | null;
+    opponentPoints?: number | null;
+  },
 ): NativeMemberLeagueSummary {
   return {
     linkId: membership.linkId,
@@ -562,6 +577,12 @@ function summaryFromParts(
     updatedAt: league.updated_at,
     createdAt: league.created_at,
     canEditInvite: isCommishRole(membership.role),
+    teamName: extras?.teamName ?? null,
+    avatarUrl: extras?.avatarUrl ?? null,
+    currentWeek: Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1)),
+    opponentName: extras?.opponentName ?? null,
+    myPoints: extras?.myPoints ?? null,
+    opponentPoints: extras?.opponentPoints ?? null,
   };
 }
 
@@ -634,7 +655,7 @@ export async function listNativeLeagueSummariesForUser(
   if (leagueIds.length === 0) return [];
   const placeholders = leagueIds.map(() => "?").join(", ");
 
-  const [leagues, filledRows] = await Promise.all([
+  const [leagues, filledRows, teamRows, scheduleRows, resultRows] = await Promise.all([
     tidbExecute<LeagueCoreRow>(
       `SELECT ${LEAGUE_CORE_SELECT} FROM native_leagues WHERE id IN (${placeholders})`,
       leagueIds,
@@ -645,26 +666,99 @@ export async function listNativeLeagueSummariesForUser(
        GROUP BY league_id`,
       leagueIds,
     ),
+    tidbExecute<{
+      id: number;
+      league_id: string;
+      team_name: string | null;
+      avatar_url: string | null;
+    }>(
+      `SELECT id, league_id, team_name, avatar_url FROM native_teams
+       WHERE league_id IN (${placeholders})`,
+      leagueIds,
+    ),
+    tidbExecute<{
+      league_id: string;
+      home_team_id: number;
+      away_team_id: number;
+    }>(
+      `SELECT s.league_id, s.home_team_id, s.away_team_id
+       FROM native_schedules s
+       INNER JOIN native_leagues l ON l.id = s.league_id
+       WHERE s.league_id IN (${placeholders})
+         AND s.season_year = l.season_year
+         AND s.week = l.current_week`,
+      leagueIds,
+    ),
+    tidbExecute<{
+      league_id: string;
+      team_id: number;
+      points: number;
+    }>(
+      `SELECT r.league_id, r.team_id, r.points
+       FROM native_matchup_results r
+       INNER JOIN native_leagues l ON l.id = r.league_id
+       WHERE r.league_id IN (${placeholders})
+         AND r.season_year = l.season_year
+         AND r.week = l.current_week`,
+      leagueIds,
+    ),
   ]);
 
   const leagueById = new Map(leagues.map((l) => [l.id, l]));
   const filledById = new Map(filledRows.map((r) => [String(r.league_id), Number(r.c ?? 0)]));
+  const teamById = new Map(
+    teamRows.map((t) => [
+      Number(t.id),
+      {
+        leagueId: String(t.league_id),
+        name: String(t.team_name ?? "").trim() || `Team ${t.id}`,
+        avatarUrl: t.avatar_url ? String(t.avatar_url) : null,
+      },
+    ]),
+  );
+  const pointsByTeam = new Map(
+    resultRows.map((r) => [`${String(r.league_id)}:${Number(r.team_id)}`, Number(r.points ?? 0)]),
+  );
+  const pairingByLeagueTeam = new Map<string, number>();
+  for (const s of scheduleRows) {
+    const leagueId = String(s.league_id);
+    const home = Number(s.home_team_id);
+    const away = Number(s.away_team_id);
+    pairingByLeagueTeam.set(`${leagueId}:${home}`, away);
+    pairingByLeagueTeam.set(`${leagueId}:${away}`, home);
+  }
 
   const out: NativeMemberLeagueSummary[] = [];
   for (const link of links) {
     const leagueId = String(link.native_league_id);
     const league = leagueById.get(leagueId);
     if (!league) continue;
+    const teamId = link.team_id == null ? null : Number(link.team_id);
+    const mine = teamId != null ? teamById.get(teamId) : undefined;
+    const oppId =
+      teamId != null ? pairingByLeagueTeam.get(`${leagueId}:${teamId}`) ?? null : null;
+    const opponent = oppId != null ? teamById.get(oppId) : undefined;
+    const myPoints =
+      teamId != null ? (pointsByTeam.get(`${leagueId}:${teamId}`) ?? null) : null;
+    const opponentPoints =
+      oppId != null ? (pointsByTeam.get(`${leagueId}:${oppId}`) ?? null) : null;
     out.push(
       summaryFromParts(
         {
           linkId: String(link.id),
           leagueId,
           role: String(link.role ?? "member"),
-          teamId: link.team_id == null ? null : Number(link.team_id),
+          teamId,
         },
         league,
         filledById.get(leagueId) ?? 0,
+        {
+          teamName: mine?.name ?? null,
+          avatarUrl: mine?.avatarUrl ?? null,
+          opponentName: opponent?.name ?? null,
+          myPoints,
+          opponentPoints,
+        },
       ),
     );
   }

@@ -1,46 +1,20 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
 
 import { navLinkClass } from "@/components/nav/NavMenus";
-import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
-import { listNativeLeagueSummaries } from "@/lib/native-league.functions";
 
 /**
- * Top-nav entry into desktop native Fantasy (left of GlobalSearch).
+ * Top-nav entry into desktop Fantasy hub (left of GlobalSearch).
  * SiteNav hides this while search is open; expanded search uses an opaque field.
  */
 export function FantasyNavLink() {
   const { user, ready } = useAuth();
-  const { leagues, activeLeague, setActiveLeagueId } = useActiveLeague();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const active = pathname.startsWith("/league/");
-
-  const nativeFromContext = useMemo(
-    () => leagues.filter((l) => (l.platform ?? "").toLowerCase() === "native"),
-    [leagues],
-  );
-
-  const { data: summaries = [] } = useQuery({
-    queryKey: ["native-league-summaries"],
-    enabled: Boolean(ready && user?.id),
-    staleTime: 60_000,
-    retry: false,
-    queryFn: () => listNativeLeagueSummaries(),
-  });
-
-  const targetLinkId = useMemo(() => {
-    if (activeLeague && (activeLeague.platform ?? "").toLowerCase() === "native") {
-      return activeLeague.id;
-    }
-    if (nativeFromContext[0]?.id) return nativeFromContext[0].id;
-    return summaries[0]?.linkId ?? null;
-  }, [activeLeague, nativeFromContext, summaries]);
+  const active = pathname === "/fantasy" || pathname.startsWith("/league/");
 
   if (!ready) return null;
 
-  if (!user || !targetLinkId) {
+  if (!user) {
     return (
       <Link
         to="/account/leagues"
@@ -54,12 +28,10 @@ export function FantasyNavLink() {
 
   return (
     <Link
-      to="/league/$linkId"
-      params={{ linkId: targetLinkId }}
+      to="/fantasy"
       preload="intent"
       className={navLinkClass}
       data-status={active ? "active" : undefined}
-      onClick={() => setActiveLeagueId(targetLinkId)}
     >
       Fantasy
     </Link>
