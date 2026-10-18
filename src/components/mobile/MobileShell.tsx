@@ -1,6 +1,6 @@
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { ChevronLeft, House, Monitor, Settings } from "lucide-react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { useAuth } from "@/hooks/useAuth";
@@ -102,26 +102,43 @@ function MobileHeader() {
       <Settings className="size-5" strokeWidth={2.5} />
     </button>
   );
-  // Fixed (not sticky) so pull-to-refresh / overscroll never drags the chrome.
+  const headerRef = useRef<HTMLElement | null>(null);
+  const [spacerPx, setSpacerPx] = useState<number | null>(null);
+
+  // Exact spacer height so My Team's blue hero sits flush under the fixed header
+  // (a taller spacer showed a 1px grey page-bg seam).
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const apply = () => setSpacerPx(Math.round(el.getBoundingClientRect().height));
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [subpageTitle, inLeague, theme]);
+
+  // Fixed so pull-to-refresh never drags chrome. No light-theme drop shadow —
+  // it read as a grey hairline over the matching Team hero blue.
   const headerShellClass = cn(
     "fixed inset-x-0 top-0 z-30 bg-m-header text-m-header-fg",
-    theme === "dark" ? "border-b border-m-border" : "shadow-[0_2px_6px_rgba(0,0,0,0.18)]",
+    theme === "dark" && "border-b border-m-border",
   );
   const headerShellStyle = { paddingTop: "env(safe-area-inset-top, 0px)" } as const;
   const headerRowClass = "relative flex items-center justify-between px-4 py-3";
-  /** Matches safe-area + py-3 + h-12 logo/button row. */
   const headerSpacer = (
     <div
       aria-hidden
-      className="shrink-0"
-      style={{ height: "calc(env(safe-area-inset-top, 0px) + 4.5rem)" }}
+      className="shrink-0 bg-m-header"
+      style={{
+        height: spacerPx != null ? `${spacerPx}px` : "calc(env(safe-area-inset-top, 0px) + 4.5rem)",
+      }}
     />
   );
 
   if (subpageTitle && leagueId) {
     return (
       <>
-        <header className={headerShellClass} style={headerShellStyle}>
+        <header ref={headerRef} className={headerShellClass} style={headerShellStyle}>
           <div className="mx-auto w-full max-w-md">
             <div className={headerRowClass}>
               <button
@@ -151,7 +168,7 @@ function MobileHeader() {
   return (
     <>
       {settingsOpen ? <MobileSettingsOverlay onClose={closeSettings} /> : null}
-      <header className={headerShellClass} style={headerShellStyle}>
+      <header ref={headerRef} className={headerShellClass} style={headerShellStyle}>
         <div className="mx-auto w-full max-w-md">
           <div className={headerRowClass}>
             {inLeague ? (
