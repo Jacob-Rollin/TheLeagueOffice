@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { useNflState } from "@/hooks/useLeagueProjections";
 import { liveRefreshMs, useNflGameProgress } from "@/hooks/useNflGameProgress";
@@ -19,9 +19,8 @@ const BROADCAST_STATS_CACHE_MS = 12 * 1000;
 export type WeeklyActualStatsPace = "default" | "broadcast";
 
 /**
- * Live / final weekly box-score stat lines for the Statistics tab.
- * Pass `week` to follow the My Team week selector.
- * Hidden tabs never poll; in-game floor is 45s (12s on broadcast).
+ * Live / final weekly box-score stat lines (Sleeper client cache first).
+ * Hidden tabs skip refetch without wiping good data; soft-retry once.
  */
 export function useWeeklyActualStats(
   week?: number | null,
@@ -46,9 +45,13 @@ export function useWeeklyActualStats(
     staleTime: cacheTtl,
     refetchInterval: visibleRefetchInterval(capped),
     refetchIntervalInBackground: false,
-    retry: false,
+    retry: 1,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
-      if (!isPageVisible()) return new Map<string, Record<string, number>>();
+      // Never commit an empty Map while hidden — that wiped live scores to 0.00.
+      if (!isPageVisible()) {
+        throw new Error("page-hidden");
+      }
       const rows = await fetchWeeklyActualStatRows(season, pollWeek ?? 1, cacheTtl);
       return new Map(Object.entries(rows));
     },
@@ -56,7 +59,9 @@ export function useWeeklyActualStats(
 
   const statsFor = useCallback(
     (playerId: string): Record<string, number> | null => {
-      return query.data?.get(playerId) ?? null;
+      const id = String(playerId ?? "").trim();
+      if (!id) return null;
+      return query.data?.get(id) ?? null;
     },
     [query.data],
   );
@@ -64,6 +69,7 @@ export function useWeeklyActualStats(
   return {
     statsFor,
     loading: query.isLoading,
+    ready: Boolean(query.data && query.data.size > 0),
     dataUpdatedAt: query.dataUpdatedAt,
   };
 }

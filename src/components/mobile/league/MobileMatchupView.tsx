@@ -15,7 +15,7 @@ import type { StandingRow, WeeklyMatchupEntry } from "@/lib/league.server";
 import { getNativeLeagueBoard } from "@/lib/native-league.functions";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
-import { resolveHostOrBoxScore } from "@/lib/scoring-map";
+import { resolveHostOrBoxScore, resolveNativeLiveScore } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
 import {
@@ -171,13 +171,12 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
   };
 
   const pointsFor = (entry: WeeklyMatchupEntry, player: Player): number => {
-    // Host/CDN often stores 0 for remapped DEF / cold native overlay — score
-    // the Sleeper box line with league settings (TLON / Playbook parity).
-    return resolveHostOrBoxScore(
-      entryPoints(entry, player.id),
-      statsFor(sleeperIdFor(player)),
-      scoringMap,
-    );
+    const host = entryPoints(entry, player.id);
+    const stats = statsFor(sleeperIdFor(player));
+    // Native: browser Sleeper week-stats drive live scores; TiDB host is finalize-only.
+    if (isNative) return resolveNativeLiveScore(host, stats, scoringMap);
+    // Synced hosts: prefer non-zero host points; fall through to box for DEF remaps.
+    return resolveHostOrBoxScore(host, stats, scoringMap);
   };
 
   /** Header totals follow the same live starter scores as the lineup rows. */

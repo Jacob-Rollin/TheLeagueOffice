@@ -12,18 +12,16 @@
 import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
 import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
 import { getCached } from "@/lib/sleeper-cache";
-import { sleeperFetchJson } from "@/lib/sleeper-http";
+import { waitForSleeperPermit } from "@/lib/sleeper-rate-budget";
 
 /** Shared IndexedDB key — matchup overlay + Statistics tab share one download. */
 export const WEEKLY_ACTUAL_STATS_CACHE_KEY = (season: string | number, week: number) =>
-  `weekly-actual-stats-v5-regular-snap:${season}|${week}`;
+  `weekly-actual-stats-v6-client-live:${season}|${week}`;
 
 /**
- * Budgeted Sleeper week actuals. Callers pass TTL so broadcast pages (~12s)
- * and default boards (~30s) coalesce on the same cache key.
- *
- * On Sleeper miss/empty: warm snap-cdn fallback (Actions publish) — never
- * write an empty `{}` into IndexedDB (that poisoned native Matchup 0.00s).
+ * Live week actuals from browser → Sleeper (IndexedDB `getCached`).
+ * Waits for a live rate-budget permit so Matchup scoring is not starved.
+ * Snap-cdn is a soft warm fallback only — Actions finalize TiDB later.
  */
 export async function fetchWeeklyActualStatRows(
   season: string | number,
@@ -34,18 +32,34 @@ export async function fetchWeeklyActualStatRows(
   const safeWeek = Math.max(1, Math.min(18, Math.floor(week) || 1));
   return getCached(WEEKLY_ACTUAL_STATS_CACHE_KEY(safeSeason, safeWeek), ttlMs, async () => {
     const url = `${SLEEPER_BASE}/stats/nfl/regular/${safeSeason}/${safeWeek}?${positionsQuery()}`;
-    const rows = await sleeperFetchJson<unknown>(url, "live");
-    if (rows == null) {
-      const snap = await fetchSnapWeekStatRows(safeSeason, safeWeek);
-      if (snap && Object.keys(snap).length > 0) return snap;
-      throw new Error("sleeper week stats unavailable");
+    const rows = await fetchSleeperWeekStatsJson(url);
+    if (rows != null) {
+      const parsed = parseSleeperWeekStatRows(rows);
+      if (Object.keys(parsed).length > 0) return parsed;
     }
-    const parsed = parseSleeperWeekStatRows(rows);
-    if (Object.keys(parsed).length > 0) return parsed;
     const snap = await fetchSnapWeekStatRows(safeSeason, safeWeek);
     if (snap && Object.keys(snap).length > 0) return snap;
-    throw new Error("empty week stats");
+    throw new Error("sleeper week stats unavailable");
   });
+}
+
+/** Wait for live budget, then GET — critical for native Matchup scoring. */
+async function fetchSleeperWeekStatsJson(url: string): Promise<unknown | null> {
+  if (!(await waitForSleeperPermit("live", 6_000))) return null;
+  try {
+    const res = await fetch(url, { headers: { accept: "application/json" } });
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 1200));
+      if (!(await waitForSleeperPermit("live", 4_000))) return null;
+      const retry = await fetch(url, { headers: { accept: "application/json" } });
+      if (!retry.ok) return null;
+      return (await retry.json()) as unknown;
+    }
+    if (!res.ok) return null;
+    return (await res.json()) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchSnapWeekStatRows(
