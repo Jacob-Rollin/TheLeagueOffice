@@ -50,6 +50,16 @@ export function markRevalidated(key: string): void {
   }
 }
 
+/** Clear the 5-minute barrier so the next roster query may hit the network. */
+export function forceRosterRevalidate(key: string): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.removeItem(stampKey(key));
+  } catch {
+    /* best-effort */
+  }
+}
+
 export async function readRosterCache<T>(key: string): Promise<T | null> {
   try {
     return (await db()?.getItem<T>(key)) ?? null;

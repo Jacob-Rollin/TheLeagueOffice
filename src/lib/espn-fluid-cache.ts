@@ -52,3 +52,19 @@ export function espnFluidCacheKey(
 ): string {
   return `${kind}|${platform}|${leagueId}|${extra}`;
 }
+
+/**
+ * Drop in-tab ESPN/Yahoo Fluid memos for one league so a user-initiated
+ * refresh can re-hit Fluid once (not a storm — next loaders re-memoize).
+ */
+export function clearEspnFluidForLeague(leagueId: string, platform?: string | null): void {
+  const id = String(leagueId ?? "").trim();
+  if (!id) return;
+  const plat = (platform ?? "").trim().toLowerCase();
+  const needle = `|${id}|`;
+  for (const key of [...store.keys()]) {
+    if (!key.includes(needle)) continue;
+    if (plat && !key.includes(`|${plat}|`)) continue;
+    store.delete(key);
+  }
+}
