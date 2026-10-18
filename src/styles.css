@@ -271,7 +271,7 @@
   }
 }
 
-/* Mobile pull-to-refresh football spinner (Sleeper-style cue, our glyph). */
+/* Mobile pull-to-refresh circular loader. */
 @keyframes m-ptr-spin {
   to {
     transform: rotate(360deg);
@@ -279,7 +279,8 @@
 }
 
 .m-ptr-spin {
-  animation: m-ptr-spin 0.85s linear infinite;
+  animation: m-ptr-spin 0.75s linear infinite;
+  transform-origin: 50% 50%;
 }
 
 @media (prefers-reduced-motion: reduce) {
