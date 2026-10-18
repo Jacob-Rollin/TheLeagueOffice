@@ -10,7 +10,7 @@ import {
 import { FootballIcon } from "@/components/mobile/league/mobileNavIcons";
 import { cn } from "@/lib/utils";
 
-/** Arm distance — ~2× the prior pull so the cue has real travel. */
+/** Arm distance — ~2× the last shipped pull (~100px) so the cue has real travel. */
 const TRIGGER_PX = 200;
 const MAX_PULL_PX = 300;
 const SETTLE_MS = 240;
