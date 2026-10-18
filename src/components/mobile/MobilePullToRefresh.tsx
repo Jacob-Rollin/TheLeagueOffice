@@ -27,11 +27,14 @@ type MobilePullToRefreshProps = {
   enabled?: boolean;
 };
 
-/** Simple turf + yard lines — only paints the pull reveal strip, not the page. */
+/**
+ * Field-style reveal: theme grey turf + accent blue yard markers.
+ * Only paints the pull strip — not the page body.
+ */
 const FIELD_BG =
-  "linear-gradient(90deg, rgba(255,255,255,0.14) 0 1px, transparent 1px 100%)," +
-  "linear-gradient(90deg, transparent 0 49.5%, rgba(255,255,255,0.35) 49.5% 50.5%, transparent 50.5% 100%)," +
-  "linear-gradient(180deg, #1f6b3a 0%, #2a8a4a 40%, #247a42 60%, #1a5c32 100%)";
+  "linear-gradient(90deg, color-mix(in srgb, var(--m-accent) 28%, transparent) 0 1px, transparent 1px 100%)," +
+  "linear-gradient(90deg, transparent 0 49.5%, color-mix(in srgb, var(--m-accent) 48%, transparent) 49.5% 50.5%, transparent 50.5% 100%)," +
+  "var(--m-bg)";
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -203,8 +206,9 @@ export function MobilePullToRefresh({
         className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center overflow-hidden"
         style={{
           height: showReveal ? revealH : 0,
+          backgroundColor: "var(--m-bg)",
           backgroundImage: FIELD_BG,
-          backgroundSize: "28px 100%, 100% 100%, 100% 100%",
+          backgroundSize: "24px 100%, 100% 100%, 100% 100%",
           backgroundPosition: "center, center, center",
           transition,
         }}
