@@ -37,7 +37,8 @@ jobs:
           season = str(state.get("league_season") or state.get("season") or datetime.datetime.utcnow().year)
           week = max(1, int(state.get("week") or 1))
           pos = "&".join(f"position[]={p}" for p in ("QB", "RB", "WR", "TE", "K", "DEF"))
-          url = f"https://api.sleeper.app/v1/stats/nfl/{season}/{week}?season_type=regular&{pos}"
+          # Must use /regular/{season}/{week} — query-string season_type returns empty {} rows.
+          url = f"https://api.sleeper.app/v1/stats/nfl/regular/{season}/{week}?{pos}"
           raw = json.load(urllib.request.urlopen(url))
           SKIP_KEYS = {"stats", "player_id", "player", "team", "opponent"}
 
