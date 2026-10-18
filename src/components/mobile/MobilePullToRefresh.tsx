@@ -27,9 +27,6 @@ type MobilePullToRefreshProps = {
   enabled?: boolean;
 };
 
-/** Yard numbers along the field (50 at midfield, counting down each way). */
-const YARD_MARKS = [10, 20, 30, 40, 50, 40, 30, 20, 10] as const;
-
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
@@ -57,8 +54,8 @@ function wait(ms: number) {
 }
 
 /**
- * Pull-to-refresh for /m pages. Reveal strip shows a turf background with the
- * Matchup football icon centered (spins while refreshing). Page chrome untouched.
+ * Pull-to-refresh for /m pages. Clean grey reveal with the Matchup football
+ * centered (rotates on pull, spins while refreshing). No field backdrop.
  */
 export function MobilePullToRefresh({
   onRefresh,
@@ -195,9 +192,9 @@ export function MobilePullToRefresh({
       onTouchCancel={onTouchEnd}
       style={{ overscrollBehaviorY: "none" }}
     >
-      {/* Reveal strip only — grey field with proper yard lines; does not paint the page. */}
+      {/* Clean grey reveal — Matchup football only (no field backdrop). */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 z-10 overflow-hidden"
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center overflow-hidden"
         style={{
           height: showReveal ? revealH : 0,
           backgroundColor: "var(--m-bg)",
@@ -205,38 +202,31 @@ export function MobilePullToRefresh({
         }}
         aria-hidden={!showReveal}
       >
-        <PtrFieldBackdrop showNumbers={revealH > 72} />
-        <div className="relative z-[1] flex h-full items-center justify-center">
-          <span
-            className={cn(
-              "flex size-11 items-center justify-center rounded-full bg-white/95 text-m-header shadow-md ring-1 ring-black/10",
-              (state === "armed" || refreshing) && "text-m-accent ring-m-accent/30",
-            )}
-            role="status"
-            aria-live="polite"
-            aria-label={
-              refreshing
-                ? "Refreshing"
-                : state === "armed"
-                  ? "Release to refresh"
-                  : "Pull to refresh"
+        <span
+          className={cn(
+            "flex size-11 items-center justify-center rounded-full bg-white text-m-header shadow-md ring-1 ring-black/10",
+            (state === "armed" || refreshing) && "text-m-accent ring-m-accent/30",
+          )}
+          role="status"
+          aria-live="polite"
+          aria-label={
+            refreshing ? "Refreshing" : state === "armed" ? "Release to refresh" : "Pull to refresh"
+          }
+          style={{
+            opacity: showReveal ? Math.min(1, progress * 3 + (refreshing ? 1 : 0)) : 0,
+            transition,
+          }}
+        >
+          <FootballIcon
+            className={cn("size-7", refreshing && !reduceMotion && "m-ptr-spin")}
+            strokeWidth={2.25}
+            style={
+              refreshing || reduceMotion
+                ? undefined
+                : { transform: `rotate(${spinDeg ?? 0}deg)`, transition }
             }
-            style={{
-              opacity: showReveal ? Math.min(1, progress * 3 + (refreshing ? 1 : 0)) : 0,
-              transition,
-            }}
-          >
-            <FootballIcon
-              className={cn("size-7", refreshing && !reduceMotion && "m-ptr-spin")}
-              strokeWidth={2.25}
-              style={
-                refreshing || reduceMotion
-                  ? undefined
-                  : { transform: `rotate(${spinDeg ?? 0}deg)`, transition }
-              }
-            />
-          </span>
-        </div>
+          />
+        </span>
       </div>
 
       <div
@@ -247,80 +237,6 @@ export function MobilePullToRefresh({
       >
         {children}
       </div>
-    </div>
-  );
-}
-
-/**
- * Top-down field: end zones, 10-yard lines, hash ticks, and yard numbers
- * in theme accent blue on the grey pull reveal.
- */
-function PtrFieldBackdrop({ showNumbers }: { showNumbers: boolean }) {
-  return (
-    <div className="absolute inset-0 text-m-accent">
-      {/* Soft end-zone washes */}
-      <div className="absolute inset-y-0 left-0 w-[8%] bg-m-accent/10" aria-hidden />
-      <div className="absolute inset-y-0 right-0 w-[8%] bg-m-accent/10" aria-hidden />
-
-      {/* Sidelines */}
-      <div className="absolute inset-x-[2%] top-[10%] h-px bg-m-accent/50" aria-hidden />
-      <div className="absolute inset-x-[2%] bottom-[10%] h-px bg-m-accent/50" aria-hidden />
-
-      {/* Goal lines */}
-      <div className="absolute inset-y-[10%] left-[8%] w-[2px] bg-m-accent/55" aria-hidden />
-      <div className="absolute inset-y-[10%] right-[8%] w-[2px] bg-m-accent/55" aria-hidden />
-
-      {/* Every-10-yard lines across the playing field between goal lines */}
-      {Array.from({ length: 9 }, (_, i) => {
-        const pct = 8 + ((i + 1) * 84) / 10;
-        const isFifty = i === 4;
-        return (
-          <div
-            key={`yl-${i}`}
-            className={cn(
-              "absolute inset-y-[10%]",
-              isFifty ? "w-[2.5px] bg-m-accent/70" : "w-px bg-m-accent/40",
-            )}
-            style={{ left: `${pct}%` }}
-            aria-hidden
-          />
-        );
-      })}
-
-      {/* Hash marks — short ticks between each 10-yard segment */}
-      {Array.from({ length: 10 }, (_, segment) =>
-        [1, 2, 3, 4].map((tick) => {
-          const pct = 8 + (segment * 84) / 10 + (tick * 84) / 50;
-          return (
-            <span key={`h-${segment}-${tick}`} aria-hidden>
-              <span
-                className="absolute h-[9%] w-px bg-m-accent/35"
-                style={{ left: `${pct}%`, top: "28%" }}
-              />
-              <span
-                className="absolute h-[9%] w-px bg-m-accent/35"
-                style={{ left: `${pct}%`, bottom: "28%" }}
-              />
-            </span>
-          );
-        }),
-      )}
-
-      {showNumbers ? (
-        <div className="absolute inset-x-[8%] bottom-[14%] flex justify-between px-[4%]">
-          {YARD_MARKS.map((n, i) => (
-            <span
-              key={`yn-${i}`}
-              className={cn(
-                "font-display text-[9px] font-bold leading-none tracking-wider tabular-nums",
-                n === 50 ? "text-m-accent/70" : "text-m-accent/45",
-              )}
-            >
-              {n}
-            </span>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }
