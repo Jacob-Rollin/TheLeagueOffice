@@ -105,20 +105,20 @@ function MobileHeader() {
   const headerRef = useRef<HTMLElement | null>(null);
   const [spacerPx, setSpacerPx] = useState<number | null>(null);
 
-  // Measure the fixed header so the spacer never leaves a grey hairline gap
-  // above Team/Matchup heroes that share --m-header blue.
+  // Exact spacer height so My Team's blue hero sits flush under the fixed header
+  // (a taller spacer showed a 1px grey page-bg seam).
   useLayoutEffect(() => {
     const el = headerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const apply = () => setSpacerPx(Math.ceil(el.getBoundingClientRect().height));
+    const apply = () => setSpacerPx(Math.round(el.getBoundingClientRect().height));
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(el);
     return () => ro.disconnect();
   }, [subpageTitle, inLeague, theme]);
 
-  // Fixed (not sticky) so pull-to-refresh / overscroll never drags the chrome.
-  // No light-theme shadow — it read as a grey seam over the matching Team hero.
+  // Fixed so pull-to-refresh never drags chrome. No light-theme drop shadow —
+  // it read as a grey hairline over the matching Team hero blue.
   const headerShellClass = cn(
     "fixed inset-x-0 top-0 z-30 bg-m-header text-m-header-fg",
     theme === "dark" && "border-b border-m-border",
