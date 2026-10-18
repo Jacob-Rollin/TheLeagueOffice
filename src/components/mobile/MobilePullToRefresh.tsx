@@ -9,9 +9,9 @@ import {
 
 import { cn } from "@/lib/utils";
 
-/** Arm distance — about 2× the prior 72px so the cue has room to play. */
-const TRIGGER_PX = 144;
-const MAX_PULL_PX = 220;
+/** Arm distance — ~2× the last shipped pull (~100px) so the cue has real travel. */
+const TRIGGER_PX = 200;
+const MAX_PULL_PX = 300;
 const SETTLE_MS = 240;
 /** Brief hold after release so refresh is visible, without feeling stuck. */
 const MIN_REFRESH_VISIBLE_MS = 1800;
