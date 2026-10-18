@@ -3,16 +3,17 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
   type TouchEvent as ReactTouchEvent,
 } from "react";
 
 import { cn } from "@/lib/utils";
 
-const TRIGGER_PX = 68;
-const MAX_PULL_PX = 104;
+const TRIGGER_PX = 72;
+const MAX_PULL_PX = 108;
 const SETTLE_MS = 220;
+/** Circumference of the 36px viewBox ring (r=14). */
+const RING_C = 2 * Math.PI * 14;
 
 type PtrState = "idle" | "pulling" | "armed" | "refreshing";
 
@@ -45,8 +46,8 @@ function atScrollTop() {
 }
 
 /**
- * Sleeper-style pull-to-refresh for /m pages: small football indicator that
- * tracks the finger, then spins while `onRefresh` resolves.
+ * Pull-to-refresh for /m pages. Content below the fixed header translates;
+ * a circular progress ring fills on pull, then spins while refreshing.
  */
 export function MobilePullToRefresh({
   onRefresh,
@@ -104,38 +105,48 @@ export function MobilePullToRefresh({
     tracking.current = true;
   };
 
-  const onTouchMove = (e: ReactTouchEvent) => {
+  const onTouchMove = () => {
     if (!tracking.current || startY.current == null) return;
     if (stateRef.current === "refreshing") return;
     if (!atScrollTop()) {
       reset();
       return;
     }
-    const t = e.touches[0];
-    if (!t) return;
-    const raw = t.clientY - startY.current;
-    if (raw <= 0) {
-      setPull(0);
-      setState("idle");
-      return;
-    }
-    const eased = raw <= TRIGGER_PX ? raw : TRIGGER_PX + (raw - TRIGGER_PX) * 0.32;
-    const next = Math.min(eased, MAX_PULL_PX);
-    setPull(next);
-    setState(next >= TRIGGER_PX ? "armed" : "pulling");
-    // preventDefault is applied via the non-passive window listener below.
   };
 
-  // React's touchmove handlers are passive — attach a real listener when pulling
-  // so we can block native overscroll without console warnings.
+  // Use a non-passive window listener for move so we can preventDefault and
+  // read clientY without React's passive touchmove limitation.
   useEffect(() => {
-    if (state !== "pulling" && state !== "armed") return;
-    const block = (e: TouchEvent) => {
-      if (e.cancelable) e.preventDefault();
+    if (!enabled) return;
+
+    const onMove = (e: TouchEvent) => {
+      if (!tracking.current || startY.current == null) return;
+      if (stateRef.current === "refreshing") return;
+      if (!atScrollTop()) {
+        startY.current = null;
+        tracking.current = false;
+        setPull(0);
+        setState("idle");
+        return;
+      }
+      const t = e.touches[0];
+      if (!t) return;
+      const raw = t.clientY - startY.current;
+      if (raw <= 0) {
+        setPull(0);
+        setState("idle");
+        return;
+      }
+      const eased = raw <= TRIGGER_PX ? raw : TRIGGER_PX + (raw - TRIGGER_PX) * 0.32;
+      const next = Math.min(eased, MAX_PULL_PX);
+      setPull(next);
+      setState(next >= TRIGGER_PX ? "armed" : "pulling");
+      if (next > 6 && e.cancelable) e.preventDefault();
     };
-    window.addEventListener("touchmove", block, { passive: false });
-    return () => window.removeEventListener("touchmove", block);
-  }, [state]);
+
+    window.addEventListener("touchmove", onMove, { passive: false });
+    return () => window.removeEventListener("touchmove", onMove);
+  }, [enabled]);
 
   const onTouchEnd = () => {
     if (!tracking.current) return;
@@ -156,8 +167,9 @@ export function MobilePullToRefresh({
       ? "none"
       : `transform ${SETTLE_MS}ms cubic-bezier(0.23, 1, 0.32, 1), opacity ${SETTLE_MS}ms ease`;
   const progress = Math.min(1, pull / TRIGGER_PX);
-  const spinDeg = state === "refreshing" ? undefined : progress * 200;
-  const indicatorOffset = Math.min(pull, TRIGGER_PX) - TRIGGER_PX;
+  const indicatorTravel = Math.min(pull, TRIGGER_PX);
+  const refreshing = state === "refreshing";
+  const showIndicator = refreshing || pull > 2;
 
   return (
     <div
@@ -166,53 +178,38 @@ export function MobilePullToRefresh({
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       onTouchCancel={onTouchEnd}
-      style={{ overscrollBehaviorY: "contain" }}
+      style={{ overscrollBehaviorY: "none" }}
     >
       <div
-        aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center"
         style={{
-          transform: `translateY(${indicatorOffset}px)`,
-          opacity:
-            state === "idle" && pull < 2
-              ? 0
-              : Math.min(1, pull / 28 + (state === "refreshing" ? 1 : 0)),
+          height: TRIGGER_PX,
+          transform: `translateY(${showIndicator ? indicatorTravel - TRIGGER_PX : -TRIGGER_PX}px)`,
+          opacity: showIndicator ? Math.min(1, progress * 1.15 + (refreshing ? 1 : 0)) : 0,
           transition,
-          paddingTop: "0.35rem",
         }}
       >
         <span
           className={cn(
-            "flex size-9 items-center justify-center rounded-full border border-m-border bg-m-card shadow-sm",
-            state === "armed" || state === "refreshing" ? "text-m-accent" : "text-m-muted",
+            "mt-2 flex size-10 items-center justify-center rounded-full border bg-m-card shadow-md",
+            state === "armed" || refreshing
+              ? "border-m-accent text-m-accent"
+              : "border-m-border text-m-muted",
           )}
           role="status"
           aria-live="polite"
           aria-label={
-            state === "refreshing"
-              ? "Refreshing"
-              : state === "armed"
-                ? "Release to refresh"
-                : "Pull to refresh"
+            refreshing ? "Refreshing" : state === "armed" ? "Release to refresh" : "Pull to refresh"
           }
         >
-          <FootballGlyph
-            className={cn("size-5", state === "refreshing" && !reduceMotion && "m-ptr-spin")}
-            style={
-              state === "refreshing" || reduceMotion
-                ? undefined
-                : { transform: `rotate(${spinDeg ?? 0}deg)`, transition }
-            }
-          />
+          <RefreshRing progress={progress} spinning={refreshing && !reduceMotion} />
         </span>
       </div>
 
       <div
         style={{
           transform:
-            pull > 0 || state === "refreshing"
-              ? `translateY(${Math.min(pull, TRIGGER_PX) * 0.85}px)`
-              : undefined,
+            pull > 0 || refreshing ? `translateY(${Math.min(pull, TRIGGER_PX) * 0.9}px)` : undefined,
           transition,
         }}
       >
@@ -222,21 +219,34 @@ export function MobilePullToRefresh({
   );
 }
 
-function FootballGlyph({ className, style }: { className?: string; style?: CSSProperties }) {
+/** Circular progress that fills on pull, then spins as a loader while refreshing. */
+function RefreshRing({ progress, spinning }: { progress: number; spinning: boolean }) {
+  const dash = Math.max(0.08, progress) * RING_C;
   return (
-    <svg viewBox="0 0 24 24" className={className} style={style} fill="currentColor" aria-hidden>
-      <ellipse cx="12" cy="12" rx="9" ry="5.5" transform="rotate(-35 12 12)" />
-      <path
-        fill="var(--m-card)"
-        d="M9.2 10.1c.9-.7 2.1-1.1 2.8-.6.7.5.6 1.7-.3 2.4-.9.7-2.1 1.1-2.8.6-.7-.5-.6-1.7.3-2.4z"
-        opacity="0.35"
-      />
-      <path
-        stroke="var(--m-card)"
-        strokeWidth="1.2"
-        strokeLinecap="round"
+    <svg
+      viewBox="0 0 36 36"
+      className={cn("size-6", spinning && "m-ptr-spin")}
+      aria-hidden
+    >
+      <circle
+        cx="18"
+        cy="18"
+        r="14"
         fill="none"
-        d="M10.2 9.6l3.6 4.8M11.4 8.9l1.2 1.6M13.2 13.8l1.2 1.6"
+        stroke="currentColor"
+        strokeWidth="3"
+        opacity="0.2"
+      />
+      <circle
+        cx="18"
+        cy="18"
+        r="14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={spinning ? `${RING_C * 0.72} ${RING_C}` : `${dash} ${RING_C}`}
+        transform="rotate(-90 18 18)"
       />
     </svg>
   );

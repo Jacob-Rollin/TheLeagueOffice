@@ -1,6 +1,6 @@
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { ChevronLeft, House, Monitor, Settings } from "lucide-react";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { AuthDialog, type AuthMode } from "@/components/auth/AuthDialog";
 import { useAuth } from "@/hooks/useAuth";
@@ -38,12 +38,27 @@ function MobileFrame({ children }: { children: ReactNode }) {
     isError,
   });
 
+  // Pin the document against iOS rubber-band so the fixed header never drifts.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overscrollBehaviorY;
+    const prevBody = body.style.overscrollBehaviorY;
+    html.style.overscrollBehaviorY = "none";
+    body.style.overscrollBehaviorY = "none";
+    return () => {
+      html.style.overscrollBehaviorY = prevHtml;
+      body.style.overscrollBehaviorY = prevBody;
+    };
+  }, []);
+
   return (
     <div
       className={cn(
         theme === "dark" ? "mobile-theme-dark" : "mobile-theme-light",
         "min-h-screen bg-m-bg font-sans text-m-card-fg",
       )}
+      style={{ overscrollBehaviorY: "none" }}
     >
       {/* Boot: logo-only while auth/admin preload. Offline: same mark + connection copy. */}
       <MobileSplashHost gateLoading={gate === "loading"} />
@@ -87,36 +102,49 @@ function MobileHeader() {
       <Settings className="size-5" strokeWidth={2.5} />
     </button>
   );
-  // Safe-area sits outside the content row so the logo stays truly centered.
+  // Fixed (not sticky) so pull-to-refresh / overscroll never drags the chrome.
   const headerShellClass = cn(
-    "sticky top-0 z-20 bg-m-header text-m-header-fg",
+    "fixed inset-x-0 top-0 z-30 bg-m-header text-m-header-fg",
     theme === "dark" ? "border-b border-m-border" : "shadow-[0_2px_6px_rgba(0,0,0,0.18)]",
   );
   const headerShellStyle = { paddingTop: "env(safe-area-inset-top, 0px)" } as const;
   const headerRowClass = "relative flex items-center justify-between px-4 py-3";
+  /** Matches safe-area + py-3 + h-12 logo/button row. */
+  const headerSpacer = (
+    <div
+      aria-hidden
+      className="shrink-0"
+      style={{ height: "calc(env(safe-area-inset-top, 0px) + 4.5rem)" }}
+    />
+  );
 
   if (subpageTitle && leagueId) {
     return (
-      <header className={headerShellClass} style={headerShellStyle}>
-        <div className={headerRowClass}>
-          <button
-            type="button"
-            aria-label="Back"
-            className={iconButtonClass}
-            onClick={() =>
-              router.history.canGoBack()
-                ? router.history.back()
-                : void router.navigate({ to: "/m/league/$leagueId/team", params: { leagueId } })
-            }
-          >
-            <ChevronLeft className="size-6" strokeWidth={2.5} />
-          </button>
-          <h1 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-display text-xl font-semibold tracking-wide">
-            {subpageTitle}
-          </h1>
-          <span className="size-11" aria-hidden="true" />
-        </div>
-      </header>
+      <>
+        <header className={headerShellClass} style={headerShellStyle}>
+          <div className="mx-auto w-full max-w-md">
+            <div className={headerRowClass}>
+              <button
+                type="button"
+                aria-label="Back"
+                className={iconButtonClass}
+                onClick={() =>
+                  router.history.canGoBack()
+                    ? router.history.back()
+                    : void router.navigate({ to: "/m/league/$leagueId/team", params: { leagueId } })
+                }
+              >
+                <ChevronLeft className="size-6" strokeWidth={2.5} />
+              </button>
+              <h1 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-display text-xl font-semibold tracking-wide">
+                {subpageTitle}
+              </h1>
+              <span className="size-11" aria-hidden="true" />
+            </div>
+          </div>
+        </header>
+        {headerSpacer}
+      </>
     );
   }
 
@@ -124,32 +152,35 @@ function MobileHeader() {
     <>
       {settingsOpen ? <MobileSettingsOverlay onClose={closeSettings} /> : null}
       <header className={headerShellClass} style={headerShellStyle}>
-        <div className={headerRowClass}>
-          {inLeague ? (
-            <Link to="/m" aria-label="Home" className={iconButtonClass}>
-              <House className="size-5" strokeWidth={2.5} />
-            </Link>
-          ) : (
-            settingsButton
-          )}
+        <div className="mx-auto w-full max-w-md">
+          <div className={headerRowClass}>
+            {inLeague ? (
+              <Link to="/m" aria-label="Home" className={iconButtonClass}>
+                <House className="size-5" strokeWidth={2.5} />
+              </Link>
+            ) : (
+              settingsButton
+            )}
 
-          <Link
-            to="/m"
-            aria-label="The League Office home"
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-          >
-            <img src="/the-league-logo.png" alt="" className="h-12 w-auto" />
-          </Link>
-
-          {inLeague ? (
-            settingsButton
-          ) : (
-            <Link to="/" aria-label="Open desktop site" className={iconButtonClass}>
-              <Monitor className="size-5" strokeWidth={2.5} />
+            <Link
+              to="/m"
+              aria-label="The League Office home"
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            >
+              <img src="/the-league-logo.png" alt="" className="h-12 w-auto" />
             </Link>
-          )}
+
+            {inLeague ? (
+              settingsButton
+            ) : (
+              <Link to="/" aria-label="Open desktop site" className={iconButtonClass}>
+                <Monitor className="size-5" strokeWidth={2.5} />
+              </Link>
+            )}
+          </div>
         </div>
       </header>
+      {headerSpacer}
     </>
   );
 }
