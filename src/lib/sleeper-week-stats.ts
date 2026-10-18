@@ -10,16 +10,20 @@
  */
 
 import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
+import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
 import { getCached } from "@/lib/sleeper-cache";
 import { sleeperFetchJson } from "@/lib/sleeper-http";
 
 /** Shared IndexedDB key — matchup overlay + Statistics tab share one download. */
 export const WEEKLY_ACTUAL_STATS_CACHE_KEY = (season: string | number, week: number) =>
-  `weekly-actual-stats-v4-regular-path:${season}|${week}`;
+  `weekly-actual-stats-v5-regular-snap:${season}|${week}`;
 
 /**
  * Budgeted Sleeper week actuals. Callers pass TTL so broadcast pages (~12s)
  * and default boards (~30s) coalesce on the same cache key.
+ *
+ * On Sleeper miss/empty: warm snap-cdn fallback (Actions publish) — never
+ * write an empty `{}` into IndexedDB (that poisoned native Matchup 0.00s).
  */
 export async function fetchWeeklyActualStatRows(
   season: string | number,
@@ -31,8 +35,35 @@ export async function fetchWeeklyActualStatRows(
   return getCached(WEEKLY_ACTUAL_STATS_CACHE_KEY(safeSeason, safeWeek), ttlMs, async () => {
     const url = `${SLEEPER_BASE}/stats/nfl/regular/${safeSeason}/${safeWeek}?${positionsQuery()}`;
     const rows = await sleeperFetchJson<unknown>(url, "live");
-    return parseSleeperWeekStatRows(rows);
+    if (rows == null) {
+      const snap = await fetchSnapWeekStatRows(safeSeason, safeWeek);
+      if (snap && Object.keys(snap).length > 0) return snap;
+      throw new Error("sleeper week stats unavailable");
+    }
+    const parsed = parseSleeperWeekStatRows(rows);
+    if (Object.keys(parsed).length > 0) return parsed;
+    const snap = await fetchSnapWeekStatRows(safeSeason, safeWeek);
+    if (snap && Object.keys(snap).length > 0) return snap;
+    throw new Error("empty week stats");
   });
+}
+
+async function fetchSnapWeekStatRows(
+  season: string,
+  week: number,
+): Promise<Record<string, Record<string, number>> | null> {
+  if (!snapCdnPublicBase()) return null;
+  const url = r2Url(R2_SNAP_KEYS.nativeWeekStats(season, week));
+  if (!url) return null;
+  try {
+    const res = await fetch(url, { headers: { accept: "application/json" } });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { stats?: unknown };
+    if (!json?.stats || typeof json.stats !== "object") return null;
+    return parseSleeperWeekStatRows(json.stats);
+  } catch {
+    return null;
+  }
 }
 
 function coerceStatLine(raw: unknown): Record<string, number> | null {
