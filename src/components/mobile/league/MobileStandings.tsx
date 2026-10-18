@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { Trophy } from "lucide-react";
+import { Trophy, UserRound } from "lucide-react";
 
 import { resolveAvatarUrl } from "@/components/playbook/panels";
 import type { StandingRow } from "@/lib/league.server";
@@ -452,8 +452,8 @@ function BracketTeamRow({
           muted && "opacity-75",
         )}
       >
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-dashed border-m-border bg-m-chip text-[9px] font-bold text-m-muted">
-          ?
+        <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-m-border bg-m-chip text-m-muted">
+          <UserRound className="size-[70%] translate-y-[6%]" strokeWidth={1.75} aria-hidden />
         </span>
         <span className={cn("min-w-0 flex-1 truncate text-[12px] font-semibold", mine && "text-m-accent")}>
           {slot.label}
