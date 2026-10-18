@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { useNflState } from "@/hooks/useLeagueProjections";
 import { liveRefreshMs, useNflGameProgress } from "@/hooks/useNflGameProgress";
@@ -46,7 +46,7 @@ export function useWeeklyActualStats(
     refetchInterval: visibleRefetchInterval(capped),
     refetchIntervalInBackground: false,
     retry: 1,
-    placeholderData: keepPreviousData,
+    placeholderData: (prev) => prev,
     queryFn: async () => {
       // Never commit an empty Map while hidden — that wiped live scores to 0.00.
       if (!isPageVisible()) {
