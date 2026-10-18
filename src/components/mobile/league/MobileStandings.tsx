@@ -146,7 +146,6 @@ function tbdLabel(a: Seed, b: Seed) {
 function round1Title(byes: Seed[], games: Matchup[]) {
   if (byes.length) return "Wild Card";
   if (games.length === 1) return "Championship";
-  if (games.length === 2) return "Semifinals";
   return "Round 1";
 }
 
