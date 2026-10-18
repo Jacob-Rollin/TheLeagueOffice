@@ -231,13 +231,32 @@ export function MobilePlayoffPicture({
   const semisWeek = startWeek + (hasByes ? 1 : 0);
   const showThirdPlace = !hasByes && games.length === 2;
 
+  const thirdPlaceBlock = showThirdPlace ? (
+    <FinalsBlock
+      title="3rd Place"
+      week={finalsWeek}
+      top={{
+        kind: "tbd",
+        label: tbdLabel(games[0]![0], games[0]![1]),
+        mine: isMine(games[0]![0].row) || isMine(games[0]![1].row),
+      }}
+      bottom={{
+        kind: "tbd",
+        label: tbdLabel(games[1]![0], games[1]![1]),
+        mine: isMine(games[1]![0].row) || isMine(games[1]![1].row),
+      }}
+      isMine={isMine}
+    />
+  ) : null;
+
   return (
     <div className="space-y-5 pb-5">
-      <p className="px-4 text-center text-sm text-m-muted">If the playoffs started today</p>
+      <p className="px-3 text-center text-sm text-m-muted">If the playoffs started today</p>
 
-      <div className="overflow-x-auto no-scrollbar px-4">
-        <div className="flex min-w-min items-stretch gap-0 pb-1">
-          <BracketColumn title={r1Label} week={startWeek} className="justify-around gap-8">
+      {/* Full-width bracket — no horizontal scroll. 3rd Place sits below the connector band. */}
+      <div className="px-3">
+        <div className="flex w-full items-stretch gap-0">
+          <BracketColumn title={r1Label} week={startWeek} className="justify-around gap-5">
             {games.map(([high, low]) => (
               <MatchupCard
                 key={`${high.seed}-${low.seed}`}
@@ -250,52 +269,33 @@ export function MobilePlayoffPicture({
 
           {showAdvanceColumn ? (
             <>
-              <BracketConnectors count={Math.max(2, games.length)} />
+              <BracketConnectors />
               <BracketColumn
                 title={hasByes ? "Semifinals" : "Finals"}
                 week={hasByes ? semisWeek : finalsWeek}
-                className="justify-around gap-8"
+                className={hasByes ? "justify-around gap-5" : "justify-center"}
               >
-                {hasByes
-                  ? advanceMatchups.map((g, i) => (
-                      <MatchupCard key={`semi-${i}`} top={g.top} bottom={g.bottom} isMine={isMine} />
-                    ))
-                  : (
-                      <>
-                        <FinalsBlock
-                          title="Championship"
-                          week={finalsWeek}
-                          top={advanceMatchups[0]!.top}
-                          bottom={advanceMatchups[0]!.bottom}
-                          isMine={isMine}
-                          trophy
-                        />
-                        {showThirdPlace ? (
-                          <FinalsBlock
-                            title="3rd Place"
-                            week={finalsWeek}
-                            top={{
-                              kind: "tbd",
-                              label: tbdLabel(games[0]![0], games[0]![1]),
-                              mine: isMine(games[0]![0].row) || isMine(games[0]![1].row),
-                            }}
-                            bottom={{
-                              kind: "tbd",
-                              label: tbdLabel(games[1]![0], games[1]![1]),
-                              mine: isMine(games[1]![0].row) || isMine(games[1]![1].row),
-                            }}
-                            isMine={isMine}
-                          />
-                        ) : null}
-                      </>
-                    )}
+                {hasByes ? (
+                  advanceMatchups.map((g, i) => (
+                    <MatchupCard key={`semi-${i}`} top={g.top} bottom={g.bottom} isMine={isMine} />
+                  ))
+                ) : (
+                  <FinalsBlock
+                    title="Championship"
+                    week={finalsWeek}
+                    top={advanceMatchups[0]!.top}
+                    bottom={advanceMatchups[0]!.bottom}
+                    isMine={isMine}
+                    trophy
+                  />
+                )}
               </BracketColumn>
             </>
           ) : null}
 
           {championshipFromByes ? (
             <>
-              <BracketConnectors count={2} />
+              <BracketConnectors />
               <BracketColumn title="Finals" week={finalsWeek} className="justify-center">
                 <FinalsBlock
                   title="Championship"
@@ -309,10 +309,18 @@ export function MobilePlayoffPicture({
             </>
           ) : null}
         </div>
+
+        {thirdPlaceBlock ? (
+          <div className="mt-8 flex w-full">
+            <div className="min-w-0 flex-1" aria-hidden />
+            <div className="w-5 shrink-0" aria-hidden />
+            <div className="min-w-0 flex-1">{thirdPlaceBlock}</div>
+          </div>
+        ) : null}
       </div>
 
       {outside.length ? (
-        <div className="px-4">
+        <div className="px-3">
           <h3 className="mb-2 font-display text-sm font-bold uppercase tracking-widest text-m-muted">
             On the Bubble
           </h3>
@@ -346,9 +354,9 @@ function BracketColumn({
   className?: string;
 }) {
   return (
-    <div className="flex w-[13.25rem] shrink-0 flex-col">
-      <div className="mb-3 px-0.5">
-        <p className="font-display text-[11px] font-bold uppercase tracking-[0.14em] text-m-muted">
+    <div className="flex min-w-0 flex-1 flex-col">
+      <div className="mb-2.5 px-0.5">
+        <p className="truncate font-display text-[10px] font-bold uppercase tracking-[0.12em] text-m-muted">
           {title}
           <span className="font-semibold normal-case tracking-normal text-m-muted/80">
             {" "}
@@ -361,17 +369,15 @@ function BracketColumn({
   );
 }
 
-/** Elbow connectors between round columns (Sleeper-style tree). */
-function BracketConnectors({ count }: { count: number }) {
-  const pairs = Math.max(1, Math.ceil(count / 2));
+/** Single elbow tree from Round 1 into the Championship mid-band. */
+function BracketConnectors() {
   return (
-    <div className="flex w-7 shrink-0 flex-col justify-around py-10" aria-hidden>
-      {Array.from({ length: pairs }, (_, i) => (
-        <div key={i} className="relative mx-auto h-28 w-full">
-          <span className="absolute left-0 top-[18%] h-[64%] w-[55%] rounded-r-md border border-l-0 border-m-accent/55" />
-          <span className="absolute right-0 top-1/2 h-px w-[45%] -translate-y-1/2 bg-m-accent/55" />
-        </div>
-      ))}
+    <div className="flex w-5 shrink-0 flex-col self-stretch px-0.5" aria-hidden>
+      <div className="mb-2.5 h-[1.125rem]" />
+      <div className="relative min-h-[7.5rem] flex-1">
+        <span className="absolute left-0 top-[12%] bottom-[12%] w-[55%] rounded-r-md border border-l-0 border-m-accent/50" />
+        <span className="absolute right-0 top-1/2 h-px w-[45%] -translate-y-1/2 bg-m-accent/50" />
+      </div>
     </div>
   );
 }
@@ -410,10 +416,10 @@ function FinalsBlock({
   trophy?: boolean;
 }) {
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5 px-0.5">
-        {trophy ? <Trophy className="size-3.5 text-amber-500" aria-hidden /> : null}
-        <p className="font-display text-[11px] font-bold uppercase tracking-[0.12em] text-m-muted">
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 px-0.5">
+        {trophy ? <Trophy className="size-3 shrink-0 text-amber-500" aria-hidden /> : null}
+        <p className="truncate font-display text-[10px] font-bold uppercase tracking-[0.1em] text-m-muted">
           {title}
           <span className="ml-1 font-semibold normal-case tracking-normal text-m-muted/80">
             · Wk {week}
@@ -441,18 +447,17 @@ function BracketTeamRow({
     return (
       <div
         className={cn(
-          "flex min-h-[2.75rem] items-center gap-2.5 px-2.5 py-2",
+          "flex min-h-[2.5rem] items-center gap-1.5 px-2 py-1.5",
           mine && "bg-m-highlight",
           muted && "opacity-75",
         )}
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-dashed border-m-border bg-m-chip text-[10px] font-bold text-m-muted">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-dashed border-m-border bg-m-chip text-[9px] font-bold text-m-muted">
           ?
         </span>
-        <span className={cn("min-w-0 flex-1 truncate text-sm font-semibold", mine && "text-m-accent")}>
+        <span className={cn("min-w-0 flex-1 truncate text-[12px] font-semibold", mine && "text-m-accent")}>
           {slot.label}
         </span>
-        <span className="shrink-0 text-xs tabnum text-m-muted">—</span>
       </div>
     );
   }
@@ -462,16 +467,16 @@ function BracketTeamRow({
   return (
     <div
       className={cn(
-        "flex min-h-[2.75rem] items-center gap-2.5 px-2.5 py-2",
+        "flex min-h-[2.5rem] items-center gap-1.5 px-2 py-1.5",
         mine && "bg-m-highlight",
         muted && "opacity-75",
       )}
     >
       <span className="relative shrink-0">
-        <MobileTeamLogo name={seed.row.team} logo={seed.row.avatar} className="size-8" />
+        <MobileTeamLogo name={seed.row.team} logo={seed.row.avatar} className="size-7" />
         <span
           className={cn(
-            "absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full border border-m-card font-display text-[9px] font-bold leading-none",
+            "absolute -bottom-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full border border-m-card font-display text-[8px] font-bold leading-none",
             muted ? "bg-m-chip text-m-muted" : "bg-m-accent text-m-accent-fg",
           )}
         >
@@ -479,14 +484,11 @@ function BracketTeamRow({
         </span>
       </span>
       <span className="min-w-0 flex-1">
-        <span className={cn("block truncate text-sm font-semibold", mine && "text-m-accent")}>
+        <span className={cn("block truncate text-[12px] font-semibold leading-tight", mine && "text-m-accent")}>
           {shortName(seed)}
         </span>
-        {seed.row.owner ? (
-          <span className="block truncate text-[11px] text-m-muted">{seed.row.team}</span>
-        ) : null}
       </span>
-      <span className="shrink-0 text-right text-xs font-semibold tabnum text-m-muted">
+      <span className="shrink-0 text-right text-[11px] font-semibold tabnum text-m-muted">
         {record(seed.row)}
       </span>
     </div>
