@@ -7,16 +7,15 @@ import {
   type TouchEvent as ReactTouchEvent,
 } from "react";
 
+import { FootballIcon } from "@/components/mobile/league/mobileNavIcons";
 import { cn } from "@/lib/utils";
 
-/** Arm distance — ~2× the last shipped pull (~100px) so the cue has real travel. */
+/** Arm distance — ~2× the prior pull so the cue has real travel. */
 const TRIGGER_PX = 200;
 const MAX_PULL_PX = 300;
 const SETTLE_MS = 240;
 /** Brief hold after release so refresh is visible, without feeling stuck. */
 const MIN_REFRESH_VISIBLE_MS = 1800;
-/** Circumference of the 36px viewBox ring (r=14). */
-const RING_C = 2 * Math.PI * 14;
 
 type PtrState = "idle" | "pulling" | "armed" | "refreshing";
 
@@ -27,6 +26,12 @@ type MobilePullToRefreshProps = {
   /** When false, gesture is ignored (e.g. nested sheet open). */
   enabled?: boolean;
 };
+
+/** Simple turf + yard lines — only paints the pull reveal strip, not the page. */
+const FIELD_BG =
+  "linear-gradient(90deg, rgba(255,255,255,0.14) 0 1px, transparent 1px 100%)," +
+  "linear-gradient(90deg, transparent 0 49.5%, rgba(255,255,255,0.35) 49.5% 50.5%, transparent 50.5% 100%)," +
+  "linear-gradient(180deg, #1f6b3a 0%, #2a8a4a 40%, #247a42 60%, #1a5c32 100%)";
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -55,8 +60,8 @@ function wait(ms: number) {
 }
 
 /**
- * Pull-to-refresh for /m pages. Content below the fixed header translates;
- * a circular progress ring fills on pull, then spins briefly while refreshing.
+ * Pull-to-refresh for /m pages. Reveal strip shows a turf background with the
+ * Matchup football icon centered (spins while refreshing). Page chrome untouched.
  */
 export function MobilePullToRefresh({
   onRefresh,
@@ -124,12 +129,9 @@ export function MobilePullToRefresh({
     if (stateRef.current === "refreshing") return;
     if (!atScrollTop()) {
       reset();
-      return;
     }
   };
 
-  // Use a non-passive window listener for move so we can preventDefault and
-  // read clientY without React's passive touchmove limitation.
   useEffect(() => {
     if (!enabled) return;
 
@@ -181,9 +183,11 @@ export function MobilePullToRefresh({
       ? "none"
       : `transform ${SETTLE_MS}ms cubic-bezier(0.23, 1, 0.32, 1), opacity ${SETTLE_MS}ms ease`;
   const progress = Math.min(1, pull / TRIGGER_PX);
-  const indicatorTravel = Math.min(pull, TRIGGER_PX);
   const refreshing = state === "refreshing";
-  const showIndicator = refreshing || pull > 2;
+  /** Visible reveal height — tracks pull so the football stays centered in the strip. */
+  const revealH = Math.min(pull, TRIGGER_PX) * 0.92;
+  const showReveal = refreshing || pull > 2;
+  const spinDeg = refreshing ? undefined : progress * 360;
 
   return (
     <div
@@ -194,74 +198,53 @@ export function MobilePullToRefresh({
       onTouchCancel={onTouchEnd}
       style={{ overscrollBehaviorY: "none" }}
     >
+      {/* Reveal strip only — turf + yard lines; does not paint the page body. */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center"
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center overflow-hidden"
         style={{
-          height: TRIGGER_PX,
-          transform: `translateY(${showIndicator ? indicatorTravel - TRIGGER_PX : -TRIGGER_PX}px)`,
-          opacity: showIndicator ? Math.min(1, progress * 1.15 + (refreshing ? 1 : 0)) : 0,
+          height: showReveal ? revealH : 0,
+          backgroundImage: FIELD_BG,
+          backgroundSize: "28px 100%, 100% 100%, 100% 100%",
+          backgroundPosition: "center, center, center",
           transition,
         }}
+        aria-hidden={!showReveal}
       >
         <span
           className={cn(
-            "mt-2 flex size-10 items-center justify-center rounded-full border bg-m-card shadow-md",
-            state === "armed" || refreshing
-              ? "border-m-accent text-m-accent"
-              : "border-m-border text-m-muted",
+            "flex size-11 items-center justify-center rounded-full bg-white/95 text-m-header shadow-md ring-1 ring-black/10",
+            (state === "armed" || refreshing) && "text-m-accent ring-m-accent/30",
           )}
           role="status"
           aria-live="polite"
           aria-label={
             refreshing ? "Refreshing" : state === "armed" ? "Release to refresh" : "Pull to refresh"
           }
+          style={{
+            opacity: showReveal ? Math.min(1, progress * 3 + (refreshing ? 1 : 0)) : 0,
+            transition,
+          }}
         >
-          <RefreshRing progress={progress} spinning={refreshing && !reduceMotion} />
+          <FootballIcon
+            className={cn("size-7", refreshing && !reduceMotion && "m-ptr-spin")}
+            strokeWidth={2.25}
+            style={
+              refreshing || reduceMotion
+                ? undefined
+                : { transform: `rotate(${spinDeg ?? 0}deg)`, transition }
+            }
+          />
         </span>
       </div>
 
       <div
         style={{
-          transform:
-            pull > 0 || refreshing ? `translateY(${Math.min(pull, TRIGGER_PX) * 0.9}px)` : undefined,
+          transform: pull > 0 || refreshing ? `translateY(${revealH}px)` : undefined,
           transition,
         }}
       >
         {children}
       </div>
     </div>
-  );
-}
-
-/** Circular progress that fills on pull, then spins as a loader while refreshing. */
-function RefreshRing({ progress, spinning }: { progress: number; spinning: boolean }) {
-  const dash = Math.max(0.08, progress) * RING_C;
-  return (
-    <svg
-      viewBox="0 0 36 36"
-      className={cn("size-6", spinning && "m-ptr-spin")}
-      aria-hidden
-    >
-      <circle
-        cx="18"
-        cy="18"
-        r="14"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3"
-        opacity="0.2"
-      />
-      <circle
-        cx="18"
-        cy="18"
-        r="14"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeDasharray={spinning ? `${RING_C * 0.72} ${RING_C}` : `${dash} ${RING_C}`}
-        transform="rotate(-90 18 18)"
-      />
-    </svg>
   );
 }
