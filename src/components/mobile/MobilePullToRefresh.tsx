@@ -28,13 +28,12 @@ type MobilePullToRefreshProps = {
 };
 
 /**
- * Field-style reveal: theme grey turf + accent blue yard markers.
- * Only paints the pull strip — not the page body.
+ * Yard markers for the pull reveal — theme accent on grey (`--m-bg`).
+ * Separate from backgroundColor so lines stay visible across browsers.
  */
-const FIELD_BG =
-  "linear-gradient(90deg, color-mix(in srgb, var(--m-accent) 28%, transparent) 0 1px, transparent 1px 100%)," +
-  "linear-gradient(90deg, transparent 0 49.5%, color-mix(in srgb, var(--m-accent) 48%, transparent) 49.5% 50.5%, transparent 50.5% 100%)," +
-  "var(--m-bg)";
+const FIELD_LINES =
+  "repeating-linear-gradient(90deg, transparent 0 18px, var(--m-accent) 18px 19.5px)," +
+  "linear-gradient(90deg, transparent 0 calc(50% - 1.25px), var(--m-accent) calc(50% - 1.25px) calc(50% + 1.25px), transparent calc(50% + 1.25px))";
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -201,44 +200,51 @@ export function MobilePullToRefresh({
       onTouchCancel={onTouchEnd}
       style={{ overscrollBehaviorY: "none" }}
     >
-      {/* Reveal strip only — turf + yard lines; does not paint the page body. */}
+      {/* Reveal strip only — grey field + blue yard lines; does not paint the page body. */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center overflow-hidden"
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 overflow-hidden"
         style={{
           height: showReveal ? revealH : 0,
           backgroundColor: "var(--m-bg)",
-          backgroundImage: FIELD_BG,
-          backgroundSize: "24px 100%, 100% 100%, 100% 100%",
-          backgroundPosition: "center, center, center",
           transition,
         }}
         aria-hidden={!showReveal}
       >
-        <span
-          className={cn(
-            "flex size-11 items-center justify-center rounded-full bg-white/95 text-m-header shadow-md ring-1 ring-black/10",
-            (state === "armed" || refreshing) && "text-m-accent ring-m-accent/30",
-          )}
-          role="status"
-          aria-live="polite"
-          aria-label={
-            refreshing ? "Refreshing" : state === "armed" ? "Release to refresh" : "Pull to refresh"
-          }
-          style={{
-            opacity: showReveal ? Math.min(1, progress * 3 + (refreshing ? 1 : 0)) : 0,
-            transition,
-          }}
-        >
-          <FootballIcon
-            className={cn("size-7", refreshing && !reduceMotion && "m-ptr-spin")}
-            strokeWidth={2.25}
-            style={
-              refreshing || reduceMotion
-                ? undefined
-                : { transform: `rotate(${spinDeg ?? 0}deg)`, transition }
+        <div
+          className="absolute inset-0 opacity-45"
+          style={{ backgroundImage: FIELD_LINES }}
+        />
+        <div className="relative z-[1] flex h-full items-center justify-center">
+          <span
+            className={cn(
+              "flex size-11 items-center justify-center rounded-full bg-white/95 text-m-header shadow-md ring-1 ring-black/10",
+              (state === "armed" || refreshing) && "text-m-accent ring-m-accent/30",
+            )}
+            role="status"
+            aria-live="polite"
+            aria-label={
+              refreshing
+                ? "Refreshing"
+                : state === "armed"
+                  ? "Release to refresh"
+                  : "Pull to refresh"
             }
-          />
-        </span>
+            style={{
+              opacity: showReveal ? Math.min(1, progress * 3 + (refreshing ? 1 : 0)) : 0,
+              transition,
+            }}
+          >
+            <FootballIcon
+              className={cn("size-7", refreshing && !reduceMotion && "m-ptr-spin")}
+              strokeWidth={2.25}
+              style={
+                refreshing || reduceMotion
+                  ? undefined
+                  : { transform: `rotate(${spinDeg ?? 0}deg)`, transition }
+              }
+            />
+          </span>
+        </div>
       </div>
 
       <div
