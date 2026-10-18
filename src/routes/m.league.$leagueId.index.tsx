@@ -17,7 +17,8 @@ const heroButtonClass =
   "flex-1 rounded-lg bg-m-chip px-3 py-3 text-center font-display text-[15px] font-bold uppercase tracking-wider text-m-chip-fg";
 
 function MobileLeagueHome() {
-  const { activeLeague, standings, rows, playoffTeams, seasonComplete, loading } = useMobileLeagueStandings();
+  const { activeLeague, standings, rows, playoffTeams, playoffStartWeek, seasonComplete, loading } =
+    useMobileLeagueStandings();
   const { myTeam } = useLeagueRosters([]);
   const [tab, setTab] = useState<LeagueTab>("standings");
 
@@ -88,7 +89,12 @@ function MobileLeagueHome() {
           ) : !rows.length ? (
             <p className="px-4 py-10 text-center text-sm text-m-muted">Standings are unavailable for this league.</p>
           ) : tab === "playoffs" ? (
-            <MobilePlayoffPicture rows={rows} playoffTeams={playoffTeams} isMine={isMine} />
+            <MobilePlayoffPicture
+              rows={rows}
+              playoffTeams={playoffTeams}
+              playoffStartWeek={playoffStartWeek ?? 15}
+              isMine={isMine}
+            />
           ) : (
             <MobileStandingsTable
               rows={rows}
