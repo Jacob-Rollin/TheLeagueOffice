@@ -9,9 +9,12 @@ import {
 
 import { cn } from "@/lib/utils";
 
-const TRIGGER_PX = 72;
-const MAX_PULL_PX = 108;
-const SETTLE_MS = 220;
+/** Arm distance — about 2× the prior 72px so the cue has room to play. */
+const TRIGGER_PX = 144;
+const MAX_PULL_PX = 220;
+const SETTLE_MS = 240;
+/** Brief hold after release so refresh is visible, without feeling stuck. */
+const MIN_REFRESH_VISIBLE_MS = 1800;
 /** Circumference of the 36px viewBox ring (r=14). */
 const RING_C = 2 * Math.PI * 14;
 
@@ -45,9 +48,15 @@ function atScrollTop() {
   return Math.max(window.scrollY, docTop, bodyTop) <= 1;
 }
 
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 /**
  * Pull-to-refresh for /m pages. Content below the fixed header translates;
- * a circular progress ring fills on pull, then spins while refreshing.
+ * a circular progress ring fills on pull, then spins briefly while refreshing.
  */
 export function MobilePullToRefresh({
   onRefresh,
@@ -86,15 +95,20 @@ export function MobilePullToRefresh({
   const runRefresh = useCallback(async () => {
     setState("refreshing");
     setPull(TRIGGER_PX);
+    const started = Date.now();
     try {
       await Promise.resolve(onRefreshRef.current());
     } finally {
+      const hold = reduceMotion
+        ? 0
+        : Math.max(0, MIN_REFRESH_VISIBLE_MS - (Date.now() - started));
+      if (hold > 0) await wait(hold);
       setPull(0);
       setState("idle");
       startY.current = null;
       tracking.current = false;
     }
-  }, []);
+  }, [reduceMotion]);
 
   const onTouchStart = (e: ReactTouchEvent) => {
     if (!enabled || stateRef.current === "refreshing") return;
@@ -137,7 +151,7 @@ export function MobilePullToRefresh({
         setState("idle");
         return;
       }
-      const eased = raw <= TRIGGER_PX ? raw : TRIGGER_PX + (raw - TRIGGER_PX) * 0.32;
+      const eased = raw <= TRIGGER_PX ? raw : TRIGGER_PX + (raw - TRIGGER_PX) * 0.28;
       const next = Math.min(eased, MAX_PULL_PX);
       setPull(next);
       setState(next >= TRIGGER_PX ? "armed" : "pulling");
