@@ -1,12 +1,12 @@
 /**
- * Parse Sleeper `/stats/nfl/regular/{season}/{week}` payloads.
+ * Parse Sleeper `/v1/stats/nfl/regular/{season}/{week}` payloads.
  *
  * Sleeper usually returns a flat dict: `{ [playerId]: { pass_yd, … } }`.
  * Some callers / older shapes use arrays or nested `{ stats: { … } }` —
  * accept all three so live scoring never silently empties.
  *
- * Note: `/stats/nfl/{season}/{week}?season_type=regular` returns empty `{}`
- * rows in current Sleeper — always use the `/regular/` path segment.
+ * Path must include `/v1` — without it `/stats/nfl/regular/...` 404s.
+ * Also avoid `/stats/nfl/{season}/{week}?season_type=regular` (empty `{}` rows).
  */
 
 import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
@@ -16,7 +16,7 @@ import { waitForSleeperPermit } from "@/lib/sleeper-rate-budget";
 
 /** Shared IndexedDB key — matchup overlay + Statistics tab share one download. */
 export const WEEKLY_ACTUAL_STATS_CACHE_KEY = (season: string | number, week: number) =>
-  `weekly-actual-stats-v6-client-live:${season}|${week}`;
+  `weekly-actual-stats-v7-v1-path:${season}|${week}`;
 
 /**
  * Live week actuals from browser → Sleeper (IndexedDB `getCached`).
@@ -31,7 +31,8 @@ export async function fetchWeeklyActualStatRows(
   const safeSeason = String(season || new Date().getUTCFullYear());
   const safeWeek = Math.max(1, Math.min(18, Math.floor(week) || 1));
   return getCached(WEEKLY_ACTUAL_STATS_CACHE_KEY(safeSeason, safeWeek), ttlMs, async () => {
-    const url = `${SLEEPER_BASE}/stats/nfl/regular/${safeSeason}/${safeWeek}?${positionsQuery()}`;
+    // `/v1` required — bare `/stats/nfl/regular/...` returns 404 HTML.
+    const url = `${SLEEPER_BASE}/v1/stats/nfl/regular/${safeSeason}/${safeWeek}?${positionsQuery()}`;
     const rows = await fetchSleeperWeekStatsJson(url);
     if (rows != null) {
       const parsed = parseSleeperWeekStatRows(rows);
