@@ -33,7 +33,7 @@ function MobileHome() {
   }
 
   return (
-    <MobilePullToRefresh onRefresh={onRefresh} revealColor="var(--m-bg)">
+    <MobilePullToRefresh onRefresh={onRefresh}>
       <main>
         {leagues.length > 0 ? <MobileMyLeagues leagues={leagues} /> : <MobileJoinHero />}
         <div className="h-3" />

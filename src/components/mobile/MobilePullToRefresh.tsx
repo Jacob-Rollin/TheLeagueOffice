@@ -9,12 +9,9 @@ import {
 
 import { cn } from "@/lib/utils";
 
-/** Pull distance required to arm refresh (slightly longer for a clearer cue). */
-const TRIGGER_PX = 100;
-const MAX_PULL_PX = 148;
-const SETTLE_MS = 280;
-/** Keep the spinner visible so users see refresh working before snap-back. */
-const MIN_REFRESH_VISIBLE_MS = 3500;
+const TRIGGER_PX = 72;
+const MAX_PULL_PX = 108;
+const SETTLE_MS = 220;
 /** Circumference of the 36px viewBox ring (r=14). */
 const RING_C = 2 * Math.PI * 14;
 
@@ -26,11 +23,6 @@ type MobilePullToRefreshProps = {
   className?: string;
   /** When false, gesture is ignored (e.g. nested sheet open). */
   enabled?: boolean;
-  /**
-   * Fill color behind content while pulling (defaults to header blue so Team
-   * hero pages do not flash grey). Override with a CSS color / token.
-   */
-  revealColor?: string;
 };
 
 function usePrefersReducedMotion() {
@@ -53,22 +45,15 @@ function atScrollTop() {
   return Math.max(window.scrollY, docTop, bodyTop) <= 1;
 }
 
-function wait(ms: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
 /**
  * Pull-to-refresh for /m pages. Content below the fixed header translates;
- * a circular progress ring fills on pull, then spins for at least ~3.5s.
+ * a circular progress ring fills on pull, then spins while refreshing.
  */
 export function MobilePullToRefresh({
   onRefresh,
   children,
   className,
   enabled = true,
-  revealColor = "var(--m-header)",
 }: MobilePullToRefreshProps) {
   const reduceMotion = usePrefersReducedMotion();
   const [pull, setPull] = useState(0);
@@ -101,20 +86,15 @@ export function MobilePullToRefresh({
   const runRefresh = useCallback(async () => {
     setState("refreshing");
     setPull(TRIGGER_PX);
-    const started = Date.now();
     try {
       await Promise.resolve(onRefreshRef.current());
     } finally {
-      const hold = reduceMotion
-        ? 0
-        : Math.max(0, MIN_REFRESH_VISIBLE_MS - (Date.now() - started));
-      if (hold > 0) await wait(hold);
       setPull(0);
       setState("idle");
       startY.current = null;
       tracking.current = false;
     }
-  }, [reduceMotion]);
+  }, []);
 
   const onTouchStart = (e: ReactTouchEvent) => {
     if (!enabled || stateRef.current === "refreshing") return;
@@ -130,9 +110,12 @@ export function MobilePullToRefresh({
     if (stateRef.current === "refreshing") return;
     if (!atScrollTop()) {
       reset();
+      return;
     }
   };
 
+  // Use a non-passive window listener for move so we can preventDefault and
+  // read clientY without React's passive touchmove limitation.
   useEffect(() => {
     if (!enabled) return;
 
@@ -154,7 +137,7 @@ export function MobilePullToRefresh({
         setState("idle");
         return;
       }
-      const eased = raw <= TRIGGER_PX ? raw : TRIGGER_PX + (raw - TRIGGER_PX) * 0.28;
+      const eased = raw <= TRIGGER_PX ? raw : TRIGGER_PX + (raw - TRIGGER_PX) * 0.32;
       const next = Math.min(eased, MAX_PULL_PX);
       setPull(next);
       setState(next >= TRIGGER_PX ? "armed" : "pulling");
@@ -187,7 +170,6 @@ export function MobilePullToRefresh({
   const indicatorTravel = Math.min(pull, TRIGGER_PX);
   const refreshing = state === "refreshing";
   const showIndicator = refreshing || pull > 2;
-  const contentShift = Math.min(pull, TRIGGER_PX) * 0.92;
 
   return (
     <div
@@ -196,11 +178,7 @@ export function MobilePullToRefresh({
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       onTouchCancel={onTouchEnd}
-      style={{
-        overscrollBehaviorY: "none",
-        // Slot behind translating content — header blue avoids the grey seam on Team.
-        backgroundColor: revealColor,
-      }}
+      style={{ overscrollBehaviorY: "none" }}
     >
       <div
         className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center"
@@ -213,7 +191,7 @@ export function MobilePullToRefresh({
       >
         <span
           className={cn(
-            "mt-3 flex size-11 items-center justify-center rounded-full border bg-m-card shadow-md",
+            "mt-2 flex size-10 items-center justify-center rounded-full border bg-m-card shadow-md",
             state === "armed" || refreshing
               ? "border-m-accent text-m-accent"
               : "border-m-border text-m-muted",
@@ -230,7 +208,8 @@ export function MobilePullToRefresh({
 
       <div
         style={{
-          transform: pull > 0 || refreshing ? `translateY(${contentShift}px)` : undefined,
+          transform:
+            pull > 0 || refreshing ? `translateY(${Math.min(pull, TRIGGER_PX) * 0.9}px)` : undefined,
           transition,
         }}
       >
@@ -244,7 +223,11 @@ export function MobilePullToRefresh({
 function RefreshRing({ progress, spinning }: { progress: number; spinning: boolean }) {
   const dash = Math.max(0.08, progress) * RING_C;
   return (
-    <svg viewBox="0 0 36 36" className={cn("size-7", spinning && "m-ptr-spin")} aria-hidden>
+    <svg
+      viewBox="0 0 36 36"
+      className={cn("size-6", spinning && "m-ptr-spin")}
+      aria-hidden
+    >
       <circle
         cx="18"
         cy="18"
