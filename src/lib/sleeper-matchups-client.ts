@@ -146,6 +146,22 @@ function buildEntries(
 
 const liveMemory = new Map<string, { at: number; board: LeagueWeekMatchups }>();
 
+/** Drop in-memory live boards so pull-to-refresh can re-pull scores. */
+export function clearSleeperLiveMatchupMemory(leagueId?: string | null, week?: number | null): void {
+  const clean = String(leagueId ?? "").trim();
+  if (!clean) {
+    liveMemory.clear();
+    return;
+  }
+  if (week != null && week > 0) {
+    liveMemory.delete(`${clean}|${Math.floor(week)}`);
+    return;
+  }
+  for (const key of [...liveMemory.keys()]) {
+    if (key.startsWith(`${clean}|`)) liveMemory.delete(key);
+  }
+}
+
 /** Drop live in-memory boards so a focus/visibility refetch hits Sleeper. */
 export function clearSleeperLiveMatchupMemory(leagueId?: string, week?: number): void {
   if (leagueId == null || week == null) {
