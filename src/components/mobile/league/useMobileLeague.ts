@@ -91,12 +91,14 @@ export function useMobileLeagueStandings() {
     rows.length,
     settings.data?.playoffTeams ?? (rows.length >= 10 ? 6 : 4),
   );
+  const playoffStartWeek = settings.data?.playoffStartWeek ?? 15;
 
   return {
     activeLeague,
     standings,
     rows,
     playoffTeams,
+    playoffStartWeek,
     seasonComplete: (standings?.league.status ?? "").toLowerCase() === "complete",
     loading,
   };

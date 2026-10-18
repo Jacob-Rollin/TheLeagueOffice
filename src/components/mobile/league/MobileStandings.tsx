@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Trophy } from "lucide-react";
 
 import { resolveAvatarUrl } from "@/components/playbook/panels";
 import type { StandingRow } from "@/lib/league.server";
@@ -111,84 +112,220 @@ export function MobileStandingsTable({
 }
 
 type Seed = { seed: number; row: StandingRow };
+type Matchup = [Seed, Seed];
+/** Fixed seed or a TBD slot labeled with the two possible teams. */
+type BracketSlot =
+  | { kind: "seed"; seed: Seed }
+  | { kind: "tbd"; label: string; mine: boolean };
 
 /** Standard bracket seeding: top seeds take byes, the rest pair high vs. low. */
 function seedBracket(rows: StandingRow[], playoffTeams: number) {
   const field: Seed[] = rows.slice(0, playoffTeams).map((row, i) => ({ seed: i + 1, row }));
-  if (field.length < 2) return { byes: [] as Seed[], games: [] as [Seed, Seed][] };
+  if (field.length < 2) return { byes: [] as Seed[], games: [] as Matchup[] };
   const bracketSize = 2 ** Math.ceil(Math.log2(field.length));
   const byeCount = bracketSize - field.length;
   const byes = field.slice(0, byeCount);
   const playing = field.slice(byeCount);
-  const games: [Seed, Seed][] = [];
+  const games: Matchup[] = [];
   for (let i = 0; i < playing.length / 2; i += 1) {
     games.push([playing[i]!, playing[playing.length - 1 - i]!]);
   }
   return { byes, games };
 }
 
+function shortName(seed: Seed) {
+  const owner = seed.row.owner?.trim();
+  if (owner) return owner;
+  return seed.row.team;
+}
+
+function tbdLabel(a: Seed, b: Seed) {
+  return `${shortName(a)} / ${shortName(b)}`;
+}
+
+function round1Title(byes: Seed[], games: Matchup[]) {
+  if (byes.length) return "Wild Card";
+  if (games.length === 1) return "Championship";
+  if (games.length === 2) return "Semifinals";
+  return "Round 1";
+}
+
 export function MobilePlayoffPicture({
   rows,
   playoffTeams,
   isMine,
+  playoffStartWeek = 15,
 }: {
   rows: StandingRow[];
   playoffTeams: number;
   isMine: (row: StandingRow) => boolean;
+  /** First NFL week of the fantasy playoffs — used for round labels. */
+  playoffStartWeek?: number;
 }) {
   const { byes, games } = seedBracket(rows, playoffTeams);
   const outside = rows.slice(playoffTeams, playoffTeams + 2);
-  const roundLabel = byes.length
-    ? "Wild Card Round"
-    : games.length === 1
-      ? "Championship"
-      : games.length === 2
-        ? "Semifinals"
-        : "Quarterfinals";
+  const startWeek = Math.max(1, Math.min(18, Math.floor(playoffStartWeek) || 15));
 
   if (!games.length) {
-    return <p className="px-4 py-8 text-center text-sm text-m-muted">Playoff seeding is not available yet.</p>;
+    return (
+      <p className="px-4 py-8 text-center text-sm text-m-muted">Playoff seeding is not available yet.</p>
+    );
   }
 
-  return (
-    <div className="space-y-5 px-4 pb-5">
-      <p className="text-center text-sm text-m-muted">If the playoffs started today</p>
+  const hasByes = byes.length > 0;
+  const r1Label = round1Title(byes, games);
 
-      <div>
-        <h3 className="mb-2 font-display text-sm font-bold uppercase tracking-widest text-m-muted">
-          {roundLabel}
-        </h3>
-        <div className="space-y-3">
-          {games.map(([high, low]) => (
-            <div key={high.seed} className="overflow-hidden rounded-lg border border-m-border">
-              <SeedLine seed={high} mine={isMine(high.row)} />
-              <div className="border-t border-m-border" />
-              <SeedLine seed={low} mine={isMine(low.row)} />
-            </div>
-          ))}
+  /** Next-round matchups after R1 (byes vs WC winners, or championship TBDs for 4-team). */
+  const advanceMatchups: { top: BracketSlot; bottom: BracketSlot }[] = hasByes
+    ? byes.map((bye, i) => {
+        const linked = games[games.length - 1 - i] ?? games[i]!;
+        return {
+          top: { kind: "seed", seed: bye },
+          bottom: {
+            kind: "tbd",
+            label: tbdLabel(linked[0], linked[1]),
+            mine: isMine(linked[0].row) || isMine(linked[1].row),
+          },
+        };
+      })
+    : games.length >= 2
+      ? [
+          {
+            top: {
+              kind: "tbd",
+              label: tbdLabel(games[0]![0], games[0]![1]),
+              mine: isMine(games[0]![0].row) || isMine(games[0]![1].row),
+            },
+            bottom: {
+              kind: "tbd",
+              label: tbdLabel(games[1]![0], games[1]![1]),
+              mine: isMine(games[1]![0].row) || isMine(games[1]![1].row),
+            },
+          },
+        ]
+      : [];
+
+  const showAdvanceColumn = hasByes || games.length >= 2;
+  const championshipFromByes: [BracketSlot, BracketSlot] | null =
+    hasByes && advanceMatchups.length >= 2
+      ? [
+          {
+            kind: "tbd",
+            label: `Winner · Semi 1`,
+            mine:
+              isMine(byes[0]!.row) ||
+              isMine((games[games.length - 1] ?? games[0])![0].row) ||
+              isMine((games[games.length - 1] ?? games[0])![1].row),
+          },
+          {
+            kind: "tbd",
+            label: `Winner · Semi 2`,
+            mine:
+              isMine(byes[1]!.row) ||
+              isMine((games[0] ?? games[games.length - 1])![0].row) ||
+              isMine((games[0] ?? games[games.length - 1])![1].row),
+          },
+        ]
+      : null;
+
+  const finalsWeek = startWeek + (hasByes ? 2 : games.length >= 2 ? 1 : 0);
+  const semisWeek = startWeek + (hasByes ? 1 : 0);
+  const showThirdPlace = !hasByes && games.length === 2;
+
+  return (
+    <div className="space-y-5 pb-5">
+      <p className="px-4 text-center text-sm text-m-muted">If the playoffs started today</p>
+
+      <div className="overflow-x-auto no-scrollbar px-4">
+        <div className="flex min-w-min items-stretch gap-0 pb-1">
+          <BracketColumn title={r1Label} week={startWeek} className="justify-around gap-8">
+            {games.map(([high, low]) => (
+              <MatchupCard
+                key={`${high.seed}-${low.seed}`}
+                top={{ kind: "seed", seed: high }}
+                bottom={{ kind: "seed", seed: low }}
+                isMine={isMine}
+              />
+            ))}
+          </BracketColumn>
+
+          {showAdvanceColumn ? (
+            <>
+              <BracketConnectors count={Math.max(2, games.length)} />
+              <BracketColumn
+                title={hasByes ? "Semifinals" : "Finals"}
+                week={hasByes ? semisWeek : finalsWeek}
+                className="justify-around gap-8"
+              >
+                {hasByes
+                  ? advanceMatchups.map((g, i) => (
+                      <MatchupCard key={`semi-${i}`} top={g.top} bottom={g.bottom} isMine={isMine} />
+                    ))
+                  : (
+                      <>
+                        <FinalsBlock
+                          title="Championship"
+                          week={finalsWeek}
+                          top={advanceMatchups[0]!.top}
+                          bottom={advanceMatchups[0]!.bottom}
+                          isMine={isMine}
+                          trophy
+                        />
+                        {showThirdPlace ? (
+                          <FinalsBlock
+                            title="3rd Place"
+                            week={finalsWeek}
+                            top={{
+                              kind: "tbd",
+                              label: tbdLabel(games[0]![0], games[0]![1]),
+                              mine: isMine(games[0]![0].row) || isMine(games[0]![1].row),
+                            }}
+                            bottom={{
+                              kind: "tbd",
+                              label: tbdLabel(games[1]![0], games[1]![1]),
+                              mine: isMine(games[1]![0].row) || isMine(games[1]![1].row),
+                            }}
+                            isMine={isMine}
+                          />
+                        ) : null}
+                      </>
+                    )}
+              </BracketColumn>
+            </>
+          ) : null}
+
+          {championshipFromByes ? (
+            <>
+              <BracketConnectors count={2} />
+              <BracketColumn title="Finals" week={finalsWeek} className="justify-center">
+                <FinalsBlock
+                  title="Championship"
+                  week={finalsWeek}
+                  top={championshipFromByes[0]}
+                  bottom={championshipFromByes[1]}
+                  isMine={isMine}
+                  trophy
+                />
+              </BracketColumn>
+            </>
+          ) : null}
         </div>
       </div>
 
-      {byes.length ? (
-        <div>
-          <h3 className="mb-2 font-display text-sm font-bold uppercase tracking-widest text-m-muted">First Round Bye</h3>
-          <div className="overflow-hidden rounded-lg border border-m-border">
-            {byes.map((seed, i) => (
-              <div key={seed.seed} className={cn(i > 0 && "border-t border-m-border")}>
-                <SeedLine seed={seed} mine={isMine(seed.row)} />
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       {outside.length ? (
-        <div>
-          <h3 className="mb-2 font-display text-sm font-bold uppercase tracking-widest text-m-muted">On the Bubble</h3>
-          <div className="overflow-hidden rounded-lg border border-dashed border-m-border">
+        <div className="px-4">
+          <h3 className="mb-2 font-display text-sm font-bold uppercase tracking-widest text-m-muted">
+            On the Bubble
+          </h3>
+          <div className="overflow-hidden rounded-xl border border-dashed border-m-border bg-m-chip/40">
             {outside.map((row, i) => (
               <div key={row.rosterId} className={cn(i > 0 && "border-t border-m-border")}>
-                <SeedLine seed={{ seed: playoffTeams + i + 1, row }} mine={isMine(row)} muted />
+                <BracketTeamRow
+                  slot={{ kind: "seed", seed: { seed: playoffTeams + i + 1, row } }}
+                  mine={isMine(row)}
+                  muted
+                  isMine={isMine}
+                />
               </div>
             ))}
           </div>
@@ -198,25 +335,160 @@ export function MobilePlayoffPicture({
   );
 }
 
-function SeedLine({ seed, mine, muted }: { seed: Seed; mine: boolean; muted?: boolean }) {
+function BracketColumn({
+  title,
+  week,
+  children,
+  className,
+}: {
+  title: string;
+  week: number;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className={cn("flex items-center gap-3 px-3 py-2.5", mine && "bg-m-highlight", muted && "opacity-75")}>
-      <span
+    <div className="flex w-[13.25rem] shrink-0 flex-col">
+      <div className="mb-3 px-0.5">
+        <p className="font-display text-[11px] font-bold uppercase tracking-[0.14em] text-m-muted">
+          {title}
+          <span className="font-semibold normal-case tracking-normal text-m-muted/80">
+            {" "}
+            (Week {week})
+          </span>
+        </p>
+      </div>
+      <div className={cn("flex flex-1 flex-col", className)}>{children}</div>
+    </div>
+  );
+}
+
+/** Elbow connectors between round columns (Sleeper-style tree). */
+function BracketConnectors({ count }: { count: number }) {
+  const pairs = Math.max(1, Math.ceil(count / 2));
+  return (
+    <div className="flex w-7 shrink-0 flex-col justify-around py-10" aria-hidden>
+      {Array.from({ length: pairs }, (_, i) => (
+        <div key={i} className="relative mx-auto h-28 w-full">
+          <span className="absolute left-0 top-[18%] h-[64%] w-[55%] rounded-r-md border border-l-0 border-m-accent/55" />
+          <span className="absolute right-0 top-1/2 h-px w-[45%] -translate-y-1/2 bg-m-accent/55" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MatchupCard({
+  top,
+  bottom,
+  isMine,
+}: {
+  top: BracketSlot;
+  bottom: BracketSlot;
+  isMine: (row: StandingRow) => boolean;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-m-border bg-m-card shadow-sm">
+      <BracketTeamRow slot={top} isMine={isMine} />
+      <div className="border-t border-m-border" />
+      <BracketTeamRow slot={bottom} isMine={isMine} />
+    </div>
+  );
+}
+
+function FinalsBlock({
+  title,
+  week,
+  top,
+  bottom,
+  isMine,
+  trophy,
+}: {
+  title: string;
+  week: number;
+  top: BracketSlot;
+  bottom: BracketSlot;
+  isMine: (row: StandingRow) => boolean;
+  trophy?: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5 px-0.5">
+        {trophy ? <Trophy className="size-3.5 text-amber-500" aria-hidden /> : null}
+        <p className="font-display text-[11px] font-bold uppercase tracking-[0.12em] text-m-muted">
+          {title}
+          <span className="ml-1 font-semibold normal-case tracking-normal text-m-muted/80">
+            · Wk {week}
+          </span>
+        </p>
+      </div>
+      <MatchupCard top={top} bottom={bottom} isMine={isMine} />
+    </div>
+  );
+}
+
+function BracketTeamRow({
+  slot,
+  isMine,
+  mine: mineOverride,
+  muted,
+}: {
+  slot: BracketSlot;
+  isMine: (row: StandingRow) => boolean;
+  mine?: boolean;
+  muted?: boolean;
+}) {
+  if (slot.kind === "tbd") {
+    const mine = mineOverride ?? slot.mine;
+    return (
+      <div
         className={cn(
-          "inline-flex size-7 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold",
-          muted ? "bg-m-chip text-m-muted" : "bg-m-accent text-m-accent-fg",
+          "flex min-h-[2.75rem] items-center gap-2.5 px-2.5 py-2",
+          mine && "bg-m-highlight",
+          muted && "opacity-75",
         )}
       >
-        {seed.seed}
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-dashed border-m-border bg-m-chip text-[10px] font-bold text-m-muted">
+          ?
+        </span>
+        <span className={cn("min-w-0 flex-1 truncate text-sm font-semibold", mine && "text-m-accent")}>
+          {slot.label}
+        </span>
+        <span className="shrink-0 text-xs tabnum text-m-muted">—</span>
+      </div>
+    );
+  }
+
+  const { seed } = slot;
+  const mine = mineOverride ?? isMine(seed.row);
+  return (
+    <div
+      className={cn(
+        "flex min-h-[2.75rem] items-center gap-2.5 px-2.5 py-2",
+        mine && "bg-m-highlight",
+        muted && "opacity-75",
+      )}
+    >
+      <span className="relative shrink-0">
+        <MobileTeamLogo name={seed.row.team} logo={seed.row.avatar} className="size-8" />
+        <span
+          className={cn(
+            "absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full border border-m-card font-display text-[9px] font-bold leading-none",
+            muted ? "bg-m-chip text-m-muted" : "bg-m-accent text-m-accent-fg",
+          )}
+        >
+          {seed.seed}
+        </span>
       </span>
-      <MobileTeamLogo name={seed.row.team} logo={seed.row.avatar} className="size-8" />
       <span className="min-w-0 flex-1">
-        <span className={cn("block truncate text-sm font-semibold", mine && "text-m-accent")}>{seed.row.team}</span>
-        <span className="block truncate text-xs text-m-muted">{seed.row.owner}</span>
+        <span className={cn("block truncate text-sm font-semibold", mine && "text-m-accent")}>
+          {shortName(seed)}
+        </span>
+        {seed.row.owner ? (
+          <span className="block truncate text-[11px] text-m-muted">{seed.row.team}</span>
+        ) : null}
       </span>
-      <span className="shrink-0 text-right text-sm tabnum">
-        <span className="block font-semibold">{record(seed.row)}</span>
-        <span className="block text-xs text-m-muted">{points(seed.row.pointsFor)} PF</span>
+      <span className="shrink-0 text-right text-xs font-semibold tabnum text-m-muted">
+        {record(seed.row)}
       </span>
     </div>
   );
