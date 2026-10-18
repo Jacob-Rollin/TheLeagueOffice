@@ -374,16 +374,38 @@ export function resolveHostOrBoxScore(
   const host =
     hostPts != null && Number.isFinite(Number(hostPts)) ? Number(hostPts) : 0;
   if (host !== 0) return Math.round(host * 100) / 100;
+  return scoreFromBoxOrPublished(stats, map) ?? host;
+}
+
+/**
+ * Native live Matchup/Team display: Sleeper client box-score first.
+ * TiDB host `playerPoints` are finalize artifacts (Tue cron) — only used
+ * when the browser week-stats line is missing.
+ */
+export function resolveNativeLiveScore(
+  hostPts: number | null | undefined,
+  stats: Record<string, number> | null | undefined,
+  map: ScoringMap,
+): number {
+  const fromBox = scoreFromBoxOrPublished(stats, map);
+  if (fromBox != null) return fromBox;
+  const host =
+    hostPts != null && Number.isFinite(Number(hostPts)) ? Number(hostPts) : 0;
+  return Math.round(host * 100) / 100;
+}
+
+function scoreFromBoxOrPublished(
+  stats: Record<string, number> | null | undefined,
+  map: ScoringMap,
+): number | null {
   const scored = scoreActualLine(stats, map);
   if (scored != null) return scored;
-  // Last resort when the league map misses keys but Sleeper published pts_*.
-  if (stats) {
-    for (const key of ["pts_half_ppr", "pts_ppr", "pts_std"] as const) {
-      const n = Number(stats[key]);
-      if (Number.isFinite(n) && n !== 0) return Math.round(n * 100) / 100;
-    }
+  if (!stats) return null;
+  for (const key of ["pts_half_ppr", "pts_ppr", "pts_std"] as const) {
+    const n = Number(stats[key]);
+    if (Number.isFinite(n) && n !== 0) return Math.round(n * 100) / 100;
   }
-  return host;
+  return null;
 }
 
 /**

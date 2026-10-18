@@ -31,7 +31,7 @@ import {
 import { getNativeLeagueBoard, getNativeLineup, saveNativeLineup } from "@/lib/native-league.functions";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
-import { resolveHostOrBoxScore } from "@/lib/scoring-map";
+import { resolveHostOrBoxScore, resolveNativeLiveScore } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
 import {
@@ -596,11 +596,10 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
 
   const scorePlayerOnEntry = (entry: WeeklyMatchupEntry | null, p: Player): number => {
     if (!entry) return 0;
-    return resolveHostOrBoxScore(
-      entryPoints(entry, p.id),
-      statsFor(sleeperIdFor(p)),
-      scoringMap,
-    );
+    const host = entryPoints(entry, p.id);
+    const stats = statsFor(sleeperIdFor(p));
+    if (isNative) return resolveNativeLiveScore(host, stats, scoringMap);
+    return resolveHostOrBoxScore(host, stats, scoringMap);
   };
 
   const sumStarterActuals = (
