@@ -57,6 +57,13 @@ CRON_SECRET=
 # Yahoo league sync
 YAHOO_CLIENT_ID=
 YAHOO_CLIENT_SECRET=
+
+# Press Room AI (optional — templates used when unset)
+GROQ_API_KEY=
+# Optional failover / model overrides
+GEMINI_API_KEY=
+# GROQ_PRESS_ROOM_MODEL=openai/gpt-oss-120b
+# GEMINI_PRESS_ROOM_MODEL=gemini-2.0-flash
 ```
 
 Set the same variables in your Vercel project settings for deployments.

@@ -53,6 +53,45 @@ export type Database = {
         }
         Relationships: []
       }
+      press_room_articles: {
+        Row: {
+          id: string
+          league_key: string
+          week: number
+          kind: string
+          title: string
+          paragraphs: Json
+          fact_hash: string
+          model: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          league_key: string
+          week: number
+          kind: string
+          title: string
+          paragraphs: Json
+          fact_hash: string
+          model?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          league_key?: string
+          week?: number
+          kind?: string
+          title?: string
+          paragraphs?: Json
+          fact_hash?: string
+          model?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       hof_championships: {
         Row: {
           created_at: string
