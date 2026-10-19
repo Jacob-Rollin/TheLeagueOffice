@@ -73,8 +73,8 @@ function SidebarTeamAvatar({
   platform: string | null;
 }) {
   const [failed, setFailed] = useState(false);
-  const src = resolveAvatarUrl(logo);
-  useEffect(() => setFailed(false), [src]);
+  const src = resolveAvatarUrl(logo, { teamName: name });
+  useEffect(() => setFailed(false), [src, name]);
   const box = "flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200/80";
 
   if (src && !failed) {

@@ -137,11 +137,13 @@ export function NativeTeamLogoPicker({
             {options.map((opt) => {
               const src = nativeLogoDataUri(opt.key, previewInitial);
               const isSelected = selected === opt.key;
+              const title =
+                opt.shape === "bolt" ? `${opt.label} (no letter)` : opt.label;
               return (
                 <button
                   key={opt.key}
                   type="button"
-                  title={opt.label}
+                  title={title}
                   disabled={busy}
                   className={cn(
                     "flex aspect-square items-center justify-center overflow-hidden rounded-full border bg-white p-0.5 transition",

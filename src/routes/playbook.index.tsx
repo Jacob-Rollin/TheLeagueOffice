@@ -618,7 +618,7 @@ function InsightTeamAvatar({
   logo: string | null;
   platform: string | null;
 }) {
-  const src = resolveAvatarUrl(logo);
+  const src = resolveAvatarUrl(logo, { teamName: name });
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const shell =
     "flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-100 bg-slate-50";

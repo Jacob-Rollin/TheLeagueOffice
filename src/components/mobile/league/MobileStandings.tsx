@@ -6,9 +6,9 @@ import type { StandingRow } from "@/lib/league.server";
 import { cn } from "@/lib/utils";
 
 export function MobileTeamLogo({ name, logo, className }: { name: string; logo: string | null; className?: string }) {
-  const src = resolveAvatarUrl(logo);
+  const src = resolveAvatarUrl(logo, { teamName: name });
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
+  useEffect(() => setFailed(false), [src, name]);
 
   return (
     <span

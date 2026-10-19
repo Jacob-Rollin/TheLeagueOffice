@@ -354,7 +354,7 @@ function LeagueTeamAvatar({
   logo: string | null;
   platform: string;
 }) {
-  const src = resolveAvatarUrl(logo);
+  const src = resolveAvatarUrl(logo, { teamName: name });
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const shell =
     "flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted";

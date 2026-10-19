@@ -24,16 +24,17 @@ export function MatchupTeamAvatar({
   size?: "md" | "sm";
 }) {
   const [failed, setFailed] = useState(false);
-  const src = resolveAvatarUrl(logo);
+  // Always pass team name so native `pool:` logos bake the correct monogram.
+  const src = resolveAvatarUrl(logo, { teamName: name });
   const plat = (platform ?? "").trim().toLowerCase();
-  const remountKey = `${cacheKey ?? "matchup"}:${src ?? "none"}:${plat}`;
+  const remountKey = `${cacheKey ?? "matchup"}:${src ?? "none"}:${plat}:${name}`;
   const box = size === "sm" ? "h-8 w-8" : "h-10 w-10";
   const espnImg = size === "sm" ? "h-5 w-5" : "h-7 w-7";
   const initials = size === "sm" ? "text-[10px]" : "text-xs";
 
   useEffect(() => {
     setFailed(false);
-  }, [src, cacheKey, plat]);
+  }, [src, cacheKey, plat, name]);
 
   if (src && !failed) {
     return (

@@ -79,16 +79,45 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
       // Native membership table may be missing on older envs — soft-empty.
       const nativeRows = nativeRes.error ? [] : (nativeRes.data ?? []);
 
+      // One batched summary call warms team name + pool avatar for nav / hub logos.
+      let nativeByLink = new Map<
+        string,
+        { name: string; teamName: string | null; avatarUrl: string | null }
+      >();
+      if (nativeRows.length > 0) {
+        try {
+          const { listNativeLeagueSummaries } = await import("@/lib/native-league.functions");
+          const summaries = await listNativeLeagueSummaries();
+          nativeByLink = new Map(
+            (summaries ?? []).map((s) => [
+              s.linkId,
+              {
+                name: s.name,
+                teamName: s.teamName,
+                avatarUrl: s.avatarUrl,
+              },
+            ]),
+          );
+        } catch {
+          /* summaries optional — tokens still usable without logos */
+        }
+      }
+
       const nativeTokens: ActiveLeagueToken[] = nativeRows.map((row) => {
+        const linkId = String(row?.id ?? "");
         const leagueId = String(row?.native_league_id ?? "");
+        const summary = nativeByLink.get(linkId);
         return {
-          id: String(row?.id ?? ""),
+          id: linkId,
           platform: "native",
           leagueId,
           nativeLeagueId: leagueId,
-          name: (row?.label as string | null | undefined)?.trim() || "Native League",
-          teamName: null,
-          avatar: null,
+          name:
+            summary?.name?.trim() ||
+            (row?.label as string | null | undefined)?.trim() ||
+            "Native League",
+          teamName: summary?.teamName ?? null,
+          avatar: summary?.avatarUrl ?? null,
         };
       });
 
