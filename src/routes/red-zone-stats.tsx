@@ -393,9 +393,10 @@ function RedZoneStatsPage() {
       <div className="mb-4 rounded-xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-slate-600">
         <p className="font-semibold text-slate-800">What is the Red Zone?</p>
         <p className="mt-1 leading-relaxed">
-          Only plays that start inside the selected yard line ({`Inside ${yardline}`}) are counted —
-          nothing farther upfield is included. Fantasy points use{" "}
-          {scoringFormatLabel(scoringFormat)} scoring on that production only.
+          Only snaps that start inside the selected yard line ({`Inside ${yardline}`}) count —
+          nothing farther upfield. Pass Att excludes sacks (shown in Sacks) and two-point tries;
+          kneels count as rushes. Fantasy points use {scoringFormatLabel(scoringFormat)} scoring on
+          that production only.
         </p>
       </div>
 
