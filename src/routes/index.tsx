@@ -138,7 +138,8 @@ function Home() {
           className="pointer-events-none absolute inset-y-3 left-0 w-1 rounded-r-full bg-gradient-to-b from-blue-500/80 via-blue-600/50 to-blue-400/20"
         />
 
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* No z-index here — hero CTAs must stay under GlobalSearch (header z-40). */}
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 pl-2.5">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-600">
               Front Office
