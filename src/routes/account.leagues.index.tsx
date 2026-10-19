@@ -586,7 +586,12 @@ function LeagueRow({
       >
         ✓
       </span>
-      <LeagueAvatar platform={platformKey} src={meta?.avatar ?? null} alt={`${leagueName} team avatar`} />
+      <LeagueAvatar
+        platform={platformKey}
+        src={meta?.avatar ?? null}
+        alt={`${leagueName} team avatar`}
+        teamName={teamName}
+      />
       <div className="min-w-0">
         <p className="text-base font-semibold leading-tight text-black">{leagueName}</p>
         <p className="text-sm font-medium leading-tight text-black">

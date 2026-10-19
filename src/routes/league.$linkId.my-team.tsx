@@ -646,7 +646,7 @@ function NativeMyTeamPage() {
       : null;
 
   const seasonPtsKey = ptsField(format);
-  const avatarSrc = resolveNativeTeamAvatarSrc(myTeamMeta?.avatarUrl);
+  const avatarSrc = resolveNativeTeamAvatarSrc(myTeamMeta?.avatarUrl, lineup.teamName);
   const avatarPoolKey = isNativeLogoKey(myTeamMeta?.avatarUrl) ? myTeamMeta!.avatarUrl! : null;
   const rowHelpers: RowHelpers = {
     projectPlayer,
