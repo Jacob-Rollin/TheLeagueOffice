@@ -27,7 +27,10 @@ import {
   FantasyPosChip,
   FantasyPosChipRow,
   FantasyTradeButton,
+  displayPlayerPoints,
   fantasyOutlineBtn,
+  formatFantasyProj,
+  formatFantasyPts,
 } from "@/components/native/fantasy";
 import {
   PLAYER_LIST_COL_HEADER_ROW,
@@ -49,7 +52,7 @@ import {
 } from "@/lib/native-league.functions";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
-import { projectionPoints } from "@/lib/scoring-map";
+import { resolveNativeLiveScore } from "@/lib/scoring-map";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 
@@ -118,7 +121,8 @@ function NativeLeaguePlayersPage() {
     scoringMap,
   } = useLeagueProjections(activeWeek);
   const { statsFor: weekStatLine } = useWeeklyActualStats(activeWeek, { pace: "broadcast" });
-  const { progressByNflTeam } = useNflGameProgress(activeWeek);
+  const { progressByNflTeam, currentWeek: nflCurrentWeek } = useNflGameProgress(activeWeek);
+  const showActuals = nflCurrentWeek != null && activeWeek < nflCurrentWeek;
   const { data: schedule = [] } = useNflSchedule();
   const { rankFor: defenseRankFor } = usePositionalDefenseRanks();
 
@@ -481,12 +485,15 @@ function NativeLeaguePlayersPage() {
                   opponent: opp,
                   team: player.team || null,
                 });
-                const line = weekStatLine(sid);
-                const scored = line
-                  ? projectionPoints(line, scoringMap, format)
-                  : null;
-                const score =
-                  scored != null && Number.isFinite(scored) ? scored : null;
+                const rawScore = resolveNativeLiveScore(
+                  null,
+                  weekStatLine(sid),
+                  scoringMap,
+                );
+                const displayScore = displayPlayerPoints(rawScore, progress?.phase, {
+                  showActuals,
+                  bye,
+                });
                 const oprk =
                   !bye && opp
                     ? defenseRankFor(player.pos, opp)
@@ -578,10 +585,10 @@ function NativeLeaguePlayersPage() {
                       {bye ? "Bye" : strip.status || strip.game || "—"}
                     </td>
                     <td className="px-2 py-2.5 text-right tabular-nums font-semibold text-slate-900">
-                      {bye ? "—" : proj != null ? proj.toFixed(2) : "—"}
+                      {bye ? "-" : formatFantasyProj(proj)}
                     </td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-slate-800">
-                      {bye ? "—" : score != null ? score.toFixed(2) : "—"}
+                      {formatFantasyPts(displayScore)}
                     </td>
                     <td
                       className={cn(
@@ -598,7 +605,7 @@ function NativeLeaguePlayersPage() {
                         : "—"}
                     </td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-slate-800">
-                      {seasonPts != null ? seasonPts.toFixed(2) : "—"}
+                      {formatFantasyPts(seasonPts)}
                     </td>
                   </tr>
                 );

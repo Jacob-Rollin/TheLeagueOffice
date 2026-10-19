@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { FantasyBoard } from "@/components/native/fantasy/chrome";
+import { formatFantasyProj, formatFantasyPts } from "@/components/native/fantasy/format";
 import { cn } from "@/lib/utils";
 
 export type FantasyMatchupTeamSide = {
@@ -104,11 +105,11 @@ function TeamScoreBlock({
         <p className="text-xs text-muted-foreground">{record}</p>
       ) : null}
       <p className="mt-1 font-display text-3xl font-semibold italic tracking-wide text-slate-900">
-        {team.points.toFixed(1)}
+        {formatFantasyPts(team.points)}
       </p>
       {team.projection != null && Number.isFinite(team.projection) ? (
         <p className="text-xs text-muted-foreground">
-          Proj {team.projection.toFixed(1)}
+          Proj {formatFantasyProj(team.projection)}
         </p>
       ) : null}
     </div>
@@ -154,7 +155,7 @@ export function FantasyMatchupWeekList({
                   {m.home.teamName}
                 </span>
                 <span className="mx-1 font-display italic text-slate-900">
-                  {m.home.points.toFixed(1)}
+                  {formatFantasyPts(m.home.points)}
                 </span>
               </span>
               <span className="shrink-0 px-2 text-xs font-bold uppercase tracking-wide text-slate-400">
@@ -162,7 +163,7 @@ export function FantasyMatchupWeekList({
               </span>
               <span className="min-w-0 truncate text-right">
                 <span className="font-display italic text-slate-900">
-                  {m.away.points.toFixed(1)}
+                  {formatFantasyPts(m.away.points)}
                 </span>
                 <span className="mx-1" />
                 <span className={cn(m.away.teamId === myTeamId && "font-semibold text-primary")}>

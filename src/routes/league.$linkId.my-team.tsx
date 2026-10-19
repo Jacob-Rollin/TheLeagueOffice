@@ -15,8 +15,11 @@ import {
   FantasySaveLineupButton,
   FantasySectionTitle,
   FantasyWeekSelect,
+  displayPlayerPoints,
   fantasyOutlineBtn,
   fantasyPrimaryBtn,
+  formatFantasyProj,
+  formatFantasyPts,
   nativeMatchupViewToCard,
 } from "@/components/native/fantasy";
 import { PLAYER_LIST_HEADER_ROW } from "@/components/research/SortHeader";
@@ -64,7 +67,7 @@ import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
-import { projectionPoints, type ScoringMap } from "@/lib/scoring-map";
+import { resolveNativeLiveScore, type ScoringMap } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$linkId/my-team")({
@@ -321,15 +324,14 @@ function NativeMyTeamPage() {
     return side.playerPoints ?? {};
   }, [thisMatchup, myTeamId]);
 
-  const actualPointsFor = (player: Player): number | null => {
+  /** Browser Sleeper week-stats first; TiDB host points are finalize-only (mobile parity). */
+  const actualPointsFor = (player: Player): number => {
     const sid = sleeperIdFor(player);
-    const fromMatchup = myPlayerPoints[player.id] ?? myPlayerPoints[sid];
-    if (fromMatchup != null && Number.isFinite(fromMatchup)) return fromMatchup;
-    const line = weekStatLine(sid);
-    if (!line) return null;
-    const scored = projectionPoints(line, scoringMap, format);
-    return scored != null && Number.isFinite(scored) ? scored : null;
+    const host = myPlayerPoints[player.id] ?? myPlayerPoints[sid];
+    return resolveNativeLiveScore(host, weekStatLine(sid), scoringMap);
   };
+
+  const showActuals = nflCurrentWeek != null && activeWeek < nflCurrentWeek;
 
   const liveActive = Boolean(
     isLeagueCurrentWeek && liveStats.data && Object.keys(liveStats.data.stats).length > 0,
@@ -661,6 +663,7 @@ function NativeMyTeamPage() {
     progressByNflTeam,
     defenseRankFor,
     playersById,
+    showActuals,
   };
 
   return (
@@ -697,7 +700,7 @@ function NativeMyTeamPage() {
                 )}
                 {rankLabel ? <span className="text-slate-500"> · {rankLabel}</span> : null}
                 {myStanding != null ? (
-                  <span className="text-slate-500"> · {myStanding.pointsFor.toFixed(2)} PF</span>
+                  <span className="text-slate-500"> · {formatFantasyPts(myStanding.pointsFor)} PF</span>
                 ) : null}
               </p>
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium text-blue-700">
@@ -933,7 +936,7 @@ function MatchupMiniCard({
 
 type RowHelpers = {
   projectPlayer: (player: Player) => number | null;
-  actualPointsFor: (player: Player) => number | null;
+  actualPointsFor: (player: Player) => number;
   rankFor: (playerId: string) => { overall: number | null; pos: number | null };
   sleeperIdFor: (player: { id: string; name: string; pos: string }) => string;
   seasonStats: Map<string, { stats: Record<string, number> }> | undefined;
@@ -943,6 +946,7 @@ type RowHelpers = {
   progressByNflTeam: Map<string, NflGameProgress>;
   defenseRankFor: (pos: string | null | undefined, opp: string | null | undefined) => number | null;
   playersById: Map<string, Player>;
+  showActuals: boolean;
 };
 
 function LineupTable({
@@ -1000,7 +1004,11 @@ function LineupTable({
     });
     const sid = player ? helpers.sleeperIdFor(player) : null;
     const proj = player ? helpers.projectPlayer(player) : null;
-    const score = player ? helpers.actualPointsFor(player) : null;
+    const rawScore = player ? helpers.actualPointsFor(player) : null;
+    const displayScore = displayPlayerPoints(rawScore, progress?.phase, {
+      showActuals: helpers.showActuals,
+      bye: Boolean(bye),
+    });
     const oprk =
       player && opp && opp !== "BYE"
         ? helpers.defenseRankFor(player.pos, opp)
@@ -1012,8 +1020,8 @@ function LineupTable({
         : NaN;
 
     if (proj != null && Number.isFinite(proj)) projTotal += proj;
-    if (score != null && Number.isFinite(score)) {
-      scoreTotal += score;
+    if (displayScore != null) {
+      scoreTotal += displayScore;
       scored += 1;
     }
     if (Number.isFinite(seasonPts)) fptsTotal += seasonPts;
@@ -1083,10 +1091,10 @@ function LineupTable({
           {bye ? "Bye" : strip.status || strip.game || "—"}
         </td>
         <td className={tdRightClass}>
-          {bye ? "—" : proj != null ? proj.toFixed(2) : "—"}
+          {bye ? "-" : formatFantasyProj(proj)}
         </td>
         <td className={tdRightClass}>
-          {bye ? "—" : score != null ? score.toFixed(2) : "—"}
+          {formatFantasyPts(displayScore)}
         </td>
         <td
           className={cn(
@@ -1101,7 +1109,7 @@ function LineupTable({
           {ranks.pos != null && ranks.pos > 0 && ranks.pos < 900 ? ranks.pos : "—"}
         </td>
         <td className={tdRightClass}>
-          {Number.isFinite(seasonPts) ? seasonPts.toFixed(2) : "—"}
+          {formatFantasyPts(Number.isFinite(seasonPts) ? seasonPts : null)}
         </td>
       </tr>
     );
@@ -1133,12 +1141,12 @@ function LineupTable({
                   Totals
                 </span>
               </td>
-              <td className={cn(tdRightClass, "font-semibold")}>{projTotal.toFixed(2)}</td>
+              <td className={cn(tdRightClass, "font-semibold")}>{formatFantasyProj(projTotal)}</td>
               <td className={cn(tdRightClass, "font-semibold")}>
-                {scored > 0 ? scoreTotal.toFixed(2) : "—"}
+                {scored > 0 ? formatFantasyPts(scoreTotal) : "-"}
               </td>
               <td className={tdRightClass} colSpan={2} />
-              <td className={cn(tdRightClass, "font-semibold")}>{fptsTotal.toFixed(2)}</td>
+              <td className={cn(tdRightClass, "font-semibold")}>{formatFantasyPts(fptsTotal)}</td>
             </tr>
           </tfoot>
         ) : null}
