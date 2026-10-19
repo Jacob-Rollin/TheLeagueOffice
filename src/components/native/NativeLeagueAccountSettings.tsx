@@ -338,6 +338,7 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
               platform="native"
               src={myTeam?.avatarUrl ?? null}
               alt={`${myTeam?.teamName ?? summary.name} team avatar`}
+              teamName={myTeam?.teamName ?? null}
               className="size-14 max-h-14 max-w-14 h-14 w-14"
             />
           </button>

@@ -1,7 +1,7 @@
 /**
  * Curated native-league team logo pool.
  * Stored as short keys (`pool:helmet:navy`) in `native_teams.avatar_url`;
- * resolved client-side to data-URI SVGs so `<img>` consumers work unchanged.
+ * resolved client-side to data-URI SVGs (with team initial) so `<img>` works.
  */
 
 export const NATIVE_LOGO_SHAPES = ["helmet", "shield", "ball", "star", "bolt"] as const;
@@ -66,36 +66,96 @@ export function isNativeLogoKey(raw: string | null | undefined): boolean {
   return parseNativeLogoKey(raw) != null;
 }
 
-/** Filled glyph on a colored disc; ball / helmet get simple accent strokes. */
-function buildSvg(shape: NativeLogoShape, fill: string, ink: string): string {
-  const disc = `<circle cx="32" cy="32" r="30" fill="${fill}"/>`;
-  switch (shape) {
-    case "helmet":
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128">${disc}<path d="M14 34c0-11.6 9-21 20.5-21h5.5c6.6 0 12 5.2 12 11.6V27c0 1.1-.9 2-2 2H38c-3.9 0-7 3.1-7 7v5.5c0 2.1-1 4-2.6 5.2-2.2 1.7-5.3 1.4-7.1-.7C19.7 43.8 18 40.6 18 37.2V34z" fill="${ink}"/><path d="M31 42h16.5c1.9 0 3.5 1.6 3.5 3.5v4c0 1.9-1.6 3.5-3.5 3.5H28" fill="none" stroke="${ink}" stroke-width="3" stroke-linecap="round"/><circle cx="20" cy="35.5" r="1.8" fill="${fill}"/></svg>`;
-    case "shield":
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128">${disc}<path d="M32 10l18 5.5v13.5c0 12.8-7.6 21.5-18 25-10.4-3.5-18-12.2-18-25V15.5L32 10z" fill="${ink}"/></svg>`;
-    case "ball":
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128">${disc}<ellipse cx="32" cy="32" rx="17" ry="21" fill="${ink}"/><path d="M32 15v34M25.5 24.5h13M25.5 39.5h13" fill="none" stroke="${fill}" stroke-width="2.4" stroke-linecap="round"/></svg>`;
-    case "star":
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128">${disc}<path d="M32 11l5.2 11.1 12.2 1.5-9 8.5 2.4 12.1L32 37.6 21.2 44.2l2.4-12.1-9-8.5 12.2-1.5L32 11z" fill="${ink}"/></svg>`;
-    case "bolt":
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128">${disc}<path d="M37 10L18 34h11.5L26 54l22-28H35.5L37 10z" fill="${ink}"/></svg>`;
-  }
+/** First alphanumeric from a team name, uppercased (fallback "T"). */
+export function teamLogoInitial(name?: string | null): string {
+  const cleaned = String(name ?? "").trim();
+  const match = cleaned.match(/[A-Za-z0-9]/);
+  return (match?.[0] ?? "T").toUpperCase();
 }
 
-export function nativeLogoDataUri(key: string): string | null {
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+type LetterSlot = { x: number; y: number; size: number };
+
+/**
+ * Monogram cut out of the ink emblem (letter uses the disc/fill color).
+ * Positioned per-shape so it sits inside the glyph.
+ */
+function monogram(letter: string, fill: string, slot: LetterSlot): string {
+  const ch = escapeXml(letter.slice(0, 1).toUpperCase() || "T");
+  return `<text x="${slot.x}" y="${slot.y}" text-anchor="middle" dominant-baseline="central" font-family="Archivo, Barlow Condensed, Arial Black, sans-serif" font-size="${slot.size}" font-weight="800" fill="${fill}">${ch}</text>`;
+}
+
+/** Emblem paths sit on a solid team-color disc; monogram cuts through in fill color. */
+function buildSvg(shape: NativeLogoShape, fill: string, ink: string, letter: string): string {
+  const disc = `<circle cx="32" cy="32" r="30" fill="${fill}"/>`;
+  let emblem = "";
+  let slot: LetterSlot = { x: 32, y: 33, size: 20 };
+
+  switch (shape) {
+    case "helmet":
+      // Smooth side-view shell facing right + facemask cage (no rear notch).
+      emblem = [
+        `<path fill="${ink}" d="M16 37c0-12.6 10.2-23 24.5-23C51.5 14 58 21.5 58 30.5V32c0 .8-.7 1.5-1.5 1.5H42c-3.6 0-6.5 2.9-6.5 6.5v5c0 2.2-1 4.2-2.7 5.5-2.8 2.1-6.8 1.8-9.2-.8C21.4 47.4 20 44.6 20 41.5V37z"/>`,
+        `<path fill="none" stroke="${ink}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M35.5 37.5H52c1.8 0 3.3 1.5 3.3 3.3v5.2c0 1.8-1.5 3.3-3.3 3.3H33"/>`,
+        `<path fill="none" stroke="${ink}" stroke-width="1.9" stroke-linecap="round" d="M39 37.5v11.8M45.5 37.5v11.8M52 37.5v11.8"/>`,
+      ].join("");
+      slot = { x: 30, y: 32.5, size: 16 };
+      break;
+    case "shield":
+      emblem = `<path fill="${ink}" d="M32 7.5l20 6.2v14.8c0 14.2-8.5 23.8-20 27.5C20.5 52.3 12 42.7 12 28.5V13.7L32 7.5z"/>`;
+      slot = { x: 32, y: 30, size: 18 };
+      break;
+    case "ball":
+      // Horizontal pointed football — monogram optically centered.
+      // Tip stripes only; no center laces through the letter.
+      emblem = [
+        `<path fill="${ink}" d="M4.5 32C8.5 19.5 19 12 32 12s23.5 7.5 27.5 20C55.5 44.5 45 52 32 52S8.5 44.5 4.5 32z"/>`,
+        `<path fill="none" stroke="${fill}" stroke-width="2.3" stroke-linecap="round" d="M12.5 25c2.4 4.5 2.4 9.5 0 14"/>`,
+        `<path fill="none" stroke="${fill}" stroke-width="2.3" stroke-linecap="round" d="M51.5 25c-2.4 4.5-2.4 9.5 0 14"/>`,
+      ].join("");
+      slot = { x: 32, y: 34, size: 20 };
+      break;
+    case "star":
+      // Edge-to-edge 5-point star (R≈28.5), cy nudged for optical center.
+      emblem = `<path fill="${ink}" d="M32 4.7L38.58 24.14L59.11 24.39L42.65 36.66L48.75 56.26L32 44.4L15.25 56.26L21.35 36.66L4.89 24.39L25.42 24.14Z"/>`;
+      slot = { x: 32, y: 35, size: 15 };
+      break;
+    case "bolt":
+      emblem = `<path fill="${ink}" d="M39 7.5L15.5 34h13L23.5 56.5 49 28.5H34.5L39 7.5z"/>`;
+      slot = { x: 31, y: 32, size: 15 };
+      break;
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128">${disc}${emblem}${monogram(letter, fill, slot)}</svg>`;
+}
+
+export function nativeLogoDataUri(
+  key: string,
+  initial?: string | null,
+): string | null {
   const parsed = parseNativeLogoKey(key);
   if (!parsed) return null;
   const color = COLOR_BY_ID.get(parsed.colorId);
   if (!color) return null;
-  const svg = buildSvg(parsed.shape, color.fill, color.ink);
+  const letter = teamLogoInitial(initial ?? "T");
+  const svg = buildSvg(parsed.shape, color.fill, color.ink, letter);
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-export function resolveNativeTeamAvatarSrc(raw?: string | null): string | null {
+export function resolveNativeTeamAvatarSrc(
+  raw?: string | null,
+  initial?: string | null,
+): string | null {
   const value = String(raw ?? "").trim();
   if (!value) return null;
-  if (isNativeLogoKey(value)) return nativeLogoDataUri(value);
+  if (isNativeLogoKey(value)) return nativeLogoDataUri(value, initial);
   return value;
 }
 

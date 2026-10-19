@@ -313,7 +313,13 @@ export function ProfileMenu() {
               "flex h-8 w-8 max-h-8 max-w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-200 bg-white p-0",
             )}
           >
-            <LeagueAvatar platform={navPlatform} src={navAvatar} alt="" className="size-8" />
+            <LeagueAvatar
+              platform={navPlatform}
+              src={navAvatar}
+              alt=""
+              teamName={activeLeague?.teamName}
+              className="size-8"
+            />
           </DropdownMenuTrigger>
         ) : (
           <DropdownMenuTrigger
@@ -352,6 +358,7 @@ export function ProfileMenu() {
                           platform={league?.platform}
                           src={league?.avatar}
                           alt=""
+                          teamName={league?.teamName}
                           className="size-8"
                         />
                         <span className="min-w-0">

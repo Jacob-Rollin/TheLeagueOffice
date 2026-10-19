@@ -700,7 +700,7 @@ function NativeMatchupPage() {
 }
 
 function TeamAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
-  const src = resolveNativeTeamAvatarSrc(avatarUrl);
+  const src = resolveNativeTeamAvatarSrc(avatarUrl, name);
   return (
     <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100 sm:size-14">
       {src ? (

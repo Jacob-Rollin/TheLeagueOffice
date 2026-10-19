@@ -37,7 +37,10 @@ function teamInitials(name: string): string {
   return cleaned.slice(0, 2).toUpperCase();
 }
 
-export function resolveAvatarUrl(raw?: string | null): string | null {
+export function resolveAvatarUrl(
+  raw?: string | null,
+  opts?: { initial?: string | null; teamName?: string | null },
+): string | null {
   const value = (raw ?? "").trim();
   if (!value) return null;
   const lower = value.toLowerCase();
@@ -50,9 +53,9 @@ export function resolveAvatarUrl(raw?: string | null): string | null {
   ) {
     return null;
   }
-  // Native curated pool keys (`pool:helmet:navy`) → data-URI SVG.
+  // Native curated pool keys (`pool:helmet:navy`) → data-URI SVG (+ team initial).
   if (lower.startsWith("pool:")) {
-    return resolveNativeTeamAvatarSrc(value);
+    return resolveNativeTeamAvatarSrc(value, opts?.initial ?? opts?.teamName);
   }
   if (/sleepercdn\.com\/avatars(?:\/thumbs)?\/(?:0|default)(?:[/?#.]|$)/i.test(value)) {
     return null;
@@ -184,9 +187,9 @@ export function TeamAvatarBadge({
   cacheKey?: string | null;
 }) {
   const [failed, setFailed] = useState(false);
-  const src = resolveAvatarUrl(logo);
+  const src = resolveAvatarUrl(logo, { teamName: name });
   const plat = (platform ?? "").trim().toLowerCase();
-  const remountKey = `${cacheKey ?? "rank"}:${src ?? "none"}:${plat}`;
+  const remountKey = `${cacheKey ?? "rank"}:${src ?? "none"}:${plat}:${name}`;
 
   useEffect(() => {
     setFailed(false);

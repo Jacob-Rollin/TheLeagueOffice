@@ -314,6 +314,7 @@ function NativeLeagueTeamsPage() {
                   platform="native"
                   src={team.avatarUrl}
                   alt={`${team.teamName} logo`}
+                  teamName={team.teamName}
                   className="size-10"
                 />
                 <div className="min-w-0 flex-1">
