@@ -130,9 +130,9 @@ function RootShell({ children }: { children: ReactNode }) {
 function SiteNav() {
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // z-40 keeps GlobalSearch results above landing hero CTAs (Manage Your League / Open Playbook).
+  // sticky + z-50: GlobalSearch lists must paint above landing Manage Your League / Open Playbook.
   return (
-    <header className="relative z-40 border-b-4 border-accent bg-primary text-primary-foreground">
+    <header className="sticky top-0 z-50 border-b-4 border-accent bg-primary text-primary-foreground">
       <nav className="mx-auto flex w-full max-w-shell items-center gap-2 px-3 py-1.5">
         <Link to="/" className="display-title mr-2 whitespace-nowrap text-lg">
           THE LEAGUE <span className="text-accent-foreground/90 rounded bg-accent px-1.5">OFFICE</span>
