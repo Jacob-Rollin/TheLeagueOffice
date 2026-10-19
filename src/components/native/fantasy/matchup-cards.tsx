@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
 
 import { FantasyBoard } from "@/components/native/fantasy/chrome";
 import { formatFantasyPts } from "@/components/native/fantasy/format";
