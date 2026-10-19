@@ -130,8 +130,8 @@ function RootShell({ children }: { children: ReactNode }) {
 function SiteNav() {
   const [searchOpen, setSearchOpen] = useState(false);
 
+  // z-40 keeps GlobalSearch results above landing hero CTAs (Manage Your League / Open Playbook).
   return (
-    {/* z-40 keeps GlobalSearch / nav menus above page heroes that use z-10. */}
     <header className="relative z-40 border-b-4 border-accent bg-primary text-primary-foreground">
       <nav className="mx-auto flex w-full max-w-shell items-center gap-2 px-3 py-1.5">
         <Link to="/" className="display-title mr-2 whitespace-nowrap text-lg">
