@@ -17,9 +17,10 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import {
-  fetchNativeLiveWeekStats,
   overlayNativeLiveMatchupScores,
+  weeklyStatsMapToRecord,
 } from "@/lib/native-live-scoring";
 import {
   getNativeLeagueBoard,
@@ -28,7 +29,6 @@ import {
   listNativeTransactions,
   setNativeLeagueWeek,
 } from "@/lib/native-league.functions";
-import { visibleRefetchInterval } from "@/lib/page-visibility";
 import type { Player } from "@/lib/players-build";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { ScoringMap } from "@/lib/scoring-map";
@@ -37,8 +37,6 @@ export const Route = createFileRoute("/league/$linkId/")({
   ssr: false,
   component: NativeLeagueDashboard,
 });
-
-const LIVE_STATS_POLL_MS = 60_000;
 
 type NativeBoard = NonNullable<Awaited<ReturnType<typeof getNativeLeagueBoard>>>;
 
@@ -96,37 +94,25 @@ function NativeLeagueDashboardBody({
     queryFn: () => getNativeMatchupWeek({ data: { linkId, week: currentWeek } }),
   });
 
-  const seasonYear =
-    matchupWeek?.seasonYear ?? summary.seasonYear ?? new Date().getUTCFullYear();
-
-  const liveStats = useQuery({
-    queryKey: ["native-live-week-stats", seasonYear, currentWeek],
-    enabled: Boolean(draftDone && matchupWeek),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-    refetchInterval: visibleRefetchInterval(LIVE_STATS_POLL_MS),
-    refetchIntervalInBackground: false,
-    retry: false,
-    queryFn: () => fetchNativeLiveWeekStats(seasonYear, currentWeek),
-  });
+  /** Same broadcast client cache as mobile — Actions finalize TiDB / snap-cdn separately. */
+  const { statsById, ready: liveStatsReady, dataUpdatedAt: liveStatsUpdatedAt } =
+    useWeeklyActualStats(draftDone ? currentWeek : null, { pace: "broadcast" });
 
   const scoredMatchups = useMemo(() => {
     const base = matchupWeek?.matchups ?? [];
-    const stats = liveStats.data?.stats;
+    const stats = weeklyStatsMapToRecord(statsById);
     const starters = matchupWeek?.startersByTeamId ?? {};
     const scoring = (matchupWeek?.scoringSettings ?? {}) as ScoringMap;
-    if (!stats || Object.keys(stats).length === 0) return base;
+    if (!stats) return base;
     return overlayNativeLiveMatchupScores(base, starters, stats, scoring);
   }, [
     matchupWeek?.matchups,
     matchupWeek?.startersByTeamId,
     matchupWeek?.scoringSettings,
-    liveStats.data?.stats,
+    statsById,
   ]);
 
-  const liveActive = Boolean(
-    liveStats.data && Object.keys(liveStats.data.stats).length > 0,
-  );
+  const liveActive = Boolean(draftDone && liveStatsReady);
 
   const myMatchupScored = useMemo(() => {
     if (myTeamId == null) return null;
@@ -360,9 +346,9 @@ function NativeLeagueDashboardBody({
         </FantasyBoard>
       )}
 
-      {liveActive && liveStats.data?.updatedAt ? (
+      {liveActive && liveStatsUpdatedAt ? (
         <p className="text-xs text-muted-foreground">
-          Live scores as of {new Date(liveStats.data.updatedAt).toLocaleString()}
+          Live scores as of {new Date(liveStatsUpdatedAt).toLocaleString()}
         </p>
       ) : null}
 

@@ -59,11 +59,10 @@ import {
   saveNativeLineup,
 } from "@/lib/native-league.functions";
 import {
-  fetchNativeLiveWeekStats,
   overlayNativeLiveMatchupScores,
+  weeklyStatsMapToRecord,
 } from "@/lib/native-live-scoring";
 import { DEFAULT_IR_ALLOWED_STATUSES } from "@/lib/native-league-settings";
-import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
@@ -74,8 +73,6 @@ export const Route = createFileRoute("/league/$linkId/my-team")({
   ssr: false,
   component: NativeMyTeamPage,
 });
-
-const LIVE_STATS_POLL_MS = 60_000;
 
 const thClass =
   "px-2.5 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500";
@@ -186,34 +183,7 @@ function NativeMyTeamPage() {
     queryFn: () => getNativeMatchupWeek({ data: { linkId, week: lastWeekNum } }),
   });
 
-  const seasonYear =
-    matchupWeek?.seasonYear ?? board?.summary.seasonYear ?? new Date().getUTCFullYear();
   const isLeagueCurrentWeek = activeWeek === (boardWeek ?? activeWeek);
-
-  const liveStats = useQuery({
-    queryKey: ["native-live-week-stats", seasonYear, activeWeek],
-    enabled: Boolean(matchupWeek && isLeagueCurrentWeek),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-    refetchInterval: visibleRefetchInterval(LIVE_STATS_POLL_MS),
-    refetchIntervalInBackground: false,
-    retry: false,
-    queryFn: () => fetchNativeLiveWeekStats(seasonYear, activeWeek),
-  });
-
-  const scoredMatchups = useMemo(() => {
-    const base = matchupWeek?.matchups ?? [];
-    const stats = liveStats.data?.stats;
-    const starters = matchupWeek?.startersByTeamId ?? {};
-    const scoring = (matchupWeek?.scoringSettings ?? {}) as ScoringMap;
-    if (!stats || Object.keys(stats).length === 0) return base;
-    return overlayNativeLiveMatchupScores(base, starters, stats, scoring);
-  }, [
-    matchupWeek?.matchups,
-    matchupWeek?.startersByTeamId,
-    matchupWeek?.scoringSettings,
-    liveStats.data?.stats,
-  ]);
 
   const {
     projectFor,
@@ -224,8 +194,29 @@ function NativeMyTeamPage() {
     nflWeek,
     scoringMap,
   } = useLeagueProjections(activeWeek);
-  const { statsFor: weekStatLine } = useWeeklyActualStats(activeWeek, { pace: "broadcast" });
+  /** Same broadcast client cache as mobile Team — Actions finalize TiDB later. */
+  const {
+    statsFor: weekStatLine,
+    statsById,
+    ready: liveStatsReady,
+  } = useWeeklyActualStats(activeWeek, { pace: "broadcast" });
   const { progressByNflTeam, currentWeek: nflCurrentWeek } = useNflGameProgress(activeWeek);
+
+  const scoredMatchups = useMemo(() => {
+    const base = matchupWeek?.matchups ?? [];
+    if (!isLeagueCurrentWeek) return base;
+    const stats = weeklyStatsMapToRecord(statsById);
+    const starters = matchupWeek?.startersByTeamId ?? {};
+    const scoring = (matchupWeek?.scoringSettings ?? {}) as ScoringMap;
+    if (!stats) return base;
+    return overlayNativeLiveMatchupScores(base, starters, stats, scoring);
+  }, [
+    matchupWeek?.matchups,
+    matchupWeek?.startersByTeamId,
+    matchupWeek?.scoringSettings,
+    statsById,
+    isLeagueCurrentWeek,
+  ]);
   const { data: schedule = [] } = useNflSchedule();
   const { rankFor: defenseRankFor } = usePositionalDefenseRanks();
 
@@ -333,9 +324,7 @@ function NativeMyTeamPage() {
 
   const showActuals = nflCurrentWeek != null && activeWeek < nflCurrentWeek;
 
-  const liveActive = Boolean(
-    isLeagueCurrentWeek && liveStats.data && Object.keys(liveStats.data.stats).length > 0,
-  );
+  const liveActive = Boolean(isLeagueCurrentWeek && liveStatsReady);
 
   const isPlayerLocked = (player: Player | null | undefined) => {
     if (!player) return false;

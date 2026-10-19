@@ -34,10 +34,9 @@ import {
   parseRosterSlotCounts,
 } from "@/lib/native-league-lineup";
 import {
-  fetchNativeLiveWeekStats,
   overlayNativeLiveMatchupScores,
+  weeklyStatsMapToRecord,
 } from "@/lib/native-live-scoring";
-import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
 import {
@@ -55,8 +54,6 @@ export const Route = createFileRoute("/league/$linkId/matchup")({
   ssr: false,
   component: NativeMatchupPage,
 });
-
-const LIVE_STATS_POLL_MS = 60_000;
 
 function badgeLabel(slot: string): string {
   if (slot === "FLEX" || slot === "WRRB" || slot === "WRTE") return "FLX";
@@ -155,32 +152,7 @@ function NativeMatchupPage() {
     queryFn: () => getNativeStandings({ data: { linkId } }),
   });
 
-  const seasonYear = data?.seasonYear ?? board?.summary.seasonYear ?? new Date().getUTCFullYear();
   const isCurrentWeek = activeWeek === (board?.currentWeek ?? activeWeek);
-
-  const liveStats = useQuery({
-    queryKey: ["native-live-week-stats", seasonYear, activeWeek],
-    enabled: Boolean(data && isCurrentWeek),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-    refetchInterval: visibleRefetchInterval(LIVE_STATS_POLL_MS),
-    refetchIntervalInBackground: false,
-    retry: false,
-    queryFn: () => fetchNativeLiveWeekStats(seasonYear, activeWeek),
-  });
-
-  const scoredMatchups = useMemo(() => {
-    const base = data?.matchups ?? [];
-    const stats = liveStats.data?.stats;
-    const starters = data?.startersByTeamId ?? {};
-    const scoring = (data?.scoringSettings ?? {}) as ScoringMap;
-    if (!stats || Object.keys(stats).length === 0) return base;
-    return overlayNativeLiveMatchupScores(base, starters, stats, scoring);
-  }, [data?.matchups, data?.startersByTeamId, data?.scoringSettings, liveStats.data?.stats]);
-
-  const liveActive = Boolean(
-    isCurrentWeek && liveStats.data && Object.keys(liveStats.data.stats).length > 0,
-  );
 
   const cache = useSleeperPlayers();
   const fallback = useQuery({
@@ -196,10 +168,32 @@ function NativeMatchupPage() {
   }, [cache.data?.players, fallback.data?.players]);
 
   const { projectFor, sleeperIdFor, scoringMap } = useLeagueProjections(activeWeek);
-  const { statsFor } = useWeeklyActualStats(activeWeek, { pace: "broadcast" });
+  /** Same broadcast client cache as mobile Matchup — Actions finalize TiDB later. */
+  const { statsFor, statsById, ready: liveStatsReady } = useWeeklyActualStats(activeWeek, {
+    pace: "broadcast",
+  });
   const { progressByNflTeam, currentWeek: nflCurrentWeek } = useNflGameProgress(activeWeek);
   const { data: schedule = [] } = useNflSchedule();
   const showActuals = nflCurrentWeek != null && activeWeek < nflCurrentWeek;
+
+  const scoredMatchups = useMemo(() => {
+    const base = data?.matchups ?? [];
+    // Past weeks keep TiDB host finalize; live week overlays from client Sleeper cache.
+    if (!isCurrentWeek) return base;
+    const stats = weeklyStatsMapToRecord(statsById);
+    const starters = data?.startersByTeamId ?? {};
+    const scoring = (data?.scoringSettings ?? {}) as ScoringMap;
+    if (!stats) return base;
+    return overlayNativeLiveMatchupScores(base, starters, stats, scoring);
+  }, [
+    data?.matchups,
+    data?.startersByTeamId,
+    data?.scoringSettings,
+    statsById,
+    isCurrentWeek,
+  ]);
+
+  const liveActive = Boolean(isCurrentWeek && liveStatsReady);
 
   const livePointsFor = (hostMap: Record<string, number>, playerId: string | null): number => {
     if (!playerId) return 0;
@@ -471,8 +465,8 @@ function NativeMatchupPage() {
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             {liveActive
-              ? "Live scores refresh about every minute while this tab is open."
-              : "Scores update when the week snap is published; live overlay appears once week stats are warm."}
+              ? "Live scores refresh from Sleeper while this tab is open. Finalized weeks use Actions → TiDB."
+              : "Live scores use the shared Sleeper client cache (same as mobile). Past weeks keep finalized TiDB snaps."}
           </p>
         </div>
         <FantasyWeekSelect week={activeWeek} onWeekChange={(w) => setWeek(w)} />
