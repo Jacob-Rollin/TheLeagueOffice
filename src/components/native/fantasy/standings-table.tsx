@@ -1,3 +1,4 @@
+import { formatFantasyPts } from "@/components/native/fantasy/format";
 import { TeamAvatarBadge } from "@/components/playbook/panels";
 import { cn } from "@/lib/utils";
 
@@ -151,14 +152,14 @@ export function FantasyStandingsTable({
                       <span className="w-20 text-center">
                         {formatRecord(row.wins, row.losses, row.ties)}
                       </span>
-                      <span className="w-16 text-right">{row.pointsFor.toFixed(1)}</span>
+                      <span className="w-16 text-right">{formatFantasyPts(row.pointsFor)}</span>
                       <span
                         className={cn(
                           "w-16 text-right font-normal",
                           mine ? "text-white/80" : "text-slate-500",
                         )}
                       >
-                        {row.pointsAgainst.toFixed(1)}
+                        {formatFantasyPts(row.pointsAgainst)}
                       </span>
                       <span className="w-16 text-right">{pctLabel}</span>
                     </div>

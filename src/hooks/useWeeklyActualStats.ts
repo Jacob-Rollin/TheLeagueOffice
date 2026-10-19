@@ -68,6 +68,8 @@ export function useWeeklyActualStats(
 
   return {
     statsFor,
+    /** Full week map — same client cache mobile Matchup/Team use for live overlays. */
+    statsById: query.data,
     loading: query.isLoading,
     ready: Boolean(query.data && query.data.size > 0),
     dataUpdatedAt: query.dataUpdatedAt,

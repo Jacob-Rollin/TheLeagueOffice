@@ -12,6 +12,9 @@ import {
   FantasyMatchupWeekList,
   FantasyPlayerChip,
   FantasyWeekSelect,
+  displayPlayerPoints,
+  formatFantasyProj,
+  formatFantasyPts,
   nativeMatchupViewToCard,
   type FantasyMatchupCard,
 } from "@/components/native/fantasy";
@@ -20,6 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import {
   getNativeLeagueBoard,
   getNativeMatchupWeek,
@@ -30,10 +34,9 @@ import {
   parseRosterSlotCounts,
 } from "@/lib/native-league-lineup";
 import {
-  fetchNativeLiveWeekStats,
   overlayNativeLiveMatchupScores,
+  weeklyStatsMapToRecord,
 } from "@/lib/native-live-scoring";
-import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
 import {
@@ -44,15 +47,13 @@ import {
   progressForNflTeam,
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
-import type { ScoringMap } from "@/lib/scoring-map";
+import { resolveNativeLiveScore, type ScoringMap } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$linkId/matchup")({
   ssr: false,
   component: NativeMatchupPage,
 });
-
-const LIVE_STATS_POLL_MS = 60_000;
 
 function badgeLabel(slot: string): string {
   if (slot === "FLEX" || slot === "WRRB" || slot === "WRTE") return "FLX";
@@ -151,32 +152,7 @@ function NativeMatchupPage() {
     queryFn: () => getNativeStandings({ data: { linkId } }),
   });
 
-  const seasonYear = data?.seasonYear ?? board?.summary.seasonYear ?? new Date().getUTCFullYear();
   const isCurrentWeek = activeWeek === (board?.currentWeek ?? activeWeek);
-
-  const liveStats = useQuery({
-    queryKey: ["native-live-week-stats", seasonYear, activeWeek],
-    enabled: Boolean(data && isCurrentWeek),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-    refetchInterval: visibleRefetchInterval(LIVE_STATS_POLL_MS),
-    refetchIntervalInBackground: false,
-    retry: false,
-    queryFn: () => fetchNativeLiveWeekStats(seasonYear, activeWeek),
-  });
-
-  const scoredMatchups = useMemo(() => {
-    const base = data?.matchups ?? [];
-    const stats = liveStats.data?.stats;
-    const starters = data?.startersByTeamId ?? {};
-    const scoring = (data?.scoringSettings ?? {}) as ScoringMap;
-    if (!stats || Object.keys(stats).length === 0) return base;
-    return overlayNativeLiveMatchupScores(base, starters, stats, scoring);
-  }, [data?.matchups, data?.startersByTeamId, data?.scoringSettings, liveStats.data?.stats]);
-
-  const liveActive = Boolean(
-    isCurrentWeek && liveStats.data && Object.keys(liveStats.data.stats).length > 0,
-  );
 
   const cache = useSleeperPlayers();
   const fallback = useQuery({
@@ -191,9 +167,40 @@ function NativeMatchupPage() {
     return map;
   }, [cache.data?.players, fallback.data?.players]);
 
-  const { projectFor, sleeperIdFor } = useLeagueProjections(activeWeek);
-  const { progressByNflTeam } = useNflGameProgress(activeWeek);
+  const { projectFor, sleeperIdFor, scoringMap } = useLeagueProjections(activeWeek);
+  /** Same broadcast client cache as mobile Matchup — Actions finalize TiDB later. */
+  const { statsFor, statsById, ready: liveStatsReady } = useWeeklyActualStats(activeWeek, {
+    pace: "broadcast",
+  });
+  const { progressByNflTeam, currentWeek: nflCurrentWeek } = useNflGameProgress(activeWeek);
   const { data: schedule = [] } = useNflSchedule();
+  const showActuals = nflCurrentWeek != null && activeWeek < nflCurrentWeek;
+
+  const scoredMatchups = useMemo(() => {
+    const base = data?.matchups ?? [];
+    // Past weeks keep TiDB host finalize; live week overlays from client Sleeper cache.
+    if (!isCurrentWeek) return base;
+    const stats = weeklyStatsMapToRecord(statsById);
+    const starters = data?.startersByTeamId ?? {};
+    const scoring = (data?.scoringSettings ?? {}) as ScoringMap;
+    if (!stats) return base;
+    return overlayNativeLiveMatchupScores(base, starters, stats, scoring);
+  }, [
+    data?.matchups,
+    data?.startersByTeamId,
+    data?.scoringSettings,
+    statsById,
+    isCurrentWeek,
+  ]);
+
+  const liveActive = Boolean(isCurrentWeek && liveStatsReady);
+
+  const livePointsFor = (hostMap: Record<string, number>, playerId: string | null): number => {
+    if (!playerId) return 0;
+    const player = playersById.get(playerId);
+    const sid = player ? sleeperIdFor(player) : playerId;
+    return resolveNativeLiveScore(hostMap[playerId] ?? hostMap[sid], statsFor(sid), scoringMap);
+  };
 
   const myTeamId = data?.myTeamId ?? board?.summary.teamId ?? null;
 
@@ -340,8 +347,46 @@ function NativeMatchupPage() {
     return Math.round(sum * 100) / 100;
   }, [rightPlayers, projectFor, sleeperIdFor]);
 
-  const leftPointsMap = oriented?.left.playerPoints ?? {};
-  const rightPointsMap = oriented?.right.playerPoints ?? {};
+  /** Host TiDB points overlaid with browser Sleeper week-stats (mobile parity). */
+  const leftPointsMap = useMemo(() => {
+    const host = oriented?.left.playerPoints ?? {};
+    const ids = oriented?.leftStarterIds ?? [];
+    const out: Record<string, number> = { ...host };
+    for (const id of ids) {
+      if (!id) continue;
+      out[id] = livePointsFor(host, id);
+    }
+    return out;
+  }, [oriented?.left.playerPoints, oriented?.leftStarterIds, statsFor, sleeperIdFor, scoringMap, playersById]);
+
+  const rightPointsMap = useMemo(() => {
+    const host = oriented?.right.playerPoints ?? {};
+    const ids = oriented?.rightStarterIds ?? [];
+    const out: Record<string, number> = { ...host };
+    for (const id of ids) {
+      if (!id) continue;
+      out[id] = livePointsFor(host, id);
+    }
+    return out;
+  }, [oriented?.right.playerPoints, oriented?.rightStarterIds, statsFor, sleeperIdFor, scoringMap, playersById]);
+
+  const leftLiveTotal = useMemo(() => {
+    let sum = 0;
+    for (const id of oriented?.leftStarterIds ?? []) {
+      if (!id) continue;
+      sum += leftPointsMap[id] ?? 0;
+    }
+    return Math.round(sum * 100) / 100;
+  }, [oriented?.leftStarterIds, leftPointsMap]);
+
+  const rightLiveTotal = useMemo(() => {
+    let sum = 0;
+    for (const id of oriented?.rightStarterIds ?? []) {
+      if (!id) continue;
+      sum += rightPointsMap[id] ?? 0;
+    }
+    return Math.round(sum * 100) / 100;
+  }, [oriented?.rightStarterIds, rightPointsMap]);
 
   const leftDisplayProj = oriented
     ? computeTeamDisplayProjection({
@@ -353,7 +398,7 @@ function NativeMatchupPage() {
         },
         weeklyFallback,
         progressByNflTeam,
-        teamLivePoints: oriented.left.points,
+        teamLivePoints: leftLiveTotal,
         teamBaselineProj: leftProjBase,
       })
     : 0;
@@ -368,15 +413,15 @@ function NativeMatchupPage() {
         },
         weeklyFallback,
         progressByNflTeam,
-        teamLivePoints: oriented.right.points,
+        teamLivePoints: rightLiveTotal,
         teamBaselineProj: rightProjBase,
       })
     : 0;
 
   const winPct = oriented
     ? computeDynamicWinProbability({
-        scoreA: oriented.left.points,
-        scoreB: oriented.right.points,
+        scoreA: leftLiveTotal,
+        scoreB: rightLiveTotal,
         startersA: leftPlayers,
         startersB: rightPlayers,
         pointsMapA: leftPointsMap,
@@ -390,7 +435,6 @@ function NativeMatchupPage() {
         activeWeek,
       })
     : { pctA: 50, pctB: 50 };
-
   const matchupFinal = useMemo(() => {
     if (!leftPlayers.length && !rightPlayers.length) return false;
     const all = [...leftPlayers, ...rightPlayers];
@@ -409,8 +453,8 @@ function NativeMatchupPage() {
   };
 
   const leftLeadsWin = winPct.pctA >= winPct.pctB;
-  const leftWon = matchupFinal && (oriented?.left.points ?? 0) > (oriented?.right.points ?? 0);
-  const rightWon = matchupFinal && (oriented?.right.points ?? 0) > (oriented?.left.points ?? 0);
+  const leftWon = matchupFinal && leftLiveTotal > rightLiveTotal;
+  const rightWon = matchupFinal && rightLiveTotal > leftLiveTotal;
 
   return (
     <div className="space-y-5">
@@ -421,8 +465,8 @@ function NativeMatchupPage() {
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             {liveActive
-              ? "Live scores refresh about every minute while this tab is open."
-              : "Scores update when the week snap is published; live overlay appears once week stats are warm."}
+              ? "Live scores refresh from Sleeper while this tab is open. Finalized weeks use Actions → TiDB."
+              : "Live scores use the shared Sleeper client cache (same as mobile). Past weeks keep finalized TiDB snaps."}
           </p>
         </div>
         <FantasyWeekSelect week={activeWeek} onWeekChange={(w) => setWeek(w)} />
@@ -471,10 +515,10 @@ function NativeMatchupPage() {
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="font-display text-2xl font-semibold italic tabular-nums tracking-tight text-slate-900 sm:text-3xl">
-                        {oriented.left.points.toFixed(2)}
+                        {formatFantasyPts(leftLiveTotal)}
                       </p>
                       <p className="mt-1 text-xs font-medium tabular-nums text-slate-500">
-                        Proj {leftDisplayProj.toFixed(2)}
+                        Proj {formatFantasyProj(leftDisplayProj)}
                       </p>
                     </div>
                   </div>
@@ -497,10 +541,10 @@ function NativeMatchupPage() {
                   <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
                     <div className="shrink-0 text-left">
                       <p className="font-display text-2xl font-semibold italic tabular-nums tracking-tight text-slate-900 sm:text-3xl">
-                        {oriented.right.points.toFixed(2)}
+                        {formatFantasyPts(rightLiveTotal)}
                       </p>
                       <p className="mt-1 text-xs font-medium tabular-nums text-slate-500">
-                        Proj {rightDisplayProj.toFixed(2)}
+                        Proj {formatFantasyProj(rightDisplayProj)}
                       </p>
                     </div>
                     <div className="min-w-0 flex-1 text-right">
@@ -613,8 +657,9 @@ function NativeMatchupPage() {
               <MirroredLineupBoard
                 title="Starters"
                 rows={starterRows}
-                leftPoints={leftPointsMap}
-                rightPoints={rightPointsMap}
+                leftHostPoints={oriented.left.playerPoints}
+                rightHostPoints={oriented.right.playerPoints}
+                scorePlayer={(host, id) => livePointsFor(host, id)}
                 playersById={playersById}
                 projectFor={(id) => {
                   const p = playersById.get(id);
@@ -623,6 +668,7 @@ function NativeMatchupPage() {
                 schedule={schedule}
                 activeWeek={activeWeek}
                 progressByNflTeam={progressByNflTeam}
+                showActuals={showActuals}
                 onOpen={(id) => modalRef.current?.open(id)}
                 showTotals
               />
@@ -631,8 +677,9 @@ function NativeMatchupPage() {
                 <MirroredLineupBoard
                   title="Bench"
                   rows={benchRows}
-                  leftPoints={leftPointsMap}
-                  rightPoints={rightPointsMap}
+                  leftHostPoints={oriented.left.playerPoints}
+                  rightHostPoints={oriented.right.playerPoints}
+                  scorePlayer={(host, id) => livePointsFor(host, id)}
                   playersById={playersById}
                   projectFor={(id) => {
                     const p = playersById.get(id);
@@ -641,6 +688,7 @@ function NativeMatchupPage() {
                   schedule={schedule}
                   activeWeek={activeWeek}
                   progressByNflTeam={progressByNflTeam}
+                  showActuals={showActuals}
                   onOpen={(id) => modalRef.current?.open(id)}
                 />
               ) : null}
@@ -649,8 +697,9 @@ function NativeMatchupPage() {
                 <MirroredLineupBoard
                   title="IR / Reserve"
                   rows={irRows}
-                  leftPoints={leftPointsMap}
-                  rightPoints={rightPointsMap}
+                  leftHostPoints={oriented.left.playerPoints}
+                  rightHostPoints={oriented.right.playerPoints}
+                  scorePlayer={(host, id) => livePointsFor(host, id)}
                   playersById={playersById}
                   projectFor={(id) => {
                     const p = playersById.get(id);
@@ -659,6 +708,7 @@ function NativeMatchupPage() {
                   schedule={schedule}
                   activeWeek={activeWeek}
                   progressByNflTeam={progressByNflTeam}
+                  showActuals={showActuals}
                   onOpen={(id) => modalRef.current?.open(id)}
                 />
               ) : null}
@@ -731,7 +781,7 @@ function MatchupStrip({
                   {m.home.teamName}
                 </span>
                 <span className="mx-1 font-display italic tabular-nums text-slate-900">
-                  {m.home.points.toFixed(1)}
+                  {formatFantasyPts(m.home.points)}
                 </span>
               </span>
               <span className="truncate text-[11px] font-semibold text-slate-700">
@@ -739,7 +789,7 @@ function MatchupStrip({
                   {m.away.teamName}
                 </span>
                 <span className="mx-1 font-display italic tabular-nums text-slate-900">
-                  {m.away.points.toFixed(1)}
+                  {formatFantasyPts(m.away.points)}
                 </span>
               </span>
             </button>
@@ -753,25 +803,29 @@ function MatchupStrip({
 function MirroredLineupBoard({
   title,
   rows,
-  leftPoints,
-  rightPoints,
+  leftHostPoints,
+  rightHostPoints,
+  scorePlayer,
   playersById,
   projectFor,
   schedule,
   activeWeek,
   progressByNflTeam,
+  showActuals,
   onOpen,
   showTotals,
 }: {
   title: string;
   rows: Array<{ slot: string; leftId: string | null; rightId: string | null }>;
-  leftPoints: Record<string, number>;
-  rightPoints: Record<string, number>;
+  leftHostPoints: Record<string, number>;
+  rightHostPoints: Record<string, number>;
+  scorePlayer: (host: Record<string, number>, id: string) => number;
   playersById: Map<string, Player>;
   projectFor: (id: string) => number | null;
   schedule: Parameters<typeof scheduleOpponent>[0];
   activeWeek: number;
   progressByNflTeam: Map<string, NflGameProgress>;
+  showActuals: boolean;
   onOpen: (id: string) => void;
   showTotals?: boolean;
 }) {
@@ -787,12 +841,10 @@ function MirroredLineupBoard({
       {rows.map((row, idx) => {
         const leftPlayer = row.leftId ? playersById.get(row.leftId) ?? null : null;
         const rightPlayer = row.rightId ? playersById.get(row.rightId) ?? null : null;
-        const leftPts = row.leftId != null ? leftPoints[row.leftId] ?? null : null;
-        const rightPts = row.rightId != null ? rightPoints[row.rightId] ?? null : null;
-        const leftP =
-          leftPlayer != null ? projectFor(leftPlayer.id) : null;
-        const rightP =
-          rightPlayer != null ? projectFor(rightPlayer.id) : null;
+        const leftPts = row.leftId != null ? scorePlayer(leftHostPoints, row.leftId) : null;
+        const rightPts = row.rightId != null ? scorePlayer(rightHostPoints, row.rightId) : null;
+        const leftP = leftPlayer != null ? projectFor(leftPlayer.id) : null;
+        const rightP = rightPlayer != null ? projectFor(rightPlayer.id) : null;
         if (leftPts != null && Number.isFinite(leftPts)) leftScore += leftPts;
         if (rightPts != null && Number.isFinite(rightPts)) rightScore += rightPts;
         if (leftP != null && Number.isFinite(leftP)) leftProj += leftP;
@@ -812,6 +864,7 @@ function MirroredLineupBoard({
               schedule={schedule}
               activeWeek={activeWeek}
               progressByNflTeam={progressByNflTeam}
+              showActuals={showActuals}
               onOpen={onOpen}
             />
             <div className="flex items-center justify-center self-center px-0.5">
@@ -826,6 +879,7 @@ function MirroredLineupBoard({
               schedule={schedule}
               activeWeek={activeWeek}
               progressByNflTeam={progressByNflTeam}
+              showActuals={showActuals}
               onOpen={onOpen}
             />
           </div>
@@ -837,9 +891,9 @@ function MirroredLineupBoard({
             <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
               Total{" "}
             </span>
-            {leftScore.toFixed(2)}
+            {formatFantasyPts(leftScore)}
             <span className="ml-2 text-xs font-medium text-slate-500">
-              Proj {leftProj.toFixed(2)}
+              Proj {formatFantasyProj(leftProj)}
             </span>
           </div>
           <div className="w-11" />
@@ -847,9 +901,9 @@ function MirroredLineupBoard({
             <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
               Total{" "}
             </span>
-            {rightScore.toFixed(2)}
+            {formatFantasyPts(rightScore)}
             <span className="ml-2 text-xs font-medium text-slate-500">
-              Proj {rightProj.toFixed(2)}
+              Proj {formatFantasyProj(rightProj)}
             </span>
           </div>
         </div>
@@ -867,6 +921,7 @@ function SidePlayerCell({
   schedule,
   activeWeek,
   progressByNflTeam,
+  showActuals,
   onOpen,
 }: {
   player: Player | null;
@@ -877,6 +932,7 @@ function SidePlayerCell({
   schedule: Parameters<typeof scheduleOpponent>[0];
   activeWeek: number;
   progressByNflTeam: Map<string, NflGameProgress>;
+  showActuals: boolean;
   onOpen: (id: string) => void;
 }) {
   if (!playerId) {
@@ -907,6 +963,7 @@ function SidePlayerCell({
           formatNflKickoffLabel(progress.kickoffIso) ||
           ""
         : "";
+  const displayPts = displayPlayerPoints(points, progress?.phase, { showActuals, bye });
 
   return (
     <div
@@ -930,16 +987,16 @@ function SidePlayerCell({
             align === "right" && "text-right",
           )}
         >
-          {opp ?? "—"}
+          {opp ?? "-"}
           {status ? ` · ${status}` : ""}
         </p>
       </div>
       <div className={cn("shrink-0", align === "right" && "text-left")}>
         <p className="font-display text-sm font-semibold italic tabular-nums text-slate-900">
-          {points != null && Number.isFinite(points) ? points.toFixed(2) : "—"}
+          {formatFantasyPts(displayPts)}
         </p>
         <p className="text-[10px] font-medium tabular-nums text-slate-500">
-          {bye ? "—" : proj != null ? proj.toFixed(1) : "—"}
+          {bye ? "-" : formatFantasyProj(proj)}
         </p>
       </div>
     </div>

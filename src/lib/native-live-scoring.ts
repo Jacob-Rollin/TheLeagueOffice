@@ -47,10 +47,24 @@ async function fetchSnapWeekStats(
   }
 }
 
+/** Convert useWeeklyActualStats Map → overlay record (desktop strip / sync adapter). */
+export function weeklyStatsMapToRecord(
+  map: Map<string, Record<string, number>> | undefined | null,
+): Record<string, Record<string, number>> | null {
+  if (!map || map.size === 0) return null;
+  const out: Record<string, Record<string, number>> = {};
+  for (const [id, line] of map) {
+    if (id && line) out[id] = line;
+  }
+  return out;
+}
+
 /**
  * Live week stats for native Matchup overlay.
  * - Budgeted Sleeper first (visitor IP + shared weekly-stats cache)
  * - snap-cdn warm fallback when Sleeper is empty/429
+ * Prefer `useWeeklyActualStats` in UI; this helper remains for sync-adapter /
+ * non-React callers that need the same IndexedDB-backed fetch.
  */
 export async function fetchNativeLiveWeekStats(
   season: number,
