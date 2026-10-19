@@ -148,9 +148,9 @@ function buildSvg(shape: NativeLogoShape, fill: string, ink: string, letter: str
   switch (shape) {
     case "helmet": {
       emblem = helmetEmblem(ink);
-      // Letter on the shell (lucide ~8,10 → disc coords), above the earhole.
+      // Letter on the top-center of the shell crown (forward of the earhole).
       if (letter) {
-        letterMarkup = monogram(letter, ink, { x: 24.5, y: 28, size: 12 });
+        letterMarkup = monogram(letter, ink, { x: 28, y: 16.5, size: 11 });
       }
       break;
     }
