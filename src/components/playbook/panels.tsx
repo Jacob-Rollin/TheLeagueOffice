@@ -16,6 +16,7 @@ import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRost
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/draft";
+import { resolveNativeTeamAvatarSrc } from "@/lib/native-team-logos";
 import { buildTruePowerRankings, starterRequirements } from "@/lib/power-rankings";
 import { scaleValue } from "@/lib/trade-engine";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,10 @@ export function resolveAvatarUrl(raw?: string | null): string | null {
     lower === "none"
   ) {
     return null;
+  }
+  // Native curated pool keys (`pool:helmet:navy`) → data-URI SVG.
+  if (lower.startsWith("pool:")) {
+    return resolveNativeTeamAvatarSrc(value);
   }
   if (/sleepercdn\.com\/avatars(?:\/thumbs)?\/(?:0|default)(?:[/?#.]|$)/i.test(value)) {
     return null;
