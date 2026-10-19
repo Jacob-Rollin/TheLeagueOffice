@@ -9,22 +9,38 @@
 export const NATIVE_LOGO_SHAPES = ["helmet", "shield", "ball", "star", "bolt"] as const;
 export type NativeLogoShape = (typeof NATIVE_LOGO_SHAPES)[number];
 
+/**
+ * Picker palette — neutrals, cools, warms, then earth/greens.
+ * Ids are stored in `pool:shape:id` keys.
+ */
 export const NATIVE_LOGO_COLORS = [
-  { id: "navy", fill: "#0B1F3A", ink: "#F8FAFC" },
-  { id: "red", fill: "#C8102E", ink: "#FFFFFF" },
+  { id: "black", fill: "#111827", ink: "#F8FAFC", label: "Black" },
+  { id: "grey", fill: "#6B7280", ink: "#FFFFFF", label: "Grey" },
+  { id: "navy", fill: "#0B1F3A", ink: "#F8FAFC", label: "Navy" },
+  { id: "lightblue", fill: "#38BDF8", ink: "#0C4A6E", label: "Light blue" },
+  { id: "purple", fill: "#6B21A8", ink: "#FAF5FF", label: "Purple" },
+  { id: "maroon", fill: "#7F1D1D", ink: "#FEF2F2", label: "Maroon" },
+  { id: "red", fill: "#C8102E", ink: "#FFFFFF", label: "Red" },
+  { id: "orange", fill: "#EA580C", ink: "#FFF7ED", label: "Orange" },
+  { id: "yellow", fill: "#EAB308", ink: "#1C1917", label: "Yellow" },
+  { id: "brown", fill: "#78350F", ink: "#FFFBEB", label: "Brown" },
+  { id: "green", fill: "#16A34A", ink: "#F0FDF4", label: "Green" },
+  { id: "darkgreen", fill: "#14532D", ink: "#F0FDF4", label: "Dark green" },
+] as const;
+
+export type NativeLogoColorId = (typeof NATIVE_LOGO_COLORS)[number]["id"];
+
+/** Pre-palette ids still resolve so existing `avatar_url` keys keep rendering. */
+const LEGACY_LOGO_COLORS = [
   { id: "slate", fill: "#334155", ink: "#F8FAFC" },
   { id: "blue", fill: "#1D4ED8", ink: "#EFF6FF" },
   { id: "sky", fill: "#0284C7", ink: "#F0F9FF" },
   { id: "teal", fill: "#0F766E", ink: "#F0FDFA" },
-  { id: "green", fill: "#15803D", ink: "#F0FDF4" },
   { id: "amber", fill: "#B45309", ink: "#FFFBEB" },
-  { id: "orange", fill: "#C2410C", ink: "#FFF7ED" },
   { id: "charcoal", fill: "#1E293B", ink: "#F8FAFC" },
   { id: "crimson", fill: "#991B1B", ink: "#FEF2F2" },
   { id: "forest", fill: "#166534", ink: "#F0FDF4" },
 ] as const;
-
-export type NativeLogoColorId = (typeof NATIVE_LOGO_COLORS)[number]["id"];
 
 export type NativeLogoOption = {
   key: string;
@@ -35,7 +51,12 @@ export type NativeLogoOption = {
   label: string;
 };
 
-const COLOR_BY_ID = new Map(NATIVE_LOGO_COLORS.map((c) => [c.id, c]));
+type LogoColorSwatch = { id: string; fill: string; ink: string };
+
+const COLOR_BY_ID = new Map<string, LogoColorSwatch>([
+  ...NATIVE_LOGO_COLORS.map((c) => [c.id, { id: c.id, fill: c.fill, ink: c.ink }] as const),
+  ...LEGACY_LOGO_COLORS.map((c) => [c.id, { id: c.id, fill: c.fill, ink: c.ink }] as const),
+]);
 
 const SHAPE_LABEL: Record<NativeLogoShape, string> = {
   helmet: "Helmet",
@@ -58,12 +79,12 @@ const POOL_KEY_RE = /^pool:([a-z]+):([a-z]+)$/i;
 
 export function parseNativeLogoKey(
   raw: string | null | undefined,
-): { shape: NativeLogoShape; colorId: NativeLogoColorId } | null {
+): { shape: NativeLogoShape; colorId: string } | null {
   const value = String(raw ?? "").trim();
   const match = POOL_KEY_RE.exec(value);
   if (!match) return null;
   const shape = match[1]!.toLowerCase() as NativeLogoShape;
-  const colorId = match[2]!.toLowerCase() as NativeLogoColorId;
+  const colorId = match[2]!.toLowerCase();
   if (!NATIVE_LOGO_SHAPES.includes(shape)) return null;
   if (!COLOR_BY_ID.has(colorId)) return null;
   return { shape, colorId };
@@ -194,7 +215,7 @@ export const NATIVE_LOGO_POOL: NativeLogoOption[] = NATIVE_LOGO_SHAPES.flatMap((
     colorId: color.id,
     fill: color.fill,
     ink: color.ink,
-    label: `${SHAPE_LABEL[shape]} · ${color.id}`,
+    label: `${SHAPE_LABEL[shape]} · ${color.label}`,
   })),
 );
 

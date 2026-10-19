@@ -120,8 +120,8 @@ export function NativeTeamLogoPicker({
             <button
               key={c.id}
               type="button"
-              title={c.id}
-              aria-label={c.id}
+              title={c.label}
+              aria-label={c.label}
               className={cn(
                 "size-7 rounded-full border-2",
                 colorFilter === c.id ? "border-blue-600 ring-2 ring-blue-200" : "border-white shadow-sm",
