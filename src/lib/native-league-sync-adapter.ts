@@ -29,6 +29,7 @@ import {
   getNativeStandings,
   listNativeTransactions,
 } from "@/lib/native-league.functions";
+import { isNativeSettingsChangeType } from "@/lib/native-league-settings-changelog";
 import {
   fetchNativeLiveWeekStats,
   overlayNativeLiveMatchupScores,
@@ -341,73 +342,75 @@ export function nativeTxnRowsToActivityEvents(
   nameByTeamIdSeed?: Map<number, string>,
 ): LeagueActivityEvent[] {
   const nameByTeamId = new Map(nameByTeamIdSeed ?? []);
-  return rows.map((r) => {
-    const kind = mapTxnKind(r.type);
-    const team = r.teamName?.trim() || null;
-    const at = Date.parse(r.createdAt);
-    const typeLower = String(r.type ?? "").toLowerCase();
+  return rows
+    .filter((r) => !isNativeSettingsChangeType(r.type))
+    .map((r) => {
+      const kind = mapTxnKind(r.type);
+      const team = r.teamName?.trim() || null;
+      const at = Date.parse(r.createdAt);
+      const typeLower = String(r.type ?? "").toLowerCase();
 
-    if (kind === "trade") {
-      const legs = Array.isArray(r.tradeLegs) ? r.tradeLegs : [];
-      if (r.proposerTeamId != null && r.proposerName) {
-        nameByTeamId.set(r.proposerTeamId, r.proposerName);
-      }
-      if (r.acceptorTeamId != null && r.acceptorName) {
-        nameByTeamId.set(r.acceptorTeamId, r.acceptorName);
-      }
-      for (const leg of legs) {
-        if (!nameByTeamId.has(leg.teamId)) {
-          nameByTeamId.set(leg.teamId, `Team ${leg.teamId}`);
+      if (kind === "trade") {
+        const legs = Array.isArray(r.tradeLegs) ? r.tradeLegs : [];
+        if (r.proposerTeamId != null && r.proposerName) {
+          nameByTeamId.set(r.proposerTeamId, r.proposerName);
         }
+        if (r.acceptorTeamId != null && r.acceptorName) {
+          nameByTeamId.set(r.acceptorTeamId, r.acceptorName);
+        }
+        for (const leg of legs) {
+          if (!nameByTeamId.has(leg.teamId)) {
+            nameByTeamId.set(leg.teamId, `Team ${leg.teamId}`);
+          }
+        }
+        const moves = tradeMovesFromNativeLegs(legs, nameByTeamId);
+        const sideA =
+          (r.proposerName?.trim() ||
+            (r.proposerTeamId != null ? nameByTeamId.get(r.proposerTeamId) : null) ||
+            (legs[0] ? nameByTeamId.get(legs[0].teamId) : null) ||
+            "").trim();
+        const sideB =
+          (r.acceptorName?.trim() ||
+            (r.acceptorTeamId != null ? nameByTeamId.get(r.acceptorTeamId) : null) ||
+            (legs[1] ? nameByTeamId.get(legs[1].teamId) : null) ||
+            "").trim();
+        const prefix = typeLower.includes("veto") ? "TRADE VETOED" : "TRADE COMPLETED";
+        const parts =
+          sideA && sideB
+            ? `${sideA} and ${sideB}`
+            : moves.length
+              ? "trade"
+              : typeLower.includes("veto")
+                ? "trade vetoed"
+                : "trade completed";
+        return {
+          id: `native-txn-${r.id}`,
+          at: Number.isFinite(at) ? at : Date.now(),
+          kind: "trade" as const,
+          text: `${prefix}: ${parts}`,
+          teamName: null,
+          moves,
+        };
       }
-      const moves = tradeMovesFromNativeLegs(legs, nameByTeamId);
-      const sideA =
-        (r.proposerName?.trim() ||
-          (r.proposerTeamId != null ? nameByTeamId.get(r.proposerTeamId) : null) ||
-          (legs[0] ? nameByTeamId.get(legs[0].teamId) : null) ||
-          "").trim();
-      const sideB =
-        (r.acceptorName?.trim() ||
-          (r.acceptorTeamId != null ? nameByTeamId.get(r.acceptorTeamId) : null) ||
-          (legs[1] ? nameByTeamId.get(legs[1].teamId) : null) ||
-          "").trim();
-      const prefix = typeLower.includes("veto") ? "TRADE VETOED" : "TRADE COMPLETED";
-      const parts =
-        sideA && sideB
-          ? `${sideA} and ${sideB}`
-          : moves.length
-            ? "trade"
-            : typeLower.includes("veto")
-              ? "trade vetoed"
-              : "trade completed";
+
+      const moves: LeagueActivityMove[] = [];
+      if (r.addPlayerId) moves.push(stubMove(r.addPlayerId, "add"));
+      if (r.dropPlayerId) {
+        moves.push(stubMove(r.dropPlayerId, kind === "ir" ? "ir" : "drop"));
+      }
+      const addBit = r.addPlayerId ? `added ${r.addPlayerId}` : "";
+      const dropBit = r.dropPlayerId ? `dropped ${r.dropPlayerId}` : "";
+      const action = [addBit, dropBit].filter(Boolean).join(", ") || r.type;
+      const text = team ? `${team} ${action}` : action;
       return {
         id: `native-txn-${r.id}`,
         at: Number.isFinite(at) ? at : Date.now(),
-        kind: "trade" as const,
-        text: `${prefix}: ${parts}`,
-        teamName: null,
+        kind,
+        text,
+        teamName: team,
         moves,
       };
-    }
-
-    const moves: LeagueActivityMove[] = [];
-    if (r.addPlayerId) moves.push(stubMove(r.addPlayerId, "add"));
-    if (r.dropPlayerId) {
-      moves.push(stubMove(r.dropPlayerId, kind === "ir" ? "ir" : "drop"));
-    }
-    const addBit = r.addPlayerId ? `added ${r.addPlayerId}` : "";
-    const dropBit = r.dropPlayerId ? `dropped ${r.dropPlayerId}` : "";
-    const action = [addBit, dropBit].filter(Boolean).join(", ") || r.type;
-    const text = team ? `${team} ${action}` : action;
-    return {
-      id: `native-txn-${r.id}`,
-      at: Number.isFinite(at) ? at : Date.now(),
-      kind,
-      text,
-      teamName: team,
-      moves,
-    };
-  });
+    });
 }
 
 export function nativeTransactionsToLeagueTransactionLog(

@@ -15,6 +15,7 @@ import {
   fantasyOutlineBtn,
   fantasyPrimaryBtn,
   LeagueActivityPanel,
+  LeagueSettingsChangesPanel,
   nativeMatchupViewToCard,
 } from "@/components/native/fantasy";
 import { MatchupsPanelShell } from "@/components/playbook/MatchupPreviewCard";
@@ -582,6 +583,7 @@ function NativeLeagueDashboardBody({
         </div>
 
         <div className="space-y-6 lg:col-span-1">
+          <LeagueSettingsChangesPanel linkId={linkId} />
           <LeagueActivityPanel linkId={linkId}>
             <FantasyActivityList
               items={activityItems.slice(0, 5)}
