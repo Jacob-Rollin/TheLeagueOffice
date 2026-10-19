@@ -119,19 +119,13 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
     if (board?.commissioner) setDraft(board.commissioner);
   }, [board]);
 
-  const locked = Boolean(draft?.settingsLocked);
-  const canEdit = Boolean(draft?.canManage) && !locked;
+  const canEdit = Boolean(draft?.canManage);
   const canManage = Boolean(draft?.canManage);
   const draftComplete = board?.summary.draftStatus === "complete";
   const currentWeek = board?.currentWeek ?? 1;
 
   const savePatch = async (patch: Record<string, unknown>) => {
-    if (!linkId || saving) return;
-    // After draft lock, only allowAiTeams may save from league-info.
-    if (locked && !("allowAiTeams" in patch && Object.keys(patch).length === 1)) {
-      if (!canEdit) return;
-    }
-    if (!canManage) return;
+    if (!linkId || saving || !canManage) return;
     setSaving(true);
     try {
       const result = await updateNativeLeagueBasics({ data: { linkId, ...patch } });
@@ -143,6 +137,7 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
       await queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] });
       await queryClient.invalidateQueries({ queryKey: ["native-league-summaries"] });
       await queryClient.invalidateQueries({ queryKey: ["active-league-connections"] });
+      await queryClient.invalidateQueries({ queryKey: ["native-transactions", linkId] });
       setScreen("hub");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save settings.");
@@ -238,17 +233,13 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
               ? undefined
               : () => {
                   if (screen === "league-info") {
-                    if (locked) {
-                      void savePatch({ allowAiTeams: draft.allowAiTeams });
-                    } else {
-                      void savePatch({
-                        name: draft.name,
-                        seasonStartWeek: draft.seasonStartWeek,
-                        isPublic: draft.isPublic,
-                        autoActivateNextYear: draft.autoActivateNextYear,
-                        allowAiTeams: draft.allowAiTeams,
-                      });
-                    }
+                    void savePatch({
+                      name: draft.name,
+                      seasonStartWeek: draft.seasonStartWeek,
+                      isPublic: draft.isPublic,
+                      autoActivateNextYear: draft.autoActivateNextYear,
+                      allowAiTeams: draft.allowAiTeams,
+                    });
                   } else if (screen === "scoring") {
                     void savePatch({
                       scoringPreset: draft.scoringPreset as NativeScoringPreset,
@@ -307,17 +298,8 @@ export function MobileCommissionerTools({ onClose }: { onClose: () => void }) {
                 }
           }
           saving={saving}
-          saveDisabled={
-            screen === "league-info" ? !canManage : !canEdit
-          }
+          saveDisabled={!canEdit}
         />
-
-        {locked ? (
-          <p className="border-b border-m-border bg-m-card px-4 py-2 text-xs text-m-muted">
-            Structural settings lock after the draft starts. Allow AI managers and Advance week
-            remain available for testing.
-          </p>
-        ) : null}
 
         {screen === "hub" ? (
           <>

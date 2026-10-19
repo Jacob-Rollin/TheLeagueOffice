@@ -5,6 +5,7 @@ import { useEffect, useMemo } from "react";
 import { FantasyArticlesColumn } from "@/components/fantasy/FantasyArticlesColumn";
 import { FantasyHubStandings } from "@/components/fantasy/FantasyHubStandings";
 import { FantasyHubTransactions } from "@/components/fantasy/FantasyHubTransactions";
+import { LeagueSettingsChangesPanel } from "@/components/native/fantasy";
 import { FantasyJoinAnotherCard } from "@/components/fantasy/FantasyJoinAnotherCard";
 import { FantasyLeaguesBox } from "@/components/fantasy/FantasyLeaguesBox";
 import { NativeLeagueSubNav } from "@/components/nav/NativeLeagueSubNav";
@@ -97,6 +98,7 @@ function FantasyDashboardPage() {
             {user && selectedLinkId ? (
               <>
                 <FantasyHubStandings linkId={selectedLinkId} />
+                <LeagueSettingsChangesPanel linkId={selectedLinkId} />
                 <FantasyHubTransactions linkId={selectedLinkId} />
               </>
             ) : null}

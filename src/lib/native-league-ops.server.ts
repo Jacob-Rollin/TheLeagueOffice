@@ -16,6 +16,13 @@ import {
   type NativeLeagueSettingsInput,
   type NativeScoringPreset,
 } from "@/lib/native-league-settings";
+import {
+  formatSettingsDisplayValue,
+  NATIVE_SETTINGS_CHANGE_TYPE,
+  parseSettingsChangeEntries,
+  settingsChangeLabel,
+  type NativeSettingsChangeEntry,
+} from "@/lib/native-league-settings-changelog";
 
 export type { NativeCommissionerSettings };
 import { NATIVE_LEAGUE_TABLE_NAMES } from "@/lib/native-league-ddl.server";
@@ -489,7 +496,6 @@ function commissionerSettingsFromLeague(
   for (const [k, v] of Object.entries(slotCounts)) {
     if (v != null && v > 0) rosterSlots[k] = v;
   }
-  const draftStatus = String(league.draft_status ?? "");
   return {
     name: league.name,
     inviteCode: league.invite_code,
@@ -532,10 +538,142 @@ function commissionerSettingsFromLeague(
     rosterSlots,
     irAllowedStatuses: parseIrAllowedStatuses(rosterSlotsRaw),
     rosterCapacity: countActiveRosterCapacity(slotCounts),
-    settingsLocked: draftStatus !== "not_started" && draftStatus !== "scheduled",
+    // Commissioners may edit settings anytime; changelog is written on save.
+    settingsLocked: false,
     canManage,
     allowAiTeams: asBool(league.allow_ai_teams, false),
   };
+}
+
+type LeagueSettingsSnapshot = Record<string, string>;
+
+function snapshotLeagueSettingsForChangelog(league: LeagueCoreRow): LeagueSettingsSnapshot {
+  const raw = parseRosterSlots(league.roster_slots) ?? {};
+  const counts = parseRosterSlotCounts(raw);
+  const irStatuses = parseIrAllowedStatuses(raw);
+  const scoring = parseScoringSettingsJson(league.scoring_settings);
+  const scoringKeys = Object.keys(scoring).sort();
+  const scoringSummary = scoringKeys
+    .map((k) => `${k}=${Number.isFinite(scoring[k]) ? scoring[k] : 0}`)
+    .join(", ");
+
+  return {
+    name: formatSettingsDisplayValue(league.name),
+    scoring_preset: formatSettingsDisplayValue(league.scoring_preset ?? "half"),
+    scoring_settings: scoringSummary || "Default",
+    draft_mode: formatSettingsDisplayValue(league.draft_mode ?? "offline"),
+    draft_format: formatSettingsDisplayValue(league.draft_format ?? "standard"),
+    draft_order_type: formatSettingsDisplayValue(league.draft_order_type ?? "snake"),
+    draft_pick_time_limit_sec: formatSettingsDisplayValue(
+      Number(league.draft_pick_time_limit_sec ?? 90) || 90,
+    ),
+    season_start_week: formatSettingsDisplayValue(
+      Math.max(1, Number(league.season_start_week ?? 1) || 1),
+    ),
+    is_public: formatSettingsDisplayValue(asBool(league.is_public, false)),
+    auto_activate_next_year: formatSettingsDisplayValue(
+      asBool(league.auto_activate_next_year, true),
+    ),
+    playoff_teams: formatSettingsDisplayValue(Number(league.playoff_teams ?? 4) || 4),
+    playoff_matchup_length: formatSettingsDisplayValue(league.playoff_matchup_length ?? "one"),
+    playoff_week_pair: formatSettingsDisplayValue(league.playoff_week_pair ?? "15-17"),
+    standings_tiebreaker: formatSettingsDisplayValue(
+      league.standings_tiebreaker ?? "points_for",
+    ),
+    allow_matchup_ties: formatSettingsDisplayValue(asBool(league.allow_matchup_ties, false)),
+    matchup_tiebreaker_slot: formatSettingsDisplayValue(
+      league.matchup_tiebreaker_slot ?? "Bench",
+    ),
+    divisions_enabled: formatSettingsDisplayValue(asBool(league.divisions_enabled, false)),
+    waiver_type: formatSettingsDisplayValue(league.waiver_type ?? "rolling"),
+    waiver_budget: formatSettingsDisplayValue(
+      league.waiver_budget == null ? null : Number(league.waiver_budget),
+    ),
+    waiver_period_days: formatSettingsDisplayValue(Number(league.waiver_period_days ?? 1) || 1),
+    post_draft_player_status: formatSettingsDisplayValue(
+      league.post_draft_player_status ?? "free_agents",
+    ),
+    lock_fa_on_gametime: formatSettingsDisplayValue(asBool(league.lock_fa_on_gametime, true)),
+    max_adds_per_week: formatSettingsDisplayValue(
+      league.max_adds_per_week == null ? null : Number(league.max_adds_per_week),
+    ),
+    max_adds_per_season: formatSettingsDisplayValue(
+      league.max_adds_per_season == null ? null : Number(league.max_adds_per_season),
+    ),
+    undroppable_top_players: formatSettingsDisplayValue(
+      asBool(league.undroppable_top_players, false),
+    ),
+    roster_lock_type: formatSettingsDisplayValue(league.roster_lock_type ?? "game_time"),
+    trade_deadline_week: formatSettingsDisplayValue(
+      league.trade_deadline_week == null ? null : Number(league.trade_deadline_week),
+    ),
+    trade_review_hours: formatSettingsDisplayValue(Number(league.trade_review_hours ?? 24) || 24),
+    trade_veto_mode: formatSettingsDisplayValue(league.trade_veto_mode ?? "commissioner"),
+    max_trades_per_season: formatSettingsDisplayValue(
+      league.max_trades_per_season == null ? null : Number(league.max_trades_per_season),
+    ),
+    keepers_per_team: formatSettingsDisplayValue(Number(league.keepers_per_team ?? 0) || 0),
+    keeper_note: formatSettingsDisplayValue(
+      league.keeper_note == null ? null : String(league.keeper_note),
+    ),
+    allow_ai_teams: formatSettingsDisplayValue(asBool(league.allow_ai_teams, false)),
+    bench_spots: formatSettingsDisplayValue(counts.BN ?? 0),
+    ir_spots: formatSettingsDisplayValue(counts.IR ?? 0),
+    ir_allowed_statuses: formatSettingsDisplayValue(irStatuses),
+  };
+}
+
+function diffLeagueSettingsSnapshots(
+  before: LeagueSettingsSnapshot,
+  after: LeagueSettingsSnapshot,
+): NativeSettingsChangeEntry[] {
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  const changes: NativeSettingsChangeEntry[] = [];
+  for (const key of keys) {
+    const from = before[key] ?? "None";
+    const to = after[key] ?? "None";
+    if (from === to) continue;
+    changes.push({
+      key,
+      label: settingsChangeLabel(key),
+      from,
+      to,
+    });
+  }
+  return changes;
+}
+
+async function recordNativeSettingsChangeTxn(input: {
+  leagueId: string;
+  teamId: number | null;
+  userId: string;
+  changes: NativeSettingsChangeEntry[];
+}): Promise<void> {
+  if (!input.changes.length) return;
+  let changedByName = "Commissioner";
+  if (input.teamId != null) {
+    const teamRows = await tidbExecute<{ team_name: string | null }>(
+      `SELECT team_name FROM native_teams WHERE id = ? AND league_id = ? LIMIT 1`,
+      [input.teamId, input.leagueId],
+    );
+    const name = teamRows[0]?.team_name?.trim();
+    if (name) changedByName = name;
+  }
+  await tidbExecute(
+    `INSERT INTO native_transactions
+       (league_id, team_id, type, status, payload, created_by, processed_at)
+     VALUES (?, ?, ?, 'completed', ?, ?, UTC_TIMESTAMP())`,
+    [
+      input.leagueId,
+      input.teamId,
+      NATIVE_SETTINGS_CHANGE_TYPE,
+      JSON.stringify({
+        changes: input.changes.slice(0, 40),
+        changedByName,
+      }),
+      input.userId,
+    ],
+  );
 }
 
 export function parseRosterSlots(raw: string | Record<string, unknown> | null | undefined): Record<string, unknown> | null {
@@ -971,7 +1109,7 @@ async function loadLeagueBoard(userId: string, linkId: string): Promise<NativeLe
   for (const [k, v] of Object.entries(slotCounts)) {
     if (v != null && v > 0) rosterSlots[k] = v;
   }
-  const settingsLocked = summary.draftStatus !== "not_started" && summary.draftStatus !== "scheduled";
+  const settingsLocked = false;
 
   const rosters: NativeRosterRow[] = rosterRows.map((r) => {
     const active = parsePlayerIdList(r.player_ids);
@@ -1205,20 +1343,7 @@ export async function updateNativeLeagueBasicsForUser(
   );
   const league = leagueRows[0];
   if (!league) return { ok: false, error: "League not found" };
-  const draftStatus = String(league.draft_status ?? "");
-  const structuralLocked = draftStatus !== "not_started" && draftStatus !== "scheduled";
-
-  // After draft starts, only testing toggles (Allow AI managers) may change.
-  if (structuralLocked) {
-    if (input.allowAiTeams == null) {
-      return { ok: false, error: "Structural settings lock after the draft starts" };
-    }
-    await tidbExecute(`UPDATE native_leagues SET allow_ai_teams = ? WHERE id = ?`, [
-      input.allowAiTeams ? 1 : 0,
-      membership.leagueId,
-    ]);
-    return { ok: true };
-  }
+  const beforeSnap = snapshotLeagueSettingsForChangelog(league);
 
   const name = input.name != null ? String(input.name).trim().slice(0, 128) : null;
   if (name != null && name.length < 1) return { ok: false, error: "League name is required" };
@@ -1382,6 +1507,25 @@ export async function updateNativeLeagueBasicsForUser(
       .update({ label: name })
       .eq("native_league_id", membership.leagueId);
   }
+
+  const afterRows = await tidbExecute<LeagueCoreRow>(
+    `SELECT ${LEAGUE_CORE_SELECT} FROM native_leagues WHERE id = ? LIMIT 1`,
+    [membership.leagueId],
+  );
+  const afterLeague = afterRows[0];
+  if (afterLeague) {
+    const changes = diffLeagueSettingsSnapshots(
+      beforeSnap,
+      snapshotLeagueSettingsForChangelog(afterLeague),
+    );
+    await recordNativeSettingsChangeTxn({
+      leagueId: membership.leagueId,
+      teamId: membership.teamId,
+      userId,
+      changes,
+    });
+  }
+
   return { ok: true };
 }
 
@@ -2924,6 +3068,9 @@ export type NativeTransactionRow = {
   acceptorTeamId: number | null;
   proposerName: string | null;
   acceptorName: string | null;
+  /** Present on settings_change rows. */
+  settingsChanges: NativeSettingsChangeEntry[] | null;
+  changedByName: string | null;
   createdAt: string;
 };
 
@@ -3004,11 +3151,13 @@ export async function listNativeTransactionsForLink(
       payload["acceptorTeamId"] != null && Number.isFinite(Number(payload["acceptorTeamId"]))
         ? Math.floor(Number(payload["acceptorTeamId"]))
         : null;
+    const type = String(r.type);
+    const settingsChanges = parseSettingsChangeEntries(payload["changes"]);
     return {
       id: Number(r.id),
       teamId: r.team_id == null ? null : Number(r.team_id),
       teamName: r.team_name,
-      type: String(r.type),
+      type,
       status: String(r.status),
       addPlayerId: payload["addPlayerId"] != null ? String(payload["addPlayerId"]) : null,
       dropPlayerId: payload["dropPlayerId"] != null ? String(payload["dropPlayerId"]) : null,
@@ -3020,6 +3169,11 @@ export async function listNativeTransactionsForLink(
         payload["proposerName"] != null ? String(payload["proposerName"]).trim() || null : null,
       acceptorName:
         payload["acceptorName"] != null ? String(payload["acceptorName"]).trim() || null : null,
+      settingsChanges: settingsChanges.length ? settingsChanges : null,
+      changedByName:
+        payload["changedByName"] != null
+          ? String(payload["changedByName"]).trim() || null
+          : r.team_name?.trim() || null,
       createdAt: String(r.created_at),
     };
   });

@@ -20,6 +20,8 @@ export {
   type FantasyActivityItem,
 } from "@/components/native/fantasy/activity-list";
 
+export { LeagueSettingsChangesPanel } from "@/components/native/fantasy/settings-changes-panel";
+
 export {
   FantasyAroundLeagueList,
   FantasyMatchupScoreCard,

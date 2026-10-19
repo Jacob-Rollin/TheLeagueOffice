@@ -140,7 +140,7 @@ function SlotGrid({ keys, roster }: { keys: RosterSlotKey[]; roster: Record<Rost
 
 /**
  * Account-shell native settings — same chrome as synced league review,
- * with commissioner edits for native-only fields under Basic (and locked-aware roster/scoring/draft).
+ * with commissioner edits for native-only fields under Basic / roster / scoring / draft.
  */
 export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
   const queryClient = useQueryClient();
@@ -210,8 +210,8 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
     );
   }
 
-  const { summary, canManage, settingsLocked, commissioner, teams, picksPerTeam } = board;
-  const readOnly = !canManage || settingsLocked;
+  const { summary, canManage, commissioner, teams, picksPerTeam } = board;
+  const readOnly = !canManage;
   const myTeam = summary.teamId != null ? teams.find((t) => t.id === summary.teamId) : null;
   const roster = slotsToRoster(board.rosterSlots);
   const scoring = commissioner.scoringSettings ?? {};
@@ -234,6 +234,7 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
     await queryClient.invalidateQueries({ queryKey: ["native-league-summary", linkId] });
     await queryClient.invalidateQueries({ queryKey: ["native-league-summaries"] });
     await queryClient.invalidateQueries({ queryKey: ["active-league-connections"] });
+    await queryClient.invalidateQueries({ queryKey: ["native-transactions", linkId] });
   };
 
   const saveBasics = async () => {
@@ -241,19 +242,17 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
     setSaving(true);
     try {
       const result = await updateNativeLeagueBasics({
-        data: settingsLocked
-          ? { linkId, allowAiTeams }
-          : {
-              linkId,
-              name,
-              scoringPreset,
-              draftMode,
-              benchSpots,
-              irSpots,
-              irAllowedStatuses,
-              seasonStartWeek,
-              allowAiTeams,
-            },
+        data: {
+          linkId,
+          name,
+          scoringPreset,
+          draftMode,
+          benchSpots,
+          irSpots,
+          irAllowedStatuses,
+          seasonStartWeek,
+          allowAiTeams,
+        },
       });
       if (!result.ok) {
         toast.error(result.error);
@@ -387,7 +386,7 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
             <h2 className="text-base font-semibold text-foreground">Settings</h2>
             <p className="text-xs text-muted-foreground">
               Hosted on The League Office · {roleLabel}
-              {settingsLocked ? " · Structural settings locked after draft start" : ""}
+              {canManage ? " · Changes are posted to the league dashboard" : ""}
             </p>
           </div>
           <Link
@@ -579,11 +578,7 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
                           disabled={saving}
                           onClick={() => void saveBasics()}
                         >
-                          {saving
-                            ? "Saving…"
-                            : settingsLocked
-                              ? "Save AI Setting"
-                              : "Save Settings"}
+                          {saving ? "Saving…" : "Save Settings"}
                         </button>
                       ) : null}
                       {summary.canEditInvite ? (
@@ -632,9 +627,8 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
                   <div className="border-t border-border pt-6">
                     <SectionTitle>Edit Reserves</SectionTitle>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {settingsLocked
-                        ? "Bench and IR counts lock after the draft starts."
-                        : "Adjust bench / IR before the draft. Starters stay at the league template."}
+                      Adjust bench / IR anytime. Starters stay at the league template. Changes are
+                      visible to the whole league on the fantasy dashboard.
                     </p>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <label className={labelClass}>
@@ -685,16 +679,14 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
                         ))}
                       </div>
                     </fieldset>
-                    {!settingsLocked ? (
-                      <button
-                        type="button"
-                        className={`${buttonClass} mt-4`}
-                        disabled={saving}
-                        onClick={() => void saveBasics()}
-                      >
-                        {saving ? "Saving…" : "Save Roster Settings"}
-                      </button>
-                    ) : null}
+                    <button
+                      type="button"
+                      className={`${buttonClass} mt-4`}
+                      disabled={saving}
+                      onClick={() => void saveBasics()}
+                    >
+                      {saving ? "Saving…" : "Save Roster Settings"}
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -705,7 +697,7 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
                 scoring={scoring}
                 scoringPreset={scoringPreset}
                 setScoringPreset={setScoringPreset}
-                canEdit={canManage && !settingsLocked}
+                canEdit={canManage}
                 saving={saving}
                 onSave={() => void saveBasics()}
               />
@@ -745,7 +737,7 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
                   </div>
                 </div>
 
-                {canManage && !settingsLocked ? (
+                {canManage ? (
                   <div className="border-t border-border pt-6">
                     <SectionTitle>Edit Draft Mode</SectionTitle>
                     <label className={`${labelClass} mt-3`}>
