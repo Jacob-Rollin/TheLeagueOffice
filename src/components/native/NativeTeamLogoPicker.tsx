@@ -138,7 +138,9 @@ export function NativeTeamLogoPicker({
               const src = nativeLogoDataUri(opt.key, previewInitial);
               const isSelected = selected === opt.key;
               const title =
-                opt.shape === "bolt" ? `${opt.label} (no letter)` : opt.label;
+                opt.shape === "bolt" || opt.shape === "helmet"
+                  ? `${opt.label} (no letter)`
+                  : opt.label;
               return (
                 <button
                   key={opt.key}
