@@ -150,12 +150,8 @@ export function expandLineupSlots(
     if (!(n > 0)) continue;
     const starter = key !== "BN" && key !== "IR" && key !== "TAXI";
     for (let index = 0; index < n; index++) {
-      const label =
-        n > 1
-          ? `${key === "DEF" ? "DST" : key}${index + 1}`
-          : key === "DEF"
-            ? "DST"
-            : key;
+      // No RB1/WR2 — Playbook Matchup POS badges use the bare slot key.
+      const label = key === "DEF" ? "DST" : key;
       rows.push({ key, index, label, playerId: null, starter });
     }
   }

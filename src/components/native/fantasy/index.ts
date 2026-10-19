@@ -44,3 +44,10 @@ export {
   formatFantasyPts,
   playerGameStarted,
 } from "@/components/native/fantasy/format";
+
+export {
+  MatchupSlotBadge,
+  badgeLabel,
+  normalizeSlotKey,
+  SLOT_PILL_TONE,
+} from "@/components/playbook/MatchupLineupCards";
