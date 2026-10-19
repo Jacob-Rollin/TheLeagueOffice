@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
+import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import type { NativeMemberLeagueSummary } from "@/lib/native-league.functions";
 import { cn } from "@/lib/utils";
@@ -40,20 +41,12 @@ function LeagueRow({
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-          {league.avatarUrl ? (
-            <img
-              src={league.avatarUrl}
-              alt=""
-              className="size-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <span className="font-display text-sm font-bold uppercase tracking-wide text-slate-500">
-              {(teamLabel.slice(0, 2) || "TM").toUpperCase()}
-            </span>
-          )}
-        </div>
+        <MatchupTeamAvatar
+          name={teamLabel}
+          logo={league.avatarUrl}
+          platform="native"
+          cacheKey={`fantasy-hub-${league.linkId}`}
+        />
         <div className="min-w-0">
           <Link
             to="/league/$linkId/my-team"

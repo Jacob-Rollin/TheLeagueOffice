@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 
 import { FantasyBoard } from "@/components/native/fantasy/chrome";
 import { formatFantasyProj, formatFantasyPts } from "@/components/native/fantasy/format";
+import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
 import { cn } from "@/lib/utils";
 
 export type FantasyMatchupTeamSide = {
@@ -12,6 +14,7 @@ export type FantasyMatchupTeamSide = {
   wins?: number | undefined;
   losses?: number | undefined;
   ties?: number | undefined;
+  avatarUrl?: string | null | undefined;
 };
 
 export type FantasyMatchupCard = {
@@ -52,6 +55,9 @@ type FantasyMatchupScoreCardProps = {
   weekLabel?: ReactNode;
   status?: MatchupStatusBadge;
   className?: string;
+  /** When set, wraps the card (no outer border) for embedding in a FantasyBoard. */
+  embedded?: boolean;
+  cacheKey?: string;
 };
 
 export function FantasyMatchupScoreCard({
@@ -61,16 +67,21 @@ export function FantasyMatchupScoreCard({
   weekLabel,
   status,
   className,
+  embedded = false,
+  cacheKey = "native-matchup",
 }: FantasyMatchupScoreCardProps) {
   const homeMine = myTeamId != null && home.teamId === myTeamId;
   const awayMine = myTeamId != null && away.teamId === myTeamId;
 
   return (
     <section
-      className={cn("rounded-xl border border-slate-200 bg-white p-5 shadow-sm", className)}
+      className={cn(
+        embedded ? "p-1" : "rounded-xl border border-slate-200 bg-white p-5 shadow-sm",
+        className,
+      )}
     >
       <div className="grid gap-4 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-        <TeamScoreBlock team={home} mine={homeMine} align="left" />
+        <TeamScoreBlock team={home} mine={homeMine} align="left" cacheKey={cacheKey} />
         <div className="flex flex-col items-center gap-1 text-center">
           {weekLabel ?? (
             <span className="font-display text-xs font-bold uppercase tracking-widest text-slate-500">
@@ -79,7 +90,7 @@ export function FantasyMatchupScoreCard({
           )}
           <StatusBadge status={status} />
         </div>
-        <TeamScoreBlock team={away} mine={awayMine} align="right" />
+        <TeamScoreBlock team={away} mine={awayMine} align="right" cacheKey={cacheKey} />
       </div>
     </section>
   );
@@ -89,29 +100,140 @@ function TeamScoreBlock({
   team,
   mine,
   align,
+  cacheKey,
 }: {
   team: FantasyMatchupTeamSide;
   mine: boolean;
   align: "left" | "right";
+  cacheKey: string;
 }) {
   const record = formatRecord(team.wins, team.losses, team.ties);
+  const mirrored = align === "right";
 
   return (
-    <div className={cn(align === "right" && "sm:text-right")}>
-      <p className={cn("truncate font-medium text-slate-900", mine && "text-primary")}>
-        {team.teamName}
-      </p>
-      {record ? (
-        <p className="text-xs text-muted-foreground">{record}</p>
-      ) : null}
-      <p className="mt-1 font-display text-3xl font-semibold italic tracking-wide text-slate-900">
-        {formatFantasyPts(team.points)}
-      </p>
-      {team.projection != null && Number.isFinite(team.projection) ? (
-        <p className="text-xs text-muted-foreground">
-          Proj {formatFantasyProj(team.projection)}
+    <div
+      className={cn(
+        "flex min-w-0 items-center gap-3",
+        mirrored && "sm:flex-row-reverse sm:text-right",
+      )}
+    >
+      <MatchupTeamAvatar
+        name={team.teamName}
+        logo={team.avatarUrl}
+        platform="native"
+        cacheKey={`${cacheKey}-${team.teamId}`}
+      />
+      <div className="min-w-0 flex-1">
+        <p className={cn("truncate font-medium text-slate-900", mine && "text-primary")}>
+          {team.teamName}
         </p>
-      ) : null}
+        {record ? <p className="text-xs text-muted-foreground">{record}</p> : null}
+        <p className="mt-1 font-display text-3xl font-semibold italic tracking-wide text-slate-900">
+          {formatFantasyPts(team.points)}
+        </p>
+        {team.projection != null && Number.isFinite(team.projection) ? (
+          <p className="text-xs text-muted-foreground">
+            Proj {formatFantasyProj(team.projection)}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Compact “Around the League” rows — Playbook-style, logos + scores. */
+export function FantasyAroundLeagueList({
+  matchups,
+  myTeamId,
+  linkId,
+  cacheKey = "around",
+  className,
+}: {
+  matchups: FantasyMatchupCard[];
+  myTeamId?: number | null;
+  linkId: string;
+  cacheKey?: string;
+  className?: string;
+}) {
+  if (!matchups.length) return null;
+
+  return (
+    <div className={cn("mt-5 border-t border-slate-200 pt-4", className)}>
+      <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
+        Around the League
+      </span>
+      <ul className="mt-2 divide-y divide-slate-100">
+        {matchups.map((m) => {
+          const mine =
+            myTeamId != null && (m.home.teamId === myTeamId || m.away.teamId === myTeamId);
+          return (
+            <li key={m.matchupId}>
+              <Link
+                to="/league/$linkId/matchup"
+                params={{ linkId }}
+                className={cn(
+                  "flex items-center gap-2 px-1 py-3 transition-opacity hover:opacity-85",
+                  mine && "rounded-md bg-blue-50/80",
+                )}
+              >
+                <AroundSide team={m.home} myTeamId={myTeamId} cacheKey={cacheKey} align="left" />
+                <span className="flex w-8 shrink-0 items-center justify-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                  vs
+                </span>
+                <AroundSide team={m.away} myTeamId={myTeamId} cacheKey={cacheKey} align="right" />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function AroundSide({
+  team,
+  myTeamId,
+  cacheKey,
+  align,
+}: {
+  team: FantasyMatchupTeamSide;
+  myTeamId?: number | null;
+  cacheKey: string;
+  align: "left" | "right";
+}) {
+  const mine = myTeamId != null && team.teamId === myTeamId;
+  const mirrored = align === "right";
+  const record = formatRecord(team.wins, team.losses, team.ties);
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 flex-1 items-center gap-2",
+        mirrored && "flex-row-reverse text-right",
+      )}
+    >
+      <MatchupTeamAvatar
+        name={team.teamName}
+        logo={team.avatarUrl}
+        platform="native"
+        cacheKey={`${cacheKey}-${team.teamId}`}
+        size="sm"
+      />
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block truncate text-sm font-semibold leading-tight text-slate-900",
+            mine && "text-primary",
+          )}
+        >
+          {team.teamName}
+        </span>
+        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium tabular-nums text-slate-400">
+          {record ? <span>{record}</span> : null}
+          <span className="font-display text-sm font-semibold italic text-slate-900">
+            {formatFantasyPts(team.points)}
+          </span>
+        </span>
+      </span>
     </div>
   );
 }
@@ -208,10 +330,25 @@ export function nativeMatchupViewToCard(
     home: { teamId: number; teamName: string; points: number };
     away: { teamId: number; teamName: string; points: number };
   },
+  avatars?: Map<number, string | null> | Record<number, string | null>,
+  records?: Map<number, { wins: number; losses: number; ties: number }>,
 ): FantasyMatchupCard {
+  const avatarFor = (teamId: number) => {
+    if (!avatars) return null;
+    if (avatars instanceof Map) return avatars.get(teamId) ?? null;
+    return avatars[teamId] ?? null;
+  };
+  const withMeta = (side: { teamId: number; teamName: string; points: number }) => {
+    const rec = records?.get(side.teamId);
+    return {
+      ...side,
+      avatarUrl: avatarFor(side.teamId),
+      ...(rec ? { wins: rec.wins, losses: rec.losses, ties: rec.ties } : {}),
+    };
+  };
   return {
     matchupId: m.matchupId,
-    home: { ...m.home },
-    away: { ...m.away },
+    home: withMeta(m.home),
+    away: withMeta(m.away),
   };
 }
