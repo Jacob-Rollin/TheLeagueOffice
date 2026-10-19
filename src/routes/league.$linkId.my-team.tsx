@@ -15,6 +15,7 @@ import {
   FantasySaveLineupButton,
   FantasySectionTitle,
   FantasyWeekSelect,
+  MatchupSlotBadge,
   displayPlayerPoints,
   fantasyOutlineBtn,
   fantasyPrimaryBtn,
@@ -1026,9 +1027,7 @@ function LineupTable({
         )}
       >
         <td className={tdClass}>
-          <span className="inline-flex min-w-10 items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-            {row.label}
-          </span>
+          <MatchupSlotBadge slot={row.key} className="mx-0 ring-1 ring-white" />
         </td>
         <td className={cn(tdClass, "min-w-[12rem]")}>
           {row.playerId ? (

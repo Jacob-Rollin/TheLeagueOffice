@@ -10,7 +10,6 @@ import {
 import {
   FantasyBoard,
   FantasyMatchupWeekList,
-  FantasyPlayerChip,
   FantasyWeekSelect,
   displayPlayerPoints,
   formatFantasyProj,
@@ -18,10 +17,12 @@ import {
   nativeMatchupViewToCard,
   type FantasyMatchupCard,
 } from "@/components/native/fantasy";
+import { MatchupGridRow } from "@/components/playbook/MatchupLineupCards";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
+import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import {
@@ -48,58 +49,13 @@ import {
   type NflGameProgress,
 } from "@/lib/rolling-live-projection";
 import { resolveNativeLiveScore, type ScoringMap } from "@/lib/scoring-map";
+import { sosStarsFromRank } from "@/lib/sos-presentation";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/league/$linkId/matchup")({
   ssr: false,
   component: NativeMatchupPage,
 });
-
-function badgeLabel(slot: string): string {
-  if (slot === "FLEX" || slot === "WRRB" || slot === "WRTE") return "FLX";
-  if (slot === "SFLEX") return "SF";
-  if (slot === "BENCH" || slot === "BN") return "BN";
-  if (slot === "DEF" || slot === "DST") return "DEF";
-  return slot;
-}
-
-const SLOT_PILL_TONE: Record<string, string> = {
-  QB: "border-qb bg-qb text-white",
-  RB: "border-rb bg-rb text-white",
-  WR: "border-wr bg-wr text-white",
-  TE: "border-te bg-te text-white",
-  K: "border-k bg-k text-white",
-  DEF: "border-def bg-def text-white",
-  BN: "border-slate-300 bg-slate-100 text-slate-600",
-  IR: "border-slate-300 bg-slate-100 text-slate-600",
-};
-
-function MatchupSlotBadge({ slot }: { slot: string }) {
-  const label = badgeLabel(slot);
-  const display = slot === "IR" ? "IR" : label;
-  const isFlx = display === "FLX" || slot === "FLEX" || slot === "FLX";
-  const pillBase =
-    "mx-auto z-10 flex h-9 w-11 items-center justify-center rounded-md border text-xs font-bold uppercase shadow-md ring-2 ring-white";
-
-  if (isFlx) {
-    return (
-      <span className={cn(pillBase, "relative isolate overflow-hidden border-slate-300 text-white")}>
-        <span className="pointer-events-none absolute inset-0 flex" aria-hidden="true">
-          <span className="h-full w-1/3 bg-rb" />
-          <span className="h-full w-1/3 bg-wr" />
-          <span className="h-full w-1/3 bg-te" />
-        </span>
-        <span className="relative z-10">FLX</span>
-      </span>
-    );
-  }
-
-  return (
-    <span className={cn(pillBase, SLOT_PILL_TONE[display] ?? SLOT_PILL_TONE["BN"])}>
-      {display === "DEF" ? "DST" : display}
-    </span>
-  );
-}
 
 function padPairRows(
   left: Array<string | null>,
@@ -167,13 +123,14 @@ function NativeMatchupPage() {
     return map;
   }, [cache.data?.players, fallback.data?.players]);
 
-  const { projectFor, sleeperIdFor, scoringMap } = useLeagueProjections(activeWeek);
+  const { projectFor, sleeperIdFor, scoringMap, rankFor } = useLeagueProjections(activeWeek);
   /** Same broadcast client cache as mobile Matchup — Actions finalize TiDB later. */
   const { statsFor, statsById, ready: liveStatsReady } = useWeeklyActualStats(activeWeek, {
     pace: "broadcast",
   });
   const { progressByNflTeam, currentWeek: nflCurrentWeek } = useNflGameProgress(activeWeek);
   const { data: schedule = [] } = useNflSchedule();
+  const { rankFor: defenseRankFor } = usePositionalDefenseRanks();
   const showActuals = nflCurrentWeek != null && activeWeek < nflCurrentWeek;
 
   const scoredMatchups = useMemo(() => {
@@ -665,6 +622,9 @@ function NativeMatchupPage() {
                   const p = playersById.get(id);
                   return p ? projectFor(sleeperIdFor(p)) : null;
                 }}
+                sleeperIdFor={sleeperIdFor}
+                rankFor={rankFor}
+                defenseRankFor={defenseRankFor}
                 schedule={schedule}
                 activeWeek={activeWeek}
                 progressByNflTeam={progressByNflTeam}
@@ -685,6 +645,9 @@ function NativeMatchupPage() {
                     const p = playersById.get(id);
                     return p ? projectFor(sleeperIdFor(p)) : null;
                   }}
+                  sleeperIdFor={sleeperIdFor}
+                  rankFor={rankFor}
+                  defenseRankFor={defenseRankFor}
                   schedule={schedule}
                   activeWeek={activeWeek}
                   progressByNflTeam={progressByNflTeam}
@@ -705,6 +668,9 @@ function NativeMatchupPage() {
                     const p = playersById.get(id);
                     return p ? projectFor(sleeperIdFor(p)) : null;
                   }}
+                  sleeperIdFor={sleeperIdFor}
+                  rankFor={rankFor}
+                  defenseRankFor={defenseRankFor}
                   schedule={schedule}
                   activeWeek={activeWeek}
                   progressByNflTeam={progressByNflTeam}
@@ -800,6 +766,67 @@ function MatchupStrip({
   );
 }
 
+/**
+ * Playbook Matchup card phase + schedule labels.
+ * - yet to play → white sheet (`pre`)
+ * - live → white sheet + lock (`in`)
+ * - completed → muted final sheet (`post`)
+ * Past weeks force `post` when progress is cold so finals still grey out.
+ */
+function sideMeta(
+  player: Player | null,
+  schedule: Parameters<typeof scheduleOpponent>[0],
+  activeWeek: number,
+  progressByNflTeam: Map<string, NflGameProgress>,
+  showActuals: boolean,
+  defenseRankFor: (pos: string | null | undefined, opp: string | null | undefined) => number | null,
+) {
+  if (!player) {
+    return {
+      phase: "pre" as const,
+      scheduleLabel: "",
+      boxScoreLabel: "",
+      sosStars: null as number | null,
+      sosOpponent: null as string | null,
+      bye: false,
+    };
+  }
+  const bye = player.bye != null && Number(player.bye) === activeWeek;
+  const opp = bye ? null : scheduleOpponent(schedule, activeWeek, player.team || "");
+  const progress = progressForNflTeam(player.team, progressByNflTeam);
+  // Match Playbook: drive sheet color from NFL progress; past weeks → final.
+  let phase: NflGameProgress["phase"] = progress?.phase ?? "pre";
+  if (showActuals && phase === "pre") phase = "post";
+  // Bye uses muted final sheet (same as mobile completed/bye cards).
+  if (bye) phase = "post";
+
+  let scheduleLabel = "";
+  if (bye) {
+    scheduleLabel = "BYE";
+  } else if (phase === "post") {
+    scheduleLabel = "Final";
+  } else if (phase === "in") {
+    scheduleLabel = formatNflGameStatusLabel(progress, player.team) || "Live";
+  } else {
+    scheduleLabel =
+      formatNflKickoffLabel(progress?.kickoffIso) ||
+      formatNflGameStatusLabel(progress, player.team) ||
+      (opp ? `vs ${opp}` : "TBD");
+  }
+
+  const boxScoreLabel =
+    phase === "post" && !bye ? (progress?.boxScoreLabel ?? "") : "";
+  const defRank = !bye && opp ? defenseRankFor(player.pos, opp) : null;
+  return {
+    phase,
+    scheduleLabel,
+    boxScoreLabel,
+    sosStars: sosStarsFromRank(defRank),
+    sosOpponent: opp,
+    bye,
+  };
+}
+
 function MirroredLineupBoard({
   title,
   rows,
@@ -808,6 +835,9 @@ function MirroredLineupBoard({
   scorePlayer,
   playersById,
   projectFor,
+  sleeperIdFor,
+  rankFor,
+  defenseRankFor,
   schedule,
   activeWeek,
   progressByNflTeam,
@@ -822,6 +852,9 @@ function MirroredLineupBoard({
   scorePlayer: (host: Record<string, number>, id: string) => number;
   playersById: Map<string, Player>;
   projectFor: (id: string) => number | null;
+  sleeperIdFor: (player: { id: string; name: string; pos: string }) => string;
+  rankFor: (id: string) => { overall: number | null; pos: number | null };
+  defenseRankFor: (pos: string | null | undefined, opp: string | null | undefined) => number | null;
   schedule: Parameters<typeof scheduleOpponent>[0];
   activeWeek: number;
   progressByNflTeam: Map<string, NflGameProgress>;
@@ -837,56 +870,82 @@ function MirroredLineupBoard({
   let rightProj = 0;
 
   return (
-    <FantasyBoard title={title} bodyClassName="divide-y divide-slate-100">
+    <FantasyBoard title={title} bodyClassName="px-2 pb-2 pt-1 sm:px-3">
       {rows.map((row, idx) => {
         const leftPlayer = row.leftId ? playersById.get(row.leftId) ?? null : null;
         const rightPlayer = row.rightId ? playersById.get(row.rightId) ?? null : null;
-        const leftPts = row.leftId != null ? scorePlayer(leftHostPoints, row.leftId) : null;
-        const rightPts = row.rightId != null ? scorePlayer(rightHostPoints, row.rightId) : null;
+        const leftRaw = row.leftId != null ? scorePlayer(leftHostPoints, row.leftId) : null;
+        const rightRaw = row.rightId != null ? scorePlayer(rightHostPoints, row.rightId) : null;
+        const leftMeta = sideMeta(
+          leftPlayer,
+          schedule,
+          activeWeek,
+          progressByNflTeam,
+          showActuals,
+          defenseRankFor,
+        );
+        const rightMeta = sideMeta(
+          rightPlayer,
+          schedule,
+          activeWeek,
+          progressByNflTeam,
+          showActuals,
+          defenseRankFor,
+        );
+        const leftPts = displayPlayerPoints(leftRaw, leftMeta.phase, {
+          showActuals,
+          bye: leftMeta.bye,
+        });
+        const rightPts = displayPlayerPoints(rightRaw, rightMeta.phase, {
+          showActuals,
+          bye: rightMeta.bye,
+        });
         const leftP = leftPlayer != null ? projectFor(leftPlayer.id) : null;
         const rightP = rightPlayer != null ? projectFor(rightPlayer.id) : null;
+        // Team totals include live 0s once a game has started (Playbook parity).
         if (leftPts != null && Number.isFinite(leftPts)) leftScore += leftPts;
+        else if (leftRaw != null && leftMeta.phase !== "pre" && !leftMeta.bye) leftScore += leftRaw;
         if (rightPts != null && Number.isFinite(rightPts)) rightScore += rightPts;
+        else if (rightRaw != null && rightMeta.phase !== "pre" && !rightMeta.bye) {
+          rightScore += rightRaw;
+        }
         if (leftP != null && Number.isFinite(leftP)) leftProj += leftP;
         if (rightP != null && Number.isFinite(rightP)) rightProj += rightP;
 
+        const leftSid = leftPlayer ? sleeperIdFor(leftPlayer) : null;
+        const rightSid = rightPlayer ? sleeperIdFor(rightPlayer) : null;
+
         return (
-          <div
+          <MatchupGridRow
             key={`${row.slot}-${idx}`}
-            className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-1 px-2 py-2 sm:gap-2 sm:px-3"
-          >
-            <SidePlayerCell
-              player={leftPlayer}
-              playerId={row.leftId}
-              points={leftPts}
-              proj={leftP}
-              align="left"
-              schedule={schedule}
-              activeWeek={activeWeek}
-              progressByNflTeam={progressByNflTeam}
-              showActuals={showActuals}
-              onOpen={onOpen}
-            />
-            <div className="flex items-center justify-center self-center px-0.5">
-              <MatchupSlotBadge slot={row.slot} />
-            </div>
-            <SidePlayerCell
-              player={rightPlayer}
-              playerId={row.rightId}
-              points={rightPts}
-              proj={rightP}
-              align="right"
-              schedule={schedule}
-              activeWeek={activeWeek}
-              progressByNflTeam={progressByNflTeam}
-              showActuals={showActuals}
-              onOpen={onOpen}
-            />
-          </div>
+            slot={row.slot}
+            left={leftPlayer}
+            right={rightPlayer}
+            leftLive={leftPts}
+            rightLive={rightPts}
+            leftProj={leftMeta.bye ? null : leftP}
+            rightProj={rightMeta.bye ? null : rightP}
+            leftPhase={leftMeta.phase}
+            rightPhase={rightMeta.phase}
+            leftSchedule={leftMeta.scheduleLabel}
+            rightSchedule={rightMeta.scheduleLabel}
+            leftBoxScore={leftMeta.boxScoreLabel}
+            rightBoxScore={rightMeta.boxScoreLabel}
+            leftSosStars={leftMeta.sosStars}
+            rightSosStars={rightMeta.sosStars}
+            leftSosOpponent={leftMeta.sosOpponent}
+            rightSosOpponent={rightMeta.sosOpponent}
+            leftPosRank={leftSid ? rankFor(leftSid).pos : null}
+            rightPosRank={rightSid ? rankFor(rightSid).pos : null}
+            leftBye={leftMeta.bye}
+            rightBye={rightMeta.bye}
+            showFavoriteCheck
+            onOpenPlayer={onOpen}
+          />
         );
       })}
       {showTotals ? (
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 bg-slate-50 px-3 py-2.5 text-sm font-semibold tabular-nums text-slate-800">
+        <div className="grid grid-cols-2 items-center gap-1.5 border-t border-slate-100 bg-slate-50 px-3 py-2.5 text-sm font-semibold tabular-nums text-slate-800">
           <div className="text-left">
             <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
               Total{" "}
@@ -896,7 +955,6 @@ function MirroredLineupBoard({
               Proj {formatFantasyProj(leftProj)}
             </span>
           </div>
-          <div className="w-11" />
           <div className="text-right">
             <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
               Total{" "}
@@ -909,96 +967,5 @@ function MirroredLineupBoard({
         </div>
       ) : null}
     </FantasyBoard>
-  );
-}
-
-function SidePlayerCell({
-  player,
-  playerId,
-  points,
-  proj,
-  align,
-  schedule,
-  activeWeek,
-  progressByNflTeam,
-  showActuals,
-  onOpen,
-}: {
-  player: Player | null;
-  playerId: string | null;
-  points: number | null;
-  proj: number | null;
-  align: "left" | "right";
-  schedule: Parameters<typeof scheduleOpponent>[0];
-  activeWeek: number;
-  progressByNflTeam: Map<string, NflGameProgress>;
-  showActuals: boolean;
-  onOpen: (id: string) => void;
-}) {
-  if (!playerId) {
-    return (
-      <div
-        className={cn(
-          "flex min-h-[3.25rem] items-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-2 text-sm text-slate-400",
-          align === "right" && "justify-end text-right",
-        )}
-      >
-        Empty
-      </div>
-    );
-  }
-
-  const bye = player?.bye != null && Number(player.bye) === activeWeek;
-  const opp = bye
-    ? "BYE"
-    : player
-      ? scheduleOpponent(schedule, activeWeek, player.team || "")
-      : null;
-  const progress = player ? progressForNflTeam(player.team, progressByNflTeam) : undefined;
-  const status =
-    bye
-      ? "Bye"
-      : progress
-        ? formatNflGameStatusLabel(progress) ||
-          formatNflKickoffLabel(progress.kickoffIso) ||
-          ""
-        : "";
-  const displayPts = displayPlayerPoints(points, progress?.phase, { showActuals, bye });
-
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 items-center gap-2 rounded-lg border border-slate-100 bg-white px-2 py-1.5",
-        align === "right" && "flex-row-reverse text-right",
-      )}
-    >
-      <div className="min-w-0 flex-1">
-        <FantasyPlayerChip
-          player={player}
-          fallbackName={playerId}
-          size="sm"
-          showMeta={false}
-          onClick={() => onOpen(playerId)}
-          className={cn(align === "right" && "flex-row-reverse text-right")}
-        />
-        <p
-          className={cn(
-            "mt-0.5 truncate text-[10px] font-medium uppercase tracking-wide text-slate-500",
-            align === "right" && "text-right",
-          )}
-        >
-          {opp ?? "-"}
-          {status ? ` · ${status}` : ""}
-        </p>
-      </div>
-      <div className={cn("shrink-0", align === "right" && "text-left")}>
-        <p className="font-display text-sm font-semibold italic tabular-nums text-slate-900">
-          {formatFantasyPts(displayPts)}
-        </p>
-        <p className="text-[10px] font-medium tabular-nums text-slate-500">
-          {bye ? "-" : formatFantasyProj(proj)}
-        </p>
-      </div>
-    </div>
   );
 }

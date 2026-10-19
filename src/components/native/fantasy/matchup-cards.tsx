@@ -150,22 +150,22 @@ export function FantasyMatchupWeekList({
 
           const row = (
             <>
-              <span className="min-w-0 truncate">
+              <span className="min-w-0 truncate text-left">
                 <span className={cn(m.home.teamId === myTeamId && "font-semibold text-primary")}>
                   {m.home.teamName}
                 </span>
-                <span className="mx-1 font-display italic text-slate-900">
+                <span className="ml-1.5 font-display italic tabular-nums text-slate-900">
                   {formatFantasyPts(m.home.points)}
                 </span>
               </span>
-              <span className="shrink-0 px-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+              <span className="flex w-8 shrink-0 items-center justify-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
                 vs
               </span>
               <span className="min-w-0 truncate text-right">
-                <span className="font-display italic text-slate-900">
+                <span className="font-display italic tabular-nums text-slate-900">
                   {formatFantasyPts(m.away.points)}
                 </span>
-                <span className="mx-1" />
+                <span className="ml-1.5" />
                 <span className={cn(m.away.teamId === myTeamId && "font-semibold text-primary")}>
                   {m.away.teamName}
                 </span>
@@ -174,7 +174,7 @@ export function FantasyMatchupWeekList({
           );
 
           const rowClass = cn(
-            "flex w-full items-center justify-between gap-2 px-4 py-2.5 text-sm text-slate-800",
+            "grid w-full grid-cols-[1fr_auto_1fr] items-center gap-1 px-4 py-2.5 text-sm text-slate-800",
             mine && "bg-primary/5",
             selected && "ring-1 ring-inset ring-primary/30",
             interactive && "cursor-pointer hover:bg-slate-50",

@@ -259,7 +259,7 @@ export function GlobalSearch({ onOpenChange }: GlobalSearchProps = {}) {
       </div>
 
       {open && active && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-80 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+        <div className="absolute right-0 top-full z-[60] mt-1 w-80 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
           <div className="max-h-[70vh] overflow-y-auto py-1 text-foreground">
             {!!pages.length && (
               <Section title="Platform Pages">

@@ -111,7 +111,8 @@ function Home() {
 
   return (
     <main className="mx-auto w-full max-w-shell px-4 pb-16 md:px-8">
-      <section className="relative mt-6 overflow-hidden rounded-xl border border-border/60 bg-[#f8fafc] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] md:px-8 md:py-6">
+      {/* z-0 isolation: keep Manage Your League / Open Playbook under GlobalSearch (header z-50). */}
+      <section className="relative z-0 isolate mt-6 overflow-hidden rounded-xl border border-border/60 bg-[#f8fafc] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] md:px-8 md:py-6">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-gradient-to-r from-slate-100/90 via-white to-blue-50/70"
@@ -138,7 +139,7 @@ function Home() {
           className="pointer-events-none absolute inset-y-3 left-0 w-1 rounded-r-full bg-gradient-to-b from-blue-500/80 via-blue-600/50 to-blue-400/20"
         />
 
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 pl-2.5">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-600">
               Front Office
