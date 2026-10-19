@@ -14,10 +14,14 @@ import {
   type FantasyStandingsRow,
   fantasyOutlineBtn,
   fantasyPrimaryBtn,
+  LeagueActivityPanel,
   nativeMatchupViewToCard,
 } from "@/components/native/fantasy";
+import { MatchupsPanelShell } from "@/components/playbook/MatchupPreviewCard";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import {
@@ -33,6 +37,7 @@ import {
 } from "@/lib/native-league.functions";
 import type { Player } from "@/lib/players-build";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
+import { winPctFromDisplayProjections } from "@/lib/rolling-live-projection";
 import type { ScoringMap } from "@/lib/scoring-map";
 
 export const Route = createFileRoute("/league/$linkId/")({
@@ -163,17 +168,6 @@ function NativeLeagueDashboardBody({
     return map;
   }, [teams]);
 
-  const aroundMatchups = useMemo(() => {
-    return scoredMatchups
-      .filter((m) => myTeamId == null || (m.home.teamId !== myTeamId && m.away.teamId !== myTeamId))
-      .map((m) => nativeMatchupViewToCard(m, avatarByTeam, recordByTeam));
-  }, [scoredMatchups, myTeamId, avatarByTeam, recordByTeam]);
-
-  const myMatchupCard = useMemo(() => {
-    if (!myMatchupScored) return null;
-    return nativeMatchupViewToCard(myMatchupScored, avatarByTeam, recordByTeam);
-  }, [myMatchupScored, avatarByTeam, recordByTeam]);
-
   const cache = useSleeperPlayers();
   const catalogFallback = useQuery({
     queryKey: ["players-catalog"],
@@ -193,6 +187,83 @@ function NativeLeagueDashboardBody({
     for (const [id, p] of playersById) map.set(id, p.name);
     return map;
   }, [playersById]);
+
+  const { projectFor, sleeperIdFor } = useLeagueProjections(currentWeek);
+  const { progressByNflTeam } = useNflGameProgress(currentWeek);
+
+  const enrichMatchupCard = useMemo(() => {
+    const startersByTeam = matchupWeek?.startersByTeamId ?? {};
+    const teamProj = (teamId: number): number => {
+      const ids = startersByTeam[String(teamId)] ?? [];
+      let sum = 0;
+      for (const rawId of ids) {
+        const id = String(rawId ?? "").trim();
+        if (!id) continue;
+        const player = playersById.get(id);
+        if (player?.bye != null && Number(player.bye) === Number(currentWeek)) continue;
+        const pts = player ? projectFor(sleeperIdFor(player)) : projectFor(id);
+        if (pts != null && Number.isFinite(pts)) sum += pts;
+      }
+      return Math.round(sum * 100) / 100;
+    };
+    return (m: (typeof scoredMatchups)[number]) => {
+      const homeProj = teamProj(m.home.teamId);
+      const awayProj = teamProj(m.away.teamId);
+      const homeWinPct = winPctFromDisplayProjections(homeProj, awayProj);
+      const awayWinPct = Math.max(1, Math.min(99, 100 - homeWinPct));
+      const starters = [
+        ...(startersByTeam[String(m.home.teamId)] ?? []),
+        ...(startersByTeam[String(m.away.teamId)] ?? []),
+      ];
+      const started =
+        m.home.points > 0.005 ||
+        m.away.points > 0.005 ||
+        starters.some((id) => {
+          const p = playersById.get(String(id));
+          const nfl = (p?.team ?? "").trim().toUpperCase();
+          if (!nfl) return false;
+          const phase = progressByNflTeam.get(nfl)?.phase;
+          return phase === "in" || phase === "post";
+        });
+      const final =
+        starters.length > 0 &&
+        starters.every((id) => {
+          const p = playersById.get(String(id));
+          if (p?.bye != null && Number(p.bye) === Number(currentWeek)) return true;
+          const nfl = (p?.team ?? "").trim().toUpperCase();
+          if (!nfl) return false;
+          return progressByNflTeam.get(nfl)?.phase === "post";
+        });
+      return nativeMatchupViewToCard(m, avatarByTeam, recordByTeam, {
+        homeProj,
+        awayProj,
+        homeWinPct,
+        awayWinPct,
+        weekStarted: started,
+        matchupFinal: final,
+      });
+    };
+  }, [
+    matchupWeek?.startersByTeamId,
+    playersById,
+    projectFor,
+    sleeperIdFor,
+    progressByNflTeam,
+    currentWeek,
+    avatarByTeam,
+    recordByTeam,
+  ]);
+
+  const aroundMatchups = useMemo(() => {
+    return scoredMatchups
+      .filter((m) => myTeamId == null || (m.home.teamId !== myTeamId && m.away.teamId !== myTeamId))
+      .map((m) => enrichMatchupCard(m));
+  }, [scoredMatchups, myTeamId, enrichMatchupCard]);
+
+  const myMatchupCard = useMemo(() => {
+    if (!myMatchupScored) return null;
+    return enrichMatchupCard(myMatchupScored);
+  }, [myMatchupScored, enrichMatchupCard]);
 
   const { data: recentTx } = useQuery({
     queryKey: ["native-transactions", linkId, "dashboard"],
@@ -341,22 +412,20 @@ function NativeLeagueDashboardBody({
       {/* Playbook-style: main column 2/3, rail 1/3 */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <FantasyBoard
-            title="Matchups"
-            bodyClassName="p-4"
+          <MatchupsPanelShell
+            weekLabel={
+              <span className="rounded-lg border border-border bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
+                Week {currentWeek}
+              </span>
+            }
             action={
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-lg border border-border bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
-                  Week {currentWeek}
-                </span>
-                <Link
-                  to="/league/$linkId/matchup"
-                  params={{ linkId }}
-                  className="text-xs font-medium text-blue-700 hover:underline"
-                >
-                  View Matchup
-                </Link>
-              </div>
+              <Link
+                to="/league/$linkId/matchup"
+                params={{ linkId }}
+                className="text-xs font-semibold text-primary hover:underline"
+              >
+                View Matchup
+              </Link>
             }
           >
             {myMatchupCard ? (
@@ -366,13 +435,16 @@ function NativeLeagueDashboardBody({
                   home={myMatchupCard.home}
                   away={myMatchupCard.away}
                   myTeamId={myTeamId}
-                  status={liveActive ? "live" : null}
-                  cacheKey={`${linkId}-dash`}
-                  weekLabel={
-                    <span className="font-display text-xs font-bold uppercase tracking-widest text-slate-500">
-                      VS
-                    </span>
+                  status={
+                    myMatchupCard.matchupFinal
+                      ? "final"
+                      : liveActive || myMatchupCard.weekStarted
+                        ? "live"
+                        : null
                   }
+                  weekStarted={myMatchupCard.weekStarted}
+                  matchupFinal={myMatchupCard.matchupFinal}
+                  cacheKey={`${linkId}-dash`}
                 />
                 <FantasyAroundLeagueList
                   matchups={aroundMatchups}
@@ -395,9 +467,7 @@ function NativeLeagueDashboardBody({
                 ) : null}
                 {scoredMatchups.length > 0 ? (
                   <FantasyAroundLeagueList
-                    matchups={scoredMatchups.map((m) =>
-                      nativeMatchupViewToCard(m, avatarByTeam, recordByTeam),
-                    )}
+                    matchups={scoredMatchups.map((m) => enrichMatchupCard(m))}
                     myTeamId={myTeamId}
                     linkId={linkId}
                     cacheKey={`${linkId}-around-all`}
@@ -413,7 +483,7 @@ function NativeLeagueDashboardBody({
                 ) : null}
               </>
             )}
-          </FantasyBoard>
+          </MatchupsPanelShell>
 
           <FantasyBoard
             title="Standings"
@@ -512,27 +582,15 @@ function NativeLeagueDashboardBody({
         </div>
 
         <div className="space-y-6 lg:col-span-1">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2 px-1">
-              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900">
-                Recent activity
-              </h3>
-              <Link
-                to="/league/$linkId/transactions"
-                params={{ linkId }}
-                className="text-xs font-medium text-blue-700 hover:underline"
-              >
-                All transactions
-              </Link>
-            </div>
+          <LeagueActivityPanel linkId={linkId}>
             <FantasyActivityList
-              items={activityItems}
+              items={activityItems.slice(0, 5)}
               playersById={playersById}
               resolveName={(id) => (id ? (nameById.get(id) ?? id) : null)}
               onOpenPlayer={(id) => modalRef.current?.open(id)}
-              emptyMessage="No transactions yet."
+              emptyMessage="No recent transactions recorded. Summaries will appear here after the next league moves."
             />
-          </div>
+          </LeagueActivityPanel>
         </div>
       </div>
     </div>

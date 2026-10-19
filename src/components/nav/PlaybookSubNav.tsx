@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NavLockBadge } from "@/components/nav/NavMenus";
+import { resolveAvatarUrl } from "@/components/playbook/panels";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
@@ -67,28 +68,6 @@ function teamInitials(name: string): string {
   return cleaned.slice(0, 2).toUpperCase();
 }
 
-function resolveAvatarUrl(raw?: string | null): string | null {
-  const value = (raw ?? "").trim();
-  if (!value) return null;
-  const lower = value.toLowerCase();
-  if (
-    value === "0" ||
-    lower === "default" ||
-    lower === "null" ||
-    lower === "undefined" ||
-    lower === "none"
-  ) {
-    return null;
-  }
-  if (/sleepercdn\.com\/avatars(?:\/thumbs)?\/(?:0|default)(?:[/?#.]|$)/i.test(value)) {
-    return null;
-  }
-  if (/\/(?:0|default)(?:\.[a-z0-9]+)?(?:[?#]|$)/i.test(value)) {
-    return null;
-  }
-  return value;
-}
-
 function LeagueProfileAvatar({
   name,
   avatar,
@@ -103,16 +82,16 @@ function LeagueProfileAvatar({
   compact?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
-  const src = resolveAvatarUrl(avatar);
+  const src = resolveAvatarUrl(avatar, { teamName: name });
   const plat = (platform ?? "").trim().toLowerCase();
   const shell = compact
     ? "mr-2 flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/80 bg-slate-50 text-[9px] font-bold text-slate-600"
     : "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/80 bg-slate-50 text-xs font-bold text-slate-600";
-  const remountKey = `${cacheKey ?? "league"}:${src ?? "none"}:${plat}`;
+  const remountKey = `${cacheKey ?? "league"}:${src ?? "none"}:${plat}:${name}`;
 
   useEffect(() => {
     setFailed(false);
-  }, [src, cacheKey, plat]);
+  }, [src, cacheKey, plat, name]);
 
   if (src && !failed) {
     return (

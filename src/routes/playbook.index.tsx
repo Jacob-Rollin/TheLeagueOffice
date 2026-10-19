@@ -6,7 +6,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { StreakIndicator } from "@/components/league/StreakIndicator";
-import { MatchupPreviewCard, MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
+import {
+  AroundLeagueMatchupRow,
+  MatchupPreviewCard,
+  MatchupTeamAvatar,
+} from "@/components/playbook/MatchupPreviewCard";
 import {
   resolveAvatarUrl,
   ActivityFeed,
@@ -618,7 +622,7 @@ function InsightTeamAvatar({
   logo: string | null;
   platform: string | null;
 }) {
-  const src = resolveAvatarUrl(logo);
+  const src = resolveAvatarUrl(logo, { teamName: name });
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const shell =
     "flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-100 bg-slate-50";
@@ -833,104 +837,31 @@ function LeagueMatchupRow({
   cacheKey: string;
   recordFor: (rosterId: number, name: string) => string | null;
 }) {
-  const { a, b, started, final } = pair;
-  const aWon = final && a.live > b.live + 0.005;
-  const bWon = final && b.live > a.live + 0.005;
-  const tied = final && !aWon && !bWon;
-  const aLeads = final ? aWon : a.winPct >= b.winPct;
-
-  const projTone = (live: number, proj: number) => {
-    if (!started || Math.abs(live - proj) < 0.005) return "text-slate-400";
-    return live > proj ? "text-emerald-600" : "text-rose-600";
-  };
-  const scoreTone = (won: boolean) =>
-    final && !won && !tied ? "text-slate-400" : "text-slate-900";
-  const barWidth = (side: LeagueMatchupSide, won: boolean) =>
-    final ? (won ? 100 : tied ? 50 : 0) : side.winPct;
-  const pctLabel = (side: LeagueMatchupSide, won: boolean) =>
-    final ? (tied ? "TIE" : won ? "WON" : "LOST") : `${side.winPct}%`;
-  const pctTone = (leads: boolean) =>
-    final && tied ? "text-slate-500" : leads ? "text-emerald-600" : "text-rose-600";
-
-  const team = (side: LeagueMatchupSide, mirrored: boolean) => {
-    const record = recordFor(side.rosterId, side.name);
-    return (
-      <Link
-        to="/playbook/rosters"
-        search={{ scout: String(side.rosterId) }}
-        className={cn(
-          "flex min-w-0 flex-1 items-center gap-2.5 transition-opacity hover:opacity-85",
-          mirrored && "flex-row-reverse text-right",
-        )}
-      >
-        <MatchupTeamAvatar
-          name={side.name}
-          logo={side.logo}
-          platform={platform ?? null}
-          cacheKey={`${cacheKey}-${side.rosterId}`}
-          size="sm"
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold leading-tight text-slate-900">
-            {side.name}
-          </span>
-          {record ? (
-            <span className="mt-0.5 block text-[11px] font-medium tabular-nums text-slate-400">
-              {record}
-            </span>
-          ) : null}
-        </span>
-      </Link>
-    );
-  };
-
-  const score = (side: LeagueMatchupSide, won: boolean, mirrored: boolean) => (
-    <div className={cn("w-16 shrink-0", mirrored ? "text-left" : "text-right")}>
-      <p className={cn("text-lg font-bold tabular-nums leading-tight", scoreTone(won))}>
-        {side.live.toFixed(2)}
-      </p>
-      <p className={cn("text-[11px] font-medium tabular-nums", projTone(side.live, side.proj))}>
-        {side.proj.toFixed(2)}
-      </p>
-    </div>
-  );
-
   return (
-    <li className="py-3">
-      <div className="flex items-center gap-2 sm:gap-3">
-        {team(a, false)}
-        {score(a, aWon, false)}
-        <span className="w-6 shrink-0 text-center text-[10px] font-extrabold uppercase text-slate-300">
-          vs
-        </span>
-        {score(b, bWon, true)}
-        {team(b, true)}
-      </div>
-      <div className="mt-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide">
-        <span className={cn("w-10 shrink-0", pctTone(aLeads))}>{pctLabel(a, aWon)}</span>
-        <div className="flex h-1 min-w-0 flex-1 items-center gap-1">
-          <div className="flex h-full min-w-0 flex-1 justify-end overflow-hidden rounded-full bg-slate-100">
-            <div
-              className={cn(
-                "h-full rounded-full transition-[width] duration-500",
-                final ? (aWon ? "bg-emerald-500" : "bg-transparent") : aLeads ? "bg-emerald-500" : "bg-rose-500",
-              )}
-              style={{ width: `${barWidth(a, aWon)}%` }}
-            />
-          </div>
-          <div className="flex h-full min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className={cn(
-                "h-full rounded-full transition-[width] duration-500",
-                final ? (bWon ? "bg-emerald-500" : "bg-transparent") : aLeads ? "bg-rose-500" : "bg-emerald-500",
-              )}
-              style={{ width: `${barWidth(b, bWon)}%` }}
-            />
-          </div>
-        </div>
-        <span className={cn("w-10 shrink-0 text-right", pctTone(!aLeads))}>{pctLabel(b, bWon)}</span>
-      </div>
-    </li>
+    <AroundLeagueMatchupRow
+      a={{
+        id: pair.a.rosterId,
+        name: pair.a.name,
+        logo: pair.a.logo,
+        live: pair.a.live,
+        proj: pair.a.proj,
+        winPct: pair.a.winPct,
+      }}
+      b={{
+        id: pair.b.rosterId,
+        name: pair.b.name,
+        logo: pair.b.logo,
+        live: pair.b.live,
+        proj: pair.b.proj,
+        winPct: pair.b.winPct,
+      }}
+      started={pair.started}
+      final={pair.final}
+      platform={platform ?? null}
+      cacheKey={cacheKey}
+      recordFor={(id, name) => recordFor(Number(id), name)}
+      scoutRosterId
+    />
   );
 }
 

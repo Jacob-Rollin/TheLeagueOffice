@@ -583,7 +583,7 @@ function PlaybookTransactionsPage() {
                 <tbody>
                   {tallies.map((t) => {
                     const roster = logoByTeam.get(t.team);
-                    const logo = resolveAvatarUrl(roster?.logo ?? null);
+                    const logo = resolveAvatarUrl(roster?.logo ?? null, { teamName: t.team });
                     const selected = team === t.team;
                     return (
                       <tr

@@ -83,6 +83,7 @@ function MobileLeagueCard({ league }: { league: ActiveLeagueToken }) {
             platform={league.platform}
             src={league.avatar}
             alt=""
+            teamName={league.teamName}
             className="size-16 max-h-16 max-w-16"
           />
           <p className="mt-3 font-display text-2xl font-bold leading-tight">

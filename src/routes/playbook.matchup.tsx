@@ -337,13 +337,13 @@ function TeamLogoAvatar({
   cacheKey?: string | null;
 }) {
   const [failed, setFailed] = useState(false);
-  const src = resolveAvatarUrl(logo);
+  const src = resolveAvatarUrl(logo, { teamName: name });
   const plat = (platform ?? "").trim().toLowerCase();
-  const remountKey = `${cacheKey ?? "matchup"}:${src ?? "none"}:${plat}`;
+  const remountKey = `${cacheKey ?? "matchup"}:${src ?? "none"}:${plat}:${name}`;
 
   useEffect(() => {
     setFailed(false);
-  }, [src, cacheKey, plat]);
+  }, [src, cacheKey, plat, name]);
 
   if (src && !failed) {
     return (

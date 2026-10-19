@@ -316,13 +316,32 @@ export function nativeBoardToLeagueScoring(board: NativeBoard): LeagueScoring {
   };
 }
 
-export function nativeTransactionsToLeagueTransactionLog(
-  rows: NativeTxn[],
-  board: NativeBoard,
-): LeagueTransactionLog {
-  const teamNames = board.teams.map((t) => t.teamName);
-  const nameByTeamId = new Map(board.teams.map((t) => [t.id, t.teamName]));
-  const events: LeagueActivityEvent[] = rows.map((r) => {
+/** Native txn row shape used by listNativeTransactions / FantasyActivityItem. */
+export type NativeActivityTxnRow = {
+  id: number;
+  teamId: number | null;
+  teamName: string | null;
+  type: string;
+  addPlayerId: string | null;
+  dropPlayerId: string | null;
+  tradeLegs?: { teamId: number; playerIds: string[] }[] | null;
+  proposerTeamId?: number | null;
+  acceptorTeamId?: number | null;
+  proposerName?: string | null;
+  acceptorName?: string | null;
+  createdAt: string;
+};
+
+/**
+ * Map native transaction rows onto Playbook `LeagueActivityEvent`s so
+ * dashboards can reuse `ActivityFeed` chrome + player rows.
+ */
+export function nativeTxnRowsToActivityEvents(
+  rows: NativeActivityTxnRow[],
+  nameByTeamIdSeed?: Map<number, string>,
+): LeagueActivityEvent[] {
+  const nameByTeamId = new Map(nameByTeamIdSeed ?? []);
+  return rows.map((r) => {
     const kind = mapTxnKind(r.type);
     const team = r.teamName?.trim() || null;
     const at = Date.parse(r.createdAt);
@@ -335,6 +354,11 @@ export function nativeTransactionsToLeagueTransactionLog(
       }
       if (r.acceptorTeamId != null && r.acceptorName) {
         nameByTeamId.set(r.acceptorTeamId, r.acceptorName);
+      }
+      for (const leg of legs) {
+        if (!nameByTeamId.has(leg.teamId)) {
+          nameByTeamId.set(leg.teamId, `Team ${leg.teamId}`);
+        }
       }
       const moves = tradeMovesFromNativeLegs(legs, nameByTeamId);
       const sideA =
@@ -384,8 +408,16 @@ export function nativeTransactionsToLeagueTransactionLog(
       moves,
     };
   });
+}
+
+export function nativeTransactionsToLeagueTransactionLog(
+  rows: NativeTxn[],
+  board: NativeBoard,
+): LeagueTransactionLog {
+  const teamNames = board.teams.map((t) => t.teamName);
+  const nameByTeamId = new Map(board.teams.map((t) => [t.id, t.teamName]));
   return {
-    events,
+    events: nativeTxnRowsToActivityEvents(rows, nameByTeamId),
     teams: teamNames,
     currentWeek: board.currentWeek,
   };

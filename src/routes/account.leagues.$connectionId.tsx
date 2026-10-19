@@ -193,6 +193,7 @@ function LeagueSettingsPage() {
                 platform={platform}
                 src={settings?.avatar ?? null}
                 alt={`${settings?.teamName ?? leagueLabel ?? "League"} team avatar`}
+                teamName={settings?.teamName ?? null}
                 className="size-14 max-h-14 max-w-14 h-14 w-14"
               />
               <div className="min-w-0">

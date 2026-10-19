@@ -275,12 +275,12 @@ function PressRoomTeamAvatar({
   platform?: string | null;
 }) {
   const [failed, setFailed] = useState(false);
-  const src = resolveAvatarUrl(logo);
+  const src = resolveAvatarUrl(logo, { teamName: name });
   const plat = (platform ?? "").trim().toLowerCase();
 
   useEffect(() => {
     setFailed(false);
-  }, [src, plat]);
+  }, [src, plat, name]);
 
   const shell =
     "relative flex h-14 w-14 flex-shrink-0 select-none items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm";
@@ -465,7 +465,7 @@ function PressRoomPage() {
       : articleTab === "waiver"
         ? weekReport.brief.waiverLogo || weekReport.brief.apexLogo
         : weekReport.brief.apexLogo;
-  const bannerLogoSrc = resolveAvatarUrl(bannerLogoRaw);
+  const bannerLogoSrc = resolveAvatarUrl(bannerLogoRaw, { teamName: bannerTeamName });
 
   const deskEyebrow =
     articleTab === "recap"

@@ -24,9 +24,14 @@ export function LeagueAvatar({
   className,
 }: LeagueAvatarProps) {
   const [failed, setFailed] = useState(false);
+  // Prefer explicit teamName; only fall back to alt when it looks like a name
+  // (avoid baking "T" from phrases like "team avatar").
+  const initialSource =
+    (teamName && teamName.trim()) ||
+    (alt && !/\b(logo|avatar|team avatar)\b/i.test(alt) ? alt : null);
   const resolved =
     typeof src === "string" && src.length > 0
-      ? resolveNativeTeamAvatarSrc(src, teamName ?? alt)
+      ? resolveNativeTeamAvatarSrc(src, initialSource)
       : null;
   const url = resolved && resolved.length > 0 ? resolved : null;
   const key = (platform ?? "").toLowerCase();

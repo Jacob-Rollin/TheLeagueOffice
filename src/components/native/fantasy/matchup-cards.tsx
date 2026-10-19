@@ -1,9 +1,13 @@
 import type { ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
 
 import { FantasyBoard } from "@/components/native/fantasy/chrome";
-import { formatFantasyProj, formatFantasyPts } from "@/components/native/fantasy/format";
-import { MatchupTeamAvatar } from "@/components/playbook/MatchupPreviewCard";
+import { formatFantasyPts } from "@/components/native/fantasy/format";
+import {
+  AroundLeagueMatchupRow,
+  MatchupPreviewCard,
+  type AroundLeagueSide,
+} from "@/components/playbook/MatchupPreviewCard";
+import { winPctFromDisplayProjections } from "@/lib/rolling-live-projection";
 import { cn } from "@/lib/utils";
 
 export type FantasyMatchupTeamSide = {
@@ -15,15 +19,16 @@ export type FantasyMatchupTeamSide = {
   losses?: number | undefined;
   ties?: number | undefined;
   avatarUrl?: string | null | undefined;
+  winPct?: number | undefined;
 };
 
 export type FantasyMatchupCard = {
   matchupId: number;
   home: FantasyMatchupTeamSide;
   away: FantasyMatchupTeamSide;
+  weekStarted?: boolean;
+  matchupFinal?: boolean;
 };
-
-type MatchupStatusBadge = "live" | "final" | null;
 
 function formatRecord(wins?: number, losses?: number, ties?: number) {
   if (wins == null && losses == null) return null;
@@ -33,118 +38,100 @@ function formatRecord(wins?: number, losses?: number, ties?: number) {
   return `${w}-${l}${t > 0 ? `-${t}` : ""}`;
 }
 
-function StatusBadge({ status }: { status?: MatchupStatusBadge | undefined }) {
-  if (!status) return null;
-  const live = status === "live";
-  return (
-    <span
-      className={cn(
-        "rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-        live ? "bg-accent/15 text-accent" : "bg-slate-100 text-slate-600",
-      )}
-    >
-      {live ? "Live" : "Final"}
-    </span>
-  );
+function sideProj(team: FantasyMatchupTeamSide): number {
+  if (team.projection != null && Number.isFinite(team.projection)) return team.projection;
+  return team.points;
+}
+
+function sideWinPct(left: FantasyMatchupTeamSide, right: FantasyMatchupTeamSide): number {
+  if (left.winPct != null && Number.isFinite(left.winPct)) {
+    return Math.max(1, Math.min(99, Math.round(left.winPct)));
+  }
+  return winPctFromDisplayProjections(sideProj(left), sideProj(right));
 }
 
 type FantasyMatchupScoreCardProps = {
   home: FantasyMatchupTeamSide;
   away: FantasyMatchupTeamSide;
   myTeamId?: number | null;
+  /** Kept for API compat — score card uses Playbook VS layout instead. */
   weekLabel?: ReactNode;
-  status?: MatchupStatusBadge;
+  status?: "live" | "final" | null;
   className?: string;
-  /** When set, wraps the card (no outer border) for embedding in a FantasyBoard. */
   embedded?: boolean;
   cacheKey?: string;
+  weekStarted?: boolean;
+  matchupFinal?: boolean;
+  linkId?: string;
 };
 
+/**
+ * Native dashboard hero matchup — same layout as Playbook `MatchupPreviewCard`.
+ * Orients the signed-in team on the left when `myTeamId` is set.
+ */
 export function FantasyMatchupScoreCard({
   home,
   away,
   myTeamId,
-  weekLabel,
-  status,
   className,
-  embedded = false,
   cacheKey = "native-matchup",
+  weekStarted = false,
+  matchupFinal = false,
+  status,
 }: FantasyMatchupScoreCardProps) {
-  const homeMine = myTeamId != null && home.teamId === myTeamId;
-  const awayMine = myTeamId != null && away.teamId === myTeamId;
+  const mineIsAway = myTeamId != null && away.teamId === myTeamId;
+  const left = mineIsAway ? away : home;
+  const right = mineIsAway ? home : away;
+  const leftProj = sideProj(left);
+  const rightProj = sideProj(right);
+  const myWinPct = sideWinPct(left, right);
+  const oppWinPct =
+    right.winPct != null && Number.isFinite(right.winPct)
+      ? Math.max(1, Math.min(99, Math.round(right.winPct)))
+      : Math.max(1, Math.min(99, 100 - myWinPct));
+  const final = matchupFinal || status === "final";
+  const started = weekStarted || status === "live" || left.points > 0.005 || right.points > 0.005;
 
   return (
-    <section
-      className={cn(
-        embedded ? "p-1" : "rounded-xl border border-slate-200 bg-white p-5 shadow-sm",
-        className,
-      )}
-    >
-      <div className="grid gap-4 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-        <TeamScoreBlock team={home} mine={homeMine} align="left" cacheKey={cacheKey} />
-        <div className="flex flex-col items-center gap-1 text-center">
-          {weekLabel ?? (
-            <span className="font-display text-xs font-bold uppercase tracking-widest text-slate-500">
-              VS
-            </span>
-          )}
-          <StatusBadge status={status} />
-        </div>
-        <TeamScoreBlock team={away} mine={awayMine} align="right" cacheKey={cacheKey} />
-      </div>
-    </section>
-  );
-}
-
-function TeamScoreBlock({
-  team,
-  mine,
-  align,
-  cacheKey,
-}: {
-  team: FantasyMatchupTeamSide;
-  mine: boolean;
-  align: "left" | "right";
-  cacheKey: string;
-}) {
-  const record = formatRecord(team.wins, team.losses, team.ties);
-  const mirrored = align === "right";
-
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 items-center gap-3",
-        mirrored && "sm:flex-row-reverse sm:text-right",
-      )}
-    >
-      <MatchupTeamAvatar
-        name={team.teamName}
-        logo={team.avatarUrl}
+    <div className={className}>
+      <MatchupPreviewCard
+        loading={false}
+        leagueId={cacheKey}
         platform="native"
-        cacheKey={`${cacheKey}-${team.teamId}`}
+        myName={left.teamName}
+        myLogo={left.avatarUrl ?? null}
+        myRecord={formatRecord(left.wins, left.losses, left.ties)}
+        myLive={left.points}
+        myProj={leftProj}
+        myWinPct={myWinPct}
+        oppName={right.teamName}
+        oppLogo={right.avatarUrl ?? null}
+        oppRecord={formatRecord(right.wins, right.losses, right.ties)}
+        oppLive={right.points}
+        oppProj={rightProj}
+        oppWinPct={oppWinPct}
+        weekStarted={started}
+        matchupFinal={final}
       />
-      <div className="min-w-0 flex-1">
-        <p className={cn("truncate font-medium text-slate-900", mine && "text-primary")}>
-          {team.teamName}
-        </p>
-        {record ? <p className="text-xs text-muted-foreground">{record}</p> : null}
-        <p className="mt-1 font-display text-3xl font-semibold italic tracking-wide text-slate-900">
-          {formatFantasyPts(team.points)}
-        </p>
-        {team.projection != null && Number.isFinite(team.projection) ? (
-          <p className="text-xs text-muted-foreground">
-            Proj {formatFantasyProj(team.projection)}
-          </p>
-        ) : null}
-      </div>
     </div>
   );
 }
 
-/** Compact “Around the League” rows — Playbook-style, logos + scores. */
+function toAroundSide(team: FantasyMatchupTeamSide, winPct: number): AroundLeagueSide {
+  return {
+    id: team.teamId,
+    name: team.teamName,
+    logo: team.avatarUrl ?? null,
+    live: team.points,
+    proj: sideProj(team),
+    winPct,
+  };
+}
+
+/** Compact “Around the League” rows — identical layout to Playbook dashboard. */
 export function FantasyAroundLeagueList({
   matchups,
-  myTeamId,
+  myTeamId: _myTeamId,
   linkId,
   cacheKey = "around",
   className,
@@ -155,6 +142,7 @@ export function FantasyAroundLeagueList({
   cacheKey?: string;
   className?: string;
 }) {
+  void _myTeamId;
   if (!matchups.length) return null;
 
   return (
@@ -162,78 +150,34 @@ export function FantasyAroundLeagueList({
       <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">
         Around the League
       </span>
-      <ul className="mt-2 divide-y divide-slate-100">
+      <ul className="divide-y divide-slate-100">
         {matchups.map((m) => {
-          const mine =
-            myTeamId != null && (m.home.teamId === myTeamId || m.away.teamId === myTeamId);
+          const aPct = sideWinPct(m.home, m.away);
+          const bPct =
+            m.away.winPct != null && Number.isFinite(m.away.winPct)
+              ? Math.max(1, Math.min(99, Math.round(m.away.winPct)))
+              : Math.max(1, Math.min(99, 100 - aPct));
+          const started =
+            m.weekStarted || m.home.points > 0.005 || m.away.points > 0.005;
+          const final = Boolean(m.matchupFinal);
           return (
-            <li key={m.matchupId}>
-              <Link
-                to="/league/$linkId/matchup"
-                params={{ linkId }}
-                className={cn(
-                  "flex items-center gap-2 px-1 py-3 transition-opacity hover:opacity-85",
-                  mine && "rounded-md bg-blue-50/80",
-                )}
-              >
-                <AroundSide team={m.home} myTeamId={myTeamId} cacheKey={cacheKey} align="left" />
-                <span className="flex w-8 shrink-0 items-center justify-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                  vs
-                </span>
-                <AroundSide team={m.away} myTeamId={myTeamId} cacheKey={cacheKey} align="right" />
-              </Link>
-            </li>
+            <AroundLeagueMatchupRow
+              key={m.matchupId}
+              a={toAroundSide(m.home, aPct)}
+              b={toAroundSide(m.away, bPct)}
+              started={started}
+              final={final}
+              platform="native"
+              cacheKey={`${cacheKey}-${linkId}`}
+              recordFor={(id) => {
+                const side = m.home.teamId === id ? m.home : m.away.teamId === id ? m.away : null;
+                if (!side) return null;
+                return formatRecord(side.wins, side.losses, side.ties);
+              }}
+            />
           );
         })}
       </ul>
-    </div>
-  );
-}
-
-function AroundSide({
-  team,
-  myTeamId,
-  cacheKey,
-  align,
-}: {
-  team: FantasyMatchupTeamSide;
-  myTeamId?: number | null;
-  cacheKey: string;
-  align: "left" | "right";
-}) {
-  const mine = myTeamId != null && team.teamId === myTeamId;
-  const mirrored = align === "right";
-  const record = formatRecord(team.wins, team.losses, team.ties);
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-1 items-center gap-2",
-        mirrored && "flex-row-reverse text-right",
-      )}
-    >
-      <MatchupTeamAvatar
-        name={team.teamName}
-        logo={team.avatarUrl}
-        platform="native"
-        cacheKey={`${cacheKey}-${team.teamId}`}
-        size="sm"
-      />
-      <span className="min-w-0 flex-1">
-        <span
-          className={cn(
-            "block truncate text-sm font-semibold leading-tight text-slate-900",
-            mine && "text-primary",
-          )}
-        >
-          {team.teamName}
-        </span>
-        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium tabular-nums text-slate-400">
-          {record ? <span>{record}</span> : null}
-          <span className="font-display text-sm font-semibold italic text-slate-900">
-            {formatFantasyPts(team.points)}
-          </span>
-        </span>
-      </span>
     </div>
   );
 }
@@ -258,11 +202,7 @@ export function FantasyMatchupWeekList({
   if (!matchups.length) return null;
 
   return (
-    <FantasyBoard
-      className={className}
-      title={title}
-      bodyClassName="divide-y divide-slate-100"
-    >
+    <FantasyBoard className={className} title={title} bodyClassName="divide-y divide-slate-100">
       <ul>
         {matchups.map((m) => {
           const mine =
@@ -332,23 +272,40 @@ export function nativeMatchupViewToCard(
   },
   avatars?: Map<number, string | null> | Record<number, string | null>,
   records?: Map<number, { wins: number; losses: number; ties: number }>,
+  extras?: {
+    homeProj?: number | null;
+    awayProj?: number | null;
+    homeWinPct?: number | null;
+    awayWinPct?: number | null;
+    weekStarted?: boolean;
+    matchupFinal?: boolean;
+  },
 ): FantasyMatchupCard {
   const avatarFor = (teamId: number) => {
     if (!avatars) return null;
     if (avatars instanceof Map) return avatars.get(teamId) ?? null;
     return avatars[teamId] ?? null;
   };
-  const withMeta = (side: { teamId: number; teamName: string; points: number }) => {
+  const withMeta = (
+    side: { teamId: number; teamName: string; points: number },
+    proj?: number | null,
+    winPct?: number | null,
+  ) => {
     const rec = records?.get(side.teamId);
     return {
       ...side,
       avatarUrl: avatarFor(side.teamId),
       ...(rec ? { wins: rec.wins, losses: rec.losses, ties: rec.ties } : {}),
+      ...(proj != null && Number.isFinite(proj) ? { projection: proj } : {}),
+      ...(winPct != null && Number.isFinite(winPct) ? { winPct } : {}),
     };
   };
-  return {
+  const card: FantasyMatchupCard = {
     matchupId: m.matchupId,
-    home: withMeta(m.home),
-    away: withMeta(m.away),
+    home: withMeta(m.home, extras?.homeProj, extras?.homeWinPct),
+    away: withMeta(m.away, extras?.awayProj, extras?.awayWinPct),
   };
+  if (extras?.weekStarted != null) card.weekStarted = extras.weekStarted;
+  if (extras?.matchupFinal != null) card.matchupFinal = extras.matchupFinal;
+  return card;
 }
