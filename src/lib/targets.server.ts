@@ -128,6 +128,8 @@ const loadTargetsAgg = memo<{
     const row = parseCsvLine(line);
     if (cell(row, idx, "season_type") !== "REG") continue;
     if (cell(row, idx, "play_type") !== "pass") continue;
+    // Exclude PAT / 2PT conversion tries from target counts.
+    if (num(cell(row, idx, "two_point_attempt")) > 0) continue;
 
     const recvId = cell(row, idx, "receiver_player_id").trim();
     if (!recvId) continue;
@@ -159,12 +161,15 @@ export async function loadMostTargetedPlayers(
   const seasonKey = String(season ?? currentSeason()).slice(0, 16);
   const allowCompute = opts?.allowCompute === true;
 
-  try {
-    const { readAggJson } = await import("./research-agg.server");
-    const cached = await readAggJson<MostTargetedPayload>("agg_targets", seasonKey);
-    if (cached?.rows?.length) return cached;
-  } catch {
-    /* compute below when allowed */
+  // Cron must rebuild so maxWeek advances with nflverse; browse serves TiDB only.
+  if (!allowCompute) {
+    try {
+      const { readAggJson } = await import("./research-agg.server");
+      const cached = await readAggJson<MostTargetedPayload>("agg_targets", seasonKey);
+      if (cached?.rows?.length) return cached;
+    } catch {
+      /* soft-empty below when TiDB configured */
+    }
   }
 
   if (!allowCompute) {

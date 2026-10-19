@@ -826,10 +826,11 @@ export async function loadSosBoard(
   try {
     const { tidbConfigured } = await import("@/lib/tidb");
     if (tidbConfigured()) {
-      const { readAggJson } = await import("./research-agg.server");
-      const cached = await readAggJson<SosBoard>("agg_sos", season);
-      if (cached?.ranks && Array.isArray(cached.schedule)) return cached;
+      // Cron rebuilds; browse returns the warm snap (or empty) without fan-out.
       if (!allowCompute) {
+        const { readAggJson } = await import("./research-agg.server");
+        const cached = await readAggJson<SosBoard>("agg_sos", season);
+        if (cached?.ranks && Array.isArray(cached.schedule)) return cached;
         return {
           season,
           priorSeason: null,
@@ -940,7 +941,12 @@ export async function loadMatchupsGuide(
           "agg_matchups_guide",
           `${seasonGuess}|${weekKnown}|${fmt}`,
         );
-        if (cached && (Object.keys(cached.games).length || Object.keys(cached.defense).length)) {
+        // Cron (`allowCompute`) must rebuild; browse can reuse the warm snap.
+        if (
+          opts?.allowCompute !== true &&
+          cached &&
+          (Object.keys(cached.games).length || Object.keys(cached.defense).length)
+        ) {
           return cached;
         }
         if (opts?.allowCompute !== true) {

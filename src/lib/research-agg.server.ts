@@ -114,7 +114,10 @@ export async function withResearchSnap<T>(
   if (tidbConfigured()) {
     try {
       const cached = await readAggJson<T>(table, key);
-      if (cached != null && warm(cached)) return cached;
+      // Browse serves warm snaps. Cron (`allowCompute`) must rebuild so
+      // maxWeek / dataThroughWeek advance when nflverse / Sleeper update —
+      // otherwise a week-4 snap stays pinned for the rest of the season.
+      if (!allowCompute && cached != null && warm(cached)) return cached;
     } catch {
       /* treat as miss */
     }

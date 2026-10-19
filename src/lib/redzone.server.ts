@@ -1,9 +1,17 @@
 /**
  * Red-zone (inside the 20) player stats aggregated from nflverse play-by-play.
- * Only snaps with yardline_100 <= 20 are counted — nowhere else on the field.
+ * Only snaps with yardline_100 <= yardline are counted — nowhere else on the field.
+ * Counting rules match FantasyPros (see `redzone-counting.ts`).
  */
 
 import { currentSeason, HOUR } from "./players-build";
+import {
+  isRedZonePlayType,
+  isRushPlayType,
+  isTwoPointTry,
+  officialPassAttemptDelta,
+  rushAttemptDelta,
+} from "./redzone-counting";
 import type { RedZonePlayerRow, RedZonePos, RedZoneStatsPayload } from "./redzone";
 
 export type { RedZonePlayerRow, RedZonePos, RedZoneStatsPayload } from "./redzone";
@@ -240,7 +248,8 @@ const loadRedZoneAgg = memo<{
     const yardline = num(cell(row, idx, "yardline_100"));
     if (!(yardline > 0 && yardline <= yardlineMax)) continue;
     const playType = cell(row, idx, "play_type");
-    if (playType !== "pass" && playType !== "run") continue;
+    if (!isRedZonePlayType(playType)) continue;
+    if (isTwoPointTry(num(cell(row, idx, "two_point_attempt")))) continue;
 
     const week = num(cell(row, idx, "week"));
     if (week > maxWeek) maxWeek = week;
@@ -259,12 +268,13 @@ const loadRedZoneAgg = memo<{
       const passerName = cell(row, idx, "passer_player_name").trim();
       if (passerId) {
         const a = ensure(byGsis, passerId, passerName, team);
-        a.passAtt += num(cell(row, idx, "pass_attempt"));
+        const sack = num(cell(row, idx, "sack"));
+        a.passAtt += officialPassAttemptDelta(num(cell(row, idx, "pass_attempt")), sack);
         a.passCmp += num(cell(row, idx, "complete_pass"));
         a.passYds += num(cell(row, idx, "passing_yards"));
         a.passTd += num(cell(row, idx, "pass_touchdown"));
         a.passInt += num(cell(row, idx, "interception"));
-        a.passSack += num(cell(row, idx, "sack"));
+        a.passSack += sack;
         if (fum) a.fumLost += fum;
         if (gameId) a.games.add(gameId);
       }
@@ -283,17 +293,18 @@ const loadRedZoneAgg = memo<{
       }
     }
 
-    if (playType === "run") {
+    if (isRushPlayType(playType)) {
       const rushId = cell(row, idx, "rusher_player_id").trim();
       const rushName = cell(row, idx, "rusher_player_name").trim();
       if (rushId) {
         const a = ensure(byGsis, rushId, rushName, team);
-        a.rushAtt += num(cell(row, idx, "rush_attempt")) || 1;
+        const rushAtt = rushAttemptDelta(num(cell(row, idx, "rush_attempt")));
+        a.rushAtt += rushAtt;
         a.rushYds += num(cell(row, idx, "rushing_yards"));
         a.rushTd += num(cell(row, idx, "rush_touchdown"));
         if (fum) a.fumLost += fum;
         if (gameId) a.games.add(gameId);
-        teamRushAtt.set(team, (teamRushAtt.get(team) ?? 0) + (num(cell(row, idx, "rush_attempt")) || 1));
+        teamRushAtt.set(team, (teamRushAtt.get(team) ?? 0) + rushAtt);
       }
     }
   }
@@ -391,13 +402,16 @@ export async function loadRedZoneStats(
   const allowCompute = opts?.allowCompute === true;
 
   // Durable TiDB snapshot — skip nflverse PBP gunzip on the request path when warm.
+  // Cron (`allowCompute`) must not reuse the snap or maxWeek never advances.
   const earlyKey = `${seasonKey}:${yardline}:${weekFromInput ?? "d"}:${weekToInput ?? "d"}`;
-  try {
-    const { readAggJson } = await import("./research-agg.server");
-    const cached = await readAggJson<RedZoneStatsPayload>("agg_redzone", earlyKey);
-    if (cached?.rowsByPos) return cached;
-  } catch {
-    /* compute below when allowed */
+  if (!allowCompute) {
+    try {
+      const { readAggJson } = await import("./research-agg.server");
+      const cached = await readAggJson<RedZoneStatsPayload>("agg_redzone", earlyKey);
+      if (cached?.rowsByPos) return cached;
+    } catch {
+      /* soft-empty below when TiDB configured */
+    }
   }
 
   if (!allowCompute) {
