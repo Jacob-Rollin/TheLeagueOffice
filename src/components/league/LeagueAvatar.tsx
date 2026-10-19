@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { resolveNativeTeamAvatarSrc } from "@/lib/native-team-logos";
 import { cn } from "@/lib/utils";
 
 type LeagueAvatarProps = {
@@ -15,7 +16,9 @@ const FALLBACK_SHELL =
 
 export function LeagueAvatar({ platform, src, alt = "", className }: LeagueAvatarProps) {
   const [failed, setFailed] = useState(false);
-  const url = typeof src === "string" && src.length > 0 ? src : null;
+  const resolved =
+    typeof src === "string" && src.length > 0 ? resolveNativeTeamAvatarSrc(src) : null;
+  const url = resolved && resolved.length > 0 ? resolved : null;
   const key = (platform ?? "").toLowerCase();
 
   useEffect(() => {

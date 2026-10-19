@@ -237,6 +237,23 @@ export const renameNativeTeam = createServerFn({ method: "POST" })
     return await renameNativeTeamForUser(context.userId, data.linkId, data.teamId, data.teamName);
   });
 
+export const setNativeTeamAvatar = createServerFn({ method: "POST" })
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
+  .inputValidator((input: { linkId: string; teamId: number; avatarKey: string }) => ({
+    linkId: String(input.linkId ?? "").trim().slice(0, 36),
+    teamId: Number(input.teamId),
+    avatarKey: String(input.avatarKey ?? "").trim().slice(0, 64),
+  }))
+  .handler(async ({ context, data }) => {
+    const { setNativeTeamAvatarForUser } = await import("@/lib/native-league-ops.server");
+    return await setNativeTeamAvatarForUser(
+      context.userId,
+      data.linkId,
+      data.teamId,
+      data.avatarKey,
+    );
+  });
+
 export const kickNativeTeamMember = createServerFn({ method: "POST" })
   .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((input: { linkId: string; teamId: number }) => ({

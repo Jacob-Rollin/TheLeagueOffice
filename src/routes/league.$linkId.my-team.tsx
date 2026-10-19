@@ -58,12 +58,15 @@ import {
   getNativeStandings,
   resolveNativeIrViolation,
   saveNativeLineup,
+  setNativeTeamAvatar,
 } from "@/lib/native-league.functions";
 import {
   overlayNativeLiveMatchupScores,
   weeklyStatsMapToRecord,
 } from "@/lib/native-live-scoring";
+import { NativeTeamLogoPicker } from "@/components/native/NativeTeamLogoPicker";
 import { DEFAULT_IR_ALLOWED_STATUSES } from "@/lib/native-league-settings";
+import { isNativeLogoKey, resolveNativeTeamAvatarSrc } from "@/lib/native-team-logos";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
 import type { NflGameProgress } from "@/lib/rolling-live-projection";
@@ -237,6 +240,8 @@ function NativeMyTeamPage() {
   const [activateDropFor, setActivateDropFor] = useState<string | null>(null);
   const [dropPick, setDropPick] = useState("");
   const [optimizing, setOptimizing] = useState(false);
+  const [logoOpen, setLogoOpen] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
 
   const allowedStatuses = useMemo(
     () =>
@@ -641,6 +646,8 @@ function NativeMyTeamPage() {
       : null;
 
   const seasonPtsKey = ptsField(format);
+  const avatarSrc = resolveNativeTeamAvatarSrc(myTeamMeta?.avatarUrl);
+  const avatarPoolKey = isNativeLogoKey(myTeamMeta?.avatarUrl) ? myTeamMeta!.avatarUrl! : null;
   const rowHelpers: RowHelpers = {
     projectPlayer,
     actualPointsFor,
@@ -656,6 +663,29 @@ function NativeMyTeamPage() {
     showActuals,
   };
 
+  const saveTeamLogo = async (key: string) => {
+    if (myTeamId == null || logoBusy) return;
+    setLogoBusy(true);
+    try {
+      const result = await setNativeTeamAvatar({
+        data: { linkId, teamId: myTeamId, avatarKey: key },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Team logo updated.");
+      setLogoOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] });
+      void queryClient.invalidateQueries({ queryKey: ["native-league-summary", linkId] });
+      void queryClient.invalidateQueries({ queryKey: ["native-league-summaries"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update logo.");
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <Toaster />
@@ -664,20 +694,20 @@ function NativeMyTeamPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
-            <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100">
-              {myTeamMeta?.avatarUrl ? (
-                <img
-                  src={myTeamMeta.avatarUrl}
-                  alt=""
-                  className="size-full object-cover"
-                  loading="lazy"
-                />
+            <button
+              type="button"
+              className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100"
+              title="Change logo"
+              onClick={() => setLogoOpen(true)}
+            >
+              {avatarSrc ? (
+                <img src={avatarSrc} alt="" className="size-full object-cover" loading="lazy" />
               ) : (
                 <span className="font-display text-lg font-bold uppercase text-slate-500">
                   {(lineup.teamName ?? "TM").slice(0, 2).toUpperCase()}
                 </span>
               )}
-            </div>
+            </button>
             <div className="min-w-0">
               <h2 className="truncate font-display text-2xl font-bold uppercase tracking-wide text-slate-900 md:text-3xl">
                 {lineup.teamName}
@@ -694,6 +724,9 @@ function NativeMyTeamPage() {
                 ) : null}
               </p>
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium text-blue-700">
+                <button type="button" className="hover:underline" onClick={() => setLogoOpen(true)}>
+                  Change logo
+                </button>
                 <Link to="/league/$linkId/settings" params={{ linkId }} className="hover:underline">
                   Team Settings
                 </Link>
@@ -860,6 +893,17 @@ function NativeMyTeamPage() {
       )}
 
       <PlayerModalHost ref={modalRef} />
+
+      {myTeamId != null ? (
+        <NativeTeamLogoPicker
+          open={logoOpen}
+          onOpenChange={setLogoOpen}
+          teamName={lineup.teamName}
+          currentKey={avatarPoolKey}
+          busy={logoBusy}
+          onSelect={saveTeamLogo}
+        />
+      ) : null}
     </div>
   );
 }
