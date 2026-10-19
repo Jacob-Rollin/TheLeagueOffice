@@ -26,9 +26,11 @@ Captured for the Edge + TiDB overhaul. Request-path sinks must move to TiDB/CDN 
 - `useSleeperPlayers`, `useLeagueProjections`, `useWeeklyActualStats`, home ESPN news
 - Live score ticker via `/api/public/scoreboard`
 
-## Supabase B / brain
-- `aggregation.server.ts` → `player_warehouse` + `master_player_brain.json` (migrate to TiDB)
-- `playerBrainHydration.ts` — client brain download (retire after seed)
+## Supabase B / brain (RETIRED)
+- `league-office-brain` paused/deleted after TiDB cutover — no app code paths remain
+- `aggregation.server.ts` → TiDB `player_warehouse` only (live harvest)
+- `playerBrainHydration.ts` → snap-cdn / `/api/data/players-export` → local catalog
+- `supabaseB.ts` — stub that throws if accidentally imported
 
 ## Crons
 - `api/cron/warehouse-ingest`, `api/cron/league-delta-sync`

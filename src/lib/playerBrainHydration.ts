@@ -1,9 +1,8 @@
 /**
  * Client-side player matrix hydration.
  *
- * Prefers the CDN-cached TiDB export (`/api/data/players-export`). Falls back
- * to the legacy Supabase Storage `master_player_brain.json` only when TiDB is
- * not seeded yet. Stores the dictionary in IndexedDB via localforage.
+ * Prefers GitHub snap-cdn `players-export.json`, then `/api/data/players-export`
+ * (TiDB). On miss, serves IndexedDB / local Sleeper catalog — never Supabase B.
  *
  * This module deliberately does NOT feed the War Room, Trade Desk, Waiver
  * Evaluator, or global search — those keep reading from their existing
@@ -19,8 +18,6 @@ import type { SosBoard } from "@/lib/players.server";
 import type { PlayerSos, SosMatchup } from "@/lib/sos-presentation";
 import { readCache } from "@/lib/sleeper-cache";
 
-const BUCKET = "player_brain";
-const FILE = "master_player_brain.json";
 // Schema-versioned heartbeat forces one refresh when synchronized fields expand.
 const HEARTBEAT_KEY = "player-brain:last-sync:v7-tidb";
 const MATRIX_KEY = "player-brain:matrix";
@@ -79,14 +76,7 @@ const store = (() => {
   }
 })();
 
-function brainUrl(): string | null {
-  const raw = import.meta.env["VITE_SUPABASE_URL_B"] as string | undefined;
-  if (!raw) return null;
-  const origin = raw.replace(/\/rest\/v1\/?$/i, "").replace(/\/$/, "");
-  return `${origin}/storage/v1/object/public/${BUCKET}/${FILE}`;
-}
-
-/** True when the 30-minute heartbeat has expired (i.e. a download is allowed). */
+/** True when the heartbeat has expired (i.e. a download is allowed). */
 export function heartbeatCleared(now = Date.now()): boolean {
   if (typeof localStorage === "undefined") return true;
   try {
@@ -334,7 +324,6 @@ async function loadBrainMatrix(options?: { force?: boolean }): Promise<BrainMatr
       return await localFallbackMatrix();
     }
 
-    // Phase 3: stream warehouse rows from TiDB-backed API when seeded.
     const tidbMatrix = await loadTidbWarehouseMatrix();
     if (tidbMatrix) {
       if (store) {
@@ -351,28 +340,7 @@ async function loadBrainMatrix(options?: { force?: boolean }): Promise<BrainMatr
       return tidbMatrix;
     }
 
-    // Legacy fallback: Supabase Storage brain (removed from request path once TiDB is seeded).
-    const url = brainUrl();
-    if (!url) return await localFallbackMatrix();
-
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return await localFallbackMatrix();
-
-    const brain = (await res.json()) as MasterPlayerBrainPayload;
-    if (!Array.isArray(brain?.ids) || brain.ids.length === 0) return await localFallbackMatrix();
-
-    const matrix = compileMatrix(brain);
-    if (store) {
-      await store.setItem(MATRIX_KEY, matrix);
-      await store.setItem(META_KEY, {
-        v: brain.v,
-        count: brain.count,
-        generated_at: brain.generated_at,
-        storedAt: Date.now(),
-      });
-    }
-    stampHeartbeat();
-    return matrix;
+    return await localFallbackMatrix();
   } catch {
     // Silent by design — never surfaces to the UI.
     return await localFallbackMatrix();

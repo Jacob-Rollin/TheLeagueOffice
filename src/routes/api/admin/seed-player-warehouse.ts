@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { authorizeCronRequest } from "@/lib/cron-auth.server";
-import { loadSeedRowsFromSupabase, seedPlayerWarehouse } from "@/lib/tidb-migrate.server";
+import { loadSeedRowsFromLiveProviders, seedPlayerWarehouse } from "@/lib/tidb-migrate.server";
 import { tidbConfigured } from "@/lib/tidb";
 
 /**
- * One-time seed: Supabase brain (or warehouse table) → TiDB player_warehouse.
+ * One-time seed: live Sleeper / FantasyCalc / LeagueLogs → TiDB player_warehouse.
  * Prefer POST /api/admin/tidb-migrate with action "migrate" (schema + seed).
  */
 export const Route = createFileRoute("/api/admin/seed-player-warehouse")({
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/api/admin/seed-player-warehouse")({
         }
 
         try {
-          const loaded = await loadSeedRowsFromSupabase();
+          const loaded = await loadSeedRowsFromLiveProviders();
           if (loaded.rows.length < 100) {
             return new Response(
               JSON.stringify({

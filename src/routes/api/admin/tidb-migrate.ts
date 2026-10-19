@@ -4,16 +4,16 @@ import { authorizeCronRequest } from "@/lib/cron-auth.server";
 import { tidbNativeLeagueStatus } from "@/lib/native-league.server";
 import {
   applyTidbSchema,
-  loadSeedRowsFromSupabase,
+  loadSeedRowsFromLiveProviders,
   seedPlayerWarehouse,
   tidbWarehouseStatus,
 } from "@/lib/tidb-migrate.server";
 import { tidbConfigured } from "@/lib/tidb";
 
 /**
- * TiDB cutover control plane.
+ * TiDB warehouse control plane (no Supabase B).
  * GET  → status
- * POST → { action: "schema" | "seed" | "migrate" }  (migrate = schema + seed)
+ * POST → { action: "schema" | "seed" | "migrate" }  (migrate = schema + seed from live harvest)
  */
 export const Route = createFileRoute("/api/admin/tidb-migrate")({
   server: {
@@ -74,7 +74,7 @@ export const Route = createFileRoute("/api/admin/tidb-migrate")({
           }
 
           if (action === "seed" || action === "migrate") {
-            const loaded = await loadSeedRowsFromSupabase();
+            const loaded = await loadSeedRowsFromLiveProviders();
             if (loaded.rows.length < 100) {
               return new Response(
                 JSON.stringify({

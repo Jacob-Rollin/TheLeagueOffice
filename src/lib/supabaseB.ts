@@ -1,28 +1,14 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
 /**
- * Database B — isolated analytical player data warehouse.
+ * @deprecated Supabase Database B (`league-office-brain`) is retired.
  *
- * This client talks ONLY to the secondary Supabase project (player_warehouse
- * tables). It must never be used for auth, profiles, or user league data;
- * those flows stay on the default `supabase` client (Database A).
+ * Player warehouse + brain hydration live on TiDB (`DATABASE_URL`) and
+ * snap-cdn / `/api/data/players-export`. Auth, profiles, and site tables stay
+ * on Database A (`supabase` / `VITE_SUPABASE_URL`).
+ *
+ * Importing this module throws so accidental dual-write / brain paths cannot
+ * silently hit a paused project.
  */
 
-const rawUrl = import.meta.env["VITE_SUPABASE_URL_B"] as string | undefined;
-const anonKey = import.meta.env["VITE_SUPABASE_ANON_KEY_B"] as string | undefined;
-
-// The stored URL may include a trailing "/rest/v1" path; createClient needs
-// the bare project origin.
-const url = rawUrl?.replace(/\/rest\/v1\/?$/i, "");
-
-if (!url || !anonKey) {
-  console.warn("[supabaseB] Missing VITE_SUPABASE_URL_B / VITE_SUPABASE_ANON_KEY_B");
-}
-
-export const supabaseB: SupabaseClient = createClient(url ?? "", anonKey ?? "", {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    storage: undefined,
-  },
-});
+throw new Error(
+  "[supabaseB] league-office-brain is retired — use TiDB player_warehouse / players-export",
+);

@@ -220,8 +220,8 @@ let ensureSeedPromise: Promise<{
 
 /**
  * One-shot: if TiDB has no warehouse rows (or missing table), apply schema +
- * seed from Supabase brain. Safe to call from export/cron; concurrent callers
- * share one in-flight migrate.
+ * seed from live Sleeper / FantasyCalc / LeagueLogs harvest. Safe to call from
+ * export/cron; concurrent callers share one in-flight migrate.
  */
 export async function ensureTidbWarehouseSeeded(): Promise<{
   migrated: boolean;
@@ -245,7 +245,7 @@ export async function ensureTidbWarehouseSeeded(): Promise<{
       }
 
       await applyTidbSchema();
-      const loaded = await loadSeedRowsFromSupabase();
+      const loaded = await loadSeedRowsFromLiveProviders();
       if (loaded.rows.length < 100) {
         ensureSeedPromise = null; // allow retry
         return {
@@ -298,76 +298,61 @@ export async function tidbWarehouseStatus(): Promise<{
   }
 }
 
-type BrainPayload = {
-  ids?: string[];
-  names?: string[];
-  positions?: string[];
-  teams?: string[];
-  values?: number[];
-  injuries?: string[];
-  injury_types?: string[];
-  injury_notes?: string[];
-};
-
-function brainUrl(): string | null {
-  const raw =
-    process.env["VITE_SUPABASE_URL_B"] ??
-    (typeof import.meta !== "undefined"
-      ? (import.meta.env["VITE_SUPABASE_URL_B"] as string | undefined)
-      : undefined);
-  if (!raw) return null;
-  const origin = raw.replace(/\/rest\/v1\/?$/i, "").replace(/\/$/, "");
-  return `${origin}/storage/v1/object/public/player_brain/master_player_brain.json`;
-}
-
-/** Load seed rows from Supabase Storage brain, else Supabase B warehouse table. */
-export async function loadSeedRowsFromSupabase(): Promise<{
-  source: "brain" | "warehouse";
+/**
+ * Build warehouse seed rows from live public providers (Sleeper registry +
+ * FantasyCalc + LeagueLogs). Does not touch Supabase B (`league-office-brain`).
+ */
+export async function loadSeedRowsFromLiveProviders(): Promise<{
+  source: "live-harvest";
   rows: WarehouseSeedRow[];
 }> {
-  const url = brainUrl();
-  if (url) {
-    const res = await fetch(url, { cache: "no-store" });
-    if (res.ok) {
-      const brain = (await res.json()) as BrainPayload;
-      const ids = Array.isArray(brain.ids) ? brain.ids : [];
-      if (ids.length > 0) {
-        const rows: WarehouseSeedRow[] = [];
-        for (let i = 0; i < ids.length; i++) {
-          const id = String(ids[i] ?? "").slice(0, 32);
-          if (!id) continue;
-          rows.push({
-            sleeper_id: id,
-            player_name: String(brain.names?.[i] ?? "") || null,
-            position: String(brain.positions?.[i] ?? "") || null,
-            team: String(brain.teams?.[i] ?? "") || null,
-            fantasycalc_value: Number(brain.values?.[i] ?? 0) || null,
-            leaguelogs_status: String(brain.injuries?.[i] ?? "") || null,
-            injury_type: String(brain.injury_types?.[i] ?? "") || null,
-            injury_notes: String(brain.injury_notes?.[i] ?? "") || null,
-          });
-        }
-        return { source: "brain", rows };
-      }
-    }
+  const { harvestFantasyCalc, harvestLeagueLogs, loadIdentityIndex } =
+    await import("@/lib/aggregation.server");
+
+  const index = await loadIdentityIndex();
+  const byId = new Map<string, WarehouseSeedRow>();
+
+  for (const r of index.base.values()) {
+    byId.set(r.sleeper_id, {
+      sleeper_id: r.sleeper_id,
+      player_name: r.full_name ?? null,
+      position: r.position ?? null,
+      team: r.team ?? null,
+      injury_type: r.injury_type ?? null,
+      injury_notes: r.injury_notes ?? null,
+    });
   }
 
-  // Fall back to Supabase B warehouse table (never TiDB — this is the migration source).
-  const { supabaseB } = await import("@/lib/supabaseB");
-  const PAGE = 1000;
-  const rows: WarehouseSeedRow[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabaseB
-      .from("player_warehouse")
-      .select(
-        "sleeper_id, player_name, position, team, fantasycalc_value, leaguelogs_status, injury_type, injury_notes",
-      )
-      .order("sleeper_id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`Supabase warehouse read failed: ${error.message}`);
-    const page = (data ?? []) as WarehouseSeedRow[];
-    rows.push(...page);
-    if (page.length < PAGE) break;
+  const [fantasycalc, leaguelogs] = await Promise.all([
+    harvestFantasyCalc(index),
+    harvestLeagueLogs(index),
+  ]);
+
+  for (const r of fantasycalc) {
+    const existing = byId.get(r.sleeper_id) ?? { sleeper_id: r.sleeper_id };
+    existing.fantasycalc_value = r.fantasycalc_value ?? null;
+    existing.player_name = existing.player_name ?? r.full_name ?? null;
+    existing.position = existing.position ?? r.position ?? null;
+    existing.team = existing.team ?? r.team ?? null;
+    byId.set(r.sleeper_id, existing);
   }
-  return { source: "warehouse", rows };
+
+  for (const r of leaguelogs) {
+    const existing = byId.get(r.sleeper_id) ?? { sleeper_id: r.sleeper_id };
+    existing.leaguelogs_status = r.leaguelogs_status ?? null;
+    existing.player_name = existing.player_name ?? r.full_name ?? null;
+    existing.position = existing.position ?? r.position ?? null;
+    existing.team = existing.team ?? r.team ?? null;
+    byId.set(r.sleeper_id, existing);
+  }
+
+  return { source: "live-harvest", rows: Array.from(byId.values()) };
+}
+
+/** @deprecated Use {@link loadSeedRowsFromLiveProviders}. Supabase B is retired. */
+export async function loadSeedRowsFromSupabase(): Promise<{
+  source: "live-harvest";
+  rows: WarehouseSeedRow[];
+}> {
+  return loadSeedRowsFromLiveProviders();
 }
