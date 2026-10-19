@@ -766,6 +766,13 @@ function MatchupStrip({
   );
 }
 
+/**
+ * Playbook Matchup card phase + schedule labels.
+ * - yet to play → white sheet (`pre`)
+ * - live → white sheet + lock (`in`)
+ * - completed → muted final sheet (`post`)
+ * Past weeks force `post` when progress is cold so finals still grey out.
+ */
 function sideMeta(
   player: Player | null,
   schedule: Parameters<typeof scheduleOpponent>[0],
@@ -787,14 +794,28 @@ function sideMeta(
   const bye = player.bye != null && Number(player.bye) === activeWeek;
   const opp = bye ? null : scheduleOpponent(schedule, activeWeek, player.team || "");
   const progress = progressForNflTeam(player.team, progressByNflTeam);
-  const phase: NflGameProgress["phase"] =
-    bye || showActuals ? "post" : progress?.phase ?? "pre";
-  const scheduleLabel = bye
-    ? "Bye"
-    : formatNflGameStatusLabel(progress) ||
+  // Match Playbook: drive sheet color from NFL progress; past weeks → final.
+  let phase: NflGameProgress["phase"] = progress?.phase ?? "pre";
+  if (showActuals && phase === "pre") phase = "post";
+  // Bye uses muted final sheet (same as mobile completed/bye cards).
+  if (bye) phase = "post";
+
+  let scheduleLabel = "";
+  if (bye) {
+    scheduleLabel = "BYE";
+  } else if (phase === "post") {
+    scheduleLabel = "Final";
+  } else if (phase === "in") {
+    scheduleLabel = formatNflGameStatusLabel(progress, player.team) || "Live";
+  } else {
+    scheduleLabel =
       formatNflKickoffLabel(progress?.kickoffIso) ||
-      (opp ? `vs ${opp}` : "");
-  const boxScoreLabel = progress?.boxScoreLabel ?? "";
+      formatNflGameStatusLabel(progress, player.team) ||
+      (opp ? `vs ${opp}` : "TBD");
+  }
+
+  const boxScoreLabel =
+    phase === "post" && !bye ? (progress?.boxScoreLabel ?? "") : "";
   const defRank = !bye && opp ? defenseRankFor(player.pos, opp) : null;
   return {
     phase,
@@ -916,6 +937,8 @@ function MirroredLineupBoard({
             rightSosOpponent={rightMeta.sosOpponent}
             leftPosRank={leftSid ? rankFor(leftSid).pos : null}
             rightPosRank={rightSid ? rankFor(rightSid).pos : null}
+            leftBye={leftMeta.bye}
+            rightBye={rightMeta.bye}
             showFavoriteCheck
             onOpenPlayer={onOpen}
           />

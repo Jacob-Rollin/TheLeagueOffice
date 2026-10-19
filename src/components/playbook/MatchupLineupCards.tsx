@@ -322,6 +322,7 @@ export type MatchupSideCardProps = {
   sosStars?: number | null;
   sosOpponent?: string | null;
   posRank?: number | null;
+  bye?: boolean;
   showCheck?: boolean;
   onOpenPlayer?: (id: string) => void;
 };
@@ -329,7 +330,10 @@ export type MatchupSideCardProps = {
 export function liveScoreLabel(
   phase: NflGameProgress["phase"] | undefined,
   livePts: number | null,
+  opts?: { bye?: boolean },
 ): string {
+  // Yet to play → "-". Bye → "-" on the muted final sheet.
+  if (opts?.bye) return "-";
   if (phase !== "pre" || (livePts != null && livePts > 0)) {
     return livePts != null ? livePts.toFixed(2) : "0.00";
   }
@@ -361,11 +365,13 @@ export function LeftPlayerCard({
   sosStars = null,
   sosOpponent = null,
   posRank = null,
+  bye = false,
   showCheck = false,
   onOpenPlayer,
 }: MatchupSideCardProps) {
   const isFinal = phase === "post";
   const isLocked = phase === "post" || phase === "in";
+  // Playbook Matchup sheets: white = yet to play / live; muted grey = completed (or bye).
   const shell = cn(
     "flex h-full w-full items-center justify-between rounded-xl border p-3.5 shadow-sm",
     isFinal
@@ -390,8 +396,8 @@ export function LeftPlayerCard({
 
   const open = () => onOpenPlayer?.(player.id);
   const teamAbbr = (player.team || "FA").toUpperCase();
-  const line2 = isFinal ? "Final" : scheduleLabel.trim() || "TBD";
-  const line3Final = isFinal ? formatWinnerFirstBoxScore(boxScoreLabel) : "";
+  const line2 = bye ? "BYE" : isFinal ? "Final" : scheduleLabel.trim() || "TBD";
+  const line3Final = isFinal && !bye ? formatWinnerFirstBoxScore(boxScoreLabel) : "";
 
   return (
     <div className={shell} {...playerHoverPrefetchProps(player.id)}>
@@ -433,9 +439,9 @@ export function LeftPlayerCard({
         )}
       </div>
       <MatchupScoreColumn
-        liveLabel={liveScoreLabel(phase, livePts)}
+        liveLabel={liveScoreLabel(phase, livePts, { bye })}
         livePts={livePts}
-        projPts={projPts}
+        projPts={bye ? null : projPts}
         phase={phase}
         showCheck={showCheck}
         checkSide="left"
@@ -455,6 +461,7 @@ export function RightPlayerCard({
   sosStars = null,
   sosOpponent = null,
   posRank = null,
+  bye = false,
   showCheck = false,
   onOpenPlayer,
 }: MatchupSideCardProps) {
@@ -484,15 +491,15 @@ export function RightPlayerCard({
 
   const open = () => onOpenPlayer?.(player.id);
   const teamAbbr = (player.team || "FA").toUpperCase();
-  const line2 = isFinal ? "Final" : scheduleLabel.trim() || "TBD";
-  const line3Final = isFinal ? formatWinnerFirstBoxScore(boxScoreLabel) : "";
+  const line2 = bye ? "BYE" : isFinal ? "Final" : scheduleLabel.trim() || "TBD";
+  const line3Final = isFinal && !bye ? formatWinnerFirstBoxScore(boxScoreLabel) : "";
 
   return (
     <div className={shell} {...playerHoverPrefetchProps(player.id)}>
       <MatchupScoreColumn
-        liveLabel={liveScoreLabel(phase, livePts)}
+        liveLabel={liveScoreLabel(phase, livePts, { bye })}
         livePts={livePts}
-        projPts={projPts}
+        projPts={bye ? null : projPts}
         phase={phase}
         showCheck={showCheck}
         checkSide="right"
@@ -562,6 +569,8 @@ export function MatchupGridRow({
   rightSosOpponent = null,
   leftPosRank = null,
   rightPosRank = null,
+  leftBye = false,
+  rightBye = false,
   showFavoriteCheck = false,
   onOpenPlayer,
 }: {
@@ -584,6 +593,8 @@ export function MatchupGridRow({
   rightSosOpponent?: string | null;
   leftPosRank?: number | null;
   rightPosRank?: number | null;
+  leftBye?: boolean;
+  rightBye?: boolean;
   showFavoriteCheck?: boolean;
   onOpenPlayer?: (id: string) => void;
 }) {
@@ -613,6 +624,7 @@ export function MatchupGridRow({
           sosStars={leftSosStars}
           sosOpponent={leftSosOpponent}
           posRank={leftPosRank}
+          bye={leftBye}
           showCheck={Boolean(leftWins)}
           {...(onOpenPlayer ? { onOpenPlayer } : {})}
         />
@@ -628,6 +640,7 @@ export function MatchupGridRow({
           sosStars={rightSosStars}
           sosOpponent={rightSosOpponent}
           posRank={rightPosRank}
+          bye={rightBye}
           showCheck={Boolean(rightWins)}
           {...(onOpenPlayer ? { onOpenPlayer } : {})}
         />
