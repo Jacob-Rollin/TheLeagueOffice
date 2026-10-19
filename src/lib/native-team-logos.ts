@@ -66,9 +66,9 @@ const SHAPE_LABEL: Record<NativeLogoShape, string> = {
   bolt: "Bolt",
 };
 
-/** Bolt is too narrow for a monogram — render glyph only. */
+/** Helmet + bolt are glyph-only (no monogram). */
 export function nativeLogoShowsLetter(shape: NativeLogoShape): boolean {
-  return shape !== "bolt";
+  return shape !== "bolt" && shape !== "helmet";
 }
 
 export function nativeLogoKey(shape: NativeLogoShape, colorId: NativeLogoColorId): string {
@@ -112,8 +112,7 @@ function escapeXml(value: string): string {
 type LetterSlot = { x: number; y: number; size: number };
 
 /**
- * Monogram. `cutout` = disc color punched through a filled emblem;
- * `overlay` = ink letter on top of a stroke-only glyph (helmet).
+ * Monogram cut out of a filled emblem (letter uses the disc/fill color).
  * Uses dy for reliable vertical centering across SVG renderers.
  */
 function monogram(
@@ -147,16 +146,13 @@ function buildSvg(shape: NativeLogoShape, fill: string, ink: string, letter: str
 
   switch (shape) {
     case "helmet": {
+      // Glyph only — no monogram on the stroke helmet.
       emblem = helmetEmblem(ink);
-      // Letter on the top-center of the shell crown (forward of the earhole).
-      if (letter) {
-        letterMarkup = monogram(letter, ink, { x: 28, y: 16.5, size: 11 });
-      }
       break;
     }
     case "shield": {
       emblem = `<path fill="${ink}" d="M32 7.5l20 6.2v14.8c0 14.2-8.5 23.8-20 27.5C20.5 52.3 12 42.7 12 28.5V13.7L32 7.5z"/>`;
-      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 28, size: 18 });
+      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 28, size: 26 });
       break;
     }
     case "ball": {
@@ -167,12 +163,12 @@ function buildSvg(shape: NativeLogoShape, fill: string, ink: string, letter: str
         `<path fill="none" stroke="${fill}" stroke-width="2.3" stroke-linecap="round" d="M51.5 25c-2.4 4.5-2.4 9.5 0 14"/>`,
       ].join("");
       // Geometric center of the oval (32,32) with dy-based baseline centering.
-      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 32, size: 20 });
+      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 32, size: 28 });
       break;
     }
     case "star": {
       emblem = `<path fill="${ink}" d="M32 4.7L38.58 24.14L59.11 24.39L42.65 36.66L48.75 56.26L32 44.4L15.25 56.26L21.35 36.66L4.89 24.39L25.42 24.14Z"/>`;
-      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 33, size: 15 });
+      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 33, size: 22 });
       break;
     }
     case "bolt": {

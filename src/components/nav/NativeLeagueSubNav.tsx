@@ -1,8 +1,9 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { resolveAvatarUrl } from "@/components/playbook/panels";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +70,66 @@ function segmentFromPath(pathname: string, linkId: string): string {
   return pathname.slice(base.length + 1).split("/")[0] ?? "";
 }
 
+function teamInitials(name: string): string {
+  const cleaned = name.trim();
+  if (!cleaned) return "TM";
+  const letters = cleaned.replace(/[^a-zA-Z0-9]/g, "");
+  if (letters.length >= 2) return letters.slice(0, 2).toUpperCase();
+  return cleaned.slice(0, 2).toUpperCase();
+}
+
+function roleLabel(role?: string | null): string {
+  if (role === "commissioner") return "Commissioner";
+  if (role === "co_commish") return "Co-Commish";
+  return "My Team";
+}
+
+/** Team logo (pool key → data-URI) for the fantasy sub-nav league switcher. */
+function NativeSwitcherAvatar({
+  teamName,
+  avatarUrl,
+  cacheKey,
+  compact = false,
+}: {
+  teamName?: string | null;
+  avatarUrl?: string | null;
+  cacheKey: string;
+  compact?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+  const name = teamName?.trim() || "My Team";
+  const src = resolveAvatarUrl(avatarUrl, { teamName: name });
+  const shell = compact
+    ? "mr-2 flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/80 bg-slate-50 text-[9px] font-bold text-slate-600"
+    : "flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/80 bg-slate-50 text-xs font-bold text-slate-600";
+  const remountKey = `${cacheKey}:${src ?? "none"}:${name}`;
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src, cacheKey, name]);
+
+  if (src && !failed) {
+    return (
+      <span key={remountKey} className={shell}>
+        <img
+          key={remountKey}
+          src={src}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span key={remountKey} className={shell}>
+      {teamInitials(name)}
+    </span>
+  );
+}
+
 function NativeLeagueSwitcher({ linkId }: { linkId: string }) {
   const { user } = useAuth();
   const { setActiveLeagueId } = useActiveLeague();
@@ -95,12 +156,8 @@ function NativeLeagueSwitcher({ linkId }: { linkId: string }) {
   if (!summaries.length) return null;
 
   const leagueName = active?.name?.trim() || "Native League";
-  const teamLabel =
-    active?.role === "commissioner"
-      ? "Commissioner"
-      : active?.role === "co_commish"
-        ? "Co-Commish"
-        : "My Team";
+  const teamName = active?.teamName?.trim() || null;
+  const teamLabel = teamName || roleLabel(active?.role);
 
   const switchTo = (next: NativeMemberLeagueSummary) => {
     setActiveLeagueId(next.linkId);
@@ -115,9 +172,12 @@ function NativeLeagueSwitcher({ linkId }: { linkId: string }) {
   return (
     <DropdownMenu key={linkId}>
       <DropdownMenuTrigger className="flex h-9 max-w-[190px] items-center rounded-lg border border-border/80 bg-white px-2.5 py-0.5 text-left shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <span className="mr-2 flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/80 bg-slate-50 text-[9px] font-bold text-slate-600">
-          {leagueName.replace(/[^a-zA-Z0-9]/g, "").slice(0, 2).toUpperCase() || "NL"}
-        </span>
+        <NativeSwitcherAvatar
+          teamName={teamName}
+          avatarUrl={active?.avatarUrl}
+          cacheKey={`native-switcher-${linkId}`}
+          compact
+        />
         <span className="min-w-0 flex-1 text-left">
           <span className="block truncate text-[11px] font-bold text-slate-800">{leagueName}</span>
           <span className="block truncate text-[10px] font-medium text-slate-500">{teamLabel}</span>
@@ -127,6 +187,7 @@ function NativeLeagueSwitcher({ linkId }: { linkId: string }) {
       <DropdownMenuContent align="start" className="w-80 p-1">
         {summaries.map((league) => {
           const selected = league.linkId === linkId;
+          const rowTeam = league.teamName?.trim() || null;
           return (
             <DropdownMenuItem
               key={league.linkId}
@@ -140,15 +201,19 @@ function NativeLeagueSwitcher({ linkId }: { linkId: string }) {
               onSelect={() => switchTo(league)}
             >
               <span className="flex min-w-0 flex-1 items-center gap-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/80 bg-slate-50 text-xs font-bold text-slate-600">
-                  {league.name.replace(/[^a-zA-Z0-9]/g, "").slice(0, 2).toUpperCase() || "NL"}
-                </span>
+                <NativeSwitcherAvatar
+                  teamName={rowTeam}
+                  avatarUrl={league.avatarUrl}
+                  cacheKey={`native-switcher-row-${league.linkId}`}
+                />
                 <span className="min-w-0 flex-1 text-left">
                   <span className="block truncate text-xs font-bold text-slate-800">
                     {league.name}
                   </span>
                   <span className="block truncate text-[11px] font-medium text-slate-500">
-                    {league.filledTeams}/{league.teamCount} teams · {league.draftStatus}
+                    {rowTeam
+                      ? rowTeam
+                      : `${league.filledTeams}/${league.teamCount} teams · ${league.draftStatus}`}
                   </span>
                 </span>
                 <span className="shrink-0 text-[11px] font-medium text-slate-500">Native</span>
