@@ -17,6 +17,7 @@ export {
 export { FantasyActivityList, type FantasyActivityItem } from "@/components/native/fantasy/activity-list";
 
 export {
+  FantasyAroundLeagueList,
   FantasyMatchupScoreCard,
   FantasyMatchupWeekList,
   nativeMatchupViewToCard,
