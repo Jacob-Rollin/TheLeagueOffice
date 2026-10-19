@@ -3,9 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { authorizeCronRequest } from "@/lib/cron-auth.server";
 
 /**
- * Scheduled player_warehouse / master_player_brain harvest.
+ * Scheduled TiDB player_warehouse harvest (Sleeper / FantasyCalc / LeagueLogs).
  * Replaces the previous every-SSR-request bootstrap trigger so Fluid CPU is
- * not spent on warehouse HEAD/GET checks during normal page traffic.
+ * not spent on warehouse work during normal page traffic.
  */
 export const Route = createFileRoute("/api/cron/warehouse-ingest")({
   server: {

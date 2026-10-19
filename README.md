@@ -39,20 +39,16 @@ npm run dev
 Create a `.env` file in the project root:
 
 ```sh
-# Database A (primary)
+# Database A (primary — auth, profiles, site)
 VITE_SUPABASE_URL=
 VITE_SUPABASE_PUBLISHABLE_KEY=
 
-# Database B (player warehouse)
-VITE_SUPABASE_URL_B=
-VITE_SUPABASE_ANON_KEY_B=
-
-# Server-only
+# Server-only (Database A)
 SUPABASE_URL=
 SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-# TiDB Serverless (player warehouse + synced snapshots)
+# TiDB Serverless (player warehouse + synced snapshots + research aggs)
 DATABASE_URL=mysql://USER:PASS@GATEWAY/league-office-native
 
 # Cron / webhook auth
@@ -65,13 +61,16 @@ YAHOO_CLIENT_SECRET=
 
 Set the same variables in your Vercel project settings for deployments.
 
-### TiDB warehouse cutover (one-time)
+**Retired:** Supabase project `league-office-brain` (Database B) and env vars
+`VITE_SUPABASE_URL_B` / `VITE_SUPABASE_ANON_KEY_B`. Warehouse + brain hydration
+are TiDB + snap-cdn only — see [`scripts/tidb/CUTOVER.md`](scripts/tidb/CUTOVER.md).
 
-Full click-by-click guide: [`scripts/tidb/CUTOVER.md`](scripts/tidb/CUTOVER.md).
+### TiDB warehouse (seed / verify)
 
-1. Create a TiDB Serverless cluster and set `DATABASE_URL` on **Vercel** (Production + Preview). Prefer a URL ending in `/league-office-native` (the app rewrites `/sys` and `/test` automatically).
-2. Deploy a build that includes `/api/admin/tidb-migrate` (merge the TiDB cutover PR).
-3. **Run migrate** (GitHub Actions → **TiDB Warehouse Migrate** → Run workflow), or:
+Full guide: [`scripts/tidb/CUTOVER.md`](scripts/tidb/CUTOVER.md).
+
+1. Set `DATABASE_URL` on **Vercel** (Production + Preview). Prefer a URL ending in `/league-office-native`.
+2. **Seed** (live harvest → TiDB) via Actions → **TiDB Warehouse Migrate**, or:
    ```sh
    export APP_URL="https://www.theleagueoffice.app"
    export CRON_SECRET="from-vercel"
@@ -80,11 +79,8 @@ Full click-by-click guide: [`scripts/tidb/CUTOVER.md`](scripts/tidb/CUTOVER.md).
      -H "Content-Type: application/json" \
      -d '{"action":"migrate"}'
    ```
-4. **Verify**: `GET /api/admin/tidb-migrate` (same auth) shows `playerWarehouseCount` ≈ 4000+, and `curl -s "$APP_URL/api/data/players-export" | head -c 200` starts with `{"ok":true,"v":7`. No extra redeploy needed unless you just changed env vars.
-5. Optional env flags:
-   - `WAREHOUSE_DUAL_WRITE_SUPABASE=1` — keep writing Supabase B during transition
-   - `WAREHOUSE_UPLOAD_BRAIN=1` — keep publishing `master_player_brain.json`
-6. Background sync uses `/api/webhooks/sync` and `/api/cron/*` — never wire host events to `repository_dispatch`.
+3. **Verify**: `GET /api/admin/tidb-migrate` shows `playerWarehouseCount` ≈ 4000+, and `curl -s "$APP_URL/api/data/players-export" | head -c 200` starts with `{"ok":true,"v":7`.
+4. Background sync uses `/api/webhooks/sync` and `/api/cron/*` — never wire host events to `repository_dispatch`.
 
 ## Scripts
 

@@ -1,5 +1,4 @@
-import { supabaseB } from "@/lib/supabaseB";
-import { loadSosMatrix, type SosMatrixEntry } from "@/lib/players.server";
+import type { SosMatrixEntry } from "@/lib/players.server";
 
 /**
  * Player Warehouse aggregation pipeline.
@@ -11,18 +10,16 @@ import { loadSosMatrix, type SosMatrixEntry } from "@/lib/players.server";
  *   2. FantasyCalc trade values
  *   3. LeagueLogs injury status tags
  *
- * Primary store: TiDB (`DATABASE_URL`). Supabase B dual-write / brain upload
- * are legacy opt-ins. Database A (auth, profiles, native leagues) is never
- * touched from this module.
+ * Store: TiDB only (`DATABASE_URL` → `player_warehouse`). Client hydration
+ * uses snap-cdn / `/api/data/players-export`. Supabase B (`league-office-brain`)
+ * is retired — do not dual-write or upload `master_player_brain.json`.
+ * Database A (auth, profiles, native leagues) is never touched from this module.
  *
  * Server-only: this module performs outbound network calls and warehouse
  * writes. Never import it from client-reachable component code.
  */
 
 export const WAREHOUSE_TABLE = "player_warehouse" as const;
-export const BRAIN_BUCKET = "player_brain" as const;
-export const BRAIN_FILE = "master_player_brain.json" as const;
-export const BRAIN_CACHE_CONTROL = "public, max-age=1800, s-maxage=1800" as const;
 
 const SLEEPER_PLAYERS_URL = "https://api.sleeper.app/v1/players/nfl";
 const FANTASYCALC_URL =
@@ -377,47 +374,20 @@ async function upsertBatchTidb(rows: PlayerWarehouseRow[]): Promise<number> {
   return written;
 }
 
-function dualWriteSupabaseB(): boolean {
-  // Default off once TiDB is configured; set WAREHOUSE_DUAL_WRITE_SUPABASE=1 to keep both.
-  if (!process.env["DATABASE_URL"]?.trim()) return true;
-  return process.env["WAREHOUSE_DUAL_WRITE_SUPABASE"]?.trim() === "1";
-}
-
-function keepBrainUpload(): boolean {
-  // Legacy Supabase Storage brain is optional after TiDB cutover.
-  return process.env["WAREHOUSE_UPLOAD_BRAIN"]?.trim() === "1" || !process.env["DATABASE_URL"]?.trim();
-}
-
 async function upsertBatch(rows: PlayerWarehouseRow[]): Promise<{ written: number }> {
   if (rows.length === 0) return { written: 0 };
 
   const { tidbConfigured } = await import("@/lib/tidb");
-  let tidbWritten = 0;
-  if (tidbConfigured()) {
-    tidbWritten = await upsertBatchTidb(rows);
-    if (tidbWritten < rows.length) {
-      throw new Error(`[aggregation] TiDB upsert wrote ${tidbWritten}/${rows.length}`);
-    }
+  if (!tidbConfigured()) {
+    throw new Error("[aggregation] DATABASE_URL (TiDB) is required for warehouse writes");
   }
 
-  if (dualWriteSupabaseB()) {
-    const CHUNK = 500;
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const { error } = await supabaseB
-        .from(WAREHOUSE_TABLE)
-        .upsert(rows.slice(i, i + CHUNK), { onConflict: "sleeper_id" });
-      if (error) {
-        // TiDB-primary: Supabase B failure is non-fatal when TiDB succeeded.
-        if (tidbWritten > 0) {
-          console.warn("[aggregation] Supabase B dual-write failed:", error.message);
-          break;
-        }
-        throw new Error(`[aggregation] upsert failed: ${error.message}`);
-      }
-    }
+  const tidbWritten = await upsertBatchTidb(rows);
+  if (tidbWritten < rows.length) {
+    throw new Error(`[aggregation] TiDB upsert wrote ${tidbWritten}/${rows.length}`);
   }
 
-  return { written: Math.max(rows.length, tidbWritten) };
+  return { written: tidbWritten };
 }
 
 /** Ingest Sleeper base player data (identity anchor source). */
@@ -557,26 +527,6 @@ export function validateBrainAlignment(brain: MasterPlayerBrain): void {
 }
 
 /* ------------------------------------------------------------------ */
-/* Edge CDN storage upload                                             */
-/* ------------------------------------------------------------------ */
-
-export async function uploadBrain(brain: MasterPlayerBrain): Promise<{ bytes: number }> {
-  validateBrainAlignment(brain);
-
-  const json = JSON.stringify(brain);
-  const body = new Blob([json], { type: "application/json" });
-
-  const { error } = await supabaseB.storage.from(BRAIN_BUCKET).upload(BRAIN_FILE, body, {
-    upsert: true,
-    contentType: "application/json",
-    cacheControl: BRAIN_CACHE_CONTROL,
-  });
-
-  if (error) throw new IngestionError(`[aggregation] brain upload failed: ${error.message}`, "storage");
-  return { bytes: json.length };
-}
-
-/* ------------------------------------------------------------------ */
 /* Master ingestion loop                                               */
 /* ------------------------------------------------------------------ */
 
@@ -591,8 +541,7 @@ export interface IngestionReport {
 
 /**
  * Master automation loop. Harvests provider vectors, anchors every record to
- * its master Sleeper ID, and writes TiDB `player_warehouse` (primary).
- * Legacy Supabase Storage brain upload is optional (`WAREHOUSE_UPLOAD_BRAIN=1`).
+ * its master Sleeper ID, and writes TiDB `player_warehouse`.
  */
 export async function runWarehouseIngestion(): Promise<IngestionReport> {
   const written: Record<string, number> = {};
@@ -618,23 +567,7 @@ export async function runWarehouseIngestion(): Promise<IngestionReport> {
     const rows = await readWarehouse();
     written["warehouse_rows"] = rows.length;
 
-    // Optional legacy brain publish for older clients during cutover.
-    let bytes = 0;
-    if (keepBrainUpload()) {
-      const trendMap = new Map<string, number>();
-      for (const r of fantasycalc) {
-        if (typeof r.fantasycalc_trend === "number" && r.fantasycalc_trend !== 0) {
-          trendMap.set(r.sleeper_id, r.fantasycalc_trend);
-        }
-      }
-      const sosByKey = await loadSosMatrix(rows);
-      const brain = compileBrain(rows, trendMap, sosByKey);
-      validateBrainAlignment(brain);
-      bytes = (await uploadBrain(brain)).bytes;
-      return { ok: true, written, compiled: brain.count, bytes };
-    }
-
-    return { ok: true, written, compiled: rows.length, bytes };
+    return { ok: true, written, compiled: rows.length, bytes: 0 };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const failedSource = err instanceof IngestionError ? err.source : "unknown";
@@ -643,39 +576,18 @@ export async function runWarehouseIngestion(): Promise<IngestionReport> {
   }
 }
 
-/** Read warehouse rows — TiDB first when configured, else Supabase B. */
+/** Read warehouse rows from TiDB (`player_warehouse`). */
 export async function readWarehouse(): Promise<PlayerWarehouseRow[]> {
   const { tidbConfigured, tidbExecute } = await import("@/lib/tidb");
-  if (tidbConfigured()) {
-    try {
-      const rows = await tidbExecute<PlayerWarehouseRow>(
-        `SELECT sleeper_id, player_name, position, team, fantasycalc_value,
-                leaguelogs_status, injury_type, injury_notes, updated_at
-         FROM player_warehouse
-         ORDER BY sleeper_id ASC
-         LIMIT 5000`,
-      );
-      if (rows.length > 0) return rows;
-    } catch (error) {
-      console.warn("[aggregation] TiDB read failed, falling back to Supabase B:", error);
-    }
+  if (!tidbConfigured()) {
+    throw new IngestionError("[aggregation] DATABASE_URL (TiDB) is required", "warehouse");
   }
 
-  const PAGE = 1000;
-  const all: PlayerWarehouseRow[] = [];
-
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabaseB
-      .from(WAREHOUSE_TABLE)
-      .select("*")
-      .order("sleeper_id", { ascending: true })
-      .range(from, from + PAGE - 1);
-
-    if (error) throw new IngestionError(`[aggregation] read failed: ${error.message}`, "warehouse");
-    const page = (data ?? []) as PlayerWarehouseRow[];
-    all.push(...page);
-    if (page.length < PAGE) break;
-  }
-
-  return all;
+  return tidbExecute<PlayerWarehouseRow>(
+    `SELECT sleeper_id, player_name, position, team, fantasycalc_value,
+            leaguelogs_status, injury_type, injury_notes, updated_at
+     FROM player_warehouse
+     ORDER BY sleeper_id ASC
+     LIMIT 5000`,
+  );
 }

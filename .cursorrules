@@ -359,7 +359,8 @@
 - player_to_drop (text)
 - created_at (timestamp with time zone)
 
-# Database B — Player Analytics & Market Valuations Warehouse Tables
+# TiDB — Player Analytics & Market Valuations Warehouse
+# (Supabase Database B / league-office-brain is retired; do not use supabaseB.)
 
 ## player_warehouse
 - sleeper_id (text)
