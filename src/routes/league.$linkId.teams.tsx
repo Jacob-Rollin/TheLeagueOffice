@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { LeagueAvatar } from "@/components/league/LeagueAvatar";
+import { NativeTeamLogoPicker } from "@/components/native/NativeTeamLogoPicker";
 import { Toaster } from "@/components/ui/sonner";
 import {
   AlertDialog,
@@ -23,7 +25,9 @@ import {
   renameNativeTeam,
   runNativeAiLineups,
   setNativeTeamAi,
+  setNativeTeamAvatar,
 } from "@/lib/native-league.functions";
+import { isNativeLogoKey } from "@/lib/native-team-logos";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
 
@@ -45,6 +49,12 @@ function NativeLeagueTeamsPage() {
   const [draftName, setDraftName] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
   const [pendingKick, setPendingKick] = useState<{ id: number; name: string } | null>(null);
+  const [logoTeam, setLogoTeam] = useState<{
+    id: number;
+    name: string;
+    avatarUrl: string | null;
+  } | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [rosterTeamId, setRosterTeamId] = useState<number | "">("");
   const [rosterQuery, setRosterQuery] = useState("");
@@ -144,6 +154,27 @@ function NativeLeagueTeamsPage() {
     }
   };
 
+  const saveLogo = async (avatarKey: string) => {
+    if (!logoTeam || logoBusy) return;
+    setLogoBusy(true);
+    try {
+      const result = await setNativeTeamAvatar({
+        data: { linkId, teamId: logoTeam.id, avatarKey },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Team logo updated.");
+      setLogoTeam(null);
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update logo.");
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
   const toggleAi = async (teamId: number, enabled: boolean) => {
     setBusyId(teamId);
     try {
@@ -231,11 +262,11 @@ function NativeLeagueTeamsPage() {
           League <span className="text-primary">Teams</span>
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Rename seats
+          Rename seats, change logos
           {board.canManage
             ? allowAi
               ? ", open claimed seats, or assign AI managers anytime for testing"
-              : " and open claimed seats"
+              : ", or open claimed seats"
             : ""}
           .
         </p>
@@ -265,7 +296,7 @@ function NativeLeagueTeamsPage() {
 
         <ul className="mt-4 divide-y divide-border">
           {board.teams.map((team) => {
-            const canRename =
+            const canEditTeam =
               board.canManage || (user?.id != null && team.userId === user.id);
             const editing = editingId === team.id;
             const seatLabel = team.isAi
@@ -279,6 +310,12 @@ function NativeLeagueTeamsPage() {
                 <span className="w-8 text-xs font-semibold text-muted-foreground">
                   #{team.draftSlot}
                 </span>
+                <LeagueAvatar
+                  platform="native"
+                  src={team.avatarUrl}
+                  alt={`${team.teamName} logo`}
+                  className="size-10"
+                />
                 <div className="min-w-0 flex-1">
                   {editing ? (
                     <input
@@ -315,7 +352,7 @@ function NativeLeagueTeamsPage() {
                     </>
                   ) : (
                     <>
-                      {canRename ? (
+                      {canEditTeam ? (
                         <button
                           type="button"
                           className={outlineClass}
@@ -325,6 +362,21 @@ function NativeLeagueTeamsPage() {
                           }}
                         >
                           Rename
+                        </button>
+                      ) : null}
+                      {canEditTeam ? (
+                        <button
+                          type="button"
+                          className={outlineClass}
+                          onClick={() =>
+                            setLogoTeam({
+                              id: team.id,
+                              name: team.teamName,
+                              avatarUrl: team.avatarUrl,
+                            })
+                          }
+                        >
+                          Change Logo
                         </button>
                       ) : null}
                       {board.canManage && team.userId && !team.isAi ? (
@@ -496,6 +548,15 @@ function NativeLeagueTeamsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <NativeTeamLogoPicker
+        open={logoTeam != null}
+        onOpenChange={(o) => !o && setLogoTeam(null)}
+        teamName={logoTeam?.name ?? "Team"}
+        currentKey={isNativeLogoKey(logoTeam?.avatarUrl) ? logoTeam!.avatarUrl! : null}
+        busy={logoBusy}
+        onSelect={saveLogo}
+      />
     </div>
   );
 }

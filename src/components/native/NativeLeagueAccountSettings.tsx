@@ -21,10 +21,12 @@ import {
 import { toast } from "sonner";
 
 import { LeagueAvatar } from "@/components/league/LeagueAvatar";
+import { NativeTeamLogoPicker } from "@/components/native/NativeTeamLogoPicker";
 import { Toaster } from "@/components/ui/sonner";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import {
   getNativeLeagueBoard,
+  setNativeTeamAvatar,
   updateNativeInviteCode,
   updateNativeLeagueBasics,
 } from "@/lib/native-league.functions";
@@ -36,6 +38,7 @@ import {
   type NativeIrAllowedStatus,
   type NativeScoringPreset,
 } from "@/lib/native-league-settings";
+import { isNativeLogoKey } from "@/lib/native-team-logos";
 import {
   RESERVE_SLOT_KEYS,
   ROSTER_SLOT_LABEL,
@@ -164,6 +167,8 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
   const [allowAiTeams, setAllowAiTeams] = useState(false);
   const [seasonStartWeek, setSeasonStartWeek] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [logoOpen, setLogoOpen] = useState(false);
+  const [logoBusy, setLogoBusy] = useState(false);
 
   useEffect(() => {
     if (!board) return;
@@ -295,18 +300,47 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
     }
   };
 
+  const saveTeamLogo = async (avatarKey: string) => {
+    if (!myTeam || logoBusy) return;
+    setLogoBusy(true);
+    try {
+      const result = await setNativeTeamAvatar({
+        data: { linkId, teamId: myTeam.id, avatarKey },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Team logo updated.");
+      setLogoOpen(false);
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update logo.");
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Toaster />
 
       <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-4">
-          <LeagueAvatar
-            platform="native"
-            src={myTeam?.avatarUrl ?? null}
-            alt={`${myTeam?.teamName ?? summary.name} team avatar`}
-            className="size-14 max-h-14 max-w-14 h-14 w-14"
-          />
+          <button
+            type="button"
+            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            title="Change logo"
+            disabled={!myTeam}
+            onClick={() => myTeam && setLogoOpen(true)}
+          >
+            <LeagueAvatar
+              platform="native"
+              src={myTeam?.avatarUrl ?? null}
+              alt={`${myTeam?.teamName ?? summary.name} team avatar`}
+              className="size-14 max-h-14 max-w-14 h-14 w-14"
+            />
+          </button>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
@@ -320,6 +354,15 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
               {myTeam?.teamName ?? "My Team"}
             </p>
             <p className="truncate text-sm text-muted-foreground">{summary.name}</p>
+            {myTeam ? (
+              <button
+                type="button"
+                className="mt-1 text-xs font-semibold text-primary hover:underline"
+                onClick={() => setLogoOpen(true)}
+              >
+                Change logo
+              </button>
+            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 self-start sm:self-center">
@@ -784,6 +827,17 @@ export function NativeLeagueAccountSettings({ linkId }: { linkId: string }) {
           </div>
         </div>
       </section>
+
+      {myTeam ? (
+        <NativeTeamLogoPicker
+          open={logoOpen}
+          onOpenChange={setLogoOpen}
+          teamName={myTeam.teamName}
+          currentKey={isNativeLogoKey(myTeam.avatarUrl) ? myTeam.avatarUrl : null}
+          busy={logoBusy}
+          onSelect={saveTeamLogo}
+        />
+      ) : null}
     </div>
   );
 }

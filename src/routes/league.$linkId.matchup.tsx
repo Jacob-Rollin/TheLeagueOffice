@@ -38,6 +38,7 @@ import {
   overlayNativeLiveMatchupScores,
   weeklyStatsMapToRecord,
 } from "@/lib/native-live-scoring";
+import { resolveNativeTeamAvatarSrc } from "@/lib/native-team-logos";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import type { Player } from "@/lib/players-build";
 import {
@@ -699,10 +700,11 @@ function NativeMatchupPage() {
 }
 
 function TeamAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
+  const src = resolveNativeTeamAvatarSrc(avatarUrl);
   return (
     <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100 sm:size-14">
-      {avatarUrl ? (
-        <img src={avatarUrl} alt="" className="size-full object-cover" loading="lazy" />
+      {src ? (
+        <img src={src} alt="" className="size-full object-cover" loading="lazy" />
       ) : (
         <span className="font-display text-sm font-bold uppercase text-slate-500">
           {(name.trim().slice(0, 2) || "TM").toUpperCase()}

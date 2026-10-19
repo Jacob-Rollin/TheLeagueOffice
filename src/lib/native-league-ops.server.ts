@@ -186,16 +186,19 @@ export async function createNativeLeagueForUser(
     );
 
     // One multi-row INSERT for seats + one for empty rosters (avoids 3×N round-trips).
+    const { pickDistinctNativeLogos } = await import("@/lib/native-team-logos");
+    const seatLogos = pickDistinctNativeLogos(settings.teamCount);
     const teamPlaceholders: string[] = [];
     const teamParams: unknown[] = [];
     const faab = settings.waiverType === "faab" ? settings.waiverBudget : null;
     for (let slot = 1; slot <= settings.teamCount; slot++) {
       const isCommish = slot === 1;
-      teamPlaceholders.push("(?, ?, ?, ?, ?, ?)");
+      teamPlaceholders.push("(?, ?, ?, ?, ?, ?, ?)");
       teamParams.push(
         leagueId,
         isCommish ? uid : null,
         isCommish ? teamName : `Team ${slot}`,
+        seatLogos[slot - 1] ?? null,
         slot,
         slot,
         faab,
@@ -203,7 +206,7 @@ export async function createNativeLeagueForUser(
     }
     await tidbExecute(
       `INSERT INTO native_teams (
-        league_id, user_id, team_name, draft_slot, waiver_priority, faab_balance
+        league_id, user_id, team_name, avatar_url, draft_slot, waiver_priority, faab_balance
       ) VALUES ${teamPlaceholders.join(", ")}`,
       teamParams,
     );
@@ -1059,6 +1062,41 @@ export async function renameNativeTeamForUser(
 
   await tidbExecute(`UPDATE native_teams SET team_name = ? WHERE id = ? AND league_id = ?`, [
     name,
+    teamId,
+    membership.leagueId,
+  ]);
+  return { ok: true };
+}
+
+export async function setNativeTeamAvatarForUser(
+  userId: string,
+  linkId: string,
+  teamId: number,
+  avatarKey: string,
+): Promise<NativeMutationResult> {
+  if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
+  const membership = await assertMembershipLink(userId, linkId);
+  if (!membership) return { ok: false, error: "League not found" };
+
+  const { isAllowedNativeLogoKey } = await import("@/lib/native-team-logos");
+  const key = String(avatarKey ?? "").trim().slice(0, 64);
+  if (!isAllowedNativeLogoKey(key)) {
+    return { ok: false, error: "Choose a logo from the league pool" };
+  }
+
+  const team = await tidbExecute<{ id: number; user_id: string | null }>(
+    `SELECT id, user_id FROM native_teams WHERE id = ? AND league_id = ? LIMIT 1`,
+    [teamId, membership.leagueId],
+  );
+  const row = team[0];
+  if (!row) return { ok: false, error: "Team not found" };
+  const owns = row.user_id === userId;
+  if (!owns && !isCommishRole(membership.role)) {
+    return { ok: false, error: "You can only change your own team logo" };
+  }
+
+  await tidbExecute(`UPDATE native_teams SET avatar_url = ? WHERE id = ? AND league_id = ?`, [
+    key,
     teamId,
     membership.leagueId,
   ]);
