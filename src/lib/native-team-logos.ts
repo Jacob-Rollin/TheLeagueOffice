@@ -152,7 +152,7 @@ function buildSvg(shape: NativeLogoShape, fill: string, ink: string, letter: str
     }
     case "shield": {
       emblem = `<path fill="${ink}" d="M32 7.5l20 6.2v14.8c0 14.2-8.5 23.8-20 27.5C20.5 52.3 12 42.7 12 28.5V13.7L32 7.5z"/>`;
-      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 28, size: 24 });
+      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 28, size: 26 });
       break;
     }
     case "ball": {
@@ -163,12 +163,12 @@ function buildSvg(shape: NativeLogoShape, fill: string, ink: string, letter: str
         `<path fill="none" stroke="${fill}" stroke-width="2.3" stroke-linecap="round" d="M51.5 25c-2.4 4.5-2.4 9.5 0 14"/>`,
       ].join("");
       // Geometric center of the oval (32,32) with dy-based baseline centering.
-      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 32, size: 26 });
+      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 32, size: 28 });
       break;
     }
     case "star": {
       emblem = `<path fill="${ink}" d="M32 4.7L38.58 24.14L59.11 24.39L42.65 36.66L48.75 56.26L32 44.4L15.25 56.26L21.35 36.66L4.89 24.39L25.42 24.14Z"/>`;
-      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 33, size: 20 });
+      if (letter) letterMarkup = monogram(letter, fill, { x: 32, y: 33, size: 22 });
       break;
     }
     case "bolt": {
