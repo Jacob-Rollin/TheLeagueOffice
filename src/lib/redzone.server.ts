@@ -241,6 +241,8 @@ const loadRedZoneAgg = memo<{
     if (!(yardline > 0 && yardline <= yardlineMax)) continue;
     const playType = cell(row, idx, "play_type");
     if (playType !== "pass" && playType !== "run") continue;
+    // Official red-zone boards (FantasyPros / PFR) exclude PAT / 2PT tries.
+    if (num(cell(row, idx, "two_point_attempt")) > 0) continue;
 
     const week = num(cell(row, idx, "week"));
     if (week > maxWeek) maxWeek = week;
@@ -259,12 +261,14 @@ const loadRedZoneAgg = memo<{
       const passerName = cell(row, idx, "passer_player_name").trim();
       if (passerId) {
         const a = ensure(byGsis, passerId, passerName, team);
-        a.passAtt += num(cell(row, idx, "pass_attempt"));
+        const sack = num(cell(row, idx, "sack"));
+        // nflverse sets pass_attempt=1 on sacks; official Att excludes them.
+        if (!sack) a.passAtt += num(cell(row, idx, "pass_attempt"));
         a.passCmp += num(cell(row, idx, "complete_pass"));
         a.passYds += num(cell(row, idx, "passing_yards"));
         a.passTd += num(cell(row, idx, "pass_touchdown"));
         a.passInt += num(cell(row, idx, "interception"));
-        a.passSack += num(cell(row, idx, "sack"));
+        a.passSack += sack;
         if (fum) a.fumLost += fum;
         if (gameId) a.games.add(gameId);
       }
@@ -391,13 +395,16 @@ export async function loadRedZoneStats(
   const allowCompute = opts?.allowCompute === true;
 
   // Durable TiDB snapshot — skip nflverse PBP gunzip on the request path when warm.
+  // Cron (`allowCompute`) must not reuse the snap or maxWeek never advances.
   const earlyKey = `${seasonKey}:${yardline}:${weekFromInput ?? "d"}:${weekToInput ?? "d"}`;
-  try {
-    const { readAggJson } = await import("./research-agg.server");
-    const cached = await readAggJson<RedZoneStatsPayload>("agg_redzone", earlyKey);
-    if (cached?.rowsByPos) return cached;
-  } catch {
-    /* compute below when allowed */
+  if (!allowCompute) {
+    try {
+      const { readAggJson } = await import("./research-agg.server");
+      const cached = await readAggJson<RedZoneStatsPayload>("agg_redzone", earlyKey);
+      if (cached?.rowsByPos) return cached;
+    } catch {
+      /* soft-empty below when TiDB configured */
+    }
   }
 
   if (!allowCompute) {
