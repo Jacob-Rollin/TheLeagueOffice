@@ -14,6 +14,7 @@ import {
   type FantasyStandingsRow,
   fantasyOutlineBtn,
   fantasyPrimaryBtn,
+  LeagueActivityPanel,
   nativeMatchupViewToCard,
 } from "@/components/native/fantasy";
 import { MatchupsPanelShell } from "@/components/playbook/MatchupPreviewCard";
@@ -581,27 +582,15 @@ function NativeLeagueDashboardBody({
         </div>
 
         <div className="space-y-6 lg:col-span-1">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2 px-1">
-              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900">
-                Recent activity
-              </h3>
-              <Link
-                to="/league/$linkId/transactions"
-                params={{ linkId }}
-                className="text-xs font-medium text-blue-700 hover:underline"
-              >
-                All transactions
-              </Link>
-            </div>
+          <LeagueActivityPanel linkId={linkId}>
             <FantasyActivityList
-              items={activityItems}
+              items={activityItems.slice(0, 5)}
               playersById={playersById}
               resolveName={(id) => (id ? (nameById.get(id) ?? id) : null)}
               onOpenPlayer={(id) => modalRef.current?.open(id)}
-              emptyMessage="No transactions yet."
+              emptyMessage="No recent transactions recorded. Summaries will appear here after the next league moves."
             />
-          </div>
+          </LeagueActivityPanel>
         </div>
       </div>
     </div>

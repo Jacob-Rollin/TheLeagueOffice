@@ -14,7 +14,11 @@ export {
   type FantasyStandingsRow,
 } from "@/components/native/fantasy/standings-table";
 
-export { FantasyActivityList, type FantasyActivityItem } from "@/components/native/fantasy/activity-list";
+export {
+  FantasyActivityList,
+  LeagueActivityPanel,
+  type FantasyActivityItem,
+} from "@/components/native/fantasy/activity-list";
 
 export {
   FantasyAroundLeagueList,
