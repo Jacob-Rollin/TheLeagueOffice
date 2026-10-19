@@ -7,6 +7,8 @@ type LeagueAvatarProps = {
   platform?: string | null | undefined;
   src?: string | null | undefined;
   alt?: string | undefined;
+  /** Team name (or initial) — baked into native pool logos. */
+  teamName?: string | null | undefined;
   /** Applied to the outer circle container. */
   className?: string | undefined;
 };
@@ -14,10 +16,18 @@ type LeagueAvatarProps = {
 const FALLBACK_SHELL =
   "max-w-10 max-h-10 w-10 h-10 rounded-full bg-white border border-neutral-200 flex items-center justify-center p-1.5 overflow-hidden";
 
-export function LeagueAvatar({ platform, src, alt = "", className }: LeagueAvatarProps) {
+export function LeagueAvatar({
+  platform,
+  src,
+  alt = "",
+  teamName,
+  className,
+}: LeagueAvatarProps) {
   const [failed, setFailed] = useState(false);
   const resolved =
-    typeof src === "string" && src.length > 0 ? resolveNativeTeamAvatarSrc(src) : null;
+    typeof src === "string" && src.length > 0
+      ? resolveNativeTeamAvatarSrc(src, teamName ?? alt)
+      : null;
   const url = resolved && resolved.length > 0 ? resolved : null;
   const key = (platform ?? "").toLowerCase();
 

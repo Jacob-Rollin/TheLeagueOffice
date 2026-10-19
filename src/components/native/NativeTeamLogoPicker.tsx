@@ -13,6 +13,7 @@ import {
   NATIVE_LOGO_POOL,
   NATIVE_LOGO_SHAPES,
   nativeLogoDataUri,
+  teamLogoInitial,
   type NativeLogoColorId,
   type NativeLogoShape,
 } from "@/lib/native-team-logos";
@@ -56,6 +57,7 @@ export function NativeTeamLogoPicker({
     });
   }, [shapeFilter, colorFilter]);
 
+  const previewInitial = teamLogoInitial(teamName);
   const selected = pending ?? currentKey;
 
   const confirm = async () => {
@@ -133,7 +135,7 @@ export function NativeTeamLogoPicker({
         <div className="max-h-[42vh] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/60 p-2">
           <div className="grid grid-cols-5 gap-2 sm:grid-cols-6">
             {options.map((opt) => {
-              const src = nativeLogoDataUri(opt.key);
+              const src = nativeLogoDataUri(opt.key, previewInitial);
               const isSelected = selected === opt.key;
               return (
                 <button
