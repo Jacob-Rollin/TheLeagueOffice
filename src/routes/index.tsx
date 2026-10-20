@@ -295,6 +295,7 @@ function FeaturedBriefing({ article }: { article: ArticleRow }) {
           <ArticleHero
             imageUrl={article.image_url}
             title={article.title}
+            category={article.category}
             featured={articleFeaturedFromRow(article)}
             className="transition-transform duration-500 group-hover:scale-[1.01]"
           />

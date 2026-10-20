@@ -75,7 +75,7 @@ export function sanitizeDeskBlurb(text: string): string {
 }
 
 /**
- * Boxed header chip only: headshot + name + "POS | TEAM".
+ * Content-width header chip: circular headshot + name + "POS | TEAM".
  * Stat line is NOT inside the box — use renderPlayerMetaHtml / renderPlayerBlock.
  */
 export function renderPlayerHeaderHtml(player: {
@@ -89,12 +89,14 @@ export function renderPlayerHeaderHtml(player: {
   const team = (player.team || "").toUpperCase();
   const sub = [pos, team].filter(Boolean).join(" | ");
   return (
-    `<div class="lo-player-header" contenteditable="false">` +
+    `<div class="lo-player-header" contenteditable="false" ` +
+    `style="display:inline-block;width:fit-content;max-width:18rem;vertical-align:top">` +
     `<a class="lo-player-header__inner lo-player-link" href="${playerHref(player.id)}" ` +
     `data-player-id="${escapeHtml(player.id)}" ` +
-    `style="display:flex;align-items:center;gap:0.75rem;padding:1rem;text-decoration:none;color:inherit">` +
+    `style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem 1rem;text-decoration:none;color:inherit">` +
     `<img class="lo-player-header__shot" src="${escapeHtml(src)}" alt="" width="56" height="56" ` +
-    `style="width:56px;height:56px;border-radius:9999px;object-fit:cover;flex-shrink:0;margin:0;border:0" />` +
+    `style="width:56px;height:56px;border-radius:9999px;object-fit:cover;flex-shrink:0;margin:0;` +
+    `border:2px solid #cbd5e1;background:#e2e8f0" />` +
     `<span class="lo-player-header__id" style="display:flex;flex-direction:column;gap:0.2rem;min-width:0">` +
     `<strong class="lo-player-header__name" style="display:block;font-size:1.25rem;line-height:1.2;color:#0f172a">` +
     `${escapeHtml(player.name)}</strong>` +
