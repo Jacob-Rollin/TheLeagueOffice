@@ -417,6 +417,11 @@ export async function buildStartSitDeskPack(): Promise<StartSitDeskPack> {
   return { kind: "start-sit", week, season, byPos };
 }
 
+function posShort(pos: string): string {
+  const p = pos.toUpperCase();
+  return p === "DEF" ? "DST" : p;
+}
+
 function posPhrase(pos: string): string {
   switch (pos.toUpperCase()) {
     case "QB":
@@ -433,6 +438,21 @@ function posPhrase(pos: string): string {
     default:
       return pos.toLowerCase();
   }
+}
+
+/**
+ * Our board ranks defenses for the offense's position: 1 = toughest, 32 = softest.
+ * Phrase the opponent as a defense vs that position — never "SOS Favorable".
+ */
+function defenseVsPosStanding(rank: number, pos: string): string {
+  const spot = posPhrase(pos);
+  if (rank >= 32) return `the worst defense against ${spot} so far this season`;
+  if (rank >= 30) return `one of the softest defenses against ${spot} so far this season`;
+  if (rank >= 25) return `a below-average defense against ${spot} through the season to date`;
+  if (rank <= 1) return `the toughest defense against ${spot} so far this season`;
+  if (rank <= 3) return `one of the stingiest defenses against ${spot} so far this season`;
+  if (rank <= 8) return `a top-tier defense against ${spot} through the season to date`;
+  return `a middle-of-the-pack defense against ${spot} so far this season`;
 }
 
 /** Template blurbs when LLM is unavailable. */
@@ -464,24 +484,27 @@ export function templateStartSitBlurbs(pack: StartSitDeskPack): Record<string, D
           ? Math.round(p.oppPointsAllowed * 10) / 10
           : null;
       const oppLabel = p.oppNickname || p.opp;
+      const standing = defenseVsPosStanding(p.sosRank, p.pos);
+      const spot = posPhrase(p.pos);
+      const short = posShort(p.pos);
       let blurb: string;
       if (p.lean === "start") {
         blurb =
           pa != null
-            ? `${p.name} draws ${oppLabel} in Week ${pack.week}. That defense has allowed ${pa} fantasy points per game to ${posPhrase(p.pos)} (SOS rank ${p.sosRank} — favorable). Lock him in as a starter.`
-            : `${p.name} draws a favorable Week ${pack.week} matchup against ${oppLabel} (SOS rank ${p.sosRank}). Lock him in as a starter.`;
+            ? `${p.name} draws the ${oppLabel} in Week ${pack.week}. The ${oppLabel} are ${standing}, allowing ${pa} fantasy points per game to ${spot}. Start him.`
+            : `${p.name} draws the ${oppLabel} in Week ${pack.week}. The ${oppLabel} are ${standing}. Start him.`;
       } else {
         blurb =
           pa != null
-            ? `${p.name} faces ${oppLabel} in Week ${pack.week}. That unit has held ${posPhrase(p.pos)} to ${pa} fantasy points per game (SOS rank ${p.sosRank} — tough). Look for a cleaner matchup if you have options.`
-            : `${p.name} faces a tough Week ${pack.week} draw vs ${oppLabel} (SOS rank ${p.sosRank}). Look for a cleaner matchup elsewhere if you have options.`;
+            ? `${p.name} faces the ${oppLabel} in Week ${pack.week}. The ${oppLabel} are ${standing}, holding ${spot} to ${pa} fantasy points per game. Sit him if you have a cleaner option.`
+            : `${p.name} faces the ${oppLabel} in Week ${pack.week}. The ${oppLabel} are ${standing}. Sit him if you have a cleaner option.`;
       }
       return {
         id: p.id,
         name: p.name,
         pos: p.pos,
         team: p.team,
-        statLine: `${p.lean.toUpperCase()} · ${vs} · SOS ${p.sosRank}`,
+        statLine: `${p.lean.toUpperCase()} · ${vs} · Opp rank vs ${short}: ${p.sosRank}`,
         blurb,
       };
     });
