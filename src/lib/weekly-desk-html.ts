@@ -1,6 +1,9 @@
 /**
  * Pure HTML builders for weekly desk player breaks — NFL Fantasy-style headers.
- * Header chip is boxed; prose after it is normal article text.
+ *
+ * Boxed chip: headshot + name + "POS TEAM"
+ * Below the box (bold, not linked): ROSTERED / START · vs · SOS
+ * Then normal article prose.
  */
 
 export type DeskPlayerBlurb = {
@@ -9,7 +12,7 @@ export type DeskPlayerBlurb = {
   pos: string;
   team: string;
   blurb: string;
-  /** Line under team abbr — e.g. "ROSTERED: 14%" or "START · vs KC · SOS 28". */
+  /** Bold line under the boxed header — e.g. "ROSTERED: 14%" or "START · vs KC · SOS 28". */
   statLine?: string;
 };
 
@@ -39,6 +42,11 @@ function headshotUrl(id: string, pos: string, team: string): string {
   return `https://sleepercdn.com/content/nfl/players/${id}.jpg`;
 }
 
+function normPos(pos: string): string {
+  const p = String(pos || "").toUpperCase();
+  return p === "DEF" ? "DST" : p;
+}
+
 /** Rewrite ambiguous ownership phrasing the LLM sometimes invents. */
 export function sanitizeDeskBlurb(text: string): string {
   return text
@@ -51,36 +59,56 @@ export function sanitizeDeskBlurb(text: string): string {
 }
 
 /**
- * Boxed NFL-style player header only (Name / TEAM / optional stat line).
- * Safe for article editor insertHTML; contenteditable=false so typing stays in prose.
+ * Boxed header chip only: headshot + name + "POS TEAM".
+ * Stat line is NOT inside the box — use renderPlayerMetaHtml / renderPlayerBlock.
  */
 export function renderPlayerHeaderHtml(player: {
   id: string;
   name: string;
   pos: string;
   team: string;
-  statLine?: string | null;
 }): string {
   const src = headshotUrl(player.id, player.pos, player.team);
+  const pos = normPos(player.pos);
   const team = (player.team || "").toUpperCase();
-  const stat = String(player.statLine ?? "").trim();
+  const sub = [pos, team].filter(Boolean).join(" ");
   return (
     `<div class="lo-player-header" contenteditable="false">` +
-    `<a class="lo-player-header__inner" href="/player/${escapeHtml(player.id)}">` +
-    `<img class="lo-player-header__shot" src="${escapeHtml(src)}" alt="" width="56" height="56" />` +
-    `<span class="lo-player-header__id">` +
-    `<strong class="lo-player-header__name">${escapeHtml(player.name)}</strong>` +
-    (team ? `<span class="lo-player-header__team">${escapeHtml(team)}</span>` : "") +
-    (stat ? `<span class="lo-player-header__stat">${escapeHtml(stat)}</span>` : "") +
+    `<a class="lo-player-header__inner" href="/player/${escapeHtml(player.id)}" ` +
+    `style="display:flex;align-items:center;gap:0.75rem;padding:1rem;text-decoration:none;color:inherit">` +
+    `<img class="lo-player-header__shot" src="${escapeHtml(src)}" alt="" width="56" height="56" ` +
+    `style="width:56px;height:56px;border-radius:9999px;object-fit:cover;flex-shrink:0;margin:0;border:0" />` +
+    `<span class="lo-player-header__id" style="display:flex;flex-direction:column;gap:0.2rem;min-width:0">` +
+    `<strong class="lo-player-header__name" style="display:block;font-size:1.25rem;line-height:1.2;color:#0f172a">` +
+    `${escapeHtml(player.name)}</strong>` +
+    (sub
+      ? `<span class="lo-player-header__sub" style="display:block;font-size:0.8rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#64748b">` +
+        `${escapeHtml(sub)}</span>`
+      : "") +
     `</span></a></div>`
   );
 }
 
-/** Header chip + normal article paragraph (not inside the box). */
+/** Bold metadata line under the header box (not linked, not inside the chip). */
+export function renderPlayerMetaHtml(statLine: string | null | undefined): string {
+  const stat = String(statLine ?? "").trim();
+  if (!stat) return "";
+  return (
+    `<p class="lo-player-meta" style="margin:0.35rem 0 0.75rem;font-size:0.875rem;font-weight:700;` +
+    `letter-spacing:0.04em;text-transform:uppercase;color:#0f172a">` +
+    `<strong>${escapeHtml(stat)}</strong></p>`
+  );
+}
+
+/**
+ * Full player unit for generated articles:
+ * boxed header → bold meta under it → article paragraph.
+ */
 export function renderPlayerBlock(player: DeskPlayerBlurb): string {
   const blurb = sanitizeDeskBlurb(player.blurb);
   return (
     `${renderPlayerHeaderHtml(player)}\n` +
+    `${renderPlayerMetaHtml(player.statLine)}\n` +
     `<p>${escapeHtml(blurb)}</p>`
   );
 }
@@ -94,7 +122,7 @@ export function renderPriorityList(
   const rows = players
     .map((p, i) => {
       const team = (p.team || "").toUpperCase();
-      const label = [p.pos, team].filter(Boolean).join(" ");
+      const label = [normPos(p.pos), team].filter(Boolean).join(" ");
       return (
         `<li><span class="lo-priority__rank">${i + 1})</span> ` +
         `<a href="/player/${escapeHtml(p.id)}"><strong>${escapeHtml(p.name)}</strong></a>` +
@@ -111,7 +139,7 @@ export function renderPriorityList(
   );
 }
 
-/** Position section: heading + uniform player blocks (no hero/list split). */
+/** Position section: heading + uniform player blocks. */
 export function renderPositionSection(
   heading: string,
   players: DeskPlayerBlurb[],
@@ -128,7 +156,7 @@ export function renderGroupedByPosition(players: DeskPlayerBlurb[]): string[] {
   const order = ["QB", "RB", "WR", "TE", "DST"] as const;
   const buckets = new Map<string, DeskPlayerBlurb[]>();
   for (const p of players) {
-    const key = p.pos.toUpperCase() === "DEF" ? "DST" : p.pos.toUpperCase();
+    const key = normPos(p.pos);
     const list = buckets.get(key) ?? [];
     list.push(p);
     buckets.set(key, list);
