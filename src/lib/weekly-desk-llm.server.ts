@@ -88,23 +88,36 @@ function waiverFactsForLlm(pack: WaiverDeskPack) {
 function startSitFactsForLlm(pack: StartSitDeskPack) {
   const board: Record<string, unknown[]> = {};
   for (const [pos, rows] of Object.entries(pack.byPos)) {
-    board[pos] = rows.map((p) => ({
-      id: p.id,
-      name: p.name,
-      pos: p.pos,
-      team: p.team,
-      opp: p.opp,
-      oppNickname: p.oppNickname,
-      lean: p.lean,
-      sosRank: p.sosRank,
-      grade: p.grade,
-      /** Season fantasy points per game this opponent has allowed to this position. */
-      oppPointsAllowedToPos: p.oppPointsAllowed,
-      note:
-        p.oppPointsAllowed == null
-          ? "points-allowed unavailable — use SOS rank/grade only"
-          : `Opponent has allowed ${p.oppPointsAllowed} FPPG to ${p.pos}`,
-    }));
+    board[pos] = rows.map((p) => {
+      const oppRankVsPos = p.sosRank;
+      // Board: 1 = toughest defense vs this position, 32 = softest / worst vs this position.
+      let defenseStanding: string;
+      if (oppRankVsPos >= 32) defenseStanding = `worst defense vs ${p.pos} so far this season`;
+      else if (oppRankVsPos >= 30) defenseStanding = `one of the softest defenses vs ${p.pos} so far this season`;
+      else if (oppRankVsPos >= 25) defenseStanding = `below-average defense vs ${p.pos} through the season to date`;
+      else if (oppRankVsPos <= 1) defenseStanding = `toughest defense vs ${p.pos} so far this season`;
+      else if (oppRankVsPos <= 3) defenseStanding = `one of the stingiest defenses vs ${p.pos} so far this season`;
+      else if (oppRankVsPos <= 8) defenseStanding = `top-tier defense vs ${p.pos} through the season to date`;
+      else defenseStanding = `middle-of-the-pack defense vs ${p.pos} so far this season`;
+
+      return {
+        id: p.id,
+        name: p.name,
+        pos: p.pos,
+        team: p.team,
+        opp: p.opp,
+        oppNickname: p.oppNickname,
+        lean: p.lean,
+        /** Opponent's defensive rank against this position (1 = toughest, 32 = softest). */
+        oppRankVsPos,
+        defenseStanding,
+        oppPointsAllowedToPos: p.oppPointsAllowed,
+        note:
+          p.oppPointsAllowed == null
+            ? `Cite defenseStanding / oppRankVsPos only — no invented FPPG.`
+            : `${p.oppNickname || p.opp} have allowed ${p.oppPointsAllowed} FPPG to ${p.pos}`,
+      };
+    });
   }
   return { week: pack.week, season: pack.season, byPos: board };
 }
@@ -154,12 +167,16 @@ export async function narrateStartSitBlurbs(
     "You write League Office start/sit blurbs for fantasy football in the style of an NFL.com fantasy desk.",
     "Return JSON: {\"intro\":\"2-3 sentences\",\"blurbs\":[{\"id\":\"...\",\"blurb\":\"2-4 sentences\"}]}",
     "Use ONLY provided matchup facts. No FAAB. No invented injuries, yards, TDs, or percentages.",
-    "When oppPointsAllowedToPos is a number, cite it as fantasy points per game allowed to that position (e.g. \"allowed 24.1 FPPG to WRs\").",
-    "Combine SOS rank/grade with points-allowed when both exist — do not invent other defensive stats.",
-    "If points-allowed is null, rely on SOS rank/grade only.",
+    "ALWAYS frame the matchup around the opposing DEFENSE vs this player's POSITION.",
+    "Use defenseStanding and oppRankVsPos (1 = toughest defense vs that position, 32 = worst/softest).",
+    "Example good phrasing: \"Detroit has been the worst defense against quarterbacks so far this season…\"",
+    "Example good phrasing: \"Buffalo rank among the stingiest defenses against running backs through the season to date…\"",
+    "NEVER write \"SOS rank\", \"SOS\", \"marked Favorable\", \"marked Tough\", or \"Favorable matchup\" as a label.",
+    "When oppPointsAllowedToPos is a number, cite it as FPPG allowed to that position.",
+    "If points-allowed is null, rely on defenseStanding / oppRankVsPos only.",
     "Every listed player is already a depth-chart starter — do not frame them as handcuffs.",
-    "Do not invent ownership language. The START/SIT · vs · SOS line already appears under the header.",
-    "Tone: decisive start/sit desk with concrete matchup context.",
+    "Do not invent ownership language. The header already shows START/SIT · vs · Opp rank vs POS.",
+    "Tone: decisive start/sit desk centered on how that defense has treated this position.",
   ].join("\n");
   const user = `Week ${pack.week} ${pack.season} start/sit board:\n${JSON.stringify(startSitFactsForLlm(pack))}`;
   const raw = await groqJson(system, user);
@@ -170,7 +187,7 @@ export async function narrateStartSitBlurbs(
       : "";
   const intro =
     sanitizeDeskBlurb(introRaw) ||
-    `Week ${pack.week} matchups create clear starts and sits — here are the sharpest edges by position, grounded in how each defense has treated that spot.`;
+    `Week ${pack.week} starts and sits hinge on how each defense has treated that position so far — here are the clearest edges.`;
 
   const byPos: Record<string, DeskPlayerBlurb[]> = {};
   for (const [pos, rows] of Object.entries(templates)) {

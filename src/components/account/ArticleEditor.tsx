@@ -537,7 +537,7 @@ export function ArticleEditor({
                 />
                 <input
                   className="min-w-[12rem] flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus:border-ring"
-                  placeholder="Optional under-header line: ROSTERED: 14% or START · vs KC · SOS 28"
+                  placeholder="Optional under-header line: ROSTERED: 14% or START · vs DET · Opp rank vs QB: 32"
                   value={playerStatLine}
                   onFocus={rememberSelection}
                   onChange={(e) => setPlayerStatLine(e.target.value)}

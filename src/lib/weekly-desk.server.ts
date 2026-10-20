@@ -140,17 +140,32 @@ async function publishStartSit(): Promise<{ slug: string; week: number; season: 
   return { slug, week: pack.week, season: pack.season };
 }
 
-/** Cron / admin entry: publish both weekly desks (auto-published). */
-export async function processWeeklyDeskCron(): Promise<WeeklyDeskReport> {
+export type WeeklyDeskKindFilter = "all" | WeeklyDeskKind;
+
+/**
+ * Cron / admin entry: publish weekly desks (auto-published).
+ * - `all` — both (admin "Generate weekly desks")
+ * - `waiver` — Tue cron (early-week adds)
+ * - `start-sit` — Thu cron (after midweek practices / injury reports)
+ */
+export async function processWeeklyDeskCron(
+  kinds: WeeklyDeskKindFilter = "all",
+): Promise<WeeklyDeskReport> {
   try {
-    const waiver = await publishWaiver();
-    const startSit = await publishStartSit();
+    const wantWaiver = kinds === "all" || kinds === "waiver";
+    const wantStartSit = kinds === "all" || kinds === "start-sit";
+
+    const waiver = wantWaiver ? await publishWaiver() : null;
+    const startSit = wantStartSit ? await publishStartSit() : null;
+    const week = waiver?.week ?? startSit?.week ?? 0;
+    const season = waiver?.season ?? startSit?.season ?? 0;
+
     return {
       ok: true,
-      week: waiver.week,
-      season: waiver.season,
-      waiverSlug: waiver.slug,
-      startSitSlug: startSit.slug,
+      week,
+      season,
+      ...(waiver?.slug ? { waiverSlug: waiver.slug } : {}),
+      ...(startSit?.slug ? { startSitSlug: startSit.slug } : {}),
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "weekly desk failed";

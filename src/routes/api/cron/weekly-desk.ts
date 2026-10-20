@@ -1,10 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { authorizeCronRequest } from "@/lib/cron-auth.server";
+import type { WeeklyDeskKindFilter } from "@/lib/weekly-desk.server";
+
+function parseKind(request: Request): WeeklyDeskKindFilter {
+  try {
+    const kind = new URL(request.url).searchParams.get("kind")?.trim().toLowerCase();
+    if (kind === "waiver" || kind === "start-sit") return kind;
+  } catch {
+    /* ignore */
+  }
+  return "all";
+}
 
 /**
- * Auto-publish Front Office weekly desks (Waiver Wire + Start/Sit) into CMS articles.
+ * Auto-publish Front Office weekly desks into CMS articles.
  * Prefer Actions cron (CRON_SECRET). Reuses GROQ_API_KEY when set.
+ *
+ * Query: `?kind=waiver` | `?kind=start-sit` | omit / `all` for both.
  */
 export const Route = createFileRoute("/api/cron/weekly-desk")({
   server: {
@@ -17,8 +30,9 @@ export const Route = createFileRoute("/api/cron/weekly-desk")({
           });
         }
         try {
+          const kind = parseKind(request);
           const { processWeeklyDeskCron } = await import("@/lib/weekly-desk.server");
-          const report = await processWeeklyDeskCron();
+          const report = await processWeeklyDeskCron(kind);
           return new Response(JSON.stringify(report), {
             status: report.ok ? 200 : 500,
             headers: { "content-type": "application/json", "cache-control": "no-store" },

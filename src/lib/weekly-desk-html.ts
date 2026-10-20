@@ -2,7 +2,7 @@
  * Pure HTML builders for weekly desk player breaks — NFL Fantasy-style headers.
  *
  * Boxed chip: headshot + name + "POS | TEAM"
- * Below the box (bold, not linked): ROSTERED / START · vs · SOS
+ * Below the box (bold, not linked): ROSTERED / START · vs · Opp rank vs POS
  * Then normal article prose.
  * Player links use data-player-id so ArticleView can open the player popup.
  */
@@ -13,7 +13,7 @@ export type DeskPlayerBlurb = {
   pos: string;
   team: string;
   blurb: string;
-  /** Bold line under the boxed header — e.g. "ROSTERED: 14%" or "START · vs KC · SOS 28". */
+  /** Bold line under the boxed header — e.g. "ROSTERED: 14%" or "START · vs DET · Opp rank vs QB: 32". */
   statLine?: string;
   /** Nickname team for priority table (e.g. Steelers). */
   teamNickname?: string;
@@ -56,7 +56,7 @@ function playerHref(id: string): string {
   return `/player/${escapeHtml(id)}`;
 }
 
-/** Rewrite ambiguous ownership phrasing the LLM sometimes invents. */
+/** Rewrite ambiguous ownership / SOS phrasing the LLM sometimes invents. */
 export function sanitizeDeskBlurb(text: string): string {
   return text
     .replace(/\bat\s+(\d{1,3})\s+owners?\b/gi, "at $1% rostered")
@@ -64,6 +64,13 @@ export function sanitizeDeskBlurb(text: string): string {
     .replace(/\bowned\s+by\s+(\d{1,3})\s*%?\b/gi, "rostered in $1% of leagues")
     .replace(/\bownership\s+of\s+(\d{1,3})\b(?!\s*%)/gi, "rostered rate of $1%")
     .replace(/\brostered\s+in\s+(\d{1,3})\s+leagues\b/gi, "rostered in $1% of leagues")
+    .replace(/\bSOS\s*rank(?:\s+of)?\s+(\d{1,2})\s+is\s+marked\s+Favorable\b/gi, "opp rank vs position of $1 points to a soft defense")
+    .replace(/\bSOS\s*rank(?:\s+of)?\s+(\d{1,2})\s+is\s+marked\s+Tough\b/gi, "opp rank vs position of $1 points to a tough defense")
+    .replace(/\bmarked\s+Favorable\b/gi, "a soft matchup against that position")
+    .replace(/\bmarked\s+Tough\b/gi, "a tough matchup against that position")
+    .replace(/\bSOS\s*rank\b/gi, "opp rank vs position")
+    .replace(/\b\(SOS[^)]*\)/gi, "")
+    .replace(/\s{2,}/g, " ")
     .trim();
 }
 
