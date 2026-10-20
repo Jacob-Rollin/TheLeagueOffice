@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useCallback, useRef, type MouseEvent, type ReactNode } from "react";
 
 import {
   ArticleHero,
   articleFeaturedFromRow,
 } from "@/components/articles/ArticleHero";
+import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import type { ArticleRow } from "@/lib/articles";
 
 export type ArticleViewData = Pick<
@@ -21,9 +22,34 @@ export type ArticleViewData = Pick<
   | "featured_player_team"
 >;
 
+function playerIdFromAnchor(anchor: HTMLAnchorElement): string | null {
+  const data = anchor.getAttribute("data-player-id")?.trim();
+  if (data) return data;
+  try {
+    const href = anchor.getAttribute("href") || "";
+    const path = href.startsWith("http") ? new URL(href).pathname : href;
+    const m = path.match(/\/player\/([^/?#]+)/i);
+    return m?.[1] ? decodeURIComponent(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Published article layout, shared by the article page and the editor preview. */
 export function ArticleView({ article, footer }: { article: ArticleViewData; footer?: ReactNode }) {
   const featured = articleFeaturedFromRow(article);
+  const modalRef = useRef<PlayerModalHandle>(null);
+
+  const onContentClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    const anchor = target?.closest?.("a") as HTMLAnchorElement | null;
+    if (!anchor || !event.currentTarget.contains(anchor)) return;
+    const id = playerIdFromAnchor(anchor);
+    if (!id) return;
+    event.preventDefault();
+    event.stopPropagation();
+    modalRef.current?.open(id);
+  }, []);
 
   return (
     <article className="overflow-hidden rounded-xl border border-border/80 bg-card">
@@ -45,6 +71,7 @@ export function ArticleView({ article, footer }: { article: ArticleViewData; foo
           <p className="mt-5 text-base leading-relaxed text-muted-foreground">{article.summary}</p>
         ) : null}
         <div
+          onClick={onContentClick}
           className={
             "mt-6 space-y-4 text-base leading-relaxed text-foreground " +
             "[&_a]:text-blue-600 [&_a]:underline " +
@@ -54,10 +81,14 @@ export function ArticleView({ article, footer }: { article: ArticleViewData; foo
             "[&_h3]:mb-2 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-semibold " +
             "[&_img]:my-6 [&_img]:h-auto [&_img]:w-full [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-border/10 [&_img]:object-cover " +
             "[&_p]:mb-4 " +
-            /* NFL Fantasy-style: boxed name/pos/team chip; bold meta under it; prose unboxed */
-            "[&_.lo-priority]:my-8 [&_.lo-priority__list]:my-3 [&_.lo-priority__list]:list-none [&_.lo-priority__list]:space-y-2 [&_.lo-priority__list]:pl-0 " +
-            "[&_.lo-priority__list_li]:text-base [&_.lo-priority__list_li]:leading-snug " +
-            "[&_.lo-priority__rank]:mr-1 [&_.lo-priority__rank]:font-bold [&_.lo-priority__rank]:text-slate-900 " +
+            /* Priority table (NFL.com-style) */
+            "[&_.lo-priority]:my-8 " +
+            "[&_.lo-priority__wrap]:overflow-x-auto " +
+            "[&_.lo-priority__table]:w-full [&_.lo-priority__table]:min-w-[18rem] [&_.lo-priority__table]:border-collapse [&_.lo-priority__table]:text-left " +
+            "[&_.lo-priority__table_th]:border-b [&_.lo-priority__table_th]:border-slate-300 [&_.lo-priority__table_th]:pb-2 [&_.lo-priority__table_th]:pr-3 [&_.lo-priority__table_th]:text-[11px] [&_.lo-priority__table_th]:font-bold [&_.lo-priority__table_th]:uppercase [&_.lo-priority__table_th]:tracking-wide [&_.lo-priority__table_th]:text-slate-900 " +
+            "[&_.lo-priority__table_td]:border-b [&_.lo-priority__table_td]:border-slate-200 [&_.lo-priority__table_td]:py-3 [&_.lo-priority__table_td]:pr-3 [&_.lo-priority__table_td]:align-top [&_.lo-priority__table_td]:text-sm " +
+            "[&_.lo-priority__table_td_a]:font-semibold " +
+            /* Boxed name / POS | TEAM chip; bold meta under it; prose unboxed */
             "[&_.lo-player-header]:mb-2 [&_.lo-player-header]:mt-7 [&_.lo-player-header]:overflow-hidden [&_.lo-player-header]:rounded-xl [&_.lo-player-header]:border [&_.lo-player-header]:border-slate-200 [&_.lo-player-header]:bg-slate-50 [&_.lo-player-header]:shadow-sm " +
             "[&_.lo-player-header_a]:!text-inherit [&_.lo-player-header_a]:!no-underline " +
             "[&_.lo-player-header__inner]:flex [&_.lo-player-header__inner]:items-center [&_.lo-player-header__inner]:gap-3 [&_.lo-player-header__inner]:p-4 " +
@@ -72,6 +103,7 @@ export function ArticleView({ article, footer }: { article: ArticleViewData; foo
         />
         {footer}
       </div>
+      <PlayerModalHost ref={modalRef} />
     </article>
   );
 }

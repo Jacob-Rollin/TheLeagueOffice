@@ -7,6 +7,7 @@ import {
   buildWaiverDeskPack,
   templateStartSitBlurbs,
   templateWaiverBlurbs,
+  waiverTopList,
 } from "@/lib/weekly-desk-facts.server";
 import {
   renderGroupedByPosition,
@@ -84,9 +85,10 @@ async function publishWaiver(): Promise<{ slug: string; week: number; season: nu
   const templates = templateWaiverBlurbs(pack);
   const narrated = await narrateWaiverBlurbs(pack, templates);
   const hero = narrated.players[0] ?? null;
-  // NFL-style layout: intro → top overall board → position write-ups.
+  // NFL-style layout: intro → top-10 overall board → position write-ups.
+  const top = waiverTopList(narrated.players, 10);
   const sections = [
-    renderPriorityList(`Top ${narrated.players.length} Overall Waiver-Wire Targets`, narrated.players),
+    renderPriorityList(`Top ${top.length} Overall Waiver-Wire Targets`, top),
     ...renderGroupedByPosition(narrated.players),
   ];
   const content = wrapDeskArticle(narrated.intro, sections);
