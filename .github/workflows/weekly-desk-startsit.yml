@@ -1,0 +1,38 @@
+name: Weekly Front Office Desk — Start/Sit
+
+# Publishes Start/Sit CMS article after midweek practices and injury reports.
+# Thu 13:00 UTC (~9am ET) — firmer designations than Tuesday.
+
+on:
+  schedule:
+    - cron: "0 13 * * 4"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-desk-startsit
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Publish start/sit desk
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL / CRON_SECRET not configured — skipping."
+            exit 0
+          fi
+          BASE="${APP_URL%/}"
+          case "$BASE" in
+            http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+            http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+          esac
+          curl -fsSL -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE/api/cron/weekly-desk?kind=start-sit"
