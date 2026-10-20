@@ -54,14 +54,17 @@ export function ArticleView({ article, footer }: { article: ArticleViewData; foo
             "[&_h3]:mb-2 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-semibold " +
             "[&_img]:my-6 [&_img]:h-auto [&_img]:w-full [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-border/10 [&_img]:object-cover " +
             "[&_p]:mb-4 " +
-            /* Structured weekly-desk player breaks */
-            "[&_.lo-player-hero]:my-8 [&_.lo-player-hero]:overflow-hidden [&_.lo-player-hero]:rounded-xl [&_.lo-player-hero]:border [&_.lo-player-hero]:border-slate-200 [&_.lo-player-hero]:bg-slate-50 " +
-            "[&_.lo-player-hero__head]:flex [&_.lo-player-hero__head]:items-center [&_.lo-player-hero__head]:gap-4 [&_.lo-player-hero__head]:border-b [&_.lo-player-hero__head]:border-slate-200 [&_.lo-player-hero__head]:bg-white [&_.lo-player-hero__head]:p-4 " +
-            "[&_.lo-player-hero__head_img]:size-16 [&_.lo-player-hero__head_img]:rounded-full [&_.lo-player-hero__head_img]:object-cover " +
-            "[&_.lo-player-hero__body]:p-4 [&_.lo-player-hero__body_p]:mb-0 " +
-            "[&_.lo-player-row]:my-3 [&_.lo-player-row]:flex [&_.lo-player-row]:gap-3 [&_.lo-player-row]:rounded-lg [&_.lo-player-row]:border [&_.lo-player-row]:border-slate-100 [&_.lo-player-row]:bg-white [&_.lo-player-row]:p-3 " +
-            "[&_.lo-player-row_img]:size-11 [&_.lo-player-row_img]:shrink-0 [&_.lo-player-row_img]:rounded-full [&_.lo-player-row_img]:object-cover " +
-            "[&_.lo-player-row__copy_p]:mb-1 [&_.lo-player-row__copy_p]:text-sm"
+            /* NFL Fantasy-style: boxed player header only; prose stays normal article text */
+            "[&_.lo-priority]:my-8 [&_.lo-priority__list]:my-3 [&_.lo-priority__list]:list-none [&_.lo-priority__list]:space-y-2 [&_.lo-priority__list]:pl-0 " +
+            "[&_.lo-priority__list_li]:text-base [&_.lo-priority__list_li]:leading-snug " +
+            "[&_.lo-priority__rank]:mr-1 [&_.lo-priority__rank]:font-bold [&_.lo-priority__rank]:text-slate-900 " +
+            "[&_.lo-player-header]:my-6 [&_.lo-player-header]:overflow-hidden [&_.lo-player-header]:rounded-xl [&_.lo-player-header]:border [&_.lo-player-header]:border-slate-200 [&_.lo-player-header]:bg-white [&_.lo-player-header]:shadow-sm " +
+            "[&_.lo-player-header__inner]:flex [&_.lo-player-header__inner]:items-start [&_.lo-player-header__inner]:gap-3 [&_.lo-player-header__inner]:p-4 [&_.lo-player-header__inner]:no-underline [&_.lo-player-header__inner]:text-inherit " +
+            "[&_.lo-player-header__shot]:!my-0 [&_.lo-player-header__shot]:!size-14 [&_.lo-player-header__shot]:!w-14 [&_.lo-player-header__shot]:!max-w-14 [&_.lo-player-header__shot]:shrink-0 [&_.lo-player-header__shot]:!rounded-full [&_.lo-player-header__shot]:!border-0 [&_.lo-player-header__shot]:object-cover [&_.lo-player-header__shot]:ring-1 [&_.lo-player-header__shot]:ring-slate-200 " +
+            "[&_.lo-player-header__id]:flex [&_.lo-player-header__id]:min-w-0 [&_.lo-player-header__id]:flex-col [&_.lo-player-header__id]:gap-0.5 " +
+            "[&_.lo-player-header__name]:text-xl [&_.lo-player-header__name]:font-bold [&_.lo-player-header__name]:leading-tight [&_.lo-player-header__name]:text-slate-900 " +
+            "[&_.lo-player-header__team]:text-sm [&_.lo-player-header__team]:font-semibold [&_.lo-player-header__team]:uppercase [&_.lo-player-header__team]:tracking-wide [&_.lo-player-header__team]:text-slate-600 " +
+            "[&_.lo-player-header__stat]:text-xs [&_.lo-player-header__stat]:font-bold [&_.lo-player-header__stat]:uppercase [&_.lo-player-header__stat]:tracking-wider [&_.lo-player-header__stat]:text-blue-700"
           }
           // Content is authored by league admins / weekly desk only.
           dangerouslySetInnerHTML={{ __html: article.content }}

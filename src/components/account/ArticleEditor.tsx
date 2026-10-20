@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bold,
   ChevronDown,
@@ -8,11 +8,14 @@ import {
   Italic,
   Quote,
   Underline,
+  UserRound,
   X,
 } from "lucide-react";
 
 import { ArticleView, type ArticleViewData } from "@/components/articles/ArticleView";
+import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { ArticleInput, ArticleRow } from "@/lib/articles";
+import { renderPlayerHeaderHtml } from "@/lib/weekly-desk-html";
 import { cn } from "@/lib/utils";
 
 const inputClass =
@@ -87,12 +90,30 @@ export function ArticleEditor({
   const [featuredPos, setFeaturedPos] = useState(article?.featured_player_pos ?? "");
   const [featuredTeam, setFeaturedTeam] = useState(article?.featured_player_team ?? "");
   const [embedUrl, setEmbedUrl] = useState("");
+  const [playerQuery, setPlayerQuery] = useState("");
+  const [playerStatLine, setPlayerStatLine] = useState("");
+  const [playerPickerOpen, setPlayerPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sizeOpen, setSizeOpen] = useState(false);
   const [markerOpen, setMarkerOpen] = useState(false);
   const [preview, setPreview] = useState<ArticleViewData | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const savedRange = useRef<Range | null>(null);
+  const deferredPlayerQuery = useDeferredValue(playerQuery.trim().toLowerCase());
+  const { data: playersPayload, loading: playersLoading } = useSleeperPlayers();
+
+  const playerHits = useMemo(() => {
+    if (deferredPlayerQuery.length < 2) return [];
+    const catalog = playersPayload?.players ?? [];
+    const out: { id: string; name: string; pos: string; team: string }[] = [];
+    for (const p of catalog) {
+      if (!p.name.toLowerCase().includes(deferredPlayerQuery)) continue;
+      const pos = String(p.pos || "").toUpperCase() === "DEF" ? "DST" : String(p.pos || "").toUpperCase();
+      out.push({ id: p.id, name: p.name, pos, team: p.team || "FA" });
+      if (out.length >= 8) break;
+    }
+    return out;
+  }, [deferredPlayerQuery, playersPayload]);
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.innerHTML = article?.content ?? "";
@@ -134,6 +155,22 @@ export function ArticleEditor({
       `<figure class="article-image"><img src="${url}" alt="" /></figure><p><br /></p>`,
     );
     setEmbedUrl("");
+  };
+
+  const insertPlayerHeader = (player: { id: string; name: string; pos: string; team: string }) => {
+    const stat = playerStatLine.trim();
+    const html =
+      renderPlayerHeaderHtml({
+        id: player.id,
+        name: player.name,
+        pos: player.pos,
+        team: player.team,
+        ...(stat ? { statLine: stat } : {}),
+      }) + `<p><br /></p>`;
+    exec("insertHTML", html);
+    setPlayerQuery("");
+    setPlayerStatLine("");
+    setPlayerPickerOpen(false);
   };
 
   const clearFormatting = () => {
@@ -479,6 +516,59 @@ export function ArticleEditor({
                 </button>
               </div>
             </div>
+
+            <div className="relative z-20 border border-t-0 border-border bg-slate-50/90 px-2 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <UserRound className="h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
+                <input
+                  className="min-w-[10rem] flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus:border-ring"
+                  placeholder="Search player to insert header"
+                  value={playerQuery}
+                  onFocus={() => {
+                    rememberSelection();
+                    setPlayerPickerOpen(true);
+                    setSizeOpen(false);
+                    setMarkerOpen(false);
+                  }}
+                  onChange={(e) => {
+                    setPlayerQuery(e.target.value);
+                    setPlayerPickerOpen(true);
+                  }}
+                />
+                <input
+                  className="min-w-[12rem] flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus:border-ring"
+                  placeholder="Optional line: ROSTERED: 14% or START · vs KC · SOS 28"
+                  value={playerStatLine}
+                  onFocus={rememberSelection}
+                  onChange={(e) => setPlayerStatLine(e.target.value)}
+                />
+              </div>
+              {playerPickerOpen && deferredPlayerQuery.length >= 2 ? (
+                <div className="absolute left-2 right-2 top-full z-40 mt-1 max-h-56 overflow-y-auto rounded-md border border-border bg-card shadow-lg">
+                  {playersLoading && playerHits.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">Loading players…</p>
+                  ) : playerHits.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
+                  ) : (
+                    playerHits.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => insertPlayerHeader(p)}
+                      >
+                        <span className="font-semibold text-foreground">{p.name}</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {p.pos} · {p.team}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
+
             <div
               ref={bodyRef}
               contentEditable
@@ -490,7 +580,18 @@ export function ArticleEditor({
               onMouseUp={rememberSelection}
               onBlur={rememberSelection}
               onPaste={handlePaste}
-              className="min-h-[320px] w-full rounded-b-md border border-t-0 border-border bg-background p-4 text-sm leading-relaxed text-foreground outline-none [&_blockquote]:my-4 [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:bg-muted/15 [&_blockquote]:px-4 [&_blockquote]:py-3 [&_blockquote]:italic [&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-black [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:text-base [&_h3]:font-semibold [&_img]:my-4 [&_img]:h-auto [&_img]:w-full [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-border/10 [&_img]:object-cover"
+              className={
+                "min-h-[320px] w-full rounded-b-md border border-t-0 border-border bg-background p-4 text-sm leading-relaxed text-foreground outline-none " +
+                "[&_blockquote]:my-4 [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:bg-muted/15 [&_blockquote]:px-4 [&_blockquote]:py-3 [&_blockquote]:italic " +
+                "[&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-black [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:text-base [&_h3]:font-semibold " +
+                "[&_img]:my-4 [&_img]:h-auto [&_img]:w-full [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-border/10 [&_img]:object-cover " +
+                "[&_.lo-player-header]:my-4 [&_.lo-player-header]:overflow-hidden [&_.lo-player-header]:rounded-xl [&_.lo-player-header]:border [&_.lo-player-header]:border-slate-200 [&_.lo-player-header]:bg-white " +
+                "[&_.lo-player-header__inner]:flex [&_.lo-player-header__inner]:items-start [&_.lo-player-header__inner]:gap-3 [&_.lo-player-header__inner]:p-3 [&_.lo-player-header__inner]:no-underline [&_.lo-player-header__inner]:text-inherit " +
+                "[&_.lo-player-header__shot]:!my-0 [&_.lo-player-header__shot]:!size-12 [&_.lo-player-header__shot]:!w-12 [&_.lo-player-header__shot]:!max-w-12 [&_.lo-player-header__shot]:!rounded-full [&_.lo-player-header__shot]:!border-0 [&_.lo-player-header__shot]:object-cover " +
+                "[&_.lo-player-header__id]:flex [&_.lo-player-header__id]:flex-col [&_.lo-player-header__id]:gap-0.5 " +
+                "[&_.lo-player-header__name]:text-base [&_.lo-player-header__name]:font-bold [&_.lo-player-header__team]:text-xs [&_.lo-player-header__team]:font-semibold [&_.lo-player-header__team]:uppercase [&_.lo-player-header__team]:text-slate-600 " +
+                "[&_.lo-player-header__stat]:text-[10px] [&_.lo-player-header__stat]:font-bold [&_.lo-player-header__stat]:uppercase [&_.lo-player-header__stat]:tracking-wider [&_.lo-player-header__stat]:text-blue-700"
+              }
             />
           </div>
 

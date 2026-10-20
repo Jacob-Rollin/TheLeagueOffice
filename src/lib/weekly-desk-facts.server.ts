@@ -383,32 +383,33 @@ export function templateWaiverBlurbs(pack: WaiverDeskPack): DeskPlayerBlurb[] {
     name: p.name,
     pos: p.pos,
     team: p.team,
-    meta: `${p.owned}% rostered${p.trendCount ? ` · ${p.trendCount} trending adds` : ""}${
-      p.role === "injury-elevated" ? " · role bump" : " · starter"
-    }`,
+    statLine: `ROSTERED: ${p.owned}%`,
     blurb:
       p.role === "injury-elevated"
         ? `${p.name} moves into a larger Week ${pack.week} role with the depth-chart starter sidelined — available in most leagues at ${p.owned}% rostered.`
         : p.owned <= 25
           ? `${p.name} is a depth-chart starter still widely available at ${p.owned}% rostered and worth priority consideration for managers hunting a secure role.`
-          : `${p.name} starts for ${p.team} and sits at ${p.owned}% rostered — still claimable in many leagues with a clear weekly role.`,
+          : `${p.name} starts for ${p.team} and remains available at ${p.owned}% rostered — still claimable in many leagues with a clear weekly role.`,
   }));
 }
 
 export function templateStartSitBlurbs(pack: StartSitDeskPack): Record<string, DeskPlayerBlurb[]> {
   const out: Record<string, DeskPlayerBlurb[]> = {};
   for (const [pos, rows] of Object.entries(pack.byPos)) {
-    out[pos] = rows.map((p) => ({
-      id: p.id,
-      name: p.name,
-      pos: p.pos,
-      team: p.team,
-      meta: `${p.lean.toUpperCase()} · vs ${p.opp} · SOS ${p.sosRank} (${p.grade})`,
-      blurb:
-        p.lean === "start"
-          ? `${p.name} draws a favorable Week ${pack.week} matchup against ${p.opp} (SOS rank ${p.sosRank}). Lock him in as a starter.`
-          : `${p.name} faces a tough Week ${pack.week} draw vs ${p.opp} (SOS rank ${p.sosRank}). Look for a cleaner matchup elsewhere if you have options.`,
-    }));
+    out[pos] = rows.map((p) => {
+      const vs = /^at\s+/i.test(p.opp) || /^vs\.?\s+/i.test(p.opp) ? p.opp : `vs ${p.opp}`;
+      return {
+        id: p.id,
+        name: p.name,
+        pos: p.pos,
+        team: p.team,
+        statLine: `${p.lean.toUpperCase()} · ${vs} · SOS ${p.sosRank}`,
+        blurb:
+          p.lean === "start"
+            ? `${p.name} draws a favorable Week ${pack.week} matchup against ${p.opp} (SOS rank ${p.sosRank}). Lock him in as a starter.`
+            : `${p.name} faces a tough Week ${pack.week} draw vs ${p.opp} (SOS rank ${p.sosRank}). Look for a cleaner matchup elsewhere if you have options.`,
+      };
+    });
   }
   return out;
 }
