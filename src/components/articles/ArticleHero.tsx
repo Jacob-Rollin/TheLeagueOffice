@@ -3,8 +3,9 @@ import type { Pos } from "@/lib/draft";
 import { getTeamPrimaryColor } from "@/lib/nfl-teams";
 import { cn } from "@/lib/utils";
 
-/** White ink wordmark (transparent fill) — not a CSS-inverted solid oval. */
+/** Ink wordmarks (transparent fill) — not CSS-inverted solid ovals. */
 const LEAGUE_LOGO_WHITE_SRC = "/the-league-logo-white.png";
+const LEAGUE_LOGO_NAVY_SRC = "/the-league-logo-navy.png";
 
 export type ArticleHeroPlayer = {
   id: string;
@@ -68,15 +69,26 @@ export function articleHeroDeskCopy(
   return null;
 }
 
-function BrandMark({ density }: { density: ArticleHeroDensity }) {
+/**
+ * Featured heroes open to white on the right — use navy ink there.
+ * Stock covers keep a dark wash — white ink.
+ */
+function BrandMark({
+  density,
+  tone = "white",
+}: {
+  density: ArticleHeroDensity;
+  tone?: "white" | "navy";
+}) {
   if (density === "micro") return null;
   return (
     <img
-      src={LEAGUE_LOGO_WHITE_SRC}
+      src={tone === "navy" ? LEAGUE_LOGO_NAVY_SRC : LEAGUE_LOGO_WHITE_SRC}
       alt=""
       aria-hidden="true"
       className={cn(
-        "pointer-events-none absolute z-20 select-none object-contain drop-shadow-sm",
+        "pointer-events-none absolute z-20 select-none object-contain",
+        tone === "navy" ? "opacity-90" : "drop-shadow-sm",
         density === "compact"
           ? "right-1 top-1 h-5 w-auto sm:right-1.5 sm:top-1.5 sm:h-6"
           : "right-3 top-3 h-9 w-auto sm:right-4 sm:top-4 sm:h-11",
@@ -86,14 +98,19 @@ function BrandMark({ density }: { density: ArticleHeroDensity }) {
 }
 
 /**
- * Demo text band: solid team color flush on the far right, fades to transparent
- * toward the player (left). Never transparent on the right edge.
+ * Demo text band: solid team color flush on the far right, long soft fade to
+ * transparent toward the player. Uses color-mix so the left edge never reads hard.
  */
 function deskBandGradient(teamColor: string, kind: ArticleHeroDeskKind): string {
-  if (kind === "wire") {
-    return `linear-gradient(90deg, transparent 0%, ${teamColor}cc 28%, ${teamColor} 100%)`;
-  }
-  return `linear-gradient(90deg, transparent 0%, ${teamColor}aa 30%, ${teamColor} 100%)`;
+  const soft = kind === "wire" ? 42 : 38;
+  const mid = kind === "wire" ? 78 : 72;
+  return [
+    `linear-gradient(90deg`,
+    `transparent 0%`,
+    `color-mix(in srgb, ${teamColor} ${soft}%, transparent) 32%`,
+    `color-mix(in srgb, ${teamColor} ${mid}%, transparent) 62%`,
+    `${teamColor} 100%)`,
+  ].join(", ");
 }
 
 function DeskTypeBlock({
@@ -112,15 +129,16 @@ function DeskTypeBlock({
     <div
       className={cn(
         "pointer-events-none absolute inset-y-0 right-0 flex flex-col justify-center",
-        isCompact ? "w-[58%]" : "w-[56%] sm:w-[54%]",
+        // Sit mostly on the light right so the soft fade is visible (not lost on maroon).
+        isCompact ? "w-[52%]" : "w-[50%] sm:w-[48%]",
       )}
     >
-      {/* Band is flush to the hero’s right edge; only text gets inner padding. */}
+      {/* Band flush to the hero’s right edge; padding hugs the type. */}
       <div
         className={cn(
-          "w-full",
+          "w-full leading-none",
           rightAlign ? "text-right" : "text-left",
-          isCompact ? "py-1 pl-2 pr-1.5" : "py-2 pl-5 pr-3 sm:py-2.5 sm:pl-6 sm:pr-4",
+          isCompact ? "py-1 pl-2 pr-1.5" : "py-1.5 pl-4 pr-3 sm:py-2 sm:pl-5 sm:pr-4",
         )}
         style={{ background: deskBandGradient(teamColor, desk.kind) }}
       >
@@ -128,7 +146,7 @@ function DeskTypeBlock({
           <p
             className={cn(
               "font-bold uppercase tracking-[0.18em] text-slate-900",
-              isCompact ? "text-[7px] leading-none" : "text-[10px] leading-tight sm:text-[11px]",
+              isCompact ? "text-[7px]" : "text-[10px] sm:text-[11px]",
             )}
           >
             {desk.weekLabel}
@@ -138,16 +156,16 @@ function DeskTypeBlock({
           className={cn(
             "display-title font-black uppercase tracking-tight text-white",
             isCompact
-              ? "mt-0.5 text-xs leading-[0.92] sm:text-sm"
-              : "mt-0.5 text-[2.15rem] leading-[0.88] sm:text-5xl md:text-6xl",
+              ? "mt-0.5 text-xs leading-[0.9] sm:text-sm"
+              : "mt-1 text-[2.35rem] leading-[0.86] sm:text-5xl md:text-6xl",
           )}
           style={
             isCompact
               ? undefined
               : {
-                  WebkitTextStroke: "1.25px rgba(15, 23, 42, 0.55)",
+                  WebkitTextStroke: "1.5px rgba(15, 23, 42, 0.65)",
                   paintOrder: "stroke fill",
-                  textShadow: "0 1px 2px rgba(15, 23, 42, 0.25)",
+                  textShadow: "0 1px 2px rgba(15, 23, 42, 0.3)",
                 }
           }
         >
@@ -158,7 +176,7 @@ function DeskTypeBlock({
             "font-medium tracking-wide text-white",
             isCompact
               ? "mt-0.5 truncate text-[7px] leading-tight text-white/90"
-              : "mt-0.5 text-xs leading-snug sm:text-sm",
+              : "mt-1 text-xs leading-snug sm:text-sm",
           )}
         >
           {desk.subtitle}
@@ -171,7 +189,7 @@ function DeskTypeBlock({
 /**
  * Article / card / list hero.
  * Featured: team→white gradient, cutout, faded team logo, desk type on a
- * soft fading wash (demo style), white League wordmark upper-right.
+ * flush-right solid→transparent band; navy League mark on light (white on stock).
  */
 export function ArticleHero({
   imageUrl,
@@ -278,7 +296,7 @@ export function ArticleHero({
           </div>
         ) : null}
 
-        <BrandMark density={density} />
+        <BrandMark density={density} tone="navy" />
       </div>
     );
   }
@@ -292,7 +310,7 @@ export function ArticleHero({
     <div className={cn(frame, "bg-slate-100")}>
       <img src={cover} alt={title} className="h-full w-full object-cover" />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/55 via-slate-950/10 to-transparent" />
-      <BrandMark density={density} />
+      <BrandMark density={density} tone="white" />
     </div>
   );
 }
