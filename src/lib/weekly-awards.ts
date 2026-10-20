@@ -447,8 +447,16 @@ export function buildWeekReport(input: WeekReportInput): { awards: AwardRow[]; b
   }
 
   const waiverAddIds = new Set<string>();
-  for (const event of events) {
-    if (event.kind !== "waiver" && event.kind !== "free_agent") continue;
+  // Prefer activity stamped for this scoring week when hosts provide `event.week`.
+  const weekStamped = events.filter(
+    (event) =>
+      (event.kind === "waiver" || event.kind === "free_agent") &&
+      (event.week == null || Number(event.week) === selectedWeek),
+  );
+  const waiverEvents = weekStamped.some((e) => e.week != null)
+    ? weekStamped.filter((e) => Number(e.week) === selectedWeek)
+    : weekStamped;
+  for (const event of waiverEvents) {
     for (const move of event.moves ?? []) {
       if (move.action !== "add" || !move.playerId) continue;
       // Map ESPN ids / ghost labels onto the Sleeper catalog before matching

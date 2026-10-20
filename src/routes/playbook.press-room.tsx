@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
@@ -16,26 +17,33 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { useAuth } from "@/hooks/useAuth";
 import { useActiveMatchups } from "@/hooks/useActiveMatchups";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useLeagueActivity } from "@/hooks/useLeagueActivity";
 import { useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import type { Player, Pos } from "@/lib/draft";
+import type { Pos } from "@/lib/draft";
 import { completedWeekNumberList, standingsGamesPlayed } from "@/lib/completed-weeks";
+import {
+  adminRegeneratePressRoomArticle,
+  loadPressRoomArticle,
+} from "@/lib/press-room-articles-client";
+import {
+  buildPressRoomFactPack,
+  pressRoomLeagueKey,
+} from "@/lib/press-room-fact-pack";
+import {
+  generateTemplateArticle,
+  type PressRoomArticleKind,
+} from "@/lib/press-room-templates";
 import { cn } from "@/lib/utils";
 import {
   buildPlayersByName,
   buildWeekReport,
-  eff1,
-  metric,
-  nameToken,
-  pts2,
-  UNNAMED_FRANCHISE,
   type AwardRow,
-  type BriefPlayer,
-  type EditorialBrief,
 } from "@/lib/weekly-awards";
 
 export const Route = createFileRoute("/playbook/press-room")({
@@ -46,38 +54,13 @@ export const Route = createFileRoute("/playbook/press-room")({
   component: PressRoomPage,
 });
 
-type ArticleTab = "recap" | "preview" | "waiver";
+type ArticleTab = PressRoomArticleKind;
 
 const ARTICLE_TABS: { id: ArticleTab; label: string }[] = [
   { id: "recap", label: "Post-Week Recap" },
   { id: "preview", label: "Matchup Preview" },
   { id: "waiver", label: "Waiver Sweep" },
 ];
-
-/**
- * Wrap a player identity as a clickable modal token.
- * Falls back to a plain bold name when id/name are unresolved.
- */
-function playerToken(player: BriefPlayer | null | undefined, fallbackName?: string): string {
-  const name = player?.name?.trim() || fallbackName?.trim() || "";
-  const id = player?.id?.trim() || "";
-  if (id && name) return `⟦${id}¦${name}⟧`;
-  if (name) return nameToken(name);
-  return nameToken("a featured playmaker");
-}
-
-/** Bench-blame copy locked to the player's true roster + that club's matchup result. */
-function generateBenchSentence(
-  player: BriefPlayer,
-  narrative: "won_anyway" | "cost_matchup",
-): string {
-  const teamLabel = nameToken(player.teamName?.trim() || UNNAMED_FRANCHISE);
-  const pts = metric(`${pts2(player.points)}pts`);
-  if (narrative === "won_anyway") {
-    return ` The costly coaching miss left ${playerToken(player)} on the pine for ${teamLabel} after a ${pts} eruption, but the squad's starting core did more than enough to secure the victory regardless.`;
-  }
-  return ` The costly coaching miss left ${playerToken(player)} on the pine for ${teamLabel} after a ${pts} eruption that completely cost them the matchup and would have rewritten the standings.`;
-}
 
 function renderSentence(
   sentence: string,
@@ -147,114 +130,6 @@ function getArticleBackgroundImage(tab: ArticleTab): string {
   if (tab === "preview") return ARTICLE_BG_PREVIEW;
   if (tab === "waiver") return ARTICLE_BG_WAIVER;
   return ARTICLE_BG_RECAP;
-}
-
-type GeneratedArticle = {
-  title: string;
-  paragraphs: string[];
-};
-
-function generateRecapArticle(brief: EditorialBrief): GeneratedArticle {
-  const topTeam = brief.apexTeam.trim() || UNNAMED_FRANCHISE;
-  const lowTeam = brief.stalledTeam.trim() || UNNAMED_FRANCHISE;
-  const badBeatWinner = brief.razorWinner.trim() || UNNAMED_FRANCHISE;
-  const badBeatLoser = brief.razorLoser.trim() || UNNAMED_FRANCHISE;
-  const margin = pts2(brief.razorMargin);
-  const apexPts = pts2(brief.apexPoints);
-  const stalledPts = pts2(brief.stalledPoints);
-  const genius = brief.geniusTeam.trim() || topTeam;
-  const geniusEff = eff1(brief.geniusEfficiency || 0);
-  const activeMvpPlayer = brief.mvpPlayer;
-  const mvpPts = pts2(activeMvpPlayer?.points ?? 0);
-
-  const mvpClause = activeMvpPlayer
-    ? ` The turning point of the slate came down to a sensational performance by ${playerToken(activeMvpPlayer)}, who exploded for a massive ${metric(`${mvpPts}pts`)} to comfortably anchor the victory for ${nameToken(activeMvpPlayer.teamName || topTeam)}.`
-    : ` The desk will keep watching for a breakout starter to seize the MVP narrative as more box scores settle.`;
-
-  const bustClause =
-    brief.benchBustPlayer && brief.benchBustNarrative
-      ? generateBenchSentence(brief.benchBustPlayer, brief.benchBustNarrative)
-      : ` Every unused flex point on the bench remains a live threat to next week's Gridiron Genius board.`;
-
-  return {
-    title: `WEEK RECAP: ${topTeam.toUpperCase()} DOMINATES THE SLATE AS ${badBeatLoser.toUpperCase()} FALLS IN A HEARTBREAKER`,
-    paragraphs: [
-      `The books are officially closed on another wild week of league action, and the fallout has left managers scrambling to adjust their strategies. Headlining the week was a masterclass performance by ${nameToken(topTeam)}, who completely set the scoreboard on fire to post a week-high total of ${metric(`${apexPts}pts`)}.${mvpClause} On the opposite side of the ledger, ${nameToken(lowTeam)} found themselves stuck in neutral, failing to generate offensive momentum and finishing at the bottom of the pile with just ${metric(`${stalledPts}pts`)}.`,
-      `The true drama of the week unfolded in a razor-thin matchup that will be talked about for the rest of the season. ${nameToken(badBeatWinner)} narrowly escaped with a victory, handing a heartbreaking defeat to ${nameToken(badBeatLoser)} by a microscopic margin of just ${metric(`${margin}pts`)}.${bustClause}`,
-      `${nameToken(genius)} earned Gridiron Genius honors with ${metric(`${geniusEff}%`)} coaching efficiency, squeezing every available point from the optimal board. As we look ahead, managers must audit their coaching efficiency metrics to ensure optimal player optimization before the next wave of kickoff whistles blows.`,
-    ],
-  };
-}
-
-function generatePreviewArticle(brief: EditorialBrief): GeneratedArticle {
-  const pairs = brief.previewPairs;
-  const headlinePair = pairs[0];
-  const spotlightA = (headlinePair?.home || brief.apexTeam).trim() || UNNAMED_FRANCHISE;
-  const spotlightB = (headlinePair?.away || brief.stalledTeam).trim() || UNNAMED_FRANCHISE;
-  const projA = pts2(headlinePair?.homeProj ?? brief.apexPoints);
-  const projB = pts2(headlinePair?.awayProj ?? brief.stalledPoints);
-  const star = brief.previewStarPlayer;
-  const starPts = pts2(star?.points ?? 0);
-  const focusClub =
-    (brief.previewFocusTeam || star?.teamName || spotlightB || spotlightA).trim() ||
-    UNNAMED_FRANCHISE;
-
-  const starClause = star
-    ? ` The Press Room flags ${playerToken(star)} as the projected matchup-advantage weapon for ${nameToken(focusClub)}, riding a recent ${metric(`${starPts}pts`)} surge that tilts the early board.`
-    : ` Until projections firm up, both desks should treat their top projected position weapon as the swing piece that decides the card.`;
-
-  const slateLines =
-    pairs.length > 0
-      ? pairs
-          .slice(0, 3)
-          .map(
-            (p) =>
-              `${nameToken(p.home || UNNAMED_FRANCHISE)} (${metric(`${pts2(p.homeProj)}pts`)} projected) against ${nameToken(p.away || UNNAMED_FRANCHISE)} (${metric(`${pts2(p.awayProj)}pts`)} projected)`,
-          )
-          .join("; ")
-      : `${nameToken(spotlightA)} and ${nameToken(spotlightB)} headline an unsettled slate`;
-
-  return {
-    title: `MATCHUP PREVIEW: ${spotlightA.toUpperCase()} AND ${spotlightB.toUpperCase()} SET THE TONE FOR WEEK ${brief.week + 1}`,
-    paragraphs: [
-      `The Press Room turns its attention to the next slate, where projected totals already paint a clear hierarchy. Early board math has ${nameToken(spotlightA)} checking in near ${metric(`${projA}pts`)}, while ${nameToken(spotlightB)} sits closer to ${metric(`${projB}pts`)} — a gap that will force both desks into aggressive start-sit decisions.${starClause}`,
-      `Across the league, the featured card list includes ${slateLines}. Managers chasing Apex Performance form must weigh boom-bust upside against floor reliability, especially after last week's razor-thin outcomes rewrote the standings narrative.`,
-      `Keep an eye on coaching efficiency early. The clubs that treated Gridiron Genius as a weekly habit — not a one-off — enter the preview window with cleaner benches and sharper flex calls. The managers who sleep on the wire now will be writing excuses later.`,
-    ],
-  };
-}
-
-function generateWaiverArticle(brief: EditorialBrief): GeneratedArticle {
-  const gemName = brief.waiverPlayer.trim() || "a featured playmaker";
-  const gemTeam = brief.waiverTeam.trim() || UNNAMED_FRANCHISE;
-  const gemPts = pts2(brief.waiverPoints);
-  const stalled = brief.stalledTeam.trim() || UNNAMED_FRANCHISE;
-  const apex = brief.apexTeam.trim() || UNNAMED_FRANCHISE;
-  const gemPlayer: BriefPlayer | null =
-    brief.waiverPlayerId && brief.waiverPlayer
-      ? {
-          id: brief.waiverPlayerId,
-          name: brief.waiverPlayer,
-          points: brief.waiverPoints,
-          rosterId: null,
-          teamName: gemTeam,
-        }
-      : null;
-  const mvp = brief.mvpPlayer;
-
-  const gemLead = gemPlayer ? playerToken(gemPlayer) : nameToken(gemName);
-  const mvpAside = mvp
-    ? ` Even Apex Performance clubs chasing ${playerToken(mvp)} form should treat the wire as a weekly habit, not a panic button.`
-    : ` Even Apex Performance clubs should treat the wire as a weekly habit, not a panic button.`;
-
-  return {
-    title: `WAIVER SWEEP: ${gemName.toUpperCase()} HIGHLIGHTS THE PRIORITY BOARD AFTER WEEK ${brief.week}`,
-    paragraphs: [
-      `The waiver wire never sleeps, and this week's priority list starts with ${gemLead}. After posting ${metric(`${gemPts}pts`)} for ${nameToken(gemTeam)}, the Press Room is treating that claim as the blueprint for opportunistic adds — not a one-week fluke.`,
-      `${nameToken(stalled)} and other clubs near the bottom of the scoring pile need volume and upside more than comfort. Meanwhile, ${nameToken(apex)} can afford surgical adds that protect Apex Performance form without blowing up a locked lineup core.${mvpAside}`,
-      `Expect the next processing window to get noisy. Managers who wait for the headline names will miss the secondary pieces that decide Razor's Edge outcomes. Move early, stream smart, and keep the Gridiron Genius efficiency board clean heading into the next kickoff slate.`,
-    ],
-  };
 }
 
 function teamInitials(name: string): string {
@@ -377,7 +252,10 @@ function AwardCard({
 }
 
 function PressRoomPage() {
-  const { activeLeague } = useActiveLeague();
+  const { activeLeague, sandboxMode } = useActiveLeague();
+  const { user } = useAuth();
+  const { data: isAdmin } = useIsAdmin(user?.id ?? null);
+  const queryClient = useQueryClient();
   const platform = activeLeague?.platform ?? null;
   const { data: playersPayload } = useSleeperPlayers();
   const players = playersPayload?.players ?? [];
@@ -391,6 +269,7 @@ function PressRoomPage() {
   const nflWeek = useNflState();
   const currentWeek = nflWeek.data?.week ?? null;
   const displayWeek = nflWeek.data?.displayWeek ?? null;
+  const seasonYear = Number(nflWeek.data?.season) || new Date().getUTCFullYear();
   const finalizedWeeks = useMemo(() => {
     const weeks = completedWeekNumberList({
       nflWeek: currentWeek,
@@ -403,6 +282,7 @@ function PressRoomPage() {
   const defaultWeek = finalizedWeeks[finalizedWeeks.length - 1] ?? 1;
   const [selectedWeek, setSelectedWeek] = useState<number>(defaultWeek);
   const [articleTab, setArticleTab] = useState<ArticleTab>("recap");
+  const [regenError, setRegenError] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedWeek(defaultWeek);
@@ -426,21 +306,86 @@ function PressRoomPage() {
     [matchups, previewMatchups, playersById, playersByName, rosterPositions, events, selectedWeek, teams],
   );
 
-  const articles = useMemo(() => {
-    const brief = weekReport.brief;
-    return {
-      recap: generateRecapArticle(brief),
-      preview: generatePreviewArticle(brief),
-      waiver: generateWaiverArticle(brief),
-    };
-  }, [weekReport.brief]);
+  const leagueKey = useMemo(() => {
+    if (sandboxMode || !activeLeague) return null;
+    return pressRoomLeagueKey({
+      platform: activeLeague.platform,
+      leagueId: activeLeague.leagueId,
+      ...(activeLeague.nativeLeagueId ? { nativeLeagueId: activeLeague.nativeLeagueId } : {}),
+      season: seasonYear,
+    });
+  }, [activeLeague, sandboxMode, seasonYear]);
 
-  const activeArticle =
-    articleTab === "recap"
-      ? articles.recap
-      : articleTab === "preview"
-        ? articles.preview
-        : articles.waiver;
+  const templateArticle = useMemo(
+    () => generateTemplateArticle(articleTab, weekReport.brief),
+    [articleTab, weekReport.brief],
+  );
+
+  const factPack = useMemo(() => {
+    if (!leagueKey || !weekReport.brief.apexTeam) return null;
+    return buildPressRoomFactPack({
+      brief: weekReport.brief,
+      kind: articleTab,
+      leagueKey,
+      season: seasonYear,
+      entries: matchups?.entries ?? [],
+      standingsRows: standings?.rows ?? null,
+      events,
+      playersById,
+      playersByName,
+    });
+  }, [
+    leagueKey,
+    weekReport.brief,
+    articleTab,
+    seasonYear,
+    matchups?.entries,
+    standings?.rows,
+    events,
+    playersById,
+    playersByName,
+  ]);
+
+  const articleQueryKey = [
+    "press-room-article",
+    leagueKey ?? "none",
+    selectedWeek,
+    articleTab,
+  ] as const;
+
+  const articleQuery = useQuery({
+    queryKey: articleQueryKey,
+    enabled: Boolean(factPack),
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60,
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev,
+    queryFn: async () => {
+      if (!factPack) return templateArticle;
+      try {
+        return await loadPressRoomArticle({ factPack });
+      } catch (error) {
+        console.warn("[press-room] load failed; using template", error);
+        return { ...templateArticle, source: "template" as const, model: "template", factHash: "", leagueKey: leagueKey ?? "", week: selectedWeek, kind: articleTab };
+      }
+    },
+  });
+
+  const regenerate = useMutation({
+    mutationFn: async () => {
+      if (!factPack) throw new Error("No fact pack for this week.");
+      return adminRegeneratePressRoomArticle({ factPack });
+    },
+    onMutate: () => setRegenError(null),
+    onSuccess: (article) => {
+      queryClient.setQueryData(articleQueryKey, article);
+    },
+    onError: (error) => {
+      setRegenError(error instanceof Error ? error.message : "Regenerate failed.");
+    },
+  });
+
+  const activeArticle = articleQuery.data ?? templateArticle;
 
   const navigate = useNavigate();
   const openPlayer = (id: string) => modalRef.current?.open(id);
@@ -474,6 +419,8 @@ function PressRoomPage() {
         ? "Matchup Intel"
         : "Wire Scout";
 
+  const showAdminRegen = isAdmin === true && Boolean(factPack);
+
   return (
     <div className="w-full">
       <div className="mb-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -485,24 +432,46 @@ function PressRoomPage() {
             Weekly league journalism, awards, and headline performances.
           </p>
         </div>
-        <div className="w-full max-w-[11rem] shrink-0">
-          <Select
-            value={String(selectedWeek)}
-            onValueChange={(value) => setSelectedWeek(Math.max(1, Number(value) || 1))}
-          >
-            <SelectTrigger className="h-9 border-slate-200 bg-white text-sm font-semibold text-slate-800">
-              <SelectValue placeholder="Select week" />
-            </SelectTrigger>
-            <SelectContent>
-              {finalizedWeeks.map((week) => (
-                <SelectItem key={week} value={String(week)}>
-                  Week {week}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex w-full max-w-md shrink-0 flex-col items-stretch gap-2 sm:max-w-none sm:flex-row sm:items-center sm:justify-end">
+          <div className="w-full sm:w-[11rem]">
+            <Select
+              value={String(selectedWeek)}
+              onValueChange={(value) => setSelectedWeek(Math.max(1, Number(value) || 1))}
+            >
+              <SelectTrigger className="h-9 border-slate-200 bg-white text-sm font-semibold text-slate-800">
+                <SelectValue placeholder="Select week" />
+              </SelectTrigger>
+              <SelectContent>
+                {finalizedWeeks.map((week) => (
+                  <SelectItem key={week} value={String(week)}>
+                    Week {week}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {showAdminRegen ? (
+            <button
+              type="button"
+              disabled={regenerate.isPending || matchupsLoading}
+              onClick={() => regenerate.mutate()}
+              className={cn(
+                "h-9 shrink-0 rounded-md border border-blue-600 bg-transparent px-3",
+                "text-sm font-medium text-blue-600 transition-colors",
+                "hover:bg-blue-600 hover:text-white",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+            >
+              {regenerate.isPending ? "Regenerating…" : "Regenerate"}
+            </button>
+          ) : null}
         </div>
       </div>
+      {regenError ? (
+        <p className="mb-2 text-sm text-red-600" role="alert">
+          {regenError}
+        </p>
+      ) : null}
 
       <div className="mt-4 grid w-full grid-cols-1 gap-6 select-none lg:grid-cols-3">
         <div className="flex min-h-[500px] flex-col items-start rounded-2xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-2">
@@ -556,6 +525,8 @@ function PressRoomPage() {
           <article className="w-full text-left">
             {matchupsLoading && !weekReport.brief.apexTeam ? (
               <p className="text-sm text-muted-foreground">Loading editorial desk…</p>
+            ) : articleQuery.isFetching && !articleQuery.data ? (
+              <p className="text-sm text-muted-foreground">Filing this week’s desk copy…</p>
             ) : (
               <div className="space-y-5">
                 {activeArticle.paragraphs.map((paragraph, index) => (
