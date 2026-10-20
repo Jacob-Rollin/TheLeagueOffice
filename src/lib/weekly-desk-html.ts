@@ -1,9 +1,10 @@
 /**
  * Pure HTML builders for weekly desk player breaks — NFL Fantasy-style headers.
  *
- * Boxed chip: headshot + name + "POS TEAM"
+ * Boxed chip: headshot + name + "POS | TEAM"
  * Below the box (bold, not linked): ROSTERED / START · vs · SOS
  * Then normal article prose.
+ * Player links use data-player-id so ArticleView can open the player popup.
  */
 
 export type DeskPlayerBlurb = {
@@ -14,6 +15,10 @@ export type DeskPlayerBlurb = {
   blurb: string;
   /** Bold line under the boxed header — e.g. "ROSTERED: 14%" or "START · vs KC · SOS 28". */
   statLine?: string;
+  /** Nickname team for priority table (e.g. Steelers). */
+  teamNickname?: string;
+  /** Next-opponent cell for the waiver priority table (e.g. "vs. Saints"). */
+  nextOpponent?: string;
 };
 
 const POS_HEADINGS: Record<string, string> = {
@@ -47,6 +52,10 @@ function normPos(pos: string): string {
   return p === "DEF" ? "DST" : p;
 }
 
+function playerHref(id: string): string {
+  return `/player/${escapeHtml(id)}`;
+}
+
 /** Rewrite ambiguous ownership phrasing the LLM sometimes invents. */
 export function sanitizeDeskBlurb(text: string): string {
   return text
@@ -59,7 +68,7 @@ export function sanitizeDeskBlurb(text: string): string {
 }
 
 /**
- * Boxed header chip only: headshot + name + "POS TEAM".
+ * Boxed header chip only: headshot + name + "POS | TEAM".
  * Stat line is NOT inside the box — use renderPlayerMetaHtml / renderPlayerBlock.
  */
 export function renderPlayerHeaderHtml(player: {
@@ -71,10 +80,11 @@ export function renderPlayerHeaderHtml(player: {
   const src = headshotUrl(player.id, player.pos, player.team);
   const pos = normPos(player.pos);
   const team = (player.team || "").toUpperCase();
-  const sub = [pos, team].filter(Boolean).join(" ");
+  const sub = [pos, team].filter(Boolean).join(" | ");
   return (
     `<div class="lo-player-header" contenteditable="false">` +
-    `<a class="lo-player-header__inner" href="/player/${escapeHtml(player.id)}" ` +
+    `<a class="lo-player-header__inner lo-player-link" href="${playerHref(player.id)}" ` +
+    `data-player-id="${escapeHtml(player.id)}" ` +
     `style="display:flex;align-items:center;gap:0.75rem;padding:1rem;text-decoration:none;color:inherit">` +
     `<img class="lo-player-header__shot" src="${escapeHtml(src)}" alt="" width="56" height="56" ` +
     `style="width:56px;height:56px;border-radius:9999px;object-fit:cover;flex-shrink:0;margin:0;border:0" />` +
@@ -113,7 +123,10 @@ export function renderPlayerBlock(player: DeskPlayerBlurb): string {
   );
 }
 
-/** Numbered priority board (waiver top targets). */
+/**
+ * NFL.com-style two-column priority board:
+ * WAIVER WIRE PRIORITY RANKINGS | NEXT OPPONENT
+ */
 export function renderPriorityList(
   heading: string,
   players: DeskPlayerBlurb[],
@@ -121,21 +134,30 @@ export function renderPriorityList(
   if (!players.length) return "";
   const rows = players
     .map((p, i) => {
-      const team = (p.team || "").toUpperCase();
-      const label = [normPos(p.pos), team].filter(Boolean).join(" ");
+      const pos = normPos(p.pos);
+      const nick = (p.teamNickname || p.team || "").trim();
+      const left = `${i + 1}) ${pos} ${p.name}${nick ? `, ${nick}` : ""}`;
+      const opp = (p.nextOpponent || "TBD").trim();
       return (
-        `<li><span class="lo-priority__rank">${i + 1})</span> ` +
-        `<a href="/player/${escapeHtml(p.id)}"><strong>${escapeHtml(p.name)}</strong></a>` +
-        (label ? `, ${escapeHtml(label)}` : "") +
-        `</li>`
+        `<tr>` +
+        `<td><a class="lo-player-link" href="${playerHref(p.id)}" data-player-id="${escapeHtml(p.id)}">` +
+        `${escapeHtml(left)}</a></td>` +
+        `<td>${escapeHtml(opp)}</td>` +
+        `</tr>`
       );
     })
     .join("");
   return (
     `<div class="lo-priority">` +
     `<h2>${escapeHtml(heading)}</h2>` +
-    `<ol class="lo-priority__list">${rows}</ol>` +
-    `</div>`
+    `<div class="lo-priority__wrap">` +
+    `<table class="lo-priority__table">` +
+    `<thead><tr>` +
+    `<th scope="col">Waiver Wire Priority Rankings</th>` +
+    `<th scope="col">Next Opponent</th>` +
+    `</tr></thead>` +
+    `<tbody>${rows}</tbody>` +
+    `</table></div></div>`
   );
 }
 

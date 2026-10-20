@@ -17,9 +17,8 @@ function parseBlurbs(raw: unknown, fallbackIds: string[]): Map<string, string> {
     if (!row || typeof row !== "object") continue;
     const id = String((row as { id?: string }).id ?? "").trim();
     const text = String((row as { blurb?: string }).blurb ?? "").trim();
-    if (id && text) map.set(id, sanitizeDeskBlurb(text).slice(0, 600));
+    if (id && text) map.set(id, sanitizeDeskBlurb(text).slice(0, 700));
   }
-  // Soft require most ids to be covered.
   const hit = fallbackIds.filter((id) => map.has(id)).length;
   if (hit < Math.ceil(fallbackIds.length * 0.5)) return new Map();
   return map;
@@ -37,7 +36,7 @@ async function groqJson(system: string, user: string): Promise<unknown | null> {
     },
     body: JSON.stringify({
       model,
-      temperature: 0.75,
+      temperature: 0.7,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
@@ -67,7 +66,6 @@ async function groqJson(system: string, user: string): Promise<unknown | null> {
   }
 }
 
-/** Facts for the model — ownership always labeled as a rostered percentage. */
 function waiverFactsForLlm(pack: WaiverDeskPack) {
   return {
     week: pack.week,
@@ -77,6 +75,7 @@ function waiverFactsForLlm(pack: WaiverDeskPack) {
       name: p.name,
       pos: p.pos,
       team: p.team,
+      nextOpponent: p.nextOpponent,
       rosteredPct: `${p.owned}%`,
       rosteredLabel: `rostered in ${p.owned}% of fantasy leagues`,
       trendAdds: p.trendCount,
@@ -84,6 +83,30 @@ function waiverFactsForLlm(pack: WaiverDeskPack) {
       depthOrder: p.depthOrder,
     })),
   };
+}
+
+function startSitFactsForLlm(pack: StartSitDeskPack) {
+  const board: Record<string, unknown[]> = {};
+  for (const [pos, rows] of Object.entries(pack.byPos)) {
+    board[pos] = rows.map((p) => ({
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      team: p.team,
+      opp: p.opp,
+      oppNickname: p.oppNickname,
+      lean: p.lean,
+      sosRank: p.sosRank,
+      grade: p.grade,
+      /** Season fantasy points per game this opponent has allowed to this position. */
+      oppPointsAllowedToPos: p.oppPointsAllowed,
+      note:
+        p.oppPointsAllowed == null
+          ? "points-allowed unavailable — use SOS rank/grade only"
+          : `Opponent has allowed ${p.oppPointsAllowed} FPPG to ${p.pos}`,
+    }));
+  }
+  return { week: pack.week, season: pack.season, byPos: board };
 }
 
 export async function narrateWaiverBlurbs(
@@ -96,8 +119,8 @@ export async function narrateWaiverBlurbs(
     "Return JSON: {\"intro\":\"2-3 sentences\",\"blurbs\":[{\"id\":\"...\",\"blurb\":\"2-4 sentences\"}]}",
     "Use ONLY provided facts. No FAAB dollars. No invented injuries or stats.",
     "rosteredPct is the share of fantasy leagues that already roster the player (e.g. \"14%\").",
-    "ALWAYS write ownership as \"X% rostered\" or \"rostered in X% of leagues\". NEVER say \"owners\", \"at 14 owners\", or treat the number as a count of people.",
-    "Do not repeat the ROSTERED line — that already appears under the player header. Focus on role, opportunity, and why to add.",
+    "ALWAYS write ownership as \"X% rostered\" or \"rostered in X% of leagues\". NEVER say \"owners\".",
+    "Do not repeat the ROSTERED line — that already appears under the player header.",
     "role=starter means depth-chart starter still available; role=injury-elevated means the starter is out and this backup's role grew.",
     "Tone: sharp sports desk, not template filler.",
   ].join("\n");
@@ -130,12 +153,15 @@ export async function narrateStartSitBlurbs(
   const system = [
     "You write League Office start/sit blurbs for fantasy football in the style of an NFL.com fantasy desk.",
     "Return JSON: {\"intro\":\"2-3 sentences\",\"blurbs\":[{\"id\":\"...\",\"blurb\":\"2-4 sentences\"}]}",
-    "Use ONLY provided matchup facts (opp, SOS rank, lean). No FAAB. No invented injuries.",
-    "Every listed player is already a depth-chart starter — do not frame them as handcuffs or backups.",
-    "Do not invent ownership or \"owners\" language. Matchup edge is already shown under the player header (START/SIT · vs · SOS).",
-    "Tone: decisive start/sit desk.",
+    "Use ONLY provided matchup facts. No FAAB. No invented injuries, yards, TDs, or percentages.",
+    "When oppPointsAllowedToPos is a number, cite it as fantasy points per game allowed to that position (e.g. \"allowed 24.1 FPPG to WRs\").",
+    "Combine SOS rank/grade with points-allowed when both exist — do not invent other defensive stats.",
+    "If points-allowed is null, rely on SOS rank/grade only.",
+    "Every listed player is already a depth-chart starter — do not frame them as handcuffs.",
+    "Do not invent ownership language. The START/SIT · vs · SOS line already appears under the header.",
+    "Tone: decisive start/sit desk with concrete matchup context.",
   ].join("\n");
-  const user = `Week ${pack.week} ${pack.season} start/sit board:\n${JSON.stringify(pack.byPos)}`;
+  const user = `Week ${pack.week} ${pack.season} start/sit board:\n${JSON.stringify(startSitFactsForLlm(pack))}`;
   const raw = await groqJson(system, user);
   const map = parseBlurbs(raw, ids);
   const introRaw =
@@ -144,7 +170,7 @@ export async function narrateStartSitBlurbs(
       : "";
   const intro =
     sanitizeDeskBlurb(introRaw) ||
-    `Week ${pack.week} matchups create clear starts and sits across the lineup — here are the sharpest edges by position.`;
+    `Week ${pack.week} matchups create clear starts and sits — here are the sharpest edges by position, grounded in how each defense has treated that spot.`;
 
   const byPos: Record<string, DeskPlayerBlurb[]> = {};
   for (const [pos, rows] of Object.entries(templates)) {
