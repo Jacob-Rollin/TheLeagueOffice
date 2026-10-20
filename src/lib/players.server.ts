@@ -1048,6 +1048,10 @@ export type DepthChartEntry = {
 };
 
 /** Team -> position -> active players in Sleeper depth chart order. */
+export async function loadDepthCharts(): Promise<Map<string, Map<Pos, DepthChartEntry[]>>> {
+  return depthCharts("all");
+}
+
 const depthCharts = memo<Map<string, Map<Pos, DepthChartEntry[]>>>(6 * HOUR, async () => {
   const res = await fetch(`${BASE}/v1/players/nfl`, { headers: { accept: "application/json" } });
   if (!res.ok) throw new Error(`Upstream ${res.status}`);

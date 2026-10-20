@@ -76,6 +76,7 @@ export async function narrateWaiverBlurbs(
     "You write League Office waiver-wire blurbs for fantasy football.",
     "Return JSON: {\"intro\":\"2 sentences\",\"blurbs\":[{\"id\":\"...\",\"blurb\":\"2-3 sentences\"}]}",
     "Use ONLY provided facts. No FAAB dollars. No invented injuries or stats.",
+    "role=starter means depth-chart starter still available; role=injury-elevated means the starter is out and this backup's role grew.",
     "Tone: sharp sports desk, not template filler.",
   ].join("\n");
   const user = `Week ${pack.week} ${pack.season} waiver board:\n${JSON.stringify(pack.players)}`;
@@ -107,6 +108,7 @@ export async function narrateStartSitBlurbs(
     "You write League Office start/sit blurbs for fantasy football.",
     "Return JSON: {\"intro\":\"2 sentences\",\"blurbs\":[{\"id\":\"...\",\"blurb\":\"2-3 sentences\"}]}",
     "Use ONLY provided matchup facts (opp, SOS rank, lean). No FAAB. No invented injuries.",
+    "Every listed player is already a depth-chart starter — do not frame them as handcuffs or backups.",
     "Tone: decisive start/sit desk.",
   ].join("\n");
   const user = `Week ${pack.week} ${pack.season} start/sit board:\n${JSON.stringify(pack.byPos)}`;
