@@ -117,6 +117,8 @@ function sanitizeFactPack(input: PressRoomFactPack): PressRoomFactPack {
     leagueKey,
     scoreboard: Array.isArray(input.scoreboard) ? input.scoreboard.slice(0, 16) : [],
     previewPairs: Array.isArray(input.previewPairs) ? input.previewPairs.slice(0, 12) : [],
+    weekWaiverAdds: Array.isArray(input.weekWaiverAdds) ? input.weekWaiverAdds.slice(0, 8) : [],
+    standings: Array.isArray(input.standings) ? input.standings.slice(0, 14) : [],
   };
 }
 

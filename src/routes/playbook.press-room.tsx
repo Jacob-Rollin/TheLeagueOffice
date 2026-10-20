@@ -329,8 +329,22 @@ function PressRoomPage() {
       leagueKey,
       season: seasonYear,
       entries: matchups?.entries ?? [],
+      standingsRows: standings?.rows ?? null,
+      events,
+      playersById,
+      playersByName,
     });
-  }, [leagueKey, weekReport.brief, articleTab, seasonYear, matchups?.entries]);
+  }, [
+    leagueKey,
+    weekReport.brief,
+    articleTab,
+    seasonYear,
+    matchups?.entries,
+    standings?.rows,
+    events,
+    playersById,
+    playersByName,
+  ]);
 
   const articleQueryKey = [
     "press-room-article",

@@ -2,6 +2,14 @@
  * Structured Press Room facts — computed in code, narrated by LLM or templates.
  * Shared cache key is platform + host/native league id + season (not per-user connection).
  */
+import { hydrateActivityMove } from "@/components/dashboard/ActivityFeed";
+import type { Player } from "@/lib/draft";
+import type {
+  LeagueActivityEvent,
+  StandingRow,
+  WeeklyMatchupEntry,
+} from "@/lib/league.server";
+import { playerToken, type PressRoomArticleKind } from "@/lib/press-room-templates";
 import {
   eff1,
   metric,
@@ -10,8 +18,6 @@ import {
   UNNAMED_FRANCHISE,
   type EditorialBrief,
 } from "@/lib/weekly-awards";
-import type { WeeklyMatchupEntry } from "@/lib/league.server";
-import { playerToken, type PressRoomArticleKind } from "@/lib/press-room-templates";
 
 export type PressRoomScoreboardRow = {
   home: string;
@@ -19,6 +25,21 @@ export type PressRoomScoreboardRow = {
   homePts: number;
   awayPts: number;
   margin: number;
+};
+
+export type PressRoomStandingSnap = {
+  team: string;
+  wins: number;
+  losses: number;
+  ties: number;
+  pointsFor: number;
+  rank: number;
+};
+
+export type PressRoomWaiverAdd = {
+  playerId: string | null;
+  playerName: string;
+  teamName: string;
 };
 
 export type PressRoomFactPack = {
@@ -42,6 +63,8 @@ export type PressRoomFactPack = {
   waiverPlayerId: string | null;
   waiverTeam: string;
   waiverPoints: number;
+  /** Top week-filtered waiver/FA adds (beyond the single gem). */
+  weekWaiverAdds: PressRoomWaiverAdd[];
   mvpName: string | null;
   mvpId: string | null;
   mvpPoints: number | null;
@@ -62,6 +85,8 @@ export type PressRoomFactPack = {
     awayProj: number;
   }[];
   scoreboard: PressRoomScoreboardRow[];
+  /** Current standings snapshot (rank order) for narrative context — not invented. */
+  standings: PressRoomStandingSnap[];
 };
 
 /** Shared desk key so every member of the same host/native league reads one article. */
@@ -128,14 +153,90 @@ function pairMatchups(entries: WeeklyMatchupEntry[]): PressRoomScoreboardRow[] {
   return rows.sort((x, y) => y.margin - x.margin);
 }
 
+function standingsSnapshot(rows: StandingRow[] | null | undefined): PressRoomStandingSnap[] {
+  if (!rows?.length) return [];
+  const sorted = [...rows].sort(
+    (a, b) =>
+      b.wins - a.wins ||
+      a.losses - b.losses ||
+      b.ties - a.ties ||
+      b.pointsFor - a.pointsFor,
+  );
+  return sorted.slice(0, 14).map((row, index) => ({
+    team: (row.team || row.owner || UNNAMED_FRANCHISE).trim() || UNNAMED_FRANCHISE,
+    wins: Number(row.wins) || 0,
+    losses: Number(row.losses) || 0,
+    ties: Number(row.ties) || 0,
+    pointsFor: Number(row.pointsFor) || 0,
+    rank: index + 1,
+  }));
+}
+
+/** Prefer events stamped for the selected week; if none carry week, keep all adds. */
+export function weekFilteredWaiverAdds(input: {
+  week: number;
+  events: LeagueActivityEvent[];
+  playersById?: Map<string, Player>;
+  playersByName?: Map<string, Player>;
+  limit?: number;
+}): PressRoomWaiverAdd[] {
+  const { week, events, playersById, playersByName } = input;
+  const limit = Math.max(1, Math.min(8, input.limit ?? 3));
+  const stamped = events.filter(
+    (e) =>
+      (e.kind === "waiver" || e.kind === "free_agent") &&
+      (e.week == null || Number(e.week) === week),
+  );
+  const pool = stamped.some((e) => e.week != null)
+    ? stamped.filter((e) => Number(e.week) === week)
+    : stamped;
+
+  const out: PressRoomWaiverAdd[] = [];
+  const seen = new Set<string>();
+  for (const event of pool) {
+    for (const move of event.moves ?? []) {
+      if (move.action !== "add" || !move.playerId) continue;
+      const hydrated =
+        playersById && playersByName
+          ? hydrateActivityMove(move, playersById, playersByName)
+          : move;
+      const playerId = String(hydrated.playerId ?? "").trim();
+      const playerName = String(hydrated.name ?? move.playerId ?? "").trim();
+      if (!playerName) continue;
+      const key = playerId || playerName.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        playerId: playerId || null,
+        playerName,
+        teamName: (event.teamName || UNNAMED_FRANCHISE).trim() || UNNAMED_FRANCHISE,
+      });
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
 export function buildPressRoomFactPack(input: {
   brief: EditorialBrief;
   kind: PressRoomArticleKind;
   leagueKey: string;
   season: number;
   entries?: WeeklyMatchupEntry[];
+  standingsRows?: StandingRow[] | null;
+  events?: LeagueActivityEvent[];
+  playersById?: Map<string, Player>;
+  playersByName?: Map<string, Player>;
 }): PressRoomFactPack {
   const { brief, kind, leagueKey, season } = input;
+  const weekWaiverAdds = weekFilteredWaiverAdds({
+    week: brief.week,
+    events: input.events ?? [],
+    ...(input.playersById ? { playersById: input.playersById } : {}),
+    ...(input.playersByName ? { playersByName: input.playersByName } : {}),
+    limit: 3,
+  });
+
   return {
     week: brief.week,
     season,
@@ -157,6 +258,7 @@ export function buildPressRoomFactPack(input: {
     waiverPlayerId: brief.waiverPlayerId,
     waiverTeam: brief.waiverTeam.trim() || "",
     waiverPoints: brief.waiverPoints,
+    weekWaiverAdds,
     mvpName: brief.mvpPlayer?.name ?? null,
     mvpId: brief.mvpPlayer?.id ?? null,
     mvpPoints: brief.mvpPlayer?.points ?? null,
@@ -177,6 +279,7 @@ export function buildPressRoomFactPack(input: {
       awayProj: p.awayProj,
     })),
     scoreboard: pairMatchups(input.entries ?? []),
+    standings: standingsSnapshot(input.standingsRows),
   };
 }
 
@@ -207,6 +310,11 @@ export function requiredFactStrings(pack: PressRoomFactPack): string[] {
       push(pack.razorWinner);
       push(pack.razorLoser);
       push(pts2(pack.razorMargin));
+    }
+    if (pack.woodshedWinner && pack.woodshedMargin > 0) {
+      push(pack.woodshedWinner);
+      push(pack.woodshedLoser);
+      push(pts2(pack.woodshedMargin));
     }
     if (pack.geniusTeam) {
       push(pack.geniusTeam);

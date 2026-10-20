@@ -2,6 +2,7 @@
  * Server-only Press Room prose generation.
  * Groq (primary) → Gemini (failover) → caller falls back to templates.
  * Facts are never invented here — validation rejects ungrounded copy.
+ * On validation failure, each provider retries once with a slightly hotter seed.
  */
 import { factPackMarkupHints, type PressRoomFactPack } from "@/lib/press-room-fact-pack";
 import type { GeneratedPressArticle } from "@/lib/press-room-templates";
@@ -21,12 +22,13 @@ function geminiKey(): string {
   return String(process.env["GEMINI_API_KEY"] ?? process.env["GOOGLE_API_KEY"] ?? "").trim();
 }
 
-function buildSystemPrompt(pack: PressRoomFactPack): string {
+function buildSystemPrompt(pack: PressRoomFactPack, attempt: number): string {
   const hints = factPackMarkupHints(pack);
   return [
     "You are the Press Room desk writer for a private fantasy football league.",
     "Write like a sharp sports columnist: vivid, specific, varied week to week — never a fill-in-the-blank template.",
     "Use ONLY the JSON facts provided. Do not invent scores, standings, injuries, players, or matchups.",
+    "Lean on scoreboard, woodshed blowout, standings ranks, and weekWaiverAdds when present — still without inventing.",
     "Return strict JSON only: {\"title\":\"...\",\"paragraphs\":[\"...\",\"...\",\"...\"]} with exactly 3 paragraphs.",
     "Title should be uppercase sports-desk style, under 120 characters.",
     "When mentioning teams or metrics from markupHints, prefer those exact tokens so the UI can bold/link them:",
@@ -34,9 +36,14 @@ function buildSystemPrompt(pack: PressRoomFactPack): string {
     "- Metrics: «12.34pts» or «91.2%»",
     "- Players: ⟦playerId¦Player Name⟧ when an id is provided in markupHints",
     `Article kind: ${pack.kind}. Week ${pack.week}, season ${pack.season}.`,
-    `Seed for variety (keep facts fixed, vary voice/structure): ${pack.leagueKey}|${pack.week}|${pack.kind}`,
+    `Seed for variety (keep facts fixed, vary voice/structure): ${pack.leagueKey}|${pack.week}|${pack.kind}|a${attempt}`,
+    attempt > 1
+      ? "RETRY: Prior draft failed grounding checks. Reuse exact names and point strings from the facts / markupHints."
+      : "",
     `markupHints: ${JSON.stringify(hints)}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildUserPrompt(pack: PressRoomFactPack): string {
@@ -77,10 +84,14 @@ function normalizeArticle(raw: unknown): GeneratedPressArticle | null {
   };
 }
 
-async function callGroq(pack: PressRoomFactPack): Promise<LlmArticleResult | null> {
+async function callGroqOnce(
+  pack: PressRoomFactPack,
+  attempt: number,
+): Promise<LlmArticleResult | null> {
   const key = groqKey();
   if (!key) return null;
   const model = String(process.env["GROQ_PRESS_ROOM_MODEL"] ?? "openai/gpt-oss-120b").trim();
+  const temperature = attempt === 1 ? 0.85 : 0.55;
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -89,10 +100,10 @@ async function callGroq(pack: PressRoomFactPack): Promise<LlmArticleResult | nul
     },
     body: JSON.stringify({
       model,
-      temperature: 0.85,
+      temperature,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: buildSystemPrompt(pack) },
+        { role: "system", content: buildSystemPrompt(pack, attempt) },
         { role: "user", content: buildUserPrompt(pack) },
       ],
     }),
@@ -111,10 +122,14 @@ async function callGroq(pack: PressRoomFactPack): Promise<LlmArticleResult | nul
   return { ...article, model: `groq:${model}` };
 }
 
-async function callGemini(pack: PressRoomFactPack): Promise<LlmArticleResult | null> {
+async function callGeminiOnce(
+  pack: PressRoomFactPack,
+  attempt: number,
+): Promise<LlmArticleResult | null> {
   const key = geminiKey();
   if (!key) return null;
   const model = String(process.env["GEMINI_PRESS_ROOM_MODEL"] ?? "gemini-2.0-flash").trim();
+  const temperature = attempt === 1 ? 0.85 : 0.55;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
   const res = await fetch(url, {
     method: "POST",
@@ -123,11 +138,11 @@ async function callGemini(pack: PressRoomFactPack): Promise<LlmArticleResult | n
       contents: [
         {
           role: "user",
-          parts: [{ text: `${buildSystemPrompt(pack)}\n\n${buildUserPrompt(pack)}` }],
+          parts: [{ text: `${buildSystemPrompt(pack, attempt)}\n\n${buildUserPrompt(pack)}` }],
         },
       ],
       generationConfig: {
-        temperature: 0.85,
+        temperature,
         responseMimeType: "application/json",
       },
     }),
@@ -146,18 +161,27 @@ async function callGemini(pack: PressRoomFactPack): Promise<LlmArticleResult | n
   return { ...article, model: `gemini:${model}` };
 }
 
+async function withRetry(
+  pack: PressRoomFactPack,
+  call: (pack: PressRoomFactPack, attempt: number) => Promise<LlmArticleResult | null>,
+): Promise<LlmArticleResult | null> {
+  const first = await call(pack, 1);
+  if (first) return first;
+  return call(pack, 2);
+}
+
 /** Try free LLM providers; returns null when keys missing or output fails validation. */
 export async function generatePressRoomArticleWithLlm(
   pack: PressRoomFactPack,
 ): Promise<LlmArticleResult | null> {
   try {
-    const groq = await callGroq(pack);
+    const groq = await withRetry(pack, callGroqOnce);
     if (groq) return groq;
   } catch (error) {
     console.warn("[press-room-llm] groq error", error);
   }
   try {
-    const gemini = await callGemini(pack);
+    const gemini = await withRetry(pack, callGeminiOnce);
     if (gemini) return gemini;
   } catch (error) {
     console.warn("[press-room-llm] gemini error", error);
