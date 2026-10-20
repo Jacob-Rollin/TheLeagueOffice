@@ -19,6 +19,9 @@ export type ArticleHeroDesk = {
   subtitle: string;
 };
 
+/** Visual density for article / list / admin thumbnails. */
+export type ArticleHeroDensity = "default" | "compact" | "micro";
+
 function normalizePos(posRaw: string): Pos {
   const pos = (posRaw || "WR").toUpperCase();
   if (pos === "DEF" || pos === "DST") return "DEF";
@@ -52,7 +55,8 @@ export function articleHeroDeskCopy(
   return null;
 }
 
-function BrandMark({ compact }: { compact?: boolean }) {
+function BrandMark({ density }: { density: ArticleHeroDensity }) {
+  if (density === "micro") return null;
   return (
     <img
       src={LEAGUE_LOGO_WHITE_SRC}
@@ -60,14 +64,16 @@ function BrandMark({ compact }: { compact?: boolean }) {
       aria-hidden="true"
       className={cn(
         "pointer-events-none absolute z-20 select-none object-contain drop-shadow-sm",
-        compact ? "right-2 top-2 h-8 w-auto sm:h-9" : "right-3 top-3 h-10 w-auto sm:right-4 sm:top-4 sm:h-12",
+        density === "compact"
+          ? "right-1 top-1 h-5 w-auto sm:right-1.5 sm:top-1.5 sm:h-6"
+          : "right-3 top-3 h-10 w-auto sm:right-4 sm:top-4 sm:h-12",
       )}
     />
   );
 }
 
 /**
- * Article / card hero.
+ * Article / card / list hero.
  * Featured: team→white gradient, cutout, faded team logo, desk type on a
  * team-color title band, white League wordmark upper-right (no tile watermark).
  */
@@ -78,15 +84,22 @@ export function ArticleHero({
   featured,
   className,
   compact = false,
+  density: densityProp,
+  fill = false,
 }: {
-  imageUrl: string;
+  imageUrl?: string | null;
   title: string;
   category?: string | null;
   featured?: ArticleHeroPlayer | null;
   className?: string;
-  /** Smaller chrome for tight cards. */
+  /** @deprecated Prefer `density="compact"`. */
   compact?: boolean;
+  /** default = full hero; compact = homepage rows; micro = admin thumbs. */
+  density?: ArticleHeroDensity;
+  /** Fill parent instead of locking 16:9 (list / admin thumbs). */
+  fill?: boolean;
 }) {
+  const density: ArticleHeroDensity = densityProp ?? (compact ? "compact" : "default");
   const chip = featured?.id?.trim() ? featured : null;
   const avatarPos = normalizePos(chip?.pos || "WR");
   const team = chip?.team || "";
@@ -98,13 +111,23 @@ export function ArticleHero({
       ? teamLogo(team || chip.id)
       : playerImage(chip.id, avatarPos, team));
   const desk = articleHeroDeskCopy(category, title);
+  const frame = cn(
+    "relative w-full overflow-hidden",
+    !fill && "aspect-[16/9]",
+    fill && "h-full",
+    className,
+  );
 
   if (chip && shot) {
+    const isMicro = density === "micro";
+    const isCompact = density === "compact";
     return (
       <div
-        className={cn("relative w-full overflow-hidden aspect-[16/9]", className)}
+        className={frame}
         style={{
-          background: `linear-gradient(100deg, ${teamColor} 0%, ${teamColor} 38%, color-mix(in srgb, ${teamColor} 35%, #ffffff) 62%, #ffffff 100%)`,
+          background: isMicro
+            ? `linear-gradient(135deg, ${teamColor} 0%, color-mix(in srgb, ${teamColor} 70%, #0f172a) 100%)`
+            : `linear-gradient(100deg, ${teamColor} 0%, ${teamColor} 38%, color-mix(in srgb, ${teamColor} 35%, #ffffff) 62%, #ffffff 100%)`,
         }}
       >
         {logo ? (
@@ -113,10 +136,12 @@ export function ArticleHero({
             alt=""
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute select-none object-contain opacity-[0.18]",
-              compact
-                ? "left-[6%] top-1/2 h-[88%] w-auto -translate-y-1/2"
-                : "left-[4%] top-1/2 h-[98%] w-auto -translate-y-1/2",
+              "pointer-events-none absolute select-none object-contain",
+              isMicro
+                ? "left-1/2 top-1/2 h-[120%] w-auto -translate-x-1/2 -translate-y-1/2 opacity-[0.22]"
+                : isCompact
+                  ? "left-[4%] top-1/2 h-[90%] w-auto -translate-y-1/2 opacity-[0.18]"
+                  : "left-[4%] top-1/2 h-[98%] w-auto -translate-y-1/2 opacity-[0.18]",
             )}
           />
         ) : null}
@@ -124,91 +149,100 @@ export function ArticleHero({
         <div
           className={cn(
             "pointer-events-none absolute inset-y-0 left-0",
-            compact ? "w-[46%]" : "w-[50%]",
+            isMicro ? "w-full" : isCompact ? "w-[48%]" : "w-[50%]",
           )}
         >
           <img
             src={shot}
             alt=""
             className={cn(
-              "absolute bottom-0 left-1/2 max-h-full -translate-x-1/2 object-contain object-bottom",
-              compact ? "h-[110%] w-auto" : "h-[115%] w-auto",
+              "absolute bottom-0 max-h-full object-contain object-bottom",
+              isMicro
+                ? "left-1/2 h-[115%] w-auto -translate-x-1/2"
+                : isCompact
+                  ? "left-1/2 h-[112%] w-auto -translate-x-1/2"
+                  : "left-1/2 h-[115%] w-auto -translate-x-1/2",
             )}
           />
         </div>
 
-        <div
-          className={cn(
-            "pointer-events-none absolute inset-y-0 right-0 flex flex-col justify-center",
-            compact ? "w-[56%] pr-2 pl-1" : "w-[52%] pr-5 pl-2 sm:pr-10",
-          )}
-        >
-          {desk ? (
-            <div className={cn("w-full", compact ? "max-w-none" : "max-w-md")}>
-              {desk.weekLabel ? (
-                <p
-                  className={cn(
-                    "font-black uppercase tracking-[0.18em] text-slate-900",
-                    compact ? "text-[9px] sm:text-[10px]" : "text-xs sm:text-sm",
-                  )}
-                >
-                  {desk.weekLabel}
-                </p>
-              ) : null}
-              <div
-                className={cn(
-                  "mt-1.5 w-full",
-                  compact ? "px-2 py-1.5" : "px-3 py-2.5 sm:px-4 sm:py-3",
-                )}
-                style={{
-                  background: `linear-gradient(90deg, ${teamColor} 0%, color-mix(in srgb, ${teamColor} 92%, #000) 100%)`,
-                }}
-              >
-                <p
-                  className={cn(
-                    "display-title font-black uppercase leading-[0.92] tracking-tight text-white",
-                    compact ? "text-xl sm:text-2xl" : "text-3xl sm:text-4xl md:text-5xl",
-                  )}
+        {!isMicro ? (
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-y-0 right-0 flex flex-col justify-center",
+              isCompact ? "w-[54%] pr-1.5 pl-0.5" : "w-[52%] pr-5 pl-2 sm:pr-10",
+            )}
+          >
+            {desk ? (
+              <div className="w-full">
+                {desk.weekLabel ? (
+                  <p
+                    className={cn(
+                      "font-black uppercase tracking-[0.14em] text-slate-900",
+                      isCompact ? "text-[7px] leading-none sm:text-[8px]" : "text-xs sm:text-sm",
+                    )}
+                  >
+                    {desk.weekLabel}
+                  </p>
+                ) : null}
+                <div
+                  className={cn("mt-0.5 w-full", isCompact ? "px-1 py-0.5" : "mt-1.5 px-3 py-2.5 sm:px-4 sm:py-3")}
                   style={{
-                    WebkitTextStroke: compact ? "0.5px rgba(15,23,42,0.35)" : "1px rgba(15,23,42,0.4)",
+                    background: `linear-gradient(90deg, ${teamColor} 0%, color-mix(in srgb, ${teamColor} 92%, #000) 100%)`,
                   }}
                 >
-                  {desk.title}
-                </p>
-                <p
-                  className={cn(
-                    "mt-1 font-semibold tracking-wide text-white/95",
-                    compact ? "text-[10px] sm:text-xs" : "text-sm sm:text-base",
+                  <p
+                    className={cn(
+                      "display-title font-black uppercase leading-[0.92] tracking-tight text-white",
+                      isCompact ? "text-[10px] sm:text-xs" : "text-3xl sm:text-4xl md:text-5xl",
+                    )}
+                    style={
+                      isCompact
+                        ? undefined
+                        : { WebkitTextStroke: "1px rgba(15,23,42,0.4)" }
+                    }
+                  >
+                    {desk.title}
+                  </p>
+                  {!isCompact ? (
+                    <p className="mt-1 text-sm font-semibold tracking-wide text-white/95 sm:text-base">
+                      {desk.subtitle}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 truncate text-[7px] font-semibold leading-tight text-white/90 sm:text-[8px]">
+                      {desk.subtitle}
+                    </p>
                   )}
-                >
-                  {desk.subtitle}
-                </p>
+                </div>
               </div>
-            </div>
-          ) : (
-            <p
-              className={cn(
-                "line-clamp-3 font-black uppercase leading-tight tracking-tight text-slate-900",
-                compact ? "text-sm sm:text-base" : "text-xl sm:text-2xl md:text-3xl",
-              )}
-            >
-              {title}
-            </p>
-          )}
-        </div>
+            ) : (
+              <p
+                className={cn(
+                  "line-clamp-3 font-black uppercase leading-tight tracking-tight text-slate-900",
+                  isCompact ? "text-[9px]" : "text-xl sm:text-2xl md:text-3xl",
+                )}
+              >
+                {title}
+              </p>
+            )}
+          </div>
+        ) : null}
 
-        <BrandMark compact={compact} />
+        <BrandMark density={density} />
       </div>
     );
   }
 
+  const cover = (imageUrl || "").trim();
+  if (!cover) {
+    return <div className={cn(frame, "bg-slate-200")} aria-hidden="true" />;
+  }
+
   return (
-    <div
-      className={cn("relative w-full overflow-hidden bg-slate-100 aspect-[16/9]", className)}
-    >
-      <img src={imageUrl} alt={title} className="h-full w-full object-cover" />
+    <div className={cn(frame, "bg-slate-100")}>
+      <img src={cover} alt={title} className="h-full w-full object-cover" />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/55 via-slate-950/10 to-transparent" />
-      <BrandMark compact={compact} />
+      <BrandMark density={density} />
     </div>
   );
 }

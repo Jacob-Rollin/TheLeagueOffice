@@ -329,19 +329,24 @@ function FeaturedBriefing({ article }: { article: ArticleRow }) {
 }
 
 function BriefingRow({ article }: { article: ArticleRow }) {
+  const featured = articleFeaturedFromRow(article);
+  const showThumb = Boolean(article.image_url?.trim() || featured);
   return (
     <Link
       to="/articles/$slug"
       params={{ slug: article.slug }}
       className="group flex gap-4 overflow-hidden rounded-xl border border-border/80 bg-card p-3 transition-colors hover:border-blue-600/40 sm:p-4"
     >
-      {article.image_url ? (
+      {showThumb ? (
         <div className="h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-slate-100 sm:h-24 sm:w-36">
-          <img
-            src={article.image_url}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          <ArticleHero
+            imageUrl={article.image_url}
+            title={article.title}
+            category={article.category}
+            featured={featured}
+            density="compact"
+            fill
+            className="transition-transform duration-500 group-hover:scale-[1.03]"
           />
         </div>
       ) : null}
