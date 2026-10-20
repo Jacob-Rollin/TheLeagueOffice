@@ -75,7 +75,7 @@ export function sanitizeDeskBlurb(text: string): string {
 }
 
 /**
- * Content-width header chip: circular headshot + name + "POS | TEAM".
+ * Fixed-width header chip (18rem): circular headshot + name + "POS | TEAM".
  * Stat line is NOT inside the box — use renderPlayerMetaHtml / renderPlayerBlock.
  */
 export function renderPlayerHeaderHtml(player: {
