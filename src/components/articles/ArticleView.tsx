@@ -54,17 +54,18 @@ export function ArticleView({ article, footer }: { article: ArticleViewData; foo
             "[&_h3]:mb-2 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-semibold " +
             "[&_img]:my-6 [&_img]:h-auto [&_img]:w-full [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-border/10 [&_img]:object-cover " +
             "[&_p]:mb-4 " +
-            /* NFL Fantasy-style: boxed player header only; prose stays normal article text */
+            /* NFL Fantasy-style: boxed name/pos/team chip; bold meta under it; prose unboxed */
             "[&_.lo-priority]:my-8 [&_.lo-priority__list]:my-3 [&_.lo-priority__list]:list-none [&_.lo-priority__list]:space-y-2 [&_.lo-priority__list]:pl-0 " +
             "[&_.lo-priority__list_li]:text-base [&_.lo-priority__list_li]:leading-snug " +
             "[&_.lo-priority__rank]:mr-1 [&_.lo-priority__rank]:font-bold [&_.lo-priority__rank]:text-slate-900 " +
-            "[&_.lo-player-header]:my-6 [&_.lo-player-header]:overflow-hidden [&_.lo-player-header]:rounded-xl [&_.lo-player-header]:border [&_.lo-player-header]:border-slate-200 [&_.lo-player-header]:bg-white [&_.lo-player-header]:shadow-sm " +
-            "[&_.lo-player-header__inner]:flex [&_.lo-player-header__inner]:items-start [&_.lo-player-header__inner]:gap-3 [&_.lo-player-header__inner]:p-4 [&_.lo-player-header__inner]:no-underline [&_.lo-player-header__inner]:text-inherit " +
-            "[&_.lo-player-header__shot]:!my-0 [&_.lo-player-header__shot]:!size-14 [&_.lo-player-header__shot]:!w-14 [&_.lo-player-header__shot]:!max-w-14 [&_.lo-player-header__shot]:shrink-0 [&_.lo-player-header__shot]:!rounded-full [&_.lo-player-header__shot]:!border-0 [&_.lo-player-header__shot]:object-cover [&_.lo-player-header__shot]:ring-1 [&_.lo-player-header__shot]:ring-slate-200 " +
-            "[&_.lo-player-header__id]:flex [&_.lo-player-header__id]:min-w-0 [&_.lo-player-header__id]:flex-col [&_.lo-player-header__id]:gap-0.5 " +
-            "[&_.lo-player-header__name]:text-xl [&_.lo-player-header__name]:font-bold [&_.lo-player-header__name]:leading-tight [&_.lo-player-header__name]:text-slate-900 " +
-            "[&_.lo-player-header__team]:text-sm [&_.lo-player-header__team]:font-semibold [&_.lo-player-header__team]:uppercase [&_.lo-player-header__team]:tracking-wide [&_.lo-player-header__team]:text-slate-600 " +
-            "[&_.lo-player-header__stat]:text-xs [&_.lo-player-header__stat]:font-bold [&_.lo-player-header__stat]:uppercase [&_.lo-player-header__stat]:tracking-wider [&_.lo-player-header__stat]:text-blue-700"
+            "[&_.lo-player-header]:mb-2 [&_.lo-player-header]:mt-7 [&_.lo-player-header]:overflow-hidden [&_.lo-player-header]:rounded-xl [&_.lo-player-header]:border [&_.lo-player-header]:border-slate-200 [&_.lo-player-header]:bg-slate-50 [&_.lo-player-header]:shadow-sm " +
+            "[&_.lo-player-header_a]:!text-inherit [&_.lo-player-header_a]:!no-underline " +
+            "[&_.lo-player-header__inner]:flex [&_.lo-player-header__inner]:items-center [&_.lo-player-header__inner]:gap-3 [&_.lo-player-header__inner]:p-4 " +
+            "[&_.lo-player-header__shot]:!my-0 [&_.lo-player-header__shot]:!size-14 [&_.lo-player-header__shot]:!h-14 [&_.lo-player-header__shot]:!w-14 [&_.lo-player-header__shot]:!max-w-[3.5rem] [&_.lo-player-header__shot]:shrink-0 [&_.lo-player-header__shot]:!rounded-full [&_.lo-player-header__shot]:!border-0 [&_.lo-player-header__shot]:object-cover [&_.lo-player-header__shot]:ring-1 [&_.lo-player-header__shot]:ring-slate-200 " +
+            "[&_.lo-player-header__id]:flex [&_.lo-player-header__id]:min-w-0 [&_.lo-player-header__id]:flex-col [&_.lo-player-header__id]:gap-1 " +
+            "[&_.lo-player-header__name]:block [&_.lo-player-header__name]:text-xl [&_.lo-player-header__name]:font-bold [&_.lo-player-header__name]:leading-tight [&_.lo-player-header__name]:text-slate-900 " +
+            "[&_.lo-player-header__sub]:block [&_.lo-player-header__sub]:text-sm [&_.lo-player-header__sub]:font-semibold [&_.lo-player-header__sub]:uppercase [&_.lo-player-header__sub]:tracking-wide [&_.lo-player-header__sub]:text-slate-500 " +
+            "[&_.lo-player-meta]:mb-3 [&_.lo-player-meta]:mt-0 [&_.lo-player-meta]:text-sm [&_.lo-player-meta]:font-bold [&_.lo-player-meta]:uppercase [&_.lo-player-meta]:tracking-wide [&_.lo-player-meta]:text-slate-900"
           }
           // Content is authored by league admins / weekly desk only.
           dangerouslySetInnerHTML={{ __html: article.content }}

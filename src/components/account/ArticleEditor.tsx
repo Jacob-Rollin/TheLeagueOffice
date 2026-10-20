@@ -15,7 +15,7 @@ import {
 import { ArticleView, type ArticleViewData } from "@/components/articles/ArticleView";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { ArticleInput, ArticleRow } from "@/lib/articles";
-import { renderPlayerHeaderHtml } from "@/lib/weekly-desk-html";
+import { renderPlayerHeaderHtml, renderPlayerMetaHtml } from "@/lib/weekly-desk-html";
 import { cn } from "@/lib/utils";
 
 const inputClass =
@@ -158,15 +158,15 @@ export function ArticleEditor({
   };
 
   const insertPlayerHeader = (player: { id: string; name: string; pos: string; team: string }) => {
-    const stat = playerStatLine.trim();
     const html =
       renderPlayerHeaderHtml({
         id: player.id,
         name: player.name,
         pos: player.pos,
         team: player.team,
-        ...(stat ? { statLine: stat } : {}),
-      }) + `<p><br /></p>`;
+      }) +
+      renderPlayerMetaHtml(playerStatLine.trim() || null) +
+      `<p><br /></p>`;
     exec("insertHTML", html);
     setPlayerQuery("");
     setPlayerStatLine("");
@@ -585,12 +585,14 @@ export function ArticleEditor({
                 "[&_blockquote]:my-4 [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:bg-muted/15 [&_blockquote]:px-4 [&_blockquote]:py-3 [&_blockquote]:italic " +
                 "[&_h1]:mb-2 [&_h1]:text-2xl [&_h1]:font-black [&_h2]:mb-2 [&_h2]:text-xl [&_h2]:font-bold [&_h3]:mb-2 [&_h3]:text-base [&_h3]:font-semibold " +
                 "[&_img]:my-4 [&_img]:h-auto [&_img]:w-full [&_img]:max-w-full [&_img]:rounded-xl [&_img]:border [&_img]:border-border/10 [&_img]:object-cover " +
-                "[&_.lo-player-header]:my-4 [&_.lo-player-header]:overflow-hidden [&_.lo-player-header]:rounded-xl [&_.lo-player-header]:border [&_.lo-player-header]:border-slate-200 [&_.lo-player-header]:bg-white " +
-                "[&_.lo-player-header__inner]:flex [&_.lo-player-header__inner]:items-start [&_.lo-player-header__inner]:gap-3 [&_.lo-player-header__inner]:p-3 [&_.lo-player-header__inner]:no-underline [&_.lo-player-header__inner]:text-inherit " +
-                "[&_.lo-player-header__shot]:!my-0 [&_.lo-player-header__shot]:!size-12 [&_.lo-player-header__shot]:!w-12 [&_.lo-player-header__shot]:!max-w-12 [&_.lo-player-header__shot]:!rounded-full [&_.lo-player-header__shot]:!border-0 [&_.lo-player-header__shot]:object-cover " +
+                "[&_.lo-player-header]:my-3 [&_.lo-player-header]:overflow-hidden [&_.lo-player-header]:rounded-xl [&_.lo-player-header]:border [&_.lo-player-header]:border-slate-200 [&_.lo-player-header]:bg-slate-50 " +
+                "[&_.lo-player-header_a]:!text-inherit [&_.lo-player-header_a]:!no-underline " +
+                "[&_.lo-player-header__inner]:flex [&_.lo-player-header__inner]:items-center [&_.lo-player-header__inner]:gap-3 [&_.lo-player-header__inner]:p-3 " +
+                "[&_.lo-player-header__shot]:!my-0 [&_.lo-player-header__shot]:!size-12 [&_.lo-player-header__shot]:!h-12 [&_.lo-player-header__shot]:!w-12 [&_.lo-player-header__shot]:!max-w-12 [&_.lo-player-header__shot]:!rounded-full [&_.lo-player-header__shot]:!border-0 [&_.lo-player-header__shot]:object-cover " +
                 "[&_.lo-player-header__id]:flex [&_.lo-player-header__id]:flex-col [&_.lo-player-header__id]:gap-0.5 " +
-                "[&_.lo-player-header__name]:text-base [&_.lo-player-header__name]:font-bold [&_.lo-player-header__team]:text-xs [&_.lo-player-header__team]:font-semibold [&_.lo-player-header__team]:uppercase [&_.lo-player-header__team]:text-slate-600 " +
-                "[&_.lo-player-header__stat]:text-[10px] [&_.lo-player-header__stat]:font-bold [&_.lo-player-header__stat]:uppercase [&_.lo-player-header__stat]:tracking-wider [&_.lo-player-header__stat]:text-blue-700"
+                "[&_.lo-player-header__name]:block [&_.lo-player-header__name]:text-base [&_.lo-player-header__name]:font-bold [&_.lo-player-header__name]:text-slate-900 " +
+                "[&_.lo-player-header__sub]:block [&_.lo-player-header__sub]:text-xs [&_.lo-player-header__sub]:font-semibold [&_.lo-player-header__sub]:uppercase [&_.lo-player-header__sub]:text-slate-500 " +
+                "[&_.lo-player-meta]:mb-2 [&_.lo-player-meta]:mt-0 [&_.lo-player-meta]:text-xs [&_.lo-player-meta]:font-bold [&_.lo-player-meta]:uppercase [&_.lo-player-meta]:tracking-wide [&_.lo-player-meta]:text-slate-900"
               }
             />
           </div>
