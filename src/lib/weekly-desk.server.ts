@@ -95,7 +95,7 @@ async function publishWaiver(): Promise<{ slug: string; week: number; season: nu
     slug,
     title: `Waiver Wire: Players to Add (Week ${pack.week})`,
     category: "Waiver Wire",
-    summary: `Priority waiver adds for Week ${pack.week} — available players with rising opportunity. No FAAB bids.`,
+    summary: `Priority waiver adds for Week ${pack.week} — available players with rising opportunity.`,
     content,
     image_url: weeklyDeskStockImage("waiver", pack.week, pack.season),
     author_name: "League Office Desk",
@@ -124,9 +124,9 @@ async function publishStartSit(): Promise<{ slug: string; week: number; season: 
   const slug = stableSlug("start-sit", pack.week, pack.season);
   await upsertArticle({
     slug,
-    title: `Start / Sit: Week ${pack.week} Matchup Edges`,
+    title: `Start / Sit Advice: Week ${pack.week}`,
     category: "Start Sit",
-    summary: `Position-by-position starts and sits for Week ${pack.week} based on matchup strength. Includes DST; no kickers.`,
+    summary: `Position-by-position starts and sits for Week ${pack.week} based on matchup strength.`,
     content,
     image_url: weeklyDeskStockImage("start-sit", pack.week, pack.season),
     author_name: "League Office Desk",

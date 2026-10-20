@@ -1,6 +1,6 @@
 /**
  * Pure HTML builders for weekly desk player breaks — NFL Fantasy-style headers.
- * Name / TEAM / ROSTERED (or START·vs·SOS) then prose. Styled via ArticleView.
+ * Header chip is boxed; prose after it is normal article text.
  */
 
 export type DeskPlayerBlurb = {
@@ -50,23 +50,38 @@ export function sanitizeDeskBlurb(text: string): string {
     .trim();
 }
 
-/** Single NFL-style player block: Name → TEAM → stat line → blurb. */
-export function renderPlayerBlock(player: DeskPlayerBlurb): string {
+/**
+ * Boxed NFL-style player header only (Name / TEAM / optional stat line).
+ * Safe for article editor insertHTML; contenteditable=false so typing stays in prose.
+ */
+export function renderPlayerHeaderHtml(player: {
+  id: string;
+  name: string;
+  pos: string;
+  team: string;
+  statLine?: string | null;
+}): string {
   const src = headshotUrl(player.id, player.pos, player.team);
   const team = (player.team || "").toUpperCase();
-  const stat = player.statLine?.trim();
+  const stat = String(player.statLine ?? "").trim();
+  return (
+    `<div class="lo-player-header" contenteditable="false">` +
+    `<a class="lo-player-header__inner" href="/player/${escapeHtml(player.id)}">` +
+    `<img class="lo-player-header__shot" src="${escapeHtml(src)}" alt="" width="56" height="56" />` +
+    `<span class="lo-player-header__id">` +
+    `<strong class="lo-player-header__name">${escapeHtml(player.name)}</strong>` +
+    (team ? `<span class="lo-player-header__team">${escapeHtml(team)}</span>` : "") +
+    (stat ? `<span class="lo-player-header__stat">${escapeHtml(stat)}</span>` : "") +
+    `</span></a></div>`
+  );
+}
+
+/** Header chip + normal article paragraph (not inside the box). */
+export function renderPlayerBlock(player: DeskPlayerBlurb): string {
   const blurb = sanitizeDeskBlurb(player.blurb);
   return (
-    `<div class="lo-player-block">` +
-    `<a class="lo-player-block__head" href="/player/${escapeHtml(player.id)}">` +
-    `<img class="lo-player-block__shot" src="${escapeHtml(src)}" alt="" width="56" height="56" />` +
-    `<span class="lo-player-block__id">` +
-    `<strong class="lo-player-block__name">${escapeHtml(player.name)}</strong>` +
-    (team ? `<span class="lo-player-block__team">${escapeHtml(team)}</span>` : "") +
-    (stat ? `<span class="lo-player-block__stat">${escapeHtml(stat)}</span>` : "") +
-    `</span></a>` +
-    `<div class="lo-player-block__body"><p>${escapeHtml(blurb)}</p></div>` +
-    `</div>`
+    `${renderPlayerHeaderHtml(player)}\n` +
+    `<p>${escapeHtml(blurb)}</p>`
   );
 }
 
@@ -123,7 +138,6 @@ export function renderGroupedByPosition(players: DeskPlayerBlurb[]): string[] {
     const rows = buckets.get(pos);
     if (rows?.length) sections.push(renderPositionSection(pos, rows));
   }
-  // Any unexpected positions last.
   for (const [pos, rows] of buckets) {
     if ((order as readonly string[]).includes(pos)) continue;
     if (rows.length) sections.push(renderPositionSection(pos, rows));
@@ -136,7 +150,7 @@ export function wrapDeskArticle(introHtml: string, sectionsHtml: string[]): stri
   return [`<p>${escapeHtml(intro)}</p>`, ...sectionsHtml].filter(Boolean).join("\n");
 }
 
-/** @deprecated Prefer renderPlayerBlock — kept for any leftover callers. */
+/** @deprecated Prefer renderPlayerBlock. */
 export function renderPlayerHeroBlock(player: DeskPlayerBlurb): string {
   return renderPlayerBlock(player);
 }
