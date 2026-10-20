@@ -20,6 +20,10 @@ export type Database = {
           category: string
           content: string
           created_at: string | null
+          featured_player_id: string | null
+          featured_player_name: string | null
+          featured_player_pos: string | null
+          featured_player_team: string | null
           id: string
           image_url: string
           published: boolean
@@ -32,6 +36,10 @@ export type Database = {
           category?: string
           content: string
           created_at?: string | null
+          featured_player_id?: string | null
+          featured_player_name?: string | null
+          featured_player_pos?: string | null
+          featured_player_team?: string | null
           id?: string
           image_url: string
           published?: boolean
@@ -44,6 +52,10 @@ export type Database = {
           category?: string
           content?: string
           created_at?: string | null
+          featured_player_id?: string | null
+          featured_player_name?: string | null
+          featured_player_pos?: string | null
+          featured_player_team?: string | null
           id?: string
           image_url?: string
           published?: boolean

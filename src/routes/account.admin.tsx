@@ -86,6 +86,8 @@ const buttonClass =
   "rounded-md bg-primary px-4 py-2 font-display text-sm uppercase tracking-wide text-primary-foreground disabled:opacity-60";
 const blueButton =
   "rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-60";
+const outlineBlueButton =
+  "rounded-md border border-blue-600 bg-transparent px-4 py-2 text-sm font-semibold text-blue-600 transition-colors hover:bg-blue-600 hover:text-white disabled:opacity-60";
 
 type SubTab = "invites" | "articles" | "users" | "leagues";
 
@@ -694,6 +696,7 @@ function ArticlesManager({
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [autoOpened, setAutoOpened] = useState(false);
+  const [deskBusy, setDeskBusy] = useState(false);
 
   const { data: articles, isLoading, error } = useQuery({
     queryKey: ["admin-articles"],
@@ -746,6 +749,26 @@ function ArticlesManager({
     }
   };
 
+  const generateWeeklyDesk = async () => {
+    setDeskBusy(true);
+    try {
+      const { regenerateWeeklyDeskArticles } = await import("@/lib/weekly-desk.functions");
+      const report = await regenerateWeeklyDeskArticles();
+      if (!report.ok) throw new Error(report.error || "Weekly desk failed.");
+      toast.success(
+        `Published Week ${report.week} desks` +
+          (report.waiverSlug && report.startSitSlug
+            ? ` (${report.waiverSlug}, ${report.startSitSlug}).`
+            : "."),
+      );
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not generate weekly desks.");
+    } finally {
+      setDeskBusy(false);
+    }
+  };
+
   return (
     <section className={cardClass}>
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -755,16 +778,26 @@ function ArticlesManager({
             Write and manage League Office editorials featured on the homepage news feed.
           </p>
         </div>
-        <button
-          type="button"
-          className={blueButton}
-          onClick={() => {
-            setEditing(null);
-            setEditorOpen(true);
-          }}
-        >
-          Create New Article
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={outlineBlueButton}
+            disabled={deskBusy}
+            onClick={() => void generateWeeklyDesk()}
+          >
+            {deskBusy ? "Generating…" : "Generate weekly desks"}
+          </button>
+          <button
+            type="button"
+            className={blueButton}
+            onClick={() => {
+              setEditing(null);
+              setEditorOpen(true);
+            }}
+          >
+            Create New Article
+          </button>
+        </div>
       </div>
 
       <div className="mt-5 divide-y divide-border overflow-hidden rounded-lg border border-border">

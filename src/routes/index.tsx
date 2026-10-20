@@ -2,6 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftRight, ArrowRight, Grid3X3, Radar } from "lucide-react";
 import { useEffect, useState } from "react";
+import {
+  ArticleHero,
+  articleFeaturedFromRow,
+} from "@/components/articles/ArticleHero";
 import { StandingsPanel } from "@/components/league/StandingsPanel";
 import { InjuryWire } from "@/components/news/InjuryWire";
 import { listPublishedArticles, type ArticleRow } from "@/lib/articles";
@@ -287,14 +291,14 @@ function FeaturedBriefing({ article }: { article: ArticleRow }) {
       className="group block overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-blue-600/50"
     >
       {article.image_url ? (
-        <div className="relative w-full overflow-hidden bg-slate-100">
-          <img
-            src={article.image_url}
-            alt={article.title}
-            loading="lazy"
-            className="h-auto w-full object-cover transition-transform duration-500 group-hover:scale-[1.01]"
+        <div className="relative w-full overflow-hidden">
+          <ArticleHero
+            imageUrl={article.image_url}
+            title={article.title}
+            featured={articleFeaturedFromRow(article)}
+            className="transition-transform duration-500 group-hover:scale-[1.01]"
           />
-          <span className="absolute right-3 top-3 rounded-md bg-blue-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+          <span className="absolute left-3 top-3 z-20 rounded-md bg-blue-600 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
             Featured
           </span>
         </div>

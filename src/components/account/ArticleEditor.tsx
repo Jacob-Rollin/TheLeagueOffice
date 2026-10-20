@@ -82,6 +82,10 @@ export function ArticleEditor({
   const [summary, setSummary] = useState(article?.summary ?? "");
   const [imageUrl, setImageUrl] = useState(article?.image_url ?? "");
   const [author, setAuthor] = useState(article?.author_name ?? authorName);
+  const [featuredId, setFeaturedId] = useState(article?.featured_player_id ?? "");
+  const [featuredName, setFeaturedName] = useState(article?.featured_player_name ?? "");
+  const [featuredPos, setFeaturedPos] = useState(article?.featured_player_pos ?? "");
+  const [featuredTeam, setFeaturedTeam] = useState(article?.featured_player_team ?? "");
   const [embedUrl, setEmbedUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sizeOpen, setSizeOpen] = useState(false);
@@ -163,6 +167,10 @@ export function ArticleEditor({
       image_url: imageUrl.trim(),
       author_name: author.trim() || "The League Office",
       created_at: article?.created_at ?? new Date().toISOString(),
+      featured_player_id: featuredId.trim() || null,
+      featured_player_name: featuredName.trim() || null,
+      featured_player_pos: featuredPos.trim() || null,
+      featured_player_team: featuredTeam.trim() || null,
     });
   };
 
@@ -190,6 +198,10 @@ export function ArticleEditor({
       image_url: imageUrl.trim(),
       author_name: author.trim() || "The League Office",
       published: true,
+      featured_player_id: featuredId.trim() || null,
+      featured_player_name: featuredName.trim() || null,
+      featured_player_pos: featuredPos.trim() || null,
+      featured_player_team: featuredTeam.trim() || null,
     });
   };
 
@@ -246,6 +258,7 @@ export function ArticleEditor({
                 className={inputClass}
                 value={imageUrl}
                 onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://… (stock football landscape)"
               />
             </div>
             <div>
@@ -258,6 +271,63 @@ export function ArticleEditor({
                 value={author}
                 onChange={(e) => setAuthor(e.target.value)}
               />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+            <p className={labelClass}>Hero player overlap</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Optional. Shows a player chip over the header stock image. Leave blank for image-only.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className={labelClass} htmlFor="article-featured-id">
+                  Player ID
+                </label>
+                <input
+                  id="article-featured-id"
+                  className={inputClass}
+                  value={featuredId}
+                  onChange={(e) => setFeaturedId(e.target.value)}
+                  placeholder="Sleeper id"
+                />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="article-featured-name">
+                  Player name
+                </label>
+                <input
+                  id="article-featured-name"
+                  className={inputClass}
+                  value={featuredName}
+                  onChange={(e) => setFeaturedName(e.target.value)}
+                  placeholder="Display name"
+                />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="article-featured-pos">
+                  Position
+                </label>
+                <input
+                  id="article-featured-pos"
+                  className={inputClass}
+                  value={featuredPos}
+                  onChange={(e) => setFeaturedPos(e.target.value)}
+                  placeholder="RB"
+                />
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="article-featured-team">
+                  Team
+                </label>
+                <input
+                  id="article-featured-team"
+                  className={inputClass}
+                  value={featuredTeam}
+                  onChange={(e) => setFeaturedTeam(e.target.value)}
+                  placeholder="DEN"
+                />
+              </div>
             </div>
           </div>
 
