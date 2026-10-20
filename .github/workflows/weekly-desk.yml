@@ -1,0 +1,38 @@
+name: Weekly Front Office Desk
+
+# Publishes Waiver Wire + Start/Sit CMS articles after research snaps warm.
+# Tue 9:00 UTC — early week waiver / start-sit window.
+
+on:
+  schedule:
+    - cron: "0 9 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-desk
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Publish weekly desk articles
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL / CRON_SECRET not configured — skipping."
+            exit 0
+          fi
+          BASE="${APP_URL%/}"
+          case "$BASE" in
+            http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+            http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
+          esac
+          curl -fsSL -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE/api/cron/weekly-desk"

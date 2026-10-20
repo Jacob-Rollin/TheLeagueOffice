@@ -58,7 +58,7 @@ CRON_SECRET=
 YAHOO_CLIENT_ID=
 YAHOO_CLIENT_SECRET=
 
-# Press Room AI (optional — templates used when unset)
+# Press Room + weekly Front Office desks (optional — templates when unset)
 GROQ_API_KEY=
 # Optional failover / model overrides
 GEMINI_API_KEY=

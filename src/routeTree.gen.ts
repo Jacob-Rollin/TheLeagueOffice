@@ -73,6 +73,7 @@ import { Route as ApiCronNativeWaiversRouteImport } from './routes/api/cron/nati
 import { Route as ApiCronResearchAggregatesRouteImport } from './routes/api/cron/research-aggregates'
 import { Route as ApiCronSupabaseKeepaliveRouteImport } from './routes/api/cron/supabase-keepalive'
 import { Route as ApiCronWarehouseIngestRouteImport } from './routes/api/cron/warehouse-ingest'
+import { Route as ApiCronWeeklyDeskRouteImport } from './routes/api/cron/weekly-desk'
 import { Route as ApiDataPlayersRouteImport } from './routes/api/data/players'
 import { Route as ApiDataPlayersExportRouteImport } from './routes/api/data/players-export'
 import { Route as ApiPublicScoreboardRouteImport } from './routes/api/public/scoreboard'
@@ -431,6 +432,11 @@ const ApiCronWarehouseIngestRoute = ApiCronWarehouseIngestRouteImport.update({
   path: '/api/cron/warehouse-ingest',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronWeeklyDeskRoute = ApiCronWeeklyDeskRouteImport.update({
+  id: '/api/cron/weekly-desk',
+  path: '/api/cron/weekly-desk',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDataPlayersRoute = ApiDataPlayersRouteImport.update({
   id: '/api/data/players',
   path: '/api/data/players',
@@ -654,6 +660,7 @@ export interface FileRoutesByFullPath {
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/supabase-keepalive': typeof ApiCronSupabaseKeepaliveRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
+  '/api/cron/weekly-desk': typeof ApiCronWeeklyDeskRoute
   '/api/data/players': typeof ApiDataPlayersRoute
   '/api/data/players-export': typeof ApiDataPlayersExportRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
@@ -747,6 +754,7 @@ export interface FileRoutesByTo {
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/supabase-keepalive': typeof ApiCronSupabaseKeepaliveRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
+  '/api/cron/weekly-desk': typeof ApiCronWeeklyDeskRoute
   '/api/data/players': typeof ApiDataPlayersRoute
   '/api/data/players-export': typeof ApiDataPlayersExportRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
@@ -844,6 +852,7 @@ export interface FileRoutesById {
   '/api/cron/research-aggregates': typeof ApiCronResearchAggregatesRoute
   '/api/cron/supabase-keepalive': typeof ApiCronSupabaseKeepaliveRoute
   '/api/cron/warehouse-ingest': typeof ApiCronWarehouseIngestRoute
+  '/api/cron/weekly-desk': typeof ApiCronWeeklyDeskRoute
   '/api/data/players': typeof ApiDataPlayersRoute
   '/api/data/players-export': typeof ApiDataPlayersExportRoute
   '/api/public/scoreboard': typeof ApiPublicScoreboardRoute
@@ -1221,6 +1230,7 @@ export interface RootRouteChildren {
   ApiCronResearchAggregatesRoute: typeof ApiCronResearchAggregatesRoute
   ApiCronSupabaseKeepaliveRoute: typeof ApiCronSupabaseKeepaliveRoute
   ApiCronWarehouseIngestRoute: typeof ApiCronWarehouseIngestRoute
+  ApiCronWeeklyDeskRoute: typeof ApiCronWeeklyDeskRoute
   ApiDataPlayersRoute: typeof ApiDataPlayersRoute
   ApiDataPlayersExportRoute: typeof ApiDataPlayersExportRoute
   ApiPublicScoreboardRoute: typeof ApiPublicScoreboardRoute
@@ -1684,6 +1694,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCronWarehouseIngestRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/weekly-desk': {
+      id: '/api/cron/weekly-desk'
+      path: '/api/cron/weekly-desk'
+      fullPath: '/api/cron/weekly-desk'
+      preLoaderRoute: typeof ApiCronWeeklyDeskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/data/players': {
       id: '/api/data/players'
       path: '/api/data/players'
@@ -2066,6 +2083,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCronResearchAggregatesRoute: ApiCronResearchAggregatesRoute,
   ApiCronSupabaseKeepaliveRoute: ApiCronSupabaseKeepaliveRoute,
   ApiCronWarehouseIngestRoute: ApiCronWarehouseIngestRoute,
+  ApiCronWeeklyDeskRoute: ApiCronWeeklyDeskRoute,
   ApiDataPlayersRoute: ApiDataPlayersRoute,
   ApiDataPlayersExportRoute: ApiDataPlayersExportRoute,
   ApiPublicScoreboardRoute: ApiPublicScoreboardRoute,
