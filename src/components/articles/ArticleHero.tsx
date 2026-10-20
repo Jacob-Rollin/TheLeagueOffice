@@ -85,14 +85,15 @@ function BrandMark({ density }: { density: ArticleHeroDensity }) {
   );
 }
 
-/** Soft horizontal wash behind desk type — fades out, never a solid opaque box. */
+/**
+ * Demo text band: solid team color flush on the far right, fades to transparent
+ * toward the player (left). Never transparent on the right edge.
+ */
 function deskBandGradient(teamColor: string, kind: ArticleHeroDeskKind): string {
   if (kind === "wire") {
-    // Demo: maroon band fades toward white on the right; open toward the player on the left.
-    return `linear-gradient(90deg, transparent 0%, ${teamColor}b8 14%, ${teamColor}eb 42%, ${teamColor}99 72%, transparent 100%)`;
+    return `linear-gradient(90deg, transparent 0%, ${teamColor}cc 28%, ${teamColor} 100%)`;
   }
-  // Start/Sit: softer wash so type sits on the cream side of the hero gradient.
-  return `linear-gradient(90deg, transparent 0%, ${teamColor}66 18%, ${teamColor}a6 48%, ${teamColor}55 78%, transparent 100%)`;
+  return `linear-gradient(90deg, transparent 0%, ${teamColor}aa 30%, ${teamColor} 100%)`;
 }
 
 function DeskTypeBlock({
@@ -111,22 +112,23 @@ function DeskTypeBlock({
     <div
       className={cn(
         "pointer-events-none absolute inset-y-0 right-0 flex flex-col justify-center",
-        isCompact ? "w-[56%] pr-1" : "w-[54%] pr-4 sm:pr-8",
+        isCompact ? "w-[58%]" : "w-[56%] sm:w-[54%]",
       )}
     >
+      {/* Band is flush to the hero’s right edge; only text gets inner padding. */}
       <div
         className={cn(
           "w-full",
           rightAlign ? "text-right" : "text-left",
-          isCompact ? "px-2 py-2" : "px-4 py-5 sm:px-6 sm:py-6",
+          isCompact ? "py-1 pl-2 pr-1.5" : "py-2 pl-5 pr-3 sm:py-2.5 sm:pl-6 sm:pr-4",
         )}
         style={{ background: deskBandGradient(teamColor, desk.kind) }}
       >
         {desk.weekLabel ? (
           <p
             className={cn(
-              "font-bold uppercase tracking-[0.2em] text-slate-900",
-              isCompact ? "text-[7px] leading-none" : "text-[11px] sm:text-xs",
+              "font-bold uppercase tracking-[0.18em] text-slate-900",
+              isCompact ? "text-[7px] leading-none" : "text-[10px] leading-tight sm:text-[11px]",
             )}
           >
             {desk.weekLabel}
@@ -136,14 +138,16 @@ function DeskTypeBlock({
           className={cn(
             "display-title font-black uppercase tracking-tight text-white",
             isCompact
-              ? "mt-0.5 text-[11px] leading-[0.95] sm:text-xs"
-              : "mt-1.5 text-[1.85rem] leading-[0.9] sm:text-4xl md:text-[2.75rem]",
+              ? "mt-0.5 text-xs leading-[0.92] sm:text-sm"
+              : "mt-0.5 text-[2.15rem] leading-[0.88] sm:text-5xl md:text-6xl",
           )}
           style={
             isCompact
               ? undefined
               : {
-                  textShadow: "0 1px 0 rgba(15,23,42,0.35), 0 0 1px rgba(15,23,42,0.5)",
+                  WebkitTextStroke: "1.25px rgba(15, 23, 42, 0.55)",
+                  paintOrder: "stroke fill",
+                  textShadow: "0 1px 2px rgba(15, 23, 42, 0.25)",
                 }
           }
         >
@@ -154,7 +158,7 @@ function DeskTypeBlock({
             "font-medium tracking-wide text-white",
             isCompact
               ? "mt-0.5 truncate text-[7px] leading-tight text-white/90"
-              : "mt-1.5 text-sm sm:text-[0.95rem]",
+              : "mt-0.5 text-xs leading-snug sm:text-sm",
           )}
         >
           {desk.subtitle}
