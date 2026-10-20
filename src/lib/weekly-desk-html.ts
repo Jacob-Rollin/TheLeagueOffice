@@ -75,7 +75,7 @@ export function sanitizeDeskBlurb(text: string): string {
 }
 
 /**
- * Content-width header chip: circular headshot + name + "POS | TEAM".
+ * Fixed-width header chip (18rem): circular headshot + name + "POS | TEAM".
  * Stat line is NOT inside the box — use renderPlayerMetaHtml / renderPlayerBlock.
  */
 export function renderPlayerHeaderHtml(player: {
@@ -90,7 +90,7 @@ export function renderPlayerHeaderHtml(player: {
   const sub = [pos, team].filter(Boolean).join(" | ");
   return (
     `<div class="lo-player-header" contenteditable="false" ` +
-    `style="display:inline-block;width:fit-content;max-width:18rem;vertical-align:top">` +
+    `style="display:inline-block;width:18rem;max-width:100%;vertical-align:top;box-sizing:border-box">` +
     `<a class="lo-player-header__inner lo-player-link" href="${playerHref(player.id)}" ` +
     `data-player-id="${escapeHtml(player.id)}" ` +
     `style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem 1rem;text-decoration:none;color:inherit">` +
