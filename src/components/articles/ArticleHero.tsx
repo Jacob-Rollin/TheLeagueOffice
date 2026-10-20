@@ -13,7 +13,10 @@ export type ArticleHeroPlayer = {
   team: string;
 };
 
+export type ArticleHeroDeskKind = "wire" | "start-sit";
+
 export type ArticleHeroDesk = {
+  kind: ArticleHeroDeskKind;
   weekLabel: string | null;
   title: string;
   subtitle: string;
@@ -29,15 +32,15 @@ function normalizePos(posRaw: string): Pos {
   return "WR";
 }
 
-export function articleHeroWeekLabel(title?: string | null): string | null {
+export function articleHeroWeekNumber(title?: string | null): string | null {
   const m = String(title ?? "").match(/\bweek\s+(\d+)\b/i);
-  return m?.[1] ? `WEEK ${m[1]}` : null;
+  return m?.[1] ?? null;
 }
 
 /**
- * Desk chrome for the right-side hero type (matches Broadcast A/B demos).
- * Wire → WEEK N / THE WIRE / Waiver Wire Targets
- * Start/Sit → WEEK N / START / SIT / Weekly Lineup Advice
+ * Desk chrome matching Broadcast demos exactly:
+ * Wire → WEEK N / THE WIRE / Waiver Wire Targets (right-aligned on faded band)
+ * Start/Sit → WEEK N ADVICE / START / SIT / Weekly Lineup Advice (left-aligned)
  */
 export function articleHeroDeskCopy(
   category?: string | null,
@@ -45,12 +48,22 @@ export function articleHeroDeskCopy(
 ): ArticleHeroDesk | null {
   const cat = (category || "").trim().toLowerCase();
   const t = (title || "").trim().toLowerCase();
-  const weekLabel = articleHeroWeekLabel(title);
+  const week = articleHeroWeekNumber(title);
   if (cat.includes("waiver") || t.includes("waiver")) {
-    return { weekLabel, title: "THE WIRE", subtitle: "Waiver Wire Targets" };
+    return {
+      kind: "wire",
+      weekLabel: week ? `WEEK ${week}` : null,
+      title: "THE WIRE",
+      subtitle: "Waiver Wire Targets",
+    };
   }
   if (cat.includes("start") || t.includes("start / sit") || t.includes("start/sit")) {
-    return { weekLabel, title: "START / SIT", subtitle: "Weekly Lineup Advice" };
+    return {
+      kind: "start-sit",
+      weekLabel: week ? `WEEK ${week} ADVICE` : null,
+      title: "START / SIT",
+      subtitle: "Weekly Lineup Advice",
+    };
   }
   return null;
 }
@@ -66,16 +79,95 @@ function BrandMark({ density }: { density: ArticleHeroDensity }) {
         "pointer-events-none absolute z-20 select-none object-contain drop-shadow-sm",
         density === "compact"
           ? "right-1 top-1 h-5 w-auto sm:right-1.5 sm:top-1.5 sm:h-6"
-          : "right-3 top-3 h-10 w-auto sm:right-4 sm:top-4 sm:h-12",
+          : "right-3 top-3 h-9 w-auto sm:right-4 sm:top-4 sm:h-11",
       )}
     />
+  );
+}
+
+/** Soft horizontal wash behind desk type — fades out, never a solid opaque box. */
+function deskBandGradient(teamColor: string, kind: ArticleHeroDeskKind): string {
+  if (kind === "wire") {
+    // Demo: maroon band fades toward white on the right; open toward the player on the left.
+    return `linear-gradient(90deg, transparent 0%, ${teamColor}b8 14%, ${teamColor}eb 42%, ${teamColor}99 72%, transparent 100%)`;
+  }
+  // Start/Sit: softer wash so type sits on the cream side of the hero gradient.
+  return `linear-gradient(90deg, transparent 0%, ${teamColor}66 18%, ${teamColor}a6 48%, ${teamColor}55 78%, transparent 100%)`;
+}
+
+function DeskTypeBlock({
+  desk,
+  teamColor,
+  density,
+}: {
+  desk: ArticleHeroDesk;
+  teamColor: string;
+  density: Exclude<ArticleHeroDensity, "micro">;
+}) {
+  const isCompact = density === "compact";
+  const rightAlign = desk.kind === "wire";
+
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-y-0 right-0 flex flex-col justify-center",
+        isCompact ? "w-[56%] pr-1" : "w-[54%] pr-4 sm:pr-8",
+      )}
+    >
+      <div
+        className={cn(
+          "w-full",
+          rightAlign ? "text-right" : "text-left",
+          isCompact ? "px-2 py-2" : "px-4 py-5 sm:px-6 sm:py-6",
+        )}
+        style={{ background: deskBandGradient(teamColor, desk.kind) }}
+      >
+        {desk.weekLabel ? (
+          <p
+            className={cn(
+              "font-bold uppercase tracking-[0.2em] text-slate-900",
+              isCompact ? "text-[7px] leading-none" : "text-[11px] sm:text-xs",
+            )}
+          >
+            {desk.weekLabel}
+          </p>
+        ) : null}
+        <p
+          className={cn(
+            "display-title font-black uppercase tracking-tight text-white",
+            isCompact
+              ? "mt-0.5 text-[11px] leading-[0.95] sm:text-xs"
+              : "mt-1.5 text-[1.85rem] leading-[0.9] sm:text-4xl md:text-[2.75rem]",
+          )}
+          style={
+            isCompact
+              ? undefined
+              : {
+                  textShadow: "0 1px 0 rgba(15,23,42,0.35), 0 0 1px rgba(15,23,42,0.5)",
+                }
+          }
+        >
+          {desk.title}
+        </p>
+        <p
+          className={cn(
+            "font-medium tracking-wide text-white",
+            isCompact
+              ? "mt-0.5 truncate text-[7px] leading-tight text-white/90"
+              : "mt-1.5 text-sm sm:text-[0.95rem]",
+          )}
+        >
+          {desk.subtitle}
+        </p>
+      </div>
+    </div>
   );
 }
 
 /**
  * Article / card / list hero.
  * Featured: team→white gradient, cutout, faded team logo, desk type on a
- * team-color title band, white League wordmark upper-right (no tile watermark).
+ * soft fading wash (demo style), white League wordmark upper-right.
  */
 export function ArticleHero({
   imageUrl,
@@ -127,7 +219,7 @@ export function ArticleHero({
         style={{
           background: isMicro
             ? `linear-gradient(135deg, ${teamColor} 0%, color-mix(in srgb, ${teamColor} 70%, #0f172a) 100%)`
-            : `linear-gradient(100deg, ${teamColor} 0%, ${teamColor} 38%, color-mix(in srgb, ${teamColor} 35%, #ffffff) 62%, #ffffff 100%)`,
+            : `linear-gradient(100deg, ${teamColor} 0%, ${teamColor} 36%, color-mix(in srgb, ${teamColor} 28%, #f8fafc) 58%, #ffffff 100%)`,
         }}
       >
         {logo ? (
@@ -149,82 +241,36 @@ export function ArticleHero({
         <div
           className={cn(
             "pointer-events-none absolute inset-y-0 left-0",
-            isMicro ? "w-full" : isCompact ? "w-[48%]" : "w-[50%]",
+            isMicro ? "w-full" : isCompact ? "w-[46%]" : "w-[48%]",
           )}
         >
           <img
             src={shot}
             alt=""
             className={cn(
-              "absolute bottom-0 max-h-full object-contain object-bottom",
-              isMicro
-                ? "left-1/2 h-[115%] w-auto -translate-x-1/2"
-                : isCompact
-                  ? "left-1/2 h-[112%] w-auto -translate-x-1/2"
-                  : "left-1/2 h-[115%] w-auto -translate-x-1/2",
+              "absolute bottom-0 left-1/2 max-h-full -translate-x-1/2 object-contain object-bottom",
+              isMicro ? "h-[115%] w-auto" : isCompact ? "h-[112%] w-auto" : "h-[115%] w-auto",
             )}
           />
         </div>
 
-        {!isMicro ? (
+        {!isMicro && desk ? (
+          <DeskTypeBlock desk={desk} teamColor={teamColor} density={density} />
+        ) : !isMicro ? (
           <div
             className={cn(
-              "pointer-events-none absolute inset-y-0 right-0 flex flex-col justify-center",
-              isCompact ? "w-[54%] pr-1.5 pl-0.5" : "w-[52%] pr-5 pl-2 sm:pr-10",
+              "pointer-events-none absolute inset-y-0 right-0 flex items-center",
+              isCompact ? "w-[54%] pr-2" : "w-[52%] pr-6",
             )}
           >
-            {desk ? (
-              <div className="w-full">
-                {desk.weekLabel ? (
-                  <p
-                    className={cn(
-                      "font-black uppercase tracking-[0.14em] text-slate-900",
-                      isCompact ? "text-[7px] leading-none sm:text-[8px]" : "text-xs sm:text-sm",
-                    )}
-                  >
-                    {desk.weekLabel}
-                  </p>
-                ) : null}
-                <div
-                  className={cn("mt-0.5 w-full", isCompact ? "px-1 py-0.5" : "mt-1.5 px-3 py-2.5 sm:px-4 sm:py-3")}
-                  style={{
-                    background: `linear-gradient(90deg, ${teamColor} 0%, color-mix(in srgb, ${teamColor} 92%, #000) 100%)`,
-                  }}
-                >
-                  <p
-                    className={cn(
-                      "display-title font-black uppercase leading-[0.92] tracking-tight text-white",
-                      isCompact ? "text-[10px] sm:text-xs" : "text-3xl sm:text-4xl md:text-5xl",
-                    )}
-                    style={
-                      isCompact
-                        ? undefined
-                        : { WebkitTextStroke: "1px rgba(15,23,42,0.4)" }
-                    }
-                  >
-                    {desk.title}
-                  </p>
-                  {!isCompact ? (
-                    <p className="mt-1 text-sm font-semibold tracking-wide text-white/95 sm:text-base">
-                      {desk.subtitle}
-                    </p>
-                  ) : (
-                    <p className="mt-0.5 truncate text-[7px] font-semibold leading-tight text-white/90 sm:text-[8px]">
-                      {desk.subtitle}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p
-                className={cn(
-                  "line-clamp-3 font-black uppercase leading-tight tracking-tight text-slate-900",
-                  isCompact ? "text-[9px]" : "text-xl sm:text-2xl md:text-3xl",
-                )}
-              >
-                {title}
-              </p>
-            )}
+            <p
+              className={cn(
+                "line-clamp-3 font-black uppercase leading-tight tracking-tight text-slate-900",
+                isCompact ? "text-[9px]" : "text-xl sm:text-2xl md:text-3xl",
+              )}
+            >
+              {title}
+            </p>
           </div>
         ) : null}
 
