@@ -54,7 +54,12 @@ export function ArticleView({ article, footer }: { article: ArticleViewData; foo
   return (
     <article className="overflow-hidden rounded-xl border border-border/80 bg-card">
       {article.image_url ? (
-        <ArticleHero imageUrl={article.image_url} title={article.title} featured={featured} />
+        <ArticleHero
+          imageUrl={article.image_url}
+          title={article.title}
+          category={article.category}
+          featured={featured}
+        />
       ) : null}
       <div className="p-6 md:p-8">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-blue-600">
