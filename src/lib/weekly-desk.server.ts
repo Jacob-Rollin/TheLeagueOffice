@@ -9,7 +9,9 @@ import {
   templateWaiverBlurbs,
 } from "@/lib/weekly-desk-facts.server";
 import {
+  renderGroupedByPosition,
   renderPositionSection,
+  renderPriorityList,
   wrapDeskArticle,
 } from "@/lib/weekly-desk-html";
 import { narrateStartSitBlurbs, narrateWaiverBlurbs } from "@/lib/weekly-desk-llm.server";
@@ -82,8 +84,10 @@ async function publishWaiver(): Promise<{ slug: string; week: number; season: nu
   const templates = templateWaiverBlurbs(pack);
   const narrated = await narrateWaiverBlurbs(pack, templates);
   const hero = narrated.players[0] ?? null;
+  // NFL-style layout: intro → top overall board → position write-ups.
   const sections = [
-    renderPositionSection("Priority Adds", narrated.players),
+    renderPriorityList(`Top ${narrated.players.length} Overall Waiver-Wire Targets`, narrated.players),
+    ...renderGroupedByPosition(narrated.players),
   ];
   const content = wrapDeskArticle(narrated.intro, sections);
   const slug = stableSlug("waiver", pack.week, pack.season);
@@ -114,7 +118,7 @@ async function publishStartSit(): Promise<{ slug: string; week: number; season: 
     const rows = narrated.byPos[pos];
     if (!rows?.length) continue;
     if (!hero) hero = rows[0]!;
-    sections.push(renderPositionSection(pos === "DST" ? "DST" : pos, rows));
+    sections.push(renderPositionSection(pos, rows));
   }
   const content = wrapDeskArticle(narrated.intro, sections);
   const slug = stableSlug("start-sit", pack.week, pack.season);
