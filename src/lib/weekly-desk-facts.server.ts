@@ -158,18 +158,39 @@ function teamNickname(abbr: string): string {
   return t?.name ?? abbr;
 }
 
-/** "vs. Saints" / "at Vikings" from SOS schedule; empty when unknown. */
+/**
+ * "vs. Saints" / "at Vikings" from SOS schedule.
+ * On a bye (no game this week), use the next game after the bye and tag the week —
+ * e.g. "vs. Eagles (Week 8)" — never "TBD" when a later opponent exists.
+ */
 function nextOpponentLabel(board: SosBoardLike | null, team: string, week: number): string {
   const upper = team.trim().toUpperCase();
   if (!board || !upper || upper === "FA") return "";
-  const game = board.schedule.find(
-    ([w, home, away]) => w === week && (home === upper || away === upper) && home && away,
+
+  const thisWeek = board.schedule.find(
+    ([w, home, away]) => w === week && (home === upper || away === upper) && Boolean(home) && Boolean(away),
   );
-  if (!game) return "";
-  const [, home, away] = game;
+  if (thisWeek) {
+    const [, home, away] = thisWeek;
+    const opp = home === upper ? away : home;
+    const nick = teamNickname(opp);
+    return home === upper ? `vs. ${nick}` : `at ${nick}`;
+  }
+
+  // Bye (or missing row): next scheduled opponent after this week.
+  const upcoming = board.schedule
+    .filter(
+      ([w, home, away]) =>
+        w > week && w <= 18 && (home === upper || away === upper) && Boolean(home) && Boolean(away),
+    )
+    .sort((a, b) => a[0] - b[0]);
+  const next = upcoming[0];
+  if (!next) return "";
+  const [nextWeek, home, away] = next;
   const opp = home === upper ? away : home;
   const nick = teamNickname(opp);
-  return home === upper ? `vs. ${nick}` : `at ${nick}`;
+  const matchup = home === upper ? `vs. ${nick}` : `at ${nick}`;
+  return `${matchup} (Week ${nextWeek})`;
 }
 
 /** Prefer mid-availability ownership over ghosts and near-rostered. Eligibility: <60%. */
