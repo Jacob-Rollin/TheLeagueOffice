@@ -7,6 +7,10 @@ import { toast } from "sonner";
 import { AccountShell } from "@/components/account/AccountShell";
 import { ArticleEditor } from "@/components/account/ArticleEditor";
 import {
+  ArticleHero,
+  articleFeaturedFromRow,
+} from "@/components/articles/ArticleHero";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -814,12 +818,16 @@ function ArticlesManager({
         ) : (
           articles.map((row) => (
             <div key={row.id} className="flex items-center gap-3 px-3 py-2">
-              <img
-                src={row.image_url}
-                alt={row.title}
-                loading="lazy"
-                className="h-10 w-10 shrink-0 rounded-md border border-border object-cover"
-              />
+              <div className="h-12 w-[4.5rem] shrink-0 overflow-hidden rounded-md border border-border bg-slate-100">
+                <ArticleHero
+                  imageUrl={row.image_url}
+                  title={row.title}
+                  category={row.category}
+                  featured={articleFeaturedFromRow(row)}
+                  density="micro"
+                  fill
+                />
+              </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">{row.title}</p>
                 <p className="truncate text-xs text-muted-foreground">
