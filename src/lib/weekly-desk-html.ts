@@ -84,7 +84,6 @@ export function renderPriorityList(
         `<li><span class="lo-priority__rank">${i + 1})</span> ` +
         `<a href="/player/${escapeHtml(p.id)}"><strong>${escapeHtml(p.name)}</strong></a>` +
         (label ? `, ${escapeHtml(label)}` : "") +
-        (p.statLine ? ` — ${escapeHtml(p.statLine)}` : "") +
         `</li>`
       );
     })
