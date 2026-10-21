@@ -8,6 +8,19 @@ import { cn } from "@/lib/utils";
 /** Above the desktop player popup (z-50). */
 const OVERLAY_Z = "z-[70]";
 
+export type DesktopDialogSize = "md" | "lg" | "xl";
+
+const CONFIRM_SIZE: Record<DesktopDialogSize, string> = {
+  md: "max-w-md",
+  lg: "max-w-2xl",
+  xl: "max-w-3xl",
+};
+
+const PICKER_SIZE: Record<"lg" | "xl", string> = {
+  lg: "max-w-lg",
+  xl: "max-w-3xl",
+};
+
 function useLockBodyScroll(active: boolean) {
   useEffect(() => {
     if (!active) return;
@@ -22,15 +35,18 @@ function useLockBodyScroll(active: boolean) {
 /**
  * Broadcast-styled centered confirm for desktop Fantasy roster actions
  * (add/drop/trade). Same role as MobileCenteredConfirm.
+ * Use `size="xl"` for trade proposals with give/receive lists.
  */
 export function DesktopCenteredConfirm({
   label,
   children,
   className,
+  size = "md",
 }: {
   label: string;
   children: ReactNode;
   className?: string;
+  size?: DesktopDialogSize;
 }) {
   useLockBodyScroll(true);
   if (typeof document === "undefined") return null;
@@ -46,11 +62,12 @@ export function DesktopCenteredConfirm({
         aria-modal="true"
         aria-label={label}
         className={cn(
-          "max-h-[min(85vh,100%)] w-full max-w-md overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white p-5 text-slate-900 shadow-lg",
+          "flex max-h-[min(90vh,100%)] w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg",
+          CONFIRM_SIZE[size],
           className,
         )}
       >
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6">{children}</div>
       </div>
     </div>,
     document.body,
@@ -60,6 +77,7 @@ export function DesktopCenteredConfirm({
 /**
  * Broadcast-styled scrollable picker (choose a drop / trade target).
  * Centered modal — not a full-screen mobile sheet.
+ * Use `size="xl"` for long trade-target lists.
  */
 export function DesktopRosterPicker({
   title,
@@ -67,12 +85,14 @@ export function DesktopRosterPicker({
   onClose,
   closeDisabled,
   children,
+  size = "lg",
 }: {
   title: string;
   subtitle?: ReactNode;
   onClose: () => void;
   closeDisabled?: boolean;
   children: ReactNode;
+  size?: "lg" | "xl";
 }) {
   useLockBodyScroll(true);
   if (typeof document === "undefined") return null;
@@ -87,9 +107,12 @@ export function DesktopRosterPicker({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="flex max-h-[min(88vh,100%)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg"
+        className={cn(
+          "flex max-h-[min(90vh,100%)] w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg",
+          PICKER_SIZE[size],
+        )}
       >
-        <header className="shrink-0 border-b border-slate-200 px-5 py-4">
+        <header className="shrink-0 border-b border-slate-200 px-6 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h3 className="display-title text-xl uppercase tracking-wide text-slate-900">
@@ -108,7 +131,7 @@ export function DesktopRosterPicker({
             </button>
           </div>
         </header>
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-slate-50/80 px-3 py-3">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-slate-50/80 px-4 py-4">
           {children}
         </div>
       </div>

@@ -25,6 +25,7 @@ export { LeagueSettingsChangesPanel } from "@/components/native/fantasy/settings
 export {
   DesktopCenteredConfirm,
   DesktopRosterPicker,
+  type DesktopDialogSize,
 } from "@/components/native/fantasy/NativeTransactionDialogs";
 
 export {
