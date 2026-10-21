@@ -1,7 +1,15 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeftRight,
+  ChevronDown,
+  LayoutDashboard,
+  Shield,
+  Swords,
+  UserRound,
+  Users,
+} from "lucide-react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 
 import { resolveAvatarUrl } from "@/components/playbook/panels";
 import {
@@ -18,56 +26,55 @@ import {
 } from "@/lib/native-league.functions";
 import { cn } from "@/lib/utils";
 
-type NativeSegment =
-  | ""
-  | "my-team"
-  | "matchup"
-  | "standings"
-  | "teams"
-  | "players"
-  | "waivers"
-  | "trades"
-  | "transactions"
-  | "draft";
+type NativeSegment = "" | "my-team" | "matchup" | "players" | "trades" | "fantasy";
 
 export type NativeSubNavLink = {
+  id: string;
   segment: NativeSegment;
   label: string;
-  to:
+  icon: ComponentType<{ className?: string }>;
+  /** Absolute hub path (Dashboard → /fantasy). */
+  href?: string;
+  to?:
     | "/league/$linkId"
     | "/league/$linkId/my-team"
     | "/league/$linkId/matchup"
-    | "/league/$linkId/standings"
-    | "/league/$linkId/teams"
     | "/league/$linkId/players"
-    | "/league/$linkId/waivers"
-    | "/league/$linkId/trades"
-    | "/league/$linkId/transactions"
-    | "/league/$linkId/draft";
+    | "/league/$linkId/trades";
 };
 
+/** Primary Fantasy IA — Sleeper-style strip; Broadcast pill chrome. */
 export const NATIVE_LEAGUE_SUBNAV_LINKS: NativeSubNavLink[] = [
-  { segment: "", label: "Dashboard", to: "/league/$linkId" },
-  { segment: "my-team", label: "My Team", to: "/league/$linkId/my-team" },
-  { segment: "matchup", label: "Matchup", to: "/league/$linkId/matchup" },
-  { segment: "standings", label: "Standings", to: "/league/$linkId/standings" },
-  { segment: "teams", label: "Teams", to: "/league/$linkId/teams" },
-  { segment: "players", label: "Players", to: "/league/$linkId/players" },
-  { segment: "waivers", label: "Waivers", to: "/league/$linkId/waivers" },
-  { segment: "trades", label: "Trades", to: "/league/$linkId/trades" },
-  { segment: "transactions", label: "Transactions", to: "/league/$linkId/transactions" },
-  { segment: "draft", label: "Draft", to: "/league/$linkId/draft" },
+  { id: "dashboard", segment: "fantasy", label: "Dashboard", icon: LayoutDashboard, href: "/fantasy" },
+  { id: "league", segment: "", label: "League", icon: Shield, to: "/league/$linkId" },
+  { id: "matchup", segment: "matchup", label: "Matchup", icon: Swords, to: "/league/$linkId/matchup" },
+  { id: "team", segment: "my-team", label: "Team", icon: UserRound, to: "/league/$linkId/my-team" },
+  { id: "players", segment: "players", label: "Players", icon: Users, to: "/league/$linkId/players" },
+  {
+    id: "trades",
+    segment: "trades",
+    label: "Trades",
+    icon: ArrowLeftRight,
+    to: "/league/$linkId/trades",
+  },
 ];
 
 function hrefFor(linkId: string, segment: NativeSegment): string {
+  if (segment === "fantasy") return "/fantasy";
   return segment ? `/league/${linkId}/${segment}` : `/league/${linkId}`;
 }
 
-function segmentFromPath(pathname: string, linkId: string): string {
+function segmentFromPath(pathname: string, linkId: string): NativeSegment {
+  if (pathname === "/fantasy" || pathname.startsWith("/fantasy/")) return "fantasy";
   const base = `/league/${linkId}`;
   if (pathname === base || pathname === `${base}/`) return "";
-  if (!pathname.startsWith(`${base}/`)) return "";
-  return pathname.slice(base.length + 1).split("/")[0] ?? "";
+  if (!pathname.startsWith(`${base}/`)) return "fantasy";
+  const seg = pathname.slice(base.length + 1).split("/")[0] ?? "";
+  if (seg === "my-team" || seg === "matchup" || seg === "players" || seg === "trades") {
+    return seg;
+  }
+  // Secondary tools (standings, waivers, …) highlight League.
+  return "";
 }
 
 function teamInitials(name: string): string {
@@ -162,7 +169,11 @@ function NativeLeagueSwitcher({ linkId }: { linkId: string }) {
   const switchTo = (next: NativeMemberLeagueSummary) => {
     setActiveLeagueId(next.linkId);
     const seg = segmentFromPath(pathname, linkId);
-    const match = NATIVE_LEAGUE_SUBNAV_LINKS.find((l) => l.segment === seg);
+    if (seg === "fantasy") {
+      void navigate({ to: "/fantasy" });
+      return;
+    }
+    const match = NATIVE_LEAGUE_SUBNAV_LINKS.find((l) => l.segment === seg && l.to);
     void navigate({
       to: match?.to ?? "/league/$linkId",
       params: { linkId: next.linkId },
@@ -171,10 +182,10 @@ function NativeLeagueSwitcher({ linkId }: { linkId: string }) {
 
   return (
     <DropdownMenu key={linkId}>
-      <DropdownMenuTrigger className="flex h-9 max-w-[190px] items-center rounded-lg border border-border/80 bg-white px-2.5 py-0.5 text-left shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <DropdownMenuTrigger className="flex h-9 max-w-[190px] items-center rounded-full border border-border/80 bg-white px-2.5 py-0.5 text-left shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <NativeSwitcherAvatar
           teamName={teamName}
-          avatarUrl={active?.avatarUrl}
+          avatarUrl={active?.avatarUrl ?? null}
           cacheKey={`native-switcher-${linkId}`}
           compact
         />
@@ -227,16 +238,17 @@ function NativeLeagueSwitcher({ linkId }: { linkId: string }) {
 }
 
 /**
- * Playbook-style sub-navbar for desktop native leagues only.
- * League switcher lists native memberships; links stay on /league/$linkId/*.
+ * Fantasy league sub-navbar: Dashboard (/fantasy), League, Matchup, Team,
+ * Players, Trades — pill active state (Broadcast blue), Sleeper-like flow.
  */
 export function NativeLeagueSubNav({ linkId }: { linkId: string }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const activeSegment = segmentFromPath(pathname, linkId);
 
   return (
-    <div className="flex h-12 w-full items-center justify-between border-b border-border/50 bg-slate-50/90 px-6">
-      <div className="mx-auto flex h-12 w-full max-w-shell items-center gap-2 px-3">
-        <div className="mr-4 grid shrink-0 items-center">
+    <div className="flex h-14 w-full items-center justify-between border-b border-border/50 bg-slate-50/90 px-6">
+      <div className="mx-auto flex h-14 w-full max-w-shell items-center gap-3 px-3">
+        <div className="mr-2 grid shrink-0 items-center">
           <span
             className="display-title invisible col-start-1 row-start-1 whitespace-nowrap text-lg"
             aria-hidden="true"
@@ -248,24 +260,43 @@ export function NativeLeagueSubNav({ linkId }: { linkId: string }) {
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          <nav className="flex items-center space-x-5 text-xs font-semibold text-slate-500">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-0.5">
+          <nav className="flex items-center gap-1.5" aria-label="Fantasy league">
             {NATIVE_LEAGUE_SUBNAV_LINKS.map((item) => {
-              const href = hrefFor(linkId, item.segment);
-              const active = item.segment
-                ? pathname === href || pathname.startsWith(`${href}/`)
-                : pathname === href || pathname === `${href}/`;
+              const active = item.segment === activeSegment;
+              const Icon = item.icon;
+              const className = cn(
+                "inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-xs font-bold uppercase tracking-wide transition-colors",
+                active
+                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700",
+              );
+
+              if (item.href) {
+                return (
+                  <Link
+                    key={item.id}
+                    to={item.href}
+                    preload="intent"
+                    className={className}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                    {item.label}
+                  </Link>
+                );
+              }
+
               return (
                 <Link
-                  key={item.segment || "dashboard"}
-                  to={item.to}
+                  key={item.id}
+                  to={item.to!}
                   params={{ linkId }}
                   preload="intent"
-                  className={cn(
-                    "inline-flex items-center whitespace-nowrap transition-colors",
-                    active ? "border-b-2 border-blue-600 text-blue-600" : "hover:text-slate-900",
-                  )}
+                  className={className}
+                  aria-current={active ? "page" : undefined}
                 >
+                  <Icon className="size-3.5 shrink-0" aria-hidden="true" />
                   {item.label}
                 </Link>
               );
@@ -275,4 +306,9 @@ export function NativeLeagueSubNav({ linkId }: { linkId: string }) {
       </div>
     </div>
   );
+}
+
+/** @deprecated Prefer hrefFor via segment — kept for any external callers. */
+export function nativeLeagueHref(linkId: string, segment: NativeSegment): string {
+  return hrefFor(linkId, segment);
 }

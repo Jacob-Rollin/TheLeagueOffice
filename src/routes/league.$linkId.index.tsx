@@ -5,8 +5,6 @@ import { toast } from "sonner";
 
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
-  FantasyActivityList,
-  type FantasyActivityItem,
   FantasyAroundLeagueList,
   FantasyBoard,
   FantasyMatchupScoreCard,
@@ -14,8 +12,6 @@ import {
   type FantasyStandingsRow,
   fantasyOutlineBtn,
   fantasyPrimaryBtn,
-  LeagueActivityPanel,
-  LeagueSettingsChangesPanel,
   nativeMatchupViewToCard,
 } from "@/components/native/fantasy";
 import { MatchupsPanelShell } from "@/components/playbook/MatchupPreviewCard";
@@ -33,7 +29,6 @@ import {
   getNativeLeagueBoard,
   getNativeMatchupWeek,
   getNativeStandings,
-  listNativeTransactions,
   setNativeLeagueWeek,
 } from "@/lib/native-league.functions";
 import type { Player } from "@/lib/players-build";
@@ -183,11 +178,6 @@ function NativeLeagueDashboardBody({
     }
     return map;
   }, [cache.data?.players, catalogFallback.data?.players]);
-  const nameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const [id, p] of playersById) map.set(id, p.name);
-    return map;
-  }, [playersById]);
 
   const { projectFor, sleeperIdFor } = useLeagueProjections(currentWeek);
   const { progressByNflTeam } = useNflGameProgress(currentWeek);
@@ -265,15 +255,6 @@ function NativeLeagueDashboardBody({
     if (!myMatchupScored) return null;
     return enrichMatchupCard(myMatchupScored);
   }, [myMatchupScored, enrichMatchupCard]);
-
-  const { data: recentTx } = useQuery({
-    queryKey: ["native-transactions", linkId, "dashboard"],
-    enabled: Boolean(draftDone && userId && linkId),
-    staleTime: 15_000,
-    queryFn: () => listNativeTransactions({ data: { linkId, limit: 12 } }),
-  });
-
-  const activityItems = (recentTx ?? []) as FantasyActivityItem[];
 
   const refreshBoard = async () => {
     await Promise.all([
@@ -390,17 +371,24 @@ function NativeLeagueDashboardBody({
       <PlayerModalHost ref={modalRef} />
 
       <div className="flex flex-wrap gap-2">
-        <Link to="/league/$linkId/my-team" params={{ linkId }} className={fantasyPrimaryBtn}>
-          My Team
-        </Link>
-        <Link to="/league/$linkId/players" params={{ linkId }} className={fantasyOutlineBtn}>
-          Players
+        <Link to="/league/$linkId/standings" params={{ linkId }} className={fantasyOutlineBtn}>
+          Standings
         </Link>
         <Link to="/league/$linkId/waivers" params={{ linkId }} className={fantasyOutlineBtn}>
           Waivers
         </Link>
-        <Link to="/league/$linkId/trades" params={{ linkId }} className={fantasyOutlineBtn}>
-          Trades
+        <Link to="/league/$linkId/teams" params={{ linkId }} className={fantasyOutlineBtn}>
+          Teams
+        </Link>
+        <Link to="/league/$linkId/draft" params={{ linkId }} className={fantasyOutlineBtn}>
+          Draft
+        </Link>
+        <Link
+          to="/league/$linkId/transactions"
+          params={{ linkId }}
+          className={fantasyOutlineBtn}
+        >
+          Transactions
         </Link>
       </div>
 
@@ -410,190 +398,174 @@ function NativeLeagueDashboardBody({
         </p>
       ) : null}
 
-      {/* Playbook-style: main column 2/3, rail 1/3 */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <MatchupsPanelShell
-            weekLabel={
-              <span className="rounded-lg border border-border bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
-                Week {currentWeek}
-              </span>
-            }
-            action={
-              <Link
-                to="/league/$linkId/matchup"
-                params={{ linkId }}
-                className="text-xs font-semibold text-primary hover:underline"
-              >
-                View Matchup
-              </Link>
-            }
-          >
-            {myMatchupCard ? (
-              <>
-                <FantasyMatchupScoreCard
-                  embedded
-                  home={myMatchupCard.home}
-                  away={myMatchupCard.away}
-                  myTeamId={myTeamId}
-                  status={
-                    myMatchupCard.matchupFinal
-                      ? "final"
-                      : liveActive || myMatchupCard.weekStarted
-                        ? "live"
-                        : null
-                  }
-                  weekStarted={myMatchupCard.weekStarted}
-                  matchupFinal={myMatchupCard.matchupFinal}
-                  cacheKey={`${linkId}-dash`}
-                />
+      <div className="space-y-6">
+        <MatchupsPanelShell
+          weekLabel={
+            <span className="rounded-lg border border-border bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
+              Week {currentWeek}
+            </span>
+          }
+          action={
+            <Link
+              to="/league/$linkId/matchup"
+              params={{ linkId }}
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              View Matchup
+            </Link>
+          }
+        >
+          {myMatchupCard ? (
+            <>
+              <FantasyMatchupScoreCard
+                embedded
+                home={myMatchupCard.home}
+                away={myMatchupCard.away}
+                myTeamId={myTeamId}
+                status={
+                  myMatchupCard.matchupFinal
+                    ? "final"
+                    : liveActive || myMatchupCard.weekStarted
+                      ? "live"
+                      : null
+                }
+                weekStarted={myMatchupCard.weekStarted}
+                matchupFinal={myMatchupCard.matchupFinal}
+                cacheKey={`${linkId}-dash`}
+              />
+              <FantasyAroundLeagueList
+                matchups={aroundMatchups}
+                myTeamId={myTeamId}
+                linkId={linkId}
+                cacheKey={`${linkId}-around`}
+              />
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600">
+                {weekMatchups.length > 0
+                  ? `No matchup linked to your team for week ${currentWeek}.`
+                  : "Schedule not generated yet — complete the draft to build week pairings."}
+              </p>
+              {weekMatchups.length > 0 && myTeamId == null ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Claim a team seat to see your weekly matchup here.
+                </p>
+              ) : null}
+              {scoredMatchups.length > 0 ? (
                 <FantasyAroundLeagueList
-                  matchups={aroundMatchups}
+                  matchups={scoredMatchups.map((m) => enrichMatchupCard(m))}
                   myTeamId={myTeamId}
                   linkId={linkId}
-                  cacheKey={`${linkId}-around`}
+                  cacheKey={`${linkId}-around-all`}
                 />
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-slate-600">
-                  {weekMatchups.length > 0
-                    ? `No matchup linked to your team for week ${currentWeek}.`
-                    : "Schedule not generated yet — complete the draft to build week pairings."}
-                </p>
-                {weekMatchups.length > 0 && myTeamId == null ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Claim a team seat to see your weekly matchup here.
-                  </p>
-                ) : null}
-                {scoredMatchups.length > 0 ? (
-                  <FantasyAroundLeagueList
-                    matchups={scoredMatchups.map((m) => enrichMatchupCard(m))}
-                    myTeamId={myTeamId}
-                    linkId={linkId}
-                    cacheKey={`${linkId}-around-all`}
-                  />
-                ) : weekMatchups.length > 0 ? (
-                  <ul className="mt-3 space-y-1 text-sm text-slate-700">
-                    {weekMatchups.slice(0, 6).map((m) => (
-                      <li key={m.matchupId} className="border-t border-border py-1.5">
-                        {teamName(m.homeTeamId)} vs {teamName(m.awayTeamId)}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </>
-            )}
-          </MatchupsPanelShell>
+              ) : weekMatchups.length > 0 ? (
+                <ul className="mt-3 space-y-1 text-sm text-slate-700">
+                  {weekMatchups.slice(0, 6).map((m) => (
+                    <li key={m.matchupId} className="border-t border-border py-1.5">
+                      {teamName(m.homeTeamId)} vs {teamName(m.awayTeamId)}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          )}
+        </MatchupsPanelShell>
 
-          <FantasyBoard
-            title="Standings"
-            bodyClassName="p-0"
-            action={
-              <Link
-                to="/league/$linkId/standings"
-                params={{ linkId }}
-                className="text-xs font-medium text-blue-700 hover:underline"
-              >
-                Full table
-              </Link>
-            }
-          >
-            {compactStandings.length === 0 ? (
-              <p className="px-4 py-5 text-sm text-muted-foreground">Standings not available yet.</p>
-            ) : (
-              <FantasyStandingsTable
-                rows={compactStandings}
-                playoffTeams={playoffTeams}
-                myTeamId={myTeamId}
-                leagueKey={linkId}
-              />
-            )}
-          </FantasyBoard>
-
-          {canManage ? (
-            <FantasyBoard title="Commissioner Week Controls" bodyClassName="p-5">
-              <p className="text-sm text-muted-foreground">
-                Season started at week {seasonStart}. Advance to test the next week without replaying
-                earlier matchups. AI lineups refresh automatically for AI seats.
-              </p>
-              <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                <div>
-                  <dt className="text-muted-foreground">Current week</dt>
-                  <dd className="font-medium text-slate-900">Week {currentWeek}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Rostered players</dt>
-                  <dd className="font-medium text-slate-900">{ownedCount}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Scoring</dt>
-                  <dd className="font-medium capitalize text-slate-900">{summary.scoringPreset}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">Invite code</dt>
-                  <dd className="font-mono text-sm font-medium tracking-wide text-slate-900">
-                    {summary.inviteCode}
-                  </dd>
-                </div>
-              </dl>
-              <div className="mt-4 flex flex-wrap items-end gap-3">
-                <button
-                  type="button"
-                  className={fantasyPrimaryBtn}
-                  disabled={weekBusy || currentWeek >= maxJump}
-                  onClick={() => void advanceWeek()}
-                >
-                  {weekBusy ? "Updating…" : `Advance to Week ${Math.min(maxJump, currentWeek + 1)}`}
-                </button>
-                <label className="block text-sm font-medium text-slate-800">
-                  Jump to week
-                  <select
-                    className="mt-1 block min-w-[8rem] rounded-md border border-border px-3 py-2 text-sm"
-                    value={jumpWeek === "" ? "" : String(jumpWeek)}
-                    disabled={weekBusy}
-                    onChange={(e) =>
-                      setJumpWeek(e.target.value === "" ? "" : Number(e.target.value))
-                    }
-                  >
-                    <option value="">Select…</option>
-                    {Array.from(
-                      { length: maxJump - seasonStart + 1 },
-                      (_, i) => seasonStart + i,
-                    ).map((w) => (
-                      <option key={w} value={w} disabled={w === currentWeek}>
-                        Week {w}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  className={fantasyOutlineBtn}
-                  disabled={weekBusy || jumpWeek === "" || jumpWeek === currentWeek}
-                  onClick={() => {
-                    if (typeof jumpWeek === "number") void advanceWeek(jumpWeek);
-                  }}
-                >
-                  Set Week
-                </button>
-              </div>
-            </FantasyBoard>
-          ) : null}
-        </div>
-
-        <div className="space-y-6 lg:col-span-1">
-          <LeagueSettingsChangesPanel linkId={linkId} />
-          <LeagueActivityPanel linkId={linkId}>
-            <FantasyActivityList
-              items={activityItems.slice(0, 5)}
-              playersById={playersById}
-              resolveName={(id) => (id ? (nameById.get(id) ?? id) : null)}
-              onOpenPlayer={(id) => modalRef.current?.open(id)}
-              emptyMessage="No recent transactions recorded. Summaries will appear here after the next league moves."
+        <FantasyBoard
+          title="Standings"
+          bodyClassName="p-0"
+          action={
+            <Link
+              to="/league/$linkId/standings"
+              params={{ linkId }}
+              className="text-xs font-medium text-blue-700 hover:underline"
+            >
+              Full table
+            </Link>
+          }
+        >
+          {compactStandings.length === 0 ? (
+            <p className="px-4 py-5 text-sm text-muted-foreground">Standings not available yet.</p>
+          ) : (
+            <FantasyStandingsTable
+              rows={compactStandings}
+              playoffTeams={playoffTeams}
+              myTeamId={myTeamId}
+              leagueKey={linkId}
             />
-          </LeagueActivityPanel>
-        </div>
+          )}
+        </FantasyBoard>
+
+        {canManage ? (
+          <FantasyBoard title="Commissioner Week Controls" bodyClassName="p-5">
+            <p className="text-sm text-muted-foreground">
+              Season started at week {seasonStart}. Advance to test the next week without replaying
+              earlier matchups. AI lineups refresh automatically for AI seats.
+            </p>
+            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+              <div>
+                <dt className="text-muted-foreground">Current week</dt>
+                <dd className="font-medium text-slate-900">Week {currentWeek}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Rostered players</dt>
+                <dd className="font-medium text-slate-900">{ownedCount}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Scoring</dt>
+                <dd className="font-medium capitalize text-slate-900">{summary.scoringPreset}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Invite code</dt>
+                <dd className="font-mono text-sm font-medium tracking-wide text-slate-900">
+                  {summary.inviteCode}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-4 flex flex-wrap items-end gap-3">
+              <button
+                type="button"
+                className={fantasyPrimaryBtn}
+                disabled={weekBusy || currentWeek >= maxJump}
+                onClick={() => void advanceWeek()}
+              >
+                {weekBusy ? "Updating…" : `Advance to Week ${Math.min(maxJump, currentWeek + 1)}`}
+              </button>
+              <label className="block text-sm font-medium text-slate-800">
+                Jump to week
+                <select
+                  className="mt-1 block min-w-[8rem] rounded-md border border-border px-3 py-2 text-sm"
+                  value={jumpWeek === "" ? "" : String(jumpWeek)}
+                  disabled={weekBusy}
+                  onChange={(e) =>
+                    setJumpWeek(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                >
+                  <option value="">Select…</option>
+                  {Array.from(
+                    { length: maxJump - seasonStart + 1 },
+                    (_, i) => seasonStart + i,
+                  ).map((w) => (
+                    <option key={w} value={w} disabled={w === currentWeek}>
+                      Week {w}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className={fantasyOutlineBtn}
+                disabled={weekBusy || jumpWeek === "" || jumpWeek === currentWeek}
+                onClick={() => {
+                  if (typeof jumpWeek === "number") void advanceWeek(jumpWeek);
+                }}
+              >
+                Set Week
+              </button>
+            </div>
+          </FantasyBoard>
+        ) : null}
       </div>
     </div>
   );
