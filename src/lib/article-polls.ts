@@ -61,6 +61,59 @@ export type CreatePollInput = {
 const POLL_COLS =
   "id, article_id, created_by, title, status, require_auth, native_league_id, created_at";
 
+const POLL_ID_RE = /data-poll-id\s*=\s*["']([0-9a-f-]{36})["']/gi;
+
+/** Poll UUIDs embedded in article HTML. */
+export function extractPollIdsFromContent(html: string): string[] {
+  const ids = new Set<string>();
+  const re = new RegExp(POLL_ID_RE.source, POLL_ID_RE.flags);
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(html ?? "")) !== null) {
+    const id = match[1]?.trim();
+    if (id) ids.add(id);
+  }
+  return [...ids];
+}
+
+/**
+ * Point embedded polls at this article and delete polls that were linked here
+ * but removed from the body (keeps the warehouse tidy).
+ */
+export async function syncArticlePollLinks(
+  articleId: string,
+  contentHtml: string,
+): Promise<void> {
+  const embeddedIds = extractPollIdsFromContent(contentHtml);
+
+  if (embeddedIds.length > 0) {
+    const { error: linkError } = await supabase
+      .from("article_polls")
+      .update({ article_id: articleId })
+      .in("id", embeddedIds);
+    if (linkError) throw new Error(linkError.message);
+  }
+
+  const { data: linked, error: listError } = await supabase
+    .from("article_polls")
+    .select("id")
+    .eq("article_id", articleId);
+  if (listError) throw new Error(listError.message);
+
+  const keep = new Set(embeddedIds);
+  const orphanIds = (linked ?? []).map((row) => row.id).filter((id) => !keep.has(id));
+  if (orphanIds.length === 0) return;
+
+  const { error: delError } = await supabase.from("article_polls").delete().in("id", orphanIds);
+  if (delError) throw new Error(delError.message);
+}
+
+/** Delete polls by id (questions → options → votes cascade). */
+export async function deleteArticlePolls(pollIds: string[]): Promise<void> {
+  if (pollIds.length === 0) return;
+  const { error } = await supabase.from("article_polls").delete().in("id", pollIds);
+  if (error) throw new Error(error.message);
+}
+
 function escapePollLabel(title?: string | null): string {
   return (title?.trim() || "Poll").replace(/[<>&"]/g, (c) =>
     ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c] ?? c,

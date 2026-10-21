@@ -1,4 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  deleteArticlePolls,
+  extractPollIdsFromContent,
+  syncArticlePollLinks,
+} from "@/lib/article-polls";
 
 export type ArticleRow = {
   id: string;
@@ -125,7 +130,9 @@ export async function createArticle(input: ArticleInput): Promise<ArticleRow> {
     .select(COLUMNS)
     .single();
   if (error) throw new Error(error.message);
-  return mapRow(data as ArticleRow);
+  const row = mapRow(data as ArticleRow);
+  await syncArticlePollLinks(row.id, input.content);
+  return row;
 }
 
 export async function updateArticle(id: string, input: ArticleInput): Promise<ArticleRow> {
@@ -145,10 +152,24 @@ export async function updateArticle(id: string, input: ArticleInput): Promise<Ar
     .select(COLUMNS)
     .single();
   if (error) throw new Error(error.message);
-  return mapRow(data as ArticleRow);
+  const row = mapRow(data as ArticleRow);
+  await syncArticlePollLinks(row.id, input.content);
+  return row;
 }
 
 export async function deleteArticle(id: string): Promise<void> {
+  // Fetch content first so we can drop polls that were never linked via article_id.
+  const { data: existing, error: fetchError } = await supabase
+    .from("articles")
+    .select("id, content")
+    .eq("id", id)
+    .maybeSingle();
+  if (fetchError) throw new Error(fetchError.message);
+
+  const pollIds = extractPollIdsFromContent(String(existing?.content ?? ""));
+  await deleteArticlePolls(pollIds);
+
+  // Comments cascade via FK; linked polls also cascade after migration.
   const { error } = await supabase.from("articles").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
