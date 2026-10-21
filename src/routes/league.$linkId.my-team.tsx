@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, Settings } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -9,10 +9,8 @@ import {
   FantasyAddButton,
   FantasyBoard,
   FantasyDropButton,
-  FantasyMatchupScoreCard,
   FantasyOptimizeButton,
   FantasyPlayerChip,
-  FantasySaveLineupButton,
   FantasySectionTitle,
   FantasyWeekSelect,
   MatchupSlotBadge,
@@ -21,8 +19,14 @@ import {
   fantasyPrimaryBtn,
   formatFantasyProj,
   formatFantasyPts,
-  nativeMatchupViewToCard,
 } from "@/components/native/fantasy";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { PLAYER_LIST_HEADER_ROW } from "@/components/research/SortHeader";
 import {
   buildProjectedOptimalLineup,
@@ -56,6 +60,7 @@ import {
   getNativeLineup,
   getNativeMatchupWeek,
   getNativeStandings,
+  renameNativeTeam,
   resolveNativeIrViolation,
   saveNativeLineup,
   setNativeTeamAvatar,
@@ -179,14 +184,6 @@ function NativeMyTeamPage() {
     queryFn: () => getNativeMatchupWeek({ data: { linkId, week: activeWeek } }),
   });
 
-  const lastWeekNum = Math.max(1, activeWeek - 1);
-  const { data: lastMatchupWeek } = useQuery({
-    queryKey: ["native-matchup-week", linkId, lastWeekNum],
-    enabled: Boolean(user?.id && linkId && lineup?.draftComplete && activeWeek > 1),
-    staleTime: 60_000,
-    queryFn: () => getNativeMatchupWeek({ data: { linkId, week: lastWeekNum } }),
-  });
-
   const isLeagueCurrentWeek = activeWeek === (boardWeek ?? activeWeek);
 
   const {
@@ -235,13 +232,15 @@ function NativeMyTeamPage() {
   const [rosterVersion, setRosterVersion] = useState(1);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [activateDropFor, setActivateDropFor] = useState<string | null>(null);
   const [dropPick, setDropPick] = useState("");
   const [optimizing, setOptimizing] = useState(false);
   const [logoOpen, setLogoOpen] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
+  const [teamSettingsOpen, setTeamSettingsOpen] = useState(false);
+  const [teamNameDraft, setTeamNameDraft] = useState("");
+  const [teamNameBusy, setTeamNameBusy] = useState(false);
 
   const allowedStatuses = useMemo(
     () =>
@@ -256,17 +255,14 @@ function NativeMyTeamPage() {
     const counts = parseRosterSlotCounts(lineup.rosterSlots);
     if (lineup.slots) {
       setViews(viewsFromSlotsRecord(counts, lineup.slots));
-      setDirty(false);
     } else if (lineup.rosterPlayerIds.length > 0 && Object.keys(posById).length > 0) {
       const defaults = buildDefaultLineupSlots(lineup.rosterPlayerIds, posById, counts, {
         injuryById,
         irAllowedStatuses: allowedStatuses,
       });
       setViews(viewsFromSlotsRecord(counts, defaults));
-      setDirty(true);
     } else {
       setViews(viewsFromSlotsRecord(counts, {}));
-      setDirty(false);
     }
     setVersion(lineup.version);
     setRosterVersion(lineup.rosterVersion);
@@ -309,11 +305,6 @@ function NativeMyTeamPage() {
     list.find((m) => m.home.teamId === myTeamId || m.away.teamId === myTeamId) ?? null;
 
   const thisMatchup = findMyMatchup(scoredMatchups);
-  const lastMatchup = useMemo(() => {
-    const base = lastMatchupWeek?.matchups ?? [];
-    return findMyMatchup(base);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastMatchupWeek?.matchups, myTeamId]);
 
   const myPlayerPoints = useMemo(() => {
     if (!thisMatchup || myTeamId == null) return {} as Record<string, number>;
@@ -410,17 +401,15 @@ function NativeMyTeamPage() {
         return;
       }
     }
-    setViews((prev) => {
-      const next = prev.map((v) => ({ ...v }));
-      const a = next[from]!;
-      const b = next[to]!;
-      const tmp = a.playerId;
-      a.playerId = b.playerId;
-      b.playerId = tmp;
-      return next;
-    });
-    setDirty(true);
+    const next = views.map((v) => ({ ...v }));
+    const a = next[from]!;
+    const b = next[to]!;
+    const tmp = a.playerId;
+    a.playerId = b.playerId;
+    b.playerId = tmp;
+    setViews(next);
     setSelectedKey(null);
+    void save(next, { quiet: true });
   };
 
   const refreshLineup = async () => {
@@ -466,7 +455,7 @@ function NativeMyTeamPage() {
     }
   };
 
-  const save = async (nextViews?: NativeLineupSlotView[]) => {
+  const save = async (nextViews?: NativeLineupSlotView[], opts?: { quiet?: boolean }) => {
     if (!lineup?.canEdit || saving || hasIrViolations) return false;
     const toSave = nextViews ?? views;
     setSaving(true);
@@ -487,8 +476,7 @@ function NativeMyTeamPage() {
         return false;
       }
       if (result.version != null) setVersion(result.version);
-      setDirty(false);
-      toast.success("Lineup saved.");
+      if (!opts?.quiet) toast.success("Lineup saved.");
       await queryClient.invalidateQueries({ queryKey: ["native-lineup", linkId] });
       return true;
     } catch (err) {
@@ -576,7 +564,8 @@ function NativeMyTeamPage() {
 
       const leftover = views
         .map((v) => v.playerId)
-        .filter((id): id is string => Boolean(id) && !placed.has(id));
+        .filter((id): id is string => Boolean(id))
+        .filter((id) => !placed.has(id));
       for (const v of next) {
         if (v.playerId || (v.key !== "BN" && v.key !== "IR" && v.key !== "TAXI")) continue;
         if (v.key === "IR") {
@@ -602,11 +591,44 @@ function NativeMyTeamPage() {
       }
 
       setViews(next);
-      setDirty(true);
       setSelectedKey(null);
-      await save(next);
+      await save(next, { quiet: true });
+      toast.success("Lineup optimized.");
     } finally {
       setOptimizing(false);
+    }
+  };
+
+  const openTeamSettings = () => {
+    setTeamNameDraft(lineup?.teamName?.trim() || "");
+    setTeamSettingsOpen(true);
+  };
+
+  const saveTeamName = async () => {
+    if (myTeamId == null || teamNameBusy) return;
+    const name = teamNameDraft.trim();
+    if (name.length < 1) {
+      toast.error("Team name is required.");
+      return;
+    }
+    setTeamNameBusy(true);
+    try {
+      const result = await renameNativeTeam({
+        data: { linkId, teamId: myTeamId, teamName: name },
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Team name updated.");
+      void queryClient.invalidateQueries({ queryKey: ["native-lineup", linkId] });
+      void queryClient.invalidateQueries({ queryKey: ["native-league-board", linkId] });
+      void queryClient.invalidateQueries({ queryKey: ["native-league-summary", linkId] });
+      void queryClient.invalidateQueries({ queryKey: ["native-league-summaries"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update team name.");
+    } finally {
+      setTeamNameBusy(false);
     }
   };
 
@@ -701,8 +723,8 @@ function NativeMyTeamPage() {
             <button
               type="button"
               className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100"
-              title="Change logo"
-              onClick={() => setLogoOpen(true)}
+              title="Team settings"
+              onClick={openTeamSettings}
             >
               {avatarSrc ? (
                 <img src={avatarSrc} alt="" className="size-full object-cover" loading="lazy" />
@@ -713,9 +735,20 @@ function NativeMyTeamPage() {
               )}
             </button>
             <div className="min-w-0">
-              <h2 className="truncate font-display text-2xl font-bold uppercase tracking-wide text-slate-900 md:text-3xl">
-                {lineup.teamName}
-              </h2>
+              <div className="flex min-w-0 items-center gap-2">
+                <h2 className="truncate font-display text-2xl font-bold uppercase tracking-wide text-slate-900 md:text-3xl">
+                  {lineup.teamName}
+                </h2>
+                <button
+                  type="button"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  title="Team settings"
+                  aria-label="Team settings"
+                  onClick={openTeamSettings}
+                >
+                  <Settings className="size-4" aria-hidden="true" />
+                </button>
+              </div>
               <p className="mt-1 text-sm text-slate-600">
                 {recordLabel ? (
                   <span className="font-semibold text-slate-800">{recordLabel}</span>
@@ -728,14 +761,8 @@ function NativeMyTeamPage() {
                 ) : null}
               </p>
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium text-blue-700">
-                <button type="button" className="hover:underline" onClick={() => setLogoOpen(true)}>
-                  Change logo
-                </button>
-                <Link to="/league/$linkId/settings" params={{ linkId }} className="hover:underline">
-                  Team Settings
-                </Link>
-                <Link to="/league/$linkId" params={{ linkId }} className="hover:underline">
-                  {board?.summary.name ?? "League"}
+                <Link to="/league/$linkId/matchup" params={{ linkId }} className="hover:underline">
+                  Matchup
                 </Link>
                 <Link to="/league/$linkId/waivers" params={{ linkId }} className="hover:underline">
                   Waivers
@@ -759,33 +786,6 @@ function NativeMyTeamPage() {
         </div>
       </section>
 
-      {/* Last / current matchup strip */}
-      {lineup.draftComplete ? (
-        <div className="grid gap-3 md:grid-cols-2">
-          {activeWeek > 1 ? (
-            <MatchupMiniCard
-              label={`Last · Week ${lastWeekNum}`}
-              matchup={lastMatchup}
-              myTeamId={myTeamId}
-              linkId={linkId}
-            />
-          ) : null}
-          <MatchupMiniCard
-            label={
-              liveActive
-                ? `Live · Week ${activeWeek}`
-                : activeWeek === (boardWeek ?? activeWeek)
-                  ? `This Week · Week ${activeWeek}`
-                  : `Week ${activeWeek}`
-            }
-            matchup={thisMatchup}
-            myTeamId={myTeamId}
-            linkId={linkId}
-            status={liveActive ? "live" : undefined}
-          />
-        </div>
-      ) : null}
-
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
@@ -807,25 +807,17 @@ function NativeMyTeamPage() {
             />
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-xs text-slate-500">
-            {!lineup.draftComplete
-              ? "Lineups unlock after the draft"
-              : hasIrViolations
-                ? "IR action required"
-                : dirty
-                  ? "Unsaved changes"
-                  : selectedKey
-                    ? "Select a slot to swap"
-                    : "Click Move, then another slot to swap"}
-          </p>
-          <FantasySaveLineupButton
-            disabled={!lineup.canEdit || saving || !dirty || hasIrViolations}
-            onClick={() => void save()}
-          >
-            {saving ? "Saving…" : "Save Lineup"}
-          </FantasySaveLineupButton>
-        </div>
+        <p className="text-xs text-slate-500">
+          {!lineup.draftComplete
+            ? "Lineups unlock after the draft"
+            : hasIrViolations
+              ? "IR action required"
+              : saving
+                ? "Saving…"
+                : selectedKey
+                  ? "Select a slot to swap"
+                  : "Click Move, then another slot — saves automatically"}
+        </p>
       </div>
 
       {!lineup.draftComplete ? (
@@ -899,14 +891,80 @@ function NativeMyTeamPage() {
       <PlayerModalHost ref={modalRef} />
 
       {myTeamId != null ? (
-        <NativeTeamLogoPicker
-          open={logoOpen}
-          onOpenChange={setLogoOpen}
-          teamName={lineup.teamName}
-          currentKey={avatarPoolKey}
-          busy={logoBusy}
-          onSelect={saveTeamLogo}
-        />
+        <>
+          <Dialog
+            open={teamSettingsOpen}
+            onOpenChange={(open) => {
+              if (teamNameBusy || logoBusy) return;
+              setTeamSettingsOpen(open);
+            }}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Team settings</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-1">
+                <label className="block text-sm font-medium text-slate-800">
+                  Team name
+                  <input
+                    type="text"
+                    maxLength={64}
+                    value={teamNameDraft}
+                    onChange={(e) => setTeamNameDraft(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-600"
+                  />
+                </label>
+                <div className="flex items-center gap-3">
+                  <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+                    {avatarSrc ? (
+                      <img src={avatarSrc} alt="" className="size-full object-cover" />
+                    ) : (
+                      <span className="font-display text-sm font-bold uppercase text-slate-500">
+                        {(teamNameDraft || lineup.teamName || "TM").slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    className={fantasyOutlineBtn}
+                    onClick={() => {
+                      setTeamSettingsOpen(false);
+                      setLogoOpen(true);
+                    }}
+                  >
+                    Change logo
+                  </button>
+                </div>
+              </div>
+              <DialogFooter className="gap-2 sm:gap-2">
+                <button
+                  type="button"
+                  className={fantasyOutlineBtn}
+                  disabled={teamNameBusy}
+                  onClick={() => setTeamSettingsOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={fantasyPrimaryBtn}
+                  disabled={teamNameBusy || !teamNameDraft.trim()}
+                  onClick={() => void saveTeamName().then(() => setTeamSettingsOpen(false))}
+                >
+                  {teamNameBusy ? "Saving…" : "Save"}
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <NativeTeamLogoPicker
+            open={logoOpen}
+            onOpenChange={setLogoOpen}
+            teamName={lineup.teamName}
+            currentKey={avatarPoolKey}
+            busy={logoBusy}
+            onSelect={saveTeamLogo}
+          />
+        </>
       ) : null}
     </div>
   );
@@ -919,57 +977,6 @@ function ordinalSuffix(n: number) {
   if (j === 2 && k !== 12) return "nd";
   if (j === 3 && k !== 13) return "rd";
   return "th";
-}
-
-type MatchupLike = {
-  matchupId: number;
-  home: { teamId: number; teamName: string; points: number };
-  away: { teamId: number; teamName: string; points: number };
-};
-
-function MatchupMiniCard({
-  label,
-  matchup,
-  myTeamId,
-  linkId,
-  status,
-}: {
-  label: string;
-  matchup: MatchupLike | null | undefined;
-  myTeamId: number | null;
-  linkId: string;
-  status?: "live";
-}) {
-  if (!matchup) {
-    return (
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-        <p className="mt-2 text-sm text-slate-500">No matchup scheduled.</p>
-      </section>
-    );
-  }
-  const card = nativeMatchupViewToCard(matchup);
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2 px-0.5">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-        <Link
-          to="/league/$linkId/matchup"
-          params={{ linkId }}
-          className="text-xs font-semibold text-blue-700 hover:underline"
-        >
-          View Matchup
-        </Link>
-      </div>
-      <FantasyMatchupScoreCard
-        home={card.home}
-        away={card.away}
-        myTeamId={myTeamId}
-        {...(status ? { status } : {})}
-        className="p-4"
-      />
-    </div>
-  );
 }
 
 type RowHelpers = {

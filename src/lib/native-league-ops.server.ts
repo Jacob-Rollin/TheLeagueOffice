@@ -3404,6 +3404,15 @@ function parseTxnTradeLegs(raw: unknown): NativeTradeLeg[] {
     .filter((l) => l.teamId > 0);
 }
 
+/** TiDB UTC datetimes → ISO-8601 with Z so browsers don't treat them as local. */
+function normalizeMysqlUtcIso(raw: unknown): string {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  if (/[zZ]$/.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)) return s;
+  const normalized = s.includes("T") ? s : s.replace(" ", "T");
+  return `${normalized}Z`;
+}
+
 export async function listNativeTransactionsForLink(
   userId: string,
   linkId: string,
@@ -3469,7 +3478,7 @@ export async function listNativeTransactionsForLink(
         payload["changedByName"] != null
           ? String(payload["changedByName"]).trim() || null
           : r.team_name?.trim() || null,
-      createdAt: String(r.created_at),
+      createdAt: normalizeMysqlUtcIso(r.created_at),
     };
   });
 

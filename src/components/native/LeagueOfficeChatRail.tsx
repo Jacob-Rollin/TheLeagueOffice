@@ -23,6 +23,7 @@ import {
 } from "@/lib/native-league-settings-changelog";
 import { visibleRefetchInterval } from "@/lib/page-visibility";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
+import { formatRelativeTimeAgo, parseServerDateMs } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
 const CHAT_POLL_MS = 10_000;
@@ -49,16 +50,6 @@ type FeedItem = {
   };
 };
 
-function timeLabel(iso: string): string {
-  const at = Date.parse(iso);
-  if (!Number.isFinite(at)) return "";
-  const mins = Math.max(1, Math.round((Date.now() - at) / 60_000));
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
-
 /**
  * Persistent Fantasy right rail: live chat + league transactions + settings
  * changes in one timeline (Sleeper-style flow, Broadcast chrome).
@@ -77,8 +68,16 @@ export function LeagueOfficeChatRail({
   const queryClient = useQueryClient();
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [pendingScroll, setPendingScroll] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
   const leagueId = nativeLeagueId.trim();
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const cache = useSleeperPlayers();
   const fallback = useQuery({
@@ -130,6 +129,7 @@ export function LeagueOfficeChatRail({
     onSuccess: async () => {
       setBody("");
       setError(null);
+      setPendingScroll(true);
       await queryClient.invalidateQueries({ queryKey: ["league-chat", leagueId] });
     },
     onError: (err: Error) => setError(err.message),
@@ -145,15 +145,18 @@ export function LeagueOfficeChatRail({
   const feed = useMemo(() => {
     const items: FeedItem[] = [];
     for (const m of messagesQuery.data ?? []) {
+      const at = parseServerDateMs(m.created_at);
+      if (!Number.isFinite(at)) continue;
       items.push({
         id: `chat-${m.id}`,
         kind: "chat",
-        at: Date.parse(m.created_at) || 0,
+        at,
         chat: m,
       });
     }
     for (const row of (txnQuery.data ?? []) as RailTxnRow[]) {
-      const at = Date.parse(row.createdAt) || 0;
+      const at = parseServerDateMs(row.createdAt);
+      if (!Number.isFinite(at)) continue;
       if (isNativeSettingsChangeType(row.type)) {
         const changes = Array.isArray(row.settingsChanges) ? row.settingsChanges : [];
         if (!changes.length) continue;
@@ -184,9 +187,16 @@ export function LeagueOfficeChatRail({
     return items;
   }, [messagesQuery.data, txnQuery.data]);
 
+  // Stick to bottom after your own send, or when already near the bottom.
+  // Avoid jumping the feed when a poll refreshes relative labels / older txns.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [feed.length]);
+    const el = scrollerRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (!pendingScroll && !nearBottom) return;
+    bottomRef.current?.scrollIntoView({ behavior: pendingScroll ? "smooth" : "auto" });
+    if (pendingScroll) setPendingScroll(false);
+  }, [feed.length, pendingScroll]);
 
   const metaName =
     typeof user?.user_metadata?.["full_name"] === "string"
@@ -279,7 +289,7 @@ export function LeagueOfficeChatRail({
         </Link>
       </header>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+      <div ref={scrollerRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {loading ? (
           <p className="px-1 text-sm text-muted-foreground">Loading feed…</p>
         ) : feed.length === 0 ? (
@@ -317,7 +327,7 @@ export function LeagueOfficeChatRail({
                           )}
                           dateTime={m.created_at}
                         >
-                          {timeLabel(m.created_at)}
+                          {formatRelativeTimeAgo(item.at, nowMs)}
                         </time>
                       </div>
                       <p className="mt-0.5 whitespace-pre-wrap leading-relaxed">{m.body}</p>
@@ -351,7 +361,7 @@ export function LeagueOfficeChatRail({
                         Settings change
                       </p>
                       <time className="text-[10px] uppercase tracking-wide text-amber-800/80">
-                        {timeLabel(s.createdAt)}
+                        {formatRelativeTimeAgo(item.at, nowMs)}
                       </time>
                     </div>
                     <p className="mt-0.5 text-xs font-medium text-amber-950">{s.who}</p>

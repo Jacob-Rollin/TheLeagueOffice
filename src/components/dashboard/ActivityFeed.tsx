@@ -1,9 +1,10 @@
-import { useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import type { Pos } from "@/lib/draft";
 import type { LeagueActivityEvent, LeagueActivityMove } from "@/lib/league.functions";
+import { formatRelativeTimeAgo } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
 /** Raw host-league transaction shape used for root-type evaluation. */
@@ -175,14 +176,8 @@ export function resolveActivityKind(
   return event.kind;
 }
 
-function formatActivityTime(at: number): string {
-  const diff = Date.now() - at;
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+function formatActivityTime(at: number, nowMs: number = Date.now()): string {
+  return formatRelativeTimeAgo(at, nowMs);
 }
 
 /** Fantasy teams involved in a trade, in the order they first appear. */
@@ -443,6 +438,11 @@ export function ActivityFeed({
 }) {
   const modalRef = useRef<PlayerModalHandle>(null);
   const openPlayer = (id: string) => modalRef.current?.open(id);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const { playersById, playersByName } = useMemo(() => buildActivityPlayerIndex(players), [players]);
 
@@ -481,7 +481,7 @@ export function ActivityFeed({
                 return (
                   <li key={entry.id} className="flex items-start gap-3 px-1 py-3">
                     <span className="w-14 shrink-0 pt-0.5 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                      {formatActivityTime(entry.at)}
+                      {formatActivityTime(entry.at, nowMs)}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-slate-900">
@@ -531,7 +531,7 @@ export function ActivityFeed({
               return (
                 <li key={event.id} className="flex items-start gap-3 px-1 py-3">
                   <span className="w-14 shrink-0 pt-0.5 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                    {formatActivityTime(event.at)}
+                    {formatActivityTime(event.at, nowMs)}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-900">{activityHeadline(event)}</p>
