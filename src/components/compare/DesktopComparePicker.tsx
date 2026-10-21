@@ -2,12 +2,12 @@ import { Columns2, Search } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
-import { InjuryAvatarBadge } from "@/components/injury/InjuryAvatarBadge";
 import { DesktopRosterPicker } from "@/components/native/fantasy/NativeTransactionDialogs";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/players-build";
+import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { projectionPoints } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
@@ -45,21 +45,16 @@ function toPosFilter(pos: string | null | undefined): PosFilter {
   return "ALL";
 }
 
-function shortName(player: Player) {
-  if (player.pos === "DEF") return player.name.split(" ").at(-1) ?? player.name;
-  const [first, ...rest] = player.name.split(" ");
-  return rest.length ? `${first?.charAt(0)}. ${rest.join(" ")}` : player.name;
-}
-
 type Col = { key: string; label: string; value: (p: Player) => number | null; decimals: number };
 
 type RowKind = "mine" | "other" | "fa";
 
 function pickerRowClass(kind: RowKind, extra?: string) {
   return cn(
-    "border-b border-slate-200 bg-white last:border-0",
-    kind === "mine" && "bg-blue-50/80",
-    kind === "other" && "bg-amber-50/70",
+    "border-b border-slate-100 bg-white last:border-0",
+    kind === "mine" && "bg-sky-50/90",
+    kind === "other" && "bg-white",
+    kind === "fa" && "bg-emerald-50/40",
     extra,
   );
 }
@@ -70,9 +65,24 @@ function rowKind(id: string, myIds: Set<string>, rosteredIds: Set<string>): RowK
   return "fa";
 }
 
+function CompareRowInjuryBadge({ status }: { status?: string | null }) {
+  const badge = injuryMicroBadge(status);
+  if (!badge) return null;
+  return (
+    <span
+      className={cn(
+        "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-[2px] px-0.5 text-[9px] font-bold text-white",
+        badge.className,
+      )}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
 /**
- * Desktop Broadcast picker for Compare — same filters/sort as mobile,
- * centered modal (not a full-screen sheet).
+ * Desktop Broadcast picker for Compare — player column matches draft/research
+ * list chrome (name + injury chip, meta line); centered player-sized modal.
  */
 export function DesktopComparePicker({
   anchorPlayer,
@@ -182,13 +192,18 @@ export function DesktopComparePicker({
     seasonStats,
   ]);
 
+  const anchorLabel =
+    anchorPlayer.pos === "DEF"
+      ? (anchorPlayer.name.split(" ").at(-1) ?? anchorPlayer.name)
+      : anchorPlayer.name;
+
   return (
     <DesktopRosterPicker
       title="Compare with"
-      size="xl"
+      size="player"
       subtitle={
         <span>
-          vs <span className="font-semibold text-slate-900">{shortName(anchorPlayer)}</span>
+          vs <span className="font-semibold text-slate-900">{anchorLabel}</span>
           {" · "}
           cross-position OK · same pos + your roster first
         </span>
@@ -255,7 +270,6 @@ export function DesktopComparePicker({
               myIds={myIds}
               rosteredIds={rosteredIds}
               ownerByPlayerId={ownerByPlayerId}
-              rankFor={rankFor}
               onSelect={onSelect}
             />
           )}
@@ -271,7 +285,6 @@ function ComparePickerTable({
   myIds,
   rosteredIds,
   ownerByPlayerId,
-  rankFor,
   onSelect,
 }: {
   rows: Player[];
@@ -279,26 +292,30 @@ function ComparePickerTable({
   myIds: Set<string>;
   rosteredIds: Set<string>;
   ownerByPlayerId: Map<string, string>;
-  rankFor: (id: string) => { pos?: number | null };
   onSelect: (player: Player) => void;
 }) {
   return (
     <div className="flex">
-      <div className="relative z-10 w-[280px] shrink-0 border-r border-slate-200 bg-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.08)]">
-        <div className="h-10 border-b border-slate-200 bg-slate-50" aria-hidden />
+      <div className="relative z-10 w-[min(360px,46%)] shrink-0 border-r border-slate-200 bg-white shadow-[4px_0_10px_-4px_rgba(0,0,0,0.08)]">
+        <div className="flex h-10 items-center border-b border-slate-200 bg-slate-50 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          Player
+        </div>
         {rows.map((p) => {
           const kind = rowKind(p.id, myIds, rosteredIds);
           const owner = ownerByPlayerId.get(p.id);
+          const injury =
+            resolveInjuryStatus(p) ?? p.injury_status ?? p.injury ?? null;
+          const posLabel = p.pos === "DEF" ? "DST" : p.pos;
           return (
             <div
               key={p.id}
-              className={pickerRowClass(kind, "flex h-16 items-center gap-2.5 px-3")}
+              className={pickerRowClass(kind, "flex h-[58px] items-center gap-2 px-2")}
             >
               <button
                 type="button"
-                aria-label={`Compare with ${shortName(p)}`}
+                aria-label={`Compare with ${p.name}`}
                 onClick={() => onSelect(p)}
-                className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm"
+                className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm"
               >
                 <Columns2 className="size-4" strokeWidth={2.5} />
               </button>
@@ -307,32 +324,22 @@ function ComparePickerTable({
                 className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                 onClick={() => onSelect(p)}
               >
-                <div className="relative shrink-0">
-                  <PlayerAvatar
-                    id={p.id}
-                    pos={p.pos}
-                    team={p.team}
-                    name={p.name}
-                    className="size-10"
-                    logoClassName="hidden"
-                  />
-                  {(() => {
-                    const r = rankFor(p.id).pos;
-                    if (r == null || r <= 0 || r >= 900) return null;
-                    return (
-                      <span className="absolute -left-1.5 -top-1.5 flex size-5 items-center justify-center rounded bg-slate-900 font-display text-[10px] font-bold text-white">
-                        {r}
-                      </span>
-                    );
-                  })()}
-                  <InjuryAvatarBadge status={p.injury_status ?? p.injury} />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold leading-tight text-slate-900">
-                    {shortName(p)}
-                  </p>
-                  <p className="truncate text-xs text-slate-500">
-                    {p.team || "FA"} - {p.pos === "DEF" ? "DST" : p.pos}
+                <PlayerAvatar
+                  id={p.id}
+                  pos={p.pos}
+                  team={p.team}
+                  name={p.name}
+                  className="size-9 shrink-0 rounded-full border-2 border-slate-200 bg-white"
+                  logoClassName="size-3"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate font-semibold text-blue-700">{p.name}</span>
+                    <CompareRowInjuryBadge status={injury} />
+                  </div>
+                  <p className="mt-0.5 truncate text-[11px] font-medium uppercase text-slate-400">
+                    {posLabel}
+                    {p.team ? ` · ${p.team}` : ""}
                     {kind === "mine"
                       ? " · You"
                       : owner
@@ -360,7 +367,7 @@ function ComparePickerTable({
           {rows.map((p) => {
             const kind = rowKind(p.id, myIds, rosteredIds);
             return (
-              <div key={p.id} className={pickerRowClass(kind, "flex h-16 items-center")}>
+              <div key={p.id} className={pickerRowClass(kind, "flex h-[58px] items-center")}>
                 {cols.map((c) => {
                   const v = c.value(p);
                   return (
@@ -368,7 +375,7 @@ function ComparePickerTable({
                       key={c.key}
                       className="flex w-24 items-center justify-end px-3 text-sm tabular-nums text-slate-800"
                     >
-                      {v == null ? "-" : v.toFixed(c.decimals)}
+                      {v == null ? "—" : c.decimals === 0 ? String(Math.round(v)) : v.toFixed(c.decimals)}
                     </div>
                   );
                 })}

@@ -3,22 +3,29 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import { fantasyOutlineBtn } from "@/components/native/fantasy/chrome";
+import {
+  DESKTOP_OVERLAY_ATTR,
+  freezePlayerPopupScroll,
+} from "@/lib/desktop-overlay";
 import { cn } from "@/lib/utils";
 
 /** Above the desktop player popup (z-50). */
 const OVERLAY_Z = "z-[70]";
 
-export type DesktopDialogSize = "md" | "lg" | "xl";
+export type DesktopDialogSize = "md" | "lg" | "xl" | "player";
 
 const CONFIRM_SIZE: Record<DesktopDialogSize, string> = {
   md: "max-w-md",
   lg: "max-w-2xl",
   xl: "max-w-3xl",
+  /** Match PlayerModal shell so the player popup is fully covered. */
+  player: "max-w-5xl",
 };
 
-const PICKER_SIZE: Record<"lg" | "xl", string> = {
+const PICKER_SIZE: Record<"lg" | "xl" | "player", string> = {
   lg: "max-w-lg",
   xl: "max-w-3xl",
+  player: "max-w-5xl",
 };
 
 function useLockBodyScroll(active: boolean) {
@@ -26,8 +33,10 @@ function useLockBodyScroll(active: boolean) {
     if (!active) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    freezePlayerPopupScroll(true);
     return () => {
       document.body.style.overflow = prev;
+      freezePlayerPopupScroll(false);
     };
   }, [active]);
 }
@@ -50,11 +59,16 @@ export function DesktopCenteredConfirm({
 }) {
   useLockBodyScroll(true);
   if (typeof document === "undefined") return null;
+  const playerShell = size === "player";
   return createPortal(
     <div
+      {...{ [DESKTOP_OVERLAY_ATTR]: "" }}
       className={cn(
-        "fixed inset-0 flex items-center justify-center bg-slate-900/45 px-4 py-6",
+        "fixed inset-0 flex justify-center bg-slate-900/45",
         OVERLAY_Z,
+        playerShell
+          ? "items-start p-2 sm:p-6"
+          : "items-center px-4 py-6",
       )}
     >
       <div
@@ -62,7 +76,10 @@ export function DesktopCenteredConfirm({
         aria-modal="true"
         aria-label={label}
         className={cn(
-          "flex max-h-[min(90vh,100%)] w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg",
+          "flex w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg",
+          playerShell
+            ? "h-full max-h-full shadow-2xl"
+            : "max-h-[min(90vh,100%)]",
           CONFIRM_SIZE[size],
           className,
         )}
@@ -92,15 +109,20 @@ export function DesktopRosterPicker({
   onClose: () => void;
   closeDisabled?: boolean;
   children: ReactNode;
-  size?: "lg" | "xl";
+  size?: "lg" | "xl" | "player";
 }) {
   useLockBodyScroll(true);
   if (typeof document === "undefined") return null;
+  const playerShell = size === "player";
   return createPortal(
     <div
+      {...{ [DESKTOP_OVERLAY_ATTR]: "" }}
       className={cn(
-        "fixed inset-0 flex items-center justify-center bg-slate-900/45 px-4 py-6",
+        "fixed inset-0 flex justify-center bg-slate-900/45",
         OVERLAY_Z,
+        playerShell
+          ? "items-start p-2 sm:p-6"
+          : "items-center px-4 py-6",
       )}
     >
       <div
@@ -108,7 +130,10 @@ export function DesktopRosterPicker({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "flex max-h-[min(90vh,100%)] w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg",
+          "flex w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg",
+          playerShell
+            ? "h-full max-h-full shadow-2xl"
+            : "max-h-[min(90vh,100%)]",
           PICKER_SIZE[size],
         )}
       >
