@@ -12,6 +12,7 @@ import type { PlayerDetail, SeasonLine } from "@/lib/players.server";
 import { sosFromBoard } from "@/lib/sos-from-board";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import type { PlayersPayload } from "@/lib/players-build";
+import { resolveInjuryStatusWithLive } from "@/lib/sandbox-rosters";
 
 const CATALOG_KEY = "players-v3";
 
@@ -104,30 +105,32 @@ export async function fetchPlayerDetailClient(
       .catch(() => null),
   ]);
   const live = liveInjuries?.[clean];
-  const injuryStatus =
-    live !== undefined ? live.status?.trim() || null : (base.injury_status ?? base.injury ?? null);
-  const injuryBody =
-    (live !== undefined ? live.bodyPart?.trim() || null : null) ||
-    base.injury_body_part ||
-    brainEntry?.injuryType ||
-    null;
-  // Prefer live Sleeper projection injury over daily catalog / brain "Healthy".
+  // Overlay injury fields only — keep roster `status` (Inactive → Not Active).
   const player = {
     ...base,
-    injury: injuryStatus,
-    injury_status: injuryStatus,
-    injury_body_part: injuryBody,
+    ...(live !== undefined
+      ? {
+          injury: live.status?.trim() || null,
+          injury_status: live.status?.trim() || null,
+          injury_body_part:
+            live.bodyPart?.trim() ||
+            base.injury_body_part ||
+            brainEntry?.injuryType ||
+            null,
+        }
+      : {
+          injury_body_part: base.injury_body_part || brainEntry?.injuryType || null,
+        }),
     injury_notes: base.injury_notes || brainEntry?.injuryNotes || null,
     // Browser → Sleeper research (shared IndexedDB); same source desktop Fluid used.
     rostered_pct: ownership?.owned ?? null,
     started_pct: ownership?.started ?? null,
   };
 
-  /** Same live overlay as the popup header — never leave depth rows on stale catalog injury. */
+  /** Same live overlay as the popup header — preserve Inactive → NA on depth rows. */
   const injuryForDepth = (p: Player): string | null => {
     const hit = liveInjuries?.[p.id];
-    if (hit !== undefined) return hit.status?.trim() || null;
-    return p.injury_status?.trim() || p.injury?.trim() || null;
+    return resolveInjuryStatusWithLive(p, hit) ?? null;
   };
 
   const fantasyDepthPositions: Pos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];

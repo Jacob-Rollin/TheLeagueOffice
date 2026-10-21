@@ -25,6 +25,7 @@ import {
 } from "./nfl-roster-status.server";
 import { normalizeFumbleRaw } from "./game-log-normalize";
 import { NFL_TEAMS, teamFullName } from "./nfl-teams";
+import { resolveInjuryStatus } from "./sandbox-rosters";
 import { hasScorableProjectionStats, scoreStats } from "./scoring-map";
 
 export type { Player, PlayersPayload, Pos };
@@ -1315,11 +1316,18 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
     sleeperInjuryIndex("current").catch(() => null),
   ]);
 
-  /** Same live overlay as the popup header — depth rows must not keep stale catalog injury. */
+  /** Same live overlay as the popup header — preserve Inactive → NA on depth rows. */
   const injuryForDepth = (p: (typeof built.all)[number]): string | null => {
     const hit = injuryIndex?.get(p.id);
-    if (hit !== undefined) return hit.status?.trim() || null;
-    return p.injury?.trim() || null;
+    const carrier =
+      hit !== undefined
+        ? {
+            ...p,
+            injury_status: hit.status?.trim() || null,
+            injury: hit.status?.trim() || null,
+          }
+        : p;
+    return resolveInjuryStatus(carrier) ?? null;
   };
 
   const depthChart: DepthEntry[] =

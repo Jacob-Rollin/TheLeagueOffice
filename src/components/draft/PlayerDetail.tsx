@@ -47,7 +47,7 @@ import {
   type PlayerSos,
   type SosDifficultyTone,
 } from "@/lib/sos-presentation";
-import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
+import { resolveInjuryStatusWithLive } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 
 /**
@@ -269,20 +269,10 @@ export function PlayerDetail({
       : "—");
 
   // Prefer live week-proj injury when present so header matches depth-chart badges.
+  // Keep roster `status` (Inactive → NA) — live often nulls injury_status only.
   const liveForPlayer = liveInjuries.data?.[player.id];
-  const injuryCarrier =
-    liveForPlayer !== undefined
-      ? {
-          ...player,
-          injury_status: liveForPlayer.status?.trim() || null,
-          injury: liveForPlayer.status?.trim() || null,
-          injury_body_part:
-            liveForPlayer.bodyPart?.trim() ||
-            player.injury_body_part ||
-            null,
-        }
-      : player;
-  const injuryStatusRaw = resolveInjuryStatus(injuryCarrier, brain) ?? null;
+  const injuryStatusRaw =
+    resolveInjuryStatusWithLive(player, liveForPlayer) ?? null;
   const injuryDetails = getFullInjuryBadgeDetails(injuryStatusRaw);
   const injuryBodyPart =
     (liveForPlayer !== undefined
@@ -1995,25 +1985,19 @@ function DepthChartPanel({
     return map;
   }, [catalog]);
 
-  /** Injury token for depth cells — same path as popup header. Never stale detail/catalog-only injury. */
+  /**
+   * Same path as popup header: live overlay on catalog/detail carrier.
+   * Must spread meta so roster `status: Inactive` still yields an NA chip when
+   * week-proj leaves injury_status null.
+   */
   const injuryStatusFor = useCallback(
     (id: string, fallback: string | null): string | null => {
       const live = liveInjuries.data?.[id];
       const meta = playersById.get(id);
-      const carrier =
-        live !== undefined
-          ? {
-              id,
-              injury_status: live.status?.trim() || null,
-              injury: live.status?.trim() || null,
-            }
-          : meta
-            ? meta
-            : fallback
-              ? { id, injury_status: fallback, injury: fallback }
-              : null;
-      if (!carrier) return null;
-      return resolveInjuryStatus(carrier) ?? carrier.injury_status ?? null;
+      const base =
+        meta ??
+        (fallback ? { id, injury_status: fallback, injury: fallback } : { id });
+      return resolveInjuryStatusWithLive(base, live) ?? null;
     },
     [liveInjuries.data, playersById],
   );

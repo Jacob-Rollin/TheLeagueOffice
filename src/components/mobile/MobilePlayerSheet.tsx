@@ -47,7 +47,10 @@ import type { Player } from "@/lib/players-build";
 import { prefetchPlayerDetail } from "@/lib/prefetch-player-detail";
 import { fetchResearchFpa } from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
-import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
+import {
+  resolveInjuryStatus,
+  resolveInjuryStatusWithLive,
+} from "@/lib/sandbox-rosters";
 import { projectionPoints } from "@/lib/scoring-map";
 import { fetchSnapTradeMarket } from "@/lib/snap-cdn";
 import {
@@ -1974,22 +1977,17 @@ function TeamTab({
       .filter((x): x is TeamRankChip => x != null);
   }, [offenseRanksBoard, pos, team]);
 
-  /** Injury token for depth cells — same path as popup header (live overlay + resolveInjuryStatus). Never snap/proj injury. */
+  /**
+   * Same path as popup header: live overlay on catalog carrier.
+   * Spread meta so roster `status: Inactive` still yields NA when week-proj
+   * leaves injury_status null (live-only carrier dropped Not Active chips).
+   */
   const injuryStatusFor = useCallback(
     (id: string): string | null => {
       const live = liveInjuries.data?.[id];
       const meta = playersById.get(id);
-      const carrier =
-        live !== undefined
-          ? {
-              injury_status: live.status?.trim() || null,
-              injury: live.status?.trim() || null,
-            }
-          : meta
-            ? meta
-            : null;
-      if (!carrier) return null;
-      return resolveInjuryStatus(carrier) ?? carrier.injury_status ?? null;
+      if (!meta && live === undefined) return null;
+      return resolveInjuryStatusWithLive(meta ?? { id }, live) ?? null;
     },
     [liveInjuries.data, playersById],
   );

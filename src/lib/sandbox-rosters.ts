@@ -75,6 +75,27 @@ export function resolveInjuryStatus(
   );
 }
 
+/**
+ * Overlay live week-proj injury onto a catalog/detail player without dropping
+ * roster `status` (e.g. Inactive → Not Active). Depth badges must use this —
+ * a live-only `{ injury_status }` carrier loses NA when Sleeper leaves injury null.
+ */
+export function resolveInjuryStatusWithLive(
+  player: InjuryCarrier | null | undefined,
+  live?: { status: string | null; bodyPart?: string | null } | null,
+): string | undefined {
+  if (live !== undefined && live !== null) {
+    const carrier: InjuryCarrier = {
+      id: player?.id ?? "",
+      ...player,
+      injury_status: live.status?.trim() || null,
+      injury: live.status?.trim() || null,
+    };
+    return resolveInjuryStatus(carrier);
+  }
+  return player ? resolveInjuryStatus(player) : undefined;
+}
+
 type SandboxSpec = { id: string; name: string; pos: Pos; team: string };
 
 const SANDBOX_MY_TEAM_SPEC: SandboxSpec[] = [
