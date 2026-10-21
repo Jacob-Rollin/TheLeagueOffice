@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, ChevronDown, ChevronUp, Cloud, CloudRain, CloudSnow, Star, Sun } from "lucide-react";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { playerImage, teamLogo } from "./PlayerAvatar";
 import { RosteredOnLabel } from "./RosteredOnLabel";
 import { SosStars } from "@/components/sos/SosStars";
@@ -10,6 +10,7 @@ import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useDraft } from "@/hooks/use-draft";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
+import { useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
 import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { sosHasUsableRanks, usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
@@ -21,7 +22,12 @@ import { getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
 import { detailQuery } from "@/lib/player-detail-query";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
 import type { CareerSeasonRow, GameLog } from "@/lib/players.server";
-import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
+import {
+  currentSeason,
+  fetchSchedule,
+  type Player as CatalogPlayer,
+  type ScheduleGame,
+} from "@/lib/players-build";
 import { formatNflGameStatusLabel, formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { fetchLeagueScoringPreferred } from "@/lib/scoring-client";
 import { projectionPoints, type ScoringMap } from "@/lib/scoring-map";
@@ -59,18 +65,6 @@ function getWatermarkLogoUrl(teamCode: string | null | undefined): string | null
 function isRaidersTeam(teamCode: string | null | undefined): boolean {
   const t = teamCode?.toUpperCase()?.trim() ?? "";
   return t === "LV" || t === "OAK";
-}
-
-/** Compact Sleeper-style injury letter for depth-chart sidebar chips. */
-function injuryLetter(injury: string | null | undefined): "Q" | "O" | "D" | "IR" | "NA" | null {
-  const raw = (injury ?? "").trim().toUpperCase();
-  if (!raw || raw === "HEALTHY" || raw === "ACTIVE" || raw === "NONE") return null;
-  if (raw === "QUESTIONABLE" || raw === "Q") return "Q";
-  if (raw === "DOUBTFUL" || raw === "D") return "D";
-  if (raw === "OUT" || raw === "O") return "O";
-  if (raw === "IR" || raw === "INJURED RESERVE") return "IR";
-  if (raw === "NA" || raw === "INACTIVE") return "NA";
-  return null;
 }
 
 /** Full-text header injury capsule with high-contrast broadcast colors. */
@@ -165,6 +159,8 @@ export function PlayerDetail({
   const draft = useDraft();
   const { activeLeague } = useActiveLeague();
   const brain = usePlayerBrain();
+  // Shared week-proj overlay — same source as depth-chart badges / ATP.
+  const liveInjuries = useLiveInjuryStatuses();
   const { rankFor } = useLeagueProjections();
   const [tab, setTab] = useState<DetailTab>("logs");
   const [internalScoringFormat, setInternalScoringFormat] = useState<Scoring>(
@@ -272,9 +268,26 @@ export function PlayerDetail({
       ? Math.floor((Date.now() - new Date(birthDate).getTime()) / 31557600000)
       : "—");
 
-  const injuryStatusRaw = resolveInjuryStatus(player, brain) ?? null;
+  // Prefer live week-proj injury when present so header matches depth-chart badges.
+  const liveForPlayer = liveInjuries.data?.[player.id];
+  const injuryCarrier =
+    liveForPlayer !== undefined
+      ? {
+          ...player,
+          injury_status: liveForPlayer.status?.trim() || null,
+          injury: liveForPlayer.status?.trim() || null,
+          injury_body_part:
+            liveForPlayer.bodyPart?.trim() ||
+            player.injury_body_part ||
+            null,
+        }
+      : player;
+  const injuryStatusRaw = resolveInjuryStatus(injuryCarrier, brain) ?? null;
   const injuryDetails = getFullInjuryBadgeDetails(injuryStatusRaw);
   const injuryBodyPart =
+    (liveForPlayer !== undefined
+      ? liveForPlayer.bodyPart?.trim() || null
+      : null) ||
     player.injury_body_part?.trim() ||
     brain?.[player.id]?.injuryType?.trim() ||
     "";
@@ -1973,6 +1986,38 @@ function DepthChartPanel({
   }[];
   onSelectPlayer?: (id: string) => void;
 }) {
+  // Same shared week-proj overlay as popup header / mobile Team depth / ATP.
+  const liveInjuries = useLiveInjuryStatuses();
+  const { data: catalog } = useSleeperPlayers();
+  const playersById = useMemo(() => {
+    const map = new Map<string, CatalogPlayer>();
+    for (const p of catalog?.players ?? []) map.set(p.id, p);
+    return map;
+  }, [catalog]);
+
+  /** Injury token for depth cells — same path as popup header. Never stale detail/catalog-only injury. */
+  const injuryStatusFor = useCallback(
+    (id: string, fallback: string | null): string | null => {
+      const live = liveInjuries.data?.[id];
+      const meta = playersById.get(id);
+      const carrier =
+        live !== undefined
+          ? {
+              id,
+              injury_status: live.status?.trim() || null,
+              injury: live.status?.trim() || null,
+            }
+          : meta
+            ? meta
+            : fallback
+              ? { id, injury_status: fallback, injury: fallback }
+              : null;
+      if (!carrier) return null;
+      return resolveInjuryStatus(carrier) ?? carrier.injury_status ?? null;
+    },
+    [liveInjuries.data, playersById],
+  );
+
   const activeName = depthChart.find((d) => d.id === playerId)?.name ?? null;
 
   const byPos = useMemo(() => {
@@ -2014,7 +2059,8 @@ function DepthChartPanel({
     d: (typeof depthChart)[number],
     index: number,
   ) => {
-    const badge = injuryLetter(d.injury);
+    // Same badge path as popup header: resolveInjuryStatus → injuryBadgeInfo.
+    const badge = injuryBadgeInfo(injuryStatusFor(d.id, d.injury));
     const isActive =
       d.id === playerId ||
       (activeName != null &&
@@ -2043,15 +2089,11 @@ function DepthChartPanel({
           {badge ? (
             <span
               className={cn(
-                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black tracking-wider text-white",
-                badge === "Q"
-                  ? "bg-amber-500"
-                  : badge === "D"
-                    ? "bg-rose-600"
-                    : "bg-red-500",
+                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black tracking-wider",
+                badge.className,
               )}
             >
-              {badge}
+              {badge.letter}
             </span>
           ) : null}
         </div>

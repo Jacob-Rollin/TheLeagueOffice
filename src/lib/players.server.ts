@@ -1308,6 +1308,20 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
   const fantasyDepthPositions: Pos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
   const practiceSquad =
     player.team === "FA" ? null : await loadPracticeSquadIndex(season).catch(() => null);
+
+  const [sos, ownershipMap, injuryIndex] = await Promise.all([
+    buildSos(player, season).catch(() => null),
+    loadSleeperOwnershipMap().catch(() => null),
+    sleeperInjuryIndex("current").catch(() => null),
+  ]);
+
+  /** Same live overlay as the popup header — depth rows must not keep stale catalog injury. */
+  const injuryForDepth = (p: (typeof built.all)[number]): string | null => {
+    const hit = injuryIndex?.get(p.id);
+    if (hit !== undefined) return hit.status?.trim() || null;
+    return p.injury?.trim() || null;
+  };
+
   const depthChart: DepthEntry[] =
     player.team === "FA"
       ? []
@@ -1327,15 +1341,10 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
               pos: p.pos,
               proj: p.proj.half,
               adp: p.adp.half,
-              injury: p.injury,
+              injury: injuryForDepth(p),
             })),
         );
 
-  const [sos, ownershipMap, injuryIndex] = await Promise.all([
-    buildSos(player, season).catch(() => null),
-    loadSleeperOwnershipMap().catch(() => null),
-    sleeperInjuryIndex("current").catch(() => null),
-  ]);
   const ownership = ownershipMap?.get(id);
   const liveInjury = injuryIndex?.get(id);
   // Sleeper omits 0% players from research — treat missing as 0 when the map loaded.
