@@ -28,6 +28,10 @@ import {
   type CompareSectionDef,
   type CompareWeekPoint,
 } from "@/lib/player-compare";
+import {
+  DESKTOP_OVERLAY_ATTR,
+  freezePlayerPopupScroll,
+} from "@/lib/desktop-overlay";
 import type { Player } from "@/lib/players-build";
 import { fetchGameLogsClient } from "@/lib/sleeper-client";
 import { cn } from "@/lib/utils";
@@ -53,8 +57,10 @@ function useLockBodyScroll(active: boolean) {
     if (!active) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    freezePlayerPopupScroll(true);
     return () => {
       document.body.style.overflow = prev;
+      freezePlayerPopupScroll(false);
     };
   }, [active]);
 }
@@ -231,12 +237,15 @@ export function DesktopCompareSheet({
     : "B";
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/45 px-4 py-6">
+    <div
+      {...{ [DESKTOP_OVERLAY_ATTR]: "" }}
+      className="fixed inset-0 z-[70] flex items-start justify-center bg-foreground/50 p-2 sm:p-6"
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Compare players"
-        className="flex max-h-[min(92vh,100%)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-lg"
+        className="relative flex h-full max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-border bg-background text-slate-900 shadow-2xl"
       >
         <header className="flex shrink-0 items-center justify-between border-b border-slate-200 px-6 py-4">
           <h2 className="display-title text-2xl text-slate-900">

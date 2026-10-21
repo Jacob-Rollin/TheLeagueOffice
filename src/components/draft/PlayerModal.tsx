@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import { PlayerDetail } from "./PlayerDetail";
+import { hasDesktopOverlay } from "@/lib/desktop-overlay";
 
 export function PlayerModal({
   id,
@@ -25,7 +26,12 @@ export function PlayerModal({
 }) {
   useEffect(() => {
     if (!id) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Nested compare / roster dialogs own Escape first.
+      if (hasDesktopOverlay()) return;
+      onClose();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [id, onClose]);
@@ -37,7 +43,9 @@ export function PlayerModal({
     document.body.style.overflow = "hidden";
 
     const handleGlobalScroll = (e: WheelEvent) => {
-      // Locate our scrollable inner popup modal content container element
+      // Nested overlays (compare, add/drop/trade) freeze the player popup —
+      // do not redirect wheel into the popup behind them.
+      if (hasDesktopOverlay()) return;
       const scrollContainer = document.getElementById("player-popup-scroll-container");
       if (scrollContainer) {
         scrollContainer.scrollTop += e.deltaY;
