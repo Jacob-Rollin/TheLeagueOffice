@@ -65,6 +65,176 @@ export type Database = {
         }
         Relationships: []
       }
+      article_comments: {
+        Row: {
+          id: string
+          article_id: string
+          user_id: string
+          author_name: string
+          body: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          article_id: string
+          user_id: string
+          author_name: string
+          body: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          article_id?: string
+          user_id?: string
+          author_name?: string
+          body?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_comments_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_polls: {
+        Row: {
+          id: string
+          article_id: string | null
+          created_by: string
+          title: string | null
+          status: string
+          require_auth: boolean
+          native_league_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          article_id?: string | null
+          created_by: string
+          title?: string | null
+          status?: string
+          require_auth?: boolean
+          native_league_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          article_id?: string | null
+          created_by?: string
+          title?: string | null
+          status?: string
+          require_auth?: boolean
+          native_league_id?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_polls_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_poll_questions: {
+        Row: {
+          id: string
+          poll_id: string
+          sort_order: number
+          prompt: string
+        }
+        Insert: {
+          id?: string
+          poll_id: string
+          sort_order?: number
+          prompt: string
+        }
+        Update: {
+          id?: string
+          poll_id?: string
+          sort_order?: number
+          prompt?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_poll_questions_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "article_polls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_poll_options: {
+        Row: {
+          id: string
+          question_id: string
+          sort_order: number
+          label: string
+        }
+        Insert: {
+          id?: string
+          question_id: string
+          sort_order?: number
+          label: string
+        }
+        Update: {
+          id?: string
+          question_id?: string
+          sort_order?: number
+          label?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_poll_options_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "article_poll_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_poll_votes: {
+        Row: {
+          question_id: string
+          user_id: string
+          option_id: string
+          created_at: string
+        }
+        Insert: {
+          question_id: string
+          user_id: string
+          option_id: string
+          created_at?: string
+        }
+        Update: {
+          question_id?: string
+          user_id?: string
+          option_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_poll_votes_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "article_poll_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_poll_votes_option_id_fkey"
+            columns: ["option_id"]
+            isOneToOne: false
+            referencedRelation: "article_poll_options"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       press_room_articles: {
         Row: {
           id: string

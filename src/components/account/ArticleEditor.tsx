@@ -6,6 +6,8 @@ import {
   Highlighter,
   Image as ImageIcon,
   Italic,
+  ListChecks,
+  Plus,
   Quote,
   Underline,
   UserRound,
@@ -13,10 +15,18 @@ import {
 } from "lucide-react";
 
 import { ArticleView, type ArticleViewData } from "@/components/articles/ArticleView";
+import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { ArticleInput, ArticleRow } from "@/lib/articles";
+import { createArticlePoll, pollEmbedHtml } from "@/lib/article-polls";
 import { renderPlayerHeaderHtml, renderPlayerMetaHtml } from "@/lib/weekly-desk-html";
 import { cn } from "@/lib/utils";
+
+type PollDraftQuestion = { prompt: string; options: string[] };
+
+function emptyPollQuestion(): PollDraftQuestion {
+  return { prompt: "", options: ["", ""] };
+}
 
 const inputClass =
   "mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring";
@@ -54,6 +64,17 @@ function sanitizePastedHtml(html: string): string {
         continue;
       }
       const el = child as HTMLElement;
+      const isPoll = el.classList.contains("lo-poll") && el.getAttribute("data-poll-id");
+      if (isPoll) {
+        const pollId = el.getAttribute("data-poll-id");
+        el.removeAttribute("style");
+        el.removeAttribute("bgcolor");
+        el.removeAttribute("id");
+        el.className = "lo-poll";
+        if (pollId) el.setAttribute("data-poll-id", pollId);
+        el.setAttribute("contenteditable", "false");
+        continue;
+      }
       const color = el.style.color;
       el.removeAttribute("class");
       el.removeAttribute("style");
@@ -89,6 +110,7 @@ export function ArticleEditor({
   const [featuredName, setFeaturedName] = useState(article?.featured_player_name ?? "");
   const [featuredPos, setFeaturedPos] = useState(article?.featured_player_pos ?? "");
   const [featuredTeam, setFeaturedTeam] = useState(article?.featured_player_team ?? "");
+  const { user } = useAuth();
   const [embedUrl, setEmbedUrl] = useState("");
   const [playerQuery, setPlayerQuery] = useState("");
   const [playerStatLine, setPlayerStatLine] = useState("");
@@ -96,6 +118,11 @@ export function ArticleEditor({
   const [error, setError] = useState<string | null>(null);
   const [sizeOpen, setSizeOpen] = useState(false);
   const [markerOpen, setMarkerOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [pollBusy, setPollBusy] = useState(false);
+  const [pollTitle, setPollTitle] = useState("");
+  const [pollLeagueId, setPollLeagueId] = useState("");
+  const [pollQuestions, setPollQuestions] = useState<PollDraftQuestion[]>([emptyPollQuestion()]);
   const [preview, setPreview] = useState<ArticleViewData | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const savedRange = useRef<Range | null>(null);
@@ -171,6 +198,33 @@ export function ArticleEditor({
     setPlayerQuery("");
     setPlayerStatLine("");
     setPlayerPickerOpen(false);
+  };
+
+  const insertPollBlock = async () => {
+    if (!user?.id) {
+      setError("Sign in as an admin to insert a poll.");
+      return;
+    }
+    setPollBusy(true);
+    setError(null);
+    try {
+      const poll = await createArticlePoll({
+        createdBy: user.id,
+        title: pollTitle.trim() || null,
+        requireAuth: true,
+        nativeLeagueId: pollLeagueId.trim() || null,
+        questions: pollQuestions,
+      });
+      exec("insertHTML", pollEmbedHtml(poll.id));
+      setPollOpen(false);
+      setPollTitle("");
+      setPollLeagueId("");
+      setPollQuestions([emptyPollQuestion()]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create poll.");
+    } finally {
+      setPollBusy(false);
+    }
   };
 
   const clearFormatting = () => {
@@ -514,8 +568,193 @@ export function ArticleEditor({
                 >
                   <ImageIcon className="h-4 w-4" aria-hidden="true" />
                 </button>
+                <button
+                  type="button"
+                  className={cn(toolButton, "w-auto gap-1 px-2 text-xs font-semibold")}
+                  onClick={() => {
+                    rememberSelection();
+                    setPollOpen((open) => !open);
+                    setSizeOpen(false);
+                    setMarkerOpen(false);
+                    setPlayerPickerOpen(false);
+                  }}
+                  aria-label="Insert poll"
+                >
+                  <ListChecks className="h-4 w-4" aria-hidden="true" />
+                  Poll
+                </button>
               </div>
             </div>
+
+            {pollOpen ? (
+              <div className="relative z-20 space-y-4 border border-t-0 border-border bg-slate-50/90 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className={labelClass}>Insert poll</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Multiple questions on one block. Signed-in users only by default; optional
+                      native-league lock. One vote per question per user.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={toolButton}
+                    aria-label="Close poll builder"
+                    onClick={() => setPollOpen(false)}
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <label className={labelClass} htmlFor="poll-title">
+                      Poll title (optional)
+                    </label>
+                    <input
+                      id="poll-title"
+                      className={inputClass}
+                      value={pollTitle}
+                      onChange={(e) => setPollTitle(e.target.value)}
+                      placeholder="Week 8 rule changes"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass} htmlFor="poll-league">
+                      Native league ID lock (optional)
+                    </label>
+                    <input
+                      id="poll-league"
+                      className={inputClass}
+                      value={pollLeagueId}
+                      onChange={(e) => setPollLeagueId(e.target.value)}
+                      placeholder="Leave blank for any signed-in user"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600">
+                  Voting always requires a signed-in account (no guests). One vote per question per
+                  user.
+                </p>
+
+                <div className="space-y-4">
+                  {pollQuestions.map((q, qi) => (
+                    <div
+                      key={qi}
+                      className="rounded-lg border border-slate-200 bg-white p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <label className={labelClass}>Question {qi + 1}</label>
+                        {pollQuestions.length > 1 ? (
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-slate-500 hover:text-red-600"
+                            onClick={() =>
+                              setPollQuestions((prev) => prev.filter((_, i) => i !== qi))
+                            }
+                          >
+                            Remove question
+                          </button>
+                        ) : null}
+                      </div>
+                      <input
+                        className={inputClass}
+                        value={q.prompt}
+                        onChange={(e) =>
+                          setPollQuestions((prev) =>
+                            prev.map((row, i) =>
+                              i === qi ? { ...row, prompt: e.target.value } : row,
+                            ),
+                          )
+                        }
+                        placeholder="Should we move the trade deadline?"
+                      />
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        Answers
+                      </p>
+                      {q.options.map((opt, oi) => (
+                        <div key={oi} className="flex items-center gap-2">
+                          <input
+                            className={inputClass}
+                            value={opt}
+                            onChange={(e) =>
+                              setPollQuestions((prev) =>
+                                prev.map((row, i) => {
+                                  if (i !== qi) return row;
+                                  const options = [...row.options];
+                                  options[oi] = e.target.value;
+                                  return { ...row, options };
+                                }),
+                              )
+                            }
+                            placeholder={`Option ${oi + 1}`}
+                          />
+                          {q.options.length > 2 ? (
+                            <button
+                              type="button"
+                              className={toolButton}
+                              aria-label="Remove option"
+                              onClick={() =>
+                                setPollQuestions((prev) =>
+                                  prev.map((row, i) => {
+                                    if (i !== qi) return row;
+                                    return {
+                                      ...row,
+                                      options: row.options.filter((_, j) => j !== oi),
+                                    };
+                                  }),
+                                )
+                              }
+                            >
+                              <X className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                          ) : null}
+                        </div>
+                      ))}
+                      {q.options.length < 8 ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"
+                          onClick={() =>
+                            setPollQuestions((prev) =>
+                              prev.map((row, i) =>
+                                i === qi ? { ...row, options: [...row.options, ""] } : row,
+                              ),
+                            )
+                          }
+                        >
+                          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                          Add answer option
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {pollQuestions.length < 10 ? (
+                    <button
+                      type="button"
+                      className={outlineBlueButton}
+                      onClick={() =>
+                        setPollQuestions((prev) => [...prev, emptyPollQuestion()])
+                      }
+                    >
+                      Add question
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={blueButton}
+                    disabled={pollBusy}
+                    onClick={() => void insertPollBlock()}
+                  >
+                    {pollBusy ? "Inserting…" : "Insert poll into article"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="relative z-20 border border-t-0 border-border bg-slate-50/90 px-2 py-2">
               <div className="flex flex-wrap items-center gap-2">
