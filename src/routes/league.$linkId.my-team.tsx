@@ -335,6 +335,10 @@ function NativeMyTeamPage() {
   const isPlayerLocked = (player: Player | null | undefined) => {
     if (!player) return false;
     if (nflCurrentWeek != null && activeWeek < nflCurrentWeek) return true;
+    // Bye-week players stay movable so managers can swap them out.
+    if (player.bye != null && Number(player.bye) === Number(activeWeek)) return false;
+    const team = String(player.team ?? "").trim().toUpperCase();
+    if (!team || team === "FA") return false;
     const progress = nflProgressFor(player.team || "", progressByNflTeam);
     return progress?.phase === "in" || progress?.phase === "post";
   };

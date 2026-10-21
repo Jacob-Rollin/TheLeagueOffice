@@ -370,7 +370,8 @@ export function LeftPlayerCard({
   onOpenPlayer,
 }: MatchupSideCardProps) {
   const isFinal = phase === "post";
-  const isLocked = phase === "post" || phase === "in";
+  // Bye is muted like a final sheet but must not show a lineup lock — managers can still swap.
+  const isLocked = !bye && (phase === "post" || phase === "in");
   // Playbook Matchup sheets: white = yet to play / live; muted grey = completed (or bye).
   const shell = cn(
     "flex h-full w-full items-center justify-between rounded-xl border p-3.5 shadow-sm",
@@ -416,7 +417,7 @@ export function LeftPlayerCard({
         </p>
         <p className="mt-1 flex max-w-full items-center gap-1.5 truncate text-xs font-medium leading-none text-slate-500">
           <span className="truncate">{line2}</span>
-          {phase === "in" ? <LineupLockBadge /> : null}
+          {isLocked && phase === "in" ? <LineupLockBadge /> : null}
         </p>
         {isFinal ? (
           line3Final ? (
@@ -466,7 +467,8 @@ export function RightPlayerCard({
   onOpenPlayer,
 }: MatchupSideCardProps) {
   const isFinal = phase === "post";
-  const isLocked = phase === "post" || phase === "in";
+  // Bye is muted like a final sheet but must not show a lineup lock — managers can still swap.
+  const isLocked = !bye && (phase === "post" || phase === "in");
   const shell = cn(
     "flex h-full w-full items-center justify-between rounded-xl border p-3.5 shadow-sm",
     isFinal
@@ -517,7 +519,7 @@ export function RightPlayerCard({
           <span className="shrink-0 text-sm font-medium text-slate-400">{teamAbbr}</span>
         </p>
         <p className="mt-1 flex max-w-full items-center justify-end gap-1.5 truncate text-xs font-medium leading-none text-slate-500">
-          {phase === "in" ? <LineupLockBadge /> : null}
+          {isLocked && phase === "in" ? <LineupLockBadge /> : null}
           <span className="truncate">{line2}</span>
         </p>
         {isFinal ? (

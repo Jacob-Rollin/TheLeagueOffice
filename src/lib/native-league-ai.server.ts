@@ -25,12 +25,17 @@ import {
   type Personality,
 } from "@/lib/mock-ai";
 import { teamForPick, type Pos, type Scoring, type Settings } from "@/lib/draft";
-import { buildAiLineupSlots, type AiLineupPlayerMeta } from "@/lib/native-league-ai-lineup";
+import {
+  buildAiLineupSlots,
+  isUnstartableThisWeek,
+  type AiLineupPlayerMeta,
+} from "@/lib/native-league-ai-lineup";
 import { planAiStreamerClaims } from "@/lib/native-league-ai-waivers";
 import {
   countActiveRosterCapacity,
   parseRosterSlotCounts,
   splitActiveAndIrFromSlots,
+  starterIdsFromNativeSlots,
   validateNativeLineupSlots,
 } from "@/lib/native-league-lineup";
 import {
@@ -515,8 +520,18 @@ async function applyAiLineupForTeam(input: {
   const kickoffs = await fetchWeekKickoffsServer(week);
   const lockType = String(input.league.roster_lock_type ?? "game_time");
 
-  // first_game: once the week's first NFL game starts, the whole lineup is frozen.
-  if (lockType === "first_game" && previousSlots && firstGameHasStarted(kickoffs)) {
+  const priorStarterCount = previousSlots
+    ? starterIdsFromNativeSlots(previousSlots).length
+    : 0;
+
+  // first_game: freeze once kickoff starts — but still set a lineup when starters
+  // are empty (e.g. prior tick left everyone on the bench).
+  if (
+    lockType === "first_game" &&
+    previousSlots &&
+    priorStarterCount > 0 &&
+    firstGameHasStarted(kickoffs)
+  ) {
     return { ok: true, skipped: true };
   }
 
@@ -527,6 +542,8 @@ async function applyAiLineupForTeam(input: {
       for (const raw of bucket) {
         const id = raw == null || raw === "" ? "" : String(raw);
         if (!id) continue;
+        // Bye / FA / Out players must be free to move out of the lineup.
+        if (isUnstartableThisWeek(input.metaById[id], week)) continue;
         if (
           playerRosterLocked({
             rosterLockType: lockType,
@@ -685,8 +702,14 @@ export async function runNativeAiLineupsForUser(
     Math.min(18, Math.round(Number(opts?.week ?? league.current_week ?? 1) || 1)),
   );
   const catalog = await loadCatalogPlayers();
+  // Fill bye / Out starter holes via FA/waivers before optimizing lineups.
+  const stream = await submitAiStreamerMovesForLeague(league, catalog, week);
   const result = await setAiLineupsForLeague(league, catalog, week);
-  return { ok: true, teams: result.teams, errors: result.errors };
+  return {
+    ok: true,
+    teams: result.teams,
+    errors: [...stream.errors, ...result.errors],
+  };
 }
 
 function waiversRequired(league: LeagueAiRow): boolean {
@@ -986,6 +1009,10 @@ export async function submitAiStreamerMovesForLeague(
       const pos = String(p.pos ?? "").toUpperCase();
       if (!streamerPos.has(pos)) return false;
       if (ownedLeagueWide.has(p.id)) return false;
+      const meta = metaById[p.id];
+      if (!meta) return false;
+      // Never stream a bye / Out / no-team player into the lineup.
+      if (isUnstartableThisWeek(meta, week)) return false;
       // Don't add a FA whose NFL game has already locked.
       if (nflTeamHasLocked(p.team, kickoffs)) return false;
       return true;
@@ -1005,6 +1032,8 @@ export async function submitAiStreamerMovesForLeague(
     let activeCount = activeCountByTeam.get(teamId) ?? 0;
     const lockedPlayerIds = new Set<string>();
     for (const id of rosterPlayerIds) {
+      // Bye / FA / Out must remain droppable for streamer fills.
+      if (isUnstartableThisWeek(metaById[id], week)) continue;
       if (
         playerRosterLocked({
           rosterLockType: lockType,

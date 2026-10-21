@@ -29,13 +29,26 @@ export type AiLineupPlayerMeta = {
   weeklyProj?: number | null;
 };
 
-/** True when the player should not start if a healthier option exists. */
+/** True when the player has no active NFL team (FA / unsigned / blank). */
+export function hasNoNflTeam(meta: AiLineupPlayerMeta | undefined): boolean {
+  if (!meta) return true;
+  const team = String(meta.team ?? "")
+    .trim()
+    .toUpperCase();
+  return !team || team === "FA" || team === "NONE" || team === "N/A";
+}
+
+/**
+ * True when the player must not start this week (bye, no NFL team, Out / IR /
+ * Doubtful / Suspended, etc.). AI never puts these in starter slots.
+ */
 export function isUnstartableThisWeek(
   meta: AiLineupPlayerMeta | undefined,
   week: number,
 ): boolean {
   if (!meta) return true;
   if (meta.bye != null && Number(meta.bye) === week) return true;
+  if (hasNoNflTeam(meta)) return true;
   const injury = String(meta.injury ?? "").trim().toUpperCase();
   if (!injury) return false;
   if (
@@ -76,12 +89,21 @@ export function aiStartPriority(meta: AiLineupPlayerMeta | undefined, week: numb
   return score;
 }
 
+const STARTER_POS_KEYS = new Set<RosterSlotKey>(["QB", "RB", "WR", "TE", "K", "DEF"]);
+const STARTER_FLEX_KEYS = new Set<RosterSlotKey>(["FLEX", "WRRB", "WRTE", "SFLEX"]);
+
+function isStarterSlotKey(key: RosterSlotKey): boolean {
+  return STARTER_POS_KEYS.has(key) || STARTER_FLEX_KEYS.has(key);
+}
+
 /**
- * Build a projection-optimized lineup that still avoids bye / Out / IR /
- * Doubtful starters when a healthier option exists.
+ * Build a projection-optimized lineup that never starts bye / FA / Out / IR /
+ * Doubtful players. Empty starter holes stay empty so streamer FA/waivers can
+ * fill them; leftovers spill to BN/TAXI only.
  *
  * Kickoff-locked players (same rules as human Optimize) stay in their previous
  * slots via `immovableIds` + `previousSlots` — AI never rearranges them.
+ * Bye / no-team players are never treated as immovable pins into starters.
  */
 export function buildAiLineupSlots(input: {
   rosterPlayerIds: string[];
@@ -95,10 +117,15 @@ export function buildAiLineupSlots(input: {
   previousSlots?: NativeLineupSlots | null;
 }): NativeLineupSlots {
   const allowed = input.irAllowedStatuses ?? DEFAULT_IR_ALLOWED_STATUSES;
-  const immovable = input.immovableIds ?? new Set<string>();
+  // Bye / FA / Out players are never truly immovable — they must leave starter slots.
+  const immovable = new Set(
+    [...(input.immovableIds ?? [])].filter(
+      (id) => !isUnstartableThisWeek(input.metaById[id], input.week),
+    ),
+  );
   const views = expandLineupSlots(input.counts);
 
-  // Pin locked players into their previous slots before optimizing the rest.
+  // Pin kickoff-locked (startable) players into their previous slots first.
   if (immovable.size > 0 && input.previousSlots) {
     for (const row of views) {
       const prevBucket = input.previousSlots[row.key];
@@ -130,40 +157,53 @@ export function buildAiLineupSlots(input: {
     return slotAcceptsPos(key, meta?.pos ?? "");
   };
 
-  const placeKeys = (keys: ReadonlySet<RosterSlotKey>, preferStartable: boolean) => {
+  /** Starter placement: startable players only — never fall back to bye/FA/Out. */
+  const placeStartable = (keys: ReadonlySet<RosterSlotKey>) => {
     for (const row of views) {
       if (row.playerId || !keys.has(row.key)) continue;
-      let idx = remaining.findIndex((id) => {
-        if (!accept(row.key, id)) return false;
-        if (!preferStartable) return true;
-        return !isUnstartableThisWeek(input.metaById[id], input.week);
-      });
-      if (idx < 0 && preferStartable) {
-        idx = remaining.findIndex((id) => accept(row.key, id));
-      }
+      const idx = remaining.findIndex(
+        (id) =>
+          accept(row.key, id) && !isUnstartableThisWeek(input.metaById[id], input.week),
+      );
       if (idx < 0) continue;
       row.playerId = remaining.splice(idx, 1)[0] ?? null;
     }
   };
 
-  placeKeys(new Set(["QB", "RB", "WR", "TE", "K", "DEF"]), true);
-  placeKeys(new Set(["FLEX", "WRRB", "WRTE", "SFLEX"]), true);
-  placeKeys(new Set(["IR"]), false);
-  placeKeys(new Set(["BN", "TAXI"]), false);
+  const placeAny = (keys: ReadonlySet<RosterSlotKey>) => {
+    for (const row of views) {
+      if (row.playerId || !keys.has(row.key)) continue;
+      const idx = remaining.findIndex((id) => accept(row.key, id));
+      if (idx < 0) continue;
+      row.playerId = remaining.splice(idx, 1)[0] ?? null;
+    }
+  };
+
+  placeStartable(STARTER_POS_KEYS);
+  placeStartable(STARTER_FLEX_KEYS);
+  placeAny(new Set(["IR"]));
+  placeAny(new Set(["BN", "TAXI"]));
 
   if (remaining.length === 0) {
     return slotsRecordFromViews(views);
   }
 
-  // Spill leftovers into open BN/TAXI without disturbing pinned slots.
+  // Spill leftovers into BN/TAXI only — never dump bye/FA into empty starters.
   for (const id of remaining.splice(0)) {
     const open = views.find((row) => !row.playerId && (row.key === "BN" || row.key === "TAXI"));
     if (open) {
       open.playerId = id;
       continue;
     }
-    const anyOpen = views.find((row) => !row.playerId && row.key !== "IR");
-    if (anyOpen) anyOpen.playerId = id;
+    // Overflow: only startable players may occupy leftover starter holes.
+    if (!isUnstartableThisWeek(input.metaById[id], input.week)) {
+      const starterOpen = views.find(
+        (row) => !row.playerId && isStarterSlotKey(row.key) && accept(row.key, id),
+      );
+      if (starterOpen) {
+        starterOpen.playerId = id;
+      }
+    }
   }
 
   return slotsRecordFromViews(views);
