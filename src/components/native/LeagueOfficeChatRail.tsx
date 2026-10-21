@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -72,18 +72,36 @@ export function LeagueOfficeChatRail({
   const [pendingScroll, setPendingScroll] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLElement | null>(null);
+  /** False until we've pinned to the newest messages after layout has a real height. */
   const initialScrollDone = useRef(false);
+  const stickToBottom = useRef(true);
   const leagueId = nativeLeagueId.trim();
+  // Rail stays mounted across Fantasy/league routes — re-pin on each page.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  const scrollScrollerToBottom = (smooth = false) => {
+    const node = scrollerRef.current;
+    if (!node) return;
+    // Prefer scrollTop over scrollIntoView — the latter can scroll the page
+    // (sticky rail ancestors) and leave the feed mid-list on some routes.
+    if (smooth && typeof node.scrollTo === "function") {
+      node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+    } else {
+      node.scrollTop = node.scrollHeight;
+    }
+  };
 
   useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
     return () => window.clearInterval(id);
   }, []);
 
-  // New league room → jump to latest on next feed paint.
+  // New league room or route → jump to latest after the next paint/layout.
   useEffect(() => {
     initialScrollDone.current = false;
-  }, [leagueId]);
+    stickToBottom.current = true;
+  }, [leagueId, pathname]);
 
   const cache = useSleeperPlayers();
   const fallback = useQuery({
@@ -193,29 +211,81 @@ export function LeagueOfficeChatRail({
     return items;
   }, [messagesQuery.data, txnQuery.data]);
 
-  // Default to newest on load; then stick after your send or when already near bottom.
-  // Avoid jumping the feed when a poll refreshes relative labels / older txns.
+  const feedLoading = messagesQuery.isLoading || txnQuery.isLoading;
+
+  // Track whether the user is reading older messages (don't yank them down on poll).
   useEffect(() => {
     const el = scrollerRef.current;
-    if (!el || feed.length === 0) return;
+    if (!el) return;
+    const onScroll = () => {
+      const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+      stickToBottom.current = gap < 80;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [leagueId, ready, user?.id]);
 
-    if (!initialScrollDone.current) {
-      const jump = () => {
-        const node = scrollerRef.current;
-        if (!node) return;
+  // Default to newest on load / route change (retry until sticky rail has height).
+  // Then stick after your send or when already near bottom — never via scrollIntoView.
+  useEffect(() => {
+    if (feed.length === 0 || feedLoading) return;
+
+    let cancelled = false;
+    const pinIfNeeded = (smooth = false) => {
+      if (cancelled) return;
+      const node = scrollerRef.current;
+      if (!node) return;
+      // Wait until flex/sticky layout gives the scroller a measurable height.
+      if (node.clientHeight < 40) return;
+
+      if (!initialScrollDone.current) {
+        scrollScrollerToBottom(false);
+        // Double-apply after layout; some pages paint the sticky height a frame later.
         node.scrollTop = node.scrollHeight;
-        initialScrollDone.current = true;
-      };
-      jump();
-      requestAnimationFrame(jump);
-      return;
+        const gap = node.scrollHeight - node.scrollTop - node.clientHeight;
+        if (gap <= 4) {
+          initialScrollDone.current = true;
+          stickToBottom.current = true;
+        }
+        return;
+      }
+
+      if (pendingScroll || stickToBottom.current) {
+        scrollScrollerToBottom(smooth && pendingScroll);
+      }
+    };
+
+    pinIfNeeded(false);
+    const raf1 = requestAnimationFrame(() => {
+      pinIfNeeded(false);
+      requestAnimationFrame(() => pinIfNeeded(false));
+    });
+    const t1 = window.setTimeout(() => pinIfNeeded(false), 50);
+    const t2 = window.setTimeout(() => pinIfNeeded(false), 200);
+    const t3 = window.setTimeout(() => pinIfNeeded(false), 500);
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => pinIfNeeded(false))
+        : null;
+    if (ro) {
+      if (scrollerRef.current) ro.observe(scrollerRef.current);
+      if (rootRef.current) ro.observe(rootRef.current);
     }
 
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    if (!pendingScroll && !nearBottom) return;
-    bottomRef.current?.scrollIntoView({ behavior: pendingScroll ? "smooth" : "auto" });
-    if (pendingScroll) setPendingScroll(false);
-  }, [feed.length, pendingScroll]);
+    if (pendingScroll && initialScrollDone.current) {
+      pinIfNeeded(true);
+      setPendingScroll(false);
+    }
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+      ro?.disconnect();
+    };
+  }, [feed.length, pendingScroll, feedLoading, leagueId, pathname]);
 
   const metaName =
     typeof user?.user_metadata?.["full_name"] === "string"
@@ -284,10 +354,11 @@ export function LeagueOfficeChatRail({
     );
   }
 
-  const loading = messagesQuery.isLoading || txnQuery.isLoading;
+  const loading = feedLoading;
 
   return (
     <section
+      ref={rootRef}
       className={cn(
         "flex min-h-[22rem] flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:min-h-0",
         className,

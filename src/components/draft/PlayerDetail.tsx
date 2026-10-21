@@ -5,6 +5,7 @@ import { ArrowRight, ChevronDown, ChevronUp, Cloud, CloudRain, CloudSnow, Star, 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { playerImage, teamLogo } from "./PlayerAvatar";
 import { RosteredOnLabel } from "./RosteredOnLabel";
+import { DesktopPlayerCompare } from "@/components/compare/DesktopPlayerCompare";
 import { NativeFantasyPopupRosterActions } from "@/components/native/fantasy/NativeFantasyPopupRosterActions";
 import { SosStars } from "@/components/sos/SosStars";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
@@ -455,6 +456,7 @@ export function PlayerDetail({
                     {watched ? "Unwatch" : "Watch"}
                   </span>
                 </button>
+                <DesktopPlayerCompare anchorPlayer={player} />
                 {showNativeFantasyRosterActions ? (
                   <NativeFantasyPopupRosterActions player={player} />
                 ) : null}
