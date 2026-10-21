@@ -6,8 +6,7 @@ import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/Play
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useDraft } from "@/hooks/use-draft";
-import { useStartingSlotRanks } from "@/hooks/useLeagueAnalytics";
-import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
+import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
@@ -24,7 +23,7 @@ import {
   buildTruePowerRankings,
   starterRequirements,
 } from "@/lib/power-rankings";
-import { positionRoomRanks, topNeedsForRoster } from "@/lib/position-room-ranks";
+import { seasonPositionRoomRanks, topNeedsFromSeasonPosRanks } from "@/lib/position-room-ranks";
 import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { fetchSnapTradeValueBasis } from "@/lib/snap-cdn";
 import {
@@ -33,7 +32,6 @@ import {
   headlineVerdict,
   injuryRisk,
   opponentImpact as computeOpponentImpact,
-  optimizeLineup,
   packageScore,
   positionalDepth,
   rosterConstraint,
@@ -98,52 +96,13 @@ function shortName(name: string): string {
   return `${first}. ${parts[parts.length - 1]}`;
 }
 
-function posRankLabel(player: Player): string {
+/** Season-to-date pos rank label (same source as player popups), ADP fallback. */
+function posRankLabel(player: Player, seasonPosRank: number | null | undefined): string {
   const pos = player.pos === "DEF" ? "DST" : player.pos;
-  const rank = player.posRank > 0 && player.posRank < 999 ? player.posRank : null;
+  const ytd = seasonPosRank != null && seasonPosRank > 0 ? seasonPosRank : null;
+  const fallback = player.posRank > 0 && player.posRank < 999 ? player.posRank : null;
+  const rank = ytd ?? fallback;
   return rank != null ? `${pos} ${rank}` : pos;
-}
-
-/**
- * Streamer / local fallback needs (K, DST, vacant skill slots) used when
- * Playbook starting-slot room ranks are cold, and merged into Top Needs.
- */
-function streamerNeeds(
-  players: Player[],
-  starters: Record<string, number>,
-  weeklyOf: (p: Player) => number,
-): string[] {
-  const fit: FitPlayer[] = players.map((p) => ({
-    id: p.id,
-    pos: p.pos,
-    weekly: weeklyOf(p),
-  }));
-  const lineup = optimizeLineup(fit, starters);
-  const scored: { pos: string; score: number }[] = [];
-  for (const pos of ["QB", "RB", "WR", "TE", "FLEX", "K", "DEF"]) {
-    const need = starters[pos] ?? 0;
-    if (need <= 0) continue;
-    const vacant = lineup.vacancies[pos] ?? 0;
-    const pts = lineup.bySlot[pos] ?? 0;
-    const perSlot = need > 0 ? pts / need : 0;
-    // Replacement-ish floors so weak streamers surface like FantasyPros.
-    const floor =
-      pos === "K"
-        ? 6
-        : pos === "DEF"
-          ? 5
-          : pos === "TE"
-            ? 8
-            : pos === "QB"
-              ? 14
-              : pos === "FLEX"
-                ? 9
-                : 10;
-    const score = vacant * 1000 + Math.max(0, floor - perSlot) * 10 - perSlot;
-    const label = pos === "DEF" ? "DST" : pos === "FLEX" ? "FLX" : pos;
-    scored.push({ pos: label, score });
-  }
-  return scored.sort((a, b) => b.score - a.score).map((r) => r.pos);
 }
 
 /** Map a power index onto the 0–100 meter using the soft display band. */
@@ -161,13 +120,13 @@ function TradeAnalyzerPage() {
   const modalRef = useRef<PlayerModalHandle>(null);
 
   const league = useLeagueRosters(data.players);
-  const { format: leagueFormat, projectFor } = useLeagueProjections();
+  const { format: leagueFormat, projectFor, rankFor } = useLeagueProjections();
   const { standings } = useActiveStandings();
-  const nflWeek = useNflState();
-  const currentWeek = nflWeek.data?.week ?? null;
-  const slotRanks = useStartingSlotRanks(currentWeek);
-  const roomRanks = useMemo(() => positionRoomRanks(slotRanks.data?.teams ?? []), [slotRanks.data]);
   const valueScoring: Scoring = league?.synced ? (leagueFormat as Scoring) : draft.settings.scoring;
+  const seasonPosRankFor = useCallback(
+    (playerId: string) => rankFor(playerId, valueScoring).pos,
+    [rankFor, valueScoring],
+  );
 
   const { data: valueBasis } = useQuery({
     queryKey: ["trade-value-basis"],
@@ -500,14 +459,33 @@ function TradeAnalyzerPage() {
       ? Math.round((rightPowerAfter.powerIndex - rightPower.powerIndex) * 10) / 10
       : null;
 
+  const seasonRoomRanks = useMemo(
+    () =>
+      seasonPositionRoomRanks(
+        allTeams.map((t) => ({ rosterId: t.slot, players: t.players })),
+        starters,
+        seasonPosRankFor,
+      ),
+    [allTeams, starters, seasonPosRankFor],
+  );
+
   const needsByKey = useMemo(() => {
     const map = new Map<string, string[]>();
     for (const team of allTeams) {
-      const streamers = streamerNeeds(team.players, starters, weeklyOf);
-      map.set(team.key, topNeedsForRoster(team.slot, roomRanks, streamers, 3));
+      map.set(
+        team.key,
+        topNeedsFromSeasonPosRanks(
+          team.slot,
+          team.players,
+          seasonRoomRanks,
+          starters,
+          seasonPosRankFor,
+          3,
+        ),
+      );
     }
     return map;
-  }, [allTeams, starters, weeklyOf, roomRanks]);
+  }, [allTeams, starters, seasonRoomRanks, seasonPosRankFor]);
 
   const recordBySlot = useMemo(() => {
     const map = new Map<number, string>();
@@ -663,6 +641,7 @@ function TradeAnalyzerPage() {
               results={leftSearchResults}
               onPick={addToGive}
               placeholder="Search players to trade away…"
+              seasonPosRankFor={seasonPosRankFor}
             />
             <TeamHeader
               team={leftTeam}
@@ -694,6 +673,7 @@ function TradeAnalyzerPage() {
               results={rightSearchResults}
               onPick={addToGet}
               placeholder="Search players to trade for…"
+              seasonPosRankFor={seasonPosRankFor}
             />
             <TeamHeader
               team={rightTeam}
@@ -717,6 +697,7 @@ function TradeAnalyzerPage() {
             onClear={clearGive}
             onOpen={(id) => modalRef.current?.open(id)}
             brain={brain}
+            seasonPosRankFor={seasonPosRankFor}
           />
           <RosterPanel
             label="Trade for"
@@ -726,6 +707,7 @@ function TradeAnalyzerPage() {
             onClear={clearGet}
             onOpen={(id) => modalRef.current?.open(id)}
             brain={brain}
+            seasonPosRankFor={seasonPosRankFor}
             muted
           />
         </div>
@@ -794,12 +776,14 @@ function SidePlayerSearch({
   results,
   onPick,
   placeholder,
+  seasonPosRankFor,
 }: {
   value: string;
   onChange: (v: string) => void;
   results: Player[];
   onPick: (p: Player) => void;
   placeholder: string;
+  seasonPosRankFor: (playerId: string) => number | null;
 }) {
   return (
     <div className="relative mb-2">
@@ -825,7 +809,9 @@ function SidePlayerSearch({
                 />
                 <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
                 <span className="text-xs text-slate-500">{p.team || "FA"}</span>
-                <span className="tabnum text-xs text-slate-400">{posRankLabel(p)}</span>
+                <span className="tabnum text-xs text-slate-400">
+                  {posRankLabel(p, seasonPosRankFor(p.id))}
+                </span>
               </button>
             </li>
           ))}
@@ -963,6 +949,7 @@ function RosterPanel({
   onClear,
   onOpen,
   brain,
+  seasonPosRankFor,
   muted,
 }: {
   label: string;
@@ -972,6 +959,7 @@ function RosterPanel({
   onClear: () => void;
   onOpen: (id: string) => void;
   brain: ReturnType<typeof usePlayerBrain>;
+  seasonPosRankFor: (playerId: string) => number | null;
   muted?: boolean;
 }) {
   return (
@@ -1060,7 +1048,7 @@ function RosterPanel({
                   </span>
                 </button>
                 <span className="w-16 shrink-0 text-right text-xs font-semibold tabular-nums text-slate-600">
-                  {posRankLabel(p)}
+                  {posRankLabel(p, seasonPosRankFor(p.id))}
                 </span>
                 {checked && (
                   <button
