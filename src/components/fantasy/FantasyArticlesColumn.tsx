@@ -142,15 +142,6 @@ export function FantasyArticlesColumn() {
   return (
     <div className="min-w-0 space-y-8">
       <section>
-        <div className="mb-4">
-          <h2 className="display-title text-3xl uppercase tracking-wide text-slate-900">
-            Fantasy <span className="text-primary">News</span>
-          </h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Latest fantasy wire from ESPN and our news sources.
-          </p>
-        </div>
-
         {isLoading ? (
           <p className="text-sm text-slate-500">Loading fantasy news…</p>
         ) : featured ? (

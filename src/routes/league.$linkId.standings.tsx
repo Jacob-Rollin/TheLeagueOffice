@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
@@ -6,7 +6,6 @@ import {
   FantasyBoard,
   FantasyStandingsTable,
   type FantasyStandingsRow,
-  fantasyOutlineBtn,
 } from "@/components/native/fantasy";
 import { useAuth } from "@/hooks/useAuth";
 import { getNativeLeagueBoard, getNativeStandings } from "@/lib/native-league.functions";
@@ -64,20 +63,15 @@ function NativeStandingsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="display-title text-2xl text-slate-900">
-            League <span className="text-primary">Standings</span>
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {data
-              ? `Through week ${data.week}`
-              : "Standings update after scoring cron runs."}
-          </p>
-        </div>
-        <Link to="/league/$linkId" params={{ linkId }} className={fantasyOutlineBtn}>
-          Dashboard
-        </Link>
+      <div>
+        <h2 className="display-title text-2xl text-slate-900">
+          League <span className="text-primary">Standings</span>
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {data
+            ? `Through week ${data.week}`
+            : "Standings update after scoring cron runs."}
+        </p>
       </div>
 
       <FantasyBoard

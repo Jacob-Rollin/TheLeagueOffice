@@ -72,12 +72,18 @@ export function LeagueOfficeChatRail({
   const [pendingScroll, setPendingScroll] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const initialScrollDone = useRef(false);
   const leagueId = nativeLeagueId.trim();
 
   useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
     return () => window.clearInterval(id);
   }, []);
+
+  // New league room → jump to latest on next feed paint.
+  useEffect(() => {
+    initialScrollDone.current = false;
+  }, [leagueId]);
 
   const cache = useSleeperPlayers();
   const fallback = useQuery({
@@ -187,11 +193,24 @@ export function LeagueOfficeChatRail({
     return items;
   }, [messagesQuery.data, txnQuery.data]);
 
-  // Stick to bottom after your own send, or when already near the bottom.
+  // Default to newest on load; then stick after your send or when already near bottom.
   // Avoid jumping the feed when a poll refreshes relative labels / older txns.
   useEffect(() => {
     const el = scrollerRef.current;
-    if (!el) return;
+    if (!el || feed.length === 0) return;
+
+    if (!initialScrollDone.current) {
+      const jump = () => {
+        const node = scrollerRef.current;
+        if (!node) return;
+        node.scrollTop = node.scrollHeight;
+        initialScrollDone.current = true;
+      };
+      jump();
+      requestAnimationFrame(jump);
+      return;
+    }
+
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     if (!pendingScroll && !nearBottom) return;
     bottomRef.current?.scrollIntoView({ behavior: pendingScroll ? "smooth" : "auto" });

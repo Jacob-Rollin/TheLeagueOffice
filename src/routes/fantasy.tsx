@@ -70,8 +70,9 @@ function FantasyDashboardPage() {
             {user && selectedLinkId ? <FantasyHubStandings linkId={selectedLinkId} /> : null}
           </div>
 
-          <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:col-span-1 lg:h-[calc(100vh-5.5rem)] lg:self-start">
-            <div className="shrink-0 space-y-4">
+          <aside className="min-w-0 space-y-4 lg:col-span-1">
+            {/* Leagues + Join scroll away; only chat sticks after they pass. */}
+            <div className="space-y-4">
               {!ready ? (
                 <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <p className="text-sm text-slate-500">Loading…</p>
@@ -103,24 +104,26 @@ function FantasyDashboardPage() {
               <FantasyJoinAnotherCard />
             </div>
 
-            {user && selectedLinkId && selectedLeagueId ? (
-              <LeagueOfficeChatRail
-                linkId={selectedLinkId}
-                nativeLeagueId={selectedLeagueId}
-                className="min-h-0 flex-1"
-              />
-            ) : (
-              <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="display-title text-lg uppercase tracking-wide text-slate-900">
-                  League <span className="text-primary">Chat</span>
-                </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  {user
-                    ? "Join or create a League Office team to open chat, transactions, and settings updates here."
-                    : "Sign in to open your league chat rail."}
-                </p>
-              </section>
-            )}
+            <div className="lg:sticky lg:top-20 lg:h-[calc(100vh-5.5rem)] lg:self-start">
+              {user && selectedLinkId && selectedLeagueId ? (
+                <LeagueOfficeChatRail
+                  linkId={selectedLinkId}
+                  nativeLeagueId={selectedLeagueId}
+                  className="h-full min-h-[22rem]"
+                />
+              ) : (
+                <section className="flex h-full min-h-[12rem] flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h2 className="display-title text-lg uppercase tracking-wide text-slate-900">
+                    League <span className="text-primary">Chat</span>
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {user
+                      ? "Join or create a League Office team to open chat, transactions, and settings updates here."
+                      : "Sign in to open your league chat rail."}
+                  </p>
+                </section>
+              )}
+            </div>
           </aside>
         </div>
       </main>
