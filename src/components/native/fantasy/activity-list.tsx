@@ -6,11 +6,14 @@ import {
   nativeTxnRowsToActivityEvents,
   type NativeActivityTxnRow,
 } from "@/lib/native-league-sync-adapter";
+import type { NativeSettingsChangeEntry } from "@/lib/native-league-settings-changelog";
 import { cn } from "@/lib/utils";
 
 /** Matches `listNativeTransactions` / `NativeTransactionRow` from native league ops. */
 export type FantasyActivityItem = NativeActivityTxnRow & {
   status: string;
+  settingsChanges?: NativeSettingsChangeEntry[] | null;
+  changedByName?: string | null;
 };
 
 type PlayerLike = {

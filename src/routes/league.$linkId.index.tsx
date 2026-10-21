@@ -370,28 +370,6 @@ function NativeLeagueDashboardBody({
       <Toaster />
       <PlayerModalHost ref={modalRef} />
 
-      <div className="flex flex-wrap gap-2">
-        <Link to="/league/$linkId/standings" params={{ linkId }} className={fantasyOutlineBtn}>
-          Standings
-        </Link>
-        <Link to="/league/$linkId/waivers" params={{ linkId }} className={fantasyOutlineBtn}>
-          Waivers
-        </Link>
-        <Link to="/league/$linkId/teams" params={{ linkId }} className={fantasyOutlineBtn}>
-          Teams
-        </Link>
-        <Link to="/league/$linkId/draft" params={{ linkId }} className={fantasyOutlineBtn}>
-          Draft
-        </Link>
-        <Link
-          to="/league/$linkId/transactions"
-          params={{ linkId }}
-          className={fantasyOutlineBtn}
-        >
-          Transactions
-        </Link>
-      </div>
-
       {liveActive && liveStatsUpdatedAt ? (
         <p className="text-xs text-muted-foreground">
           Live scores as of {new Date(liveStatsUpdatedAt).toLocaleString()}
