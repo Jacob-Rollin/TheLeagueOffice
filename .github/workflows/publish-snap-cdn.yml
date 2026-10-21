@@ -79,12 +79,34 @@ jobs:
             fi
           }
 
+          # Matchups Guide is week-indexed (UI weeks 1–18). Publish every warm
+          # week×format so week switches never soft-empty on a snap-cdn miss.
+          # Skip cold/empty payloads so a miss cannot overwrite a prior warm file
+          # when the orphan branch is seeded from the previous tip.
+          fetch_matchups_guide() {
+            local week="$1" fmt="$2"
+            local dest="out/research/matchups-guide-w${week}-${fmt}.json"
+            local url="$BASE/api/data/research/matchups-guide?week=${week}&format=${fmt}"
+            if curl -fsSL "${AUTH[@]}" "$url" -o "$dest"; then
+              if python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); assert not (isinstance(d, dict) and d.get("ok") is False), f"error payload {p}"; g=d.get("games") if isinstance(d, dict) else None; defn=d.get("defense") if isinstance(d, dict) else None; warm=(isinstance(g, dict) and len(g)>0) or (isinstance(defn, dict) and len(defn)>0); sys.exit(0 if warm else 2)' "$dest"; then
+                echo "ok $dest"
+              else
+                echo "warn: cold matchups-guide week=${week} format=${fmt} — keeping prior snap if seeded"
+                rm -f "$dest"
+              fi
+            else
+              echo "warn: miss $url"
+              rm -f "$dest"
+            fi
+          }
+
           for fmt in std half ppr; do
             fetch "$BASE/api/data/research/fpa?format=$fmt" "out/research/fpa-$fmt.json"
             fetch "$BASE/api/data/research/sos-analysis?format=$fmt" "out/research/sos-analysis-$fmt.json"
             fetch "$BASE/api/data/snap/trade-market?format=$fmt" "out/snap/trade-market-$fmt.json"
-            fetch "$BASE/api/data/research/matchups-guide?week=$WEEK&format=$fmt" \
-              "out/research/matchups-guide-w${WEEK}-$fmt.json"
+            for w in $(seq 1 18); do
+              fetch_matchups_guide "$w" "$fmt"
+            done
           done
 
           fetch "$BASE/api/data/research/fantasy-leaders" out/research/fantasy-leaders.json

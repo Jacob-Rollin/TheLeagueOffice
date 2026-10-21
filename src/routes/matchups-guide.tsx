@@ -160,7 +160,8 @@ function MatchupsGuidePage() {
     queryKey: ["matchups-guide", week, scoringFormat],
     staleTime: RESEARCH_CLIENT_STALE_MS,
     retry: 1,
-    placeholderData: (prev) => prev,
+    // Do not keepPreviousData across week changes — that flashed the prior
+    // week's board under the newly selected week label while the fetch ran.
     queryFn: () => fetchResearchMatchupsGuide(week, scoringFormat),
   });
   usePrefetchSiblingFormats("matchups-guide", scoringFormat, {
@@ -169,6 +170,9 @@ function MatchupsGuidePage() {
   });
   const guide = query.data;
   const activeWeek = week ?? guide?.week ?? null;
+  const guideHasMatchups = Boolean(
+    guide && (Object.keys(guide.games).length > 0 || Object.keys(guide.defense).length > 0),
+  );
 
   const { data: playersPayload } = useSleeperPlayers();
   const players = playersPayload?.players ?? [];
@@ -493,6 +497,14 @@ function MatchupsGuidePage() {
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-rose-600">
                     Could not load matchups. Try again shortly.
+                  </td>
+                </tr>
+              ) : !guideHasMatchups ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                    {activeWeek != null
+                      ? `Matchups for Week ${activeWeek} are not available yet.`
+                      : "Matchups for this week are not available yet."}
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
