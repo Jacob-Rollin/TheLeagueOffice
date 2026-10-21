@@ -126,6 +126,8 @@ export function buildAiLineupSlots(input: {
   const views = expandLineupSlots(input.counts);
 
   // Pin kickoff-locked (startable) players into their previous slots first.
+  // Never pin an ineligible IR occupant — Questionable / healthy must leave IR
+  // and be free for BN/active reassignment below.
   if (immovable.size > 0 && input.previousSlots) {
     for (const row of views) {
       const prevBucket = input.previousSlots[row.key];
@@ -134,6 +136,13 @@ export function buildAiLineupSlots(input: {
       const id = prevId == null || prevId === "" ? null : String(prevId);
       if (!id || !immovable.has(id)) continue;
       if (!input.rosterPlayerIds.includes(id)) continue;
+      if (
+        row.key === "IR" &&
+        !playerEligibleForIr(input.metaById[id]?.injury, allowed)
+      ) {
+        immovable.delete(id);
+        continue;
+      }
       row.playerId = id;
     }
   }
@@ -202,8 +211,14 @@ export function buildAiLineupSlots(input: {
       );
       if (starterOpen) {
         starterOpen.playerId = id;
+        continue;
       }
     }
+    // Last resort: keep every roster id placed so validation can succeed —
+    // prefer an empty BN/TAXI that somehow appeared, else leave unplaced
+    // (caller surfaces the error rather than starting a bye/FA).
+    const benchOpen = views.find((row) => !row.playerId && (row.key === "BN" || row.key === "TAXI"));
+    if (benchOpen) benchOpen.playerId = id;
   }
 
   return slotsRecordFromViews(views);

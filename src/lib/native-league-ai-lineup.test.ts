@@ -154,4 +154,46 @@ describe("buildAiLineupSlots", () => {
     expect(slots.QB?.[0]).toBe("qbOk");
     expect(slots.BN ?? []).toContain("qbBye");
   });
+
+  it("never pins a Questionable player onto IR even when kickoff-locked", () => {
+    const metaById: Record<string, AiLineupPlayerMeta> = {
+      qb1: { pos: "QB", team: "KC", weeklyProj: 18 },
+      rb1: { pos: "RB", team: "SF", weeklyProj: 18 },
+      rb2: { pos: "RB", team: "DET", weeklyProj: 14 },
+      wr1: { pos: "WR", team: "MIA", weeklyProj: 16 },
+      wr2: { pos: "WR", team: "PHI", weeklyProj: 11 },
+      te1: { pos: "TE", team: "BAL", weeklyProj: 9 },
+      k1: { pos: "K", team: "DAL", weeklyProj: 8 },
+      def1: { pos: "DEF", team: "CLE", weeklyProj: 7 },
+      qIr: { pos: "RB", team: "CHI", weeklyProj: 10, injury: "Questionable" },
+      trueIr: { pos: "WR", team: "NYG", weeklyProj: 4, injury: "IR" },
+    };
+    const slots = buildAiLineupSlots({
+      rosterPlayerIds: Object.keys(metaById),
+      metaById,
+      counts: { QB: 1, RB: 2, WR: 2, TE: 1, K: 1, DEF: 1, BN: 1, IR: 1 },
+      week: 5,
+      immovableIds: new Set(["qIr"]),
+      previousSlots: {
+        QB: ["qb1"],
+        RB: ["rb1", "rb2"],
+        WR: ["wr1", "wr2"],
+        TE: ["te1"],
+        K: ["k1"],
+        DEF: ["def1"],
+        BN: ["trueIr"],
+        IR: ["qIr"],
+      },
+    });
+    expect(slots["IR"] ?? []).not.toContain("qIr");
+    expect(slots["IR"]?.[0]).toBe("trueIr");
+    // Unpinned Q must land on an active/bench seat, not vanish from the roster.
+    const placed = [
+      ...(slots["BN"] ?? []),
+      ...(slots["RB"] ?? []),
+      ...(slots["WR"] ?? []),
+      ...(slots["FLEX"] ?? []),
+    ];
+    expect(placed).toContain("qIr");
+  });
 });

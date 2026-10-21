@@ -102,6 +102,102 @@ export function findIneligibleIrOccupants(
   return out;
 }
 
+export type IrAutoResolveAction = {
+  playerId: string;
+  action: "activate" | "activate_drop" | "drop";
+  dropPlayerId?: string | null;
+  injury: string | null;
+};
+
+type IrResolveMeta = {
+  injury?: string | null;
+  /** Lower weekly value → preferred drop when activating. */
+  weeklyProj?: number | null;
+  rank?: number | null;
+};
+
+function irDropScore(meta: IrResolveMeta | undefined): number {
+  // Higher = better drop candidate.
+  const proj =
+    meta?.weeklyProj != null && Number.isFinite(Number(meta.weeklyProj))
+      ? Number(meta.weeklyProj)
+      : null;
+  if (proj != null) return -proj;
+  const rank = meta?.rank != null && Number.isFinite(meta.rank) ? Number(meta.rank) : 400;
+  return rank;
+}
+
+/**
+ * Plan roster fixes for IR occupants who no longer match the league allow-list
+ * (e.g. Questionable after leaving Injured Reserve). Prefers activate into an
+ * open active slot; if full, activate + drop the least valuable unlocked active
+ * player; otherwise drop the IR violator.
+ */
+export function planIrViolationResolutions(input: {
+  activePlayerIds: string[];
+  irPlayerIds: string[];
+  injuryById: Record<string, string | null | undefined>;
+  metaById?: Record<string, IrResolveMeta | undefined>;
+  allowedStatuses?: readonly NativeIrAllowedStatus[];
+  capacity: number;
+  /** Kickoff-locked active ids that must not be dropped. */
+  lockedPlayerIds?: ReadonlySet<string>;
+  /** When set, only resolve these IR player ids. */
+  onlyPlayerIds?: ReadonlySet<string>;
+}): {
+  activePlayerIds: string[];
+  irPlayerIds: string[];
+  actions: IrAutoResolveAction[];
+} {
+  const allowed = input.allowedStatuses ?? DEFAULT_IR_ALLOWED_STATUSES;
+  const locked = input.lockedPlayerIds ?? new Set<string>();
+  const metaById = input.metaById ?? {};
+  let active = [...input.activePlayerIds];
+  let ir = [...input.irPlayerIds];
+  const actions: IrAutoResolveAction[] = [];
+
+  const violators = ir.filter((id) => {
+    if (input.onlyPlayerIds && !input.onlyPlayerIds.has(id)) return false;
+    return !playerEligibleForIr(input.injuryById[id], allowed);
+  });
+
+  for (const playerId of violators) {
+    if (!ir.includes(playerId)) continue;
+    const injury = input.injuryById[playerId] ?? null;
+    ir = ir.filter((id) => id !== playerId);
+
+    if (active.length < input.capacity) {
+      if (!active.includes(playerId)) active = [...active, playerId];
+      actions.push({ playerId, action: "activate", dropPlayerId: null, injury });
+      continue;
+    }
+
+    const dropCandidates = active
+      .filter((id) => id !== playerId && !locked.has(id))
+      .sort(
+        (a, b) =>
+          irDropScore(metaById[b]) - irDropScore(metaById[a]) || a.localeCompare(b),
+      );
+    const dropId = dropCandidates[0] ?? null;
+    if (dropId) {
+      active = active.filter((id) => id !== dropId);
+      if (!active.includes(playerId)) active = [...active, playerId];
+      actions.push({
+        playerId,
+        action: "activate_drop",
+        dropPlayerId: dropId,
+        injury,
+      });
+      continue;
+    }
+
+    // No drop available (everyone locked) — remove the violator.
+    actions.push({ playerId, action: "drop", dropPlayerId: null, injury });
+  }
+
+  return { activePlayerIds: active, irPlayerIds: ir, actions };
+}
+
 export function parseRosterSlotCounts(
   raw: Record<string, unknown> | null | undefined,
 ): Partial<Record<RosterSlotKey, number>> {

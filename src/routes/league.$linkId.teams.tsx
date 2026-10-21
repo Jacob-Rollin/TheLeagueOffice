@@ -205,7 +205,17 @@ function NativeLeagueTeamsPage() {
         toast.error(result.error);
         return;
       }
-      toast.success(`Updated lineups for ${result.teams ?? 0} AI team(s).`);
+      const fa = Number(result.faMoves ?? 0) || 0;
+      const errN = Array.isArray(result.errors) ? result.errors.length : 0;
+      toast.success(
+        `Updated lineups for ${result.teams ?? 0} AI team(s)` +
+          (fa > 0 ? ` · ${fa} FA pickup${fa === 1 ? "" : "s"}` : "") +
+          (errN > 0 ? ` · ${errN} warning${errN === 1 ? "" : "s"}` : "") +
+          ".",
+      );
+      if (errN > 0 && result.errors?.[0]) {
+        toast.message(String(result.errors[0]));
+      }
       refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not set AI lineups.");
@@ -274,10 +284,11 @@ function NativeLeagueTeamsPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         {board.canManage && allowAi ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            AI managers draft by ADP, stream K/DEF on bye via waivers/FA, and set weekly optimized
-            lineups (projections, sit bye / Out / IR). Kickoff locks match human lineup rules —
-            AI will not move or drop a player once their game has started. Enable in Settings
-            first. {aiTeamCount} AI seat{aiTeamCount === 1 ? "" : "s"} assigned.
+            AI managers draft by ADP, stream bye / Out starter holes (including K/DST) via FA,
+            and set weekly optimized lineups. Set AI lineups now picks up free agents immediately
+            for empty or bye starters, then rebuilds lineups. Players whose NFL game has started
+            stay locked. Enable AI managers in Settings first. {aiTeamCount} AI seat
+            {aiTeamCount === 1 ? "" : "s"} assigned.
             {board.summary.draftStatus === "complete" ? (
               <>
                 {" "}
