@@ -66,51 +66,51 @@ function FantasyDashboardPage() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="min-w-0 space-y-6 lg:col-span-2">
-            {!ready ? (
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-slate-500">Loading…</p>
-              </section>
-            ) : !user ? (
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="font-display text-lg font-bold uppercase tracking-wide text-slate-900">
-                  Fantasy
-                </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  Sign in to see your League Office teams here.
-                </p>
-                <Link
-                  to="/auth"
-                  className="mt-3 inline-flex items-center rounded-md border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white hover:bg-blue-700"
-                >
-                  Sign In
-                </Link>
-              </section>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
+            <FantasyArticlesColumn />
+            {user && selectedLinkId ? <FantasyHubStandings linkId={selectedLinkId} /> : null}
+          </div>
+
+          <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:col-span-1 lg:h-[calc(100vh-5.5rem)] lg:self-start">
+            <div className="shrink-0 space-y-4">
+              {!ready ? (
+                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-sm text-slate-500">Loading…</p>
+                </section>
+              ) : !user ? (
+                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h2 className="display-title text-lg uppercase tracking-wide text-slate-900">
+                    Your <span className="text-primary">Leagues</span>
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Sign in to see your League Office teams here.
+                  </p>
+                  <Link
+                    to="/auth"
+                    className="mt-3 inline-flex items-center rounded-md border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white hover:bg-blue-700"
+                  >
+                    Sign In
+                  </Link>
+                </section>
+              ) : (
                 <FantasyLeaguesBox
                   leagues={leagues}
                   loading={isLoading}
                   selectedLinkId={selectedLinkId}
                   onSelectLeague={setActiveLeagueId}
                 />
-                <div className="space-y-4">
-                  <FantasyJoinAnotherCard />
-                  {selectedLinkId ? <FantasyHubStandings linkId={selectedLinkId} /> : null}
-                </div>
-              </div>
-            )}
+              )}
 
-            <FantasyArticlesColumn />
-          </div>
+              <FantasyJoinAnotherCard />
+            </div>
 
-          <aside className="min-w-0 lg:col-span-1">
             {user && selectedLinkId && selectedLeagueId ? (
               <LeagueOfficeChatRail
                 linkId={selectedLinkId}
                 nativeLeagueId={selectedLeagueId}
+                className="min-h-0 flex-1"
               />
             ) : (
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <section className="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h2 className="display-title text-lg uppercase tracking-wide text-slate-900">
                   League <span className="text-primary">Chat</span>
                 </h2>

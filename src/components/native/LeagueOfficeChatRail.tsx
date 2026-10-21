@@ -260,18 +260,15 @@ export function LeagueOfficeChatRail({
   return (
     <section
       className={cn(
-        "flex h-[min(70vh,44rem)] min-h-[22rem] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-20",
+        "flex min-h-[22rem] flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:min-h-0",
         className,
       )}
     >
-      <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
         <div>
           <h2 className="display-title text-lg uppercase tracking-wide text-slate-900">
             League <span className="text-primary">Chat</span>
           </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Chat · transactions · settings
-          </p>
         </div>
         <Link
           to="/league/$linkId/transactions"
@@ -282,7 +279,7 @@ export function LeagueOfficeChatRail({
         </Link>
       </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {loading ? (
           <p className="px-1 text-sm text-muted-foreground">Loading feed…</p>
         ) : feed.length === 0 ? (
@@ -404,34 +401,33 @@ export function LeagueOfficeChatRail({
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t border-slate-200 p-3">
-        <label className="sr-only" htmlFor="league-office-chat-input">
-          Message
-        </label>
-        <textarea
-          id="league-office-chat-input"
-          rows={2}
-          maxLength={1000}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          placeholder="Enter message…"
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-600"
-        />
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">Enter to send</p>
+      <div className="shrink-0 border-t border-slate-200 p-3">
+        <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor="league-office-chat-input">
+            Message
+          </label>
+          <input
+            id="league-office-chat-input"
+            type="text"
+            maxLength={1000}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            placeholder="Enter message…"
+            className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-600"
+          />
           <button
             type="button"
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
             disabled={postMutation.isPending || !body.trim()}
             onClick={submit}
           >
-            {postMutation.isPending ? "Sending…" : "Send"}
+            {postMutation.isPending ? "…" : "Send"}
           </button>
         </div>
         {error ? (
