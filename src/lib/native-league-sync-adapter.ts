@@ -30,6 +30,7 @@ import {
   listNativeTransactions,
 } from "@/lib/native-league.functions";
 import { isNativeSettingsChangeType } from "@/lib/native-league-settings-changelog";
+import { parseServerDateMs } from "@/lib/relative-time";
 import {
   fetchNativeLiveWeekStats,
   overlayNativeLiveMatchupScores,
@@ -347,7 +348,7 @@ export function nativeTxnRowsToActivityEvents(
     .map((r) => {
       const kind = mapTxnKind(r.type);
       const team = r.teamName?.trim() || null;
-      const at = Date.parse(r.createdAt);
+      const at = parseServerDateMs(r.createdAt);
       const typeLower = String(r.type ?? "").toLowerCase();
 
       if (kind === "trade") {
