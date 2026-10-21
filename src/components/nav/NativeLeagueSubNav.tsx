@@ -4,13 +4,12 @@ import {
   ArrowLeftRight,
   ChevronDown,
   LayoutDashboard,
-  Shield,
-  Swords,
-  UserRound,
+  Trophy,
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 
+import { FootballIcon, HelmetIcon } from "@/components/mobile/league/mobileNavIcons";
 import { resolveAvatarUrl } from "@/components/playbook/panels";
 import {
   DropdownMenu,
@@ -46,9 +45,10 @@ export type NativeSubNavLink = {
 /** Primary Fantasy IA — Sleeper-style strip; Broadcast pill chrome. */
 export const NATIVE_LEAGUE_SUBNAV_LINKS: NativeSubNavLink[] = [
   { id: "dashboard", segment: "fantasy", label: "Dashboard", icon: LayoutDashboard, href: "/fantasy" },
-  { id: "league", segment: "", label: "League", icon: Shield, to: "/league/$linkId" },
-  { id: "matchup", segment: "matchup", label: "Matchup", icon: Swords, to: "/league/$linkId/matchup" },
-  { id: "team", segment: "my-team", label: "Team", icon: UserRound, to: "/league/$linkId/my-team" },
+  /** League / Matchup / Team icons match mobile bottom tabs (Trophy, football, helmet). */
+  { id: "league", segment: "", label: "League", icon: Trophy, to: "/league/$linkId" },
+  { id: "matchup", segment: "matchup", label: "Matchup", icon: FootballIcon, to: "/league/$linkId/matchup" },
+  { id: "team", segment: "my-team", label: "Team", icon: HelmetIcon, to: "/league/$linkId/my-team" },
   { id: "players", segment: "players", label: "Players", icon: Users, to: "/league/$linkId/players" },
   {
     id: "trades",
