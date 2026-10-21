@@ -1,4 +1,5 @@
 import { useEffect, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import { PlayerDetail } from "./PlayerDetail";
@@ -53,6 +54,7 @@ export function PlayerModal({
   }, [id]);
 
   if (!id) return null;
+  if (typeof document === "undefined") return null;
 
   const handleBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -67,7 +69,9 @@ export function PlayerModal({
     onClose();
   };
 
-  return (
+  // Portal to body so sticky Fantasy rails / site nav stacking contexts cannot
+  // trap the overlay (dashboard chat column is lg:sticky).
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -98,6 +102,7 @@ export function PlayerModal({
           onSessionDraft={onSessionDraft}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
