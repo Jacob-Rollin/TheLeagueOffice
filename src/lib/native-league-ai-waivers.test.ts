@@ -80,6 +80,46 @@ describe("planAiStreamerClaims", () => {
     });
   });
 
+  it("streams both K and DST when both are on bye the same week", () => {
+    // Full roster with two holes: a single swap cannot fill the whole lineup,
+    // but each streamer swap must still be accepted so AI can replace both.
+    const metaById = withTeams({
+      qb1: { pos: "QB", weeklyProj: 20, rank: 10 },
+      rb1: { pos: "RB", weeklyProj: 15, rank: 20 },
+      rb2: { pos: "RB", weeklyProj: 12, rank: 30 },
+      wr1: { pos: "WR", weeklyProj: 14, rank: 25 },
+      wr2: { pos: "WR", weeklyProj: 11, rank: 35 },
+      te1: { pos: "TE", weeklyProj: 9, rank: 40 },
+      flexRb: { pos: "RB", weeklyProj: 8, rank: 50 },
+      kBye: { pos: "K", bye: 5, weeklyProj: 0, rank: 100 },
+      defBye: { pos: "DEF", bye: 5, weeklyProj: 0, rank: 90 },
+    });
+    const plans = planAiStreamerClaims({
+      week: 5,
+      rosterPlayerIds: Object.keys(metaById),
+      metaById,
+      freeAgents: [
+        { id: "kFa", meta: { pos: "K", team: "NYJ", bye: 12, weeklyProj: 9, rank: 120 } },
+        { id: "defFa", meta: { pos: "DEF", team: "NYG", bye: 8, weeklyProj: 7, rank: 110 } },
+      ],
+      starterNeeds: standardNeeds,
+      activeRosterCount: Object.keys(metaById).length,
+      rosterCapacity: Object.keys(metaById).length,
+    });
+    expect(plans).toHaveLength(2);
+    expect(plans.map((p) => p.pos).sort()).toEqual(["DEF", "K"]);
+    expect(plans.find((p) => p.pos === "K")).toMatchObject({
+      addPlayerId: "kFa",
+      dropPlayerId: "kBye",
+      reason: "bye",
+    });
+    expect(plans.find((p) => p.pos === "DEF")).toMatchObject({
+      addPlayerId: "defFa",
+      dropPlayerId: "defBye",
+      reason: "bye",
+    });
+  });
+
   it("claims a FA TE when the only TE is on bye", () => {
     const metaById = withTeams({
       qb1: { pos: "QB", weeklyProj: 20, rank: 10 },
