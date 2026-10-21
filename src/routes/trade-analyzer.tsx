@@ -120,16 +120,28 @@ function streamerNeeds(
   }));
   const lineup = optimizeLineup(fit, starters);
   const scored: { pos: string; score: number }[] = [];
-  for (const pos of ["QB", "RB", "WR", "TE", "K", "DEF"]) {
+  for (const pos of ["QB", "RB", "WR", "TE", "FLEX", "K", "DEF"]) {
     const need = starters[pos] ?? 0;
     if (need <= 0) continue;
     const vacant = lineup.vacancies[pos] ?? 0;
     const pts = lineup.bySlot[pos] ?? 0;
     const perSlot = need > 0 ? pts / need : 0;
     // Replacement-ish floors so weak streamers surface like FantasyPros.
-    const floor = pos === "K" ? 6 : pos === "DEF" ? 5 : pos === "TE" ? 8 : pos === "QB" ? 14 : 10;
+    const floor =
+      pos === "K"
+        ? 6
+        : pos === "DEF"
+          ? 5
+          : pos === "TE"
+            ? 8
+            : pos === "QB"
+              ? 14
+              : pos === "FLEX"
+                ? 9
+                : 10;
     const score = vacant * 1000 + Math.max(0, floor - perSlot) * 10 - perSlot;
-    scored.push({ pos: pos === "DEF" ? "DST" : pos, score });
+    const label = pos === "DEF" ? "DST" : pos === "FLEX" ? "FLX" : pos;
+    scored.push({ pos: label, score });
   }
   return scored.sort((a, b) => b.score - a.score).map((r) => r.pos);
 }
@@ -488,16 +500,28 @@ function TradeAnalyzerPage() {
       ? Math.round((rightPowerAfter.powerIndex - rightPower.powerIndex) * 10) / 10
       : null;
 
-  const leftNeeds = useMemo(() => {
-    if (!leftTeam) return [];
-    const streamers = streamerNeeds(leftTeam.players, starters, weeklyOf);
-    return topNeedsForRoster(leftTeam.slot, roomRanks, streamers, 3);
-  }, [leftTeam, starters, weeklyOf, roomRanks]);
-  const rightNeeds = useMemo(() => {
-    if (!rightTeam) return [];
-    const streamers = streamerNeeds(rightTeam.players, starters, weeklyOf);
-    return topNeedsForRoster(rightTeam.slot, roomRanks, streamers, 3);
-  }, [rightTeam, starters, weeklyOf, roomRanks]);
+  const needsByKey = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const team of allTeams) {
+      const streamers = streamerNeeds(team.players, starters, weeklyOf);
+      map.set(team.key, topNeedsForRoster(team.slot, roomRanks, streamers, 3));
+    }
+    return map;
+  }, [allTeams, starters, weeklyOf, roomRanks]);
+
+  const recordBySlot = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const row of standings?.rows ?? []) {
+      const wins = Number(row.wins ?? 0);
+      const losses = Number(row.losses ?? 0);
+      const ties = Number(row.ties ?? 0);
+      map.set(row.rosterId, ties > 0 ? `${wins}-${losses}-${ties}` : `${wins}-${losses}`);
+    }
+    return map;
+  }, [standings]);
+
+  const leftNeeds = needsByKey.get(leftTeam?.key ?? "") ?? [];
+  const rightNeeds = needsByKey.get(rightTeam?.key ?? "") ?? [];
 
   /* ---------- Trade engine (same math as Trade Desk) ---------- */
   const userRoster = useMemo(() => leftTeam?.players ?? [], [leftTeam]);
@@ -643,6 +667,8 @@ function TradeAnalyzerPage() {
             <TeamHeader
               team={leftTeam}
               teams={allTeams.filter((t) => t.key !== rightKey)}
+              needsByKey={needsByKey}
+              recordBySlot={recordBySlot}
               onSelect={(key) => {
                 setLeftKey(key);
                 clearGive();
@@ -672,6 +698,8 @@ function TradeAnalyzerPage() {
             <TeamHeader
               team={rightTeam}
               teams={allTeams.filter((t) => t.key !== leftKey)}
+              needsByKey={needsByKey}
+              recordBySlot={recordBySlot}
               onSelect={(key) => {
                 setRightKey(key);
                 clearGet();
@@ -810,31 +838,45 @@ function SidePlayerSearch({
 function TeamHeader({
   team,
   teams,
+  needsByKey,
+  recordBySlot,
   onSelect,
 }: {
   team: AnalyzerTeam | null;
   teams: AnalyzerTeam[];
+  needsByKey: Map<string, string[]>;
+  recordBySlot: Map<number, string>;
   onSelect: (key: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="relative flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-      {team?.logo ? (
-        <img src={team.logo} alt="" className="size-8 rounded-full object-cover" />
-      ) : (
-        <div className="flex size-8 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
-          {(team?.name ?? "TM").slice(0, 2).toUpperCase()}
-        </div>
-      )}
+    <div className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex min-w-0 flex-1 items-center gap-1 text-left"
+        className={cn(
+          "flex w-full items-center gap-3 rounded-lg border bg-white px-3 py-2.5 text-left transition-colors",
+          open
+            ? "border-blue-500 ring-1 ring-blue-500/30"
+            : "border-slate-200 hover:border-slate-300",
+        )}
       >
-        <span className="truncate text-sm font-bold text-slate-900">
+        {team?.logo ? (
+          <img src={team.logo} alt="" className="size-8 shrink-0 rounded-md object-cover" />
+        ) : (
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-xs font-bold text-slate-600">
+            {(team?.name ?? "TM").slice(0, 2).toUpperCase()}
+          </div>
+        )}
+        <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">
           {team?.name ?? "Select team"}
         </span>
-        <ChevronDown className="size-4 shrink-0 text-slate-400" />
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-slate-400 transition-transform",
+            open && "rotate-180",
+          )}
+        />
       </button>
       {open && (
         <>
@@ -844,22 +886,69 @@ function TeamHeader({
             aria-label="Close"
             onClick={() => setOpen(false)}
           />
-          <ul className="absolute left-0 right-0 top-full z-40 mt-1 max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-            {teams.map((t) => (
-              <li key={t.key}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelect(t.key);
-                    setOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                >
-                  <span className="truncate font-medium">{t.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="absolute left-0 right-0 top-full z-40 mt-1 max-h-80 overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl sm:min-w-[22rem]">
+            <div className="sticky top-0 grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-slate-100 bg-white px-3 py-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Team
+              </span>
+              <span className="text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Needs
+              </span>
+            </div>
+            <ul>
+              {teams.map((t) => {
+                const needs = needsByKey.get(t.key) ?? [];
+                const record = recordBySlot.get(t.slot);
+                return (
+                  <li key={t.key}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelect(t.key);
+                        setOpen(false);
+                      }}
+                      className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50"
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        {t.logo ? (
+                          <img
+                            src={t.logo}
+                            alt=""
+                            className="size-7 shrink-0 rounded-md object-cover"
+                          />
+                        ) : (
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-600">
+                            {t.name.slice(0, 2).toUpperCase()}
+                          </span>
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-slate-900">
+                            {t.name}
+                          </span>
+                          {record ? (
+                            <span className="tabnum text-[11px] text-slate-500">{record}</span>
+                          ) : null}
+                        </span>
+                      </span>
+                      <span className="flex flex-wrap items-center justify-end gap-1">
+                        {needs.length ? (
+                          needs.map((pos) => (
+                            <PositionBadge
+                              key={pos}
+                              pos={pos}
+                              className="h-5 min-w-[1.85rem] text-[9px]"
+                            />
+                          ))
+                        ) : (
+                          <span className="text-[11px] text-slate-300">—</span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </>
       )}
     </div>
