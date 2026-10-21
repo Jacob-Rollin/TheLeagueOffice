@@ -65,6 +65,43 @@ function starterViews(starterNeeds: Partial<Record<RosterSlotKey, number>>) {
 }
 
 /**
+ * How many starter slots can be filled with startable (non-bye / non-Out) players.
+ * Used for multi-hole bye weeks: a single K or DST streamer swap won't fill the
+ * whole lineup yet, but it must improve (or at least not shrink) fill count.
+ */
+export function countFillableStarterSlots(
+  rosterPlayerIds: string[],
+  metaById: Record<string, AiLineupPlayerMeta>,
+  starterNeeds: Partial<Record<RosterSlotKey, number>>,
+  week: number,
+): number {
+  const views = starterViews(starterNeeds);
+  if (views.length === 0) return 0;
+  const remaining = rosterPlayerIds
+    .filter((id) => !isUnstartableThisWeek(metaById[id], week))
+    .sort(
+      (a, b) =>
+        aiStartPriority(metaById[b], week) - aiStartPriority(metaById[a], week) ||
+        a.localeCompare(b),
+    );
+
+  const place = (keys: ReadonlySet<RosterSlotKey>) => {
+    for (const row of views) {
+      if (row.playerId || !keys.has(row.key)) continue;
+      const idx = remaining.findIndex((id) =>
+        slotAcceptsPos(row.key, metaById[id]?.pos ?? ""),
+      );
+      if (idx < 0) continue;
+      row.playerId = remaining.splice(idx, 1)[0] ?? null;
+    }
+  };
+
+  place(new Set(["QB", "RB", "WR", "TE", "K", "DEF"]));
+  place(new Set(["FLEX", "WRRB", "WRTE", "SFLEX"]));
+  return views.filter((row) => Boolean(row.playerId)).length;
+}
+
+/**
  * True when every starter slot can be filled with a startable (non-bye / non-Out) player.
  */
 export function canFillStartingLineup(
@@ -75,30 +112,10 @@ export function canFillStartingLineup(
 ): boolean {
   const views = starterViews(starterNeeds);
   if (views.length === 0) return true;
-  const remaining = rosterPlayerIds
-    .filter((id) => !isUnstartableThisWeek(metaById[id], week))
-    .sort(
-      (a, b) =>
-        aiStartPriority(metaById[b], week) - aiStartPriority(metaById[a], week) ||
-        a.localeCompare(b),
-    );
-
-  // Dedicated slots first, then flex variants (matches AI lineup place order).
-  const place = (keys: ReadonlySet<RosterSlotKey>) => {
-    for (const row of views) {
-      if (row.playerId || !keys.has(row.key)) continue;
-      const idx = remaining.findIndex((id) =>
-        slotAcceptsPos(row.key, metaById[id]?.pos ?? ""),
-      );
-      if (idx < 0) return false;
-      row.playerId = remaining.splice(idx, 1)[0] ?? null;
-    }
-    return true;
-  };
-
-  if (!place(new Set(["QB", "RB", "WR", "TE", "K", "DEF"]))) return false;
-  if (!place(new Set(["FLEX", "WRRB", "WRTE", "SFLEX"]))) return false;
-  return views.every((row) => Boolean(row.playerId));
+  return (
+    countFillableStarterSlots(rosterPlayerIds, metaById, starterNeeds, week) ===
+    views.length
+  );
 }
 
 /** First unfilled starter slot's preferred add positions (dedicated pos or flex pool). */
@@ -258,17 +275,34 @@ export function planAiStreamerClaims(input: {
     };
     const candidates: Cand[] = [];
 
+    const beforeFilled = countFillableStarterSlots(
+      roster,
+      metaById,
+      input.starterNeeds,
+      week,
+    );
+
     for (const id of roster) {
       if (reservedDrops.has(id) || locked.has(id) || id === addId) continue;
       const meta = metaById[id];
       const after = roster.filter((x) => x !== id).concat(addId);
-      // Must still field a full startable lineup this week after the swap.
-      if (!canFillStartingLineup(after, metaById, input.starterNeeds, week)) {
+      const afterFilled = countFillableStarterSlots(
+        after,
+        metaById,
+        input.starterNeeds,
+        week,
+      );
+      // Multi-hole bye weeks (e.g. K + DST both out): one swap cannot fill every
+      // starter yet. Accept drops that improve fill count; reject those that worsen it.
+      if (afterFilled <= beforeFilled) {
         continue;
       }
       const nextOk = canFillStartingLineup(after, metaById, input.starterNeeds, nextWeek);
       const dropPos = asStreamerPos(meta?.pos);
       let score = 0;
+
+      // Prefer the swap that fills more starter holes this week.
+      score += (afterFilled - beforeFilled) * 200;
 
       // Prefer dumping the unstartable piece we're replacing.
       if (isUnstartableThisWeek(meta, week)) {
