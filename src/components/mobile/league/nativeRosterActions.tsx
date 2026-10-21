@@ -5,6 +5,14 @@ import { toast } from "sonner";
 
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
 import { InjuryAvatarBadge } from "@/components/injury/InjuryAvatarBadge";
+import {
+  fantasyOutlineBtn,
+  fantasyPrimaryBtn,
+} from "@/components/native/fantasy/chrome";
+import {
+  DesktopCenteredConfirm,
+  DesktopRosterPicker,
+} from "@/components/native/fantasy/NativeTransactionDialogs";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
@@ -22,6 +30,7 @@ import { HEX_CLIP, shortName } from "./lineupShared";
 import { MobileCenteredConfirm, MobileFullScreenPicker } from "./MobileTransactionModals";
 
 export type NativePlayerOwnership = "mine" | "fa" | "other";
+export type NativeRosterActionsVariant = "mobile" | "desktop";
 
 type ConfirmTone = "add" | "drop" | "receive" | "give";
 
@@ -68,12 +77,26 @@ function RankHex({ rank, className }: { rank: number | null; className?: string 
   );
 }
 
-export function ConfirmMoveRow({ tone, player }: { tone: ConfirmTone; player: Player }) {
+export function ConfirmMoveRow({
+  tone,
+  player,
+  variant = "mobile",
+}: {
+  tone: ConfirmTone;
+  player: Player;
+  variant?: NativeRosterActionsVariant;
+}) {
   const logo = teamLogo(player.team);
   const posLabel = player.pos === "DEF" ? "DST" : player.pos;
   const { label, boxClass, Icon } = CONFIRM_TONE[tone];
+  const desktop = variant === "desktop";
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-m-border bg-m-row-alt px-3 py-3">
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-xl border px-3 py-3",
+        desktop ? "border-slate-200 bg-slate-50" : "border-m-border bg-m-row-alt",
+      )}
+    >
       <span
         className={cn(
           "flex size-10 shrink-0 items-center justify-center rounded-lg text-white",
@@ -92,14 +115,35 @@ export function ConfirmMoveRow({ tone, player }: { tone: ConfirmTone; player: Pl
         logoClassName="hidden"
       />
       {logo ? (
-        <img src={logo} alt="" className="size-7 shrink-0 rounded-full bg-m-chip object-contain p-1" />
+        <img
+          src={logo}
+          alt=""
+          className={cn(
+            "size-7 shrink-0 rounded-full object-contain p-1",
+            desktop ? "bg-slate-100" : "bg-m-chip",
+          )}
+        />
       ) : (
         <span className="size-7 shrink-0" aria-hidden />
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-m-muted">{label}</p>
-        <p className="truncate text-[15px] font-semibold leading-tight">{shortName(player)}</p>
-        <p className="truncate text-xs text-m-muted">
+        <p
+          className={cn(
+            "text-[11px] font-bold uppercase tracking-wide",
+            desktop ? "text-slate-500" : "text-m-muted",
+          )}
+        >
+          {label}
+        </p>
+        <p
+          className={cn(
+            "truncate text-[15px] font-semibold leading-tight",
+            desktop ? "text-slate-900" : null,
+          )}
+        >
+          {shortName(player)}
+        </p>
+        <p className={cn("truncate text-xs", desktop ? "text-slate-500" : "text-m-muted")}>
           {player.team || "FA"} - {posLabel}
         </p>
       </div>
@@ -112,18 +156,33 @@ function DropCandidateRow({
   rank,
   disabled,
   onDrop,
+  variant = "mobile",
 }: {
   player: Player;
   rank: number | null;
   disabled?: boolean;
   onDrop: () => void;
+  variant?: NativeRosterActionsVariant;
 }) {
   const logo = teamLogo(player.team);
   const posLabel = player.pos === "DEF" ? "DST" : player.pos;
+  const desktop = variant === "desktop";
   return (
-    <article className="overflow-hidden rounded-xl bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
+    <article
+      className={cn(
+        "overflow-hidden rounded-xl shadow-sm",
+        desktop
+          ? "border border-slate-200 bg-white text-slate-900"
+          : "bg-m-card text-m-card-fg shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
+      )}
+    >
       <div className="flex items-center px-2.5 py-3">
-        <span className="w-9 shrink-0 text-[11px] font-semibold uppercase text-m-muted">
+        <span
+          className={cn(
+            "w-9 shrink-0 text-[11px] font-semibold uppercase",
+            desktop ? "text-slate-500" : "text-m-muted",
+          )}
+        >
           {posLabel}
         </span>
         <button
@@ -152,13 +211,27 @@ function DropCandidateRow({
             <InjuryAvatarBadge status={player.injury_status ?? player.injury} />
           </div>
           {logo ? (
-            <img src={logo} alt="" className="size-8 shrink-0 rounded-full bg-m-chip object-contain p-1" />
+            <img
+              src={logo}
+              alt=""
+              className={cn(
+                "size-8 shrink-0 rounded-full object-contain p-1",
+                desktop ? "bg-slate-100" : "bg-m-chip",
+              )}
+            />
           ) : (
             <span className="size-8 shrink-0" aria-hidden />
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[17px] font-semibold leading-tight">{shortName(player)}</p>
-            <p className="truncate text-xs text-m-muted">
+            <p
+              className={cn(
+                "truncate font-semibold leading-tight",
+                desktop ? "text-[15px] text-slate-900" : "text-[17px]",
+              )}
+            >
+              {shortName(player)}
+            </p>
+            <p className={cn("truncate text-xs", desktop ? "text-slate-500" : "text-m-muted")}>
               {player.team || "FA"} - {posLabel}
             </p>
           </div>
@@ -171,8 +244,11 @@ function DropCandidateRow({
 /**
  * Native free-agent + trade mutations shared by Players list and player sheet.
  * No-ops / toast when the active league is not native or draft is incomplete.
+ * Pass `variant: "desktop"` for Broadcast confirm / picker chrome on Fantasy pages.
  */
-export function useNativeRosterActions() {
+export function useNativeRosterActions(options?: { variant?: NativeRosterActionsVariant }) {
+  const variant = options?.variant ?? "mobile";
+  const desktop = variant === "desktop";
   const { activeLeague } = useActiveLeague();
   const queryClient = useQueryClient();
   const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
@@ -422,10 +498,30 @@ export function useNativeRosterActions() {
     setTradeAwayReceive(null);
   };
 
+  const Picker = desktop ? DesktopRosterPicker : MobileFullScreenPicker;
+  const Confirm = desktop ? DesktopCenteredConfirm : MobileCenteredConfirm;
+  const muted = desktop ? "text-slate-500" : "text-m-muted";
+  const fg = desktop ? "text-slate-900" : "text-m-card-fg";
+  const titleClass = desktop
+    ? "display-title text-xl uppercase tracking-wide text-slate-900"
+    : "font-display text-2xl font-bold";
+  const cancelBtn = desktop
+    ? cn(fantasyOutlineBtn, "flex-1")
+    : "flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold";
+  const confirmGreen = desktop
+    ? cn(fantasyPrimaryBtn, "flex-1 !border-[#1fae5b] !bg-[#1fae5b] hover:!bg-[#1a9a50]")
+    : "flex-1 rounded-lg bg-[#1fae5b] py-3 font-display text-base font-semibold text-white disabled:opacity-60";
+  const confirmDrop = desktop
+    ? cn(fantasyPrimaryBtn, "flex-1 !border-[#e8551f] !bg-[#e8551f] hover:!bg-[#d14a18]")
+    : "flex-1 rounded-lg bg-[#e8551f] py-3 font-display text-base font-semibold text-white disabled:opacity-60";
+  const confirmTrade = desktop
+    ? cn(fantasyPrimaryBtn, "flex-1 !border-[#f08a24] !bg-[#f08a24] hover:!bg-[#e07c1a]")
+    : "flex-1 rounded-lg bg-[#f08a24] py-3 font-display text-base font-semibold text-white disabled:opacity-60";
+
   const modals: ReactNode = (
     <>
       {pendingAdd && !selectedDrop ? (
-        <MobileFullScreenPicker
+        <Picker
           title="Choose a drop"
           closeDisabled={busy}
           onClose={() => {
@@ -436,7 +532,7 @@ export function useNativeRosterActions() {
             <>
               Roster full ({capacity}/{capacity}). Tap{" "}
               <span className="font-semibold text-[#e8551f]">−</span> to drop someone and add{" "}
-              <span className="font-semibold text-m-card-fg">{pendingAdd.name}</span>.
+              <span className={cn("font-semibold", fg)}>{pendingAdd.name}</span>.
             </>
           }
         >
@@ -447,27 +543,28 @@ export function useNativeRosterActions() {
                 player={p}
                 rank={rankFor(p.id).pos ?? null}
                 disabled={busy}
+                variant={variant}
                 onDrop={() => setSelectedDrop(p)}
               />
             ))
           ) : (
-            <p className="px-2 py-10 text-center text-sm text-m-muted">No roster players to drop.</p>
+            <p className={cn("px-2 py-10 text-center text-sm", muted)}>No roster players to drop.</p>
           )}
-        </MobileFullScreenPicker>
+        </Picker>
       ) : null}
 
       {pendingAdd && selectedDrop ? (
-        <MobileCenteredConfirm label="Confirm add and drop">
-          <h3 className="font-display text-2xl font-bold">Confirm move</h3>
-          <p className="mt-2 text-sm text-m-muted">Review the add and drop before submitting.</p>
+        <Confirm label="Confirm add and drop">
+          <h3 className={titleClass}>Confirm move</h3>
+          <p className={cn("mt-2 text-sm", muted)}>Review the add and drop before submitting.</p>
           <div className="mt-4 space-y-2">
-            <ConfirmMoveRow tone="add" player={pendingAdd} />
-            <ConfirmMoveRow tone="drop" player={selectedDrop} />
+            <ConfirmMoveRow tone="add" player={pendingAdd} variant={variant} />
+            <ConfirmMoveRow tone="drop" player={selectedDrop} variant={variant} />
           </div>
           <div className="mt-5 flex gap-2">
             <button
               type="button"
-              className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
+              className={cancelBtn}
               disabled={busy}
               onClick={() => setSelectedDrop(null)}
             >
@@ -475,30 +572,30 @@ export function useNativeRosterActions() {
             </button>
             <button
               type="button"
-              className="flex-1 rounded-lg bg-[#1fae5b] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
+              className={confirmGreen}
               disabled={busy}
               onClick={() => void runAdd(pendingAdd.id, selectedDrop.id)}
             >
               {busy ? "Submitting…" : "Confirm"}
             </button>
           </div>
-        </MobileCenteredConfirm>
+        </Confirm>
       ) : null}
 
       {pendingDrop ? (
-        <MobileCenteredConfirm label="Confirm drop">
-          <h3 className="font-display text-2xl font-bold">Drop player</h3>
-          <p className="mt-2 text-sm text-m-muted">
+        <Confirm label="Confirm drop">
+          <h3 className={titleClass}>Drop player</h3>
+          <p className={cn("mt-2 text-sm", muted)}>
             Send this player to free agency? Uses your league roster settings ({openSlots} open of{" "}
             {capacity}).
           </p>
           <div className="mt-4">
-            <ConfirmMoveRow tone="drop" player={pendingDrop} />
+            <ConfirmMoveRow tone="drop" player={pendingDrop} variant={variant} />
           </div>
           <div className="mt-5 flex gap-2">
             <button
               type="button"
-              className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
+              className={cancelBtn}
               disabled={busy}
               onClick={() => setPendingDrop(null)}
             >
@@ -506,20 +603,20 @@ export function useNativeRosterActions() {
             </button>
             <button
               type="button"
-              className="flex-1 rounded-lg bg-[#e8551f] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
+              className={confirmDrop}
               disabled={busy}
               onClick={() => void runDrop(pendingDrop.id)}
             >
               {busy ? "Dropping…" : "Confirm drop"}
             </button>
           </div>
-        </MobileCenteredConfirm>
+        </Confirm>
       ) : null}
 
       {pendingTradeFor ? (
-        <MobileCenteredConfirm label="Propose trade">
-          <h3 className="font-display text-2xl font-bold">Propose trade</h3>
-          <p className="mt-2 text-sm text-m-muted">
+        <Confirm label="Propose trade">
+          <h3 className={titleClass}>Propose trade</h3>
+          <p className={cn("mt-2 text-sm", muted)}>
             {tradePartnerId != null
               ? `From ${board?.teams.find((t) => t.id === tradePartnerId)?.teamName ?? "team"}. `
               : ""}
@@ -527,16 +624,23 @@ export function useNativeRosterActions() {
             open).
           </p>
           <div className="mt-4">
-            <ConfirmMoveRow tone="receive" player={pendingTradeFor} />
+            <ConfirmMoveRow tone="receive" player={pendingTradeFor} variant={variant} />
           </div>
           {tradeNeedsSlots ? (
-            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 [.mobile-theme-dark_&]:bg-amber-950/40 [.mobile-theme-dark_&]:text-amber-100">
+            <p
+              className={cn(
+                "mt-2 rounded-lg px-3 py-2 text-sm",
+                desktop
+                  ? "border border-amber-200 bg-amber-50 text-amber-900"
+                  : "bg-amber-50 text-amber-900 [.mobile-theme-dark_&]:bg-amber-950/40 [.mobile-theme-dark_&]:text-amber-100",
+              )}
+            >
               Giving {tradeGive.length || "0"} for 1 needs {tradeSlotNeed} open slot
               {tradeSlotNeed === 1 ? "" : "s"}; you have {openSlots}. Add more players on your give
               side.
             </p>
           ) : null}
-          <p className="mt-3 text-[11px] font-bold uppercase tracking-wide text-m-muted">You give</p>
+          <p className={cn("mt-3 text-[11px] font-bold uppercase tracking-wide", muted)}>You give</p>
           <ul className="mt-1.5 max-h-48 space-y-2 overflow-y-auto overscroll-contain pr-0.5">
             {(myRoster?.playerIds ?? []).map((id) => {
               const p = playersById.get(id);
@@ -560,11 +664,12 @@ export function useNativeRosterActions() {
                     />
                     <span
                       className={cn(
-                        "block rounded-xl ring-offset-2 ring-offset-m-card peer-focus-visible:ring-2 peer-focus-visible:ring-[#f08a24]",
+                        "block rounded-xl ring-offset-2 peer-focus-visible:ring-2 peer-focus-visible:ring-[#f08a24]",
+                        desktop ? "ring-offset-white" : "ring-offset-m-card",
                         checked && "ring-2 ring-[#f08a24]",
                       )}
                     >
-                      <ConfirmMoveRow tone="give" player={p} />
+                      <ConfirmMoveRow tone="give" player={p} variant={variant} />
                     </span>
                   </label>
                 </li>
@@ -574,7 +679,7 @@ export function useNativeRosterActions() {
           <div className="mt-5 flex gap-2">
             <button
               type="button"
-              className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
+              className={cancelBtn}
               disabled={busy}
               onClick={() => {
                 setPendingTradeFor(null);
@@ -585,26 +690,26 @@ export function useNativeRosterActions() {
             </button>
             <button
               type="button"
-              className="flex-1 rounded-lg bg-[#f08a24] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
+              className={confirmTrade}
               disabled={busy || !tradeGive.length || tradePartnerId == null || tradeNeedsSlots}
               onClick={() => void runTradeFor()}
             >
               {busy ? "Sending…" : "Propose"}
             </button>
           </div>
-        </MobileCenteredConfirm>
+        </Confirm>
       ) : null}
 
       {pendingTradeAway && !tradeAwayReceive ? (
-        <MobileFullScreenPicker
+        <Picker
           title="Who do you want?"
           closeDisabled={busy}
           onClose={() => setPendingTradeAway(null)}
           subtitle={
             <>
               Offering{" "}
-              <span className="font-semibold text-m-card-fg">{shortName(pendingTradeAway)}</span>.
-              Tap a player to request in return.
+              <span className={cn("font-semibold", fg)}>{shortName(pendingTradeAway)}</span>.
+              {desktop ? " Select" : " Tap"} a player to request in return.
             </>
           }
         >
@@ -615,7 +720,12 @@ export function useNativeRosterActions() {
                 type="button"
                 disabled={busy}
                 onClick={() => setTradeAwayReceive(p)}
-                className="flex w-full items-center gap-2.5 rounded-xl border border-m-border bg-m-card px-3 py-3 text-left disabled:opacity-50"
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-xl border px-3 py-3 text-left disabled:opacity-50",
+                  desktop
+                    ? "border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50"
+                    : "border-m-border bg-m-card",
+                )}
               >
                 <PlayerAvatar
                   id={p.id}
@@ -626,8 +736,10 @@ export function useNativeRosterActions() {
                   logoClassName="hidden"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold">{shortName(p)}</p>
-                  <p className="truncate text-xs text-m-muted">
+                  <p className={cn("truncate text-[15px] font-semibold", desktop && fg)}>
+                    {shortName(p)}
+                  </p>
+                  <p className={cn("truncate text-xs", muted)}>
                     {p.team || "FA"} - {p.pos === "DEF" ? "DST" : p.pos}
                     {ownerTeamIdByPlayer.has(p.id)
                       ? ` · ${board?.teams.find((t) => t.id === ownerTeamIdByPlayer.get(p.id))?.teamName ?? "Rostered"}`
@@ -637,25 +749,25 @@ export function useNativeRosterActions() {
               </button>
             ))
           ) : (
-            <p className="px-2 py-10 text-center text-sm text-m-muted">
+            <p className={cn("px-2 py-10 text-center text-sm", muted)}>
               No rostered players available to request.
             </p>
           )}
-        </MobileFullScreenPicker>
+        </Picker>
       ) : null}
 
       {pendingTradeAway && tradeAwayReceive ? (
-        <MobileCenteredConfirm label="Confirm trade offer">
-          <h3 className="font-display text-2xl font-bold">Propose trade</h3>
-          <p className="mt-2 text-sm text-m-muted">Review both sides before sending.</p>
+        <Confirm label="Confirm trade offer">
+          <h3 className={titleClass}>Propose trade</h3>
+          <p className={cn("mt-2 text-sm", muted)}>Review both sides before sending.</p>
           <div className="mt-4 space-y-2">
-            <ConfirmMoveRow tone="give" player={pendingTradeAway} />
-            <ConfirmMoveRow tone="receive" player={tradeAwayReceive} />
+            <ConfirmMoveRow tone="give" player={pendingTradeAway} variant={variant} />
+            <ConfirmMoveRow tone="receive" player={tradeAwayReceive} variant={variant} />
           </div>
           <div className="mt-5 flex gap-2">
             <button
               type="button"
-              className="flex-1 rounded-lg border border-m-border py-3 font-display text-base font-semibold"
+              className={cancelBtn}
               disabled={busy}
               onClick={() => setTradeAwayReceive(null)}
             >
@@ -663,14 +775,14 @@ export function useNativeRosterActions() {
             </button>
             <button
               type="button"
-              className="flex-1 rounded-lg bg-[#f08a24] py-3 font-display text-base font-semibold text-white disabled:opacity-60"
+              className={confirmTrade}
               disabled={busy || tradePartnerId == null}
               onClick={() => void runTradeAway()}
             >
               {busy ? "Sending…" : "Propose"}
             </button>
           </div>
-        </MobileCenteredConfirm>
+        </Confirm>
       ) : null}
     </>
   );

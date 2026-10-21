@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * (native Fantasy pages only). Ownership-aware — same mutations as mobile.
  */
 export function NativeFantasyPopupRosterActions({ player }: { player: Player }) {
-  const actions = useNativeRosterActions();
+  const actions = useNativeRosterActions({ variant: "desktop" });
   if (!actions.isNative) return null;
 
   const ownership = actions.ownershipFor(player.id);
