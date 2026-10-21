@@ -19,6 +19,7 @@ import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import { currentSeason, fetchSchedule } from "@/lib/players-build";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import { starterRequirements } from "@/lib/power-rankings";
+import { hasDisplayableProjection } from "@/lib/scoring-map";
 import { sosStarsFromRank } from "@/lib/sos-presentation";
 import {
   buildScheduleByTeam,
@@ -568,19 +569,32 @@ function WaiverIntelligencePage() {
                     const isRostered = myOwnedIds.has(player.id);
                     const ownership = isRostered ? "roster" : "available";
                     const rowTone = PROJECTION_OWNERSHIP_META[ownership].row;
-                    const proj = weeklyOf(player);
                     const sleeperPos = posRankFor(player.id);
                     const rankLabel =
                       sleeperPos != null && Number.isFinite(sleeperPos) && sleeperPos > 0
                         ? Math.round(sleeperPos)
                         : "—";
-                    const wireMatchup = weeklyWireMatchup(
-                      player,
-                      brain,
-                      currentWeek,
-                      scheduleByTeam.data ?? null,
-                      positionalDefenseRank,
-                    );
+                    const onBye =
+                      player.bye != null &&
+                      currentWeek != null &&
+                      Number(player.bye) === Number(currentWeek);
+                    const wireMatchup = onBye
+                      ? { opp: "BYE", stars: null as number | null }
+                      : weeklyWireMatchup(
+                          player,
+                          brain,
+                          currentWeek,
+                          scheduleByTeam.data ?? null,
+                          positionalDefenseRank,
+                        );
+                    // Proj column: real week projection only — never season-pace
+                    // fallback (that invented points for bye / IR / inactive rows).
+                    const proj = onBye || wireMatchup.opp === "BYE"
+                      ? null
+                      : projectFor(player.id);
+                    const projLabel = hasDisplayableProjection(proj)
+                      ? proj.toFixed(2)
+                      : "—";
                     const badge = injuryMicroBadge(
                       resolveInjuryStatus(player, brain),
                     );
@@ -641,11 +655,14 @@ function WaiverIntelligencePage() {
                         </td>
                         <td className="px-2 py-2.5">
                           <div className="flex items-center justify-center">
-                            <SosStars stars={wireMatchup.stars} size="md" />
+                            <SosStars
+                              stars={wireMatchup.opp === "BYE" ? null : wireMatchup.stars}
+                              size="md"
+                            />
                           </div>
                         </td>
                         <td className="px-2 py-2.5 text-right text-sm font-semibold tabular-nums text-slate-900">
-                          {proj.toFixed(2)}
+                          {projLabel}
                         </td>
                       </tr>
                     );
@@ -746,7 +763,16 @@ function WaiverIntelligencePage() {
                 : "No high-confidence waiver upgrades detected for your bench right now."}
             </div>
           ) : (
-            suggestions.map(({ add, drop }) => (
+            suggestions.map(({ add, drop }) => {
+              const addOnBye =
+                add.bye != null &&
+                currentWeek != null &&
+                Number(add.bye) === Number(currentWeek);
+              const addProj = addOnBye ? null : projectFor(add.id);
+              const addProjNote = hasDisplayableProjection(addProj)
+                ? ` (${addProj.toFixed(1)} proj)`
+                : "";
+              return (
               <div
                 key={`${add.id}-${drop.id}`}
                 className="flex flex-col rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
@@ -807,13 +833,11 @@ function WaiverIntelligencePage() {
 
                 <p className="mt-3 text-center text-[11px] font-medium text-slate-500">
                   Upgrade {drop.pos} depth with {add.name}
-                  {Number.isFinite(weeklyOf(add))
-                    ? ` (${weeklyOf(add).toFixed(1)} proj)`
-                    : ""}
-                  .
+                  {addProjNote}.
                 </p>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>

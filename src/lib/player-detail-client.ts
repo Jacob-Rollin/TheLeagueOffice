@@ -123,6 +123,13 @@ export async function fetchPlayerDetailClient(
     started_pct: ownership?.started ?? null,
   };
 
+  /** Same live overlay as the popup header — never leave depth rows on stale catalog injury. */
+  const injuryForDepth = (p: Player): string | null => {
+    const hit = liveInjuries?.[p.id];
+    if (hit !== undefined) return hit.status?.trim() || null;
+    return p.injury_status?.trim() || p.injury?.trim() || null;
+  };
+
   const fantasyDepthPositions: Pos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
   const depthChart =
     player.team === "FA"
@@ -138,7 +145,7 @@ export async function fetchPlayerDetailClient(
               pos: p.pos,
               proj: p.proj.half,
               adp: p.adp.half,
-              injury: p.injury,
+              injury: injuryForDepth(p),
             })),
         );
 
