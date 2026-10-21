@@ -89,15 +89,26 @@ export function topNeedsForRoster(
 export const NEED_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
 export type NeedPos = (typeof NEED_POSITIONS)[number];
 
-/** Absolute YTD pos-rank ceilings — at/under this, the room is not a need. */
+/**
+ * Absolute YTD pos-rank ceilings for elite rooms. Elite talent is never listed as a
+ * need (e.g. Purdy QB2), matching FantasyPros Trade Analyzer behavior.
+ */
 export const ELITE_POS_RANK_CEILING: Record<NeedPos, number> = {
-  QB: 10,
-  RB: 24,
-  WR: 30,
-  TE: 12,
-  K: 12,
-  DEF: 12,
+  QB: 8,
+  RB: 16,
+  WR: 20,
+  TE: 10,
+  K: 10,
+  DEF: 10,
 };
+
+/**
+ * When a room's strength is below this fraction of the league's best room at the
+ * same position, treat it as a need. FantasyPros indexes positional strength
+ * against the strongest team — clear gaps vs #1 surface as weaknesses even if
+ * the ordinal rank is mid-pack in a flat league.
+ */
+export const NEED_VS_LEADER_RATIO = 0.65;
 
 export type SeasonPosRankPlayer = { id: string; pos: string };
 
@@ -186,20 +197,127 @@ export function seasonPositionRoomRanks(
   return { strength, ranks, teams: teams.length };
 }
 
+/** Flex depth after dedicated RB/WR/TE starters — used for FantasyPros-style FLX needs. */
+export function flexRoomStrength(
+  players: SeasonPosRankPlayer[],
+  starters: Record<string, number>,
+  posRankFor: (playerId: string) => number | null,
+): number {
+  const flexSlots = Math.max(0, starters.FLEX ?? 0);
+  if (flexSlots <= 0) return 0;
+
+  const take = (pos: string, n: number) =>
+    players
+      .filter((p) => String(p.pos ?? "").toUpperCase() === pos)
+      .map((p) => posRankFor(p.id))
+      .filter((r): r is number => r != null && Number.isFinite(r) && r > 0)
+      .sort((a, b) => a - b)
+      .slice(n);
+
+  // Players left after filling dedicated starter seats become the flex pool.
+  const pool = [
+    ...take("RB", starters.RB ?? 0),
+    ...take("WR", starters.WR ?? 0),
+    ...take("TE", starters.TE ?? 0),
+  ].sort((a, b) => a - b);
+
+  let strength = 0;
+  for (let i = 0; i < flexSlots; i++) {
+    const rank = pool[i];
+    strength += rank != null ? Math.max(0, 48 - rank) : -24;
+  }
+  return strength;
+}
+
 /**
- * Top needs from season YTD pos ranks: worst league rooms first, but never flag a
- * position when the roster already owns an elite YTD rank there (e.g. QB2 Purdy).
+ * Absolute YTD ranks at/above this are clearly below starter quality (real need
+ * even if the room is mid-pack in a shallow league).
  */
-export function topNeedsFromSeasonPosRanks(
+export const WEAK_POS_RANK_FLOOR: Record<NeedPos, number> = {
+  QB: 18,
+  RB: 28,
+  WR: 36,
+  TE: 18,
+  K: 18,
+  DEF: 18,
+};
+
+export type ScoredNeed = {
+  label: string;
+  needScore: number;
+  leagueRank: number;
+  best: number | null;
+  /** Elite YTD talent — never list as a need (Purdy QB2). */
+  elite: boolean;
+  /**
+   * Clear positional weakness: bottom-half vs league, vacant, or weak absolute
+   * YTD rank. FantasyPros shows 1–3 of these; strong teams often only have 1–2.
+   */
+  isRealNeed: boolean;
+};
+
+/**
+ * Whether a room qualifies as a FantasyPros-style need.
+ *
+ * FP League Analyzer / Trade Analyzer derive needs from positional rankings vs
+ * the league (weakest rooms / gaps vs the best team), not a forced count of 3.
+ * Strong teams often show only 1–2 badges; weaker teams fill up to 3.
+ */
+export function isQualifyingNeed(input: {
+  leagueRank: number;
+  teamCount: number;
+  best: number | null;
+  elite: boolean;
+  pos: NeedPos | "FLEX";
+  strength: number;
+  /** Best room strength in the league at this position (FP index-vs-#1). */
+  leaderStrength?: number | null;
+}): boolean {
+  if (input.elite) return false;
+  // Vacant starter slot is always a need.
+  if (input.best == null) return true;
+  // Bottom half of the league at this position.
+  if (input.teamCount >= 2 && input.leagueRank > Math.ceil(input.teamCount / 2)) return true;
+  // Clear gap vs the league's strongest room (FP-style index against #1).
+  const leader = input.leaderStrength;
+  if (leader != null && leader > 0 && input.strength / leader < NEED_VS_LEADER_RATIO) {
+    return true;
+  }
+  // Absolute YTD starter quality floor (weak even if mid-pack in a shallow league).
+  if (input.pos !== "FLEX" && input.best >= WEAK_POS_RANK_FLOOR[input.pos]) return true;
+  // Flex: no ranked depth after starters.
+  if (input.pos === "FLEX" && input.strength <= 8) return true;
+  return false;
+}
+
+/** Highest room strength at a position across the league (FP index baseline). */
+function leaderStrengthAt(rooms: SeasonRoomRanks | null | undefined, pos: NeedPos): number | null {
+  if (!rooms || rooms.teams < 2) return null;
+  let max = -Infinity;
+  for (const row of rooms.strength.values()) {
+    const v = row[pos] ?? 0;
+    if (v > max) max = v;
+  }
+  return Number.isFinite(max) ? max : null;
+}
+
+/**
+ * Score every starter room (and FLX) for need ranking.
+ */
+export function scoreSeasonNeeds(
   rosterId: number,
   players: SeasonPosRankPlayer[],
   rooms: SeasonRoomRanks | null | undefined,
   starters: Record<string, number>,
   posRankFor: (playerId: string) => number | null,
-  limit = 3,
-): string[] {
-  const active = NEED_POSITIONS.filter((pos) => (starters[pos] ?? 0) > 0);
-  const scored = active.map((pos) => {
+): ScoredNeed[] {
+  const teamCount = Math.max(1, rooms?.teams ?? 1);
+  const scored: ScoredNeed[] = [];
+
+  for (const pos of NEED_POSITIONS) {
+    const slots = starters[pos] ?? 0;
+    if (slots <= 0) continue;
+
     const best = bestSeasonPosRank(players, pos, posRankFor);
     const elite = best != null && best <= ELITE_POS_RANK_CEILING[pos];
     const leagueRank =
@@ -209,22 +327,104 @@ export function topNeedsFromSeasonPosRanks(
           ? best
           : 99;
     const strength =
-      rooms?.strength.get(rosterId)?.[pos] ??
-      seasonRoomStrength(players, pos, starters[pos] ?? 1, posRankFor);
-    return { pos, best, elite, leagueRank, strength };
-  });
+      rooms?.strength.get(rosterId)?.[pos] ?? seasonRoomStrength(players, pos, slots, posRankFor);
+    const leaderStrength = leaderStrengthAt(rooms, pos);
 
-  // Drop elite rooms (Purdy QB2 must not surface as a QB need).
-  const candidates = scored.filter((r) => !r.elite);
-  const teamCount = rooms?.teams ?? 0;
-  const bottomHalf =
-    teamCount >= 2 ? candidates.filter((r) => r.leagueRank > Math.ceil(teamCount / 2)) : candidates;
-  const ordered = (bottomHalf.length >= 1 ? bottomHalf : candidates)
-    .sort(
-      (a, b) =>
-        b.leagueRank - a.leagueRank || a.strength - b.strength || (b.best ?? 99) - (a.best ?? 99),
-    )
-    .map((r) => (r.pos === "DEF" ? "DST" : r.pos));
+    // Higher = more of a need. Blend league ordinal + absolute YTD + gap vs #1.
+    const vsLeaderPenalty =
+      leaderStrength != null && leaderStrength > 0
+        ? Math.max(0, 1 - strength / leaderStrength) * 40
+        : 0;
+    const needScore =
+      (leagueRank / teamCount) * 100 +
+      (best != null ? best : 60) -
+      strength * 0.35 +
+      vsLeaderPenalty;
 
-  return ordered.slice(0, limit);
+    scored.push({
+      label: pos === "DEF" ? "DST" : pos,
+      needScore,
+      leagueRank,
+      best,
+      elite,
+      isRealNeed: isQualifyingNeed({
+        leagueRank,
+        teamCount,
+        best,
+        elite,
+        pos,
+        strength,
+        leaderStrength,
+      }),
+    });
+  }
+
+  const flexSlots = starters.FLEX ?? 0;
+  if (flexSlots > 0) {
+    const strength = flexRoomStrength(players, starters, posRankFor);
+    // Treat thin flex like a mid/bottom league room when depth is weak.
+    const leagueRank =
+      strength <= 0
+        ? teamCount
+        : strength <= 8
+          ? Math.ceil(teamCount * 0.75)
+          : Math.max(1, Math.ceil(teamCount * 0.4));
+    const needScore = (leagueRank / teamCount) * 100 + 40 - strength * 0.5;
+    // null = vacant flex depth (always keep); otherwise a synthetic rank for scoring.
+    const best = strength <= 0 ? null : 20;
+    scored.push({
+      label: "FLX",
+      needScore,
+      leagueRank,
+      best,
+      elite: false,
+      isRealNeed: isQualifyingNeed({
+        leagueRank,
+        teamCount,
+        best,
+        elite: false,
+        pos: "FLEX",
+        strength,
+        leaderStrength: null,
+      }),
+    });
+  }
+
+  return scored;
+}
+
+/**
+ * FantasyPros-style Top Needs from season YTD positional strength.
+ *
+ * FantasyPros Trade Analyzer / League Analyzer:
+ * - Rank each roster room vs the league (positional rankings indexed to #1).
+ * - Surface only real weaknesses — strong clubs often show 1–2 needs, not 3.
+ * - Cap at `limit` (usually 3); never pad with near-average rooms.
+ * - Elite YTD talent (e.g. Purdy QB2) is never listed.
+ * - Fully stacked rosters still get one relative weak spot (FP rarely shows —).
+ */
+export function topNeedsFromSeasonPosRanks(
+  rosterId: number,
+  players: SeasonPosRankPlayer[],
+  rooms: SeasonRoomRanks | null | undefined,
+  starters: Record<string, number>,
+  posRankFor: (playerId: string) => number | null,
+  limit = 3,
+): string[] {
+  const scored = scoreSeasonNeeds(rosterId, players, rooms, starters, posRankFor);
+  const byNeed = (a: ScoredNeed, b: ScoredNeed) =>
+    b.needScore - a.needScore || b.leagueRank - a.leagueRank || a.label.localeCompare(b.label);
+
+  const real = scored.filter((s) => s.isRealNeed).sort(byNeed);
+  if (real.length > 0) {
+    // Keep only clear weaknesses: drop trailing needs that are far milder than
+    // the primary gap so top teams stop at 1–2 instead of always filling 3.
+    const primary = real[0]!.needScore;
+    const clear = real.filter((s, i) => i === 0 || s.needScore >= primary - 45 || s.best == null);
+    return clear.slice(0, limit).map((s) => s.label);
+  }
+
+  // Stacked roster: one relative weak spot only (never pad; never elite).
+  const mild = scored.filter((s) => !s.elite).sort(byNeed);
+  return mild.slice(0, 1).map((s) => s.label);
 }
