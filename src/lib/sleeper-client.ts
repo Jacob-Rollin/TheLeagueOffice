@@ -9,6 +9,7 @@
  * - 429 backoff (one retry) then stale/empty
  * - Projection week fan-out capped at 2 concurrent
  */
+import { normalizeFumbleRaw } from "@/lib/game-log-normalize";
 import { getCached } from "@/lib/sleeper-cache";
 import {
   SLEEPER_BASE,
@@ -262,6 +263,9 @@ const LOG_KEYS = [
   "pass_yd",
   "pass_td",
   "pass_int",
+  // Total fumbles (Sleeper `fum`) — distinct from lost (`fum_lost`). Omitting
+  // `fum` made the player-popup FUM column show "-" whenever LOST was 1+.
+  "fum",
   "fum_lost",
   // Snap% / weekly rank (Sleeper Game Log Fantasy columns).
   "off_snp",
@@ -299,6 +303,7 @@ function attachSnapPct(rawStats: Record<string, number>, stats: Record<string, u
     rawStats["snap_pct"] = Math.round((def / tmDef) * 100);
   }
 }
+
 
 type WeekProjBundle = Record<
   string,
@@ -415,7 +420,8 @@ export async function fetchGameLogsClient(
           rawStats[k] = num(stats[k], 0);
         }
       }
-      attachSnapPct(rawStats, stats as Record<string, unknown>);
+      const normalized = normalizeFumbleRaw(rawStats);
+      attachSnapPct(normalized, stats as Record<string, unknown>);
       byWeek.set(week, {
         week,
         opp,
@@ -425,7 +431,7 @@ export async function fetchGameLogsClient(
           ppr: num(stats["pts_ppr"], 0),
         },
         line: [],
-        raw: rawStats,
+        raw: normalized,
         played: true,
         isBye: false,
         seasonYear: year,
