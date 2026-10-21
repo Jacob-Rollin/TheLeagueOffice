@@ -64,6 +64,20 @@ export async function fetchResearchFpa(format: ResearchFormat = "half") {
   return getFantasyPointsAllowed({ data: { format: fmt } });
 }
 
+function isWarmMatchupsGuide(
+  hit: Awaited<ReturnType<typeof import("./players.functions").getMatchupsGuide>> | null,
+): hit is Awaited<ReturnType<typeof import("./players.functions").getMatchupsGuide>> {
+  return Boolean(
+    hit &&
+      typeof hit === "object" &&
+      hit.defense &&
+      typeof hit.defense === "object" &&
+      hit.games &&
+      typeof hit.games === "object" &&
+      (Object.keys(hit.games).length > 0 || Object.keys(hit.defense).length > 0),
+  );
+}
+
 export async function fetchResearchMatchupsGuide(
   week: number | null | undefined,
   format: ResearchFormat = "half",
@@ -73,22 +87,25 @@ export async function fetchResearchMatchupsGuide(
     const qs = new URLSearchParams({ format: fmt });
     const wKnown = week != null && Number.isFinite(week) ? Math.round(week) : null;
     if (wKnown != null) qs.set("week", String(wKnown));
-    const hit = await fetchResearchPreferR2<
-      Awaited<ReturnType<typeof import("./players.functions").getMatchupsGuide>>
-    >(
-      wKnown != null ? R2_RESEARCH_KEYS.matchupsGuide(wKnown, fmt) : null,
-      `/api/data/research/matchups-guide?${qs}`,
-    );
-    if (
-      hit &&
-      typeof hit === "object" &&
-      hit.defense &&
-      typeof hit.defense === "object" &&
-      hit.games &&
-      typeof hit.games === "object"
-    ) {
-      return hit;
+    const apiPath = `/api/data/research/matchups-guide?${qs}`;
+
+    // Prefer snap-cdn for the selected week. On a miss (historical weeks often
+    // weren't published), fall through to TiDB SELECT — read-only, not Fluid
+    // compute — so the week picker stays usable until Publish Snap CDN catches up.
+    if (wKnown != null) {
+      const r2 = r2Url(R2_RESEARCH_KEYS.matchupsGuide(wKnown, fmt));
+      if (r2) {
+        const snap = await fetchJson<
+          Awaited<ReturnType<typeof import("./players.functions").getMatchupsGuide>>
+        >(r2);
+        if (isWarmMatchupsGuide(snap)) return snap;
+      }
     }
+    const api = await fetchJson<
+      Awaited<ReturnType<typeof import("./players.functions").getMatchupsGuide>>
+    >(apiPath);
+    if (isWarmMatchupsGuide(api)) return api;
+
     if (!allowFluidFallback()) {
       const w = wKnown ?? 1;
       return {

@@ -142,16 +142,30 @@ export const Route = createFileRoute("/api/cron/research-aggregates")({
           }
           report["fpa"] = fpaByFmt;
 
+          // Warm the full regular-season board (1–18), not only through the
+          // current Sleeper week — Matchups Guide lets users pick any week, and
+          // future weeks only need schedule + FPA ranks (already available).
+          const MATCHUPS_GUIDE_WEEKS = 18;
           let guideKeys = 0;
-          for (let w = 1; w <= week; w += 1) {
+          for (let w = 1; w <= MATCHUPS_GUIDE_WEEKS; w += 1) {
             for (const fmt of FORMATS) {
               const guide = await section(report, `matchupsGuide:${w}|${fmt}`, () =>
                 loadMatchupsGuide(w, fmt, { allowCompute: true }),
               );
-              if (guide) guideKeys += 1;
+              if (
+                guide &&
+                (Object.keys(guide.games).length > 0 || Object.keys(guide.defense).length > 0)
+              ) {
+                guideKeys += 1;
+              }
             }
           }
-          report["matchupsGuide"] = { weeks: week, formats: FORMATS.length, keys: guideKeys };
+          report["matchupsGuide"] = {
+            weeks: MATCHUPS_GUIDE_WEEKS,
+            currentWeek: week,
+            formats: FORMATS.length,
+            keys: guideKeys,
+          };
 
           const analysisByFmt: Record<string, unknown> = {};
           for (const fmt of FORMATS) {
