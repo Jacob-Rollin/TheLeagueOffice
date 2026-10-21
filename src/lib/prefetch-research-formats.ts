@@ -61,7 +61,7 @@ async function prefetchFormat(
       return;
     case "matchups-guide":
       await queryClient.prefetchQuery({
-        queryKey: ["matchups-guide", week, format],
+        queryKey: ["matchups-guide", "v2", week, format],
         staleTime: RESEARCH_CLIENT_STALE_MS,
         queryFn: () => fetchResearchMatchupsGuide(week, format),
       });

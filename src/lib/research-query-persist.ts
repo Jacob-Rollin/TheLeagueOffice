@@ -84,6 +84,21 @@ function isEmptyShell(key: string, data: unknown): boolean {
     const entries = o["entries"];
     return !Array.isArray(entries) || entries.length === 0;
   }
+  // Matchups Guide soft-empty is `{ games: {}, defense: {} }` — no `rows`.
+  // Treat that as empty so we never hydrate a blank board for 24h.
+  if (key === "matchups-guide") {
+    const games = o["games"];
+    const defense = o["defense"];
+    const gamesEmpty =
+      games == null ||
+      (typeof games === "object" && !Array.isArray(games) && Object.keys(games).length === 0);
+    const defenseEmpty =
+      defense == null ||
+      (typeof defense === "object" &&
+        !Array.isArray(defense) &&
+        Object.keys(defense).length === 0);
+    return gamesEmpty && defenseEmpty;
+  }
   const rows = o["rows"];
   if (Array.isArray(rows) && rows.length === 0) return true;
   const items = o["items"];
