@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
+import { ArticleComments } from "@/components/articles/ArticleComments";
 import { ArticleShare } from "@/components/articles/ArticleShare";
 import { ArticleView } from "@/components/articles/ArticleView";
 import { RecentFantasyArticles } from "@/components/articles/RecentFantasyArticles";
@@ -96,10 +97,15 @@ function ArticlePage() {
           ) : !article ? (
             <p className="text-sm text-muted-foreground">This article is no longer available.</p>
           ) : (
-            <ArticleView
-              article={article}
-              footer={<ArticleShare slug={article.slug} title={article.title} summary={article.summary} />}
-            />
+            <>
+              <ArticleView
+                article={article}
+                footer={
+                  <ArticleShare slug={article.slug} title={article.title} summary={article.summary} />
+                }
+              />
+              <ArticleComments articleId={article.id} />
+            </>
           )}
         </div>
 
