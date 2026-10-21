@@ -8,17 +8,12 @@ const map: Record<string, string> = {
   TE: "bg-te/70 text-white border-te/70",
   K: "bg-k/70 text-white border-k/70",
   DEF: "bg-def/70 text-white border-def/70",
+  DST: "bg-def/70 text-white border-def/70",
   FLEX: "bg-muted text-muted-foreground border-border",
   BN: "bg-muted text-muted-foreground border-border",
 };
 
-export function PositionBadge({
-  pos,
-  className,
-}: {
-  pos: Pos | string;
-  className?: string;
-}) {
+export function PositionBadge({ pos, className }: { pos: Pos | string; className?: string }) {
   return (
     <span
       className={cn(

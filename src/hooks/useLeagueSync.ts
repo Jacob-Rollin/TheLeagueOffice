@@ -26,6 +26,7 @@ function needsLeagueWarmPath(pathname: string): boolean {
   if (pathname.startsWith("/playbook") || pathname.startsWith("/m/")) return true;
   if (pathname === "/m") return true;
   if (pathname === "/trade" || pathname.startsWith("/trade/")) return true;
+  if (pathname === "/trade-analyzer") return true;
   if (pathname === "/waiver" || pathname.startsWith("/waiver/")) return true;
   if (pathname === "/standings" || pathname.startsWith("/standings/")) return true;
   if (pathname === "/top-available") return true;

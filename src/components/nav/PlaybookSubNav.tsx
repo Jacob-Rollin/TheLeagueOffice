@@ -25,6 +25,7 @@ export type SubNavLink = {
     | "/playbook/transactions"
     | "/trade"
     | "/trade-market-values"
+    | "/trade-analyzer"
     | "/waiver"
     | "/top-available";
   label: string;
@@ -44,6 +45,7 @@ export const PLAYBOOK_SUBNAV_LINKS: SubNavLink[] = [
 export const TRADE_SUBNAV_LINKS: SubNavLink[] = [
   { to: "/trade", label: "Trade Desk" },
   { to: "/trade-market-values", label: "Trade Market Values" },
+  { to: "/trade-analyzer", label: "Trade Analyzer" },
 ];
 
 export const WAIVER_SUBNAV_LINKS: SubNavLink[] = [
