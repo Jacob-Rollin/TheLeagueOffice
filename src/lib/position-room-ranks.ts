@@ -89,14 +89,17 @@ export function topNeedsForRoster(
 export const NEED_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DEF"] as const;
 export type NeedPos = (typeof NEED_POSITIONS)[number];
 
-/** Absolute YTD pos-rank ceilings — at/under this, the room is not a need. */
+/**
+ * Absolute YTD pos-rank ceilings used to *soft-deprioritize* a room (not hard-exclude).
+ * FantasyPros still always fills ~1–3 needs; elite rooms just rarely crack the top of the list.
+ */
 export const ELITE_POS_RANK_CEILING: Record<NeedPos, number> = {
-  QB: 10,
-  RB: 24,
-  WR: 30,
-  TE: 12,
-  K: 12,
-  DEF: 12,
+  QB: 8,
+  RB: 16,
+  WR: 20,
+  TE: 10,
+  K: 10,
+  DEF: 10,
 };
 
 export type SeasonPosRankPlayer = { id: string; pos: string };
@@ -186,9 +189,44 @@ export function seasonPositionRoomRanks(
   return { strength, ranks, teams: teams.length };
 }
 
+/** Flex depth after dedicated RB/WR/TE starters — used for FantasyPros-style FLX needs. */
+export function flexRoomStrength(
+  players: SeasonPosRankPlayer[],
+  starters: Record<string, number>,
+  posRankFor: (playerId: string) => number | null,
+): number {
+  const flexSlots = Math.max(0, starters.FLEX ?? 0);
+  if (flexSlots <= 0) return 0;
+
+  const take = (pos: string, n: number) =>
+    players
+      .filter((p) => String(p.pos ?? "").toUpperCase() === pos)
+      .map((p) => posRankFor(p.id))
+      .filter((r): r is number => r != null && Number.isFinite(r) && r > 0)
+      .sort((a, b) => a - b)
+      .slice(n);
+
+  // Players left after filling dedicated starter seats become the flex pool.
+  const pool = [
+    ...take("RB", starters.RB ?? 0),
+    ...take("WR", starters.WR ?? 0),
+    ...take("TE", starters.TE ?? 0),
+  ].sort((a, b) => a - b);
+
+  let strength = 0;
+  for (let i = 0; i < flexSlots; i++) {
+    const rank = pool[i];
+    strength += rank != null ? Math.max(0, 48 - rank) : -24;
+  }
+  return strength;
+}
+
 /**
- * Top needs from season YTD pos ranks: worst league rooms first, but never flag a
- * position when the roster already owns an elite YTD rank there (e.g. QB2 Purdy).
+ * FantasyPros-style Top Needs: always fill up to `limit` weakest rooms.
+ *
+ * Scores blend league-relative room rank + absolute YTD pos rank. Elite YTD
+ * rooms (e.g. Purdy QB2) are heavily soft-deprioritized so they almost never
+ * appear, but we never return an empty dash list when starter slots exist.
  */
 export function topNeedsFromSeasonPosRanks(
   rosterId: number,
@@ -198,10 +236,14 @@ export function topNeedsFromSeasonPosRanks(
   posRankFor: (playerId: string) => number | null,
   limit = 3,
 ): string[] {
-  const active = NEED_POSITIONS.filter((pos) => (starters[pos] ?? 0) > 0);
-  const scored = active.map((pos) => {
+  const teamCount = Math.max(1, rooms?.teams ?? 1);
+  const scored: { label: string; needScore: number }[] = [];
+
+  for (const pos of NEED_POSITIONS) {
+    const slots = starters[pos] ?? 0;
+    if (slots <= 0) continue;
+
     const best = bestSeasonPosRank(players, pos, posRankFor);
-    const elite = best != null && best <= ELITE_POS_RANK_CEILING[pos];
     const leagueRank =
       rooms && rooms.teams >= 2
         ? (rooms.ranks[pos].get(rosterId) ?? rooms.teams)
@@ -209,22 +251,32 @@ export function topNeedsFromSeasonPosRanks(
           ? best
           : 99;
     const strength =
-      rooms?.strength.get(rosterId)?.[pos] ??
-      seasonRoomStrength(players, pos, starters[pos] ?? 1, posRankFor);
-    return { pos, best, elite, leagueRank, strength };
-  });
+      rooms?.strength.get(rosterId)?.[pos] ?? seasonRoomStrength(players, pos, slots, posRankFor);
 
-  // Drop elite rooms (Purdy QB2 must not surface as a QB need).
-  const candidates = scored.filter((r) => !r.elite);
-  const teamCount = rooms?.teams ?? 0;
-  const bottomHalf =
-    teamCount >= 2 ? candidates.filter((r) => r.leagueRank > Math.ceil(teamCount / 2)) : candidates;
-  const ordered = (bottomHalf.length >= 1 ? bottomHalf : candidates)
-    .sort(
-      (a, b) =>
-        b.leagueRank - a.leagueRank || a.strength - b.strength || (b.best ?? 99) - (a.best ?? 99),
-    )
-    .map((r) => (r.pos === "DEF" ? "DST" : r.pos));
+    // Higher = more of a need (worst league rooms + worse NFL ranks).
+    let needScore = (leagueRank / teamCount) * 100 + (best != null ? best : 60) - strength * 0.35;
 
-  return ordered.slice(0, limit);
+    // Soft elite dampen — Purdy QB2 should not surface; do not hard-exclude.
+    if (best != null && best <= ELITE_POS_RANK_CEILING[pos]) {
+      needScore -= 180;
+    }
+
+    scored.push({
+      label: pos === "DEF" ? "DST" : pos,
+      needScore,
+    });
+  }
+
+  const flexSlots = starters.FLEX ?? 0;
+  if (flexSlots > 0) {
+    const strength = flexRoomStrength(players, starters, posRankFor);
+    // Approximate a "league rank" for flex from strength alone when rooms lack FLX.
+    const needScore = 55 + flexSlots * 8 - strength * 0.5;
+    scored.push({ label: "FLX", needScore });
+  }
+
+  return scored
+    .sort((a, b) => b.needScore - a.needScore || a.label.localeCompare(b.label))
+    .slice(0, limit)
+    .map((r) => r.label);
 }
