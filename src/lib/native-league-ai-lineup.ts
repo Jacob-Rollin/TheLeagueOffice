@@ -202,8 +202,14 @@ export function buildAiLineupSlots(input: {
       );
       if (starterOpen) {
         starterOpen.playerId = id;
+        continue;
       }
     }
+    // Last resort: keep every roster id placed so validation can succeed —
+    // prefer an empty BN/TAXI that somehow appeared, else leave unplaced
+    // (caller surfaces the error rather than starting a bye/FA).
+    const benchOpen = views.find((row) => !row.playerId && (row.key === "BN" || row.key === "TAXI"));
+    if (benchOpen) benchOpen.playerId = id;
   }
 
   return slotsRecordFromViews(views);
