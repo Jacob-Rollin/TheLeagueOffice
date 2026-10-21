@@ -1,17 +1,11 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { useCallback, useMemo, useRef, type MouseEvent, type ReactNode } from "react";
 
 import {
   ArticleHero,
   articleFeaturedFromRow,
 } from "@/components/articles/ArticleHero";
 import { ArticlePollBlock } from "@/components/articles/ArticlePollBlock";
+import { splitArticleContent } from "@/components/articles/article-content-parts";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import type { ArticleRow } from "@/lib/articles";
 
@@ -65,15 +59,17 @@ const contentClassName =
   "[&_.lo-player-header__id]:flex [&_.lo-player-header__id]:min-w-0 [&_.lo-player-header__id]:flex-col [&_.lo-player-header__id]:gap-1 " +
   "[&_.lo-player-header__name]:block [&_.lo-player-header__name]:truncate [&_.lo-player-header__name]:text-xl [&_.lo-player-header__name]:font-bold [&_.lo-player-header__name]:leading-tight [&_.lo-player-header__name]:text-slate-900 " +
   "[&_.lo-player-header__sub]:block [&_.lo-player-header__sub]:truncate [&_.lo-player-header__sub]:text-sm [&_.lo-player-header__sub]:font-semibold [&_.lo-player-header__sub]:uppercase [&_.lo-player-header__sub]:tracking-wide [&_.lo-player-header__sub]:text-slate-500 " +
-  "[&_.lo-player-meta]:mb-3 [&_.lo-player-meta]:mt-0 [&_.lo-player-meta]:text-sm [&_.lo-player-meta]:font-bold [&_.lo-player-meta]:uppercase [&_.lo-player-meta]:tracking-wide [&_.lo-player-meta]:text-slate-900 " +
-  "[&_.lo-poll]:my-6";
+  "[&_.lo-player-meta]:mb-3 [&_.lo-player-meta]:mt-0 [&_.lo-player-meta]:text-sm [&_.lo-player-meta]:font-bold [&_.lo-player-meta]:uppercase [&_.lo-player-meta]:tracking-wide [&_.lo-player-meta]:text-slate-900";
 
 /** Published article layout, shared by the article page and the editor preview. */
 export function ArticleView({ article, footer }: { article: ArticleViewData; footer?: ReactNode }) {
   const featured = articleFeaturedFromRow(article);
   const modalRef = useRef<PlayerModalHandle>(null);
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const pollRootsRef = useRef<Root[]>([]);
+
+  const contentParts = useMemo(
+    () => splitArticleContent(article.content ?? ""),
+    [article.content],
+  );
 
   const onContentClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
@@ -85,43 +81,6 @@ export function ArticleView({ article, footer }: { article: ArticleViewData; foo
     event.stopPropagation();
     modalRef.current?.open(id);
   }, []);
-
-  useEffect(() => {
-    const rootEl = contentRef.current;
-    pollRootsRef.current.forEach((r) => {
-      try {
-        r.unmount();
-      } catch {
-        /* already unmounted */
-      }
-    });
-    pollRootsRef.current = [];
-    if (!rootEl) return;
-
-    // Set HTML via DOM (not dangerouslySetInnerHTML) so React does not wipe poll mounts.
-    rootEl.innerHTML = article.content;
-
-    const nodes = rootEl.querySelectorAll<HTMLElement>(".lo-poll[data-poll-id]");
-    nodes.forEach((node) => {
-      const pollId = node.getAttribute("data-poll-id")?.trim();
-      if (!pollId) return;
-      node.replaceChildren();
-      const root = createRoot(node);
-      root.render(<ArticlePollBlock pollId={pollId} />);
-      pollRootsRef.current.push(root);
-    });
-
-    return () => {
-      pollRootsRef.current.forEach((r) => {
-        try {
-          r.unmount();
-        } catch {
-          /* already unmounted */
-        }
-      });
-      pollRootsRef.current = [];
-    };
-  }, [article.content]);
 
   return (
     <article className="overflow-hidden rounded-xl border border-border/80 bg-card">
@@ -147,8 +106,19 @@ export function ArticleView({ article, footer }: { article: ArticleViewData; foo
         {article.summary ? (
           <p className="mt-5 text-base leading-relaxed text-muted-foreground">{article.summary}</p>
         ) : null}
-        {/* HTML set in effect so embedded .lo-poll nodes can host React poll roots. */}
-        <div ref={contentRef} onClick={onContentClick} className={contentClassName} />
+        <div onClick={onContentClick} className={contentClassName}>
+          {contentParts.map((part, index) =>
+            part.type === "poll" ? (
+              <ArticlePollBlock key={`poll-${part.pollId}-${index}`} pollId={part.pollId} />
+            ) : (
+              <div
+                key={`html-${index}`}
+                // Authored by admins / weekly desk only.
+                dangerouslySetInnerHTML={{ __html: part.html }}
+              />
+            ),
+          )}
+        </div>
         {footer}
       </div>
       <PlayerModalHost ref={modalRef} />

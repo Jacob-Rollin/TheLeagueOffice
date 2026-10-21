@@ -60,6 +60,17 @@ export function ArticlePollBlock({ pollId }: { pollId: string }) {
     );
   }
 
+  if (bundleQuery.isError) {
+    return (
+      <div className="my-6 rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-sm text-red-800">
+        Could not load this poll
+        {bundleQuery.error instanceof Error ? `: ${bundleQuery.error.message}` : "."}
+        {" "}
+        If this is a new feature, confirm the Supabase poll migration has been applied.
+      </div>
+    );
+  }
+
   const bundle = bundleQuery.data;
   if (!bundle) {
     return (

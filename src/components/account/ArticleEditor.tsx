@@ -52,6 +52,22 @@ const ALLOWED_TAGS = new Set([
   "P","BR","B","STRONG","I","EM","U","A","UL","OL","LI","H1","H2","H3","BLOCKQUOTE","SPAN","FONT","IMG","DIV",
 ]);
 
+/** Keep poll markers intact before preview/publish (contenteditable can drop class). */
+function normalizePollMarkersInHtml(html: string): string {
+  if (!html || typeof document === "undefined") return html;
+  const holder = document.createElement("div");
+  holder.innerHTML = html;
+  holder.querySelectorAll("[data-poll-id]").forEach((node) => {
+    const el = node as HTMLElement;
+    const pollId = el.getAttribute("data-poll-id")?.trim();
+    if (!pollId) return;
+    el.classList.add("lo-poll");
+    el.setAttribute("data-poll-id", pollId);
+    el.setAttribute("contenteditable", "false");
+  });
+  return holder.innerHTML;
+}
+
 /** Strips foreign markup, highlights and background colors from pasted HTML. */
 function sanitizePastedHtml(html: string): string {
   const holder = document.createElement("div");
@@ -64,9 +80,9 @@ function sanitizePastedHtml(html: string): string {
         continue;
       }
       const el = child as HTMLElement;
-      const isPoll = el.classList.contains("lo-poll") && el.getAttribute("data-poll-id");
-      if (isPoll) {
-        const pollId = el.getAttribute("data-poll-id");
+      const pollIdAttr = el.getAttribute("data-poll-id")?.trim();
+      if (pollIdAttr || el.classList.contains("lo-poll")) {
+        const pollId = pollIdAttr || el.getAttribute("data-poll-id");
         el.removeAttribute("style");
         el.removeAttribute("bgcolor");
         el.removeAttribute("id");
@@ -266,8 +282,11 @@ export function ArticleEditor({
         questions: pollQuestions,
       });
       const ok = insertHtmlIntoBody(pollEmbedHtml(poll.id, pollTitle.trim() || poll.title));
-      if (!ok) {
-        setError("Poll was created but could not be placed in the article body. Try again.");
+      const bodyHtml = bodyRef.current?.innerHTML ?? "";
+      if (!ok || !bodyHtml.includes(`data-poll-id="${poll.id}"`)) {
+        setError(
+          "Poll was created in the database but not found in the article body. Scroll the writer — look for a blue poll box — or try Insert again.",
+        );
         return;
       }
       setPollOpen(false);
@@ -304,11 +323,14 @@ export function ArticleEditor({
   const openPreview = () => {
     setSizeOpen(false);
     setMarkerOpen(false);
+    setPollOpen(false);
+    const content = normalizePollMarkersInHtml(bodyRef.current?.innerHTML ?? "");
+    if (bodyRef.current) bodyRef.current.innerHTML = content;
     setPreview({
       title: title.trim() || "Untitled Article",
       category: category.trim() || "Uncategorized",
       summary: summary.trim(),
-      content: bodyRef.current?.innerHTML ?? "",
+      content,
       image_url: imageUrl.trim(),
       author_name: author.trim() || "The League Office",
       created_at: article?.created_at ?? new Date().toISOString(),
@@ -329,7 +351,8 @@ export function ArticleEditor({
   }, [preview]);
 
   const submit = () => {
-    const content = bodyRef.current?.innerHTML ?? "";
+    const content = normalizePollMarkersInHtml(bodyRef.current?.innerHTML ?? "");
+    if (bodyRef.current) bodyRef.current.innerHTML = content;
     if (!title.trim() || !category.trim() || !summary.trim() || !imageUrl.trim() || !content.trim()) {
       setError("Fill in the title, category, summary, header image and article body.");
       return;
