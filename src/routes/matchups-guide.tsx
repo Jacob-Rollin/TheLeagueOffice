@@ -33,6 +33,7 @@ import type { Pos } from "@/lib/draft";
 import { usePrefetchSiblingFormats } from "@/lib/prefetch-research-formats";
 import { fetchResearchMatchupsGuide, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import type { MatchupDefenseCell } from "@/lib/players.server";
+import { isUnavailableInjury } from "@/lib/injury-badge";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import {
   sosDifficultyChipClass,
@@ -181,8 +182,12 @@ function MatchupsGuidePage() {
   const { data: playersPayload } = useSleeperPlayers();
   const players = playersPayload?.players ?? [];
   const brain = usePlayerBrain();
-  const { projectFor } = useLeagueProjections(activeWeek);
+  const { projectFor, nflWeek } = useLeagueProjections(activeWeek);
   const { teams, myTeam, rosteredIds } = useLeagueRosters(players);
+  // Live Sleeper designations (via useSleeperPlayers overlay) only describe the
+  // current week — hide IR/Out/etc. for current + future boards, not history.
+  const hideUnavailableInjuries =
+    activeWeek == null || nflWeek == null || Number(activeWeek) >= Number(nflWeek);
 
   const ownerById = useMemo(() => {
     const map = new Map<string, { slot: number; team: string; isMine: boolean }>();
@@ -227,6 +232,17 @@ function MatchupsGuidePage() {
 
       const owner = ownerById.get(p.id) ?? null;
       const proj = projectFor(p.id);
+      const injuryStatus = resolveInjuryStatus(p, brain);
+      // IR / Out / Doubtful / PUP / Sus etc. — keep Questionable. If Sleeper still
+      // posts a starter-level week projection, treat them as expected to play
+      // (activation lag); season pace alone must not keep true IR sitters listed.
+      if (
+        hideUnavailableInjuries &&
+        isUnavailableInjury(injuryStatus) &&
+        (proj == null || proj < STARTER_PROJ[pos])
+      ) {
+        continue;
+      }
       // Prefer live weekly proj, but floor with season pace so past/future weeks
       // with missing or near-zero week lines still surface real starters.
       const seasonPts =
@@ -245,7 +261,7 @@ function MatchupsGuidePage() {
       const z = scoreScale ? (cell.pa - scoreScale.mean) / scoreScale.sd : 0;
       const posLabel = pos === "DEF" ? "DST" : pos;
       const bye = p.bye != null && Number(p.bye) > 0 ? Number(p.bye) : null;
-      const badge = injuryMicroBadge(resolveInjuryStatus(p, brain));
+      const badge = injuryMicroBadge(injuryStatus);
       out.push({
         id: p.id,
         name: p.name,
@@ -267,7 +283,19 @@ function MatchupsGuidePage() {
       });
     }
     return out;
-  }, [guide, pos, players, ownerById, myIds, rosteredIds, projectFor, scoreScale, brain, scoringFormat]);
+  }, [
+    guide,
+    pos,
+    players,
+    ownerById,
+    myIds,
+    rosteredIds,
+    projectFor,
+    scoreScale,
+    brain,
+    scoringFormat,
+    hideUnavailableInjuries,
+  ]);
 
   const rows = useMemo((): GuideRow[] => {
     const needle = deferredQ.trim().toLowerCase();
