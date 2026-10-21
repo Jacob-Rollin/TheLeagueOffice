@@ -269,9 +269,6 @@ export function LeagueOfficeChatRail({
           <h2 className="display-title text-lg uppercase tracking-wide text-slate-900">
             League <span className="text-primary">Chat</span>
           </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Chat · transactions · settings
-          </p>
         </div>
         <Link
           to="/league/$linkId/transactions"
