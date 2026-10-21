@@ -10,6 +10,7 @@ const map: Record<string, string> = {
   DEF: "bg-def/70 text-white border-def/70",
   DST: "bg-def/70 text-white border-def/70",
   FLEX: "bg-muted text-muted-foreground border-border",
+  FLX: "bg-gradient-to-r from-wr/70 via-rb/70 to-te/70 text-white border-transparent",
   BN: "bg-muted text-muted-foreground border-border",
 };
 

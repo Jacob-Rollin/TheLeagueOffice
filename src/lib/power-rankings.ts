@@ -60,6 +60,27 @@ function minMaxNormalize(values: number[]): number[] {
   return values.map((v) => ((v - min) / (max - min)) * 100);
 }
 
+/**
+ * Soft display band for the True Power Index.
+ *
+ * Pure 0–100 league min-max puts the weakest roster near 0 and reads much lower
+ * than FantasyPros-style power ranks (often #1 = 100, mid teams still in the 70s–80s).
+ * We keep continuous league-relative strength (not ordinal-only), then map into this
+ * floor/ceil so the best team can hit 100 and mid/low teams stay readable.
+ *
+ * Positional / starter seat ranks (Standings Starting Slot Ranks) explain *why* a
+ * team is strong — they already drive weekly optimal projection, so they are not
+ * blended in again as a fourth weight (that would double-count starter strength).
+ */
+export const POWER_INDEX_FLOOR = 55;
+export const POWER_INDEX_CEIL = 100;
+
+/** Map a 0–100 relative blend into the soft FantasyPros-like display band. */
+export function toDisplayPowerIndex(normalized0to100: number): number {
+  const t = Math.max(0, Math.min(100, normalized0to100)) / 100;
+  return Math.round((POWER_INDEX_FLOOR + t * (POWER_INDEX_CEIL - POWER_INDEX_FLOOR)) * 10) / 10;
+}
+
 function recordLabel(wins: number, losses: number, ties: number, pointsFor: number): string {
   const record = ties > 0 ? `${wins}-${losses}-${ties}` : `${wins}-${losses}`;
   const pf = Number.isFinite(pointsFor) ? pointsFor.toFixed(1) : "0.0";
@@ -67,9 +88,10 @@ function recordLabel(wins: number, losses: number, ties: number, pointsFor: numb
 }
 
 /**
- * Weighted Power Strength Index:
+ * Weighted Power Strength Index (Playbook True Power Rankings):
  * 40% roster market value + 40% optimal weekly projection + 20% season points for.
- * Each factor is min-max normalized across the league before weighting.
+ * Each factor is min-max normalized across the league, then mapped into the soft
+ * display band so indexes are not crushed toward zero for mid/low teams.
  */
 export function buildTruePowerRankings(
   teams: PowerRankingInputs[],
@@ -118,11 +140,14 @@ export function buildTruePowerRankings(
   const normPf = minMaxNormalize(computed.map((r) => r.pointsFor));
 
   const ranked = computed
-    .map((row, i) => ({
-      ...row,
-      powerIndex: 0.4 * (normMarket[i] ?? 0) + 0.4 * (normProj[i] ?? 0) + 0.2 * (normPf[i] ?? 0),
-      recordLabel: recordLabel(row.wins, row.losses, row.ties, row.pointsFor),
-    }))
+    .map((row, i) => {
+      const blend = 0.4 * (normMarket[i] ?? 0) + 0.4 * (normProj[i] ?? 0) + 0.2 * (normPf[i] ?? 0);
+      return {
+        ...row,
+        powerIndex: toDisplayPowerIndex(blend),
+        recordLabel: recordLabel(row.wins, row.losses, row.ties, row.pointsFor),
+      };
+    })
     .sort((a, b) => b.powerIndex - a.powerIndex || b.pointsFor - a.pointsFor);
 
   return ranked.map((row, index) => ({
@@ -130,7 +155,7 @@ export function buildTruePowerRankings(
     slot: row.slot,
     team: row.team,
     owner: row.owner,
-    powerIndex: Math.round(row.powerIndex * 10) / 10,
+    powerIndex: row.powerIndex,
     marketValue: Math.round(row.marketValue * 10) / 10,
     weeklyProjection: Math.round(row.weeklyProjection * 10) / 10,
     wins: row.wins,
