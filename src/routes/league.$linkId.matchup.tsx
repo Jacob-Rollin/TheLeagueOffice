@@ -446,8 +446,8 @@ function NativeMatchupPage() {
             onSelect={setSelectedMatchupId}
           />
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="min-w-0 space-y-4 lg:col-span-2">
+          <div className="space-y-6">
+            <div className="min-w-0 space-y-4">
               {/* H2H header — Playbook-style */}
               <section className="overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex items-center gap-2 sm:gap-3">
@@ -681,15 +681,13 @@ function NativeMatchupPage() {
               ) : null}
             </div>
 
-            <aside className="min-w-0 lg:col-span-1">
-              <FantasyMatchupWeekList
-                title="Around the League"
-                matchups={matchupCards}
-                myTeamId={myTeamId}
-                selectedMatchupId={focusMatchupId}
-                onSelectMatchup={setSelectedMatchupId}
-              />
-            </aside>
+            <FantasyMatchupWeekList
+              title="Around the League"
+              matchups={matchupCards}
+              myTeamId={myTeamId}
+              selectedMatchupId={focusMatchupId}
+              onSelectMatchup={setSelectedMatchupId}
+            />
           </div>
         </>
       )}

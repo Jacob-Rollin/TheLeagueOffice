@@ -1,0 +1,445 @@
+import { Link } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import {
+  FantasyActivityList,
+  type FantasyActivityItem,
+} from "@/components/native/fantasy";
+import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  deleteLeagueChatMessage,
+  listLeagueChatMessages,
+  postLeagueChatMessage,
+  type LeagueChatMessage,
+} from "@/lib/league-chat";
+import { listNativeTransactions } from "@/lib/native-league.functions";
+import {
+  isNativeSettingsChangeType,
+  type NativeSettingsChangeEntry,
+} from "@/lib/native-league-settings-changelog";
+import { visibleRefetchInterval } from "@/lib/page-visibility";
+import { loadPlayersCatalog } from "@/lib/players-catalog";
+import { cn } from "@/lib/utils";
+
+const CHAT_POLL_MS = 10_000;
+const TXN_POLL_MS = 20_000;
+
+type RailTxnRow = FantasyActivityItem & {
+  settingsChanges?: NativeSettingsChangeEntry[] | null;
+  changedByName?: string | null;
+};
+
+type FeedKind = "chat" | "transaction" | "settings";
+
+type FeedItem = {
+  id: string;
+  kind: FeedKind;
+  at: number;
+  chat?: LeagueChatMessage;
+  txn?: FantasyActivityItem;
+  settings?: {
+    id: number;
+    createdAt: string;
+    who: string;
+    changes: NativeSettingsChangeEntry[];
+  };
+};
+
+function timeLabel(iso: string): string {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return "";
+  const mins = Math.max(1, Math.round((Date.now() - at) / 60_000));
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+/**
+ * Persistent Fantasy right rail: live chat + league transactions + settings
+ * changes in one timeline (Sleeper-style flow, Broadcast chrome).
+ */
+export function LeagueOfficeChatRail({
+  linkId,
+  nativeLeagueId,
+  className,
+}: {
+  linkId: string;
+  nativeLeagueId: string;
+  className?: string;
+}) {
+  const { user, ready } = useAuth();
+  const { data: isAdmin } = useIsAdmin(user?.id ?? null);
+  const queryClient = useQueryClient();
+  const [body, setBody] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const leagueId = nativeLeagueId.trim();
+
+  const cache = useSleeperPlayers();
+  const fallback = useQuery({
+    queryKey: ["players-catalog"],
+    queryFn: () => loadPlayersCatalog(),
+    enabled: Boolean(cache.error) && !cache.data,
+    staleTime: 1000 * 60 * 30,
+  });
+  const players = cache.data?.players ?? fallback.data?.players ?? [];
+  const playersById = useMemo(() => {
+    const map = new Map<string, (typeof players)[number]>();
+    for (const p of players) map.set(p.id, p);
+    return map;
+  }, [players]);
+
+  const messagesQuery = useQuery({
+    queryKey: ["league-chat", leagueId],
+    enabled: Boolean(user?.id && leagueId),
+    staleTime: 5_000,
+    refetchInterval: visibleRefetchInterval(CHAT_POLL_MS),
+    queryFn: () => listLeagueChatMessages(leagueId),
+  });
+
+  const txnQuery = useQuery({
+    queryKey: ["native-transactions", linkId, "chat-rail"],
+    enabled: Boolean(user?.id && linkId),
+    staleTime: 15_000,
+    refetchInterval: visibleRefetchInterval(TXN_POLL_MS),
+    queryFn: () => listNativeTransactions({ data: { linkId, limit: 40 } }),
+  });
+
+  const profileQuery = useQuery({
+    queryKey: ["profile-display-name", user?.id],
+    enabled: Boolean(user?.id),
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error: err } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", user!.id)
+        .maybeSingle();
+      if (err) throw new Error(err.message);
+      return data;
+    },
+  });
+
+  const postMutation = useMutation({
+    mutationFn: postLeagueChatMessage,
+    onSuccess: async () => {
+      setBody("");
+      setError(null);
+      await queryClient.invalidateQueries({ queryKey: ["league-chat", leagueId] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteLeagueChatMessage,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["league-chat", leagueId] });
+    },
+  });
+
+  const feed = useMemo(() => {
+    const items: FeedItem[] = [];
+    for (const m of messagesQuery.data ?? []) {
+      items.push({
+        id: `chat-${m.id}`,
+        kind: "chat",
+        at: Date.parse(m.created_at) || 0,
+        chat: m,
+      });
+    }
+    for (const row of (txnQuery.data ?? []) as RailTxnRow[]) {
+      const at = Date.parse(row.createdAt) || 0;
+      if (isNativeSettingsChangeType(row.type)) {
+        const changes = Array.isArray(row.settingsChanges) ? row.settingsChanges : [];
+        if (!changes.length) continue;
+        items.push({
+          id: `settings-${row.id}`,
+          kind: "settings",
+          at,
+          settings: {
+            id: row.id,
+            createdAt: row.createdAt,
+            who:
+              row.changedByName?.trim() ||
+              row.teamName?.trim() ||
+              "Commissioner",
+            changes,
+          },
+        });
+        continue;
+      }
+      items.push({
+        id: `txn-${row.id}`,
+        kind: "transaction",
+        at,
+        txn: row,
+      });
+    }
+    items.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
+    return items;
+  }, [messagesQuery.data, txnQuery.data]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [feed.length]);
+
+  const metaName =
+    typeof user?.user_metadata?.["full_name"] === "string"
+      ? user.user_metadata["full_name"]
+      : "";
+  const displayName =
+    profileQuery.data?.full_name?.trim() ||
+    metaName.trim() ||
+    user?.email?.split("@")[0] ||
+    "Member";
+
+  const submit = () => {
+    if (!user) {
+      setError("Sign in to chat.");
+      return;
+    }
+    const trimmed = body.trim();
+    if (!trimmed) {
+      setError("Write a message first.");
+      return;
+    }
+    postMutation.mutate({
+      nativeLeagueId: leagueId,
+      userId: user.id,
+      authorName: String(displayName),
+      body: trimmed,
+    });
+  };
+
+  if (!ready) {
+    return (
+      <section
+        className={cn(
+          "rounded-xl border border-slate-200 bg-white p-4 text-sm text-muted-foreground shadow-sm",
+          className,
+        )}
+      >
+        Loading chat…
+      </section>
+    );
+  }
+
+  if (!user) {
+    return (
+      <section
+        className={cn(
+          "rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm",
+          className,
+        )}
+      >
+        Sign in to view league chat, transactions, and settings updates.
+      </section>
+    );
+  }
+
+  if (!leagueId || !linkId) {
+    return (
+      <section
+        className={cn(
+          "rounded-xl border border-slate-200 bg-white p-4 text-sm text-muted-foreground shadow-sm",
+          className,
+        )}
+      >
+        Select a league to open chat.
+      </section>
+    );
+  }
+
+  const loading = messagesQuery.isLoading || txnQuery.isLoading;
+
+  return (
+    <section
+      className={cn(
+        "flex h-[min(70vh,44rem)] min-h-[22rem] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-20",
+        className,
+      )}
+    >
+      <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
+        <div>
+          <h2 className="display-title text-lg uppercase tracking-wide text-slate-900">
+            League <span className="text-primary">Chat</span>
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Chat · transactions · settings
+          </p>
+        </div>
+        <Link
+          to="/league/$linkId/transactions"
+          params={{ linkId }}
+          className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 hover:underline"
+        >
+          All activity
+        </Link>
+      </header>
+
+      <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
+        {loading ? (
+          <p className="px-1 text-sm text-muted-foreground">Loading feed…</p>
+        ) : feed.length === 0 ? (
+          <p className="px-1 text-sm text-muted-foreground">
+            No messages or league activity yet. Say hello to start the room.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {feed.map((item) => {
+              if (item.kind === "chat" && item.chat) {
+                const m = item.chat;
+                const mine = m.user_id === user.id;
+                const canDelete = mine || isAdmin === true;
+                return (
+                  <li key={item.id} className={cn("flex gap-2", mine ? "justify-end" : "justify-start")}>
+                    <div
+                      className={cn(
+                        "max-w-[90%] rounded-lg px-3 py-2 text-sm",
+                        mine ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-900",
+                      )}
+                    >
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span
+                          className={cn(
+                            "text-xs font-semibold",
+                            mine ? "text-blue-100" : "text-slate-600",
+                          )}
+                        >
+                          {m.author_name}
+                        </span>
+                        <time
+                          className={cn(
+                            "text-[10px] uppercase tracking-wide",
+                            mine ? "text-blue-100/80" : "text-muted-foreground",
+                          )}
+                          dateTime={m.created_at}
+                        >
+                          {timeLabel(m.created_at)}
+                        </time>
+                      </div>
+                      <p className="mt-0.5 whitespace-pre-wrap leading-relaxed">{m.body}</p>
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          className={cn(
+                            "mt-1 text-[11px] font-semibold underline-offset-2 hover:underline",
+                            mine ? "text-blue-100" : "text-slate-500",
+                          )}
+                          disabled={deleteMutation.isPending}
+                          onClick={() => deleteMutation.mutate(m.id)}
+                        >
+                          Delete
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              }
+
+              if (item.kind === "settings" && item.settings) {
+                const s = item.settings;
+                return (
+                  <li
+                    key={item.id}
+                    className="rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2.5"
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="text-xs font-bold uppercase tracking-wide text-amber-900">
+                        Settings change
+                      </p>
+                      <time className="text-[10px] uppercase tracking-wide text-amber-800/80">
+                        {timeLabel(s.createdAt)}
+                      </time>
+                    </div>
+                    <p className="mt-0.5 text-xs font-medium text-amber-950">{s.who}</p>
+                    <ul className="mt-1.5 space-y-1">
+                      {s.changes.slice(0, 4).map((c, idx) => (
+                        <li key={`${s.id}-${idx}`} className="text-xs text-amber-950/90">
+                          <span className="font-semibold">{c.label}</span>
+                          {c.from != null || c.to != null ? (
+                            <span className="text-amber-900/80">
+                              {" "}
+                              {c.from ?? "—"} → {c.to ?? "—"}
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                    <Link
+                      to="/account/leagues/native/$linkId"
+                      params={{ linkId }}
+                      className="mt-1.5 inline-block text-[11px] font-semibold text-blue-700 hover:underline"
+                    >
+                      League Settings
+                    </Link>
+                  </li>
+                );
+              }
+
+              if (item.kind === "transaction" && item.txn) {
+                return (
+                  <li
+                    key={item.id}
+                    className="rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-2"
+                  >
+                    <FantasyActivityList
+                      items={[item.txn]}
+                      playersById={playersById}
+                      emptyMessage=""
+                    />
+                  </li>
+                );
+              }
+
+              return null;
+            })}
+          </ul>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="border-t border-slate-200 p-3">
+        <label className="sr-only" htmlFor="league-office-chat-input">
+          Message
+        </label>
+        <textarea
+          id="league-office-chat-input"
+          rows={2}
+          maxLength={1000}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder="Enter message…"
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-600"
+        />
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">Enter to send</p>
+          <button
+            type="button"
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+            disabled={postMutation.isPending || !body.trim()}
+            onClick={submit}
+          >
+            {postMutation.isPending ? "Sending…" : "Send"}
+          </button>
+        </div>
+        {error ? (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
+}

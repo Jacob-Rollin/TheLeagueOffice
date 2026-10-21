@@ -1,6 +1,7 @@
 import { Link, Outlet } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
+import { LeagueOfficeChatRail } from "@/components/native/LeagueOfficeChatRail";
 import { NativeLeagueSubNav } from "@/components/nav/NativeLeagueSubNav";
 import { useAuth } from "@/hooks/useAuth";
 import { getNativeLeagueBoard } from "@/lib/native-league.functions";
@@ -61,20 +62,32 @@ export function NativeLeagueShell({ linkId }: { linkId: string }) {
                   })()}
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground capitalize">
+                  {board.summary.seasonYear} · {board.summary.teamCount}-Team{" "}
+                  {board.summary.scoringPreset} ·{" "}
                   {board.summary.status.replace("_", " ")} ·{" "}
-                  {board.summary.draftStatus.replace("_", " ")} draft ·{" "}
-                  {board.summary.filledTeams}/{board.summary.teamCount} teams
+                  {board.summary.draftStatus.replace("_", " ")} draft
                 </p>
               </div>
               <Link
                 to="/account/leagues/native/$linkId"
                 params={{ linkId }}
-                className="rounded-md border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground"
+                className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-foreground hover:bg-slate-50"
               >
                 League Settings
               </Link>
             </div>
-            <Outlet />
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              <div className="min-w-0 lg:col-span-2">
+                <Outlet />
+              </div>
+              <aside className="min-w-0 lg:col-span-1">
+                <LeagueOfficeChatRail
+                  linkId={linkId}
+                  nativeLeagueId={board.summary.leagueId}
+                />
+              </aside>
+            </div>
           </>
         )}
       </main>

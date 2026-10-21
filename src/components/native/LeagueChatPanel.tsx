@@ -15,8 +15,8 @@ import { cn } from "@/lib/utils";
 const CHAT_POLL_MS = 10_000;
 
 /**
- * Native league chat room UI.
- * Not mounted on any route yet — pass `nativeLeagueId` when wiring Chat into the shell.
+ * Native league chat room UI (messages only).
+ * Prefer `LeagueOfficeChatRail` on Fantasy shell pages (chat + transactions + settings).
  */
 export function LeagueChatPanel({
   nativeLeagueId,
