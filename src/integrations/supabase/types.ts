@@ -235,6 +235,33 @@ export type Database = {
           },
         ]
       }
+      league_chat_messages: {
+        Row: {
+          id: string
+          native_league_id: string
+          user_id: string
+          author_name: string
+          body: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          native_league_id: string
+          user_id: string
+          author_name: string
+          body: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          native_league_id?: string
+          user_id?: string
+          author_name?: string
+          body?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       press_room_articles: {
         Row: {
           id: string
@@ -1146,6 +1173,10 @@ export type Database = {
       }
       is_league_member: {
         Args: { _league_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_native_league_member: {
+        Args: { target_league_id: string }
         Returns: boolean
       }
       verify_invite_code: {
