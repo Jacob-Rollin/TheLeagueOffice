@@ -23,6 +23,11 @@ export {
 export { LeagueSettingsChangesPanel } from "@/components/native/fantasy/settings-changes-panel";
 
 export {
+  DesktopCenteredConfirm,
+  DesktopRosterPicker,
+} from "@/components/native/fantasy/NativeTransactionDialogs";
+
+export {
   FantasyAroundLeagueList,
   FantasyMatchupScoreCard,
   FantasyMatchupWeekList,

@@ -88,7 +88,7 @@ function NativeLeaguePlayersPage() {
   const queryClient = useQueryClient();
   const modalRef = useRef<PlayerModalHandle>(null);
   const cache = useSleeperPlayers();
-  const rosterActions = useNativeRosterActions();
+  const rosterActions = useNativeRosterActions({ variant: "desktop" });
   const hookLinked =
     (activeLeague?.platform ?? "").toLowerCase() === "native" && activeLeague?.id === linkId;
 
