@@ -66,14 +66,19 @@ function FantasyDashboardPage() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="min-w-0 space-y-6 lg:col-span-2">
+            <FantasyArticlesColumn />
+            {user && selectedLinkId ? <FantasyHubStandings linkId={selectedLinkId} /> : null}
+          </div>
+
+          <aside className="min-w-0 space-y-4 lg:col-span-1">
             {!ready ? (
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="text-sm text-slate-500">Loading…</p>
               </section>
             ) : !user ? (
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="font-display text-lg font-bold uppercase tracking-wide text-slate-900">
-                  Fantasy
+                <h2 className="display-title text-lg uppercase tracking-wide text-slate-900">
+                  Your <span className="text-primary">Leagues</span>
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">
                   Sign in to see your League Office teams here.
@@ -86,24 +91,16 @@ function FantasyDashboardPage() {
                 </Link>
               </section>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FantasyLeaguesBox
-                  leagues={leagues}
-                  loading={isLoading}
-                  selectedLinkId={selectedLinkId}
-                  onSelectLeague={setActiveLeagueId}
-                />
-                <div className="space-y-4">
-                  <FantasyJoinAnotherCard />
-                  {selectedLinkId ? <FantasyHubStandings linkId={selectedLinkId} /> : null}
-                </div>
-              </div>
+              <FantasyLeaguesBox
+                leagues={leagues}
+                loading={isLoading}
+                selectedLinkId={selectedLinkId}
+                onSelectLeague={setActiveLeagueId}
+              />
             )}
 
-            <FantasyArticlesColumn />
-          </div>
+            <FantasyJoinAnotherCard />
 
-          <aside className="min-w-0 lg:col-span-1">
             {user && selectedLinkId && selectedLeagueId ? (
               <LeagueOfficeChatRail
                 linkId={selectedLinkId}

@@ -96,8 +96,8 @@ export function FantasyLeaguesBox({
   return (
     <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-3 py-2.5">
-        <h2 className="font-display text-lg font-bold uppercase tracking-wide text-slate-900">
-          Fantasy
+        <h2 className="display-title text-lg uppercase tracking-wide text-slate-900">
+          Your <span className="text-primary">Leagues</span>
         </h2>
       </div>
 
