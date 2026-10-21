@@ -30,10 +30,10 @@ const SECTION_COPY = {
     product: "Trade",
     guestHeadline: "Win every trade before you send it",
     guestDescription:
-      "Sign up to open Trade Desk and Trade Market Values against the rosters in your synced league.",
+      "Sign up to open Trade Desk, Trade Analyzer, and Trade Market Values against the rosters in your synced league.",
     syncHeadline: "Sync a league to open the trade tools",
     syncDescription:
-      "Connect Sleeper or ESPN so Trade Desk and Trade Market Values load with your team and your league's rosters.",
+      "Connect Sleeper or ESPN so Trade Desk, Trade Analyzer, and Trade Market Values load with your team and your league's rosters.",
     selectDescription:
       "Choose an active league to grade trades and check market values against your rosters.",
   },
@@ -46,8 +46,7 @@ const SECTION_COPY = {
     syncHeadline: "Sync a league to open the waiver tools",
     syncDescription:
       "Connect Sleeper or ESPN so The Wire and Top Available only show players still available in your league.",
-    selectDescription:
-      "Choose an active league to see which players are still available in it.",
+    selectDescription: "Choose an active league to see which players are still available in it.",
   },
 } as const;
 
@@ -64,7 +63,7 @@ export function PlaybookShell({
   section?: ShellSection;
 }) {
   const { ready, user } = useAuth();
-  const { activeLeague, leagues } = useActiveLeague();
+  const { activeLeague, leagues, sandboxMode } = useActiveLeague();
   const copy = SECTION_COPY[section];
 
   const mainClass = cn(
@@ -96,7 +95,8 @@ export function PlaybookShell({
     );
   }
 
-  if (!activeLeague) {
+  // Sandbox unlocks Trade Desk / mock rosters without a synced league.
+  if (!activeLeague && !sandboxMode) {
     return (
       <main className={cn(mainClass, "px-0 sm:px-0 lg:px-0")}>
         <AccessGate

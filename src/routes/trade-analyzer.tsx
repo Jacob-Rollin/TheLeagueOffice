@@ -1,0 +1,1318 @@
+import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
+import { PlaybookShell } from "@/components/playbook/PlaybookShell";
+import { PositionBadge } from "@/components/draft/PositionBadge";
+import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
+import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import { useActiveLeague } from "@/context/ActiveLeagueContext";
+import { useActiveStandings } from "@/hooks/useActiveStandings";
+import { useDraft } from "@/hooks/use-draft";
+import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useLeagueRosters } from "@/hooks/useLeagueRosters";
+import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { ArrowLeftRight, BarChart3, ChevronDown, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
+import { grade } from "@/lib/evaluate";
+import { loadPlayersCatalog } from "@/lib/players-catalog";
+import { buildTruePowerRankings, starterRequirements } from "@/lib/power-rankings";
+import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
+import { fetchSnapTradeValueBasis } from "@/lib/snap-cdn";
+import {
+  benchSlotWarning,
+  executiveSummary,
+  headlineVerdict,
+  injuryRisk,
+  opponentImpact as computeOpponentImpact,
+  optimizeLineup,
+  packageScore,
+  positionalDepth,
+  rosterConstraint,
+  rosterFit,
+  scaleValue,
+  sideBullets,
+  type Bullet,
+  type BulletAsset,
+  type FitPlayer,
+  type InjuryRisk,
+  type PositionalDepthRow,
+} from "@/lib/trade-engine";
+import { inSeasonWeeklyValue } from "@/lib/trade-value";
+import { cn } from "@/lib/utils";
+
+const playersQuery = queryOptions({
+  queryKey: ["players-catalog"],
+  queryFn: () => loadPlayersCatalog(),
+  staleTime: 1000 * 60 * 30,
+});
+
+export const Route = createFileRoute("/trade-analyzer")({
+  ssr: false,
+  head: () => ({
+    meta: [
+      { title: "Trade Analyzer — The League Office" },
+      {
+        name: "description",
+        content:
+          "Side-by-side fantasy football trade analyzer with power ranks, positional needs, and live trade grades.",
+      },
+    ],
+  }),
+  loader: ({ context }) => {
+    void context.queryClient.ensureQueryData(playersQuery);
+  },
+  component: TradeAnalyzerRoute,
+});
+
+type AnalyzerTeam = {
+  key: string;
+  name: string;
+  owner: string;
+  logo: string | null;
+  slot: number;
+  players: Player[];
+};
+
+function TradeAnalyzerRoute() {
+  const { activeLeagueId } = useActiveLeague();
+  return (
+    <PlaybookShell wide section="trade">
+      <TradeAnalyzerPage key={activeLeagueId ?? "none"} />
+    </PlaybookShell>
+  );
+}
+
+function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return name;
+  const first = parts[0]![0] ?? "";
+  return `${first}. ${parts[parts.length - 1]}`;
+}
+
+function posRankLabel(player: Player): string {
+  const pos = player.pos === "DEF" ? "DST" : player.pos;
+  const rank = player.posRank > 0 && player.posRank < 999 ? player.posRank : null;
+  return rank != null ? `${pos} ${rank}` : pos;
+}
+
+/** Weakest starter rooms first — vacancies, then lowest slot production. */
+function computeTopNeeds(
+  players: Player[],
+  starters: Record<string, number>,
+  weeklyOf: (p: Player) => number,
+  limit = 3,
+): string[] {
+  const fit: FitPlayer[] = players.map((p) => ({
+    id: p.id,
+    pos: p.pos,
+    weekly: weeklyOf(p),
+  }));
+  const lineup = optimizeLineup(fit, starters);
+  const scored: { pos: string; score: number }[] = [];
+  for (const pos of ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX"]) {
+    const need = starters[pos] ?? 0;
+    if (need <= 0) continue;
+    const vacant = lineup.vacancies[pos] ?? 0;
+    const pts = lineup.bySlot[pos] ?? 0;
+    const perSlot = need > 0 ? pts / need : 0;
+    // Vacancy dominates; otherwise lower production = higher need.
+    const score = vacant * 1000 - perSlot;
+    scored.push({ pos: pos === "DEF" ? "DST" : pos, score });
+  }
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((r) => r.pos);
+}
+
+function TradeAnalyzerPage() {
+  const { data } = useSuspenseQuery(playersQuery);
+  const { activeLeague, sandboxMode } = useActiveLeague();
+  const draft = useDraft();
+  const brain = usePlayerBrain();
+  const modalRef = useRef<PlayerModalHandle>(null);
+
+  const league = useLeagueRosters(data.players);
+  const { format: leagueFormat, projectFor } = useLeagueProjections();
+  const { standings } = useActiveStandings();
+  const valueScoring: Scoring = league?.synced ? (leagueFormat as Scoring) : draft.settings.scoring;
+
+  const { data: valueBasis } = useQuery({
+    queryKey: ["trade-value-basis"],
+    queryFn: () => fetchSnapTradeValueBasis(),
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const weeklyOf = useCallback(
+    (p: Player) =>
+      inSeasonWeeklyValue(
+        valueBasis?.players?.[p.id],
+        valueBasis ?? null,
+        p.proj?.[valueScoring] ?? 0,
+        valueScoring,
+      ).weekly,
+    [valueBasis, valueScoring],
+  );
+
+  const fitOf = useCallback(
+    (p: Player): FitPlayer => ({
+      id: p.id,
+      pos: p.pos,
+      weekly: weeklyOf(p),
+    }),
+    [weeklyOf],
+  );
+
+  const byId = useMemo(() => new Map(data.players.map((p) => [p.id, p])), [data.players]);
+  const rostersByTeam = useMemo(() => {
+    const map = new Map<number, Player[]>();
+    for (let t = 1; t <= draft.settings.teams; t++) map.set(t, []);
+    for (const pick of draft.picks) {
+      const player = byId.get(pick.playerId);
+      if (!player) continue;
+      map.get(pick.team)?.push(player);
+    }
+    return map;
+  }, [draft.picks, draft.settings.teams, byId]);
+
+  const hasDraftPicks = draft.picks.length > 0;
+  const sandboxTeams = useMemo(
+    () => (sandboxMode && !hasDraftPicks ? buildSandboxTeams(data.players) : null),
+    [sandboxMode, hasDraftPicks, data.players],
+  );
+
+  const allTeams = useMemo<AnalyzerTeam[]>(() => {
+    if (sandboxMode) {
+      if (sandboxTeams) {
+        return [
+          {
+            key: "mine",
+            name: "My Team",
+            owner: "",
+            logo: null,
+            slot: draft.settings.myTeam,
+            players: sandboxTeams.myTeam,
+          },
+          ...sandboxTeams.rivalTeams.map((t, i) => ({
+            key: t.key,
+            name: t.name,
+            owner: t.owner,
+            logo: null,
+            slot: i + 2,
+            players: t.players,
+          })),
+        ];
+      }
+      return [...rostersByTeam.keys()]
+        .sort((a, b) => a - b)
+        .map((t) => ({
+          key: `t${t}`,
+          name: teamName(draft.settings, t),
+          owner: "",
+          logo: null,
+          slot: t,
+          players: rostersByTeam.get(t) ?? [],
+        }));
+    }
+    if (league?.synced && league.teams.length) {
+      return league.teams.map((t) => ({
+        key: `s${t.slot}`,
+        name: t.team,
+        owner: t.owner,
+        logo: t.logo,
+        slot: t.slot,
+        players: t.players,
+      }));
+    }
+    return [...rostersByTeam.keys()]
+      .sort((a, b) => a - b)
+      .map((t) => ({
+        key: `t${t}`,
+        name: teamName(draft.settings, t),
+        owner: "",
+        logo: null,
+        slot: t,
+        players: rostersByTeam.get(t) ?? [],
+      }));
+  }, [sandboxMode, sandboxTeams, league?.synced, league?.teams, rostersByTeam, draft.settings]);
+
+  const myKey = useMemo(() => {
+    if (sandboxMode) {
+      if (sandboxTeams) return "mine";
+      return `t${draft.settings.myTeam}`;
+    }
+    const mine = allTeams.find((t) =>
+      league?.synced
+        ? league.teams.some((lt) => lt.slot === t.slot && lt.isMine)
+        : t.key === `t${draft.settings.myTeam}`,
+    );
+    return mine?.key ?? allTeams[0]?.key ?? "";
+  }, [sandboxMode, sandboxTeams, draft.settings.myTeam, allTeams, league?.synced, league?.teams]);
+
+  const [leftKey, setLeftKey] = useState("");
+  const [rightKey, setRightKey] = useState("");
+  const [giveIds, setGiveIds] = useState<string[]>([]);
+  const [getIds, setGetIds] = useState<string[]>([]);
+  const [extraGive, setExtraGive] = useState<Player[]>([]);
+  const [extraGet, setExtraGet] = useState<Player[]>([]);
+  const [searchSide, setSearchSide] = useState<"give" | "get">("give");
+  const [searchQ, setSearchQ] = useState("");
+
+  useEffect(() => {
+    setGiveIds([]);
+    setGetIds([]);
+    setExtraGive([]);
+    setExtraGet([]);
+  }, [activeLeague?.id, sandboxMode]);
+
+  useEffect(() => {
+    if (!allTeams.length) return;
+    setLeftKey((prev) =>
+      prev && allTeams.some((t) => t.key === prev) ? prev : myKey || allTeams[0]!.key,
+    );
+    setRightKey((prev) => {
+      if (prev && allTeams.some((t) => t.key === prev) && prev !== (myKey || allTeams[0]!.key))
+        return prev;
+      const rival = allTeams.find((t) => t.key !== (myKey || allTeams[0]!.key));
+      return rival?.key ?? allTeams[1]?.key ?? allTeams[0]!.key;
+    });
+  }, [allTeams, myKey]);
+
+  const leftTeam = allTeams.find((t) => t.key === leftKey) ?? null;
+  const rightTeam = allTeams.find((t) => t.key === rightKey) ?? null;
+
+  const starters = useMemo(() => {
+    if (league?.synced && league.rosterPositions.length) {
+      return starterRequirements(league.rosterPositions);
+    }
+    return draft.settings.roster as unknown as Record<string, number>;
+  }, [league?.synced, league?.rosterPositions, draft.settings.roster]);
+
+  const give = useMemo(() => {
+    const fromRoster = (leftTeam?.players ?? []).filter((p) => giveIds.includes(p.id));
+    const extras = extraGive.filter((p) => !fromRoster.some((r) => r.id === p.id));
+    return [...fromRoster, ...extras];
+  }, [leftTeam, giveIds, extraGive]);
+
+  const get = useMemo(() => {
+    const fromRoster = (rightTeam?.players ?? []).filter((p) => getIds.includes(p.id));
+    const extras = extraGet.filter((p) => !fromRoster.some((r) => r.id === p.id));
+    return [...fromRoster, ...extras];
+  }, [rightTeam, getIds, extraGet]);
+
+  const toggleGive = (player: Player) => {
+    setGiveIds((ids) =>
+      ids.includes(player.id) ? ids.filter((id) => id !== player.id) : [...ids, player.id],
+    );
+    setExtraGive((list) => list.filter((p) => p.id !== player.id));
+  };
+
+  const toggleGet = (player: Player) => {
+    setGetIds((ids) =>
+      ids.includes(player.id) ? ids.filter((id) => id !== player.id) : [...ids, player.id],
+    );
+    setExtraGet((list) => list.filter((p) => p.id !== player.id));
+  };
+
+  const clearGive = () => {
+    setGiveIds([]);
+    setExtraGive([]);
+  };
+  const clearGet = () => {
+    setGetIds([]);
+    setExtraGet([]);
+  };
+
+  const searchResults = useMemo(() => {
+    const term = searchQ.trim().toLowerCase();
+    if (term.length < 2) return [];
+    const blocked = new Set([...give.map((p) => p.id), ...get.map((p) => p.id)]);
+    return data.players
+      .filter((p) => p.name.toLowerCase().includes(term) && !blocked.has(p.id))
+      .slice(0, 8);
+  }, [searchQ, data.players, give, get]);
+
+  const addFromSearch = (player: Player) => {
+    if (searchSide === "give") {
+      if (leftTeam?.players.some((p) => p.id === player.id)) {
+        setGiveIds((ids) => (ids.includes(player.id) ? ids : [...ids, player.id]));
+      } else {
+        setExtraGive((list) => (list.some((p) => p.id === player.id) ? list : [...list, player]));
+      }
+    } else if (rightTeam?.players.some((p) => p.id === player.id)) {
+      setGetIds((ids) => (ids.includes(player.id) ? ids : [...ids, player.id]));
+    } else {
+      setExtraGet((list) => (list.some((p) => p.id === player.id) ? list : [...list, player]));
+    }
+    setSearchQ("");
+  };
+
+  const projectWeekly = useCallback(
+    (playerId: string) => {
+      const live = projectFor?.(playerId);
+      if (live != null && Number.isFinite(live)) return live;
+      const p = byId.get(playerId);
+      return p ? weeklyOf(p) : 0;
+    },
+    [projectFor, byId, weeklyOf],
+  );
+
+  const powerRows = useMemo(() => {
+    if (!allTeams.length) return [];
+    const standingBySlot = new Map((standings?.rows ?? []).map((r) => [r.rosterId, r]));
+    const inputs = allTeams.map((team) => {
+      const standing = standingBySlot.get(team.slot);
+      return {
+        slot: team.slot,
+        team: team.name,
+        owner: team.owner,
+        players: team.players,
+        wins: standing?.wins ?? 0,
+        losses: standing?.losses ?? 0,
+        ties: standing?.ties ?? 0,
+        pointsFor: standing?.pointsFor ?? 0,
+      };
+    });
+    return buildTruePowerRankings(inputs, {
+      brain,
+      projectFor: projectWeekly,
+      rosterPositions: league?.rosterPositions?.length
+        ? league.rosterPositions
+        : Object.entries(starters).flatMap(([pos, n]) => Array(n).fill(pos)),
+    });
+  }, [allTeams, standings, brain, league?.rosterPositions, starters, projectWeekly]);
+
+  const powerAfter = useMemo(() => {
+    if (!leftTeam || !rightTeam || (!give.length && !get.length)) return null;
+    const giveSet = new Set(give.map((p) => p.id));
+    const getSet = new Set(get.map((p) => p.id));
+    const standingBySlot = new Map((standings?.rows ?? []).map((r) => [r.rosterId, r]));
+    const inputs = allTeams.map((team) => {
+      const standing = standingBySlot.get(team.slot);
+      let players = team.players;
+      if (team.key === leftTeam.key) {
+        players = [
+          ...team.players.filter((p) => !giveSet.has(p.id)),
+          ...get.filter((p) => !team.players.some((r) => r.id === p.id)),
+        ];
+      } else if (team.key === rightTeam.key) {
+        players = [
+          ...team.players.filter((p) => !getSet.has(p.id)),
+          ...give.filter((p) => !team.players.some((r) => r.id === p.id)),
+        ];
+      }
+      return {
+        slot: team.slot,
+        team: team.name,
+        owner: team.owner,
+        players,
+        wins: standing?.wins ?? 0,
+        losses: standing?.losses ?? 0,
+        ties: standing?.ties ?? 0,
+        pointsFor: standing?.pointsFor ?? 0,
+      };
+    });
+    return buildTruePowerRankings(inputs, {
+      brain,
+      projectFor: projectWeekly,
+      rosterPositions: league?.rosterPositions?.length
+        ? league.rosterPositions
+        : Object.entries(starters).flatMap(([pos, n]) => Array(n).fill(pos)),
+    });
+  }, [
+    leftTeam,
+    rightTeam,
+    give,
+    get,
+    allTeams,
+    standings,
+    brain,
+    league?.rosterPositions,
+    starters,
+    projectWeekly,
+  ]);
+
+  const leftPower = powerRows.find((r) => r.slot === leftTeam?.slot);
+  const rightPower = powerRows.find((r) => r.slot === rightTeam?.slot);
+  const leftPowerAfter = powerAfter?.find((r) => r.slot === leftTeam?.slot);
+  const rightPowerAfter = powerAfter?.find((r) => r.slot === rightTeam?.slot);
+
+  const leftDelta =
+    leftPower && leftPowerAfter && (give.length > 0 || get.length > 0)
+      ? Math.round((leftPowerAfter.powerIndex - leftPower.powerIndex) * 10) / 10
+      : null;
+  const rightDelta =
+    rightPower && rightPowerAfter && (give.length > 0 || get.length > 0)
+      ? Math.round((rightPowerAfter.powerIndex - rightPower.powerIndex) * 10) / 10
+      : null;
+
+  const leftNeeds = useMemo(
+    () => (leftTeam ? computeTopNeeds(leftTeam.players, starters, weeklyOf) : []),
+    [leftTeam, starters, weeklyOf],
+  );
+  const rightNeeds = useMemo(
+    () => (rightTeam ? computeTopNeeds(rightTeam.players, starters, weeklyOf) : []),
+    [rightTeam, starters, weeklyOf],
+  );
+
+  /* ---------- Trade engine (same math as Trade Desk) ---------- */
+  const userRoster = useMemo(() => leftTeam?.players ?? [], [leftTeam]);
+  const rivalRoster = useMemo(() => rightTeam?.players ?? [], [rightTeam]);
+  const ready = give.length > 0 && get.length > 0;
+  const isSandbox = sandboxMode || !league?.synced || userRoster.length === 0;
+  const valueOnly = isSandbox;
+
+  const giveWeekly = packageScore(
+    give.map((p) => weeklyOf(p)),
+    get.length,
+  );
+  const rawGetWeekly = packageScore(
+    get.map((p) => weeklyOf(p)),
+    give.length,
+  );
+
+  const rosterCap = rosterSize(draft.settings.roster);
+  const benchPool = useMemo(
+    () =>
+      userRoster
+        .filter((p) => !give.some((g) => g.id === p.id))
+        .concat(get)
+        .map((p) => ({ name: p.name, pos: p.pos, weekly: weeklyOf(p) })),
+    [userRoster, give, get, weeklyOf],
+  );
+  const constraint = rosterConstraint({
+    rosterCount: userRoster.length,
+    rosterCap,
+    giveCount: give.length,
+    getCount: get.length,
+    bench: benchPool,
+    starters,
+  });
+  const getWeekly = Math.max(0, rawGetWeekly - constraint.penalty);
+
+  const fit = useMemo(
+    () =>
+      rosterFit({
+        roster: userRoster.map(fitOf),
+        give: give.map(fitOf),
+        get: get.map(fitOf),
+        starters,
+      }),
+    [userRoster, give, get, starters, fitOf],
+  );
+  const needDelta = fit.pct;
+  const impact = fit.impact;
+  const basePct = ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
+
+  const rivalImpact = useMemo(() => {
+    if (!rivalRoster.length || !give.length || !get.length) return null;
+    return computeOpponentImpact({
+      roster: rivalRoster.map(fitOf),
+      give: give.map(fitOf),
+      get: get.map(fitOf),
+      starters,
+    });
+  }, [rivalRoster, give, get, starters, fitOf]);
+
+  const marketValue = (list: Player[]) =>
+    list.reduce((s, p) => s + Math.max(0, brain?.[p.id]?.value ?? 0), 0);
+  const giveValue = marketValue(give);
+  const getValue = marketValue(get);
+  const valueTilt =
+    giveValue + getValue > 0
+      ? ((getValue - giveValue) / Math.max(giveValue, getValue, 1)) * 100
+      : ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
+
+  let adjustedPct = isSandbox ? valueTilt : basePct + needDelta;
+  if (!isSandbox && impact.delta > 0.25) adjustedPct = Math.max(adjustedPct, needDelta);
+  if (!isSandbox && impact.delta > 2) adjustedPct = Math.max(adjustedPct, 15);
+
+  const adjustedGrade = grade(adjustedPct);
+  const benchSlotsRequired = Math.max(0, get.length - give.length);
+  const verdict = executiveSummary({
+    ready,
+    pct: adjustedPct,
+    giveCount: give.length,
+    getCount: get.length,
+    overflow: constraint.overflow,
+    ...(isSandbox ? {} : { impact }),
+    opponentImpact: isSandbox ? null : rivalImpact,
+  });
+  const balanceTilt = valueOnly ? valueTilt : (valueTilt + adjustedPct) / 2;
+
+  const toAsset = (p: Player): BulletAsset => ({
+    name: p.name,
+    pos: String(p.pos ?? ""),
+    value: Math.max(0, brain?.[p.id]?.value ?? 0),
+    trend: brain?.[p.id]?.trend ?? 0,
+    injuryStatus: resolveInjuryStatus(p, brain) ?? "Healthy",
+    weekly: weeklyOf(p),
+  });
+  const giveAssets = give.map(toAsset);
+  const getAssets = get.map(toAsset);
+  const benchDelta =
+    getAssets.reduce((s, a) => s + a.weekly, 0) -
+    giveAssets.reduce((s, a) => s + a.weekly, 0) -
+    constraint.penalty -
+    impact.delta;
+  const giveBullets = sideBullets({ side: "give", assets: giveAssets });
+  const getBullets = sideBullets({
+    side: "get",
+    assets: getAssets,
+    impact: valueOnly ? null : impact,
+    benchDelta: valueOnly ? null : benchDelta,
+    dropSlots: benchSlotsRequired,
+  });
+  const depthRows = positionalDepth(giveAssets, getAssets);
+  const risk = injuryRisk(giveAssets, getAssets);
+
+  const swapTeams = () => {
+    const lk = leftKey;
+    setLeftKey(rightKey);
+    setRightKey(lk);
+    setGiveIds(getIds);
+    setGetIds(giveIds);
+    setExtraGive(extraGet);
+    setExtraGet(extraGive);
+  };
+
+  const content = (
+    <div className="w-full">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="display-title text-3xl text-slate-900">
+            Trade <span className="text-primary">Analyzer</span>
+          </h1>
+          <ActiveLeagueLabel className="mt-2 inline-block" />
+          <p className="mt-1 text-sm text-muted-foreground">
+            Experimental layout — same trade engine as Trade Desk.
+          </p>
+        </div>
+      </div>
+
+      {/* Search + add */}
+      <div className="relative mt-4 max-w-xl">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+              placeholder="Search players to add…"
+              className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-600"
+            />
+          </div>
+          <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setSearchSide("give")}
+              className={cn(
+                "rounded-md px-2.5 py-1.5 transition-colors",
+                searchSide === "give"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-600 hover:bg-slate-50",
+              )}
+            >
+              Trade away
+            </button>
+            <button
+              type="button"
+              onClick={() => setSearchSide("get")}
+              className={cn(
+                "rounded-md px-2.5 py-1.5 transition-colors",
+                searchSide === "get"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-600 hover:bg-slate-50",
+              )}
+            >
+              Trade for
+            </button>
+          </div>
+        </div>
+        {searchResults.length > 0 && (
+          <ul className="absolute left-0 right-0 z-40 mt-1 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+            {searchResults.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => addFromSearch(p)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                >
+                  <PositionBadge
+                    pos={p.pos === "DEF" ? "DST" : p.pos}
+                    className="h-5 min-w-[2rem] text-[10px]"
+                  />
+                  <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                  <span className="text-xs text-slate-500">{p.team || "FA"}</span>
+                  <span className="tabnum text-xs text-slate-400">{posRankLabel(p)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Two-team board */}
+      <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="grid border-b border-slate-200 sm:grid-cols-[1fr_auto_1fr]">
+          <TeamHeader
+            team={leftTeam}
+            teams={allTeams.filter((t) => t.key !== rightKey)}
+            onSelect={(key) => {
+              setLeftKey(key);
+              clearGive();
+            }}
+          />
+          <div className="flex items-center justify-center border-y border-slate-100 px-2 sm:border-y-0 sm:border-x">
+            <button
+              type="button"
+              onClick={swapTeams}
+              className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+              aria-label="Swap teams"
+            >
+              <ArrowLeftRight className="size-4" />
+            </button>
+          </div>
+          <TeamHeader
+            team={rightTeam}
+            teams={allTeams.filter((t) => t.key !== leftKey)}
+            onSelect={(key) => {
+              setRightKey(key);
+              clearGet();
+            }}
+          />
+        </div>
+
+        <div className="grid sm:grid-cols-2">
+          <RosterPanel
+            label="Trade away"
+            players={mergeExtras(leftTeam?.players ?? [], extraGive)}
+            selectedIds={new Set(give.map((p) => p.id))}
+            onToggle={toggleGive}
+            onClear={clearGive}
+            onOpen={(id) => modalRef.current?.open(id)}
+            brain={brain}
+          />
+          <RosterPanel
+            label="Trade for"
+            players={mergeExtras(rightTeam?.players ?? [], extraGet)}
+            selectedIds={new Set(get.map((p) => p.id))}
+            onToggle={toggleGet}
+            onClear={clearGet}
+            onOpen={(id) => modalRef.current?.open(id)}
+            brain={brain}
+            muted
+          />
+        </div>
+      </section>
+
+      {/* Power ranks + needs */}
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <PowerCard
+          team={leftTeam}
+          power={leftPower?.powerIndex ?? null}
+          delta={leftDelta}
+          needs={leftNeeds}
+          incoming={get}
+        />
+        <PowerCard
+          team={rightTeam}
+          power={rightPower?.powerIndex ?? null}
+          delta={rightDelta}
+          needs={rightNeeds}
+          incoming={give}
+        />
+      </div>
+
+      {/* Analysis replaces Upgrade-to-Unlock */}
+      {ready ? (
+        <AnalyzerResults
+          tilt={balanceTilt}
+          giveValue={giveValue}
+          getValue={getValue}
+          giveWeekly={giveWeekly}
+          getWeekly={getWeekly}
+          fitPct={needDelta}
+          valueOnly={valueOnly}
+          gradeLetter={adjustedGrade.letter}
+          gradeTone={adjustedGrade.tone}
+          headline={headlineVerdict({ ready, pct: adjustedPct })}
+          verdict={verdict}
+          fitNote={fit.note}
+          giveBullets={giveBullets}
+          getBullets={getBullets}
+          depth={depthRows}
+          risk={risk}
+          showRosterRow={!valueOnly && userRoster.length > 0}
+          dropSlots={benchSlotsRequired}
+        />
+      ) : (
+        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">
+          Select players on both sides to unlock the trade grade and breakdown.
+        </div>
+      )}
+
+      <PlayerModalHost ref={modalRef} />
+    </div>
+  );
+
+  return content;
+}
+
+function mergeExtras(roster: Player[], extras: Player[]): Player[] {
+  const ids = new Set(roster.map((p) => p.id));
+  return [...extras.filter((p) => !ids.has(p.id)), ...roster];
+}
+
+function TeamHeader({
+  team,
+  teams,
+  onSelect,
+}: {
+  team: AnalyzerTeam | null;
+  teams: AnalyzerTeam[];
+  onSelect: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative flex items-center gap-3 px-4 py-3">
+      {team?.logo ? (
+        <img src={team.logo} alt="" className="size-9 rounded-full object-cover" />
+      ) : (
+        <div className="flex size-9 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+          {(team?.name ?? "TM").slice(0, 2).toUpperCase()}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex min-w-0 flex-1 items-center gap-1 text-left"
+      >
+        <span className="truncate text-sm font-bold text-slate-900">
+          {team?.name ?? "Select team"}
+        </span>
+        <ChevronDown className="size-4 shrink-0 text-slate-400" />
+      </button>
+      {open && (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-30"
+            aria-label="Close"
+            onClick={() => setOpen(false)}
+          />
+          <ul className="absolute left-4 right-4 top-full z-40 mt-1 max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+            {teams.map((t) => (
+              <li key={t.key}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect(t.key);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                >
+                  <span className="truncate font-medium">{t.name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RosterPanel({
+  label,
+  players,
+  selectedIds,
+  onToggle,
+  onClear,
+  onOpen,
+  brain,
+  muted,
+}: {
+  label: string;
+  players: Player[];
+  selectedIds: Set<string>;
+  onToggle: (p: Player) => void;
+  onClear: () => void;
+  onOpen: (id: string) => void;
+  brain: ReturnType<typeof usePlayerBrain>;
+  muted?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-[22rem] flex-col border-slate-200",
+        muted && "bg-slate-50/40",
+        "sm:border-l",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-xs font-semibold text-blue-700 hover:underline disabled:text-slate-300"
+          disabled={selectedIds.size === 0}
+        >
+          Clear
+        </button>
+        <span className="font-display text-[11px] font-bold uppercase tracking-widest text-slate-500">
+          {label}
+        </span>
+        <span className="w-16 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          Pos Rank
+        </span>
+      </div>
+      <ul className="max-h-[28rem] flex-1 overflow-y-auto">
+        {players.length === 0 ? (
+          <li className="px-3 py-8 text-center text-sm text-slate-400">
+            No players on this roster.
+          </li>
+        ) : (
+          players.map((p) => {
+            const checked = selectedIds.has(p.id);
+            const injury = injuryMicroBadge(resolveInjuryStatus(p, brain));
+            const displayPos = p.pos === "DEF" ? "DST" : p.pos;
+            return (
+              <li
+                key={p.id}
+                className={cn(
+                  "flex items-center gap-2 border-b border-slate-50 px-3 py-2",
+                  checked && "bg-blue-50/60",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(p)}
+                  className="size-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-600"
+                  aria-label={`Select ${p.name}`}
+                />
+                <PositionBadge pos={displayPos} className="h-5 min-w-[2rem] shrink-0 text-[10px]" />
+                <button
+                  type="button"
+                  onClick={() => onOpen(p.id)}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  <PlayerAvatar
+                    id={p.id}
+                    pos={p.pos}
+                    team={p.team}
+                    name={p.name}
+                    className="size-8 shrink-0"
+                    logoClassName="size-3.5"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold text-slate-900">
+                        {p.name}
+                      </span>
+                      {injury && (
+                        <span
+                          className={cn(
+                            "inline-flex h-4 min-w-4 items-center justify-center rounded px-0.5 text-[9px] font-bold text-white",
+                            injury.className,
+                          )}
+                        >
+                          {injury.label}
+                        </span>
+                      )}
+                    </span>
+                    <span className="block truncate text-[11px] text-slate-500">
+                      {p.team || "FA"}
+                      {p.bye ? ` (${p.bye})` : ""}
+                    </span>
+                  </span>
+                </button>
+                <span className="w-16 shrink-0 text-right text-xs font-semibold tabular-nums text-slate-600">
+                  {posRankLabel(p)}
+                </span>
+                {checked && (
+                  <button
+                    type="button"
+                    onClick={() => onToggle(p)}
+                    className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    aria-label={`Remove ${p.name}`}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </li>
+            );
+          })
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function PowerCard({
+  team,
+  power,
+  delta,
+  needs,
+  incoming,
+}: {
+  team: AnalyzerTeam | null;
+  power: number | null;
+  delta: number | null;
+  needs: string[];
+  incoming: Player[];
+}) {
+  const marker = power != null ? Math.max(4, Math.min(96, power)) : 50;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-2">
+        {team?.logo ? (
+          <img src={team.logo} alt="" className="size-7 rounded-full object-cover" />
+        ) : (
+          <div className="flex size-7 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600">
+            {(team?.name ?? "TM").slice(0, 2).toUpperCase()}
+          </div>
+        )}
+        <span className="truncate text-sm font-bold text-slate-900">{team?.name ?? "—"}</span>
+      </div>
+
+      <div className="mt-3 flex items-baseline gap-2">
+        <span className="font-display text-4xl font-bold tabular-nums text-slate-900">
+          {power != null ? power.toFixed(1) : "—"}
+        </span>
+        {delta != null && delta !== 0 && (
+          <span
+            className={cn(
+              "font-display text-lg font-bold tabular-nums",
+              delta > 0 ? "text-emerald-600" : "text-rose-600",
+            )}
+          >
+            {delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)}
+          </span>
+        )}
+      </div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Power Rank</p>
+
+      <div className="relative mt-3 h-1.5 w-full rounded-full bg-slate-200">
+        <div
+          className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-700 bg-white"
+          style={{ left: `${marker}%` }}
+        />
+      </div>
+
+      {incoming.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {incoming.map((p) => (
+            <span
+              key={p.id}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1"
+            >
+              <PlayerAvatar
+                id={p.id}
+                pos={p.pos}
+                team={p.team}
+                name={p.name}
+                className="size-6"
+                logoClassName="size-3"
+              />
+              <span className="text-[11px] font-semibold text-slate-700">{shortName(p.name)}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <BarChart3 className="size-3.5 text-slate-400" />
+        <span className="text-xs font-semibold text-slate-500">Top Needs:</span>
+        {needs.length ? (
+          needs.map((pos) => (
+            <PositionBadge key={pos} pos={pos} className="h-5 min-w-[1.9rem] text-[10px]" />
+          ))
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const FAIR_ZONE = 7;
+
+function AnalyzerResults({
+  tilt,
+  giveValue,
+  getValue,
+  giveWeekly,
+  getWeekly,
+  fitPct,
+  valueOnly,
+  gradeLetter,
+  gradeTone,
+  headline,
+  verdict,
+  fitNote,
+  giveBullets,
+  getBullets,
+  depth,
+  risk,
+  showRosterRow,
+  dropSlots,
+}: {
+  tilt: number;
+  giveValue: number;
+  getValue: number;
+  giveWeekly: number;
+  getWeekly: number;
+  fitPct: number;
+  valueOnly: boolean;
+  gradeLetter: string;
+  gradeTone: string;
+  headline: string;
+  verdict: string;
+  fitNote: string;
+  giveBullets: Bullet[];
+  getBullets: Bullet[];
+  depth: PositionalDepthRow[];
+  risk: InjuryRisk;
+  showRosterRow: boolean;
+  dropSlots: number;
+}) {
+  const clamped = Math.max(-100, Math.min(100, tilt));
+  const mag = Math.abs(clamped);
+  const zone = mag <= FAIR_ZONE ? "fair" : mag <= 18 ? "warn" : "unfair";
+  const left = 50 + clamped / 2;
+  const barTone =
+    zone === "fair" ? "bg-emerald-500" : zone === "warn" ? "bg-amber-500" : "bg-destructive";
+  const textTone =
+    zone === "fair" ? "text-emerald-600" : zone === "warn" ? "text-amber-600" : "text-destructive";
+  const haloTone =
+    gradeTone === "good"
+      ? "border-emerald-500/70 shadow-[0_0_18px_-2px_rgba(16,185,129,0.55)]"
+      : gradeTone === "bad"
+        ? "border-destructive/70 shadow-[0_0_18px_-2px_rgba(220,38,38,0.45)]"
+        : "border-border";
+  const giveScaled = scaleValue(giveValue);
+  const getScaled = scaleValue(getValue);
+  const gap = Math.round((getScaled - giveScaled) * 10) / 10;
+
+  return (
+    <div className="mt-4 space-y-3 duration-300 animate-in fade-in slide-in-from-top-2">
+      <div className="grid gap-3 lg:grid-cols-2">
+        <section className={cn("rounded-xl border-2 bg-card p-4 shadow-sm", haloTone)}>
+          <div className="flex items-start gap-4">
+            <div
+              className={cn(
+                "flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border-2 font-display text-3xl font-bold",
+                gradeTone === "good"
+                  ? "border-emerald-600 text-emerald-600"
+                  : gradeTone === "bad"
+                    ? "border-destructive text-destructive"
+                    : "border-border text-foreground",
+              )}
+            >
+              {gradeLetter}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="eyebrow">Overall Assessment</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p
+                  className={cn(
+                    "font-display text-xl font-bold leading-tight tracking-tight",
+                    gradeTone === "good"
+                      ? "text-emerald-600"
+                      : gradeTone === "bad"
+                        ? "text-destructive"
+                        : "text-foreground",
+                  )}
+                >
+                  {headline}
+                </p>
+                {dropSlots > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-600/40 bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-700">
+                    {benchSlotWarning(dropSlots)}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-sm leading-snug text-foreground">{verdict}</p>
+              {!valueOnly && <p className="mt-1 text-xs text-muted-foreground">{fitNote}</p>}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <div className="flex items-baseline justify-between">
+            <p className="eyebrow">Value Gap</p>
+            <span className={cn("font-display text-xl font-bold tabnum", textTone)}>
+              {gap === 0
+                ? "Even"
+                : `${gap > 0 ? "Value Premium: +" : "Value Deficit: "}${gap.toFixed(1)}`}
+            </span>
+          </div>
+          <div className="relative mt-4 flex h-4 items-center justify-between text-[11px] uppercase tracking-widest text-muted-foreground">
+            <span>You give</span>
+            <span
+              className={cn(
+                "absolute left-1/2 -translate-x-1/2 whitespace-nowrap font-display font-bold tracking-wider",
+                textTone,
+              )}
+            >
+              {zone === "fair" ? "Fair zone" : clamped > 0 ? "Tilts to you" : "Tilts to them"}
+            </span>
+            <span>You receive</span>
+          </div>
+          <div className="relative mt-3 h-3 w-full overflow-hidden rounded-full border border-border bg-surface">
+            <div
+              className={cn(
+                "absolute inset-y-0 left-1/2 w-[14%] -translate-x-1/2 rounded-full transition-colors duration-300",
+                zone === "fair"
+                  ? "bg-emerald-500/25"
+                  : zone === "warn"
+                    ? "bg-amber-500/20"
+                    : "bg-destructive/15",
+              )}
+            />
+            <div
+              className={cn(
+                "absolute top-1/2 h-5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-500 ease-out",
+                barTone,
+              )}
+              style={{ left: `${left}%` }}
+            />
+          </div>
+          <div className="relative mt-2 flex h-5 items-center justify-between text-xs text-muted-foreground">
+            <span className="tabnum">{giveScaled > 0 ? giveScaled.toFixed(1) : "—"}</span>
+            <span
+              className={cn(
+                "absolute left-1/2 -translate-x-1/2 tabnum text-sm font-bold",
+                textTone,
+              )}
+            >
+              {`${clamped > 0 ? "+" : ""}${clamped.toFixed(1)}%`}
+            </span>
+            <span className="tabnum">{getScaled > 0 ? getScaled.toFixed(1) : "—"}</span>
+          </div>
+          {showRosterRow && (
+            <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center text-[11px] text-muted-foreground">
+              <div>
+                <b className="tabnum block text-sm text-foreground">{giveWeekly.toFixed(2)}</b>
+                Give pts/wk
+              </div>
+              <div>
+                <b className="tabnum block text-sm text-foreground">{getWeekly.toFixed(2)}</b>
+                Get pts/wk
+              </div>
+              <div>
+                <b
+                  className={cn(
+                    "tabnum block text-sm",
+                    fitPct > 0
+                      ? "text-emerald-600"
+                      : fitPct < 0
+                        ? "text-destructive"
+                        : "text-foreground",
+                  )}
+                >
+                  {fitPct > 0 ? "+" : ""}
+                  {fitPct}%
+                </b>
+                Roster fit
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <BulletCard title="Giving Pros & Cons" bullets={giveBullets} />
+        <BulletCard title="Getting Pros & Cons" bullets={getBullets} />
+      </div>
+
+      {showRosterRow && (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <p className="eyebrow">Positional Depth</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {depth.length ? (
+                depth.map((d) => (
+                  <span
+                    key={d.pos}
+                    className={cn(
+                      "tabnum rounded-md border px-2.5 py-1.5 text-xs font-semibold",
+                      d.delta > 0
+                        ? "border-emerald-600/40 bg-emerald-500/10 text-emerald-600"
+                        : "border-destructive/40 bg-destructive/10 text-destructive",
+                    )}
+                  >
+                    {d.pos}: {d.delta > 0 ? "+" : ""}
+                    {d.delta.toFixed(1)} Value {d.delta > 0 ? "Gained" : "Lost"}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  No positional value shift on this deal.
+                </span>
+              )}
+            </div>
+          </section>
+          <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <p className="eyebrow">Injury Vulnerability</p>
+            <div className="mt-3 flex flex-col items-center text-center">
+              <span
+                className={cn(
+                  "inline-block rounded-md border px-3 py-1.5 font-display text-xs font-bold tracking-wide",
+                  risk.level === "INCREASED"
+                    ? "border-destructive/40 bg-destructive/10 text-destructive"
+                    : risk.level === "REDUCED"
+                      ? "border-emerald-600/40 bg-emerald-500/10 text-emerald-600"
+                      : "border-border bg-surface text-muted-foreground",
+                )}
+              >
+                INJURY RISK: {risk.level}
+              </span>
+              <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                {risk.note}
+              </p>
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BulletCard({ title, bullets }: { title: string; bullets: Bullet[] }) {
+  return (
+    <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <p className="eyebrow">{title}</p>
+      <ul className="mt-2 space-y-1.5">
+        {bullets.map((b, i) => (
+          <li
+            key={`${b.tone}-${i}`}
+            className={cn(
+              "flex gap-2 rounded-md px-1 py-0.5 text-xs leading-snug -mx-1",
+              b.tone === "critical" && "bg-destructive/10",
+            )}
+          >
+            <span
+              className={cn(
+                "mt-px font-bold",
+                b.tone === "pro" ? "text-emerald-600" : "text-destructive",
+              )}
+            >
+              {b.tone === "pro" ? "+" : "−"}
+            </span>
+            <span
+              className={cn(
+                b.tone === "critical" ? "font-semibold text-destructive" : "text-foreground",
+              )}
+            >
+              {b.text}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

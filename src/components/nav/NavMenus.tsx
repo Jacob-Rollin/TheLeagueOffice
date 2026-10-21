@@ -144,12 +144,16 @@ const PLAYBOOK_LINKS: { to: PlaybookPath; label: string }[] = [
 
 const PLAYBOOK_PATH_PREFIXES = ["/playbook", "/standings"];
 
-const TRADE_LINKS: { to: "/trade" | "/trade-market-values"; label: string }[] = [
+const TRADE_LINKS: {
+  to: "/trade" | "/trade-market-values" | "/trade-analyzer";
+  label: string;
+}[] = [
   { to: "/trade", label: "Trade Desk" },
   { to: "/trade-market-values", label: "Trade Market Values" },
+  { to: "/trade-analyzer", label: "Trade Analyzer" },
 ];
 
-const TRADE_PATHS = ["/trade", "/trade-desk", "/trade-market-values"];
+const TRADE_PATHS = ["/trade", "/trade-desk", "/trade-market-values", "/trade-analyzer"];
 
 const WAIVER_LINKS: { to: "/waiver" | "/top-available"; label: string }[] = [
   { to: "/waiver", label: "The Wire" },

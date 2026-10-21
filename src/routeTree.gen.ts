@@ -33,6 +33,7 @@ import { Route as TheWireRouteImport } from './routes/the-wire'
 import { Route as TlonRouteImport } from './routes/tlon'
 import { Route as TopAvailableRouteImport } from './routes/top-available'
 import { Route as TradeRouteImport } from './routes/trade'
+import { Route as TradeAnalyzerRouteImport } from './routes/trade-analyzer'
 import { Route as TradeDeskRouteImport } from './routes/trade-desk'
 import { Route as TradeMarketValuesRouteImport } from './routes/trade-market-values'
 import { Route as WaiverRouteImport } from './routes/waiver'
@@ -224,6 +225,11 @@ const TopAvailableRoute = TopAvailableRouteImport.update({
 const TradeRoute = TradeRouteImport.update({
   id: '/trade',
   path: '/trade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TradeAnalyzerRoute = TradeAnalyzerRouteImport.update({
+  id: '/trade-analyzer',
+  path: '/trade-analyzer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TradeDeskRoute = TradeDeskRouteImport.update({
@@ -621,6 +627,7 @@ export interface FileRoutesByFullPath {
   '/tlon': typeof TlonRoute
   '/top-available': typeof TopAvailableRoute
   '/trade': typeof TradeRoute
+  '/trade-analyzer': typeof TradeAnalyzerRoute
   '/trade-desk': typeof TradeDeskRoute
   '/trade-market-values': typeof TradeMarketValuesRoute
   '/waiver': typeof WaiverRoute
@@ -717,6 +724,7 @@ export interface FileRoutesByTo {
   '/tlon': typeof TlonRoute
   '/top-available': typeof TopAvailableRoute
   '/trade': typeof TradeRoute
+  '/trade-analyzer': typeof TradeAnalyzerRoute
   '/trade-desk': typeof TradeDeskRoute
   '/trade-market-values': typeof TradeMarketValuesRoute
   '/waiver': typeof WaiverRoute
@@ -813,6 +821,7 @@ export interface FileRoutesById {
   '/tlon': typeof TlonRoute
   '/top-available': typeof TopAvailableRoute
   '/trade': typeof TradeRoute
+  '/trade-analyzer': typeof TradeAnalyzerRoute
   '/trade-desk': typeof TradeDeskRoute
   '/trade-market-values': typeof TradeMarketValuesRoute
   '/waiver': typeof WaiverRoute
@@ -913,6 +922,7 @@ export interface FileRouteTypes {
     | '/tlon'
     | '/top-available'
     | '/trade'
+    | '/trade-analyzer'
     | '/trade-desk'
     | '/trade-market-values'
     | '/waiver'
@@ -952,6 +962,7 @@ export interface FileRouteTypes {
     | '/api/cron/research-aggregates'
     | '/api/cron/supabase-keepalive'
     | '/api/cron/warehouse-ingest'
+    | '/api/cron/weekly-desk'
     | '/api/data/players'
     | '/api/data/players-export'
     | '/api/public/scoreboard'
@@ -1008,6 +1019,7 @@ export interface FileRouteTypes {
     | '/tlon'
     | '/top-available'
     | '/trade'
+    | '/trade-analyzer'
     | '/trade-desk'
     | '/trade-market-values'
     | '/waiver'
@@ -1045,6 +1057,7 @@ export interface FileRouteTypes {
     | '/api/cron/research-aggregates'
     | '/api/cron/supabase-keepalive'
     | '/api/cron/warehouse-ingest'
+    | '/api/cron/weekly-desk'
     | '/api/data/players'
     | '/api/data/players-export'
     | '/api/public/scoreboard'
@@ -1102,6 +1115,7 @@ export interface FileRouteTypes {
     | '/tlon'
     | '/top-available'
     | '/trade'
+    | '/trade-analyzer'
     | '/trade-desk'
     | '/trade-market-values'
     | '/waiver'
@@ -1141,6 +1155,7 @@ export interface FileRouteTypes {
     | '/api/cron/research-aggregates'
     | '/api/cron/supabase-keepalive'
     | '/api/cron/warehouse-ingest'
+    | '/api/cron/weekly-desk'
     | '/api/data/players'
     | '/api/data/players-export'
     | '/api/public/scoreboard'
@@ -1200,6 +1215,7 @@ export interface RootRouteChildren {
   TlonRoute: typeof TlonRoute
   TopAvailableRoute: typeof TopAvailableRoute
   TradeRoute: typeof TradeRoute
+  TradeAnalyzerRoute: typeof TradeAnalyzerRoute
   TradeDeskRoute: typeof TradeDeskRoute
   TradeMarketValuesRoute: typeof TradeMarketValuesRoute
   WaiverRoute: typeof WaiverRoute
@@ -1412,6 +1428,13 @@ declare module '@tanstack/react-router' {
       path: '/trade'
       fullPath: '/trade'
       preLoaderRoute: typeof TradeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trade-analyzer': {
+      id: '/trade-analyzer'
+      path: '/trade-analyzer'
+      fullPath: '/trade-analyzer'
+      preLoaderRoute: typeof TradeAnalyzerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/trade-desk': {
@@ -2053,6 +2076,7 @@ const rootRouteChildren: RootRouteChildren = {
   TlonRoute: TlonRoute,
   TopAvailableRoute: TopAvailableRoute,
   TradeRoute: TradeRoute,
+  TradeAnalyzerRoute: TradeAnalyzerRoute,
   TradeDeskRoute: TradeDeskRoute,
   TradeMarketValuesRoute: TradeMarketValuesRoute,
   WaiverRoute: WaiverRoute,

@@ -33,7 +33,7 @@ const PAGES: { label: string; to: string; hint: string }[] = [
   { label: "Transactions", to: "/playbook/transactions", hint: "League activity" },
   { label: "War Room", to: "/draft", hint: "Draft board" },
   { label: "Mock Draft Simulator", to: "/mock-draft/setup", hint: "Mock draft arena" },
-  { label: "Trade Desk", to: "/trade", hint: "Trade Analyzer" },
+  { label: "Trade Desk", to: "/trade", hint: "Classic trade grader" },
   { label: "The Wire", to: "/waiver", hint: "Waivers" },
   { label: "Top Available", to: "/top-available", hint: "Best available players in your league" },
   {
@@ -45,6 +45,11 @@ const PAGES: { label: string; to: string; hint: string }[] = [
     label: "Trade Market Values",
     to: "/trade-market-values",
     hint: "Market values, Buy Low and Sell High targets",
+  },
+  {
+    label: "Trade Analyzer",
+    to: "/trade-analyzer",
+    hint: "Side-by-side trade analyzer with power ranks",
   },
   { label: "Weekly Projections", to: "/weekly-projections", hint: "Week projections by roster ownership" },
   { label: "Season Projections", to: "/season-projections", hint: "Season projections by roster ownership" },
