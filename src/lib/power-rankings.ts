@@ -64,12 +64,16 @@ function minMaxNormalize(values: number[]): number[] {
  * Soft display band for the True Power Index.
  *
  * Pure 0–100 league min-max puts the weakest roster near 0 and reads much lower
- * than FantasyPros-style power ranks (typically clustered in the mid/high band).
- * We keep league ordering intact, then map into this floor/ceil so mid and lower
- * teams still show meaningful scores (~55–75) while #1 can still clear ~95.
+ * than FantasyPros-style power ranks (often #1 = 100, mid teams still in the 70s–80s).
+ * We keep continuous league-relative strength (not ordinal-only), then map into this
+ * floor/ceil so the best team can hit 100 and mid/low teams stay readable.
+ *
+ * Positional / starter seat ranks (Standings Starting Slot Ranks) explain *why* a
+ * team is strong — they already drive weekly optimal projection, so they are not
+ * blended in again as a fourth weight (that would double-count starter strength).
  */
-export const POWER_INDEX_FLOOR = 52;
-export const POWER_INDEX_CEIL = 96;
+export const POWER_INDEX_FLOOR = 55;
+export const POWER_INDEX_CEIL = 100;
 
 /** Map a 0–100 relative blend into the soft FantasyPros-like display band. */
 export function toDisplayPowerIndex(normalized0to100: number): number {
