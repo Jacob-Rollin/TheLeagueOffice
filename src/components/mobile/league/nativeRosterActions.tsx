@@ -12,6 +12,7 @@ import {
 import {
   DesktopCenteredConfirm,
   DesktopRosterPicker,
+  type DesktopDialogSize,
 } from "@/components/native/fantasy/NativeTransactionDialogs";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
@@ -498,8 +499,6 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
     setTradeAwayReceive(null);
   };
 
-  const Picker = desktop ? DesktopRosterPicker : MobileFullScreenPicker;
-  const Confirm = desktop ? DesktopCenteredConfirm : MobileCenteredConfirm;
   const muted = desktop ? "text-slate-500" : "text-m-muted";
   const fg = desktop ? "text-slate-900" : "text-m-card-fg";
   const titleClass = desktop
@@ -518,11 +517,106 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
     ? cn(fantasyPrimaryBtn, "flex-1 !border-[#f08a24] !bg-[#f08a24] hover:!bg-[#e07c1a]")
     : "flex-1 rounded-lg bg-[#f08a24] py-3 font-display text-base font-semibold text-white disabled:opacity-60";
 
+  const ConfirmShell = ({
+    label,
+    size = "md",
+    children,
+  }: {
+    label: string;
+    size?: DesktopDialogSize;
+    children: ReactNode;
+  }) =>
+    desktop ? (
+      <DesktopCenteredConfirm label={label} size={size}>
+        {children}
+      </DesktopCenteredConfirm>
+    ) : (
+      <MobileCenteredConfirm label={label}>{children}</MobileCenteredConfirm>
+    );
+
+  const PickerShell = ({
+    title,
+    subtitle,
+    onClose,
+    closeDisabled,
+    size = "lg",
+    children,
+  }: {
+    title: string;
+    subtitle?: ReactNode;
+    onClose: () => void;
+    closeDisabled?: boolean;
+    size?: "lg" | "xl";
+    children: ReactNode;
+  }) => {
+    const closeProps = closeDisabled != null ? { closeDisabled } : {};
+    const subtitleProps = subtitle != null ? { subtitle } : {};
+    return desktop ? (
+      <DesktopRosterPicker
+        title={title}
+        onClose={onClose}
+        size={size}
+        {...subtitleProps}
+        {...closeProps}
+      >
+        {children}
+      </DesktopRosterPicker>
+    ) : (
+      <MobileFullScreenPicker title={title} onClose={onClose} {...subtitleProps} {...closeProps}>
+        {children}
+      </MobileFullScreenPicker>
+    );
+  };
+
+  const giveList = (
+    <ul
+      className={cn(
+        "mt-1.5 space-y-2 overflow-y-auto overscroll-contain pr-0.5",
+        desktop ? "max-h-[min(50vh,28rem)]" : "max-h-48",
+      )}
+    >
+      {(myRoster?.playerIds ?? []).map((id) => {
+        const p = playersById.get(id);
+        if (!p) return null;
+        const checked = tradeGive.includes(id);
+        return (
+          <li key={id}>
+            <label className="block cursor-pointer">
+              <span className="sr-only">
+                {checked ? "Remove from give side" : "Add to give side"} {p.name}
+              </span>
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={checked}
+                onChange={() =>
+                  setTradeGive((prev) =>
+                    checked ? prev.filter((x) => x !== id) : [...prev, id].slice(0, 8),
+                  )
+                }
+              />
+              <span
+                className={cn(
+                  "block rounded-xl ring-offset-2 peer-focus-visible:ring-2 peer-focus-visible:ring-[#f08a24]",
+                  desktop ? "ring-offset-white" : "ring-offset-m-card",
+                  checked && "ring-2 ring-[#f08a24]",
+                )}
+              >
+                <ConfirmMoveRow tone="give" player={p} variant={variant} />
+              </span>
+            </label>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
   const modals: ReactNode = (
     <>
       {pendingAdd && !selectedDrop ? (
-        <Picker
+        <PickerShell
           title="Choose a drop"
+          size="xl"
           closeDisabled={busy}
           onClose={() => {
             setPendingAdd(null);
@@ -530,7 +624,8 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
           }}
           subtitle={
             <>
-              Roster full ({capacity}/{capacity}). Tap{" "}
+              Roster full ({capacity}/{capacity}).{" "}
+              {desktop ? "Select" : "Tap"}{" "}
               <span className="font-semibold text-[#e8551f]">−</span> to drop someone and add{" "}
               <span className={cn("font-semibold", fg)}>{pendingAdd.name}</span>.
             </>
@@ -550,14 +645,19 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
           ) : (
             <p className={cn("px-2 py-10 text-center text-sm", muted)}>No roster players to drop.</p>
           )}
-        </Picker>
+        </PickerShell>
       ) : null}
 
       {pendingAdd && selectedDrop ? (
-        <Confirm label="Confirm add and drop">
+        <ConfirmShell label="Confirm add and drop" size="lg">
           <h3 className={titleClass}>Confirm move</h3>
           <p className={cn("mt-2 text-sm", muted)}>Review the add and drop before submitting.</p>
-          <div className="mt-4 space-y-2">
+          <div
+            className={cn(
+              "mt-4 space-y-2",
+              desktop && "grid gap-3 sm:grid-cols-2 sm:space-y-0",
+            )}
+          >
             <ConfirmMoveRow tone="add" player={pendingAdd} variant={variant} />
             <ConfirmMoveRow tone="drop" player={selectedDrop} variant={variant} />
           </div>
@@ -579,11 +679,11 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
               {busy ? "Submitting…" : "Confirm"}
             </button>
           </div>
-        </Confirm>
+        </ConfirmShell>
       ) : null}
 
       {pendingDrop ? (
-        <Confirm label="Confirm drop">
+        <ConfirmShell label="Confirm drop">
           <h3 className={titleClass}>Drop player</h3>
           <p className={cn("mt-2 text-sm", muted)}>
             Send this player to free agency? Uses your league roster settings ({openSlots} open of{" "}
@@ -610,11 +710,11 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
               {busy ? "Dropping…" : "Confirm drop"}
             </button>
           </div>
-        </Confirm>
+        </ConfirmShell>
       ) : null}
 
       {pendingTradeFor ? (
-        <Confirm label="Propose trade">
+        <ConfirmShell label="Propose trade" size="xl">
           <h3 className={titleClass}>Propose trade</h3>
           <p className={cn("mt-2 text-sm", muted)}>
             {tradePartnerId != null
@@ -623,9 +723,6 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
             Select who you give — uneven trades must fit your {capacity}-player roster ({openSlots}{" "}
             open).
           </p>
-          <div className="mt-4">
-            <ConfirmMoveRow tone="receive" player={pendingTradeFor} variant={variant} />
-          </div>
           {tradeNeedsSlots ? (
             <p
               className={cn(
@@ -640,42 +737,34 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
               side.
             </p>
           ) : null}
-          <p className={cn("mt-3 text-[11px] font-bold uppercase tracking-wide", muted)}>You give</p>
-          <ul className="mt-1.5 max-h-48 space-y-2 overflow-y-auto overscroll-contain pr-0.5">
-            {(myRoster?.playerIds ?? []).map((id) => {
-              const p = playersById.get(id);
-              if (!p) return null;
-              const checked = tradeGive.includes(id);
-              return (
-                <li key={id}>
-                  <label className="block cursor-pointer">
-                    <span className="sr-only">
-                      {checked ? "Remove from give side" : "Add to give side"} {p.name}
-                    </span>
-                    <input
-                      type="checkbox"
-                      className="peer sr-only"
-                      checked={checked}
-                      onChange={() =>
-                        setTradeGive((prev) =>
-                          checked ? prev.filter((x) => x !== id) : [...prev, id].slice(0, 8),
-                        )
-                      }
-                    />
-                    <span
-                      className={cn(
-                        "block rounded-xl ring-offset-2 peer-focus-visible:ring-2 peer-focus-visible:ring-[#f08a24]",
-                        desktop ? "ring-offset-white" : "ring-offset-m-card",
-                        checked && "ring-2 ring-[#f08a24]",
-                      )}
-                    >
-                      <ConfirmMoveRow tone="give" player={p} variant={variant} />
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
+          {desktop ? (
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="min-w-0">
+                <p className={cn("text-[11px] font-bold uppercase tracking-wide", muted)}>
+                  You receive
+                </p>
+                <div className="mt-1.5">
+                  <ConfirmMoveRow tone="receive" player={pendingTradeFor} variant={variant} />
+                </div>
+              </div>
+              <div className="min-w-0">
+                <p className={cn("text-[11px] font-bold uppercase tracking-wide", muted)}>
+                  You give ({tradeGive.length})
+                </p>
+                {giveList}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mt-4">
+                <ConfirmMoveRow tone="receive" player={pendingTradeFor} variant={variant} />
+              </div>
+              <p className={cn("mt-3 text-[11px] font-bold uppercase tracking-wide", muted)}>
+                You give
+              </p>
+              {giveList}
+            </>
+          )}
           <div className="mt-5 flex gap-2">
             <button
               type="button"
@@ -697,12 +786,13 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
               {busy ? "Sending…" : "Propose"}
             </button>
           </div>
-        </Confirm>
+        </ConfirmShell>
       ) : null}
 
       {pendingTradeAway && !tradeAwayReceive ? (
-        <Picker
+        <PickerShell
           title="Who do you want?"
+          size="xl"
           closeDisabled={busy}
           onClose={() => setPendingTradeAway(null)}
           subtitle={
@@ -714,53 +804,65 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
           }
         >
           {tradeReceiveCandidates.length ? (
-            tradeReceiveCandidates.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                disabled={busy}
-                onClick={() => setTradeAwayReceive(p)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-xl border px-3 py-3 text-left disabled:opacity-50",
-                  desktop
-                    ? "border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50"
-                    : "border-m-border bg-m-card",
-                )}
-              >
-                <PlayerAvatar
-                  id={p.id}
-                  pos={p.pos}
-                  team={p.team}
-                  name={p.name}
-                  className="size-11 shrink-0"
-                  logoClassName="hidden"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className={cn("truncate text-[15px] font-semibold", desktop && fg)}>
-                    {shortName(p)}
-                  </p>
-                  <p className={cn("truncate text-xs", muted)}>
-                    {p.team || "FA"} - {p.pos === "DEF" ? "DST" : p.pos}
-                    {ownerTeamIdByPlayer.has(p.id)
-                      ? ` · ${board?.teams.find((t) => t.id === ownerTeamIdByPlayer.get(p.id))?.teamName ?? "Rostered"}`
-                      : ""}
-                  </p>
-                </div>
-              </button>
-            ))
+            <div
+              className={cn(
+                desktop && "grid gap-2 sm:grid-cols-2",
+                !desktop && "space-y-2",
+              )}
+            >
+              {tradeReceiveCandidates.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setTradeAwayReceive(p)}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-xl border px-3 py-3 text-left disabled:opacity-50",
+                    desktop
+                      ? "border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50"
+                      : "border-m-border bg-m-card",
+                  )}
+                >
+                  <PlayerAvatar
+                    id={p.id}
+                    pos={p.pos}
+                    team={p.team}
+                    name={p.name}
+                    className="size-11 shrink-0"
+                    logoClassName="hidden"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className={cn("truncate text-[15px] font-semibold", desktop && fg)}>
+                      {shortName(p)}
+                    </p>
+                    <p className={cn("truncate text-xs", muted)}>
+                      {p.team || "FA"} - {p.pos === "DEF" ? "DST" : p.pos}
+                      {ownerTeamIdByPlayer.has(p.id)
+                        ? ` · ${board?.teams.find((t) => t.id === ownerTeamIdByPlayer.get(p.id))?.teamName ?? "Rostered"}`
+                        : ""}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
           ) : (
             <p className={cn("px-2 py-10 text-center text-sm", muted)}>
               No rostered players available to request.
             </p>
           )}
-        </Picker>
+        </PickerShell>
       ) : null}
 
       {pendingTradeAway && tradeAwayReceive ? (
-        <Confirm label="Confirm trade offer">
+        <ConfirmShell label="Confirm trade offer" size="lg">
           <h3 className={titleClass}>Propose trade</h3>
           <p className={cn("mt-2 text-sm", muted)}>Review both sides before sending.</p>
-          <div className="mt-4 space-y-2">
+          <div
+            className={cn(
+              "mt-4 space-y-2",
+              desktop && "grid gap-3 sm:grid-cols-2 sm:space-y-0",
+            )}
+          >
             <ConfirmMoveRow tone="give" player={pendingTradeAway} variant={variant} />
             <ConfirmMoveRow tone="receive" player={tradeAwayReceive} variant={variant} />
           </div>
@@ -782,7 +884,7 @@ export function useNativeRosterActions(options?: { variant?: NativeRosterActions
               {busy ? "Sending…" : "Propose"}
             </button>
           </div>
-        </Confirm>
+        </ConfirmShell>
       ) : null}
     </>
   );
