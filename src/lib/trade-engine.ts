@@ -169,12 +169,7 @@ export async function loadFantasyCalcMarketMap(
       filled += 1;
     }
     if (filled > 0) {
-      console.log(
-        "DEBUG FantasyCalc - live keys:",
-        liveKeys,
-        "projection-filled gaps:",
-        filled,
-      );
+      console.log("DEBUG FantasyCalc - live keys:", liveKeys, "projection-filled gaps:", filled);
     }
   }
 
@@ -202,9 +197,7 @@ export function ensureMarketValueMap(
     }
     return out;
   }
-  console.log(
-    "DEBUG TRADE RADAR - empty marketValueById; seeding from roster weekly projections",
-  );
+  console.log("DEBUG TRADE RADAR - empty marketValueById; seeding from roster weekly projections");
   for (const pool of pools) {
     for (const p of pool) {
       if (!p.id) continue;
@@ -225,13 +218,9 @@ export function starWeighted(values: number[]): number {
   const curved = [...values]
     .map((v) => Math.max(0, v))
     .sort((a, b) => b - a)
-    .reduce(
-      (sum, v, i) => sum + Math.pow(v, VALUE_CURVE_POWER) * Math.pow(PACKAGE_DECAY, i),
-      0,
-    );
+    .reduce((sum, v, i) => sum + Math.pow(v, VALUE_CURVE_POWER) * Math.pow(PACKAGE_DECAY, i), 0);
   return curved <= 0 ? 0 : Math.pow(curved, 1 / VALUE_CURVE_POWER);
 }
-
 
 /**
  * Aggregate score for one side of the deal, after the consolidation modifier.
@@ -291,7 +280,6 @@ export function applyLeagueScoring(
   if (!ctx) return list;
   return list.map((p) => ({ ...p, weekly: leagueWeekly(p, ctx) }));
 }
-
 
 export type RosterFit = {
   /** Percentage shift applied to the production grade (-25 … +25). */
@@ -376,20 +364,20 @@ export function optimizeLineup(
   }
 
   // Pass 2 — dynamic flex optimization from the surplus RB/WR/TE pool.
-  const flexNeed = Math.max(0, req['FLEX'] ?? 0);
+  const flexNeed = Math.max(0, req["FLEX"] ?? 0);
   let flexFilled = 0;
-  bySlot['FLEX'] = 0;
+  bySlot["FLEX"] = 0;
   for (const p of pool) {
     if (flexFilled >= flexNeed) break;
     if (p._used) continue;
     if (!FLEX_ELIGIBLE.includes(p.pos)) continue;
     p._used = true;
     points += p.weekly;
-    bySlot['FLEX'] = (bySlot['FLEX'] ?? 0) + p.weekly;
+    bySlot["FLEX"] = (bySlot["FLEX"] ?? 0) + p.weekly;
     flexFilled++;
     used++;
   }
-  if (flexFilled < flexNeed) vacancies['FLEX'] = flexNeed - flexFilled;
+  if (flexFilled < flexNeed) vacancies["FLEX"] = flexNeed - flexFilled;
 
   return {
     points,
@@ -508,13 +496,13 @@ export function rosterFit(input: {
 
   // Incoming bodies that never crack the optimized lineup are bench depth.
   if (impact.delta <= 0 || !gate.eligible) {
-    for (const p of input.get) if (!fills.includes(p.pos) && !clogs.includes(p.pos)) clogs.push(p.pos);
+    for (const p of input.get)
+      if (!fills.includes(p.pos) && !clogs.includes(p.pos)) clogs.push(p.pos);
   }
 
   if (!gate.eligible) {
     // Hard structural suppressions (QB capacity / depth bleed) return 0% fit.
-    const hardZero =
-      gate.reason.includes("QB capacity") || gate.reason.includes("RB/WR depth");
+    const hardZero = gate.reason.includes("QB capacity") || gate.reason.includes("RB/WR depth");
     pct = hardZero ? 0 : Math.min(pct, -8);
   }
 
@@ -588,10 +576,7 @@ export function isDepthBleedExchange(give: FitPlayer[], get: FitPlayer[]): boole
 
   // K/DEF streamer adds must never eat QB/RB/WR/TE (starter or bench depth).
   const getsStreamer = get.some((p) => STREAM_ONLY_POSITIONS.has(fitPos(p)));
-  if (
-    getsStreamer &&
-    give.some((p) => !STREAM_ONLY_POSITIONS.has(fitPos(p)))
-  ) {
+  if (getsStreamer && give.some((p) => !STREAM_ONLY_POSITIONS.has(fitPos(p)))) {
     return true;
   }
   return false;
@@ -701,7 +686,7 @@ export function rosterConstraint(input: {
     dropNames: [],
     shielded: false,
   };
-  
+
   const net = input.getCount - input.giveCount;
   if (net <= 0 || input.rosterCap <= 0) return none;
 
@@ -724,10 +709,10 @@ export function rosterConstraint(input: {
     if (picked.length >= over) break;
     const pos = c.pos ?? "";
     const required = starters[pos] ?? 0;
-    
+
     if (required > 0 && (remaining[pos] ?? 0) <= required) {
       shielded = true;
-      continue; 
+      continue;
     }
     remaining[pos] = (remaining[pos] ?? 1) - 1;
     picked.push({ name: c.name, weekly: c.weekly, pos: c.pos });
@@ -736,14 +721,14 @@ export function rosterConstraint(input: {
   if (picked.length < over && candidates.length > 0) {
     for (const fallback of candidates) {
       if (picked.length >= over) break;
-      if (picked.some(p => p.name === fallback.name)) continue;
+      if (picked.some((p) => p.name === fallback.name)) continue;
       picked.push({ name: fallback.name, weekly: fallback.weekly, pos: fallback.pos });
     }
   }
 
   const penalty = picked.reduce((s, p) => s + p.weekly, 0);
   const primaryDropName = picked.length > 0 ? (picked[0]?.name ?? null) : null;
-  
+
   return {
     overflow: true,
     dropCount: over,
@@ -777,17 +762,17 @@ export function executiveSummary(input: {
   opponentImpact?: MarginalImpact | null;
 }): string {
   if (!input.ready) return "Add players to both sides to run the valuation model.";
-  
+
   const impact = input.impact;
-  
+
   // 🟢 THE FIX: Premium, descriptive Sandbox summary that aligns perfectly with the visual slider bar direction
   if (!impact || !impact.before || impact.before === 0) {
     const valueTrendDiff = input.pct;
     if (Math.abs(valueTrendDiff) <= 5) {
       return "TRADE PROPOSAL ANALYSIS: Balanced asset exchange. Both packages map cleanly on our valuation matrix with identical historical value distributions.";
     }
-    return valueTrendDiff > 0 
-      ? `TRADE PROPOSAL ANALYSIS: Highly Favorable. This proposal tilts significantly in your direction (+${valueTrendDiff.toFixed(1)}% asset premium) based on consensus market value index feeds.` 
+    return valueTrendDiff > 0
+      ? `TRADE PROPOSAL ANALYSIS: Highly Favorable. This proposal tilts significantly in your direction (+${valueTrendDiff.toFixed(1)}% asset premium) based on consensus market value index feeds.`
       : `TRADE PROPOSAL ANALYSIS: Disadvantageous Asset Drain. This proposal tilts heavily to the rival side (${valueTrendDiff.toFixed(1)}% loss). You are surrendering an elite high-value starter for an inadequate return packages. Recommendation: DECLINE DEAL.`;
   }
 
@@ -807,7 +792,7 @@ export function executiveSummary(input: {
     .map((entry) => ({ slot: String(entry[0]), delta: Number(entry[1]) }))
     .filter((s) => Math.abs(s.delta) >= 0.25)
     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-    
+
   const ups = shifts.filter((s) => s.delta > 0);
   const downs = shifts.filter((s) => s.delta < 0);
   const label = (slot: string) => SLOT_LABEL[slot] ?? slot;
@@ -822,9 +807,11 @@ export function executiveSummary(input: {
       ? ` while giving back ${bottom.delta.toFixed(1)} pts/wk at ${label(bottom.slot)}`
       : ", while holding positional parity everywhere else";
     const scale = impact.delta >= 2 ? "significantly upgrades" : "upgrades";
-    return withRival(`TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`);
+    return withRival(
+      `TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`,
+    );
   }
-  
+
   if (impact.delta < -0.25) {
     const worst = downs[0];
     const best = ups[0];
@@ -833,7 +820,9 @@ export function executiveSummary(input: {
     return `TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`;
   }
 
-  return withRival(`TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`);
+  return withRival(
+    `TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`,
+  );
 }
 
 /**
@@ -886,6 +875,195 @@ export function headlineVerdict(input: { ready: boolean; pct: number }): string 
   if (p > -8) return "Fair and balanced";
   if (p > -15) return "Push for more";
   return "Walk away from this deal";
+}
+
+/**
+ * FantasyPros-style Trade Analyzer grade blend.
+ *
+ * Power ranking delta (before → after) is the primary fairness signal, then
+ * optimized lineup impact, then a small Top-Needs fit term. Season YTD needs
+ * only nudge the grade — they never replace ROS/weekly lineup math.
+ */
+export const ANALYZER_GRADE_WEIGHTS = {
+  power: 0.5,
+  lineup: 0.35,
+  needFit: 0.15,
+} as const;
+
+export type AnalyzerGradeParts = {
+  power: number;
+  lineup: number;
+  needFit: number;
+};
+
+export type BlendedAnalyzerGrade = {
+  /** Combined grade pct for letter / headline (−40 … +40). */
+  pct: number;
+  parts: AnalyzerGradeParts;
+  /** True when power before/after contributed to the blend. */
+  usedPower: boolean;
+};
+
+function normalizeNeedPos(pos: string): string {
+  const p = String(pos ?? "")
+    .trim()
+    .toUpperCase();
+  if (p === "DEF" || p === "D/ST" || p === "D") return "DST";
+  if (p === "FLEX" || p === "FLX") return "FLX";
+  return p;
+}
+
+/** Incoming/outgoing pos matches a Top Need badge (FLX covers RB/WR/TE). */
+export function posMatchesTopNeed(pos: string, topNeeds: string[]): boolean {
+  const p = normalizeNeedPos(pos);
+  const needs = topNeeds.map(normalizeNeedPos);
+  if (needs.includes(p)) return true;
+  if (needs.includes("FLX") && (p === "RB" || p === "WR" || p === "TE")) return true;
+  return false;
+}
+
+/**
+ * Map True Power Index before/after into a grade-style pct (FantasyPros power %).
+ * Null when either side is missing.
+ */
+export function powerDeltaToGradePct(
+  powerBefore: number | null | undefined,
+  powerAfter: number | null | undefined,
+): number | null {
+  if (
+    powerBefore == null ||
+    powerAfter == null ||
+    !Number.isFinite(powerBefore) ||
+    !Number.isFinite(powerAfter)
+  ) {
+    return null;
+  }
+  const base = Math.max(Number(powerBefore), 1);
+  const pct = ((Number(powerAfter) - Number(powerBefore)) / base) * 100;
+  return Math.max(-40, Math.min(40, Math.round(pct * 10) / 10));
+}
+
+/**
+ * Small Top-Needs adjustment: boost returns that fill listed holes, soft-penalize
+ * surplus clogs and dealing away a needed position.
+ */
+export function needFitAdjustment(input: {
+  topNeeds: string[];
+  getPositions: string[];
+  givePositions: string[];
+  fills?: string[];
+  clogs?: string[];
+}): number {
+  const needs = input.topNeeds ?? [];
+  if (!needs.length && !(input.getPositions?.length || input.givePositions?.length)) {
+    return 0;
+  }
+
+  let score = 0;
+  const seenGet = new Set<string>();
+  for (const raw of input.getPositions) {
+    const pos = normalizeNeedPos(raw);
+    if (!pos || seenGet.has(pos)) continue;
+    seenGet.add(pos);
+    if (posMatchesTopNeed(pos, needs)) score += 8;
+  }
+  const seenGive = new Set<string>();
+  for (const raw of input.givePositions) {
+    const pos = normalizeNeedPos(raw);
+    if (!pos || seenGive.has(pos)) continue;
+    seenGive.add(pos);
+    if (posMatchesTopNeed(pos, needs)) score -= 5;
+  }
+  for (const raw of input.fills ?? []) {
+    if (posMatchesTopNeed(raw, needs)) score += 3;
+  }
+  for (const raw of input.clogs ?? []) {
+    if (!posMatchesTopNeed(raw, needs)) score -= 4;
+  }
+
+  return Math.max(-20, Math.min(20, score));
+}
+
+/**
+ * Blend power Δ + lineup fit + need fit into one analyzer grade pct.
+ * When power is unavailable, reweights to 70% lineup / 30% need fit.
+ */
+export function blendAnalyzerGrade(input: {
+  powerPct: number | null;
+  lineupPct: number;
+  needFitPct: number;
+}): BlendedAnalyzerGrade {
+  const lineup = Math.max(-25, Math.min(25, Number(input.lineupPct) || 0));
+  const needFit = Math.max(-20, Math.min(20, Number(input.needFitPct) || 0));
+  const usedPower = input.powerPct != null && Number.isFinite(input.powerPct);
+  const power = usedPower ? Math.max(-40, Math.min(40, Number(input.powerPct))) : 0;
+
+  const wPower = usedPower ? ANALYZER_GRADE_WEIGHTS.power : 0;
+  const wLineup = usedPower ? ANALYZER_GRADE_WEIGHTS.lineup : 0.7;
+  const wNeed = usedPower ? ANALYZER_GRADE_WEIGHTS.needFit : 0.3;
+
+  const pct = Math.max(
+    -40,
+    Math.min(40, Math.round((wPower * power + wLineup * lineup + wNeed * needFit) * 10) / 10),
+  );
+
+  return {
+    pct,
+    usedPower,
+    parts: {
+      power: usedPower ? power : 0,
+      lineup,
+      needFit,
+    },
+  };
+}
+
+/** Short note explaining which Top Needs the package hits or misses. */
+export function needFitNote(input: {
+  topNeeds: string[];
+  getPositions: string[];
+  givePositions: string[];
+  needFitPct: number;
+}): string {
+  const needs = input.topNeeds.map(normalizeNeedPos).filter(Boolean);
+  if (!needs.length) return "";
+
+  const filled = [
+    ...new Set(
+      input.getPositions
+        .map(normalizeNeedPos)
+        .filter((p) => p && posMatchesTopNeed(p, needs))
+        .map((p) => {
+          if (
+            needs.includes("FLX") &&
+            (p === "RB" || p === "WR" || p === "TE") &&
+            !needs.includes(p)
+          ) {
+            return "FLX";
+          }
+          return p;
+        }),
+    ),
+  ];
+  const dealt = [
+    ...new Set(
+      input.givePositions.map(normalizeNeedPos).filter((p) => p && posMatchesTopNeed(p, needs)),
+    ),
+  ];
+
+  if (filled.length && !dealt.length) {
+    return `Need fit: package addresses ${filled.join(", ")}.`;
+  }
+  if (filled.length && dealt.length) {
+    return `Need fit: gains ${filled.join(", ")} but deals away ${dealt.join(", ")}.`;
+  }
+  if (dealt.length) {
+    return `Need fit: deals away needed ${dealt.join(", ")}.`;
+  }
+  if (input.needFitPct < 0) {
+    return `Need fit: return does not target ${needs.slice(0, 3).join(", ")}.`;
+  }
+  return `Top needs: ${needs.slice(0, 3).join(", ")}.`;
 }
 
 /** Prominent warning label for unequal packages that force bench drops. */
@@ -1020,9 +1198,7 @@ export function sideBullets(input: {
   if (!out.length) {
     out.push({
       tone: "con",
-      text: incoming
-        ? "No incoming assets selected yet."
-        : "No outgoing assets selected yet.",
+      text: incoming ? "No incoming assets selected yet." : "No outgoing assets selected yet.",
     });
   }
 
@@ -1129,10 +1305,7 @@ function isBenchLineupSlot(slot: string | null | undefined): boolean {
   return normalized === "BN" || normalized === "BENCH";
 }
 
-function isActiveStarterSlot(
-  player: StartSitCandidate,
-  starterIds: Set<string>,
-): boolean {
+function isActiveStarterSlot(player: StartSitCandidate, starterIds: Set<string>): boolean {
   if (starterIds.has(player.id)) return true;
   const slot = player.lineup_slot;
   if (slot == null || slot === "") return false;
@@ -1197,8 +1370,7 @@ export function buildStartSitAdvice<T extends StartSitCandidate>(input: {
 
     const startAlreadyStarting = isActiveStarterSlot(start, starterIds);
     const sitAlreadyBenched =
-      (benchIds.has(sit.id) && !starterIds.has(sit.id)) ||
-      isBenchLineupSlot(sit.lineup_slot);
+      (benchIds.has(sit.id) && !starterIds.has(sit.id)) || isBenchLineupSlot(sit.lineup_slot);
 
     // Already-applied / duplicate recommendation — net gain is 0; discard.
     if (startAlreadyStarting && sitAlreadyBenched) {
@@ -1302,18 +1474,11 @@ const WAIVER_INJURY_BLACKLIST = new Set([
  * True when the free agent carries an active injury / inactive designation
  * that should suppress Market Radar waiver recommendations.
  */
-export function isWaiverInjuryBlacklisted(
-  injury: string | null | undefined,
-): boolean {
+export function isWaiverInjuryBlacklisted(injury: string | null | undefined): boolean {
   const raw = (injury ?? "").trim();
   if (!raw) return false;
   const upper = raw.toUpperCase();
-  if (
-    upper === "HEALTHY" ||
-    upper === "ACTIVE" ||
-    upper === "NONE" ||
-    upper === "PROBABLE"
-  ) {
+  if (upper === "HEALTHY" || upper === "ACTIVE" || upper === "NONE" || upper === "PROBABLE") {
     return false;
   }
   if (WAIVER_INJURY_BLACKLIST.has(upper)) return true;
@@ -1397,10 +1562,7 @@ export function suggestWaiverTransactions(input: {
    * Cross-referenced market signals keyed by player id:
    * FantasyCalc `value` / `trend`, plus Sleeper trending-add `count`.
    */
-  marketById?: Record<
-    string,
-    { value?: number; trend?: number; sleeperAdds?: number }
-  >;
+  marketById?: Record<string, { value?: number; trend?: number; sleeperAdds?: number }>;
   /** Optional NFL team → schedule phase (`pre` | `in` | `post`). */
   gamePhaseByTeam?: Record<string, string>;
   /** Optional player id → injury status override. */
@@ -1467,21 +1629,13 @@ export function suggestWaiverTransactions(input: {
 
     // For K/DEF, only consider same-pos roster mates (replace the weaker unit).
     // Fall back to full drop pool for skill adds.
-    const posDropPool = streamerAdd
-      ? dropPool.filter((p) => fitPos(p) === addPos)
-      : dropPool;
+    const posDropPool = streamerAdd ? dropPool.filter((p) => fitPos(p) === addPos) : dropPool;
     // Also allow same-pos drops from the full roster when bench omits the
     // current DEF/K (some hosts keep streamers in a starter slot).
     const streamerRosterDrops = streamerAdd
-      ? roster.filter(
-          (p) =>
-            fitPos(p) === addPos &&
-            !posDropPool.some((d) => sameFitPlayer(d, p)),
-        )
+      ? roster.filter((p) => fitPos(p) === addPos && !posDropPool.some((d) => sameFitPlayer(d, p)))
       : [];
-    const candidateDrops = streamerAdd
-      ? [...posDropPool, ...streamerRosterDrops]
-      : dropPool;
+    const candidateDrops = streamerAdd ? [...posDropPool, ...streamerRosterDrops] : dropPool;
 
     if (streamerAdd && candidateDrops.length === 0) continue;
 
@@ -1672,10 +1826,7 @@ export function extractRosterPlayers(source: RosterSource): FitPlayer[] {
   return out;
 }
 
-function marketRawFor(
-  p: FitPlayer,
-  marketValueById?: Record<string, number>,
-): number {
+function marketRawFor(p: FitPlayer, marketValueById?: Record<string, number>): number {
   const id = p.id ?? "";
   const fromMarket = id && marketValueById ? marketValueById[id] : undefined;
   if (typeof fromMarket === "number" && Number.isFinite(fromMarket) && fromMarket > 0) {
@@ -1888,10 +2039,7 @@ function evaluateDeal(input: {
   }
 
   // Depth-bleed rail (user): never strip our RB/WR for QB/K/DEF bench clogs.
-  if (
-    isDepthBleedExchange(give, get) &&
-    get.every((p) => ["QB", "K", "DEF"].includes(fitPos(p)))
-  ) {
+  if (isDepthBleedExchange(give, get) && get.every((p) => ["QB", "K", "DEF"].includes(fitPos(p)))) {
     return null;
   }
 
@@ -1959,10 +2107,7 @@ export function suggestMarketRadarTrade(input: {
   const oppPools = (input.opponents ?? []).map((o) =>
     applyLeagueScoring(resolveOppPlayers(o), scoring),
   );
-  const marketValueById = ensureMarketValueMap(input.marketValueById, [
-    myRoster,
-    ...oppPools,
-  ]);
+  const marketValueById = ensureMarketValueMap(input.marketValueById, [myRoster, ...oppPools]);
 
   // Browser DevTools (F12) tracing — authentic roster / FantasyCalc key alignment.
   console.log(
@@ -1977,9 +2122,7 @@ export function suggestMarketRadarTrade(input: {
     const samplePlayers = [...(userPlayers ?? []).slice(0, 3), ...sampleOppPlayers.slice(0, 2)];
     for (const player of samplePlayers) {
       const catalogHit =
-        player?.id != null && player.id !== ""
-          ? marketValueById[player.id]
-          : undefined;
+        player?.id != null && player.id !== "" ? marketValueById[player.id] : undefined;
       console.log(
         "DEBUG KEY MATCH - Roster Player ID Sample:",
         player?.id,
@@ -2123,8 +2266,7 @@ export function suggestMarketRadarTrade(input: {
     }
     eliteTargets.sort(
       (a, b) =>
-        marketRawFor(b, marketValueById) - marketRawFor(a, marketValueById) ||
-        b.weekly - a.weekly,
+        marketRawFor(b, marketValueById) - marketRawFor(a, marketValueById) || b.weekly - a.weekly,
     );
     const topElites = eliteTargets.slice(0, 4);
 
@@ -2161,8 +2303,7 @@ export function suggestMarketRadarTrade(input: {
         const secondaryPool = [...oppRoster]
           .filter((p) => !sameFitPlayer(p, elite))
           .filter(
-            (p) =>
-              fitPos(p) !== "QB" || countRosterPos(myRoster, "QB") < MAX_QB_ROSTER_CAPACITY,
+            (p) => fitPos(p) !== "QB" || countRosterPos(myRoster, "QB") < MAX_QB_ROSTER_CAPACITY,
           )
           .sort(
             (a, b) =>

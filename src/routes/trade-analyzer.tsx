@@ -28,16 +28,21 @@ import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/
 import { fetchSnapTradeValueBasis } from "@/lib/snap-cdn";
 import {
   benchSlotWarning,
+  blendAnalyzerGrade,
   executiveSummary,
   headlineVerdict,
   injuryRisk,
+  needFitAdjustment,
+  needFitNote,
   opponentImpact as computeOpponentImpact,
   packageScore,
   positionalDepth,
+  powerDeltaToGradePct,
   rosterConstraint,
   rosterFit,
   scaleValue,
   sideBullets,
+  type AnalyzerGradeParts,
   type Bullet,
   type BulletAsset,
   type FitPlayer,
@@ -546,9 +551,7 @@ function TradeAnalyzerPage() {
       }),
     [userRoster, give, get, starters, fitOf],
   );
-  const needDelta = fit.pct;
   const impact = fit.impact;
-  const basePct = ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
 
   const rivalImpact = useMemo(() => {
     if (!rivalRoster.length || !give.length || !get.length) return null;
@@ -569,12 +572,56 @@ function TradeAnalyzerPage() {
       ? ((getValue - giveValue) / Math.max(giveValue, getValue, 1)) * 100
       : ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
 
-  let adjustedPct = isSandbox ? valueTilt : basePct + needDelta;
-  if (!isSandbox && impact.delta > 0.25) adjustedPct = Math.max(adjustedPct, needDelta);
+  /**
+   * FantasyPros-style blend: 50% power Δ + 35% lineup fit + 15% Top-Needs fit.
+   * Sandbox stays market-value only (no synced roster / power context).
+   */
+  const powerGradePct =
+    ready && !isSandbox
+      ? powerDeltaToGradePct(leftPower?.powerIndex, leftPowerAfter?.powerIndex)
+      : null;
+  const needFitPct = useMemo(
+    () =>
+      needFitAdjustment({
+        topNeeds: leftNeeds,
+        getPositions: get.map((p) => p.pos),
+        givePositions: give.map((p) => p.pos),
+        fills: fit.fills,
+        clogs: fit.clogs,
+      }),
+    [leftNeeds, get, give, fit.fills, fit.clogs],
+  );
+  const blended = useMemo(() => {
+    if (isSandbox) {
+      return {
+        pct: valueTilt,
+        usedPower: false,
+        parts: { power: 0, lineup: 0, needFit: 0 } as AnalyzerGradeParts,
+      };
+    }
+    return blendAnalyzerGrade({
+      powerPct: powerGradePct,
+      lineupPct: fit.pct,
+      needFitPct,
+    });
+  }, [isSandbox, valueTilt, powerGradePct, fit.pct, needFitPct]);
+
+  let adjustedPct = blended.pct;
+  // Clear starting-lineup upgrades should not grade worse than the fit signal alone.
+  if (!isSandbox && impact.delta > 0.25) adjustedPct = Math.max(adjustedPct, fit.pct);
   if (!isSandbox && impact.delta > 2) adjustedPct = Math.max(adjustedPct, 15);
 
   const adjustedGrade = grade(adjustedPct);
   const benchSlotsRequired = Math.max(0, get.length - give.length);
+  const needsNote = !isSandbox
+    ? needFitNote({
+        topNeeds: leftNeeds,
+        getPositions: get.map((p) => p.pos),
+        givePositions: give.map((p) => p.pos),
+        needFitPct,
+      })
+    : "";
+  const fitNote = [fit.note, needsNote].filter(Boolean).join(" ");
   const verdict = executiveSummary({
     ready,
     pct: adjustedPct,
@@ -740,13 +787,14 @@ function TradeAnalyzerPage() {
           getValue={getValue}
           giveWeekly={giveWeekly}
           getWeekly={getWeekly}
-          fitPct={needDelta}
+          fitPct={fit.pct}
+          gradeParts={valueOnly ? null : blended.parts}
           valueOnly={valueOnly}
           gradeLetter={adjustedGrade.letter}
           gradeTone={adjustedGrade.tone}
           headline={headlineVerdict({ ready, pct: adjustedPct })}
           verdict={verdict}
-          fitNote={fit.note}
+          fitNote={fitNote}
           giveBullets={giveBullets}
           getBullets={getBullets}
           depth={depthRows}
@@ -1186,6 +1234,7 @@ function AnalyzerResults({
   giveWeekly,
   getWeekly,
   fitPct,
+  gradeParts,
   valueOnly,
   gradeLetter,
   gradeTone,
@@ -1205,6 +1254,7 @@ function AnalyzerResults({
   giveWeekly: number;
   getWeekly: number;
   fitPct: number;
+  gradeParts: AnalyzerGradeParts | null;
   valueOnly: boolean;
   gradeLetter: string;
   gradeTone: string;
@@ -1333,31 +1383,85 @@ function AnalyzerResults({
             <span className="tabnum">{getScaled > 0 ? getScaled.toFixed(1) : "—"}</span>
           </div>
           {showRosterRow && (
-            <div className="mt-3 grid grid-cols-3 gap-2 border-t border-border pt-3 text-center text-[11px] text-muted-foreground">
-              <div>
-                <b className="tabnum block text-sm text-foreground">{giveWeekly.toFixed(2)}</b>
-                Give pts/wk
+            <div className="mt-3 space-y-3 border-t border-border pt-3 text-[11px] text-muted-foreground">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <b className="tabnum block text-sm text-foreground">{giveWeekly.toFixed(2)}</b>
+                  Give pts/wk
+                </div>
+                <div>
+                  <b className="tabnum block text-sm text-foreground">{getWeekly.toFixed(2)}</b>
+                  Get pts/wk
+                </div>
+                <div>
+                  <b
+                    className={cn(
+                      "tabnum block text-sm",
+                      fitPct > 0
+                        ? "text-emerald-600"
+                        : fitPct < 0
+                          ? "text-destructive"
+                          : "text-foreground",
+                    )}
+                  >
+                    {fitPct > 0 ? "+" : ""}
+                    {fitPct}%
+                  </b>
+                  Lineup fit
+                </div>
               </div>
-              <div>
-                <b className="tabnum block text-sm text-foreground">{getWeekly.toFixed(2)}</b>
-                Get pts/wk
-              </div>
-              <div>
-                <b
-                  className={cn(
-                    "tabnum block text-sm",
-                    fitPct > 0
-                      ? "text-emerald-600"
-                      : fitPct < 0
-                        ? "text-destructive"
-                        : "text-foreground",
-                  )}
-                >
-                  {fitPct > 0 ? "+" : ""}
-                  {fitPct}%
-                </b>
-                Roster fit
-              </div>
+              {gradeParts ? (
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <b
+                      className={cn(
+                        "tabnum block text-sm",
+                        gradeParts.power > 0
+                          ? "text-emerald-600"
+                          : gradeParts.power < 0
+                            ? "text-destructive"
+                            : "text-foreground",
+                      )}
+                    >
+                      {gradeParts.power > 0 ? "+" : ""}
+                      {gradeParts.power.toFixed(1)}%
+                    </b>
+                    Power
+                  </div>
+                  <div>
+                    <b
+                      className={cn(
+                        "tabnum block text-sm",
+                        gradeParts.lineup > 0
+                          ? "text-emerald-600"
+                          : gradeParts.lineup < 0
+                            ? "text-destructive"
+                            : "text-foreground",
+                      )}
+                    >
+                      {gradeParts.lineup > 0 ? "+" : ""}
+                      {gradeParts.lineup}%
+                    </b>
+                    Lineup
+                  </div>
+                  <div>
+                    <b
+                      className={cn(
+                        "tabnum block text-sm",
+                        gradeParts.needFit > 0
+                          ? "text-emerald-600"
+                          : gradeParts.needFit < 0
+                            ? "text-destructive"
+                            : "text-foreground",
+                      )}
+                    >
+                      {gradeParts.needFit > 0 ? "+" : ""}
+                      {gradeParts.needFit}%
+                    </b>
+                    Need fit
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </section>
