@@ -6,7 +6,8 @@ import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/Play
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useActiveStandings } from "@/hooks/useActiveStandings";
 import { useDraft } from "@/hooks/use-draft";
-import { useLeagueProjections } from "@/hooks/useLeagueProjections";
+import { useStartingSlotRanks } from "@/hooks/useLeagueAnalytics";
+import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
@@ -17,7 +18,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
-import { buildTruePowerRankings, starterRequirements } from "@/lib/power-rankings";
+import {
+  POWER_INDEX_CEIL,
+  POWER_INDEX_FLOOR,
+  buildTruePowerRankings,
+  starterRequirements,
+} from "@/lib/power-rankings";
+import { positionRoomRanks, topNeedsForRoster } from "@/lib/position-room-ranks";
 import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { fetchSnapTradeValueBasis } from "@/lib/snap-cdn";
 import {
@@ -97,12 +104,14 @@ function posRankLabel(player: Player): string {
   return rank != null ? `${pos} ${rank}` : pos;
 }
 
-/** Weakest starter rooms first — vacancies, then lowest slot production. */
-function computeTopNeeds(
+/**
+ * Streamer / local fallback needs (K, DST, vacant skill slots) used when
+ * Playbook starting-slot room ranks are cold, and merged into Top Needs.
+ */
+function streamerNeeds(
   players: Player[],
   starters: Record<string, number>,
   weeklyOf: (p: Player) => number,
-  limit = 3,
 ): string[] {
   const fit: FitPlayer[] = players.map((p) => ({
     id: p.id,
@@ -111,20 +120,25 @@ function computeTopNeeds(
   }));
   const lineup = optimizeLineup(fit, starters);
   const scored: { pos: string; score: number }[] = [];
-  for (const pos of ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX"]) {
+  for (const pos of ["QB", "RB", "WR", "TE", "K", "DEF"]) {
     const need = starters[pos] ?? 0;
     if (need <= 0) continue;
     const vacant = lineup.vacancies[pos] ?? 0;
     const pts = lineup.bySlot[pos] ?? 0;
     const perSlot = need > 0 ? pts / need : 0;
-    // Vacancy dominates; otherwise lower production = higher need.
-    const score = vacant * 1000 - perSlot;
+    // Replacement-ish floors so weak streamers surface like FantasyPros.
+    const floor = pos === "K" ? 6 : pos === "DEF" ? 5 : pos === "TE" ? 8 : pos === "QB" ? 14 : 10;
+    const score = vacant * 1000 + Math.max(0, floor - perSlot) * 10 - perSlot;
     scored.push({ pos: pos === "DEF" ? "DST" : pos, score });
   }
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((r) => r.pos);
+  return scored.sort((a, b) => b.score - a.score).map((r) => r.pos);
+}
+
+/** Map a power index onto the 0–100 meter using the soft display band. */
+function powerMeterPct(power: number | null): number {
+  if (power == null) return 50;
+  const span = POWER_INDEX_CEIL - POWER_INDEX_FLOOR || 1;
+  return Math.max(4, Math.min(96, ((power - POWER_INDEX_FLOOR) / span) * 100));
 }
 
 function TradeAnalyzerPage() {
@@ -137,6 +151,10 @@ function TradeAnalyzerPage() {
   const league = useLeagueRosters(data.players);
   const { format: leagueFormat, projectFor } = useLeagueProjections();
   const { standings } = useActiveStandings();
+  const nflWeek = useNflState();
+  const currentWeek = nflWeek.data?.week ?? null;
+  const slotRanks = useStartingSlotRanks(currentWeek);
+  const roomRanks = useMemo(() => positionRoomRanks(slotRanks.data?.teams ?? []), [slotRanks.data]);
   const valueScoring: Scoring = league?.synced ? (leagueFormat as Scoring) : draft.settings.scoring;
 
   const { data: valueBasis } = useQuery({
@@ -257,14 +275,16 @@ function TradeAnalyzerPage() {
   const [getIds, setGetIds] = useState<string[]>([]);
   const [extraGive, setExtraGive] = useState<Player[]>([]);
   const [extraGet, setExtraGet] = useState<Player[]>([]);
-  const [searchSide, setSearchSide] = useState<"give" | "get">("give");
-  const [searchQ, setSearchQ] = useState("");
+  const [leftSearchQ, setLeftSearchQ] = useState("");
+  const [rightSearchQ, setRightSearchQ] = useState("");
 
   useEffect(() => {
     setGiveIds([]);
     setGetIds([]);
     setExtraGive([]);
     setExtraGet([]);
+    setLeftSearchQ("");
+    setRightSearchQ("");
   }, [activeLeague?.id, sandboxMode]);
 
   useEffect(() => {
@@ -325,28 +345,43 @@ function TradeAnalyzerPage() {
     setExtraGet([]);
   };
 
-  const searchResults = useMemo(() => {
-    const term = searchQ.trim().toLowerCase();
-    if (term.length < 2) return [];
-    const blocked = new Set([...give.map((p) => p.id), ...get.map((p) => p.id)]);
-    return data.players
-      .filter((p) => p.name.toLowerCase().includes(term) && !blocked.has(p.id))
-      .slice(0, 8);
-  }, [searchQ, data.players, give, get]);
+  const blockedIds = useMemo(
+    () => new Set([...give.map((p) => p.id), ...get.map((p) => p.id)]),
+    [give, get],
+  );
 
-  const addFromSearch = (player: Player) => {
-    if (searchSide === "give") {
-      if (leftTeam?.players.some((p) => p.id === player.id)) {
-        setGiveIds((ids) => (ids.includes(player.id) ? ids : [...ids, player.id]));
-      } else {
-        setExtraGive((list) => (list.some((p) => p.id === player.id) ? list : [...list, player]));
-      }
-    } else if (rightTeam?.players.some((p) => p.id === player.id)) {
+  const leftSearchResults = useMemo(() => {
+    const term = leftSearchQ.trim().toLowerCase();
+    if (term.length < 2) return [];
+    return data.players
+      .filter((p) => p.name.toLowerCase().includes(term) && !blockedIds.has(p.id))
+      .slice(0, 8);
+  }, [leftSearchQ, data.players, blockedIds]);
+
+  const rightSearchResults = useMemo(() => {
+    const term = rightSearchQ.trim().toLowerCase();
+    if (term.length < 2) return [];
+    return data.players
+      .filter((p) => p.name.toLowerCase().includes(term) && !blockedIds.has(p.id))
+      .slice(0, 8);
+  }, [rightSearchQ, data.players, blockedIds]);
+
+  const addToGive = (player: Player) => {
+    if (leftTeam?.players.some((p) => p.id === player.id)) {
+      setGiveIds((ids) => (ids.includes(player.id) ? ids : [...ids, player.id]));
+    } else {
+      setExtraGive((list) => (list.some((p) => p.id === player.id) ? list : [...list, player]));
+    }
+    setLeftSearchQ("");
+  };
+
+  const addToGet = (player: Player) => {
+    if (rightTeam?.players.some((p) => p.id === player.id)) {
       setGetIds((ids) => (ids.includes(player.id) ? ids : [...ids, player.id]));
     } else {
       setExtraGet((list) => (list.some((p) => p.id === player.id) ? list : [...list, player]));
     }
-    setSearchQ("");
+    setRightSearchQ("");
   };
 
   const projectWeekly = useCallback(
@@ -439,23 +474,30 @@ function TradeAnalyzerPage() {
   const leftPowerAfter = powerAfter?.find((r) => r.slot === leftTeam?.slot);
   const rightPowerAfter = powerAfter?.find((r) => r.slot === rightTeam?.slot);
 
+  const tradePending = give.length > 0 || get.length > 0;
+  const leftDisplayPower =
+    tradePending && leftPowerAfter ? leftPowerAfter.powerIndex : (leftPower?.powerIndex ?? null);
+  const rightDisplayPower =
+    tradePending && rightPowerAfter ? rightPowerAfter.powerIndex : (rightPower?.powerIndex ?? null);
   const leftDelta =
-    leftPower && leftPowerAfter && (give.length > 0 || get.length > 0)
+    leftPower && leftPowerAfter && tradePending
       ? Math.round((leftPowerAfter.powerIndex - leftPower.powerIndex) * 10) / 10
       : null;
   const rightDelta =
-    rightPower && rightPowerAfter && (give.length > 0 || get.length > 0)
+    rightPower && rightPowerAfter && tradePending
       ? Math.round((rightPowerAfter.powerIndex - rightPower.powerIndex) * 10) / 10
       : null;
 
-  const leftNeeds = useMemo(
-    () => (leftTeam ? computeTopNeeds(leftTeam.players, starters, weeklyOf) : []),
-    [leftTeam, starters, weeklyOf],
-  );
-  const rightNeeds = useMemo(
-    () => (rightTeam ? computeTopNeeds(rightTeam.players, starters, weeklyOf) : []),
-    [rightTeam, starters, weeklyOf],
-  );
+  const leftNeeds = useMemo(() => {
+    if (!leftTeam) return [];
+    const streamers = streamerNeeds(leftTeam.players, starters, weeklyOf);
+    return topNeedsForRoster(leftTeam.slot, roomRanks, streamers, 3);
+  }, [leftTeam, starters, weeklyOf, roomRanks]);
+  const rightNeeds = useMemo(() => {
+    if (!rightTeam) return [];
+    const streamers = streamerNeeds(rightTeam.players, starters, weeklyOf);
+    return topNeedsForRoster(rightTeam.slot, roomRanks, streamers, 3);
+  }, [rightTeam, starters, weeklyOf, roomRanks]);
 
   /* ---------- Trade engine (same math as Trade Desk) ---------- */
   const userRoster = useMemo(() => leftTeam?.players ?? [], [leftTeam]);
@@ -578,94 +620,37 @@ function TradeAnalyzerPage() {
     setExtraGet(extraGive);
   };
 
-  const content = (
+  return (
     <div className="w-full">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="display-title text-3xl text-slate-900">
-            Trade <span className="text-primary">Analyzer</span>
-          </h1>
-          <ActiveLeagueLabel className="mt-2 inline-block" />
-          <p className="mt-1 text-sm text-muted-foreground">
-            Experimental layout — same trade engine as Trade Desk.
-          </p>
-        </div>
+      <div>
+        <h1 className="display-title text-3xl text-slate-900">
+          Trade <span className="text-primary">Analyzer</span>
+        </h1>
+        <ActiveLeagueLabel className="mt-2 inline-block" />
       </div>
 
-      {/* Search + add */}
-      <div className="relative mt-4 max-w-xl">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={searchQ}
-              onChange={(e) => setSearchQ(e.target.value)}
-              placeholder="Search players to add…"
-              className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-blue-600"
+      {/* Two-team board: search above each team dropdown */}
+      <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="grid sm:grid-cols-[1fr_auto_1fr]">
+          <div className="border-b border-slate-200 p-3 sm:border-b-0 sm:border-r">
+            <SidePlayerSearch
+              value={leftSearchQ}
+              onChange={setLeftSearchQ}
+              results={leftSearchResults}
+              onPick={addToGive}
+              placeholder="Search players to trade away…"
+            />
+            <TeamHeader
+              team={leftTeam}
+              teams={allTeams.filter((t) => t.key !== rightKey)}
+              onSelect={(key) => {
+                setLeftKey(key);
+                clearGive();
+              }}
             />
           </div>
-          <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => setSearchSide("give")}
-              className={cn(
-                "rounded-md px-2.5 py-1.5 transition-colors",
-                searchSide === "give"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-600 hover:bg-slate-50",
-              )}
-            >
-              Trade away
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchSide("get")}
-              className={cn(
-                "rounded-md px-2.5 py-1.5 transition-colors",
-                searchSide === "get"
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-600 hover:bg-slate-50",
-              )}
-            >
-              Trade for
-            </button>
-          </div>
-        </div>
-        {searchResults.length > 0 && (
-          <ul className="absolute left-0 right-0 z-40 mt-1 max-h-72 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-            {searchResults.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => addFromSearch(p)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                >
-                  <PositionBadge
-                    pos={p.pos === "DEF" ? "DST" : p.pos}
-                    className="h-5 min-w-[2rem] text-[10px]"
-                  />
-                  <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-                  <span className="text-xs text-slate-500">{p.team || "FA"}</span>
-                  <span className="tabnum text-xs text-slate-400">{posRankLabel(p)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
 
-      {/* Two-team board */}
-      <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid border-b border-slate-200 sm:grid-cols-[1fr_auto_1fr]">
-          <TeamHeader
-            team={leftTeam}
-            teams={allTeams.filter((t) => t.key !== rightKey)}
-            onSelect={(key) => {
-              setLeftKey(key);
-              clearGive();
-            }}
-          />
-          <div className="flex items-center justify-center border-y border-slate-100 px-2 sm:border-y-0 sm:border-x">
+          <div className="flex items-center justify-center border-b border-slate-200 px-2 py-2 sm:border-b-0 sm:border-r">
             <button
               type="button"
               onClick={swapTeams}
@@ -675,17 +660,27 @@ function TradeAnalyzerPage() {
               <ArrowLeftRight className="size-4" />
             </button>
           </div>
-          <TeamHeader
-            team={rightTeam}
-            teams={allTeams.filter((t) => t.key !== leftKey)}
-            onSelect={(key) => {
-              setRightKey(key);
-              clearGet();
-            }}
-          />
+
+          <div className="border-b border-slate-200 p-3">
+            <SidePlayerSearch
+              value={rightSearchQ}
+              onChange={setRightSearchQ}
+              results={rightSearchResults}
+              onPick={addToGet}
+              placeholder="Search players to trade for…"
+            />
+            <TeamHeader
+              team={rightTeam}
+              teams={allTeams.filter((t) => t.key !== leftKey)}
+              onSelect={(key) => {
+                setRightKey(key);
+                clearGet();
+              }}
+            />
+          </div>
         </div>
 
-        <div className="grid sm:grid-cols-2">
+        <div className="grid border-t border-slate-200 sm:grid-cols-2">
           <RosterPanel
             label="Trade away"
             players={mergeExtras(leftTeam?.players ?? [], extraGive)}
@@ -706,27 +701,28 @@ function TradeAnalyzerPage() {
             muted
           />
         </div>
+
+        {/* Power ranks sit under the rosters like FantasyPros */}
+        <div className="grid border-t border-slate-200 sm:grid-cols-2">
+          <PowerCard
+            team={leftTeam}
+            power={leftDisplayPower}
+            delta={leftDelta}
+            needs={leftNeeds}
+            incoming={get}
+            tone="left"
+          />
+          <PowerCard
+            team={rightTeam}
+            power={rightDisplayPower}
+            delta={rightDelta}
+            needs={rightNeeds}
+            incoming={give}
+            tone="right"
+          />
+        </div>
       </section>
 
-      {/* Power ranks + needs */}
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <PowerCard
-          team={leftTeam}
-          power={leftPower?.powerIndex ?? null}
-          delta={leftDelta}
-          needs={leftNeeds}
-          incoming={get}
-        />
-        <PowerCard
-          team={rightTeam}
-          power={rightPower?.powerIndex ?? null}
-          delta={rightDelta}
-          needs={rightNeeds}
-          incoming={give}
-        />
-      </div>
-
-      {/* Analysis replaces Upgrade-to-Unlock */}
       {ready ? (
         <AnalyzerResults
           tilt={balanceTilt}
@@ -757,13 +753,58 @@ function TradeAnalyzerPage() {
       <PlayerModalHost ref={modalRef} />
     </div>
   );
-
-  return content;
 }
 
 function mergeExtras(roster: Player[], extras: Player[]): Player[] {
   const ids = new Set(roster.map((p) => p.id));
   return [...extras.filter((p) => !ids.has(p.id)), ...roster];
+}
+
+function SidePlayerSearch({
+  value,
+  onChange,
+  results,
+  onPick,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  results: Player[];
+  onPick: (p: Player) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative mb-2">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-md border border-slate-200 bg-slate-50 py-2 pl-8 pr-3 text-sm outline-none focus:border-blue-600 focus:bg-white"
+      />
+      {results.length > 0 && (
+        <ul className="absolute left-0 right-0 z-40 mt-1 max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {results.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                onClick={() => onPick(p)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+              >
+                <PositionBadge
+                  pos={p.pos === "DEF" ? "DST" : p.pos}
+                  className="h-5 min-w-[2rem] text-[10px]"
+                />
+                <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                <span className="text-xs text-slate-500">{p.team || "FA"}</span>
+                <span className="tabnum text-xs text-slate-400">{posRankLabel(p)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function TeamHeader({
@@ -777,11 +818,11 @@ function TeamHeader({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="relative flex items-center gap-3 px-4 py-3">
+    <div className="relative flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
       {team?.logo ? (
-        <img src={team.logo} alt="" className="size-9 rounded-full object-cover" />
+        <img src={team.logo} alt="" className="size-8 rounded-full object-cover" />
       ) : (
-        <div className="flex size-9 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+        <div className="flex size-8 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
           {(team?.name ?? "TM").slice(0, 2).toUpperCase()}
         </div>
       )}
@@ -803,7 +844,7 @@ function TeamHeader({
             aria-label="Close"
             onClick={() => setOpen(false)}
           />
-          <ul className="absolute left-4 right-4 top-full z-40 mt-1 max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          <ul className="absolute left-0 right-0 top-full z-40 mt-1 max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
             {teams.map((t) => (
               <li key={t.key}>
                 <button
@@ -957,16 +998,25 @@ function PowerCard({
   delta,
   needs,
   incoming,
+  tone,
 }: {
   team: AnalyzerTeam | null;
   power: number | null;
   delta: number | null;
   needs: string[];
   incoming: Player[];
+  tone: "left" | "right";
 }) {
-  const marker = power != null ? Math.max(4, Math.min(96, power)) : 50;
+  const marker = powerMeterPct(power);
+  const fillClass = tone === "left" ? "bg-slate-800" : "bg-slate-700";
+  const dotClass = tone === "left" ? "bg-slate-900" : "bg-slate-800";
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div
+      className={cn(
+        "p-4 sm:p-5",
+        tone === "right" && "border-t border-slate-100 sm:border-l sm:border-t-0",
+      )}
+    >
       <div className="flex items-center gap-2">
         {team?.logo ? (
           <img src={team.logo} alt="" className="size-7 rounded-full object-cover" />
@@ -979,7 +1029,7 @@ function PowerCard({
       </div>
 
       <div className="mt-3 flex items-baseline gap-2">
-        <span className="font-display text-4xl font-bold tabular-nums text-slate-900">
+        <span className="font-display text-4xl font-bold tabular-nums leading-none text-slate-900">
           {power != null ? power.toFixed(1) : "—"}
         </span>
         {delta != null && delta !== 0 && (
@@ -993,11 +1043,23 @@ function PowerCard({
           </span>
         )}
       </div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Power Rank</p>
+      <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Power Rank
+      </p>
 
-      <div className="relative mt-3 h-1.5 w-full rounded-full bg-slate-200">
+      <div className="relative mt-4 h-2 w-full rounded-full bg-slate-200">
         <div
-          className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-700 bg-white"
+          className={cn(
+            "absolute inset-y-0 left-0 rounded-full transition-all duration-500",
+            fillClass,
+          )}
+          style={{ width: `${marker}%` }}
+        />
+        <div
+          className={cn(
+            "absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white transition-all duration-500",
+            dotClass,
+          )}
           style={{ left: `${marker}%` }}
         />
       </div>
@@ -1024,7 +1086,7 @@ function PowerCard({
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <BarChart3 className="size-3.5 text-slate-400" />
+        <BarChart3 className="size-3.5 text-slate-400" aria-hidden />
         <span className="text-xs font-semibold text-slate-500">Top Needs:</span>
         {needs.length ? (
           needs.map((pos) => (
