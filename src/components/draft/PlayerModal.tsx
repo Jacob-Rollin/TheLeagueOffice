@@ -75,7 +75,7 @@ export function PlayerModal({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-foreground/50 p-2 sm:p-6"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-foreground/50 p-2 sm:p-6"
       onClick={handleBackdropClick}
     >
       <div
