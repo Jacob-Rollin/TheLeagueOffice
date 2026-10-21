@@ -81,10 +81,11 @@ export function NativeLeagueShell({ linkId }: { linkId: string }) {
               <div className="min-w-0 lg:col-span-2">
                 <Outlet />
               </div>
-              <aside className="min-w-0 lg:col-span-1">
+              <aside className="flex min-w-0 flex-col lg:sticky lg:top-20 lg:col-span-1 lg:h-[calc(100vh-5.5rem)] lg:self-start">
                 <LeagueOfficeChatRail
                   linkId={linkId}
                   nativeLeagueId={board.summary.leagueId}
+                  className="min-h-0 flex-1"
                 />
               </aside>
             </div>
