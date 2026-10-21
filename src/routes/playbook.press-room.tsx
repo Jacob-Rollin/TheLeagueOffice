@@ -359,14 +359,23 @@ function PressRoomPage() {
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60,
     refetchOnWindowFocus: false,
-    placeholderData: (prev) => prev,
+    // Do NOT keepPreviousData / placeholderData — swapping native ↔ synced
+    // must not flash the prior league's team names in desk copy.
     queryFn: async () => {
       if (!factPack) return templateArticle;
       try {
         return await loadPressRoomArticle({ factPack });
       } catch (error) {
         console.warn("[press-room] load failed; using template", error);
-        return { ...templateArticle, source: "template" as const, model: "template", factHash: "", leagueKey: leagueKey ?? "", week: selectedWeek, kind: articleTab };
+        return {
+          ...templateArticle,
+          source: "template" as const,
+          model: "template",
+          factHash: "",
+          leagueKey: leagueKey ?? "",
+          week: selectedWeek,
+          kind: articleTab,
+        };
       }
     },
   });
@@ -385,7 +394,18 @@ function PressRoomPage() {
     },
   });
 
-  const activeArticle = articleQuery.data ?? templateArticle;
+  // Only render cached/LLM copy when it belongs to the active league key.
+  // While the new desk loads, fall back to the live template (current league
+  // names) — never the previous league's cached paragraphs.
+  const cachedForLeague =
+    articleQuery.data && leagueKey && articleQuery.data.leagueKey === leagueKey
+      ? articleQuery.data
+      : null;
+  const activeArticle = cachedForLeague ?? templateArticle;
+  const articlePending =
+    Boolean(factPack) &&
+    !cachedForLeague &&
+    (articleQuery.isFetching || articleQuery.isLoading);
 
   const navigate = useNavigate();
   const openPlayer = (id: string) => modalRef.current?.open(id);
@@ -422,7 +442,7 @@ function PressRoomPage() {
   const showAdminRegen = isAdmin === true && Boolean(factPack);
 
   return (
-    <div className="w-full">
+    <div className="w-full" key={leagueKey ?? activeLeague?.id ?? "none"}>
       <div className="mb-4 flex w-full items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="display-title text-3xl">
@@ -525,13 +545,16 @@ function PressRoomPage() {
           <article className="w-full text-left">
             {matchupsLoading && !weekReport.brief.apexTeam ? (
               <p className="text-sm text-muted-foreground">Loading editorial desk…</p>
-            ) : articleQuery.isFetching && !articleQuery.data ? (
-              <p className="text-sm text-muted-foreground">Filing this week’s desk copy…</p>
             ) : (
               <div className="space-y-5">
+                {articlePending ? (
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Filing this week’s desk copy…
+                  </p>
+                ) : null}
                 {activeArticle.paragraphs.map((paragraph, index) => (
                   <p
-                    key={`${articleTab}-${index}`}
+                    key={`${leagueKey ?? "none"}-${articleTab}-${index}`}
                     className="text-base font-medium leading-relaxed text-slate-600 sm:text-[1.05rem]"
                   >
                     {renderSentence(paragraph, openPlayer)}
