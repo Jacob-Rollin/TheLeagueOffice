@@ -61,21 +61,31 @@ export type CreatePollInput = {
 const POLL_COLS =
   "id, article_id, created_by, title, status, require_auth, native_league_id, created_at";
 
-/** HTML marker inserted into article body; hydrated by ArticleView. */
-export function pollEmbedHtml(pollId: string, title?: string | null): string {
-  const label = (title?.trim() || "Poll").replace(/[<>&"]/g, (c) =>
+function escapePollLabel(title?: string | null): string {
+  return (title?.trim() || "Poll").replace(/[<>&"]/g, (c) =>
     ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c] ?? c,
   );
-  // Visible placeholder in the editor; ArticleView clears children before mounting React.
+}
+
+/** Inner HTML for the editor placeholder (clickable). */
+export function pollEmbedInnerHtml(title?: string | null): string {
+  const label = escapePollLabel(title);
+  return (
+    `<p class="lo-poll__editor-label"><strong>${label}</strong> — click to edit · Preview / published shows the live poll</p>`
+  );
+}
+
+/** HTML marker inserted into article body; hydrated by ArticleView. */
+export function pollEmbedHtml(pollId: string, title?: string | null): string {
   return (
     `<div class="lo-poll" data-poll-id="${pollId}" contenteditable="false">` +
-    `<p class="lo-poll__editor-label"><strong>${label}</strong> — opens in Preview / published article</p>` +
+    pollEmbedInnerHtml(title) +
     `</div><p><br /></p>`
   );
 }
 
-export async function createArticlePoll(input: CreatePollInput): Promise<ArticlePoll> {
-  const questions = input.questions
+function normalizePollQuestions(input: CreatePollQuestionInput[]) {
+  const questions = input
     .map((q) => ({
       prompt: q.prompt.trim(),
       options: q.options.map((o) => o.trim()).filter(Boolean),
@@ -87,28 +97,19 @@ export async function createArticlePoll(input: CreatePollInput): Promise<Article
   for (const q of questions) {
     if (q.options.length > 8) throw new Error("At most 8 answer options per question.");
   }
+  return questions;
+}
 
-  const leagueId = input.nativeLeagueId?.trim() || null;
-
-  const { data: poll, error: pollError } = await supabase
-    .from("article_polls")
-    .insert({
-      created_by: input.createdBy,
-      title: input.title?.trim() || null,
-      status: "open",
-      require_auth: input.requireAuth !== false,
-      native_league_id: leagueId,
-    })
-    .select(POLL_COLS)
-    .single();
-  if (pollError) throw new Error(pollError.message);
-
+async function insertPollQuestions(
+  pollId: string,
+  questions: ReturnType<typeof normalizePollQuestions>,
+): Promise<void> {
   for (let qi = 0; qi < questions.length; qi++) {
     const q = questions[qi]!;
     const { data: question, error: qError } = await supabase
       .from("article_poll_questions")
       .insert({
-        poll_id: poll.id,
+        poll_id: pollId,
         sort_order: qi,
         prompt: q.prompt.slice(0, 500),
       })
@@ -124,8 +125,70 @@ export async function createArticlePoll(input: CreatePollInput): Promise<Article
     const { error: oError } = await supabase.from("article_poll_options").insert(optionRows);
     if (oError) throw new Error(oError.message);
   }
+}
 
+export async function createArticlePoll(input: CreatePollInput): Promise<ArticlePoll> {
+  const questions = normalizePollQuestions(input.questions);
+  const leagueId = input.nativeLeagueId?.trim() || null;
+
+  const { data: poll, error: pollError } = await supabase
+    .from("article_polls")
+    .insert({
+      created_by: input.createdBy,
+      title: input.title?.trim() || null,
+      status: "open",
+      require_auth: input.requireAuth !== false,
+      native_league_id: leagueId,
+    })
+    .select(POLL_COLS)
+    .single();
+  if (pollError) throw new Error(pollError.message);
+
+  await insertPollQuestions(poll.id, questions);
   return poll as ArticlePoll;
+}
+
+export type UpdatePollInput = {
+  pollId: string;
+  title?: string | null;
+  requireAuth?: boolean;
+  nativeLeagueId?: string | null;
+  questions: CreatePollQuestionInput[];
+};
+
+/**
+ * Replace poll metadata + questions/options.
+ * Existing votes are cleared when questions are rewritten (warned in the editor UI).
+ */
+export async function updateArticlePoll(input: UpdatePollInput): Promise<ArticlePoll> {
+  const questions = normalizePollQuestions(input.questions);
+  const leagueId = input.nativeLeagueId?.trim() || null;
+
+  const { data: poll, error: pollError } = await supabase
+    .from("article_polls")
+    .update({
+      title: input.title?.trim() || null,
+      require_auth: input.requireAuth !== false,
+      native_league_id: leagueId,
+    })
+    .eq("id", input.pollId)
+    .select(POLL_COLS)
+    .single();
+  if (pollError) throw new Error(pollError.message);
+
+  const { error: delError } = await supabase
+    .from("article_poll_questions")
+    .delete()
+    .eq("poll_id", input.pollId);
+  if (delError) throw new Error(delError.message);
+
+  await insertPollQuestions(input.pollId, questions);
+  return poll as ArticlePoll;
+}
+
+/** Total votes across a poll (for edit warnings). */
+export function countPollVotes(bundle: ArticlePollBundle): number {
+  return Object.values(bundle.tallies).reduce((sum, n) => sum + n, 0);
 }
 
 export async function fetchArticlePollBundle(

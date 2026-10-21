@@ -1,4 +1,12 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   Bold,
   ChevronDown,
@@ -18,7 +26,14 @@ import { ArticleView, type ArticleViewData } from "@/components/articles/Article
 import { useAuth } from "@/hooks/useAuth";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { ArticleInput, ArticleRow } from "@/lib/articles";
-import { createArticlePoll, pollEmbedHtml } from "@/lib/article-polls";
+import {
+  countPollVotes,
+  createArticlePoll,
+  fetchArticlePollBundle,
+  pollEmbedHtml,
+  pollEmbedInnerHtml,
+  updateArticlePoll,
+} from "@/lib/article-polls";
 import { renderPlayerHeaderHtml, renderPlayerMetaHtml } from "@/lib/weekly-desk-html";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +41,16 @@ type PollDraftQuestion = { prompt: string; options: string[] };
 
 function emptyPollQuestion(): PollDraftQuestion {
   return { prompt: "", options: ["", ""] };
+}
+
+function resetPollDraft() {
+  return {
+    title: "",
+    leagueId: "",
+    questions: [emptyPollQuestion()] as PollDraftQuestion[],
+    editingPollId: null as string | null,
+    voteCount: 0,
+  };
 }
 
 const inputClass =
@@ -139,6 +164,8 @@ export function ArticleEditor({
   const [pollTitle, setPollTitle] = useState("");
   const [pollLeagueId, setPollLeagueId] = useState("");
   const [pollQuestions, setPollQuestions] = useState<PollDraftQuestion[]>([emptyPollQuestion()]);
+  const [editingPollId, setEditingPollId] = useState<string | null>(null);
+  const [editingVoteCount, setEditingVoteCount] = useState(0);
   const [preview, setPreview] = useState<ArticleViewData | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const savedRange = useRef<Range | null>(null);
@@ -264,9 +291,95 @@ export function ArticleEditor({
     setPlayerPickerOpen(false);
   };
 
-  const insertPollBlock = async () => {
+  const clearPollForm = useCallback(() => {
+    const draft = resetPollDraft();
+    setPollTitle(draft.title);
+    setPollLeagueId(draft.leagueId);
+    setPollQuestions(draft.questions);
+    setEditingPollId(draft.editingPollId);
+    setEditingVoteCount(draft.voteCount);
+  }, []);
+
+  const closePollPanel = useCallback(() => {
+    setPollOpen(false);
+    clearPollForm();
+  }, [clearPollForm]);
+
+  const openNewPollPanel = useCallback(() => {
+    rememberSelection();
+    clearPollForm();
+    setPollOpen(true);
+    setSizeOpen(false);
+    setMarkerOpen(false);
+    setPlayerPickerOpen(false);
+    setError(null);
+  }, [clearPollForm, rememberSelection]);
+
+  const refreshPollMarkerLabel = useCallback((pollId: string, title: string | null) => {
+    const editor = bodyRef.current;
+    if (!editor) return;
+    const el = editor.querySelector(`[data-poll-id="${pollId}"]`) as HTMLElement | null;
+    if (!el) return;
+    el.classList.add("lo-poll");
+    el.setAttribute("contenteditable", "false");
+    el.innerHTML = pollEmbedInnerHtml(title);
+  }, []);
+
+  const openPollEditor = useCallback(
+    async (pollId: string) => {
+      setPollBusy(true);
+      setError(null);
+      setPollOpen(true);
+      setSizeOpen(false);
+      setMarkerOpen(false);
+      setPlayerPickerOpen(false);
+      try {
+        const bundle = await fetchArticlePollBundle(pollId, user?.id ?? null);
+        if (!bundle) {
+          setError("Could not load that poll for editing.");
+          setPollOpen(false);
+          return;
+        }
+        setEditingPollId(pollId);
+        setEditingVoteCount(countPollVotes(bundle));
+        setPollTitle(bundle.poll.title ?? "");
+        setPollLeagueId(bundle.poll.native_league_id ?? "");
+        setPollQuestions(
+          bundle.questions.length > 0
+            ? bundle.questions.map((q) => ({
+                prompt: q.prompt,
+                options:
+                  q.options.length >= 2 ? q.options.map((o) => o.label) : ["", ""],
+              }))
+            : [emptyPollQuestion()],
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not load poll.");
+        setPollOpen(false);
+      } finally {
+        setPollBusy(false);
+      }
+    },
+    [user?.id],
+  );
+
+  const onBodyClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement | null;
+      const pollEl = target?.closest?.("[data-poll-id]") as HTMLElement | null;
+      if (!pollEl || !bodyRef.current?.contains(pollEl)) return;
+      const pollId = pollEl.getAttribute("data-poll-id")?.trim();
+      if (!pollId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void openPollEditor(pollId);
+    },
+    [openPollEditor],
+  );
+
+  const savePollBlock = async () => {
     if (!user?.id) {
-      setError("Sign in as an admin to insert a poll.");
+      setError("Sign in as an admin to save a poll.");
       return;
     }
     // Capture caret before await — focus will leave the editor while the poll is created.
@@ -274,6 +387,27 @@ export function ArticleEditor({
     setPollBusy(true);
     setError(null);
     try {
+      if (editingPollId) {
+        if (
+          editingVoteCount > 0 &&
+          !window.confirm(
+            `This poll already has ${editingVoteCount} vote${editingVoteCount === 1 ? "" : "s"}. Saving will clear those votes and rewrite the questions. Continue?`,
+          )
+        ) {
+          return;
+        }
+        const poll = await updateArticlePoll({
+          pollId: editingPollId,
+          title: pollTitle.trim() || null,
+          requireAuth: true,
+          nativeLeagueId: pollLeagueId.trim() || null,
+          questions: pollQuestions,
+        });
+        refreshPollMarkerLabel(poll.id, pollTitle.trim() || poll.title);
+        closePollPanel();
+        return;
+      }
+
       const poll = await createArticlePoll({
         createdBy: user.id,
         title: pollTitle.trim() || null,
@@ -289,12 +423,9 @@ export function ArticleEditor({
         );
         return;
       }
-      setPollOpen(false);
-      setPollTitle("");
-      setPollLeagueId("");
-      setPollQuestions([emptyPollQuestion()]);
+      closePollPanel();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create poll.");
+      setError(err instanceof Error ? err.message : "Could not save poll.");
     } finally {
       setPollBusy(false);
     }
@@ -649,11 +780,11 @@ export function ArticleEditor({
                   type="button"
                   className={cn(toolButton, "w-auto gap-1 px-2 text-xs font-semibold")}
                   onClick={() => {
-                    rememberSelection();
-                    setPollOpen((open) => !open);
-                    setSizeOpen(false);
-                    setMarkerOpen(false);
-                    setPlayerPickerOpen(false);
+                    if (pollOpen && !editingPollId) {
+                      closePollPanel();
+                      return;
+                    }
+                    openNewPollPanel();
                   }}
                   aria-label="Insert poll"
                 >
@@ -667,17 +798,26 @@ export function ArticleEditor({
               <div className="relative z-20 space-y-4 border border-t-0 border-border bg-slate-50/90 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className={labelClass}>Insert poll</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Multiple questions on one block. Signed-in users only by default; optional
-                      native-league lock. One vote per question per user.
+                    <p className={labelClass}>
+                      {editingPollId ? "Edit poll" : "Insert poll"}
                     </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {editingPollId
+                        ? "Update questions and answers for this embedded poll. Click another poll box in the article to switch."
+                        : "Multiple questions on one block. Signed-in users only; optional native-league lock. One vote per question per user. After insert, click the blue poll box to edit."}
+                    </p>
+                    {editingPollId && editingVoteCount > 0 ? (
+                      <p className="mt-2 text-xs font-medium text-amber-800">
+                        This poll has {editingVoteCount} existing vote
+                        {editingVoteCount === 1 ? "" : "s"}. Saving will clear them.
+                      </p>
+                    ) : null}
                   </div>
                   <button
                     type="button"
                     className={toolButton}
                     aria-label="Close poll builder"
-                    onClick={() => setPollOpen(false)}
+                    onClick={closePollPanel}
                   >
                     <X className="h-4 w-4" aria-hidden="true" />
                   </button>
@@ -825,9 +965,15 @@ export function ArticleEditor({
                     type="button"
                     className={blueButton}
                     disabled={pollBusy}
-                    onClick={() => void insertPollBlock()}
+                    onClick={() => void savePollBlock()}
                   >
-                    {pollBusy ? "Inserting…" : "Insert poll into article"}
+                    {pollBusy
+                      ? editingPollId
+                        ? "Saving…"
+                        : "Inserting…"
+                      : editingPollId
+                        ? "Save poll changes"
+                        : "Insert poll into article"}
                   </button>
                 </div>
               </div>
@@ -896,6 +1042,7 @@ export function ArticleEditor({
               onMouseUp={rememberSelection}
               onBlur={rememberSelection}
               onPaste={handlePaste}
+              onClick={onBodyClick}
               className={
                 "min-h-[320px] w-full rounded-b-md border border-t-0 border-border bg-background p-4 text-sm leading-relaxed text-foreground outline-none " +
                 "[&_blockquote]:my-4 [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:bg-muted/15 [&_blockquote]:px-4 [&_blockquote]:py-3 [&_blockquote]:italic " +
@@ -909,8 +1056,8 @@ export function ArticleEditor({
                 "[&_.lo-player-header__name]:block [&_.lo-player-header__name]:truncate [&_.lo-player-header__name]:text-base [&_.lo-player-header__name]:font-bold [&_.lo-player-header__name]:text-slate-900 " +
                 "[&_.lo-player-header__sub]:block [&_.lo-player-header__sub]:truncate [&_.lo-player-header__sub]:text-xs [&_.lo-player-header__sub]:font-semibold [&_.lo-player-header__sub]:uppercase [&_.lo-player-header__sub]:text-slate-500 " +
                 "[&_.lo-player-meta]:mb-2 [&_.lo-player-meta]:mt-0 [&_.lo-player-meta]:text-xs [&_.lo-player-meta]:font-bold [&_.lo-player-meta]:uppercase [&_.lo-player-meta]:tracking-wide [&_.lo-player-meta]:text-slate-900 " +
-                "[&_.lo-poll]:my-3 [&_.lo-poll]:rounded-lg [&_.lo-poll]:border [&_.lo-poll]:border-blue-300 [&_.lo-poll]:bg-blue-50 [&_.lo-poll]:px-3 [&_.lo-poll]:py-3 " +
-                "[&_.lo-poll__editor-label]:m-0 [&_.lo-poll__editor-label]:text-sm [&_.lo-poll__editor-label]:text-slate-800"
+                "[&_.lo-poll]:my-3 [&_.lo-poll]:cursor-pointer [&_.lo-poll]:rounded-lg [&_.lo-poll]:border [&_.lo-poll]:border-blue-300 [&_.lo-poll]:bg-blue-50 [&_.lo-poll]:px-3 [&_.lo-poll]:py-3 [&_.lo-poll]:hover:border-blue-500 [&_.lo-poll]:hover:bg-blue-100/80 " +
+                "[&_.lo-poll__editor-label]:m-0 [&_.lo-poll__editor-label]:pointer-events-none [&_.lo-poll__editor-label]:text-sm [&_.lo-poll__editor-label]:text-slate-800"
               }
             />
           </div>
