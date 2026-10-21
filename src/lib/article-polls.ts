@@ -62,8 +62,16 @@ const POLL_COLS =
   "id, article_id, created_by, title, status, require_auth, native_league_id, created_at";
 
 /** HTML marker inserted into article body; hydrated by ArticleView. */
-export function pollEmbedHtml(pollId: string): string {
-  return `<div class="lo-poll" data-poll-id="${pollId}" contenteditable="false"></div><p><br /></p>`;
+export function pollEmbedHtml(pollId: string, title?: string | null): string {
+  const label = (title?.trim() || "Poll").replace(/[<>&"]/g, (c) =>
+    ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c] ?? c,
+  );
+  // Visible placeholder in the editor; ArticleView clears children before mounting React.
+  return (
+    `<div class="lo-poll" data-poll-id="${pollId}" contenteditable="false">` +
+    `<p class="lo-poll__editor-label"><strong>${label}</strong> — opens in Preview / published article</p>` +
+    `</div><p><br /></p>`
+  );
 }
 
 export async function createArticlePoll(input: CreatePollInput): Promise<ArticlePoll> {
