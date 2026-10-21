@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { ArrowRight, ChevronDown, ChevronUp, Cloud, CloudRain, CloudSnow, Star, Sun } from "lucide-react";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { playerImage, teamLogo } from "./PlayerAvatar";
 import { RosteredOnLabel } from "./RosteredOnLabel";
+import { NativeFantasyPopupRosterActions } from "@/components/native/fantasy/NativeFantasyPopupRosterActions";
 import { SosStars } from "@/components/sos/SosStars";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useDraft } from "@/hooks/use-draft";
@@ -158,6 +159,14 @@ export function PlayerDetail({
   });
   const draft = useDraft();
   const { activeLeague } = useActiveLeague();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  /** Native Fantasy shell popups only — never the standalone /player/$id page. */
+  const showNativeFantasyRosterActions =
+    Boolean(onClose) &&
+    !showDraftActions &&
+    (pathname === "/fantasy" ||
+      pathname.startsWith("/fantasy/") ||
+      pathname.startsWith("/league/"));
   const brain = usePlayerBrain();
   // Shared week-proj overlay — same source as depth-chart badges / ATP.
   const liveInjuries = useLiveInjuryStatuses();
@@ -427,7 +436,7 @@ export function PlayerDetail({
                   {injuryDetails.text}
                 </span>
               ) : null}
-              <div className="relative z-30 ml-3 flex items-center space-x-3">
+              <div className="relative z-30 ml-3 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   aria-label={watched ? "Unwatch" : "Watch"}
@@ -446,6 +455,9 @@ export function PlayerDetail({
                     {watched ? "Unwatch" : "Watch"}
                   </span>
                 </button>
+                {showNativeFantasyRosterActions ? (
+                  <NativeFantasyPopupRosterActions player={player} />
+                ) : null}
                 {showDraftActions ? (
                   <button
                     type="button"
