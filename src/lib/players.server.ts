@@ -23,6 +23,7 @@ import {
   loadPracticeSquadIndex,
   type NflInjuryReportEntry,
 } from "./nfl-roster-status.server";
+import { normalizeFumbleRaw } from "./game-log-normalize";
 import { NFL_TEAMS, teamFullName } from "./nfl-teams";
 import { hasScorableProjectionStats, scoreStats } from "./scoring-map";
 
@@ -3044,6 +3045,7 @@ function normalizeKickerRaw(raw: Record<string, number>): Record<string, number>
 }
 
 
+
 const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
   const res = await fetch(`${BASE}/players/nfl/${encodeURIComponent(id)}`, {
     headers: { accept: "application/json" },
@@ -3210,8 +3212,9 @@ async function buildSeasonLogsForPlayer(
         rawStats[k] = num(stats[k], 0);
       }
     }
-    const normalizedRaw =
-      player.pos === "K" ? normalizeKickerRaw(rawStats) : rawStats;
+    const normalizedRaw = normalizeFumbleRaw(
+      player.pos === "K" ? normalizeKickerRaw(rawStats) : rawStats,
+    );
     const bundle = projByWeek.get(week) ?? null;
     const proj = bundle
       ? { std: bundle.std, half: bundle.half, ppr: bundle.ppr }
