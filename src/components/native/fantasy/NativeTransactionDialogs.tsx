@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import { fantasyOutlineBtn } from "@/components/native/fantasy/chrome";
 import { cn } from "@/lib/utils";
 
-/** Above the desktop player popup (z-50). */
+/** Above the desktop player popup (z-[60]) and site navbar (z-50). */
 const OVERLAY_Z = "z-[70]";
 
 function useLockBodyScroll(active: boolean) {
