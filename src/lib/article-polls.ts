@@ -213,9 +213,20 @@ export async function castArticlePollVote(input: {
   if (error) throw new Error(error.message);
 }
 
-export async function closeArticlePoll(pollId: string): Promise<void> {
-  const { error } = await supabase.from("article_polls").update({ status: "closed" }).eq("id", pollId);
+export async function setArticlePollStatus(
+  pollId: string,
+  status: "open" | "closed",
+): Promise<void> {
+  const { error } = await supabase.from("article_polls").update({ status }).eq("id", pollId);
   if (error) throw new Error(error.message);
+}
+
+export async function closeArticlePoll(pollId: string): Promise<void> {
+  await setArticlePollStatus(pollId, "closed");
+}
+
+export async function reopenArticlePoll(pollId: string): Promise<void> {
+  await setArticlePollStatus(pollId, "open");
 }
 
 /** True when the signed-in user is a member of the poll's native league (if locked). */

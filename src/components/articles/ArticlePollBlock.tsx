@@ -9,6 +9,7 @@ import {
   castArticlePollVote,
   closeArticlePoll,
   fetchArticlePollBundle,
+  reopenArticlePoll,
   userCanVoteInLeague,
 } from "@/lib/article-polls";
 import { cn } from "@/lib/utils";
@@ -45,11 +46,13 @@ export function ArticlePollBlock({ pollId }: { pollId: string }) {
     onSettled: () => setPending(null),
   });
 
-  const closeMutation = useMutation({
-    mutationFn: () => closeArticlePoll(pollId),
+  const statusMutation = useMutation({
+    mutationFn: (next: "open" | "closed") =>
+      next === "open" ? reopenArticlePoll(pollId) : closeArticlePoll(pollId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["article-poll", pollId] });
     },
+    onError: (err: Error) => setError(err.message),
   });
 
   if (bundleQuery.isLoading || !ready) {
@@ -110,14 +113,20 @@ export function ArticlePollBlock({ pollId }: { pollId: string }) {
             {" · One vote per question"}
           </p>
         </div>
-        {isAdmin && isOpen ? (
+        {isAdmin ? (
           <button
             type="button"
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-            disabled={closeMutation.isPending}
-            onClick={() => closeMutation.mutate()}
+            disabled={statusMutation.isPending}
+            onClick={() => statusMutation.mutate(isOpen ? "closed" : "open")}
           >
-            {closeMutation.isPending ? "Closing…" : "Close poll"}
+            {statusMutation.isPending
+              ? isOpen
+                ? "Closing…"
+                : "Reopening…"
+              : isOpen
+                ? "Close poll"
+                : "Reopen poll"}
           </button>
         ) : null}
       </header>
