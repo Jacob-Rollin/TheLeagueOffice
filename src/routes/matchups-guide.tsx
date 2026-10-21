@@ -157,22 +157,26 @@ function MatchupsGuidePage() {
     useResearchScoringFormat(leagueFormat);
 
   const query = useQuery({
-    queryKey: ["matchups-guide", week, scoringFormat],
+    // v2: bust IndexedDB / RQ caches that persisted empty soft-empty shells
+    // before isEmptyShell treated matchups-guide games/defense as empty.
+    queryKey: ["matchups-guide", "v2", week, scoringFormat],
     staleTime: RESEARCH_CLIENT_STALE_MS,
     retry: 1,
     // Do not keepPreviousData across week changes — that flashed the prior
     // week's board under the newly selected week label while the fetch ran.
     queryFn: () => fetchResearchMatchupsGuide(week, scoringFormat),
   });
-  usePrefetchSiblingFormats("matchups-guide", scoringFormat, {
-    week,
-    enabled: Boolean(query.data),
-  });
   const guide = query.data;
   const activeWeek = week ?? guide?.week ?? null;
   const guideHasMatchups = Boolean(
     guide && (Object.keys(guide.games).length > 0 || Object.keys(guide.defense).length > 0),
   );
+  usePrefetchSiblingFormats("matchups-guide", scoringFormat, {
+    week,
+    // Only prefetch siblings once the active week is warm — empty shells are
+    // truthy objects and would otherwise idle-prefetch more empties.
+    enabled: guideHasMatchups,
+  });
 
   const { data: playersPayload } = useSleeperPlayers();
   const players = playersPayload?.players ?? [];
@@ -223,7 +227,16 @@ function MatchupsGuidePage() {
 
       const owner = ownerById.get(p.id) ?? null;
       const proj = projectFor(p.id);
-      const weekly = proj ?? (p.proj?.half ?? 0) / 17;
+      // Prefer live weekly proj, but floor with season pace so past/future weeks
+      // with missing or near-zero week lines still surface real starters.
+      const seasonPts =
+        scoringFormat === "ppr"
+          ? (p.proj?.ppr ?? p.proj?.half)
+          : scoringFormat === "std"
+            ? (p.proj?.std ?? p.proj?.half)
+            : p.proj?.half;
+      const seasonWeekly = Math.max(0, (seasonPts ?? 0) / 17);
+      const weekly = Math.max(proj ?? 0, seasonWeekly);
       if (!owner && weekly < STARTER_PROJ[pos]) continue;
 
       const ownership: Ownership = myIds.has(p.id) ? "roster" : rosteredIds.has(p.id) ? "taken" : "available";
@@ -254,7 +267,7 @@ function MatchupsGuidePage() {
       });
     }
     return out;
-  }, [guide, pos, players, ownerById, myIds, rosteredIds, projectFor, scoreScale, brain]);
+  }, [guide, pos, players, ownerById, myIds, rosteredIds, projectFor, scoreScale, brain, scoringFormat]);
 
   const rows = useMemo((): GuideRow[] => {
     const needle = deferredQ.trim().toLowerCase();
