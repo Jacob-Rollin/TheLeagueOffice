@@ -33,8 +33,11 @@ import {
 import {
   countActiveRosterCapacity,
   parseRosterSlotCounts,
+  planIrViolationResolutions,
+  playerEligibleForIr,
   splitActiveAndIrFromSlots,
   validateNativeLineupSlots,
+  type IrAutoResolveAction,
   type NativeLineupSlots,
 } from "@/lib/native-league-lineup";
 import { getNativeLeagueByInviteCode, countCommissionerNativeLeagues } from "@/lib/native-league.server";
@@ -3046,6 +3049,298 @@ export async function resolveNativeIrViolationForUser(
     const message = error instanceof Error ? error.message : "Could not resolve IR violation";
     return { ok: false, error: message };
   }
+}
+
+/**
+ * Apply planned IR violation resolutions to a roster + sync that week's lineup.
+ * Used by AI lineup ticks and kickoff force-enforcement.
+ */
+export async function applyPlannedIrResolutions(input: {
+  leagueId: string;
+  teamId: number;
+  seasonYear: number;
+  week: number;
+  nextActive: string[];
+  nextIr: string[];
+  actions: IrAutoResolveAction[];
+  createdBy?: string | null;
+}): Promise<{ ok: true; actions: number } | { ok: false; error: string }> {
+  if (!input.actions.length) return { ok: true, actions: 0 };
+  try {
+    await tidbExecute(
+      `UPDATE native_rosters SET player_ids = ?, reserve_ir = ?, version = version + 1
+       WHERE league_id = ? AND team_id = ?`,
+      [
+        JSON.stringify(input.nextActive),
+        JSON.stringify(input.nextIr),
+        input.leagueId,
+        input.teamId,
+      ],
+    );
+
+    for (const action of input.actions) {
+      const removedId =
+        action.action === "drop"
+          ? action.playerId
+          : action.action === "activate_drop"
+            ? (action.dropPlayerId ?? null)
+            : null;
+      if (removedId) {
+        await tidbExecute(
+          `DELETE FROM native_player_locks WHERE league_id = ? AND player_id = ? AND held_by_team_id = ?`,
+          [input.leagueId, removedId, input.teamId],
+        );
+      }
+      await tidbExecute(
+        `INSERT INTO native_transactions
+           (league_id, team_id, type, status, payload, created_by, processed_at)
+         VALUES (?, ?, ?, 'completed', ?, ?, UTC_TIMESTAMP())`,
+        [
+          input.leagueId,
+          input.teamId,
+          action.action === "drop" ? "ir_force_drop" : "ir_force_activate",
+          JSON.stringify({
+            playerId: action.playerId,
+            dropPlayerId: action.dropPlayerId ?? null,
+            injury: action.injury,
+            week: input.week,
+            seasonYear: input.seasonYear,
+            source: "ir_enforcement",
+          }),
+          input.createdBy ?? null,
+        ],
+      );
+      await syncLineupAfterRosterChange({
+        leagueId: input.leagueId,
+        teamId: input.teamId,
+        seasonYear: input.seasonYear,
+        week: input.week,
+        nextPlayerIds: [...input.nextActive, ...input.nextIr],
+        droppedPlayerId: removedId,
+        addedPlayerId: action.action === "drop" ? null : action.playerId,
+      });
+    }
+    return { ok: true, actions: input.actions.length };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ir_enforce_failed";
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * Enforce IR allow-list across a league.
+ * - AI teams: resolve every ineligible IR occupant immediately.
+ * - Human teams: resolve only after that player's NFL game has locked
+ *   (managers get until kickoff to fix Questionable / healthy IR sitters).
+ */
+export async function enforceNativeIrViolationsForLeague(input: {
+  leagueId: string;
+  week: number;
+  seasonYear: number;
+  rosterSlots: unknown;
+  injuryById: Record<string, string | null | undefined>;
+  metaById?: Record<
+    string,
+    { injury?: string | null; weeklyProj?: number | null; rank?: number | null; team?: string | null }
+  >;
+  /** When true, resolve all AI ineligible IR now. Default true. */
+  resolveAllForAi?: boolean;
+  /** When true, force human ineligible IR after kickoff. Default true. */
+  forceLockedHumans?: boolean;
+}): Promise<{ teams: number; actions: number; errors: string[] }> {
+  if (!tidbConfigured()) return { teams: 0, actions: 0, errors: ["tidb_unconfigured"] };
+  const resolveAi = input.resolveAllForAi !== false;
+  const forceHumans = input.forceLockedHumans !== false;
+  const allowed = parseIrAllowedStatuses(parseRosterSlots(input.rosterSlots as never));
+  const capacity = countActiveRosterCapacity(parseRosterSlots(input.rosterSlots as never));
+  const metaById = input.metaById ?? {};
+
+  const { fetchWeekKickoffsServer } = await import("@/lib/native-league-gameplay.server");
+  const { nflTeamHasLocked } = await import("@/lib/native-league-locks");
+  const kickoffs = await fetchWeekKickoffsServer(input.week);
+
+  const teams = await tidbExecute<{ id: number; is_ai: number | boolean | null }>(
+    `SELECT id, is_ai FROM native_teams WHERE league_id = ?`,
+    [input.leagueId],
+  );
+  const rosters = await tidbExecute<{
+    team_id: number;
+    player_ids: unknown;
+    reserve_ir: unknown;
+  }>(`SELECT team_id, player_ids, reserve_ir FROM native_rosters WHERE league_id = ?`, [
+    input.leagueId,
+  ]);
+  const rosterByTeam = new Map(
+    rosters.map((r) => [
+      Number(r.team_id),
+      {
+        active: parsePlayerIdList(r.player_ids),
+        ir: parsePlayerIdList(r.reserve_ir),
+      },
+    ]),
+  );
+
+  let touched = 0;
+  let actions = 0;
+  const errors: string[] = [];
+
+  for (const team of teams) {
+    const teamId = Number(team.id);
+    const roster = rosterByTeam.get(teamId);
+    if (!roster || roster.ir.length === 0) continue;
+    const isAi = Boolean(Number(team.is_ai));
+
+    const lockedPlayerIds = new Set<string>();
+    for (const id of roster.active) {
+      const teamAbbr = metaById[id]?.team ?? null;
+      if (nflTeamHasLocked(teamAbbr, kickoffs)) lockedPlayerIds.add(id);
+    }
+
+    let onlyPlayerIds: Set<string> | undefined;
+    if (isAi && resolveAi) {
+      onlyPlayerIds = undefined; // all ineligible
+    } else if (!isAi && forceHumans) {
+      onlyPlayerIds = new Set(
+        roster.ir.filter((id) => {
+          if (playerEligibleForIr(input.injuryById[id], allowed)) return false;
+          const teamAbbr = metaById[id]?.team ?? null;
+          return nflTeamHasLocked(teamAbbr, kickoffs);
+        }),
+      );
+      if (onlyPlayerIds.size === 0) continue;
+    } else {
+      continue;
+    }
+
+    const planned = planIrViolationResolutions({
+      activePlayerIds: roster.active,
+      irPlayerIds: roster.ir,
+      injuryById: input.injuryById,
+      metaById,
+      allowedStatuses: allowed,
+      capacity,
+      lockedPlayerIds,
+      ...(onlyPlayerIds ? { onlyPlayerIds } : {}),
+    });
+    if (!planned.actions.length) continue;
+
+    const applied = await applyPlannedIrResolutions({
+      leagueId: input.leagueId,
+      teamId,
+      seasonYear: input.seasonYear,
+      week: input.week,
+      nextActive: planned.activePlayerIds,
+      nextIr: planned.irPlayerIds,
+      actions: planned.actions,
+    });
+    if (!applied.ok) {
+      errors.push(`team ${teamId}: ${applied.error}`);
+      continue;
+    }
+    touched += 1;
+    actions += applied.actions;
+    rosterByTeam.set(teamId, {
+      active: planned.activePlayerIds,
+      ir: planned.irPlayerIds,
+    });
+  }
+
+  return { teams: touched, actions, errors };
+}
+
+/**
+ * Cron/Actions entry: clear illegal IR sitters across in-season native leagues.
+ * AI teams are fixed immediately; human teams only after the player's kickoff.
+ */
+export async function processNativeIrEnforcementCron(opts?: {
+  leagueId?: string;
+  limit?: number;
+}): Promise<{
+  ok: boolean;
+  leagues: number;
+  teams: number;
+  actions: number;
+  errors: string[];
+}> {
+  if (!tidbConfigured()) {
+    return { ok: false, leagues: 0, teams: 0, actions: 0, errors: ["tidb_unconfigured"] };
+  }
+  const limit = Math.max(1, Math.min(40, Math.floor(Number(opts?.limit ?? 20) || 20)));
+  const leagues = opts?.leagueId
+    ? await tidbExecute<{
+        id: string;
+        current_week: number;
+        season_year: number;
+        roster_slots: unknown;
+      }>(
+        `SELECT id, current_week, season_year, roster_slots FROM native_leagues WHERE id = ? LIMIT 1`,
+        [opts.leagueId],
+      )
+    : await tidbExecute<{
+        id: string;
+        current_week: number;
+        season_year: number;
+        roster_slots: unknown;
+      }>(
+        `SELECT id, current_week, season_year, roster_slots FROM native_leagues
+         WHERE draft_status = 'complete' AND status IN ('in_season', 'drafting')
+         ORDER BY updated_at DESC
+         LIMIT ?`,
+        [limit],
+      );
+  if (!leagues.length) {
+    return { ok: true, leagues: 0, teams: 0, actions: 0, errors: [] };
+  }
+
+  const { loadPlayers } = await import("@/lib/players.server");
+  const payload = await loadPlayers();
+  const injuryById: Record<string, string | null> = {};
+  const metaById: Record<
+    string,
+    { injury?: string | null; weeklyProj?: number | null; rank?: number | null; team?: string | null }
+  > = {};
+  for (const p of payload.players ?? []) {
+    const injury = p.injury_status ?? p.injury ?? null;
+    injuryById[p.id] = injury;
+    metaById[p.id] = {
+      injury,
+      team: p.team ?? null,
+      rank: p.rank?.half ?? p.adp?.half ?? 400,
+    };
+  }
+
+  let teams = 0;
+  let actions = 0;
+  const errors: string[] = [];
+  for (const league of leagues) {
+    const week = Math.max(1, Math.min(18, Number(league.current_week ?? 1) || 1));
+    const seasonYear = Number(league.season_year) || new Date().getUTCFullYear();
+    try {
+      const result = await enforceNativeIrViolationsForLeague({
+        leagueId: league.id,
+        week,
+        seasonYear,
+        rosterSlots: league.roster_slots,
+        injuryById,
+        metaById,
+      });
+      teams += result.teams;
+      actions += result.actions;
+      for (const e of result.errors) errors.push(`${league.id}: ${e}`);
+    } catch (error) {
+      errors.push(
+        `${league.id}: ${error instanceof Error ? error.message : "ir_enforce_failed"}`,
+      );
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    leagues: leagues.length,
+    teams,
+    actions,
+    errors,
+  };
 }
 
 export type NativeTradeLeg = {

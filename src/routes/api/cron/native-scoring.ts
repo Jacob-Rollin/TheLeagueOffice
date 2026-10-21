@@ -37,8 +37,37 @@ export const Route = createFileRoute("/api/cron/native-scoring")({
             limit,
             mode,
           });
-          return new Response(JSON.stringify(report), {
-            status: report.ok ? 200 : 500,
+          // Kickoff IR force-resolve for human managers (and AI) across in-season leagues.
+          let irEnforcement: {
+            ok: boolean;
+            leagues: number;
+            teams: number;
+            actions: number;
+            errors: string[];
+          } | null = null;
+          if (mode === "points" || mode === "both") {
+            const { processNativeIrEnforcementCron } = await import(
+              "@/lib/native-league-ops.server"
+            );
+            irEnforcement = await processNativeIrEnforcementCron({
+              ...(leagueId ? { leagueId } : {}),
+              limit,
+            });
+          }
+          const payload = {
+            ...report,
+            ...(irEnforcement
+              ? {
+                  irLeagues: irEnforcement.leagues,
+                  irTeams: irEnforcement.teams,
+                  irActions: irEnforcement.actions,
+                  irErrors: irEnforcement.errors,
+                }
+              : {}),
+          };
+          const ok = report.ok && (irEnforcement?.ok !== false);
+          return new Response(JSON.stringify(payload), {
+            status: ok ? 200 : 500,
             headers: { "content-type": "application/json", "cache-control": "no-store" },
           });
         } catch (error) {

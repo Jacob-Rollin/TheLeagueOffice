@@ -40,6 +40,7 @@ import {
 } from "@/lib/native-league-lineup";
 import {
   LEAGUE_CORE_SELECT,
+  enforceNativeIrViolationsForLeague,
   isCommishRole,
   parsePlayerIdList,
   parseRosterSlots,
@@ -650,15 +651,35 @@ async function setAiLineupsForLeague(
   league: LeagueAiRow,
   catalog: Player[],
   week: number,
-): Promise<{ teams: number; errors: string[] }> {
-  if (!asBool(league.allow_ai_teams, false)) return { teams: 0, errors: [] };
-  if (String(league.draft_status) !== "complete") return { teams: 0, errors: [] };
+): Promise<{ teams: number; irActions: number; errors: string[] }> {
+  if (!asBool(league.allow_ai_teams, false)) {
+    return { teams: 0, irActions: 0, errors: [] };
+  }
+  if (String(league.draft_status) !== "complete") {
+    return { teams: 0, irActions: 0, errors: [] };
+  }
 
   const scoring = scoringFromPreset(String(league.scoring_preset ?? "half"));
   const seasonYear = Number(league.season_year) || new Date().getUTCFullYear();
   // One shared week-projection download for every AI team in this league tick.
   const weeklyProjById = await loadWeekProjectionPoints(seasonYear, week, scoring);
   const metaById = metaFromCatalog(catalog, scoring, weeklyProjById);
+  const injuryById: Record<string, string | null> = {};
+  for (const [id, meta] of Object.entries(metaById)) {
+    injuryById[id] = meta.injury ?? null;
+  }
+
+  // Clear illegal IR first (AI immediately; humans after kickoff) so lineup
+  // optimize sees the post-resolution roster.
+  const ir = await enforceNativeIrViolationsForLeague({
+    leagueId: league.id,
+    week,
+    seasonYear,
+    rosterSlots: league.roster_slots,
+    injuryById,
+    metaById,
+  });
+  const errors: string[] = ir.errors.map((e) => `ir: ${e}`);
 
   const teamRows = await tidbExecute<TeamAiRow>(
     `SELECT id, team_name, user_id, draft_slot, is_ai, ai_persona
@@ -666,7 +687,6 @@ async function setAiLineupsForLeague(
     [league.id],
   );
   let teams = 0;
-  const errors: string[] = [];
   for (const team of teamRows) {
     const rosterRows = await tidbExecute<{ player_ids: unknown; reserve_ir: unknown }>(
       `SELECT player_ids, reserve_ir FROM native_rosters
@@ -674,8 +694,8 @@ async function setAiLineupsForLeague(
       [league.id, Number(team.id)],
     );
     const active = parsePlayerIdList(rosterRows[0]?.player_ids);
-    const ir = parsePlayerIdList(rosterRows[0]?.reserve_ir);
-    const rosterPlayerIds = [...active, ...ir.filter((id) => !active.includes(id))];
+    const irIds = parsePlayerIdList(rosterRows[0]?.reserve_ir);
+    const rosterPlayerIds = [...active, ...irIds.filter((id) => !active.includes(id))];
     const result = await applyAiLineupForTeam({
       league,
       teamId: Number(team.id),
@@ -686,7 +706,7 @@ async function setAiLineupsForLeague(
     if (result.ok) teams += 1;
     else errors.push(`team ${team.id}: ${result.error}`);
   }
-  return { teams, errors };
+  return { teams, irActions: ir.actions, errors };
 }
 
 export async function runNativeAiLineupsForUser(
@@ -699,6 +719,7 @@ export async function runNativeAiLineupsForUser(
     errors?: string[];
     faMoves?: number;
     claims?: number;
+    irActions?: number;
   }
 > {
   if (!tidbConfigured()) return { ok: false, error: "Native leagues database is not configured" };
@@ -728,6 +749,7 @@ export async function runNativeAiLineupsForUser(
     errors: [...stream.errors, ...result.errors],
     faMoves: stream.faMoves,
     claims: stream.claims,
+    irActions: result.irActions,
   };
 }
 
@@ -1169,6 +1191,7 @@ export async function processNativeAiCron(opts?: {
   lineups: number;
   waiverClaims: number;
   faMoves: number;
+  irActions: number;
   errors: string[];
 }> {
   if (!tidbConfigured()) {
@@ -1179,6 +1202,7 @@ export async function processNativeAiCron(opts?: {
       lineups: 0,
       waiverClaims: 0,
       faMoves: 0,
+      irActions: 0,
       errors: ["tidb_unconfigured"],
     };
   }
@@ -1214,6 +1238,7 @@ export async function processNativeAiCron(opts?: {
       lineups: 0,
       waiverClaims: 0,
       faMoves: 0,
+      irActions: 0,
       errors: [],
     };
   }
@@ -1223,6 +1248,7 @@ export async function processNativeAiCron(opts?: {
   let lineups = 0;
   let waiverClaims = 0;
   let faMoves = 0;
+  let irActions = 0;
   const errors: string[] = [];
 
   for (const league of leagues) {
@@ -1254,6 +1280,7 @@ export async function processNativeAiCron(opts?: {
 
         const lu = await setAiLineupsForLeague(row, catalog, week);
         lineups += lu.teams;
+        irActions += lu.irActions;
         for (const e of lu.errors) errors.push(`${league.id}: ${e}`);
       }
     } catch (error) {
@@ -1270,6 +1297,7 @@ export async function processNativeAiCron(opts?: {
     lineups,
     waiverClaims,
     faMoves,
+    irActions,
     errors,
   };
 }
