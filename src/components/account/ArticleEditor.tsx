@@ -162,9 +162,14 @@ export function ArticleEditor({
     editor.focus();
     const range = savedRange.current;
     if (!range) return;
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
+    try {
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    } catch {
+      // Stale range after async work — caller should fall back to append.
+      savedRange.current = null;
+    }
   }, []);
 
   const exec = (command: string, value?: string) => {
@@ -173,6 +178,49 @@ export function ArticleEditor({
     document.execCommand(command, false, value);
     rememberSelection();
   };
+
+  /** Insert HTML at the saved caret, or append when selection was lost (common after async polls). */
+  const insertHtmlIntoBody = useCallback(
+    (html: string) => {
+      const editor = bodyRef.current;
+      if (!editor) return false;
+      editor.focus();
+
+      let placed = false;
+      const range = savedRange.current;
+      if (range) {
+        try {
+          const selection = window.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          if (editor.contains(range.commonAncestorContainer)) {
+            document.execCommand("styleWithCSS", false, "true");
+            placed = document.execCommand("insertHTML", false, html);
+          }
+        } catch {
+          placed = false;
+        }
+      }
+
+      if (!placed) {
+        editor.insertAdjacentHTML("beforeend", html);
+        placed = true;
+      }
+
+      // Move caret after the insert and keep a fresh saved range.
+      const selection = window.getSelection();
+      if (selection) {
+        const end = document.createRange();
+        end.selectNodeContents(editor);
+        end.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(end);
+        savedRange.current = end.cloneRange();
+      }
+      return placed;
+    },
+    [],
+  );
 
   const insertImage = () => {
     const url = embedUrl.trim();
@@ -205,6 +253,8 @@ export function ArticleEditor({
       setError("Sign in as an admin to insert a poll.");
       return;
     }
+    // Capture caret before await — focus will leave the editor while the poll is created.
+    rememberSelection();
     setPollBusy(true);
     setError(null);
     try {
@@ -215,7 +265,11 @@ export function ArticleEditor({
         nativeLeagueId: pollLeagueId.trim() || null,
         questions: pollQuestions,
       });
-      exec("insertHTML", pollEmbedHtml(poll.id));
+      const ok = insertHtmlIntoBody(pollEmbedHtml(poll.id, pollTitle.trim() || poll.title));
+      if (!ok) {
+        setError("Poll was created but could not be placed in the article body. Try again.");
+        return;
+      }
       setPollOpen(false);
       setPollTitle("");
       setPollLeagueId("");
@@ -831,7 +885,9 @@ export function ArticleEditor({
                 "[&_.lo-player-header__id]:flex [&_.lo-player-header__id]:min-w-0 [&_.lo-player-header__id]:flex-col [&_.lo-player-header__id]:gap-0.5 " +
                 "[&_.lo-player-header__name]:block [&_.lo-player-header__name]:truncate [&_.lo-player-header__name]:text-base [&_.lo-player-header__name]:font-bold [&_.lo-player-header__name]:text-slate-900 " +
                 "[&_.lo-player-header__sub]:block [&_.lo-player-header__sub]:truncate [&_.lo-player-header__sub]:text-xs [&_.lo-player-header__sub]:font-semibold [&_.lo-player-header__sub]:uppercase [&_.lo-player-header__sub]:text-slate-500 " +
-                "[&_.lo-player-meta]:mb-2 [&_.lo-player-meta]:mt-0 [&_.lo-player-meta]:text-xs [&_.lo-player-meta]:font-bold [&_.lo-player-meta]:uppercase [&_.lo-player-meta]:tracking-wide [&_.lo-player-meta]:text-slate-900"
+                "[&_.lo-player-meta]:mb-2 [&_.lo-player-meta]:mt-0 [&_.lo-player-meta]:text-xs [&_.lo-player-meta]:font-bold [&_.lo-player-meta]:uppercase [&_.lo-player-meta]:tracking-wide [&_.lo-player-meta]:text-slate-900 " +
+                "[&_.lo-poll]:my-3 [&_.lo-poll]:rounded-lg [&_.lo-poll]:border [&_.lo-poll]:border-blue-300 [&_.lo-poll]:bg-blue-50 [&_.lo-poll]:px-3 [&_.lo-poll]:py-3 " +
+                "[&_.lo-poll__editor-label]:m-0 [&_.lo-poll__editor-label]:text-sm [&_.lo-poll__editor-label]:text-slate-800"
               }
             />
           </div>
