@@ -55,6 +55,10 @@ import {
 import { inSeasonWeeklyValue } from "@/lib/trade-value";
 import { cn } from "@/lib/utils";
 
+/** Matches roster cards: left column | center gap (swap width) | right column. */
+const ANALYZER_SPLIT =
+  "grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-[minmax(0,1fr)_2.75rem_minmax(0,1fr)]";
+
 const playersQuery = queryOptions({
   queryKey: ["players-catalog"],
   queryFn: () => loadPlayersCatalog(),
@@ -736,7 +740,7 @@ function TradeAnalyzerPage() {
 
       {/* Search / team pickers sit on the page background; roster cards are separate. */}
       <section className="mt-4">
-        <div className="grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-[minmax(0,1fr)_2.75rem_minmax(0,1fr)] sm:items-start">
+        <div className={cn(ANALYZER_SPLIT, "sm:items-start")}>
           <div className="space-y-2">
             <SidePlayerSearch
               value={leftSearchQ}
@@ -838,42 +842,43 @@ function TradeAnalyzerPage() {
       </section>
 
       {ready ? (
-        <AnalyzerResults
-          tilt={balanceTilt}
-          giveValue={giveValue}
-          getValue={getValue}
-          giveWeekly={giveWeekly}
-          getWeekly={getWeekly}
-          fitPct={fit.pct}
-          gradeParts={valueOnly ? null : blended.parts}
-          valueOnly={valueOnly}
-          gradeLetter={adjustedGrade.letter}
-          gradeTone={adjustedGrade.tone}
-          headline={headlineVerdict({ ready, pct: adjustedPct })}
-          verdict={verdict}
-          fitNote={fitNote}
-          giveBullets={giveBullets}
-          getBullets={getBullets}
-          depth={depthRows}
-          risk={risk}
-          showRosterRow={!valueOnly && userRoster.length > 0}
-          dropSlots={benchSlotsRequired}
-        />
+        <>
+          <AnalyzerResults
+            tilt={balanceTilt}
+            giveValue={giveValue}
+            getValue={getValue}
+            giveWeekly={giveWeekly}
+            getWeekly={getWeekly}
+            fitPct={fit.pct}
+            gradeParts={valueOnly ? null : blended.parts}
+            valueOnly={valueOnly}
+            gradeLetter={adjustedGrade.letter}
+            gradeTone={adjustedGrade.tone}
+            headline={headlineVerdict({ ready, pct: adjustedPct })}
+            verdict={verdict}
+            fitNote={fitNote}
+            giveBullets={giveBullets}
+            getBullets={getBullets}
+            depth={depthRows}
+            risk={risk}
+            showRosterRow={!valueOnly && userRoster.length > 0}
+            dropSlots={benchSlotsRequired}
+          />
+          <TradeSideCompare
+            give={give}
+            get={get}
+            scoring={valueScoring}
+            valueBasis={valueBasis}
+            detailsById={details.map}
+            loading={details.loading}
+            seasonPosRankFor={seasonPosRankFor}
+          />
+        </>
       ) : (
         <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">
           Select players on both sides to unlock the trade grade and breakdown.
         </div>
       )}
-
-      <TradeSideCompare
-        give={give}
-        get={get}
-        scoring={valueScoring}
-        valueBasis={valueBasis}
-        detailsById={details.map}
-        loading={details.loading}
-        seasonPosRankFor={seasonPosRankFor}
-      />
 
       <PlayerModalHost ref={modalRef} />
     </div>
@@ -1332,7 +1337,7 @@ function AnalyzerResults({
 
   return (
     <div className="mt-4 space-y-3 duration-300 animate-in fade-in slide-in-from-top-2">
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className={ANALYZER_SPLIT}>
         <section className={cn("rounded-xl border-2 bg-card p-4 shadow-sm", haloTone)}>
           <div className="flex items-start gap-4">
             <div
@@ -1373,6 +1378,8 @@ function AnalyzerResults({
             </div>
           </div>
         </section>
+
+        <div className="hidden sm:block" aria-hidden />
 
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="flex items-baseline justify-between">
@@ -1511,13 +1518,14 @@ function AnalyzerResults({
         </section>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className={ANALYZER_SPLIT}>
         <BulletCard title="Giving Pros & Cons" bullets={giveBullets} />
+        <div className="hidden sm:block" aria-hidden />
         <BulletCard title="Getting Pros & Cons" bullets={getBullets} />
       </div>
 
       {showRosterRow && (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className={ANALYZER_SPLIT}>
           <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <p className="eyebrow">Positional Depth</p>
             <div className="mt-3 flex flex-col gap-2">
@@ -1543,6 +1551,7 @@ function AnalyzerResults({
               )}
             </div>
           </section>
+          <div className="hidden sm:block" aria-hidden />
           <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <p className="eyebrow">Injury Vulnerability</p>
             <div className="mt-3 flex flex-col items-center text-center">
