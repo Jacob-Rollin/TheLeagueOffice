@@ -18,6 +18,7 @@ import {
   POSITIONS,
   byeMatrix,
   fillRoster,
+  posDisplayLabel,
   roundOf,
   SCORING_LABEL,
   teamName,
@@ -108,7 +109,7 @@ function DraftRoom() {
   const lastPlayer = lastPick ? byId.get(lastPick.playerId) : undefined;
   return (
     <main
-      className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col"
+      className="mx-auto flex min-h-screen w-full max-w-shell flex-col"
       style={{ "--wr-header-h": `${headerH}px` } as React.CSSProperties}
     >
       <header
@@ -282,7 +283,7 @@ function DraftRoom() {
 
           {tab === "players" && syncing && (
             <div className="space-y-2 px-3 py-6">
-              <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">
                 Syncing player database…
               </p>
               {Array.from({ length: 8 }).map((_, i) => (
@@ -349,11 +350,8 @@ const POS_BAR_CLASS: Record<string, string> = {
   K: "bg-k",
   DEF: "bg-def",
   FLEX: "bg-primary",
+  SUPER_FLEX: "bg-primary",
 };
-
-function posDisplayLabel(pos: string): string {
-  return pos === "DEF" ? "DST" : pos;
-}
 
 function RosterAnalysisPanel({
   players,
@@ -367,12 +365,18 @@ function RosterAnalysisPanel({
   const unfilledStarters = starterSlots.filter((s) => !s.player);
 
   // Dedicated slots + a single FLEX row (do not add FLEX into every flex position).
-  const tierKeys: Array<Pos | "FLEX"> = [
-    ...POSITIONS.filter((pos) => settings.roster[pos] > 0),
-    ...(settings.roster.FLEX > 0 ? (["FLEX"] as const) : []),
+  const tierKeys: Array<Pos | "FLEX" | "SUPER_FLEX"> = [
+    ...POSITIONS.filter((pos) => (settings.roster[pos] ?? 0) > 0),
+    ...((settings.roster.FLEX ?? 0) > 0 ? (["FLEX"] as const) : []),
+    ...((settings.roster.SUPER_FLEX ?? 0) > 0 ? (["SUPER_FLEX"] as const) : []),
   ];
   const tiers = tierKeys.map((key) => {
-    const required = key === "FLEX" ? settings.roster.FLEX : settings.roster[key];
+    const required =
+      key === "FLEX"
+        ? settings.roster.FLEX
+        : key === "SUPER_FLEX"
+          ? settings.roster.SUPER_FLEX ?? 0
+          : settings.roster[key];
     const filled = starterSlots.filter((s) => s.slot === key && s.player).length;
     const pct = required > 0 ? Math.min(100, Math.round((filled / required) * 100)) : 0;
     return {

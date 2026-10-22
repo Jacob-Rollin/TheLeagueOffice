@@ -441,7 +441,7 @@ function PlayerListImpl({
                     : "border-border bg-card text-muted-foreground hover:text-foreground",
                 )}
               >
-                {p}
+                {p === "DEF" ? "DST" : p}
                 {p !== "ALL" && (settings.roster[p as Pos] ?? 0) > 0 ? (
                   <span className="tabnum ml-1 text-[10px] opacity-70">
                     {counts?.[p] ?? 0}/{settings.roster[p as Pos]}

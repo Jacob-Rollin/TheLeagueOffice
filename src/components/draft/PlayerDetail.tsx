@@ -150,6 +150,9 @@ export function PlayerDetail({
   draftRosterLabel,
   sessionDrafted,
   onSessionDraft,
+  canDraft = true,
+  sessionWatched,
+  onSessionToggleWatch,
   showFullProfileLink = true,
   scoringFormat: scoringFormatProp,
   onScoringFormatChange,
@@ -170,6 +173,11 @@ export function PlayerDetail({
   sessionDrafted?: boolean;
   /** Override draft action for mock-draft sessions. */
   onSessionDraft?: (playerId: string) => void;
+  /** When false, Draft button is disabled (e.g. off-turn in mock draft). */
+  canDraft?: boolean;
+  /** Override watch state for mock-draft sessions. */
+  sessionWatched?: boolean;
+  onSessionToggleWatch?: (playerId: string) => void;
   /** When false, hide the Full Profile utility (standalone profile page). */
   showFullProfileLink?: boolean;
   /** Optional controlled scoring format from a standalone page header. */
@@ -183,7 +191,10 @@ export function PlayerDetail({
     staleTime: 1000 * 60 * 60 * 12,
     retry: false,
   });
-  const draft = useDraft();
+  // Mock session overrides skip War Room league sync on modal open.
+  const draft = useDraft({
+    enableLeagueSync: sessionDrafted === undefined && !onSessionDraft,
+  });
   const { activeLeague } = useActiveLeague();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   /** Native Fantasy shell popups only — never the standalone /player/$id page. */
@@ -307,7 +318,13 @@ export function PlayerDetail({
   const scoring = scoringFormat;
   const drafted =
     sessionDrafted !== undefined ? sessionDrafted : draft.draftedIds.has(player.id);
-  const watched = draft.watchIds.has(player.id);
+  const watched =
+    sessionWatched !== undefined ? sessionWatched : draft.watchIds.has(player.id);
+  const toggleWatch = () => {
+    if (onSessionToggleWatch) onSessionToggleWatch(player.id);
+    else draft.toggleWatch(player.id);
+  };
+  const draftDisabled = drafted || (showDraftActions && !canDraft);
   const watermarkLogo = getWatermarkLogoUrl(player.team);
   const raidersWatermark = isRaidersTeam(player.team);
   const teamMeta = teamById(player.team);
@@ -438,7 +455,7 @@ export function PlayerDetail({
                 type="button"
                 aria-label={watched ? "Unwatch" : "Watch"}
                 aria-pressed={watched}
-                onClick={() => draft.toggleWatch(player.id)}
+                onClick={toggleWatch}
                 className="group inline-flex max-w-[38px] shrink-0 cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-2.5 py-1.5 transition-all duration-300 hover:max-w-[130px] hover:border-white/40 hover:bg-white/10"
               >
                 <Star
@@ -516,7 +533,7 @@ export function PlayerDetail({
                   POS_STRIP_BG[player.pos] ?? "bg-slate-700",
                 )}
               >
-                {player.pos}
+                {player.pos === "DEF" ? "DST" : player.pos}
               </span>
               <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
                 <span>{teamNickname}</span>
@@ -565,7 +582,7 @@ export function PlayerDetail({
                   type="button"
                   aria-label={watched ? "Unwatch" : "Watch"}
                   aria-pressed={watched}
-                  onClick={() => draft.toggleWatch(player.id)}
+                  onClick={toggleWatch}
                   className="group inline-flex max-w-[38px] cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-2.5 py-1.5 transition-all duration-300 hover:max-w-[130px] hover:border-white/40 hover:bg-white/10"
                 >
                   <Star
@@ -584,20 +601,20 @@ export function PlayerDetail({
                 {showDraftActions ? (
                   <button
                     type="button"
-                    disabled={drafted}
+                    disabled={draftDisabled}
                     onClick={() => {
-                      if (drafted) return;
+                      if (draftDisabled) return;
                       if (onSessionDraft) onSessionDraft(player.id);
                       else draft.draftPlayer(player.id);
                     }}
                     className={cn(
                       "relative z-30 inline-flex min-w-[76px] items-center justify-center rounded-full px-4 py-1.5 text-xs font-black tracking-wide uppercase whitespace-nowrap shadow-sm transition-all duration-200",
-                      drafted
+                      draftDisabled
                         ? "pointer-events-none cursor-default border border-white/10 bg-white/10 text-white/40"
                         : "cursor-pointer border border-white bg-white text-slate-900 hover:bg-slate-100",
                     )}
                   >
-                    {drafted ? "Drafted" : "Draft"}
+                    {drafted ? "Drafted" : canDraft ? "Draft" : "Waiting"}
                   </button>
                 ) : null}
               </div>

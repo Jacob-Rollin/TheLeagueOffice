@@ -40,7 +40,17 @@ function scoringKey(settings: Record<string, unknown> | null | undefined): "std"
 }
 
 function slotCounts(positions: string[] | undefined): RosterSlotCounts {
-  const roster: RosterSlotCounts = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DEF: 0, BENCH: 0 };
+  const roster: RosterSlotCounts = {
+    QB: 0,
+    RB: 0,
+    WR: 0,
+    TE: 0,
+    FLEX: 0,
+    SUPER_FLEX: 0,
+    K: 0,
+    DEF: 0,
+    BENCH: 0,
+  };
   for (const raw of positions ?? []) {
     const p = String(raw).toUpperCase();
     if (p === "QB") roster.QB++;
@@ -49,7 +59,9 @@ function slotCounts(positions: string[] | undefined): RosterSlotCounts {
     else if (p === "TE") roster.TE++;
     else if (p === "K") roster.K++;
     else if (p === "DEF" || p === "DST") roster.DEF++;
-    else if (p.includes("FLEX") || p === "SUPER_FLEX" || p === "REC_FLEX") roster.FLEX++;
+    else if (p === "SUPER_FLEX" || p === "SUPERFLEX" || p === "SFLEX" || p === "Q/W/R/T")
+      roster.SUPER_FLEX++;
+    else if (p.includes("FLEX") || p === "REC_FLEX") roster.FLEX++;
     else if (p === "BN" || p === "TAXI") roster.BENCH++;
   }
   return roster;
@@ -140,9 +152,12 @@ export async function fetchLeagueSyncPreferred(input: {
       sleeperJson<{ roster_id: number; owner_id: string | null; players?: string[] | null }[]>(
         `${SLEEPER}/league/${leagueId}/rosters`,
       ),
-      sleeperJson<{ user_id: string; display_name: string; metadata?: { team_name?: string } }[]>(
-        `${SLEEPER}/league/${leagueId}/users`,
-      ),
+      sleeperJson<{
+        user_id: string;
+        display_name: string;
+        username?: string;
+        metadata?: { team_name?: string };
+      }[]>(`${SLEEPER}/league/${leagueId}/users`),
     ]);
     if (!league || !rosters) return null;
 
@@ -171,18 +186,33 @@ export async function fetchLeagueSyncPreferred(input: {
     const picks: { playerId: string; team: number }[] = [];
     let myTeam: number | null = null;
     const wanted = username.toLowerCase();
+    const me = wanted
+      ? await sleeperJson<{ user_id?: string }>(
+          `${SLEEPER}/user/${encodeURIComponent(wanted)}`,
+        ).catch(() => null)
+      : null;
+    const myUserId = me?.user_id ?? null;
 
     for (const r of ordered) {
       const slot = slotByRoster.get(r.roster_id) ?? r.roster_id;
       const u = r.owner_id ? byUser.get(r.owner_id) : undefined;
       teamNames[String(slot)] = u?.metadata?.team_name?.trim() || u?.display_name || `Team ${slot}`;
-      if (wanted && u && u.display_name.toLowerCase() === wanted) myTeam = slot;
+      if (
+        wanted &&
+        u &&
+        ((myUserId && u.user_id === myUserId) ||
+          u.display_name.toLowerCase() === wanted ||
+          (u.username && u.username.toLowerCase() === wanted))
+      ) {
+        myTeam = slot;
+      }
       for (const pid of r.players ?? []) picks.push({ playerId: String(pid), team: slot });
     }
 
     const roster = slotCounts(league.roster_positions);
     const total = Object.values(roster).reduce((a, b) => a + b, 0);
     const teams = league.total_rosters || ordered.length || 12;
+    const draftType = (draft?.type ?? "snake").toLowerCase();
 
     const sync: LeagueSync = {
       league: {
@@ -195,7 +225,7 @@ export async function fetchLeagueSyncPreferred(input: {
       },
       teams,
       rounds: total || Number(draft?.settings?.rounds) || 15,
-      snake: (draft?.type ?? "snake") !== "linear",
+      snake: draftType !== "linear" && draftType !== "auction",
       playoffStartWeek: Number(league.settings?.["playoff_week_start"]) || 15,
       scoring: scoringKey(league.scoring_settings),
       roster,

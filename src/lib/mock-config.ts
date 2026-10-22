@@ -37,8 +37,9 @@ export const ROSTER_FIELDS: { key: keyof RosterSlots; label: string }[] = [
   { key: "WR", label: "WR" },
   { key: "TE", label: "TE" },
   { key: "FLEX", label: "FLEX" },
+  { key: "SUPER_FLEX", label: "SUPER FLEX" },
   { key: "K", label: "K" },
-  { key: "DEF", label: "DEF" },
+  { key: "DEF", label: "DST" },
   { key: "BENCH", label: "BENCH" },
 ];
 
@@ -54,6 +55,18 @@ export const DEFAULT_MOCK_CONFIG: MockConfig = {
 };
 
 const KEY = "mock-draft-config-v1";
+const SESSION_KEY = "mock-draft-session-v1";
+
+export type MockSessionState = {
+  config: MockConfig;
+  picks: { playerId: string; team: number; overall: number }[];
+  watch: string[];
+  customOrder: string[];
+  speed: "normal" | "fast" | "manual";
+  paused: boolean;
+  tab: "players" | "board" | "team";
+  rosterTeam: number;
+};
 
 export function saveMockConfig(config: MockConfig) {
   if (typeof window === "undefined") return;
@@ -74,6 +87,50 @@ export function loadMockConfig(): MockConfig | null {
   } catch {
     return null;
   }
+}
+
+export function saveMockSession(state: MockSessionState) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(state));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+export function loadMockSession(): MockSessionState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as MockSessionState;
+  } catch {
+    return null;
+  }
+}
+
+export function clearMockSession() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(SESSION_KEY);
+}
+
+/** True when the in-progress session belongs to the same setup config. */
+export function mockSessionMatchesConfig(
+  session: MockSessionState | null,
+  config: MockConfig,
+): boolean {
+  if (!session?.config) return false;
+  const a = session.config;
+  return (
+    a.teams === config.teams &&
+    a.slot === config.slot &&
+    a.scoring === config.scoring &&
+    a.snake === config.snake &&
+    a.teamName === config.teamName &&
+    a.timerLabel === config.timerLabel &&
+    a.playoffsStartWeek === config.playoffsStartWeek &&
+    JSON.stringify(a.roster) === JSON.stringify({ ...DEFAULT_ROSTER, ...config.roster })
+  );
 }
 
 export function timerSecondsFor(label: string): number | null {

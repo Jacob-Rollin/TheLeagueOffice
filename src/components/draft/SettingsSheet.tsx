@@ -18,7 +18,9 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import {
+  DEFAULT_ROSTER,
   DEFAULT_SETTINGS,
+  posDisplayLabel,
   rosterSize,
   SCORING_LABEL,
   type RosterSlots,
@@ -26,7 +28,17 @@ import {
   type Settings,
 } from "@/lib/draft";
 
-const ROSTER_KEYS: (keyof RosterSlots)[] = ["QB", "RB", "WR", "TE", "FLEX", "K", "DEF", "BENCH"];
+const ROSTER_KEYS: (keyof RosterSlots)[] = [
+  "QB",
+  "RB",
+  "WR",
+  "TE",
+  "FLEX",
+  "SUPER_FLEX",
+  "K",
+  "DEF",
+  "BENCH",
+];
 
 function Stepper({
   label,
@@ -108,7 +120,10 @@ export function SettingsSheet({
     const id = activeLeague?.id ?? null;
     if (!id || !synced) return;
     const teams = Number(synced?.teams) || DEFAULT_SETTINGS.teams;
-    const roster = (synced?.roster ?? DEFAULT_SETTINGS.roster) as RosterSlots;
+    const roster = {
+      ...DEFAULT_ROSTER,
+      ...(synced?.roster ?? DEFAULT_SETTINGS.roster),
+    } as RosterSlots;
     // ROUNDS always snaps to the synced total roster slot capacity.
     const rounds = rosterSize(roster) || Number(synced?.rounds) || DEFAULT_SETTINGS.rounds;
     const signature = `${id}:${JSON.stringify([teams, rounds, synced?.myTeam, synced?.scoring, synced?.snake, roster, synced?.teamNames])}`;
@@ -341,8 +356,14 @@ export function SettingsSheet({
             {ROSTER_KEYS.map((k) => (
               <Stepper
                 key={k}
-                label={k === "BENCH" ? "Bench" : k}
-                value={settings.roster[k]}
+                label={
+                  k === "BENCH"
+                    ? "Bench"
+                    : k === "SUPER_FLEX"
+                      ? "Super Flex"
+                      : posDisplayLabel(k)
+                }
+                value={settings.roster[k] ?? 0}
                 min={0}
                 max={12}
                 onChange={(v) => setRoster(k, v)}

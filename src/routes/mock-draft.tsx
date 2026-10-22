@@ -32,7 +32,16 @@ import {
   generateOpponents,
   type Personality,
 } from "@/lib/mock-ai";
-import { loadMockConfig, timerSecondsFor, type MockConfig } from "@/lib/mock-config";
+import {
+  clearMockSession,
+  loadMockConfig,
+  loadMockSession,
+  mockSessionMatchesConfig,
+  saveMockSession,
+  timerSecondsFor,
+  type MockConfig,
+  type MockSessionState,
+} from "@/lib/mock-config";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import { cn } from "@/lib/utils";
 
@@ -196,9 +205,10 @@ function MockDraftPage() {
   }, [started, complete, myTurn, paused, speed, picks.length, data.players.length]);
 
   // Pick clock: counts down only while the human is on the clock and unpaused.
+  // Off-turn / AI slots show --:-- so the timer does not look stuck.
   useEffect(() => {
     if (!myTurn || timerSeconds === null) {
-      setClock(timerSeconds === null ? null : timerSeconds);
+      setClock(null);
       return;
     }
     if (paused) return;
@@ -220,16 +230,17 @@ function MockDraftPage() {
     if (choice) commitPick(choice.id, settings.myTeam);
   }, [clock, myTurn, paused, available, myPlayers, settings, picks.length, commitPick]);
 
-  // Boot the arena from the standalone /mock-draft/setup configuration.
+  // Boot the arena from setup config; restore an in-progress session when it matches.
   useEffect(() => {
     const stored = loadMockConfig();
     if (!stored) {
       navigate({ to: "/mock-draft/setup" });
       return;
     }
-    const roster = { ...stored.roster };
+    const roster = { ...DEFAULT_SETTINGS.roster, ...stored.roster };
     const rounds = Math.max(1, rosterSize(roster));
     const slot = Math.min(Math.max(1, stored.slot), stored.teams);
+    const nextConfig = { ...stored, slot, roster };
     const { names, personas: personaMap } = generateOpponents(
       stored.teams,
       slot,
@@ -246,13 +257,44 @@ function MockDraftPage() {
       teamNames: names,
     });
     setPersonas(personaMap);
-    setPicks([]);
-    setRosterTeam(slot);
-    setSpeed("normal");
-    setPaused(false);
-    setTab("players");
-    setConfig({ ...stored, slot });
+
+    const session = loadMockSession();
+    if (mockSessionMatchesConfig(session, nextConfig) && session && session.picks.length > 0) {
+      setPicks(session.picks);
+      setWatch(session.watch ?? []);
+      setCustomOrder(session.customOrder ?? []);
+      setSpeed(session.speed ?? "normal");
+      setPaused(Boolean(session.paused));
+      setTab(session.tab ?? "players");
+      setRosterTeam(session.rosterTeam || slot);
+    } else {
+      setPicks([]);
+      setWatch([]);
+      setCustomOrder([]);
+      setRosterTeam(slot);
+      setSpeed("normal");
+      setPaused(false);
+      setTab("players");
+      clearMockSession();
+    }
+    setConfig(nextConfig);
   }, [navigate]);
+
+  // Persist in-progress mock so refresh / remount does not wipe the board.
+  useEffect(() => {
+    if (!config || !started) return;
+    const payload: MockSessionState = {
+      config,
+      picks,
+      watch,
+      customOrder,
+      speed,
+      paused,
+      tab,
+      rosterTeam,
+    };
+    saveMockSession(payload);
+  }, [config, started, picks, watch, customOrder, speed, paused, tab, rosterTeam]);
 
   const toggleWatch = useCallback(
     (id: string) =>
@@ -262,6 +304,10 @@ function MockDraftPage() {
   const undoPick = useCallback(() => setPicks((prev) => prev.slice(0, -1)), []);
 
   const restart = () => {
+    if (picks.length > 0 && !window.confirm("Leave this mock draft and start a new one?")) {
+      return;
+    }
+    clearMockSession();
     navigate({ to: "/mock-draft/setup" });
   };
 
@@ -274,7 +320,7 @@ function MockDraftPage() {
 
   return (
     <main
-      className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col"
+      className="mx-auto flex min-h-screen w-full max-w-shell flex-col"
       style={{ "--wr-header-h": `${headerH}px` } as React.CSSProperties}
     >
       <header
@@ -442,7 +488,7 @@ function MockDraftPage() {
         )}
         {tab === "players" && !complete && syncing && (
           <div className="space-y-2 px-3 py-6">
-            <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
               Syncing player database…
             </p>
             {Array.from({ length: 8 }).map((_, i) => (
@@ -527,12 +573,19 @@ function MockDraftPage() {
       <PlayerModalHost
         ref={modalRef}
         showDraftActions
+        canDraft={myTurn}
+        scoringFormat={settings.scoring}
+        onScoringFormatChange={(format) =>
+          setSettings((prev) => ({ ...prev, scoring: format }))
+        }
         resolveDraftRosterLabel={(playerId) => {
           const pick = picks.find((p) => p.playerId === playerId);
           return pick ? teamName(settings, pick.team) : null;
         }}
         isSessionDrafted={(playerId) => draftedIds.has(playerId)}
         onSessionDraft={draftForUser}
+        isSessionWatched={(playerId) => watchIds.has(playerId)}
+        onSessionToggleWatch={toggleWatch}
       />
     </main>
   );

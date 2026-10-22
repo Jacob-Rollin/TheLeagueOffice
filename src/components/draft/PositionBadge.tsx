@@ -23,7 +23,7 @@ export function PositionBadge({ pos, className }: { pos: Pos | string; className
         className,
       )}
     >
-      {pos}
+      {pos === "DEF" ? "DST" : pos}
     </span>
   );
 }

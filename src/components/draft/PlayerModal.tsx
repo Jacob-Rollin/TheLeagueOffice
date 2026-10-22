@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import { PlayerDetail } from "./PlayerDetail";
+import type { Scoring } from "@/lib/draft";
 import { hasDesktopOverlay } from "@/lib/desktop-overlay";
 
 export function PlayerModal({
@@ -13,6 +14,11 @@ export function PlayerModal({
   draftRosterLabel,
   sessionDrafted,
   onSessionDraft,
+  canDraft = true,
+  sessionWatched,
+  onSessionToggleWatch,
+  scoringFormat,
+  onScoringFormatChange,
 }: {
   id: string | null;
   onClose: () => void;
@@ -23,6 +29,11 @@ export function PlayerModal({
   draftRosterLabel?: string | null;
   sessionDrafted?: boolean;
   onSessionDraft?: (playerId: string) => void;
+  canDraft?: boolean;
+  sessionWatched?: boolean;
+  onSessionToggleWatch?: (playerId: string) => void;
+  scoringFormat?: Scoring;
+  onScoringFormatChange?: (format: Scoring) => void;
 }) {
   useEffect(() => {
     if (!id) return;
@@ -109,6 +120,11 @@ export function PlayerModal({
           draftRosterLabel={showDraftActions ? (draftRosterLabel ?? null) : undefined}
           sessionDrafted={sessionDrafted}
           onSessionDraft={onSessionDraft}
+          canDraft={canDraft}
+          sessionWatched={sessionWatched}
+          onSessionToggleWatch={onSessionToggleWatch}
+          scoringFormat={scoringFormat}
+          onScoringFormatChange={onScoringFormatChange}
         />
       </div>
     </div>,

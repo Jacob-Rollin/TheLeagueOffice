@@ -1,10 +1,6 @@
 import { PositionBadge } from "./PositionBadge";
 import { cn } from "@/lib/utils";
-import { byeMatrix, type Player } from "@/lib/draft";
-
-function posLabel(pos: string): string {
-  return pos === "DEF" ? "DST" : pos;
-}
+import { byeMatrix, posDisplayLabel, type Player } from "@/lib/draft";
 
 export function ByeMatrix({
   players,
@@ -64,7 +60,7 @@ export function ByeMatrix({
                 {list.map((p) => (
                   <li key={p.id} className="flex items-center gap-1">
                     <PositionBadge
-                      pos={posLabel(p.pos)}
+                      pos={posDisplayLabel(p.pos)}
                       className="h-4 min-w-0 px-1 text-[9px]"
                     />
                     <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-800">
