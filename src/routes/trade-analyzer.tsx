@@ -9,7 +9,8 @@ import { useDraft } from "@/hooks/use-draft";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
-import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { TradeSideCompare } from "@/components/trade/TradeSideCompare";
+import { queryOptions, useQueries, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeftRight, BarChart3, ChevronDown, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +18,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { grade } from "@/lib/evaluate";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
+import { getPlayerDetail } from "@/lib/players.functions";
+import type { PlayerDetail } from "@/lib/players.server";
 import {
   POWER_INDEX_CEIL,
   POWER_INDEX_FLOOR,
@@ -57,6 +60,26 @@ const playersQuery = queryOptions({
   queryFn: () => loadPlayersCatalog(),
   staleTime: 1000 * 60 * 30,
 });
+
+const detailQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["player", id, "client-v1"],
+    queryFn: async () => {
+      const { hydratePlayerBrain } = await import("@/lib/playerBrainHydration");
+      const { fetchPlayerDetailClient } = await import("@/lib/player-detail-client");
+      const brain = await hydratePlayerBrain().catch(() => null);
+      const client = await fetchPlayerDetailClient(id, brain);
+      if (client) return client;
+      try {
+        if (import.meta.env.PROD) return null;
+      } catch {
+        /* ignore */
+      }
+      return getPlayerDetail({ data: { id } });
+    },
+    staleTime: 1000 * 60 * 30,
+    retry: false,
+  });
 
 export const Route = createFileRoute("/trade-analyzer")({
   ssr: false,
@@ -317,6 +340,19 @@ function TradeAnalyzerPage() {
     const extras = extraGet.filter((p) => !fromRoster.some((r) => r.id === p.id));
     return [...fromRoster, ...extras];
   }, [rightTeam, getIds, extraGet]);
+
+  const selectedForDetails = useMemo(() => [...give, ...get], [give, get]);
+  const details = useQueries({
+    queries: selectedForDetails.map((p) => detailQuery(p.id)),
+    combine: (results) => {
+      const map = new Map<string, PlayerDetail>();
+      results.forEach((r, i) => {
+        const id = selectedForDetails[i]?.id;
+        if (id && r.data) map.set(id, r.data);
+      });
+      return { map, loading: results.some((r) => r.isLoading) };
+    },
+  });
 
   const toggleGive = (player: Player) => {
     setGiveIds((ids) =>
@@ -722,8 +758,16 @@ function TradeAnalyzerPage() {
             />
           </div>
 
-          {/* Top-row spacer — swap control lives in the roster gap below. */}
-          <div className="hidden sm:block" aria-hidden />
+          <div className="flex items-end justify-center pb-1 sm:self-end sm:pb-2.5">
+            <button
+              type="button"
+              onClick={swapTeams}
+              className="rounded-full p-2 text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-800"
+              aria-label="Swap teams"
+            >
+              <ArrowLeftRight className="size-5" />
+            </button>
+          </div>
 
           <div className="space-y-2">
             <SidePlayerSearch
@@ -767,16 +811,8 @@ function TradeAnalyzerPage() {
             />
           </div>
 
-          <div className="flex items-center justify-center py-1 sm:min-h-[16rem] sm:self-center">
-            <button
-              type="button"
-              onClick={swapTeams}
-              className="rounded-full p-2 text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-800"
-              aria-label="Swap teams"
-            >
-              <ArrowLeftRight className="size-5" />
-            </button>
-          </div>
+          {/* Open center gap between roster cards (swap control sits above with the dropdowns). */}
+          <div className="hidden sm:block" aria-hidden />
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <RosterPanel
@@ -828,6 +864,16 @@ function TradeAnalyzerPage() {
           Select players on both sides to unlock the trade grade and breakdown.
         </div>
       )}
+
+      <TradeSideCompare
+        give={give}
+        get={get}
+        scoring={valueScoring}
+        valueBasis={valueBasis}
+        detailsById={details.map}
+        loading={details.loading}
+        seasonPosRankFor={seasonPosRankFor}
+      />
 
       <PlayerModalHost ref={modalRef} />
     </div>

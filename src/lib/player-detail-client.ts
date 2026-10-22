@@ -26,12 +26,71 @@ function emptySeasonLine(season: string, raw: Record<string, number> = {}): Seas
   };
 }
 
+/** Prefer half-PPR pos rank from career totals; treat Sleeper ≥900 sentinel as empty. */
+function cleanPosRank(raw: number | null | undefined): number | null {
+  if (raw == null || !Number.isFinite(raw) || raw <= 0 || raw >= 900) return null;
+  return Math.round(raw);
+}
+
+const CLIENT_STAT_LINES: Partial<Record<string, [string, string, number][]>> = {
+  QB: [
+    ["pass_yd", "Pass Yds", 0],
+    ["pass_td", "Pass TD", 0],
+    ["pass_int", "INT", 0],
+    ["rush_yd", "Rush Yds", 0],
+    ["rush_td", "Rush TD", 0],
+  ],
+  RB: [
+    ["rush_att", "Carries", 0],
+    ["rush_yd", "Rush Yds", 0],
+    ["rush_td", "Rush TD", 0],
+    ["rec", "Rec", 0],
+    ["rec_yd", "Rec Yds", 0],
+    ["rec_td", "Rec TD", 0],
+  ],
+  WR: [
+    ["rec", "Rec", 0],
+    ["rec_tgt", "Targets", 0],
+    ["rec_yd", "Rec Yds", 0],
+    ["rec_td", "Rec TD", 0],
+    ["rush_yd", "Rush Yds", 0],
+  ],
+  TE: [
+    ["rec", "Rec", 0],
+    ["rec_tgt", "Targets", 0],
+    ["rec_yd", "Rec Yds", 0],
+    ["rec_td", "Rec TD", 0],
+  ],
+  K: [
+    ["fgm", "FG Made", 0],
+    ["fga", "FG Att", 0],
+    ["xpm", "XP Made", 0],
+  ],
+  DEF: [
+    ["sack", "Sacks", 0],
+    ["int", "INT", 0],
+    ["fum_rec", "Fum Rec", 0],
+    ["def_st_td", "TD", 0],
+    ["pts_allow", "Pts allowed", 0],
+  ],
+};
+
 function seasonLineFromCareer(
   year: string,
   games: number,
   pts: { std: number | null; half: number | null; ppr: number | null },
+  posRank: { std: number | null; half: number | null; ppr: number | null },
+  pos: string,
   raw: Record<string, number>,
 ): SeasonLine {
+  const defs = CLIENT_STAT_LINES[pos] ?? [];
+  const line = defs
+    .map(([key, label, digits]) => ({
+      label,
+      value: Number(raw[key] ?? 0).toFixed(digits),
+    }))
+    .filter((x) => x.value !== "0" || defs.length <= 4);
+
   return {
     season: year,
     games,
@@ -40,8 +99,9 @@ function seasonLineFromCareer(
       half: pts.half ?? 0,
       ppr: pts.ppr ?? 0,
     },
-    posRank: null,
-    line: [],
+    // Half as default; trade pages overlay league-format YTD via rankFor.
+    posRank: cleanPosRank(posRank.half ?? posRank.ppr ?? posRank.std),
+    line,
     raw,
   };
 }
@@ -55,7 +115,8 @@ function simpleInjuryRisk(player: Player, history: SeasonLine[]) {
   if (rookie) factors.push("Rookie — no NFL injury history");
   else if (history.length) {
     score += Math.min(45, totalMissed * 5);
-    if (totalMissed >= 6) factors.push(`${totalMissed} games missed over the last ${history.length} seasons`);
+    if (totalMissed >= 6)
+      factors.push(`${totalMissed} games missed over the last ${history.length} seasons`);
     else if (totalMissed > 0) factors.push(`${totalMissed} games missed recently`);
     else factors.push("No games missed in tracked seasons");
   }
@@ -69,7 +130,9 @@ function simpleInjuryRisk(player: Player, history: SeasonLine[]) {
   return { score, label, factors };
 }
 
-async function loadCatalogPlayer(id: string): Promise<{ player: Player; season: string; all: Player[] } | null> {
+async function loadCatalogPlayer(
+  id: string,
+): Promise<{ player: Player; season: string; all: Player[] } | null> {
   const hit = await readCache<PlayersPayload>(CATALOG_KEY);
   const payload = hit?.data;
   if (!payload?.players?.length) return null;
@@ -99,9 +162,7 @@ export async function fetchPlayerDetailClient(
       .then((m) => m.ownershipForPlayerClient(clean))
       .catch(() => null),
     // Shared IndexedDB week-proj overlay (same key as ATP / useLiveInjuryStatuses).
-    import("@/lib/sleeper-client")
-      .then((m) => m.fetchLiveInjuryStatusesClient())
-      .catch(() => null),
+    import("@/lib/sleeper-client").then((m) => m.fetchLiveInjuryStatusesClient()).catch(() => null),
   ]);
   const live = liveInjuries?.[clean];
   const injuryStatus =
@@ -163,7 +224,14 @@ export async function fetchPlayerDetailClient(
   const currentCareer = career.find((c) => c.year === season);
   const seasonToDate =
     currentCareer && currentCareer.games > 0
-      ? seasonLineFromCareer(season, currentCareer.games, currentCareer.pts, currentCareer.raw)
+      ? seasonLineFromCareer(
+          season,
+          currentCareer.games,
+          currentCareer.pts,
+          currentCareer.posRank,
+          player.pos,
+          currentCareer.raw,
+        )
       : null;
 
   // History filled when user opens Logs (includeCareer). Keep injury-risk usable.
