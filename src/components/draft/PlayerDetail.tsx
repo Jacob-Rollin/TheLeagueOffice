@@ -752,6 +752,7 @@ export function PlayerDetail({
             pos={player.pos}
             team={player.team}
             scoringFormat={scoringFormat}
+            playerSos={playerSos}
           />
         )}
         {tab === "sos" && (
@@ -824,6 +825,51 @@ const CATEGORY_TH =
   "text-[10px] font-black tracking-widest text-slate-400 uppercase text-center border-b border-slate-100 py-1";
 const MICRO_TH =
   "px-3 py-2.5 text-[11px] font-black uppercase tracking-widest text-slate-900";
+/** Hairline between Fantasy / Passing / … category blocks (matches mobile). */
+const GROUP_EDGE = "border-l border-slate-200";
+/** Soft Fpts column wash — same light-theme tone as mobile `--m-rank-col`. */
+const FPTS_COL_BG = "bg-[#e3f4f9]";
+
+/**
+ * Soft heat for weekly Sleeper pos_rank_* (1 = best at position that week).
+ * Same 10 / 22 bands as mobile player sheet.
+ */
+function weeklyPosRankCellClass(rank: number | null | undefined): string | undefined {
+  if (rank == null || !Number.isFinite(rank) || rank <= 0) return undefined;
+  if (rank <= 10) return "bg-emerald-500/25 font-semibold text-emerald-950";
+  if (rank <= 22) return "bg-amber-400/30 font-semibold text-amber-950";
+  return "bg-rose-500/25 font-semibold text-rose-950";
+}
+
+/** Sleeper stamps unranked / DNP weeks as 999 — treat ≥900 as empty. */
+function weeklyPosRankDisplay(raw: unknown): number | null {
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v <= 0 || v >= 900) return null;
+  return Math.round(v);
+}
+
+function posRankStatKey(format: Scoring): string {
+  if (format === "ppr") return "pos_rank_ppr";
+  if (format === "std") return "pos_rank_std";
+  return "pos_rank_half_ppr";
+}
+
+function formatSnapPct(raw: Record<string, number> | undefined, played: boolean): string {
+  if (!played || !raw) return "-";
+  const v = Number(raw["snap_pct"]);
+  return Number.isFinite(v) ? `${Math.round(v)}%` : "-";
+}
+
+function formatOppLabel(g: { opp?: string | null; isAway?: boolean; location?: string }): string {
+  if (
+    g.isAway ||
+    g.location === "away" ||
+    g.opp?.trim().startsWith("@")
+  ) {
+    return `@ ${g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ?? ""}`;
+  }
+  return g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() || "-";
+}
 
 /** Position-specific macro groups for Sleeper-style double-tier headers. */
 function positionStatGroups(pos: string): StatGroup[] {
@@ -945,28 +991,27 @@ function positionStatGroups(pos: string): StatGroup[] {
   }
 }
 
-function positionStatCols(pos: string): StatCol[] {
-  return positionStatGroups(pos).flatMap((g) => g.cols);
-}
-
 function DoubleTierThead({
   leftLabels,
   fantasyLabels,
   groups,
+  fantasyHighlightIndex,
 }: {
   leftLabels: string[];
   fantasyLabels: string[];
   groups: StatGroup[];
+  /** Soft wash on a Fantasy micro-header (e.g. Fpts). */
+  fantasyHighlightIndex?: number;
 }) {
   return (
     <thead>
       <tr>
         <th colSpan={leftLabels.length} className={CATEGORY_TH} aria-hidden />
-        <th colSpan={fantasyLabels.length} className={CATEGORY_TH}>
+        <th colSpan={fantasyLabels.length} className={cn(CATEGORY_TH, GROUP_EDGE)}>
           FANTASY
         </th>
         {groups.map((g) => (
-          <th key={g.label} colSpan={g.cols.length} className={CATEGORY_TH}>
+          <th key={g.label} colSpan={g.cols.length} className={cn(CATEGORY_TH, GROUP_EDGE)}>
             {g.label}
           </th>
         ))}
@@ -977,14 +1022,25 @@ function DoubleTierThead({
             {h}
           </th>
         ))}
-        {fantasyLabels.map((h) => (
-          <th key={`fan-${h}`} className={cn(MICRO_TH, "text-center")}>
+        {fantasyLabels.map((h, i) => (
+          <th
+            key={`fan-${h}`}
+            className={cn(
+              MICRO_TH,
+              "text-center",
+              i === 0 && GROUP_EDGE,
+              fantasyHighlightIndex === i && FPTS_COL_BG,
+            )}
+          >
             {h}
           </th>
         ))}
         {groups.flatMap((g) =>
-          g.cols.map((col) => (
-            <th key={`${g.label}-${col.label}`} className={cn(MICRO_TH, "text-center")}>
+          g.cols.map((col, ci) => (
+            <th
+              key={`${g.label}-${col.label}`}
+              className={cn(MICRO_TH, "text-center", ci === 0 && GROUP_EDGE)}
+            >
               {col.label}
             </th>
           )),
@@ -1085,18 +1141,26 @@ function avgOrDash(
   return (num / den).toFixed(1);
 }
 
-function renderStatCells(
+function renderGroupedStatCells(
   raw: Record<string, number> | undefined,
-  cols: StatCol[],
+  groups: StatGroup[],
   played: boolean,
 ) {
-  return cols.map((col) => (
-    <td key={col.label} className="px-3 py-2.5 text-center font-mono text-slate-700">
-      {col.kind === "avg"
-        ? avgOrDash(raw, col.numKey, col.denKey, played)
-        : numOrDash(raw, col.key, played)}
-    </td>
-  ));
+  return groups.flatMap((g) =>
+    g.cols.map((col, ci) => (
+      <td
+        key={`${g.label}-${col.label}`}
+        className={cn(
+          "px-3 py-2.5 text-center font-mono text-slate-700",
+          ci === 0 && GROUP_EDGE,
+        )}
+      >
+        {col.kind === "avg"
+          ? avgOrDash(raw, col.numKey, col.denKey, played)
+          : numOrDash(raw, col.key, played)}
+      </td>
+    )),
+  );
 }
 
 function GameLogsPanel({
@@ -1149,8 +1213,8 @@ function GameLogsPanel({
   }, [availableSeasons, season]);
 
   const statGroups = useMemo(() => positionStatGroups(pos), [pos]);
-  const statCols = useMemo(() => positionStatCols(pos), [pos]);
   const formatTag = formatLabel(scoringFormat);
+  const rankKey = posRankStatKey(scoringFormat);
   const teamPrimary = getTeamPrimaryColor(team);
 
   const {
@@ -1203,9 +1267,10 @@ function GameLogsPanel({
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <DoubleTierThead
-                leftLabels={["WK", "OPP", "PROJ"]}
-                fantasyLabels={["PTS"]}
+                leftLabels={["WK", "OPP"]}
+                fantasyLabels={["Proj", "Fpts", "Snp%", "Rank"]}
                 groups={statGroups}
+                fantasyHighlightIndex={1}
               />
               <tbody>
                 {data.logs.map((g, index) => {
@@ -1227,12 +1292,7 @@ function GameLogsPanel({
                   });
                   const hasProj = !g.isBye && projVal != null;
                   const isBye = Boolean(g.isBye) || g.opp === "BYE";
-                  const oppLabel =
-                    (g as { isAway?: boolean }).isAway ||
-                    (g as { location?: string }).location === "away" ||
-                    g.opp?.trim().startsWith("@")
-                      ? `@ ${g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ?? ""}`
-                      : g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() || "-";
+                  const oppLabel = formatOppLabel(g as { opp?: string | null; isAway?: boolean; location?: string });
                   // Current-season logs: tint Opp with positional SoS (same tiers as Outlook).
                   const sosRank =
                     Number.parseInt(season, 10) === currentSeasonYear
@@ -1240,8 +1300,12 @@ function GameLogsPanel({
                       : null;
                   const oppClass =
                     !isBye && sosRank != null && Number.isFinite(sosRank)
-                      ? sosOppTextClass(sosRank)
+                      ? cn("font-semibold", sosOppTextClass(sosRank))
                       : "text-slate-600";
+                  const weekRank = played
+                    ? weeklyPosRankDisplay(g.raw?.[rankKey])
+                    : null;
+                  const rankHeat = weeklyPosRankCellClass(weekRank);
 
                   return (
                     <tr
@@ -1265,14 +1329,32 @@ function GameLogsPanel({
                       </td>
                       <td
                         className={cn(
-                          "px-3 py-2.5 text-center font-mono",
-                          hasProj ? "font-bold text-slate-900" : "text-slate-700",
+                          "px-3 py-2.5 text-center font-mono text-slate-700",
+                          GROUP_EDGE,
                         )}
                       >
                         {hasProj ? fmtFantasyPts(projVal) : "-"}
                       </td>
-                      <td className="px-3 py-2.5 text-center font-mono text-slate-800">{pts}</td>
-                      {renderStatCells(g.raw, statCols, played)}
+                      <td
+                        className={cn(
+                          "px-3 py-2.5 text-center font-mono font-bold text-slate-900",
+                          FPTS_COL_BG,
+                        )}
+                      >
+                        {pts}
+                      </td>
+                      <td className="px-3 py-2.5 text-center font-mono text-slate-700">
+                        {formatSnapPct(g.raw, played)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-3 py-2.5 text-center font-mono text-slate-700",
+                          rankHeat,
+                        )}
+                      >
+                        {weekRank != null ? String(weekRank) : "-"}
+                      </td>
+                      {renderGroupedStatCells(g.raw, statGroups, played)}
                     </tr>
                   );
                 })}
@@ -1293,6 +1375,7 @@ function GameLogsPanel({
                     leftLabels={["YR", "TM", "GM"]}
                     fantasyLabels={[`Pts (${formatTag})`, `Pos Rank (${formatTag})`]}
                     groups={statGroups}
+                    fantasyHighlightIndex={0}
                   />
                   <tbody>
                     {career.map((row: CareerSeasonRow, index) => {
@@ -1315,13 +1398,19 @@ function GameLogsPanel({
                           <td className="px-3 py-2.5 text-center font-mono text-slate-700">
                             {row.games > 0 ? String(row.games) : "-"}
                           </td>
-                          <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-900">
+                          <td
+                            className={cn(
+                              "px-3 py-2.5 text-center font-mono font-bold text-slate-900",
+                              GROUP_EDGE,
+                              FPTS_COL_BG,
+                            )}
+                          >
                             {fmtFantasyPts(pts)}
                           </td>
                           <td className="px-3 py-2.5 text-center font-mono text-slate-700">
                             {rank != null && rank > 0 ? String(rank) : "-"}
                           </td>
-                          {renderStatCells(row.raw, statCols, true)}
+                          {renderGroupedStatCells(row.raw, statGroups, true)}
                         </tr>
                       );
                     })}
@@ -1341,14 +1430,23 @@ function ProjectionsPanel({
   pos,
   team,
   scoringFormat,
+  playerSos,
 }: {
   id: string;
   pos: string;
   team: string;
   scoringFormat: Scoring;
+  playerSos?: PlayerSos | null;
 }) {
   const statGroups = useMemo(() => positionStatGroups(pos), [pos]);
-  const statCols = useMemo(() => positionStatCols(pos), [pos]);
+  const rankKey = posRankStatKey(scoringFormat);
+  const sosRankByWeek = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const m of playerSos?.matchups ?? []) {
+      map.set(Number(m.week), m.rank);
+    }
+    return map;
+  }, [playerSos]);
   const {
     projectFor,
     scoringMap,
@@ -1378,13 +1476,15 @@ function ProjectionsPanel({
     <div className="w-full overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <DoubleTierThead
-          leftLabels={["WK", "OPP", "PROJ"]}
-          fantasyLabels={["PTS"]}
+          leftLabels={["WK", "OPP"]}
+          fantasyLabels={["Proj", "Fpts", "Snp%", "Rank"]}
           groups={statGroups}
+          fantasyHighlightIndex={1}
         />
         <tbody>
           {data.logs.map((g, index) => {
             const isBye = Boolean(g.isBye) || g.opp === "BYE";
+            const played = g.played !== false && !isBye;
             const projVal = resolveLogProjection(g, id, scoringFormat, {
               projectFor,
               nflWeek,
@@ -1394,8 +1494,24 @@ function ProjectionsPanel({
               leagueFormat,
             });
             const hasProj = !isBye && projVal != null;
-            const ptsDisplay = hasProj ? fmtFantasyPts(projVal) : "-";
+            // Actual weekly fantasy points (not a duplicate of Proj).
+            const leaguePts =
+              played && g.raw && Object.keys(g.raw).length > 0
+                ? projectionPoints(g.raw, scoringMap, leagueFormat)
+                : null;
+            const ptsVal = leaguePts ?? ptsForFormat(g.points, scoringFormat);
+            const fpts = played && ptsVal != null ? fmtFantasyPts(ptsVal) : "-";
             const showStats = !isBye && Boolean(g.projRaw && Object.keys(g.projRaw).length);
+            const oppLabel = formatOppLabel(
+              g as { opp?: string | null; isAway?: boolean; location?: string },
+            );
+            const sosRank = sosRankByWeek.get(g.week);
+            const oppClass =
+              !isBye && sosRank != null && Number.isFinite(sosRank)
+                ? cn("font-semibold", sosOppTextClass(sosRank))
+                : "text-slate-600";
+            const weekRank = played ? weeklyPosRankDisplay(g.raw?.[rankKey]) : null;
+            const rankHeat = weeklyPosRankCellClass(weekRank);
 
             return (
               <tr
@@ -1414,25 +1530,37 @@ function ProjectionsPanel({
                       BYE
                     </span>
                   ) : (
-                    <span className="text-slate-600">
-                      {(g as { isAway?: boolean }).isAway ||
-                      (g as { location?: string }).location === "away" ||
-                      g.opp?.trim().startsWith("@")
-                        ? `@ ${g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ?? ""}`
-                        : g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() || "-"}
-                    </span>
+                    <span className={oppClass}>{oppLabel}</span>
                   )}
                 </td>
                 <td
                   className={cn(
-                    "px-3 py-2.5 text-center font-mono",
-                    hasProj ? "font-bold text-slate-900" : "text-slate-700",
+                    "px-3 py-2.5 text-center font-mono text-slate-700",
+                    GROUP_EDGE,
                   )}
                 >
-                  {ptsDisplay}
+                  {hasProj ? fmtFantasyPts(projVal) : "-"}
                 </td>
-                <td className="px-3 py-2.5 text-center font-mono text-slate-800">{ptsDisplay}</td>
-                {renderStatCells(g.projRaw, statCols, showStats)}
+                <td
+                  className={cn(
+                    "px-3 py-2.5 text-center font-mono font-bold text-slate-900",
+                    FPTS_COL_BG,
+                  )}
+                >
+                  {fpts}
+                </td>
+                <td className="px-3 py-2.5 text-center font-mono text-slate-700">
+                  {formatSnapPct(g.raw, played)}
+                </td>
+                <td
+                  className={cn(
+                    "px-3 py-2.5 text-center font-mono text-slate-700",
+                    rankHeat,
+                  )}
+                >
+                  {weekRank != null ? String(weekRank) : "-"}
+                </td>
+                {renderGroupedStatCells(g.projRaw, statGroups, showStats)}
               </tr>
             );
           })}
