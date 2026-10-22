@@ -7,7 +7,9 @@ import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
   ResearchAvailabilityPoolFilter,
-  ResearchFilterTrailing,
+  ResearchPoolFilterRow,
+  ResearchPosFilterRow,
+  RESEARCH_SEARCH_INPUT_CLASS,
 } from "@/components/research/ResearchAvailabilityFilter";
 import {
   ScoringFormatSelect,
@@ -37,7 +39,7 @@ import type { Pos } from "@/lib/draft";
 import { usePrefetchSiblingFormats } from "@/lib/prefetch-research-formats";
 import {
   matchesResearchAvailability,
-  RESEARCH_OWNERSHIP_META,
+  researchOwnershipRowClass,
   type ResearchAvailabilityPool,
   type ResearchOwnership,
 } from "@/lib/research-availability";
@@ -389,7 +391,11 @@ function MatchupsGuidePage() {
         </p>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <ResearchPosFilterRow
+        myTeamOnly={myTeamFilter}
+        onMyTeamChange={setMyTeamOnly}
+        myTeamDisabled={!synced}
+      >
         {POS_TABS.map((tab) => (
           <button
             key={tab.value}
@@ -410,105 +416,100 @@ function MatchupsGuidePage() {
             {tab.label}
           </button>
         ))}
-      </div>
+      </ResearchPosFilterRow>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <ResearchAvailabilityPoolFilter
-            value={pool}
-            onChange={setPool}
-            inactive={myTeamFilter}
-          />
-
-          <Select value={teamFilter} onValueChange={(v) => startTransition(() => setTeamFilter(v))}>
-            <SelectTrigger
-              aria-label="Filter by team"
-              className="h-9 w-[13rem] shrink-0 border-slate-200 bg-white shadow-none"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Players</SelectItem>
-              {teamOptions.map((t) => (
-                <SelectItem key={t.slot} value={`team:${t.slot}`}>
-                  {t.team}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={activeWeek != null ? String(activeWeek) : ""}
-            onValueChange={(v) =>
-              startTransition(() => {
-                setWeek(Number(v));
-                setExpanded(null);
-              })
-            }
-          >
-            <SelectTrigger
-              aria-label="Week"
-              className="h-9 w-[7rem] shrink-0 border-slate-200 bg-white shadow-none"
-            >
-              <SelectValue placeholder="Week" />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
-                <SelectItem key={w} value={String(w)}>
-                  Week {w}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={grade}
-            onValueChange={(v) => startTransition(() => setGrade(v as GradeFilter))}
-          >
-            <SelectTrigger
-              aria-label="Matchup grade"
-              className="h-9 w-[9rem] shrink-0 border-slate-200 bg-white shadow-none"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {GRADE_FILTERS.map((g) => (
-                <SelectItem key={g.value} value={g.value}>
-                  <span className="inline-flex items-center gap-2">
-                    {g.dot ? (
-                      <span className={cn("size-2 rounded-full", g.dot)} aria-hidden="true" />
-                    ) : null}
-                    {g.label}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <ScoringFormatSelect
-            value={scoringFormat}
-            onChange={(next) =>
-              startTransition(() => {
-                setScoringFormat(next);
-                setExpanded(null);
-              })
-            }
-          />
-        </div>
-        <ResearchFilterTrailing
-          myTeamOnly={myTeamFilter}
-          onMyTeamChange={setMyTeamOnly}
-          myTeamDisabled={!synced}
-        >
+      <ResearchPoolFilterRow
+        search={
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search a player or team"
-            className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
+            className={RESEARCH_SEARCH_INPUT_CLASS}
           />
-        </ResearchFilterTrailing>
-      </div>
+        }
+      >
+        <ResearchAvailabilityPoolFilter
+          value={pool}
+          onChange={setPool}
+          inactive={myTeamFilter}
+        />
+
+        <Select value={teamFilter} onValueChange={(v) => startTransition(() => setTeamFilter(v))}>
+          <SelectTrigger
+            aria-label="Filter by team"
+            className="h-9 w-[13rem] shrink-0 border-slate-200 bg-white shadow-none"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Players</SelectItem>
+            {teamOptions.map((t) => (
+              <SelectItem key={t.slot} value={`team:${t.slot}`}>
+                {t.team}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={activeWeek != null ? String(activeWeek) : ""}
+          onValueChange={(v) =>
+            startTransition(() => {
+              setWeek(Number(v));
+              setExpanded(null);
+            })
+          }
+        >
+          <SelectTrigger
+            aria-label="Week"
+            className="h-9 w-[7rem] shrink-0 border-slate-200 bg-white shadow-none"
+          >
+            <SelectValue placeholder="Week" />
+          </SelectTrigger>
+          <SelectContent>
+            {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
+              <SelectItem key={w} value={String(w)}>
+                Week {w}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={grade}
+          onValueChange={(v) => startTransition(() => setGrade(v as GradeFilter))}
+        >
+          <SelectTrigger
+            aria-label="Matchup grade"
+            className="h-9 w-[9rem] shrink-0 border-slate-200 bg-white shadow-none"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {GRADE_FILTERS.map((g) => (
+              <SelectItem key={g.value} value={g.value}>
+                <span className="inline-flex items-center gap-2">
+                  {g.dot ? (
+                    <span className={cn("size-2 rounded-full", g.dot)} aria-hidden="true" />
+                  ) : null}
+                  {g.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <ScoringFormatSelect
+          value={scoringFormat}
+          onChange={(next) =>
+            startTransition(() => {
+              setScoringFormat(next);
+              setExpanded(null);
+            })
+          }
+        />
+      </ResearchPoolFilterRow>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -584,7 +585,7 @@ function MatchupsGuidePage() {
                       <tr
                         className={cn(
                           "cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50/80",
-                          RESEARCH_OWNERSHIP_META[row.ownership].row,
+                          researchOwnershipRowClass(row.ownership),
                         )}
                         onClick={() => setExpanded(open ? null : row.id)}
                       >

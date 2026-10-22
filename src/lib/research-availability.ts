@@ -35,6 +35,15 @@ export const RESEARCH_OWNERSHIP_META: Record<
   available: { label: "Available", row: "bg-emerald-50/80" },
 };
 
+/** Row background — taken rows may zebra; available always keeps emerald. */
+export function researchOwnershipRowClass(
+  ownership: ResearchOwnership,
+  zebra = false,
+): string {
+  if (ownership === "taken" && zebra) return "bg-slate-50/50";
+  return RESEARCH_OWNERSHIP_META[ownership].row;
+}
+
 export function resolveResearchOwnership(
   playerId: string,
   myIds: Set<string>,

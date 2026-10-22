@@ -7,7 +7,9 @@ import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
   ResearchAvailabilityPoolFilter,
-  ResearchFilterTrailing,
+  ResearchPoolFilterRow,
+  ResearchPosFilterRow,
+  RESEARCH_SEARCH_INPUT_CLASS,
 } from "@/components/research/ResearchAvailabilityFilter";
 import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
@@ -37,7 +39,7 @@ import { currentSeason, fetchSchedule, type Player } from "@/lib/players-build";
 import { visibleRefetchInterval } from "@/lib/page-visibility";
 import {
   matchesResearchAvailability,
-  RESEARCH_OWNERSHIP_META,
+  researchOwnershipRowClass,
   type ResearchAvailabilityPool,
   type ResearchOwnership,
 } from "@/lib/research-availability";
@@ -245,8 +247,6 @@ function AreTheyPlayingPage() {
     ? new Date(query.data.updatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
     : null;
   const colSpan = 5;
-  const searchInputClass =
-    "h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64";
 
   return (
     <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
@@ -276,7 +276,11 @@ function AreTheyPlayingPage() {
         </p>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <ResearchPosFilterRow
+        myTeamOnly={myTeamFilter}
+        onMyTeamChange={setMyTeamOnly}
+        myTeamDisabled={!synced}
+      >
         {POS_TABS.map((tab) => (
           <button
             key={tab}
@@ -292,49 +296,44 @@ function AreTheyPlayingPage() {
             {tab === "ALL" ? "Overall" : tab}
           </button>
         ))}
-      </div>
+      </ResearchPosFilterRow>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <ResearchAvailabilityPoolFilter
-            value={pool}
-            onChange={setPool}
-            inactive={myTeamFilter}
-          />
-          <DropdownMenu>
-            <DropdownMenuTrigger className={filterTriggerClass}>
-              Chance to Play
-              <ChevronDown className="size-4 opacity-50" aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56 p-1">
-              {(Object.keys(BAND_META) as ChanceBand[]).map((key) => (
-                <DropdownMenuCheckboxItem
-                  key={key}
-                  checked={band === key}
-                  onCheckedChange={(checked) => startTransition(() => setBand(checked ? key : null))}
-                  onSelect={(e) => e.preventDefault()}
-                  className={cn("rounded-sm", band === key ? BAND_META[key].row : undefined)}
-                >
-                  {BAND_META[key].label}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <ResearchFilterTrailing
-          myTeamOnly={myTeamFilter}
-          onMyTeamChange={setMyTeamOnly}
-          myTeamDisabled={!synced}
-        >
+      <ResearchPoolFilterRow
+        search={
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search players"
-            className={searchInputClass}
+            className={RESEARCH_SEARCH_INPUT_CLASS}
           />
-        </ResearchFilterTrailing>
-      </div>
+        }
+      >
+        <ResearchAvailabilityPoolFilter
+          value={pool}
+          onChange={setPool}
+          inactive={myTeamFilter}
+        />
+        <DropdownMenu>
+          <DropdownMenuTrigger className={filterTriggerClass}>
+            Chance to Play
+            <ChevronDown className="size-4 opacity-50" aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56 p-1">
+            {(Object.keys(BAND_META) as ChanceBand[]).map((key) => (
+              <DropdownMenuCheckboxItem
+                key={key}
+                checked={band === key}
+                onCheckedChange={(checked) => startTransition(() => setBand(checked ? key : null))}
+                onSelect={(e) => e.preventDefault()}
+                className={cn("rounded-sm", band === key ? BAND_META[key].row : undefined)}
+              >
+                {BAND_META[key].label}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </ResearchPoolFilterRow>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -413,17 +412,11 @@ const PlayingRow = memo(function PlayingRow({
   onOpen: (id: string) => void;
 }) {
   const { player, line } = row;
-  const tone =
-    row.ownership === "roster"
-      ? RESEARCH_OWNERSHIP_META.roster.row
-      : zebra
-        ? "bg-slate-50/50"
-        : "bg-white";
   const badge = injuryMicroBadge(row.injuryStatus);
   const posLabel = player.pos;
 
   return (
-    <tr className={cn("border-b border-slate-100", tone)}>
+    <tr className={cn("border-b border-slate-100", researchOwnershipRowClass(row.ownership, zebra))}>
       <td className="px-3 py-2.5">
         <button
           type="button"

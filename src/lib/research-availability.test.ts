@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   matchesResearchAvailability,
+  researchOwnershipRowClass,
   resolveResearchOwnership,
 } from "@/lib/research-availability";
 
@@ -36,5 +37,17 @@ describe("matchesResearchAvailability", () => {
     const state = { pool: "available" as const, myTeamOnly: false };
     expect(matchesResearchAvailability("available", state)).toBe(true);
     expect(matchesResearchAvailability("roster", state)).toBe(false);
+  });
+});
+
+describe("researchOwnershipRowClass", () => {
+  it("keeps emerald for available even when zebra", () => {
+    expect(researchOwnershipRowClass("available")).toContain("emerald");
+    expect(researchOwnershipRowClass("available", true)).toContain("emerald");
+  });
+
+  it("zebras taken only", () => {
+    expect(researchOwnershipRowClass("taken", true)).toBe("bg-slate-50/50");
+    expect(researchOwnershipRowClass("roster", true)).toContain("sky");
   });
 });
