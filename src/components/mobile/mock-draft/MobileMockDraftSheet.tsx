@@ -27,15 +27,37 @@ import { POS_DOT, posCellClass } from "./posCellStyles";
 import { pickLabelForOverall } from "./MobileMockDraftBoard";
 
 type SheetTab = "players" | "queue" | "team";
-type SheetSnap = "peek" | "expanded";
+type SheetSnap = "collapsed" | "peek" | "expanded";
 
 const POS_FILTERS: Array<"ALL" | Pos> = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"];
 
-/** Peek is a short drawer; expanded fills nearly all remaining arena height. */
+/**
+ * Sheet height snaps (% of arena). Collapsed is overwritten at runtime to fit
+ * the grabber + tabs only (Sleeper-style board-max view).
+ */
 const SNAP_PCT: Record<SheetSnap, number> = {
+  collapsed: 9,
   peek: 36,
   expanded: 88,
 };
+
+function nearestSheetSnap(pct: number, collapsedPct: number): SheetSnap {
+  const targets: Array<[SheetSnap, number]> = [
+    ["collapsed", collapsedPct],
+    ["peek", SNAP_PCT.peek],
+    ["expanded", SNAP_PCT.expanded],
+  ];
+  let best: SheetSnap = "peek";
+  let bestDist = Infinity;
+  for (const [key, val] of targets) {
+    const d = Math.abs(val - pct);
+    if (d < bestDist) {
+      bestDist = d;
+      best = key;
+    }
+  }
+  return best;
+}
 
 /** Approx. Draft + rank + name width — past this, Sleeper-style mini name sticks. */
 const NAME_SCROLL_THRESHOLD_PX = 168;
@@ -100,7 +122,9 @@ export function MobileMockDraftSheet({
   }, [picks, byId]);
   const [snap, setSnap] = useState<SheetSnap>("peek");
   const [dragPct, setDragPct] = useState<number | null>(null);
+  const [collapsedPct, setCollapsedPct] = useState(SNAP_PCT.collapsed);
   const sheetRef = useRef<HTMLDivElement | null>(null);
+  const chromeRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{
     startY: number;
     startPct: number;
@@ -110,7 +134,21 @@ export function MobileMockDraftSheet({
   /** After a vertical drag on the header, ignore the synthetic click on a tab. */
   const suppressTabClickRef = useRef(false);
 
-  const heightPct = dragPct ?? SNAP_PCT[snap];
+  const snapPct = (s: SheetSnap) => (s === "collapsed" ? collapsedPct : SNAP_PCT[s]);
+  const heightPct = dragPct ?? snapPct(snap);
+
+  const measureCollapsedPct = () => {
+    const parentH = sheetRef.current?.parentElement?.clientHeight ?? window.innerHeight;
+    const chromeH = chromeRef.current?.offsetHeight ?? 52;
+    if (parentH <= 0) return SNAP_PCT.collapsed;
+    // Fit grabber + tabs only; pad 1px so the border doesn't clip.
+    return Math.max(6, Math.min(18, ((chromeH + 1) / parentH) * 100));
+  };
+
+  useEffect(() => {
+    const next = measureCollapsedPct();
+    setCollapsedPct(next);
+  }, [queuedPlayers.length]);
 
   useEffect(() => {
     if (complete) setSnap("peek");
@@ -122,6 +160,8 @@ export function MobileMockDraftSheet({
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const parentH = sheetRef.current?.parentElement?.clientHeight ?? window.innerHeight;
+    const nextCollapsed = measureCollapsedPct();
+    setCollapsedPct(nextCollapsed);
     dragRef.current = {
       startY: e.clientY,
       startPct: heightPct,
@@ -139,16 +179,18 @@ export function MobileMockDraftSheet({
       drag.moved = true;
     }
     const deltaPct = (deltaY / drag.parentH) * 100;
-    setDragPct(Math.min(92, Math.max(26, drag.startPct + deltaPct)));
+    const floor = measureCollapsedPct();
+    setDragPct(Math.min(92, Math.max(floor, drag.startPct + deltaPct)));
   };
 
   const onHeaderPointerUp = () => {
     const drag = dragRef.current;
     if (!drag) return;
     if (drag.moved) {
-      const current = dragPct ?? SNAP_PCT[snap];
-      const mid = (SNAP_PCT.peek + SNAP_PCT.expanded) / 2;
-      setSnap(current >= mid ? "expanded" : "peek");
+      const floor = measureCollapsedPct();
+      setCollapsedPct(floor);
+      const current = dragPct ?? snapPct(snap);
+      setSnap(nearestSheetSnap(current, floor));
       // Swallow the click that follows a drag; clear if no click arrives.
       suppressTabClickRef.current = true;
       window.setTimeout(() => {
@@ -165,12 +207,14 @@ export function MobileMockDraftSheet({
       return;
     }
     onTabChange(key);
+    // Opening a tab from fully collapsed pulls the sheet to peek.
+    if (snap === "collapsed") setSnap("peek");
   };
 
   return (
     <div
       ref={sheetRef}
-      className="flex shrink-0 flex-col rounded-t-2xl border-t border-m-border bg-m-sheet shadow-[0_-8px_24px_rgba(0,0,0,0.28)] transition-[height] duration-200 ease-out"
+      className="flex shrink-0 flex-col overflow-hidden rounded-t-2xl border-t border-m-border bg-m-sheet shadow-[0_-8px_24px_rgba(0,0,0,0.28)] transition-[height] duration-200 ease-out"
       style={{
         height: `${heightPct}%`,
         transitionProperty: dragPct == null ? "height" : "none",
@@ -178,9 +222,10 @@ export function MobileMockDraftSheet({
     >
       {/* Entire chrome (grabber + tabs) resizes the sheet; tabs only change on tap. */}
       <div
+        ref={chromeRef}
         role="slider"
         aria-label="Resize player sheet"
-        aria-valuemin={SNAP_PCT.peek}
+        aria-valuemin={Math.round(collapsedPct)}
         aria-valuemax={SNAP_PCT.expanded}
         aria-valuenow={Math.round(heightPct)}
         tabIndex={0}
@@ -188,10 +233,18 @@ export function MobileMockDraftSheet({
         onPointerMove={onHeaderPointerMove}
         onPointerUp={onHeaderPointerUp}
         onPointerCancel={onHeaderPointerUp}
-        onDoubleClick={() => setSnap((s) => (s === "peek" ? "expanded" : "peek"))}
+        onDoubleClick={() =>
+          setSnap((s) =>
+            s === "collapsed" ? "peek" : s === "peek" ? "expanded" : "collapsed",
+          )
+        }
         onKeyDown={(e) => {
-          if (e.key === "ArrowUp") setSnap("expanded");
-          if (e.key === "ArrowDown") setSnap("peek");
+          if (e.key === "ArrowUp") {
+            setSnap((s) => (s === "collapsed" ? "peek" : "expanded"));
+          }
+          if (e.key === "ArrowDown") {
+            setSnap((s) => (s === "expanded" ? "peek" : "collapsed"));
+          }
         }}
         className="cursor-grab touch-none select-none active:cursor-grabbing"
       >
