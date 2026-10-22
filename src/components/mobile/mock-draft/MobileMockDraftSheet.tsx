@@ -1,4 +1,5 @@
 import {
+  memo,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -6,9 +7,10 @@ import {
   useState,
   startTransition,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
+  type RefObject,
   type UIEvent,
 } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown,
@@ -95,39 +97,39 @@ function sheetSnapInDirection(
   return order[Math.max(0, i - 1)]!;
 }
 
+/** Fallback if the name-end sentinel isn't in the DOM yet. */
+const NAME_SCROLL_THRESHOLD_PX = 168;
+const NAME_COL_CLASS = "w-[7.25rem]";
+const STAR_COL_CLASS = "w-8";
+/** Compact band (h-5) + hairline + two-line identity row. */
+const PLAYER_ROW_ESTIMATE_PX = 76;
+
 /**
  * Nested vertical + horizontal scrollers with directional lock.
  * Native scrolling (and momentum) stay on the winning axis; the other axis is
  * pinned. Avoids touch-none/preventDefault ownership, which felt laggy.
  * Never toggles overflow (that resets scrollLeft).
  */
-function DualAxisScroll({
-  className,
-  onHorizScroll,
-  children,
-}: {
-  className?: string;
-  onHorizScroll?: (e: UIEvent<HTMLDivElement>) => void;
-  children: ReactNode;
-}) {
-  const vertRef = useRef<HTMLDivElement | null>(null);
-  const horizRef = useRef<HTMLDivElement | null>(null);
-  const axisRef = useRef<"x" | "y" | null>(null);
-  const startRef = useRef({ x: 0, y: 0, scrollTop: 0, scrollLeft: 0 });
-
+function useDualAxisLock(
+  vertRef: RefObject<HTMLElement | null>,
+  horizRef: RefObject<HTMLElement | null>,
+) {
   useEffect(() => {
     const vert = vertRef.current;
     const horiz = horizRef.current;
     if (!vert || !horiz) return;
 
+    const axisRef = { current: null as "x" | "y" | null };
+    const startRef = { x: 0, y: 0, scrollTop: 0, scrollLeft: 0 };
+
     const pinOffAxis = () => {
       if (axisRef.current === "x") {
-        if (vert.scrollTop !== startRef.current.scrollTop) {
-          vert.scrollTop = startRef.current.scrollTop;
+        if (vert.scrollTop !== startRef.scrollTop) {
+          vert.scrollTop = startRef.scrollTop;
         }
       } else if (axisRef.current === "y") {
-        if (horiz.scrollLeft !== startRef.current.scrollLeft) {
-          horiz.scrollLeft = startRef.current.scrollLeft;
+        if (horiz.scrollLeft !== startRef.scrollLeft) {
+          horiz.scrollLeft = startRef.scrollLeft;
         }
       }
     };
@@ -136,44 +138,33 @@ function DualAxisScroll({
       const t = e.touches[0];
       if (!t) return;
       axisRef.current = null;
-      startRef.current = {
-        x: t.clientX,
-        y: t.clientY,
-        scrollTop: vert.scrollTop,
-        scrollLeft: horiz.scrollLeft,
-      };
+      startRef.x = t.clientX;
+      startRef.y = t.clientY;
+      startRef.scrollTop = vert.scrollTop;
+      startRef.scrollLeft = horiz.scrollLeft;
     };
 
     const onTouchMove = (e: TouchEvent) => {
       const t = e.touches[0];
       if (!t) return;
-      const dx = t.clientX - startRef.current.x;
-      const dy = t.clientY - startRef.current.y;
+      const dx = t.clientX - startRef.x;
+      const dy = t.clientY - startRef.y;
       if (axisRef.current == null) {
         if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
         axisRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-        // Cancel diagonal drift from the decision window, then let native
-        // scrolling own the winning axis for the rest of the gesture.
-        vert.scrollTop = startRef.current.scrollTop;
-        horiz.scrollLeft = startRef.current.scrollLeft;
+        vert.scrollTop = startRef.scrollTop;
+        horiz.scrollLeft = startRef.scrollLeft;
       }
       pinOffAxis();
     };
 
     const onTouchEnd = () => {
-      // Keep lock briefly so inertial scroll can't nudge the off-axis.
       const axis = axisRef.current;
       if (axis == null) return;
       window.setTimeout(() => {
         if (axisRef.current === axis) axisRef.current = null;
       }, 120);
     };
-
-    // Keep compact-name fade in sync on mount / resize (not only on scroll).
-    const syncCompact = () => updateCompactNameFade(horiz);
-    syncCompact();
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncCompact) : null;
-    ro?.observe(horiz);
 
     vert.addEventListener("touchstart", onTouchStart, { passive: true, capture: true });
     vert.addEventListener("touchmove", onTouchMove, { passive: true, capture: true });
@@ -183,7 +174,6 @@ function DualAxisScroll({
     horiz.addEventListener("scroll", pinOffAxis, { passive: true });
 
     return () => {
-      ro?.disconnect();
       vert.removeEventListener("touchstart", onTouchStart, true);
       vert.removeEventListener("touchmove", onTouchMove, true);
       vert.removeEventListener("touchend", onTouchEnd, true);
@@ -191,38 +181,13 @@ function DualAxisScroll({
       vert.removeEventListener("scroll", pinOffAxis);
       horiz.removeEventListener("scroll", pinOffAxis);
     };
-  }, []);
-
-  return (
-    <div
-      ref={vertRef}
-      className={cn(
-        "min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        className,
-      )}
-    >
-      <div
-        ref={horizRef}
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] [--m-draft-compact-opacity:0]"
-        onScroll={onHorizScroll}
-      >
-        {children}
-      </div>
-    </div>
-  );
+  }, [vertRef, horizRef]);
 }
 
-/** Fallback if the name-end sentinel isn't in the DOM yet. */
-const NAME_SCROLL_THRESHOLD_PX = 168;
-const NAME_COL_CLASS = "w-[7.25rem]";
-const STAR_COL_CLASS = "w-8";
+/** Cached name-column end (content coords). Remeasured on resize / layout change. */
+const nameEndCache = new WeakMap<HTMLElement, number>();
 
-/**
- * Right edge of the player name column in scroll-content coordinates.
- * Uses getBoundingClientRect so it stays correct inside nested flex rows
- * (offsetLeft is relative to offsetParent and was giving a bad threshold).
- */
-function nameColumnEndPx(scrollEl: HTMLElement): number {
+function measureNameColumnEndPx(scrollEl: HTMLElement): number {
   const end = scrollEl.querySelector<HTMLElement>("[data-name-scroll-end]");
   if (!end) return NAME_SCROLL_THRESHOLD_PX;
   const sRect = scrollEl.getBoundingClientRect();
@@ -231,26 +196,34 @@ function nameColumnEndPx(scrollEl: HTMLElement): number {
 }
 
 /**
- * Scroll-linked compact-name opacity (no CSS transition — that lagged flings).
- * Fades 0→1 while the name column leaves the viewport; fully opaque once none
- * of the name column remains on screen (`scrollLeft >= nameEnd`).
+ * Scroll-linked compact-name opacity. nameEnd is cached so scroll frames only
+ * write a quantized CSS var (virtualized rows keep the fan-out tiny).
  */
-function updateCompactNameFade(scrollEl: HTMLElement) {
+function updateCompactNameFade(scrollEl: HTMLElement, remeasure = false) {
   // Hidden keep-alive panes report 0 width — skip so we don't clobber opacity.
   if (scrollEl.clientWidth <= 0) return;
-  scrollEl.style.setProperty("--m-draft-scrollport-w", `${scrollEl.clientWidth}px`);
-  const nameEnd = nameColumnEndPx(scrollEl);
+  const w = scrollEl.clientWidth;
+  if (scrollEl.dataset["draftScrollportW"] !== String(w)) {
+    scrollEl.dataset["draftScrollportW"] = String(w);
+    scrollEl.style.setProperty("--m-draft-scrollport-w", `${w}px`);
+  }
+  let nameEnd = nameEndCache.get(scrollEl);
+  if (nameEnd == null || remeasure) {
+    nameEnd = measureNameColumnEndPx(scrollEl);
+    nameEndCache.set(scrollEl, nameEnd);
+  }
   // 0 at rest → 1 once the name column has fully left the scrollport.
   const opacity = Math.min(1, Math.max(0, scrollEl.scrollLeft / nameEnd));
-  scrollEl.style.setProperty("--m-draft-compact-opacity", opacity.toFixed(3));
-  const on = opacity > 0.04;
+  // 5% steps: progressive enough, far fewer style invalidations on fling.
+  const q = Math.round(opacity * 20) / 20;
+  if (scrollEl.dataset["draftCompactOpacity"] !== String(q)) {
+    scrollEl.dataset["draftCompactOpacity"] = String(q);
+    scrollEl.style.setProperty("--m-draft-compact-opacity", q.toFixed(2));
+  }
+  const on = q > 0.04;
   if (scrollEl.classList.contains("is-scrolled-x") !== on) {
     scrollEl.classList.toggle("is-scrolled-x", on);
   }
-}
-
-function onNameStripScroll(e: UIEvent<HTMLDivElement>) {
-  updateCompactNameFade(e.currentTarget);
 }
 
 export function MobileMockDraftSheet({
@@ -449,6 +422,13 @@ export function MobileMockDraftSheet({
     dragRef.current = null;
   };
 
+  // Optimistic tab chrome — underline / pane visibility update sync; session
+  // tab (persistence) follows in a transition so the arena doesn't hitch.
+  const [localTab, setLocalTab] = useState<SheetTab>(tab);
+  useEffect(() => {
+    setLocalTab(tab);
+  }, [tab]);
+
   // Keep panes mounted after first visit so tab swaps don't remount the
   // heavy players list (that was the main tab-switch hitch).
   const [mountedTabs, setMountedTabs] = useState<Record<SheetTab, boolean>>({
@@ -457,15 +437,17 @@ export function MobileMockDraftSheet({
     team: false,
   });
   useEffect(() => {
-    setMountedTabs((prev) => (prev[tab] ? prev : { ...prev, [tab]: true }));
-  }, [tab]);
+    setMountedTabs((prev) =>
+      prev[localTab] ? prev : { ...prev, [localTab]: true },
+    );
+  }, [localTab]);
 
   const onTabPress = (key: SheetTab) => {
     if (suppressTabClickRef.current) {
       suppressTabClickRef.current = false;
       return;
     }
-    // Transition keeps the tab underline snappy while the pane paints.
+    setLocalTab(key);
     startTransition(() => onTabChange(key));
     // Opening a tab from fully collapsed pulls the sheet to peek.
     if (snap === "collapsed") setSnap("peek");
@@ -523,11 +505,11 @@ export function MobileMockDraftSheet({
               key={key}
               type="button"
               role="tab"
-              aria-selected={tab === key}
+              aria-selected={localTab === key}
               onClick={() => onTabPress(key)}
               className={cn(
                 "flex-1 border-b-2 px-2 py-2 font-display text-xs font-bold uppercase tracking-widest transition-colors",
-                tab === key
+                localTab === key
                   ? "border-m-accent text-m-accent"
                   : "border-transparent text-m-muted",
               )}
@@ -540,8 +522,11 @@ export function MobileMockDraftSheet({
 
       {mountedTabs.players ? (
         <div
-          className={cn("flex min-h-0 flex-1 flex-col", tab !== "players" && "hidden")}
-          aria-hidden={tab !== "players"}
+          className={cn(
+            "flex min-h-0 flex-1 flex-col",
+            localTab !== "players" && "hidden",
+          )}
+          aria-hidden={localTab !== "players"}
         >
           <PlayersPane
             settings={settings}
@@ -562,8 +547,11 @@ export function MobileMockDraftSheet({
       ) : null}
       {mountedTabs.queue ? (
         <div
-          className={cn("flex min-h-0 flex-1 flex-col", tab !== "queue" && "hidden")}
-          aria-hidden={tab !== "queue"}
+          className={cn(
+            "flex min-h-0 flex-1 flex-col",
+            localTab !== "queue" && "hidden",
+          )}
+          aria-hidden={localTab !== "queue"}
         >
           <QueuePane
             queuedPlayers={queuedPlayers}
@@ -581,8 +569,11 @@ export function MobileMockDraftSheet({
       ) : null}
       {mountedTabs.team ? (
         <div
-          className={cn("flex min-h-0 flex-1 flex-col", tab !== "team" && "hidden")}
-          aria-hidden={tab !== "team"}
+          className={cn(
+            "flex min-h-0 flex-1 flex-col",
+            localTab !== "team" && "hidden",
+          )}
+          aria-hidden={localTab !== "team"}
         >
           <TeamPane
             settings={settings}
@@ -600,7 +591,7 @@ export function MobileMockDraftSheet({
   );
 }
 
-function PlayersPane({
+const PlayersPane = memo(function PlayersPane({
   settings,
   available,
   draftedPlayers,
@@ -745,47 +736,177 @@ function PlayersPane({
         </div>
       ) : null}
 
-      <DualAxisScroll className="px-2 pb-3" onHorizScroll={onNameStripScroll}>
+      <VirtualPlayersScroller
+        filtered={filtered}
+        settings={settings}
+        watchIds={watchIds}
+        myTurn={myTurn}
+        complete={complete || draftedOnly}
+        showPrevYear={showPrevYear}
+        prevYear={prevYear}
+        projExtrasById={projExtrasById}
+        projIndex={projIndex}
+        nextUserOverall={nextUserOverall}
+        emptyLabel={
+          draftedOnly
+            ? "No drafted players match these filters."
+            : watchOnly
+              ? "No watchlist players match these filters."
+              : "No players match these filters."
+        }
+        onDraft={onDraft}
+        onToggleQueue={onToggleQueue}
+        onOpenPlayer={onOpenPlayer}
+      />
+    </div>
+  );
+});
+
+/** Virtualized dual-axis player board — only ~viewport rows stay mounted. */
+function VirtualPlayersScroller({
+  filtered,
+  settings,
+  watchIds,
+  myTurn,
+  complete,
+  showPrevYear,
+  prevYear,
+  projExtrasById,
+  projIndex,
+  nextUserOverall,
+  emptyLabel,
+  onDraft,
+  onToggleQueue,
+  onOpenPlayer,
+}: {
+  filtered: Player[];
+  settings: Settings;
+  watchIds: Set<string>;
+  myTurn: boolean;
+  complete: boolean;
+  showPrevYear: boolean;
+  prevYear: number;
+  projExtrasById: Record<string, SeasonProjBoardExtras>;
+  projIndex: number;
+  nextUserOverall: number | null;
+  emptyLabel: string;
+  onDraft: (id: string) => void;
+  onToggleQueue: (id: string) => void;
+  onOpenPlayer: (id: string) => void;
+}) {
+  const vertRef = useRef<HTMLDivElement | null>(null);
+  const horizRef = useRef<HTMLDivElement | null>(null);
+  const rafFadeRef = useRef(0);
+
+  useDualAxisLock(vertRef, horizRef);
+
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => vertRef.current,
+    estimateSize: () => PLAYER_ROW_ESTIMATE_PX,
+    overscan: 8,
+    getItemKey: (i) => filtered[i]?.id ?? i,
+  });
+
+  // Remeasure name-end when Draft column appears/disappears or list mounts.
+  useEffect(() => {
+    const horiz = horizRef.current;
+    if (!horiz) return;
+    const sync = () => updateCompactNameFade(horiz, true);
+    sync();
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
+    ro?.observe(horiz);
+    return () => {
+      ro?.disconnect();
+      if (rafFadeRef.current) {
+        cancelAnimationFrame(rafFadeRef.current);
+        rafFadeRef.current = 0;
+      }
+    };
+  }, [complete, filtered.length]);
+
+  const onHorizScroll = (e: UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (rafFadeRef.current) return;
+    rafFadeRef.current = requestAnimationFrame(() => {
+      rafFadeRef.current = 0;
+      updateCompactNameFade(el, false);
+    });
+  };
+
+  const items = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
+  const padTop = items[0]?.start ?? 0;
+  const padBottom = Math.max(0, totalSize - (items[items.length - 1]?.end ?? 0));
+
+  return (
+    <div
+      ref={vertRef}
+      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-2 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      <div
+        ref={horizRef}
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] [--m-draft-compact-opacity:0]"
+        onScroll={onHorizScroll}
+      >
         {filtered.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-m-muted">
-            {draftedOnly
-              ? "No drafted players match these filters."
-              : watchOnly
-                ? "No watchlist players match these filters."
-                : "No players match these filters."}
-          </p>
+          <p className="px-4 py-8 text-center text-sm text-m-muted">{emptyLabel}</p>
         ) : null}
-        <div className="min-w-max">
-          {filtered.map((p, i) => (
-            <div key={p.id}>
-              {projIndex === i && nextUserOverall != null ? (
-                <div className="my-1 flex w-[100vw] max-w-md items-center gap-2 px-1">
-                  <span className="h-px flex-1 bg-m-accent/70" />
-                  <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
-                    Proj pick: Round {roundOf(nextUserOverall, settings.teams)} Overall #
-                    {nextUserOverall}
-                  </span>
-                  <span className="h-px flex-1 bg-m-accent/70" />
-                </div>
-              ) : null}
-              <PlayerStatsRow
-                player={p}
-                settings={settings}
-                rank={i + 1}
-                queued={watchIds.has(p.id)}
-                myTurn={myTurn}
-                complete={complete || draftedOnly}
-                showPrevYear={showPrevYear}
-                prevYear={prevYear}
-                projExtras={projExtrasById[p.id]}
-                onDraft={onDraft}
-                onToggleQueue={onToggleQueue}
-                onOpenPlayer={onOpenPlayer}
-              />
-            </div>
-          ))}
+        {/* Always-mounted probe so name-end stays measurable under virtualization. */}
+        <div className="pointer-events-none h-0 overflow-hidden" aria-hidden>
+          <div className="flex items-stretch gap-1.5 py-1.5">
+            {!complete ? <span className="w-[3.25rem] shrink-0" /> : null}
+            <span className="w-5 shrink-0" />
+            <span className={cn(NAME_COL_CLASS, "shrink-0")} />
+            <span data-name-scroll-end className="w-0 shrink-0" />
+          </div>
         </div>
-      </DualAxisScroll>
+        {/*
+          Padding spacers keep rows in flow so min-w-max still drives horizontal
+          scroll width (absolute rows would collapse that).
+        */}
+        <div
+          className="min-w-max"
+          style={{ paddingTop: padTop, paddingBottom: padBottom }}
+        >
+          {items.map((item) => {
+            const p = filtered[item.index]!;
+            return (
+              <div
+                key={p.id}
+                data-index={item.index}
+                ref={virtualizer.measureElement}
+              >
+                {projIndex === item.index && nextUserOverall != null ? (
+                  <div className="my-1 flex w-[100vw] max-w-md items-center gap-2 px-1">
+                    <span className="h-px flex-1 bg-m-accent/70" />
+                    <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
+                      Proj pick: Round {roundOf(nextUserOverall, settings.teams)}{" "}
+                      Overall #{nextUserOverall}
+                    </span>
+                    <span className="h-px flex-1 bg-m-accent/70" />
+                  </div>
+                ) : null}
+                <PlayerStatsRow
+                  player={p}
+                  settings={settings}
+                  rank={item.index + 1}
+                  queued={watchIds.has(p.id)}
+                  myTurn={myTurn}
+                  complete={complete}
+                  showPrevYear={showPrevYear}
+                  prevYear={prevYear}
+                  projExtras={projExtrasById[p.id]}
+                  onDraft={onDraft}
+                  onToggleQueue={onToggleQueue}
+                  onOpenPlayer={onOpenPlayer}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -815,7 +936,7 @@ function ToolChip({
   );
 }
 
-function QueuePane({
+const QueuePane = memo(function QueuePane({
   queuedPlayers,
   settings,
   myTurn,
@@ -1013,9 +1134,9 @@ function QueuePane({
       ) : null}
     </div>
   );
-}
+});
 
-function TeamPane({
+const TeamPane = memo(function TeamPane({
   settings,
   picks,
   byId,
@@ -1121,14 +1242,14 @@ function TeamPane({
       </ul>
     </div>
   );
-}
+});
 
 /**
  * Full row scrolls (Draft + name + star + stats). Compact identity band height
  * is always reserved above the stats (no layout snap); it fades in after the
  * name column clears — same idea as Sleeper.
  */
-function PlayerStatsRow({
+const PlayerStatsRow = memo(function PlayerStatsRow({
   player,
   settings,
   rank,
@@ -1275,8 +1396,6 @@ function PlayerStatsRow({
             ) : null}
           </span>
         </button>
-        {/* Compact-name threshold: fires once this marker scrolls past the left edge. */}
-        <span data-name-scroll-end className="w-0 shrink-0" aria-hidden />
         <button
           type="button"
           aria-label={queued ? "Remove from queue" : "Add to queue"}
@@ -1329,7 +1448,7 @@ function PlayerStatsRow({
       </div>
     </div>
   );
-}
+});
 
 function StatCell({
   label,

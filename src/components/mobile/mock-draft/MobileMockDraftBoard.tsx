@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Timer } from "lucide-react";
 
 import {
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 import { posCellClass } from "./posCellStyles";
 
-export function MobileMockDraftBoard({
+export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   settings,
   picks,
   byId,
@@ -192,7 +192,7 @@ export function MobileMockDraftBoard({
       </div>
     </div>
   );
-}
+});
 
 function shortName(name: string): string {
   const parts = name.trim().split(/\s+/);
