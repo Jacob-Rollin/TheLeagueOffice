@@ -670,10 +670,11 @@ function QueuePane({
         <AxisLockedScroll
           className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
           onScroll={(e) => {
-            e.currentTarget.classList.toggle(
-              "is-scrolled-x",
-              e.currentTarget.scrollLeft > NAME_SCROLL_THRESHOLD_PX,
-            );
+            const el = e.currentTarget;
+            const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
+            if (el.classList.contains("is-scrolled-x") !== on) {
+              el.classList.toggle("is-scrolled-x", on);
+            }
           }}
         >
           <div className="min-w-max">
