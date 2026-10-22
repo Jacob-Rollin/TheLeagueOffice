@@ -181,6 +181,8 @@ function AreTheyPlayingPage() {
         injury: shortInjury(
           reportLine.injury ?? liveEntry?.bodyPart ?? player.injury_body_part ?? null,
         ),
+        // Official report designation only. Sleeper IR must not become Out here —
+        // IR-R returnees still practice and need midweek FP/LP grades (~FantasyPros).
         gameStatus: reportLine.gameStatus ?? designationFromStatus(injuryStatus),
       };
       const chance = chanceToPlay(line);
@@ -395,8 +397,10 @@ function AreTheyPlayingPage() {
 
       <p className="mt-3 text-xs text-slate-400">
         Practice participation and designations come from each team&apos;s official injury report, backfilled from
-        the NFL.com league report and ESPN injury news when a club page is incomplete. DNP = did not participate,
-        LP = limited, FP = full participation, Healthy = not on that day&apos;s report.
+        the NFL.com league report and ESPN injury news when a club page is incomplete. Players designated to
+        return from IR stay listed while they practice — Chance to Play follows practice marks until the club
+        posts a game designation. DNP = did not participate, LP = limited, FP = full participation, Healthy =
+        not on that day&apos;s report.
       </p>
 
       <PlayerModalHost ref={modalRef} />
