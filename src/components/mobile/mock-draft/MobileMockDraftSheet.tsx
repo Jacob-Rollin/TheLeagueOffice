@@ -37,7 +37,7 @@ import {
 } from "@/lib/sleeper-client";
 import { cn } from "@/lib/utils";
 
-import { POS_DOT, posCellClass } from "./posCellStyles";
+import { POS_DOT, posSlotBadgeClass } from "./posCellStyles";
 import { pickLabelForOverall } from "./MobileMockDraftBoard";
 
 type SheetTab = "players" | "queue" | "team";
@@ -866,9 +866,8 @@ function TeamPane({
             >
               <span
                 className={cn(
-                  "inline-flex h-8 min-w-[2.6rem] items-center justify-center rounded-md px-1.5 font-display text-[11px] font-bold uppercase",
-                  s.player ? posCellClass(s.player.pos) : "bg-m-chip text-m-chip-fg",
-                  !s.player && (POS_DOT[s.slot] ? "" : ""),
+                  "inline-flex h-8 min-w-[2.6rem] items-center justify-center rounded-md px-1.5 font-display text-[11px] font-bold uppercase tracking-wide",
+                  posSlotBadgeClass(s.slot),
                 )}
               >
                 {s.slot === "DEF"
