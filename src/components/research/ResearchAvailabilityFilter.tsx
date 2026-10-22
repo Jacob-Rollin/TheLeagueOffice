@@ -98,39 +98,61 @@ export function ResearchMyTeamToggle({
   );
 }
 
-type TrailingProps = {
+/** Shared search field classes for the pool/filter row (right side). */
+export const RESEARCH_SEARCH_INPUT_CLASS =
+  "h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64";
+
+type PosRowProps = {
+  children: ReactNode;
   myTeamOnly: boolean;
   onMyTeamChange: (checked: boolean) => void;
   myTeamDisabled?: boolean;
-  /** Search input (or other trailing controls) stacked under My Team. */
-  children?: ReactNode;
   className?: string;
 };
 
-/**
- * Far-right research filter cluster: My Team on top, optional search below.
- * Use without children when the page has no search in this row.
- */
-export function ResearchFilterTrailing({
+/** Top research filter row: position chips (left) + My Team toggle (right). */
+export function ResearchPosFilterRow({
+  children,
   myTeamOnly,
   onMyTeamChange,
   myTeamDisabled = false,
-  children,
   className,
-}: TrailingProps) {
+}: PosRowProps) {
   return (
     <div
       className={cn(
-        "flex w-full flex-col items-stretch gap-2 sm:w-auto sm:min-w-[16rem] sm:items-end",
+        "mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2",
         className,
       )}
     >
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">{children}</div>
       <ResearchMyTeamToggle
         checked={myTeamOnly}
         onCheckedChange={onMyTeamChange}
         disabled={myTeamDisabled}
       />
-      {children}
+    </div>
+  );
+}
+
+type PoolRowProps = {
+  children: ReactNode;
+  /** Search input (or null when this page searches elsewhere). */
+  search?: ReactNode;
+  className?: string;
+};
+
+/** Second research filter row: All/Rostered/Available + other filters (left), search (right). */
+export function ResearchPoolFilterRow({ children, search, className }: PoolRowProps) {
+  return (
+    <div
+      className={cn(
+        "mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div>
+      {search ? <div className="flex w-full justify-end sm:w-auto">{search}</div> : null}
     </div>
   );
 }

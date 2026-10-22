@@ -16,7 +16,9 @@ import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
   ResearchAvailabilityPoolFilter,
-  ResearchFilterTrailing,
+  ResearchPoolFilterRow,
+  ResearchPosFilterRow,
+  RESEARCH_SEARCH_INPUT_CLASS,
 } from "@/components/research/ResearchAvailabilityFilter";
 import {
   nextSortState,
@@ -48,7 +50,7 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import {
   matchesResearchAvailability,
-  RESEARCH_OWNERSHIP_META,
+  researchOwnershipRowClass,
   type ResearchAvailabilityPool,
   type ResearchOwnership,
 } from "@/lib/research-availability";
@@ -371,7 +373,11 @@ function RedZoneStatsPage() {
         </p>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <ResearchPosFilterRow
+        myTeamOnly={myTeamFilter}
+        onMyTeamChange={setMyTeamOnly}
+        myTeamDisabled={!synced}
+      >
         {POS_TABS.map((tab) => (
           <button
             key={tab}
@@ -393,129 +399,124 @@ function RedZoneStatsPage() {
             {tab}
           </button>
         ))}
-      </div>
+      </ResearchPosFilterRow>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <ResearchAvailabilityPoolFilter
-            value={pool}
-            onChange={setPool}
-            inactive={myTeamFilter}
-          />
-
-          <Select
-            value={season}
-            onValueChange={(v) =>
-              startTransition(() => {
-                setSeason(v);
-                setWeekFrom(null);
-                setWeekTo(null);
-              })
-            }
-          >
-            <SelectTrigger className="h-9 w-[7.5rem] shrink-0 border-slate-200 bg-white shadow-none">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {seasons.map((y) => (
-                <SelectItem key={y} value={y}>
-                  {y}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {weekOptions.length > 0 ? (
-            <div className="flex shrink-0 items-center gap-1.5">
-              <Select
-                value={String(shownFrom)}
-                onValueChange={(v) =>
-                  startTransition(() => {
-                    const next = Number(v);
-                    setWeekFrom(next);
-                    if (next > shownTo) setWeekTo(next);
-                  })
-                }
-              >
-                <SelectTrigger
-                  aria-label="From week"
-                  className="h-9 w-[7rem] shrink-0 border-slate-200 bg-white shadow-none"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {weekOptions.map((w) => (
-                    <SelectItem key={w} value={String(w)}>
-                      Week {w}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span className="text-xs font-medium text-slate-500">to</span>
-              <Select
-                value={String(shownTo)}
-                onValueChange={(v) =>
-                  startTransition(() => {
-                    const next = Number(v);
-                    setWeekTo(next);
-                    if (next < shownFrom) setWeekFrom(next);
-                  })
-                }
-              >
-                <SelectTrigger
-                  aria-label="To week"
-                  className="h-9 w-[7rem] shrink-0 border-slate-200 bg-white shadow-none"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {weekOptions.map((w) => (
-                    <SelectItem key={w} value={String(w)}>
-                      Week {w}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-
-          <Select
-            value={String(yardline)}
-            onValueChange={(v) =>
-              startTransition(() => setYardline(Number(v) as YardlineOpt))
-            }
-          >
-            <SelectTrigger className="h-9 w-[8.5rem] shrink-0 border-slate-200 bg-white shadow-none">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {YARDLINE_OPTS.map((yl) => (
-                <SelectItem key={yl} value={String(yl)}>
-                  Inside {yl}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <ScoringFormatSelect
-            value={scoringFormat}
-            onChange={(next) => startTransition(() => setScoringFormat(next))}
-          />
-        </div>
-        <ResearchFilterTrailing
-          myTeamOnly={myTeamFilter}
-          onMyTeamChange={setMyTeamOnly}
-          myTeamDisabled={!synced}
-        >
+      <ResearchPoolFilterRow
+        search={
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search players"
-            className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
+            className={RESEARCH_SEARCH_INPUT_CLASS}
           />
-        </ResearchFilterTrailing>
-      </div>
+        }
+      >
+        <ResearchAvailabilityPoolFilter
+          value={pool}
+          onChange={setPool}
+          inactive={myTeamFilter}
+        />
+
+        <Select
+          value={season}
+          onValueChange={(v) =>
+            startTransition(() => {
+              setSeason(v);
+              setWeekFrom(null);
+              setWeekTo(null);
+            })
+          }
+        >
+          <SelectTrigger className="h-9 w-[7.5rem] shrink-0 border-slate-200 bg-white shadow-none">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {seasons.map((y) => (
+              <SelectItem key={y} value={y}>
+                {y}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {weekOptions.length > 0 ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Select
+              value={String(shownFrom)}
+              onValueChange={(v) =>
+                startTransition(() => {
+                  const next = Number(v);
+                  setWeekFrom(next);
+                  if (next > shownTo) setWeekTo(next);
+                })
+              }
+            >
+              <SelectTrigger
+                aria-label="From week"
+                className="h-9 w-[7rem] shrink-0 border-slate-200 bg-white shadow-none"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {weekOptions.map((w) => (
+                  <SelectItem key={w} value={String(w)}>
+                    Week {w}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-xs font-medium text-slate-500">to</span>
+            <Select
+              value={String(shownTo)}
+              onValueChange={(v) =>
+                startTransition(() => {
+                  const next = Number(v);
+                  setWeekTo(next);
+                  if (next < shownFrom) setWeekFrom(next);
+                })
+              }
+            >
+              <SelectTrigger
+                aria-label="To week"
+                className="h-9 w-[7rem] shrink-0 border-slate-200 bg-white shadow-none"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {weekOptions.map((w) => (
+                  <SelectItem key={w} value={String(w)}>
+                    Week {w}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+
+        <Select
+          value={String(yardline)}
+          onValueChange={(v) =>
+            startTransition(() => setYardline(Number(v) as YardlineOpt))
+          }
+        >
+          <SelectTrigger className="h-9 w-[8.5rem] shrink-0 border-slate-200 bg-white shadow-none">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {YARDLINE_OPTS.map((yl) => (
+              <SelectItem key={yl} value={String(yl)}>
+                Inside {yl}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <ScoringFormatSelect
+          value={scoringFormat}
+          onChange={(next) => startTransition(() => setScoringFormat(next))}
+        />
+      </ResearchPoolFilterRow>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {pos === "QB" ? (
@@ -736,7 +737,7 @@ function VirtualizedRedZoneTable({
                     key={row.id}
                     className={cn(
                       "border-b border-slate-100",
-                      RESEARCH_OWNERSHIP_META[row.ownership].row,
+                      researchOwnershipRowClass(row.ownership),
                     )}
                   >
                     {renderRow(row, row.statRank)}

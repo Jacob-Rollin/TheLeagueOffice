@@ -15,7 +15,9 @@ import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/Play
 import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import {
   ResearchAvailabilityPoolFilter,
-  ResearchFilterTrailing,
+  ResearchPoolFilterRow,
+  ResearchPosFilterRow,
+  RESEARCH_SEARCH_INPUT_CLASS,
 } from "@/components/research/ResearchAvailabilityFilter";
 import {
   ScoringFormatSelect,
@@ -39,7 +41,7 @@ import { fetchMarketHistoryClient } from "@/lib/market-history-client";
 import { usePrefetchSiblingFormats } from "@/lib/prefetch-research-formats";
 import {
   matchesResearchAvailability,
-  RESEARCH_OWNERSHIP_META,
+  researchOwnershipRowClass,
   type ResearchAvailabilityPool,
   type ResearchOwnership,
 } from "@/lib/research-availability";
@@ -300,7 +302,11 @@ function TradeMarketPage() {
         </p>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <ResearchPosFilterRow
+        myTeamOnly={myTeamFilter}
+        onMyTeamChange={setMyTeamOnly}
+        myTeamDisabled={!synced}
+      >
         {POS_TABS.map((tab) => (
           <button
             key={tab}
@@ -316,25 +322,28 @@ function TradeMarketPage() {
             {tab === "ALL" ? "Overall" : tab}
           </button>
         ))}
-      </div>
+      </ResearchPosFilterRow>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <ResearchAvailabilityPoolFilter
-            value={pool}
-            onChange={setPool}
-            inactive={myTeamFilter}
+      <ResearchPoolFilterRow
+        search={
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search players"
+            className={RESEARCH_SEARCH_INPUT_CLASS}
           />
-          <ScoringFormatSelect value={format} onChange={(f) => startTransition(() => setFormat(f))} />
-        </div>
-        <ResearchFilterTrailing
-          myTeamOnly={myTeamFilter}
-          onMyTeamChange={setMyTeamOnly}
-          myTeamDisabled={!synced}
+        }
+      >
+        <ResearchAvailabilityPoolFilter
+          value={pool}
+          onChange={setPool}
+          inactive={myTeamFilter}
         />
-      </div>
+        <ScoringFormatSelect value={format} onChange={(f) => startTransition(() => setFormat(f))} />
+      </ResearchPoolFilterRow>
 
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-border">
+      <div className="mb-4 flex flex-wrap items-end gap-3 border-b border-border">
         <div className="flex flex-wrap gap-1">
           {TARGET_VIEWS.map((item) => (
             <button
@@ -351,15 +360,6 @@ function TradeMarketPage() {
               {item.label}
             </button>
           ))}
-        </div>
-        <div className="w-full pb-2 sm:w-auto">
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search players"
-            className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-72"
-          />
         </div>
       </div>
 
@@ -500,12 +500,10 @@ const MarketRowView = memo(function MarketRowView({
   showGap: boolean;
   onOpen: (id: string) => void;
 }) {
-  const ownTone = RESEARCH_OWNERSHIP_META[row.ownership].row;
-  const tone = row.ownership === "taken" && zebra ? "bg-slate-50/50" : ownTone;
   const freq = row.tradeFrequency;
 
   return (
-    <tr className={cn("border-b border-slate-100", tone)}>
+    <tr className={cn("border-b border-slate-100", researchOwnershipRowClass(row.ownership, zebra))}>
       <td className="px-2 py-2.5 text-center text-sm tabular-nums text-slate-500">{row.rank}</td>
       <td className="px-3 py-2.5">
         <button

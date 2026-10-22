@@ -16,7 +16,9 @@ import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
   ResearchAvailabilityPoolFilter,
-  ResearchFilterTrailing,
+  ResearchPoolFilterRow,
+  ResearchPosFilterRow,
+  RESEARCH_SEARCH_INPUT_CLASS,
 } from "@/components/research/ResearchAvailabilityFilter";
 import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
@@ -39,7 +41,7 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import {
   matchesResearchAvailability,
-  RESEARCH_OWNERSHIP_META,
+  researchOwnershipRowClass,
   type ResearchAvailabilityPool,
   type ResearchOwnership,
 } from "@/lib/research-availability";
@@ -291,7 +293,11 @@ function MostTargetedPage() {
         </p>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <ResearchPosFilterRow
+        myTeamOnly={myTeamFilter}
+        onMyTeamChange={setMyTeamOnly}
+        myTeamDisabled={!synced}
+      >
         {POS_TABS.map((tab) => (
           <button
             key={tab}
@@ -307,65 +313,60 @@ function MostTargetedPage() {
             {tab === "ALL" ? "Overall" : tab}
           </button>
         ))}
-      </div>
+      </ResearchPosFilterRow>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <ResearchAvailabilityPoolFilter
-            value={pool}
-            onChange={setPool}
-            inactive={myTeamFilter}
-          />
-
-          <Select
-            value={season}
-            onValueChange={(v) => startTransition(() => setSeason(v))}
-          >
-            <SelectTrigger className="h-9 w-[7.5rem] border-slate-200 bg-white shadow-none">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {seasons.map((y) => (
-                <SelectItem key={y} value={y}>
-                  {y}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={String(activeWeek > 0 ? activeWeek : "")}
-            onValueChange={(v) =>
-              startTransition(() => setWeek(Math.max(1, Number(v) || 1)))
-            }
-            disabled={weekOptions.length === 0}
-          >
-            <SelectTrigger className="h-9 w-[7rem] border-slate-200 bg-white shadow-none">
-              <SelectValue placeholder="Week" />
-            </SelectTrigger>
-            <SelectContent>
-              {weekOptions.map((w) => (
-                <SelectItem key={w} value={String(w)}>
-                  Week {w}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <ResearchFilterTrailing
-          myTeamOnly={myTeamFilter}
-          onMyTeamChange={setMyTeamOnly}
-          myTeamDisabled={!synced}
-        >
+      <ResearchPoolFilterRow
+        search={
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search players"
-            className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2"
+            className={RESEARCH_SEARCH_INPUT_CLASS}
           />
-        </ResearchFilterTrailing>
-      </div>
+        }
+      >
+        <ResearchAvailabilityPoolFilter
+          value={pool}
+          onChange={setPool}
+          inactive={myTeamFilter}
+        />
+
+        <Select
+          value={season}
+          onValueChange={(v) => startTransition(() => setSeason(v))}
+        >
+          <SelectTrigger className="h-9 w-[7.5rem] border-slate-200 bg-white shadow-none">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {seasons.map((y) => (
+              <SelectItem key={y} value={y}>
+                {y}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={String(activeWeek > 0 ? activeWeek : "")}
+          onValueChange={(v) =>
+            startTransition(() => setWeek(Math.max(1, Number(v) || 1)))
+          }
+          disabled={weekOptions.length === 0}
+        >
+          <SelectTrigger className="h-9 w-[7rem] border-slate-200 bg-white shadow-none">
+            <SelectValue placeholder="Week" />
+          </SelectTrigger>
+          <SelectContent>
+            {weekOptions.map((w) => (
+              <SelectItem key={w} value={String(w)}>
+                Week {w}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </ResearchPoolFilterRow>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div ref={listRef} className="overflow-x-auto">
@@ -475,11 +476,8 @@ const TargetRow = memo(function TargetRow({
   zebra: boolean;
   onOpen: (id: string) => void;
 }) {
-  const ownTone = RESEARCH_OWNERSHIP_META[row.ownership].row;
-  const tone = row.ownership === "taken" && zebra ? "bg-slate-50/50" : ownTone;
-
   return (
-    <tr className={cn("border-b border-slate-100", tone)}>
+    <tr className={cn("border-b border-slate-100", researchOwnershipRowClass(row.ownership, zebra))}>
       <td className="w-10 px-2 py-2.5 text-center text-sm tabular-nums text-slate-500">
         {rank}
       </td>

@@ -15,7 +15,9 @@ import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/Play
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
 import {
   ResearchAvailabilityPoolFilter,
-  ResearchFilterTrailing,
+  ResearchPoolFilterRow,
+  ResearchPosFilterRow,
+  RESEARCH_SEARCH_INPUT_CLASS,
 } from "@/components/research/ResearchAvailabilityFilter";
 import {
   PROJECTION_OWNERSHIP_META,
@@ -323,7 +325,11 @@ function SeasonProjectionsPage() {
         </p>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <ResearchPosFilterRow
+        myTeamOnly={myTeamFilter}
+        onMyTeamChange={setMyTeamOnly}
+        myTeamDisabled={!synced}
+      >
         {PROJECTION_POS_FILTERS.map((pos) => {
           const active = posFilter === pos;
           return (
@@ -342,34 +348,29 @@ function SeasonProjectionsPage() {
             </button>
           );
         })}
-      </div>
+      </ResearchPosFilterRow>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex flex-nowrap items-center gap-2">
-          <ResearchAvailabilityPoolFilter
-            value={pool}
-            onChange={setPool}
-            inactive={myTeamFilter}
-          />
-          <ScoringFormatSelect
-            value={scoringFormat}
-            onChange={(next) => startTransition(() => setScoringFormat(next))}
-          />
-        </div>
-        <ResearchFilterTrailing
-          myTeamOnly={myTeamFilter}
-          onMyTeamChange={setMyTeamOnly}
-          myTeamDisabled={!synced}
-        >
+      <ResearchPoolFilterRow
+        search={
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search players"
-            className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
+            className={RESEARCH_SEARCH_INPUT_CLASS}
           />
-        </ResearchFilterTrailing>
-      </div>
+        }
+      >
+        <ResearchAvailabilityPoolFilter
+          value={pool}
+          onChange={setPool}
+          inactive={myTeamFilter}
+        />
+        <ScoringFormatSelect
+          value={scoringFormat}
+          onChange={(next) => startTransition(() => setScoringFormat(next))}
+        />
+      </ResearchPoolFilterRow>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div ref={listRef} className="overflow-x-auto">
