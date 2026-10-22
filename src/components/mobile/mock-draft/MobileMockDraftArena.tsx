@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Crosshair, Settings, Timer, X } from "lucide-react";
 
@@ -10,6 +10,8 @@ import {
   clearMockSession,
   DEFAULT_MOCK_CONFIG,
   loadMockConfig,
+  loadMockSession,
+  mockSessionMatchesConfig,
   saveMockConfig,
   type MockConfig,
 } from "@/lib/mock-config";
@@ -25,16 +27,24 @@ export function MobileMockDraftArena() {
   const modalRef = useRef<PlayerModalHandle>(null);
   const [jumpSignal, setJumpSignal] = useState(0);
   const [bootKey, setBootKey] = useState(0);
+  const [live, setLive] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<MockConfig>(DEFAULT_MOCK_CONFIG);
   const [showRecap, setShowRecap] = useState(false);
 
-  const goSetup = useCallback(() => {
-    void navigate({ to: "/m/mock-draft/setup" });
-  }, [navigate]);
+  const seedDefaults = useCallback(() => {
+    if (!loadMockConfig()) {
+      saveMockConfig(DEFAULT_MOCK_CONFIG);
+    }
+    setBootKey((k) => k + 1);
+  }, []);
 
-  const session = useMockDraftSession({ onMissingConfig: goSetup, bootKey });
+  const session = useMockDraftSession({
+    onMissingConfig: seedDefaults,
+    bootKey,
+    live,
+  });
   const {
     data,
     syncing,
@@ -70,6 +80,15 @@ export function MobileMockDraftArena() {
     runAiPick,
   } = session;
 
+  // Resume an in-progress session into live mode; otherwise stay in lobby.
+  useEffect(() => {
+    if (!started || !config) return;
+    const stored = loadMockSession();
+    if (mockSessionMatchesConfig(stored, config) && (stored?.picks.length ?? 0) > 0) {
+      setLive(true);
+    }
+  }, [started, config, bootKey]);
+
   const openPlayer = useCallback((id: string) => modalRef.current?.open(id), []);
 
   const leaveToHome = () => {
@@ -95,6 +114,7 @@ export function MobileMockDraftArena() {
       slot: Math.min(Math.max(1, settingsDraft.slot), settingsDraft.teams),
     };
     if (
+      live &&
       picks.length > 0 &&
       !window.confirm("Saving settings restarts this mock with the new configuration. Continue?")
     ) {
@@ -104,14 +124,21 @@ export function MobileMockDraftArena() {
     saveMockConfig(clean);
     setSettingsOpen(false);
     setShowRecap(false);
-    // Remount session from the new config without a full document reload
-    // (avoids re-hitting bootstrap / catalog warm paths unnecessarily).
+    setLive(false);
     setBootKey((k) => k + 1);
+  };
+
+  const startDraft = () => {
+    if (!loadMockConfig()) saveMockConfig(config ?? DEFAULT_MOCK_CONFIG);
+    setLive(true);
   };
 
   if (!started) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center px-6 text-center font-display text-sm font-semibold uppercase tracking-widest text-m-muted">
+      <div
+        className="fixed inset-0 z-40 mx-auto flex max-w-md flex-col items-center justify-center bg-m-bg px-6 text-center font-display text-sm font-semibold uppercase tracking-widest text-m-muted"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
         Loading mock draft…
       </div>
     );
@@ -137,7 +164,9 @@ export function MobileMockDraftArena() {
             type="button"
             onClick={() => {
               clearSession();
-              void navigate({ to: "/m/mock-draft/setup" });
+              setLive(false);
+              setShowRecap(false);
+              setBootKey((k) => k + 1);
             }}
             className="rounded-lg bg-m-accent px-3 py-2 font-display text-xs font-bold uppercase tracking-wide text-m-accent-fg"
           >
@@ -156,13 +185,16 @@ export function MobileMockDraftArena() {
     );
   }
 
+  const inLobby = !live && !complete;
+
   return (
     <div className="fixed inset-0 z-40 mx-auto flex max-w-md flex-col bg-m-bg text-m-card-fg">
       <header
-        className="shrink-0 border-b border-m-border px-2 pb-2"
-        style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
+        className="shrink-0 border-b border-m-border px-2 pb-2.5"
+        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >
-        <div className="relative flex items-start justify-between">
+        {/* Icon row — no absolute center overlay (was colliding with status bar). */}
+        <div className="flex items-center justify-between gap-2">
           <button
             type="button"
             aria-label="Exit draft"
@@ -177,63 +209,50 @@ export function MobileMockDraftArena() {
             <X className="size-5" strokeWidth={2.5} />
           </button>
 
-          <div className="absolute left-1/2 top-0 flex -translate-x-1/2 flex-col items-center">
-            <span
-              className={cn(
-                "rounded-full px-4 py-1.5 font-display text-xs font-extrabold uppercase tracking-wider",
-                complete || myTurn
-                  ? "bg-m-accent text-m-accent-fg"
-                  : "bg-m-chip text-m-chip-fg",
-              )}
+          {inLobby ? (
+            <button
+              type="button"
+              onClick={startDraft}
+              className="min-w-0 flex-1 rounded-full bg-m-accent px-4 py-2.5 font-display text-sm font-extrabold uppercase tracking-wide text-m-accent-fg"
             >
-              {complete
-                ? "Draft Complete!"
-                : paused
-                  ? "Paused"
-                  : myTurn
-                    ? "Your Turn"
-                    : "On the Clock"}
-            </span>
-            {complete ? (
-              <span className="mt-1 text-[11px] font-semibold text-m-muted">
-                {settings.teams}-team {SCORING_LABEL[settings.scoring]}{" "}
-                {settings.snake ? "Snake" : "Linear"}
+              Start Mock Draft
+            </button>
+          ) : (
+            <div className="flex min-w-0 flex-1 flex-col items-center">
+              <span
+                className={cn(
+                  "rounded-full px-4 py-1.5 font-display text-xs font-extrabold uppercase tracking-wider",
+                  complete || myTurn
+                    ? "bg-m-accent text-m-accent-fg"
+                    : "bg-m-chip text-m-chip-fg",
+                )}
+              >
+                {complete
+                  ? "Draft Complete!"
+                  : paused
+                    ? "Paused"
+                    : myTurn
+                      ? "Your Turn"
+                      : "On the Clock"}
               </span>
-            ) : (
-              <>
-                <span
-                  className={cn(
-                    "mt-1 inline-flex items-center gap-1 font-display text-sm tabular-nums",
-                    myTurn && clock !== null && clock <= 10 && !paused
-                      ? "text-red-500"
-                      : "text-m-card-fg",
-                  )}
-                >
-                  <Timer className="size-3.5" strokeWidth={2.5} />
-                  {formatClock(clock)}
-                </span>
-                {!myTurn ? (
-                  <span className="mt-0.5 text-[10px] uppercase tracking-wider text-m-muted">
-                    {teamName(settings, session.onTheClock)} · Pick {mySlotLabel}
-                  </span>
-                ) : null}
-              </>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-1">
+            {!inLobby ? (
+              <button
+                type="button"
+                aria-label="Jump to current pick"
+                onClick={() => setJumpSignal((n) => n + 1)}
+                className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
+              >
+                <Crosshair className="size-5" strokeWidth={2.5} />
+              </button>
+            ) : null}
             <button
               type="button"
-              aria-label="Jump to current pick"
-              onClick={() => setJumpSignal((n) => n + 1)}
-              className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
-            >
-              <Crosshair className="size-5" strokeWidth={2.5} />
-            </button>
-            <button
-              type="button"
-              aria-label="Draft menu"
-              onClick={() => setMenuOpen(true)}
+              aria-label={inLobby ? "Draft settings" : "Draft menu"}
+              onClick={() => (inLobby ? openSettings() : setMenuOpen(true))}
               className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
             >
               <Settings className="size-5" strokeWidth={2.5} />
@@ -241,41 +260,65 @@ export function MobileMockDraftArena() {
           </div>
         </div>
 
-        {!complete ? (
-          <div className="mt-2 flex items-center justify-center gap-1">
-            {(
-              [
-                ["normal", "Normal"],
-                ["fast", "Fast"],
-                ["manual", "Manual"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setSpeed(key)}
-                className={cn(
-                  "rounded-full px-2.5 py-1 font-display text-[10px] font-bold uppercase tracking-wide",
-                  speed === key
-                    ? "bg-m-accent text-m-accent-fg"
-                    : "bg-m-chip text-m-chip-fg",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-            {speed === "manual" && !myTurn ? (
-              <button
-                type="button"
-                onClick={runAiPick}
-                className="rounded-full bg-m-cta px-2.5 py-1 font-display text-[10px] font-bold uppercase text-m-cta-fg"
-              >
-                Advance
-              </button>
+        {!inLobby && !complete ? (
+          <div className="mt-2 flex flex-col items-center gap-1.5">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 font-display text-sm tabular-nums",
+                myTurn && clock !== null && clock <= 10 && !paused
+                  ? "text-red-500"
+                  : "text-m-card-fg",
+              )}
+            >
+              <Timer className="size-3.5" strokeWidth={2.5} />
+              {formatClock(clock)}
+            </span>
+            {!myTurn ? (
+              <span className="text-[10px] uppercase tracking-wider text-m-muted">
+                {teamName(settings, session.onTheClock)} · Pick {mySlotLabel}
+              </span>
             ) : null}
+            <div className="flex items-center justify-center gap-1">
+              {(
+                [
+                  ["normal", "Normal"],
+                  ["fast", "Fast"],
+                  ["manual", "Manual"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSpeed(key)}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 font-display text-[10px] font-bold uppercase tracking-wide",
+                    speed === key
+                      ? "bg-m-accent text-m-accent-fg"
+                      : "bg-m-chip text-m-chip-fg",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+              {speed === "manual" && !myTurn ? (
+                <button
+                  type="button"
+                  onClick={runAiPick}
+                  className="rounded-full bg-m-cta px-2.5 py-1 font-display text-[10px] font-bold uppercase text-m-cta-fg"
+                >
+                  Advance
+                </button>
+              ) : null}
+            </div>
           </div>
-        ) : (
-          <div className="mt-2 flex justify-center">
+        ) : null}
+
+        {!inLobby && complete ? (
+          <div className="mt-2 flex flex-col items-center gap-2">
+            <span className="text-[11px] font-semibold text-m-muted">
+              {settings.teams}-team {SCORING_LABEL[settings.scoring]}{" "}
+              {settings.snake ? "Snake" : "Linear"}
+            </span>
             <button
               type="button"
               onClick={() => setShowRecap(true)}
@@ -284,7 +327,14 @@ export function MobileMockDraftArena() {
               View Recap
             </button>
           </div>
-        )}
+        ) : null}
+
+        {inLobby ? (
+          <p className="mt-2 text-center text-[11px] text-m-muted">
+            {settings.teams}-team {SCORING_LABEL[settings.scoring]} ·{" "}
+            {settings.snake ? "Snake" : "Linear"} · Slot {settings.myTeam}
+          </p>
+        ) : null}
       </header>
 
       {syncing ? (
@@ -298,8 +348,9 @@ export function MobileMockDraftArena() {
           byId={byId}
           currentOverall={currentOverall}
           myTurn={myTurn}
-          complete={complete}
+          complete={complete || inLobby}
           jumpSignal={jumpSignal}
+          lobby={inLobby}
         />
       )}
 
@@ -315,10 +366,10 @@ export function MobileMockDraftArena() {
         picks={picks}
         byId={byId}
         myTurn={myTurn}
-        complete={complete}
+        complete={complete || inLobby}
         myCounts={myCounts}
         currentOverall={currentOverall}
-        nextUserOverall={nextUserOverall}
+        nextUserOverall={inLobby ? null : nextUserOverall}
         queueAutopickOn={queueAutopickOn}
         onQueueAutopickChange={setQueueAutopickOn}
         rosterTeam={rosterTeam}
@@ -385,7 +436,7 @@ export function MobileMockDraftArena() {
 
       <PlayerModalHost
         ref={modalRef}
-        showDraftActions
+        showDraftActions={!inLobby}
         canDraft={myTurn}
         resolveDraftRosterLabel={(playerId) => {
           const pick = picks.find((p) => p.playerId === playerId);

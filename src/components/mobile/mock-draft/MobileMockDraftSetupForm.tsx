@@ -23,12 +23,17 @@ type Props = {
 export function MobileMockDraftSetupForm({ config, onChange, onNameTouched }: Props) {
   const patch = (p: Partial<MockConfig>) => onChange(p);
 
+  const randomizeSlot = () => {
+    const next = 1 + Math.floor(Math.random() * config.teams);
+    patch({ slot: next });
+  };
+
   return (
     <div className="space-y-7 px-4 pb-8 pt-2">
-      <Section title="Draft Name">
+      <Section title="Team Name">
         <input
           value={config.teamName}
-          placeholder="Draft Name"
+          placeholder="Team Name"
           onChange={(e) => {
             onNameTouched?.();
             patch({ teamName: e.target.value });
@@ -38,19 +43,13 @@ export function MobileMockDraftSetupForm({ config, onChange, onNameTouched }: Pr
       </Section>
 
       <Section title="Draft Type">
-        <div className="grid grid-cols-2 gap-2">
-          <Pill
-            active={config.snake}
-            onClick={() => patch({ snake: true })}
-            title="Snake"
-            subtitle="Serpentine"
-          />
-          <Pill
-            active={!config.snake}
-            onClick={() => patch({ snake: false })}
-            title="Linear"
-            subtitle="Non-snaking"
-          />
+        <div className="flex flex-wrap gap-2">
+          <Chip active={config.snake} onClick={() => patch({ snake: true })}>
+            Snake
+          </Chip>
+          <Chip active={!config.snake} onClick={() => patch({ snake: false })}>
+            Linear
+          </Chip>
         </div>
       </Section>
 
@@ -71,13 +70,13 @@ export function MobileMockDraftSetupForm({ config, onChange, onNameTouched }: Pr
       <Section title="Teams">
         <div className="flex flex-wrap gap-2">
           {TEAM_CHOICES.map((n) => (
-            <CircleChoice
+            <Chip
               key={n}
               active={config.teams === n}
               onClick={() => patch({ teams: n, slot: Math.min(config.slot, n) })}
             >
               {n}
-            </CircleChoice>
+            </Chip>
           ))}
         </div>
       </Section>
@@ -86,28 +85,28 @@ export function MobileMockDraftSetupForm({ config, onChange, onNameTouched }: Pr
         <p className="mb-2 text-sm text-m-muted">Your pick position in round 1.</p>
         <div className="flex flex-wrap gap-2">
           {Array.from({ length: config.teams }, (_, i) => i + 1).map((s) => (
-            <CircleChoice
-              key={s}
-              active={config.slot === s}
-              onClick={() => patch({ slot: s })}
-            >
+            <Chip key={s} active={config.slot === s} onClick={() => patch({ slot: s })}>
               {s}
-            </CircleChoice>
+            </Chip>
           ))}
         </div>
       </Section>
 
       <Section title="Time Per Pick">
-        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex flex-wrap gap-2">
           {TIMER_CHOICES.map((t) => (
-            <CircleChoice
+            <Chip
               key={t.label}
               active={config.timerLabel === t.label}
               onClick={() => patch({ timerLabel: t.label })}
-              wide
             >
-              {t.label === "None" ? "No Limit" : t.label.replace(" Seconds", "s").replace(" Minutes", "m").replace(" Minute", "m")}
-            </CircleChoice>
+              {t.label === "None"
+                ? "No Limit"
+                : t.label
+                    .replace(" Seconds", "s")
+                    .replace(" Minutes", "m")
+                    .replace(" Minute", "m")}
+            </Chip>
           ))}
         </div>
       </Section>
@@ -148,16 +147,61 @@ export function MobileMockDraftSetupForm({ config, onChange, onNameTouched }: Pr
       <Section title="Playoffs Start Week">
         <div className="flex flex-wrap gap-2">
           {PLAYOFF_WEEKS.map((week) => (
-            <CircleChoice
+            <Chip
               key={week}
               active={config.playoffsStartWeek === week}
               onClick={() => patch({ playoffsStartWeek: week })}
             >
               {week}
-            </CircleChoice>
+            </Chip>
           ))}
         </div>
         <p className="mt-2 text-xs text-m-muted">Used for post-draft reporting projections.</p>
+      </Section>
+
+      <Section title="Draft Order">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-sm text-m-card-fg">Tap on draft position to set draft order.</p>
+          <button
+            type="button"
+            onClick={randomizeSlot}
+            className="shrink-0 rounded-full border border-m-accent px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide text-m-accent"
+          >
+            Randomize
+          </button>
+        </div>
+        <ul className="overflow-hidden rounded-xl border border-m-border bg-m-card">
+          {Array.from({ length: config.teams }, (_, i) => i + 1).map((pos) => {
+            const isYou = pos === config.slot;
+            return (
+              <li key={pos}>
+                <button
+                  type="button"
+                  onClick={() => patch({ slot: pos })}
+                  className={cn(
+                    "flex w-full items-center gap-3 border-b border-m-border px-3 py-3 text-left last:border-b-0",
+                    isYou && "bg-m-accent/10",
+                  )}
+                >
+                  <span className="tabnum w-5 text-center text-sm font-bold text-m-card-fg">
+                    {pos}
+                  </span>
+                  <span className="flex size-9 items-center justify-center rounded-full bg-m-chip text-[10px] font-bold text-m-chip-fg">
+                    {isYou ? "You" : "AI"}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-m-card-fg">
+                      {isYou ? config.teamName.trim() || "My Team" : `Team ${pos}`}
+                    </span>
+                    <span className="block text-[11px] text-m-muted">
+                      Draft position #{pos}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </Section>
     </div>
   );
@@ -199,36 +243,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Pill({
-  active,
-  onClick,
-  title,
-  subtitle,
-}: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-xl border px-3 py-3 text-left transition-colors",
-        active
-          ? "border-m-accent bg-m-accent/15 text-m-accent"
-          : "border-m-border bg-m-card text-m-card-fg",
-      )}
-    >
-      <span className="block font-display text-sm font-bold uppercase tracking-wide">{title}</span>
-      <span className={cn("mt-0.5 block text-[11px]", active ? "text-m-accent/80" : "text-m-muted")}>
-        {subtitle}
-      </span>
-    </button>
-  );
-}
-
+/** Solid accent fill when selected — shared by scoring / type / teams / slot / timer / playoffs. */
 function Chip({
   active,
   onClick,
@@ -247,34 +262,6 @@ function Chip({
         active
           ? "border-m-accent bg-m-accent text-m-accent-fg"
           : "border-m-border bg-m-card text-m-card-fg",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function CircleChoice({
-  active,
-  onClick,
-  children,
-  wide,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  wide?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "shrink-0 rounded-full border font-display text-sm font-semibold transition-colors",
-        wide ? "px-3.5 py-2.5" : "flex size-11 items-center justify-center",
-        active
-          ? "border-m-accent text-m-accent"
-          : "border-m-border text-m-card-fg",
       )}
     >
       {children}

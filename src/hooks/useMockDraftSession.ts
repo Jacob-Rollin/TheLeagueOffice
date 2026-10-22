@@ -51,7 +51,7 @@ const playersQuery = queryOptions({
 });
 
 export type UseMockDraftSessionOptions = {
-  /** When config is missing, called once so the host can redirect to setup. */
+  /** When config is missing, called once so the host can seed defaults / redirect. */
   onMissingConfig: () => void;
   /** Prefer queue order when the pick clock expires (mobile auto-pick toggle). */
   queueAutopick?: boolean;
@@ -60,6 +60,11 @@ export type UseMockDraftSessionOptions = {
    * mid-draft settings save) without a full document reload.
    */
   bootKey?: number;
+  /**
+   * When false, AI + pick clock stay frozen (lobby / pre-start). Resume in-progress
+   * sessions should pass true once picks exist.
+   */
+  live?: boolean;
 };
 
 /** Shared solo mock-draft engine (AI opponents, clock, sessionStorage). */
@@ -67,6 +72,7 @@ export function useMockDraftSession({
   onMissingConfig,
   queueAutopick = false,
   bootKey = 0,
+  live = true,
 }: UseMockDraftSessionOptions) {
   const pageVisible = usePageVisible();
   const cache = useSleeperPlayers();
@@ -104,7 +110,7 @@ export function useMockDraftSession({
   const complete = picks.length >= totalPicks;
   const currentOverall = Math.min(picks.length + 1, totalPicks);
   const onTheClock = teamForPick(currentOverall, settings.teams, settings.snake);
-  const myTurn = started && !complete && onTheClock === settings.myTeam;
+  const myTurn = live && started && !complete && onTheClock === settings.myTeam;
 
   const rosters = useMemo(() => {
     const map = new Map<number, Player[]>();
@@ -179,10 +185,11 @@ export function useMockDraftSession({
 
   const runRef = useRef(runAiPick);
   runRef.current = runAiPick;
-  // Pause AI when the user pauses OR the tab is hidden — avoids background CPU
-  // and accidental autopicks while the visitor is elsewhere.
+  // Pause AI when lobby / user pause / tab hidden — avoids background CPU and
+  // accidental autopicks while the visitor is elsewhere.
   useEffect(() => {
     if (
+      !live ||
       !started ||
       complete ||
       myTurn ||
@@ -196,6 +203,7 @@ export function useMockDraftSession({
     const id = setTimeout(() => runRef.current(), SPEED_DELAY[speed]);
     return () => clearTimeout(id);
   }, [
+    live,
     started,
     complete,
     myTurn,
@@ -207,7 +215,7 @@ export function useMockDraftSession({
   ]);
 
   useEffect(() => {
-    if (!myTurn || timerSeconds === null) {
+    if (!live || !myTurn || timerSeconds === null) {
       setClock(null);
       return;
     }
@@ -216,14 +224,14 @@ export function useMockDraftSession({
       setClock((c) => (c === null ? null : Math.max(0, c - 1)));
     }, 1000);
     return () => clearInterval(id);
-  }, [myTurn, timerSeconds, picks.length, paused, pageVisible]);
+  }, [live, myTurn, timerSeconds, picks.length, paused, pageVisible]);
 
   useEffect(() => {
-    if (myTurn && timerSeconds !== null) setClock(timerSeconds);
-  }, [myTurn, timerSeconds, picks.length]);
+    if (live && myTurn && timerSeconds !== null) setClock(timerSeconds);
+  }, [live, myTurn, timerSeconds, picks.length]);
 
   useEffect(() => {
-    if (!myTurn || paused || !pageVisible || clock !== 0) return;
+    if (!live || !myTurn || paused || !pageVisible || clock !== 0) return;
     let choice: Player | null = null;
     if (queueAutopickOn) {
       choice = queuedPlayers[0] ?? null;
@@ -233,6 +241,7 @@ export function useMockDraftSession({
     }
     if (choice) commitPick(choice.id, settings.myTeam);
   }, [
+    live,
     clock,
     myTurn,
     paused,

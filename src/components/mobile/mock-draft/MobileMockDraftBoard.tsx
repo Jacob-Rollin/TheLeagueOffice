@@ -21,6 +21,7 @@ export function MobileMockDraftBoard({
   myTurn,
   complete,
   jumpSignal = 0,
+  lobby = false,
 }: {
   settings: Settings;
   picks: Pick[];
@@ -30,6 +31,8 @@ export function MobileMockDraftBoard({
   complete: boolean;
   /** Increment to re-center the on-the-clock cell. */
   jumpSignal?: number;
+  /** Pre-start lobby: empty board with claim affordance on your slot. */
+  lobby?: boolean;
 }) {
   const pickByOverall = new Map(picks.map((p) => [p.overall, p]));
   const clockRef = useRef<HTMLDivElement | null>(null);
@@ -57,9 +60,22 @@ export function MobileMockDraftBoard({
               t === settings.myTeam && "ring-1 ring-m-accent",
             )}
           >
-            <span className="flex size-8 items-center justify-center rounded-full bg-m-chip text-[10px] font-bold text-m-chip-fg">
-              {t === settings.myTeam ? "You" : "AI"}
-            </span>
+            {lobby ? (
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-1 font-display text-[10px] font-extrabold uppercase tracking-wide",
+                  t === settings.myTeam
+                    ? "bg-m-accent text-m-accent-fg"
+                    : "bg-m-chip text-m-chip-fg",
+                )}
+              >
+                {t === settings.myTeam ? "You" : "Claim"}
+              </span>
+            ) : (
+              <span className="flex size-8 items-center justify-center rounded-full bg-m-chip text-[10px] font-bold text-m-chip-fg">
+                {t === settings.myTeam ? "You" : "AI"}
+              </span>
+            )}
             <span className="max-w-full truncate text-center text-[11px] font-semibold text-m-card-fg">
               {teamName(settings, t)}
             </span>
@@ -78,6 +94,11 @@ export function MobileMockDraftBoard({
             const player = pick ? byId.get(pick.playerId) : undefined;
             const isClock = !complete && overall === currentOverall;
             const pickLabel = `${round}.${(((overall - 1) % settings.teams) + 1)}`;
+            // Last pick of a snake/linear round gets ↓ (Sleeper-style turn marker).
+            const isRoundEnd =
+              round < settings.rounds &&
+              (settings.snake ? (ltr ? team === settings.teams : team === 1) : team === settings.teams);
+            const flowArrow = isRoundEnd ? "↓" : ltr ? "→" : "←";
 
             return (
               <div
@@ -110,7 +131,7 @@ export function MobileMockDraftBoard({
                       className="absolute bottom-1 right-1.5 text-[10px] opacity-50"
                       aria-hidden
                     >
-                      {ltr ? "→" : "←"}
+                      {flowArrow}
                     </span>
                   </>
                 ) : isClock ? (
@@ -125,7 +146,7 @@ export function MobileMockDraftBoard({
                   <>
                     <span className="tabnum self-end text-[10px]">{pickLabel}</span>
                     <span className="absolute bottom-1 right-1.5 text-[10px] opacity-40" aria-hidden>
-                      {ltr ? "→" : "←"}
+                      {flowArrow}
                     </span>
                   </>
                 )}

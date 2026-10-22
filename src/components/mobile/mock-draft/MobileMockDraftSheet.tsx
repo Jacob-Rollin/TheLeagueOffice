@@ -155,12 +155,9 @@ export function MobileMockDraftSheet({
           if (e.key === "ArrowUp") setSnap("expanded");
           if (e.key === "ArrowDown") setSnap("peek");
         }}
-        className="flex cursor-grab touch-none flex-col items-center py-2 active:cursor-grabbing"
+        className="flex cursor-grab touch-none items-center justify-center pt-1.5 pb-0.5 active:cursor-grabbing"
       >
-        <span className="h-1 w-10 rounded-full bg-m-border" aria-hidden />
-        <span className="mt-1 text-[9px] font-semibold uppercase tracking-widest text-m-muted">
-          {snap === "expanded" ? "Pull down" : "Pull up"}
-        </span>
+        <span className="h-1 w-9 rounded-full bg-m-border" aria-hidden />
       </div>
 
       <div className="flex items-end gap-1 border-b border-m-border px-2">
@@ -176,7 +173,7 @@ export function MobileMockDraftSheet({
             type="button"
             onClick={() => onTabChange(key)}
             className={cn(
-              "flex-1 border-b-2 px-2 py-2.5 font-display text-xs font-bold uppercase tracking-widest transition-colors",
+              "flex-1 border-b-2 px-2 py-2 font-display text-xs font-bold uppercase tracking-widest transition-colors",
               tab === key
                 ? "border-m-accent text-m-accent"
                 : "border-transparent text-m-muted",
@@ -288,48 +285,44 @@ function PlayersPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
           aria-label="Search players"
           onClick={() => setSearchOpen((o) => !o)}
-          className="rounded-lg bg-m-icon-bg p-2 text-m-icon-fg"
+          className="shrink-0 rounded-lg bg-m-icon-bg p-2 text-m-icon-fg"
         >
           <Search className="size-4" strokeWidth={2.5} />
         </button>
-        <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {POS_FILTERS.map((p) => {
-            const drafted =
-              p === "ALL"
-                ? Object.values(myCounts).reduce((a, b) => a + b, 0)
-                : (myCounts[p] ?? 0);
-            const totalSlots =
-              p === "ALL"
-                ? Object.values(settings.roster).reduce((a, b) => a + b, 0)
-                : p === "DEF"
-                  ? settings.roster.DEF
-                  : Number(settings.roster[p as keyof typeof settings.roster] ?? 0);
-            return (
-              <button
-                key={p}
-                type="button"
-                onClick={() => startTransition(() => setPos(p))}
-                className={cn(
-                  "shrink-0 rounded-full px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide",
-                  pos === p ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
-                )}
-              >
-                {p === "DEF" ? "DST" : p}
-                {p === "ALL" || totalSlots > 0
-                  ? ` ${drafted}/${p === "ALL" ? totalSlots : Math.max(totalSlots, drafted)}`
-                  : ""}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex gap-1.5 overflow-x-auto px-3 pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {POS_FILTERS.map((p) => {
+          const drafted =
+            p === "ALL"
+              ? Object.values(myCounts).reduce((a, b) => a + b, 0)
+              : (myCounts[p] ?? 0);
+          const totalSlots =
+            p === "ALL"
+              ? Object.values(settings.roster).reduce((a, b) => a + b, 0)
+              : p === "DEF"
+                ? settings.roster.DEF
+                : Number(settings.roster[p as keyof typeof settings.roster] ?? 0);
+          return (
+            <button
+              key={p}
+              type="button"
+              onClick={() => startTransition(() => setPos(p))}
+              className={cn(
+                "shrink-0 rounded-full px-2.5 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide",
+                pos === p ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
+              )}
+            >
+              {p === "DEF" ? "DST" : p}
+              {p === "ALL" || totalSlots > 0
+                ? ` ${drafted}/${p === "ALL" ? totalSlots : Math.max(totalSlots, drafted)}`
+                : ""}
+            </button>
+          );
+        })}
+        <span className="mx-0.5 h-5 w-px shrink-0 bg-m-border" aria-hidden />
         <ToolChip
           active={watchOnly}
           onClick={() => {
@@ -367,44 +360,43 @@ function PlayersPane({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-        <div className="min-w-max pb-3">
-          {filtered.length === 0 ? (
-            <p className="sticky left-0 px-4 py-8 text-center text-sm text-m-muted">
-              {draftedOnly
-                ? "No drafted players match these filters."
-                : watchOnly
-                  ? "No watchlist players match these filters."
-                  : "No players match these filters."}
-            </p>
-          ) : null}
-          {filtered.map((p, i) => (
-            <div key={p.id}>
-              {projIndex === i && nextUserOverall != null ? (
-                <div className="sticky left-0 z-[5] my-1 flex w-[100vw] max-w-md items-center gap-2 px-3">
-                  <span className="h-px flex-1 bg-m-accent/70" />
-                  <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
-                    Proj pick: Round {roundOf(nextUserOverall, settings.teams)} Overall #
-                    {nextUserOverall}
-                  </span>
-                  <span className="h-px flex-1 bg-m-accent/70" />
-                </div>
-              ) : null}
-              <PlayerStatsRow
-                player={p}
-                settings={settings}
-                queued={watchIds.has(p.id)}
-                myTurn={myTurn}
-                complete={complete || draftedOnly}
-                showPrevYear={showPrevYear}
-                prevYear={prevYear}
-                onDraft={onDraft}
-                onToggleQueue={onToggleQueue}
-                onOpenPlayer={onOpenPlayer}
-              />
-            </div>
-          ))}
-        </div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
+        {filtered.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-m-muted">
+            {draftedOnly
+              ? "No drafted players match these filters."
+              : watchOnly
+                ? "No watchlist players match these filters."
+                : "No players match these filters."}
+          </p>
+        ) : null}
+        {filtered.map((p, i) => (
+          <div key={p.id}>
+            {projIndex === i && nextUserOverall != null ? (
+              <div className="my-1 flex items-center gap-2 px-1">
+                <span className="h-px flex-1 bg-m-accent/70" />
+                <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
+                  Proj pick: Round {roundOf(nextUserOverall, settings.teams)} Overall #
+                  {nextUserOverall}
+                </span>
+                <span className="h-px flex-1 bg-m-accent/70" />
+              </div>
+            ) : null}
+            <PlayerStatsRow
+              player={p}
+              settings={settings}
+              rank={i + 1}
+              queued={watchIds.has(p.id)}
+              myTurn={myTurn}
+              complete={complete || draftedOnly}
+              showPrevYear={showPrevYear}
+              prevYear={prevYear}
+              onDraft={onDraft}
+              onToggleQueue={onToggleQueue}
+              onOpenPlayer={onOpenPlayer}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -500,24 +492,23 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-          <div className="min-w-max pb-3">
-            {queuedPlayers.map((p) => (
-              <PlayerStatsRow
-                key={p.id}
-                player={p}
-                settings={settings}
-                queued
-                myTurn={myTurn}
-                complete={complete}
-                showPrevYear={showPrevYear}
-                prevYear={prevYear}
-                onDraft={onDraft}
-                onToggleQueue={onToggleQueue}
-                onOpenPlayer={onOpenPlayer}
-              />
-            ))}
-          </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
+          {queuedPlayers.map((p, i) => (
+            <PlayerStatsRow
+              key={p.id}
+              player={p}
+              settings={settings}
+              rank={i + 1}
+              queued
+              myTurn={myTurn}
+              complete={complete}
+              showPrevYear={showPrevYear}
+              prevYear={prevYear}
+              onDraft={onDraft}
+              onToggleQueue={onToggleQueue}
+              onOpenPlayer={onOpenPlayer}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -633,10 +624,11 @@ function TeamPane({
   );
 }
 
-/** Sticky identity column + horizontally scrolling fantasy stats (ADP / pts / rank). */
+/** Compact Sleeper-style row — no sticky name column / shadow seam. */
 function PlayerStatsRow({
   player,
   settings,
+  rank,
   queued,
   myTurn,
   complete,
@@ -648,6 +640,7 @@ function PlayerStatsRow({
 }: {
   player: Player;
   settings: Settings;
+  rank: number;
   queued: boolean;
   myTurn: boolean;
   complete: boolean;
@@ -662,53 +655,51 @@ function PlayerStatsRow({
   const yearLabel = String(prevYear);
 
   return (
-    <div className="flex border-b border-m-border/70">
-      <div className="sticky left-0 z-10 flex w-[11.5rem] shrink-0 items-start gap-1.5 bg-m-sheet py-2.5 pl-2 pr-2 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.35)]">
-        {!complete ? (
-          <button
-            type="button"
-            disabled={!myTurn}
-            onClick={() => onDraft(player.id)}
-            className={cn(
-              "mt-0.5 shrink-0 rounded-full px-2.5 py-1 font-display text-[10px] font-extrabold uppercase tracking-wide",
-              myTurn
-                ? "bg-m-accent text-m-accent-fg"
-                : "bg-m-chip text-m-muted opacity-60",
-            )}
-          >
-            Draft
-          </button>
-        ) : null}
+    <div className="flex items-stretch gap-2 border-b border-m-border/60 py-1.5">
+      {!complete ? (
         <button
           type="button"
-          onClick={() => onOpenPlayer(player.id)}
-          className="min-w-0 flex-1 text-left"
+          disabled={!myTurn}
+          onClick={() => onDraft(player.id)}
+          className={cn(
+            "my-0.5 shrink-0 self-stretch rounded-lg px-3 font-display text-[11px] font-extrabold uppercase tracking-wide",
+            myTurn
+              ? "bg-m-accent text-m-accent-fg"
+              : "bg-m-chip text-m-muted opacity-70",
+          )}
         >
-          <span className="block truncate text-[13px] font-extrabold uppercase tracking-wide text-m-card-fg">
-            {short}
-          </span>
-          <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">
-            <span
-              className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
-              aria-hidden
-            />
-            <span>
-              {posDisplayLabel(player.pos)} - {player.team}
-              {player.bye ? ` (${player.bye})` : ""}
-            </span>
-          </span>
+          Draft
         </button>
-        <button
-          type="button"
-          aria-label={queued ? "Remove from queue" : "Add to queue"}
-          onClick={() => onToggleQueue(player.id)}
-          className={cn("mt-0.5 shrink-0 p-1", queued ? "text-m-accent" : "text-m-muted")}
-        >
-          <Star className={cn("size-3.5", queued && "fill-current")} strokeWidth={2.5} />
-        </button>
-      </div>
-
-      <div className="flex items-end gap-3 py-2.5 pr-4">
+      ) : null}
+      <span className="tabnum flex w-5 shrink-0 items-center justify-center text-xs text-m-muted">
+        {rank}
+      </span>
+      <button
+        type="button"
+        onClick={() => onOpenPlayer(player.id)}
+        className="min-w-0 flex-1 py-0.5 text-left"
+      >
+        <span className="block truncate text-[13px] font-bold text-m-card-fg">{short}</span>
+        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">
+          <span
+            className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
+            aria-hidden
+          />
+          <span>
+            {posDisplayLabel(player.pos)} - {player.team}
+            {player.bye ? ` (${player.bye})` : ""}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        aria-label={queued ? "Remove from queue" : "Add to queue"}
+        onClick={() => onToggleQueue(player.id)}
+        className={cn("shrink-0 self-center p-1.5", queued ? "text-m-accent" : "text-m-muted")}
+      >
+        <Star className={cn("size-4", queued && "fill-current")} strokeWidth={2.5} />
+      </button>
+      <div className="flex shrink-0 items-center gap-3 self-center pr-1">
         <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
         <StatPair
           label="Pts"
@@ -716,19 +707,6 @@ function PlayerStatsRow({
           showPrev={showPrevYear}
           prevYear={yearLabel}
           prev={v.prev != null ? v.prev.toFixed(1) : "—"}
-        />
-        <StatCell label="Rank" value={v.rank < 900 ? String(v.rank) : "—"} />
-        <StatCell
-          label="Pos rk"
-          value={player.posRank > 0 ? `${posDisplayLabel(player.pos)}${player.posRank}` : "—"}
-        />
-        <StatCell
-          label="ADP lo"
-          value={player.adpRange.min < 900 ? player.adpRange.min.toFixed(0) : "—"}
-        />
-        <StatCell
-          label="ADP hi"
-          value={player.adpRange.max < 900 ? player.adpRange.max.toFixed(0) : "—"}
         />
       </div>
     </div>
