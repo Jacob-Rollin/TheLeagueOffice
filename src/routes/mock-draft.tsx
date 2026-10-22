@@ -56,6 +56,9 @@ const playersQuery = queryOptions({
 export const Route = createFileRoute("/mock-draft")({
   // Client-only simulator — SSR would burn Fluid Active CPU on every visit.
   ssr: false,
+  loader: ({ context }) => {
+    void context.queryClient.ensureQueryData(playersQuery);
+  },
   head: () => ({
     meta: [
       { title: "Mock Draft Simulator — The League Office" },
@@ -277,7 +280,12 @@ function MockDraftPage() {
       setCustomOrder(session.customOrder ?? []);
       setSpeed(session.speed ?? "normal");
       setPaused(Boolean(session.paused));
-      setTab(session.tab ?? "players");
+      {
+        const restored = session.tab ?? "players";
+        setTab(
+          restored === "board" || restored === "team" ? restored : "players",
+        );
+      }
       setRosterTeam(session.rosterTeam || slot);
     } else {
       setPicks([]);
