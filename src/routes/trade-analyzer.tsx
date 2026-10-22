@@ -722,8 +722,16 @@ function TradeAnalyzerPage() {
             />
           </div>
 
-          {/* Top-row spacer — swap control lives in the roster gap below. */}
-          <div className="hidden sm:block" aria-hidden />
+          <div className="flex items-end justify-center pb-1 sm:self-end sm:pb-2.5">
+            <button
+              type="button"
+              onClick={swapTeams}
+              className="rounded-full p-2 text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-800"
+              aria-label="Swap teams"
+            >
+              <ArrowLeftRight className="size-5" />
+            </button>
+          </div>
 
           <div className="space-y-2">
             <SidePlayerSearch
@@ -767,16 +775,8 @@ function TradeAnalyzerPage() {
             />
           </div>
 
-          <div className="flex items-center justify-center py-1 sm:min-h-[16rem] sm:self-center">
-            <button
-              type="button"
-              onClick={swapTeams}
-              className="rounded-full p-2 text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-800"
-              aria-label="Swap teams"
-            >
-              <ArrowLeftRight className="size-5" />
-            </button>
-          </div>
+          {/* Open center gap between roster cards (swap control sits above with the dropdowns). */}
+          <div className="hidden sm:block" aria-hidden />
 
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <RosterPanel
