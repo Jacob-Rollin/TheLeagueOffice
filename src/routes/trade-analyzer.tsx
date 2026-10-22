@@ -11,7 +11,7 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { queryOptions, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowLeftRight, BarChart3, ChevronDown, Search, X } from "lucide-react";
+import { ArrowLeftRight, BarChart3, ChevronDown, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
@@ -108,6 +108,26 @@ function posRankLabel(player: Player, seasonPosRank: number | null | undefined):
   const fallback = player.posRank > 0 && player.posRank < 999 ? player.posRank : null;
   const rank = ytd ?? fallback;
   return rank != null ? `${pos} ${rank}` : pos;
+}
+
+/** Roster list order: QB → RB → WR → TE → K → DST. */
+const ROSTER_POS_ORDER: Record<string, number> = {
+  QB: 0,
+  RB: 1,
+  WR: 2,
+  TE: 3,
+  K: 4,
+  DEF: 5,
+  DST: 5,
+};
+
+function sortPlayersByPos(players: Player[]): Player[] {
+  return [...players].sort((a, b) => {
+    const pa = ROSTER_POS_ORDER[String(a.pos ?? "").toUpperCase()] ?? 99;
+    const pb = ROSTER_POS_ORDER[String(b.pos ?? "").toUpperCase()] ?? 99;
+    if (pa !== pb) return pa - pb;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 /** Map a power index onto the 0–100 meter using the soft display band. */
@@ -678,10 +698,10 @@ function TradeAnalyzerPage() {
         <ActiveLeagueLabel className="mt-2 inline-block" />
       </div>
 
-      {/* Two-team board: search above each team dropdown */}
-      <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid sm:grid-cols-[1fr_auto_1fr]">
-          <div className="border-b border-slate-200 p-3 sm:border-b-0 sm:border-r">
+      {/* Search / team pickers sit on the page background; roster cards are separate. */}
+      <section className="mt-4">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-[minmax(0,1fr)_2.75rem_minmax(0,1fr)] sm:items-start">
+          <div className="space-y-2">
             <SidePlayerSearch
               value={leftSearchQ}
               onChange={setLeftSearchQ}
@@ -702,18 +722,10 @@ function TradeAnalyzerPage() {
             />
           </div>
 
-          <div className="flex items-center justify-center border-b border-slate-200 px-2 py-2 sm:border-b-0 sm:border-r">
-            <button
-              type="button"
-              onClick={swapTeams}
-              className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-              aria-label="Swap teams"
-            >
-              <ArrowLeftRight className="size-4" />
-            </button>
-          </div>
+          {/* Top-row spacer — swap control lives in the roster gap below. */}
+          <div className="hidden sm:block" aria-hidden />
 
-          <div className="border-b border-slate-200 p-3">
+          <div className="space-y-2">
             <SidePlayerSearch
               value={rightSearchQ}
               onChange={setRightSearchQ}
@@ -733,50 +745,59 @@ function TradeAnalyzerPage() {
               }}
             />
           </div>
-        </div>
 
-        <div className="grid border-t border-slate-200 sm:grid-cols-2">
-          <RosterPanel
-            label="Trade away"
-            players={mergeExtras(leftTeam?.players ?? [], extraGive)}
-            selectedIds={new Set(give.map((p) => p.id))}
-            onToggle={toggleGive}
-            onClear={clearGive}
-            onOpen={(id) => modalRef.current?.open(id)}
-            brain={brain}
-            seasonPosRankFor={seasonPosRankFor}
-          />
-          <RosterPanel
-            label="Trade for"
-            players={mergeExtras(rightTeam?.players ?? [], extraGet)}
-            selectedIds={new Set(get.map((p) => p.id))}
-            onToggle={toggleGet}
-            onClear={clearGet}
-            onOpen={(id) => modalRef.current?.open(id)}
-            brain={brain}
-            seasonPosRankFor={seasonPosRankFor}
-            muted
-          />
-        </div>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <RosterPanel
+              label="Trade away"
+              players={sortPlayersByPos(mergeExtras(leftTeam?.players ?? [], extraGive))}
+              selectedIds={new Set(give.map((p) => p.id))}
+              onToggle={toggleGive}
+              onClear={clearGive}
+              onOpen={(id) => modalRef.current?.open(id)}
+              brain={brain}
+              seasonPosRankFor={seasonPosRankFor}
+            />
+            <PowerCard
+              team={leftTeam}
+              power={leftDisplayPower}
+              delta={leftDelta}
+              needs={leftNeeds}
+              incoming={get}
+              tone="left"
+            />
+          </div>
 
-        {/* Power ranks sit under the rosters like FantasyPros */}
-        <div className="grid border-t border-slate-200 sm:grid-cols-2">
-          <PowerCard
-            team={leftTeam}
-            power={leftDisplayPower}
-            delta={leftDelta}
-            needs={leftNeeds}
-            incoming={get}
-            tone="left"
-          />
-          <PowerCard
-            team={rightTeam}
-            power={rightDisplayPower}
-            delta={rightDelta}
-            needs={rightNeeds}
-            incoming={give}
-            tone="right"
-          />
+          <div className="flex items-center justify-center py-1 sm:min-h-[16rem] sm:self-center">
+            <button
+              type="button"
+              onClick={swapTeams}
+              className="rounded-full p-2 text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-800"
+              aria-label="Swap teams"
+            >
+              <ArrowLeftRight className="size-5" />
+            </button>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <RosterPanel
+              label="Trade for"
+              players={sortPlayersByPos(mergeExtras(rightTeam?.players ?? [], extraGet))}
+              selectedIds={new Set(get.map((p) => p.id))}
+              onToggle={toggleGet}
+              onClear={clearGet}
+              onOpen={(id) => modalRef.current?.open(id)}
+              brain={brain}
+              seasonPosRankFor={seasonPosRankFor}
+            />
+            <PowerCard
+              team={rightTeam}
+              power={rightDisplayPower}
+              delta={rightDelta}
+              needs={rightNeeds}
+              incoming={give}
+              tone="right"
+            />
+          </div>
         </div>
       </section>
 
@@ -998,7 +1019,6 @@ function RosterPanel({
   onOpen,
   brain,
   seasonPosRankFor,
-  muted,
 }: {
   label: string;
   players: Player[];
@@ -1008,16 +1028,9 @@ function RosterPanel({
   onOpen: (id: string) => void;
   brain: ReturnType<typeof usePlayerBrain>;
   seasonPosRankFor: (playerId: string) => number | null;
-  muted?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "flex min-h-[22rem] flex-col border-slate-200",
-        muted && "bg-slate-50/40",
-        "sm:border-l",
-      )}
-    >
+    <div className="flex min-h-[22rem] flex-col">
       <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
         <button
           type="button"
@@ -1098,16 +1111,6 @@ function RosterPanel({
                 <span className="w-16 shrink-0 text-right text-xs font-semibold tabular-nums text-slate-600">
                   {posRankLabel(p, seasonPosRankFor(p.id))}
                 </span>
-                {checked && (
-                  <button
-                    type="button"
-                    onClick={() => onToggle(p)}
-                    className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                    aria-label={`Remove ${p.name}`}
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                )}
               </li>
             );
           })
@@ -1136,12 +1139,7 @@ function PowerCard({
   const fillClass = tone === "left" ? "bg-slate-800" : "bg-slate-700";
   const dotClass = tone === "left" ? "bg-slate-900" : "bg-slate-800";
   return (
-    <div
-      className={cn(
-        "p-4 sm:p-5",
-        tone === "right" && "border-t border-slate-100 sm:border-l sm:border-t-0",
-      )}
-    >
+    <div className="border-t border-slate-100 p-4 sm:p-5">
       <div className="flex items-center gap-2">
         {team?.logo ? (
           <img src={team.logo} alt="" className="size-7 rounded-full object-cover" />
