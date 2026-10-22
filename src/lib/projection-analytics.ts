@@ -130,6 +130,40 @@ export function fetchAccuracyFile(season: number): Promise<AccuracyFile | null> 
   return fetchGistFile<AccuracyFile>(`accuracy-${season}.json`);
 }
 
+export type FrozenSleeperPts = {
+  std: number | null;
+  half: number | null;
+  ppr: number | null;
+};
+
+/**
+ * Kickoff-locked Sleeper weekly pts from the graded accuracy Gist.
+ * Keyed by `${week}|${playerId}` — used when Sleeper's live projections
+ * endpoint strips past-week lines after a mid-game injury.
+ */
+export function frozenSleeperPtsFromAccuracy(
+  acc: AccuracyFile | null | undefined,
+): Record<string, FrozenSleeperPts> {
+  const out: Record<string, FrozenSleeperPts> = {};
+  if (!acc?.rows?.length) return out;
+  const sleeperIdx = 6 + TRACKS.indexOf("sleeper");
+  for (const row of acc.rows) {
+    const week = Number(row[0]);
+    const id = String(row[1] ?? "");
+    const pts = row[sleeperIdx] as Pts | undefined;
+    if (!id || !Number.isFinite(week) || !pts) continue;
+    const std = Number(pts[0]);
+    const half = Number(pts[1]);
+    const ppr = Number(pts[2]);
+    out[`${week}|${id}`] = {
+      std: Number.isFinite(std) && std > 0 ? std : null,
+      half: Number.isFinite(half) && half > 0 ? half : null,
+      ppr: Number.isFinite(ppr) && ppr > 0 ? ppr : null,
+    };
+  }
+  return out;
+}
+
 /** Projected points for a track within an accuracy row. */
 export function rowTrackPts(row: AccuracyRow, track: TrackKey): Pts {
   return row[6 + TRACKS.indexOf(track)] as Pts;
