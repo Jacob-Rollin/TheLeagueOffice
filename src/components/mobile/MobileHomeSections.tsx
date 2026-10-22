@@ -109,7 +109,7 @@ export function MobileMockDraftCard() {
         Practice your draft strategy against AI managers before the real thing.
       </p>
       <Link
-        to="/m/mock-draft/setup"
+        to="/m/mock-draft"
         className="mt-5 block w-full rounded-lg bg-m-chip px-4 py-3 text-center font-display text-base font-bold uppercase tracking-widest text-m-chip-fg"
       >
         Mock Drafts
