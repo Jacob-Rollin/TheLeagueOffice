@@ -96,7 +96,14 @@ export function MobileMockDraftSheet({
   const [snap, setSnap] = useState<SheetSnap>("peek");
   const [dragPct, setDragPct] = useState<number | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ startY: number; startPct: number; parentH: number } | null>(null);
+  const dragRef = useRef<{
+    startY: number;
+    startPct: number;
+    parentH: number;
+    moved: boolean;
+  } | null>(null);
+  /** After a vertical drag on the header, ignore the synthetic click on a tab. */
+  const suppressTabClickRef = useRef(false);
 
   const heightPct = dragPct ?? SNAP_PCT[snap];
 
@@ -104,30 +111,55 @@ export function MobileMockDraftSheet({
     if (complete) setSnap("peek");
   }, [complete]);
 
-  const onHandlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+  const DRAG_THRESHOLD_PX = 8;
+
+  const onHeaderPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const parentH = sheetRef.current?.parentElement?.clientHeight ?? window.innerHeight;
-    dragRef.current = { startY: e.clientY, startPct: heightPct, parentH };
-    setDragPct(heightPct);
+    dragRef.current = {
+      startY: e.clientY,
+      startPct: heightPct,
+      parentH,
+      moved: false,
+    };
   };
 
-  const onHandlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+  const onHeaderPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.parentH <= 0) return;
     const deltaY = drag.startY - e.clientY;
+    if (!drag.moved) {
+      if (Math.abs(e.clientY - drag.startY) < DRAG_THRESHOLD_PX) return;
+      drag.moved = true;
+    }
     const deltaPct = (deltaY / drag.parentH) * 100;
-    const next = Math.min(92, Math.max(26, drag.startPct + deltaPct));
-    setDragPct(next);
+    setDragPct(Math.min(92, Math.max(26, drag.startPct + deltaPct)));
   };
 
-  const onHandlePointerUp = () => {
-    if (dragRef.current == null && dragPct == null) return;
-    const current = dragPct ?? SNAP_PCT[snap];
-    const mid = (SNAP_PCT.peek + SNAP_PCT.expanded) / 2;
-    const nextSnap: SheetSnap = current >= mid ? "expanded" : "peek";
-    setSnap(nextSnap);
+  const onHeaderPointerUp = () => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (drag.moved) {
+      const current = dragPct ?? SNAP_PCT[snap];
+      const mid = (SNAP_PCT.peek + SNAP_PCT.expanded) / 2;
+      setSnap(current >= mid ? "expanded" : "peek");
+      // Swallow the click that follows a drag; clear if no click arrives.
+      suppressTabClickRef.current = true;
+      window.setTimeout(() => {
+        suppressTabClickRef.current = false;
+      }, 50);
+    }
     setDragPct(null);
     dragRef.current = null;
+  };
+
+  const onTabPress = (key: SheetTab) => {
+    if (suppressTabClickRef.current) {
+      suppressTabClickRef.current = false;
+      return;
+    }
+    onTabChange(key);
   };
 
   return (
@@ -139,6 +171,7 @@ export function MobileMockDraftSheet({
         transitionProperty: dragPct == null ? "height" : "none",
       }}
     >
+      {/* Entire chrome (grabber + tabs) resizes the sheet; tabs only change on tap. */}
       <div
         role="slider"
         aria-label="Resize player sheet"
@@ -146,42 +179,45 @@ export function MobileMockDraftSheet({
         aria-valuemax={SNAP_PCT.expanded}
         aria-valuenow={Math.round(heightPct)}
         tabIndex={0}
-        onPointerDown={onHandlePointerDown}
-        onPointerMove={onHandlePointerMove}
-        onPointerUp={onHandlePointerUp}
-        onPointerCancel={onHandlePointerUp}
+        onPointerDown={onHeaderPointerDown}
+        onPointerMove={onHeaderPointerMove}
+        onPointerUp={onHeaderPointerUp}
+        onPointerCancel={onHeaderPointerUp}
         onDoubleClick={() => setSnap((s) => (s === "peek" ? "expanded" : "peek"))}
         onKeyDown={(e) => {
           if (e.key === "ArrowUp") setSnap("expanded");
           if (e.key === "ArrowDown") setSnap("peek");
         }}
-        className="flex cursor-grab touch-none items-center justify-center pt-1.5 pb-0.5 active:cursor-grabbing"
+        className="cursor-grab touch-none select-none active:cursor-grabbing"
       >
-        <span className="h-1 w-9 rounded-full bg-m-border" aria-hidden />
-      </div>
-
-      <div className="flex items-end gap-1 border-b border-m-border px-2">
-        {(
-          [
-            ["players", "Players"],
-            ["queue", queuedPlayers.length ? `Queue (${queuedPlayers.length})` : "Queue"],
-            ["team", "Team"],
-          ] as [SheetTab, string][]
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => onTabChange(key)}
-            className={cn(
-              "flex-1 border-b-2 px-2 py-2 font-display text-xs font-bold uppercase tracking-widest transition-colors",
-              tab === key
-                ? "border-m-accent text-m-accent"
-                : "border-transparent text-m-muted",
-            )}
-          >
-            {label}
-          </button>
-        ))}
+        <div className="flex items-center justify-center pt-1.5 pb-0.5">
+          <span className="h-1 w-9 rounded-full bg-m-border" aria-hidden />
+        </div>
+        <div className="flex items-end gap-1 border-b border-m-border px-2" role="tablist">
+          {(
+            [
+              ["players", "Players"],
+              ["queue", queuedPlayers.length ? `Queue (${queuedPlayers.length})` : "Queue"],
+              ["team", "Team"],
+            ] as [SheetTab, string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => onTabPress(key)}
+              className={cn(
+                "flex-1 border-b-2 px-2 py-2 font-display text-xs font-bold uppercase tracking-widest transition-colors",
+                tab === key
+                  ? "border-m-accent text-m-accent"
+                  : "border-transparent text-m-muted",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === "players" ? (
@@ -206,7 +242,6 @@ export function MobileMockDraftSheet({
           settings={settings}
           myTurn={myTurn}
           complete={complete}
-          prevYear={prevYear}
           queueAutopickOn={queueAutopickOn}
           onQueueAutopickChange={onQueueAutopickChange}
           onDraft={onDraft}
@@ -360,7 +395,7 @@ function PlayersPane({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
+      <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3">
         {filtered.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-m-muted">
             {draftedOnly
@@ -370,33 +405,35 @@ function PlayersPane({
                 : "No players match these filters."}
           </p>
         ) : null}
-        {filtered.map((p, i) => (
-          <div key={p.id}>
-            {projIndex === i && nextUserOverall != null ? (
-              <div className="my-1 flex items-center gap-2 px-1">
-                <span className="h-px flex-1 bg-m-accent/70" />
-                <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
-                  Proj pick: Round {roundOf(nextUserOverall, settings.teams)} Overall #
-                  {nextUserOverall}
-                </span>
-                <span className="h-px flex-1 bg-m-accent/70" />
-              </div>
-            ) : null}
-            <PlayerStatsRow
-              player={p}
-              settings={settings}
-              rank={i + 1}
-              queued={watchIds.has(p.id)}
-              myTurn={myTurn}
-              complete={complete || draftedOnly}
-              showPrevYear={showPrevYear}
-              prevYear={prevYear}
-              onDraft={onDraft}
-              onToggleQueue={onToggleQueue}
-              onOpenPlayer={onOpenPlayer}
-            />
-          </div>
-        ))}
+        <div className="min-w-max">
+          {filtered.map((p, i) => (
+            <div key={p.id}>
+              {projIndex === i && nextUserOverall != null ? (
+                <div className="my-1 flex items-center gap-2 px-1">
+                  <span className="h-px flex-1 bg-m-accent/70" />
+                  <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
+                    Proj pick: Round {roundOf(nextUserOverall, settings.teams)} Overall #
+                    {nextUserOverall}
+                  </span>
+                  <span className="h-px flex-1 bg-m-accent/70" />
+                </div>
+              ) : null}
+              <PlayerStatsRow
+                player={p}
+                settings={settings}
+                rank={i + 1}
+                queued={watchIds.has(p.id)}
+                myTurn={myTurn}
+                complete={complete || draftedOnly}
+                showPrevYear={showPrevYear}
+                prevYear={prevYear}
+                onDraft={onDraft}
+                onToggleQueue={onToggleQueue}
+                onOpenPlayer={onOpenPlayer}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -432,7 +469,6 @@ function QueuePane({
   settings,
   myTurn,
   complete,
-  prevYear,
   queueAutopickOn,
   onQueueAutopickChange,
   onDraft,
@@ -443,43 +479,33 @@ function QueuePane({
   settings: Settings;
   myTurn: boolean;
   complete: boolean;
-  prevYear: number;
   queueAutopickOn: boolean;
   onQueueAutopickChange: (on: boolean) => void;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
-  const [showPrevYear, setShowPrevYear] = useState(false);
-  const prevShort = `'${String(prevYear).slice(-2)}`;
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <ToolChip active={showPrevYear} onClick={() => setShowPrevYear((v) => !v)}>
-          <ChartLine className="size-3.5" strokeWidth={2.5} />
-          {prevShort} Stats
-        </ToolChip>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-m-muted">Auto-pick</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={queueAutopickOn}
-            onClick={() => onQueueAutopickChange(!queueAutopickOn)}
+      <div className="flex items-center justify-end gap-2 px-3 py-2">
+        <span className="text-xs text-m-muted">Auto-pick</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={queueAutopickOn}
+          onClick={() => onQueueAutopickChange(!queueAutopickOn)}
+          className={cn(
+            "relative h-6 w-11 rounded-full transition-colors",
+            queueAutopickOn ? "bg-m-accent" : "bg-m-border",
+          )}
+        >
+          <span
             className={cn(
-              "relative h-6 w-11 rounded-full transition-colors",
-              queueAutopickOn ? "bg-m-accent" : "bg-m-border",
+              "absolute top-0.5 size-5 rounded-full bg-white transition-transform",
+              queueAutopickOn ? "left-5" : "left-0.5",
             )}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 size-5 rounded-full bg-white transition-transform",
-                queueAutopickOn ? "left-5" : "left-0.5",
-              )}
-            />
-          </button>
-        </div>
+          />
+        </button>
       </div>
       {queuedPlayers.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 pb-8 text-center">
@@ -492,23 +518,25 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
-          {queuedPlayers.map((p, i) => (
-            <PlayerStatsRow
-              key={p.id}
-              player={p}
-              settings={settings}
-              rank={i + 1}
-              queued
-              myTurn={myTurn}
-              complete={complete}
-              showPrevYear={showPrevYear}
-              prevYear={prevYear}
-              onDraft={onDraft}
-              onToggleQueue={onToggleQueue}
-              onOpenPlayer={onOpenPlayer}
-            />
-          ))}
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3">
+          <div className="min-w-max">
+            {queuedPlayers.map((p, i) => (
+              <PlayerStatsRow
+                key={p.id}
+                player={p}
+                settings={settings}
+                rank={i + 1}
+                queued
+                myTurn={myTurn}
+                complete={complete}
+                showPrevYear={false}
+                prevYear={0}
+                onDraft={onDraft}
+                onToggleQueue={onToggleQueue}
+                onOpenPlayer={onOpenPlayer}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -655,51 +683,57 @@ function PlayerStatsRow({
   const yearLabel = String(prevYear);
 
   return (
-    <div className="flex items-stretch gap-2 border-b border-m-border/60 py-1.5">
-      {!complete ? (
-        <button
-          type="button"
-          disabled={!myTurn}
-          onClick={() => onDraft(player.id)}
-          className={cn(
-            "my-0.5 shrink-0 self-stretch rounded-lg px-3 font-display text-[11px] font-extrabold uppercase tracking-wide",
-            myTurn
-              ? "bg-m-accent text-m-accent-fg"
-              : "bg-m-chip text-m-muted opacity-70",
-          )}
-        >
-          Draft
-        </button>
-      ) : null}
-      <span className="tabnum flex w-5 shrink-0 items-center justify-center text-xs text-m-muted">
-        {rank}
-      </span>
-      <button
-        type="button"
-        onClick={() => onOpenPlayer(player.id)}
-        className="min-w-0 flex-1 py-0.5 text-left"
-      >
-        <span className="block truncate text-[13px] font-bold text-m-card-fg">{short}</span>
-        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">
-          <span
-            className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
-            aria-hidden
-          />
-          <span>
-            {posDisplayLabel(player.pos)} - {player.team}
-            {player.bye ? ` (${player.bye})` : ""}
-          </span>
+    <div className="flex border-b border-m-border/60">
+      {/* Compact sticky identity — star sits next to the name; no shadow seam. */}
+      <div className="sticky left-0 z-10 flex shrink-0 items-stretch gap-1.5 border-r border-m-border/50 bg-m-sheet py-1.5 pl-0 pr-1.5">
+        {!complete ? (
+          <button
+            type="button"
+            disabled={!myTurn}
+            onClick={() => onDraft(player.id)}
+            className={cn(
+              "my-0.5 shrink-0 self-stretch rounded-lg px-3 font-display text-[11px] font-extrabold uppercase tracking-wide",
+              myTurn
+                ? "bg-m-accent text-m-accent-fg"
+                : "bg-m-chip text-m-muted opacity-70",
+            )}
+          >
+            Draft
+          </button>
+        ) : null}
+        <span className="tabnum flex w-5 shrink-0 items-center justify-center text-xs text-m-muted">
+          {rank}
         </span>
-      </button>
-      <button
-        type="button"
-        aria-label={queued ? "Remove from queue" : "Add to queue"}
-        onClick={() => onToggleQueue(player.id)}
-        className={cn("shrink-0 self-center p-1.5", queued ? "text-m-accent" : "text-m-muted")}
-      >
-        <Star className={cn("size-4", queued && "fill-current")} strokeWidth={2.5} />
-      </button>
-      <div className="flex shrink-0 items-center gap-3 self-center pr-1">
+        <div className="flex max-w-[9.5rem] items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => onOpenPlayer(player.id)}
+            className="min-w-0 shrink py-0.5 text-left"
+          >
+            <span className="block truncate text-[13px] font-bold text-m-card-fg">{short}</span>
+            <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">
+              <span
+                className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
+                aria-hidden
+              />
+              <span className="truncate">
+                {posDisplayLabel(player.pos)} - {player.team}
+                {player.bye ? ` (${player.bye})` : ""}
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            aria-label={queued ? "Remove from queue" : "Add to queue"}
+            onClick={() => onToggleQueue(player.id)}
+            className={cn("shrink-0 self-center p-0.5", queued ? "text-m-accent" : "text-m-muted")}
+          >
+            <Star className={cn("size-4", queued && "fill-current")} strokeWidth={2.5} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 self-stretch py-1.5 pr-4">
         <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
         <StatPair
           label="Pts"
@@ -707,6 +741,19 @@ function PlayerStatsRow({
           showPrev={showPrevYear}
           prevYear={yearLabel}
           prev={v.prev != null ? v.prev.toFixed(1) : "—"}
+        />
+        <StatCell label="Rank" value={v.rank < 900 ? String(v.rank) : "—"} />
+        <StatCell
+          label="Pos rk"
+          value={player.posRank > 0 ? `${posDisplayLabel(player.pos)}${player.posRank}` : "—"}
+        />
+        <StatCell
+          label="ADP lo"
+          value={player.adpRange.min < 900 ? player.adpRange.min.toFixed(0) : "—"}
+        />
+        <StatCell
+          label="ADP hi"
+          value={player.adpRange.max < 900 ? player.adpRange.max.toFixed(0) : "—"}
         />
       </div>
     </div>

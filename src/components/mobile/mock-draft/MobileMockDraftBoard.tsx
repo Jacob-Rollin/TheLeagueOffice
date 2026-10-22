@@ -22,6 +22,9 @@ export function MobileMockDraftBoard({
   complete,
   jumpSignal = 0,
   lobby = false,
+  slotClaimed = false,
+  onClaimSlot,
+  onOpenPlayer,
 }: {
   settings: Settings;
   picks: Pick[];
@@ -33,6 +36,10 @@ export function MobileMockDraftBoard({
   jumpSignal?: number;
   /** Pre-start lobby: empty board with claim affordance on your slot. */
   lobby?: boolean;
+  /** Lobby only — true after the user claims a draft slot (AI names fill in). */
+  slotClaimed?: boolean;
+  onClaimSlot?: (team: number) => void;
+  onOpenPlayer?: (id: string) => void;
 }) {
   const pickByOverall = new Map(picks.map((p) => [p.overall, p]));
   const clockRef = useRef<HTMLDivElement | null>(null);
@@ -52,35 +59,53 @@ export function MobileMockDraftBoard({
           minWidth: settings.teams * (colW + 4),
         }}
       >
-        {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => (
-          <div
-            key={`h-${t}`}
-            className={cn(
-              "sticky top-0 z-10 flex flex-col items-center gap-1 rounded-lg bg-m-bg/95 px-1 py-2 backdrop-blur",
-              t === settings.myTeam && "ring-1 ring-m-accent",
-            )}
-          >
-            {lobby ? (
-              <span
-                className={cn(
-                  "rounded-full px-2.5 py-1 font-display text-[10px] font-extrabold uppercase tracking-wide",
-                  t === settings.myTeam
-                    ? "bg-m-accent text-m-accent-fg"
-                    : "bg-m-chip text-m-chip-fg",
-                )}
-              >
-                {t === settings.myTeam ? "You" : "Claim"}
+        {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => {
+          const isMine = slotClaimed
+            ? t === settings.myTeam
+            : !lobby && t === settings.myTeam;
+          const showClaim = lobby && (!slotClaimed || t !== settings.myTeam);
+          const label =
+            lobby && !slotClaimed ? `Slot ${t}` : teamName(settings, t);
+          return (
+            <div
+              key={`h-${t}`}
+              className={cn(
+                "sticky top-0 z-10 flex flex-col items-center gap-0.5 bg-m-bg/95 px-0.5 py-1 backdrop-blur",
+                isMine && "rounded-md ring-1 ring-m-accent",
+              )}
+            >
+              {lobby ? (
+                showClaim ? (
+                  <button
+                    type="button"
+                    onClick={() => onClaimSlot?.(t)}
+                    className="rounded-full bg-m-chip px-2 py-0.5 font-display text-[9px] font-extrabold uppercase tracking-wide text-m-chip-fg active:bg-m-accent active:text-m-accent-fg"
+                  >
+                    Claim
+                  </button>
+                ) : (
+                  <span className="flex size-6 items-center justify-center rounded-full bg-m-accent text-[9px] font-bold text-m-accent-fg">
+                    You
+                  </span>
+                )
+              ) : (
+                <span
+                  className={cn(
+                    "flex size-6 items-center justify-center rounded-full text-[9px] font-bold",
+                    isMine
+                      ? "bg-m-accent text-m-accent-fg"
+                      : "bg-m-chip text-m-chip-fg",
+                  )}
+                >
+                  {isMine ? "You" : "AI"}
+                </span>
+              )}
+              <span className="max-w-full truncate text-center text-[9px] font-semibold leading-tight text-m-card-fg">
+                {label}
               </span>
-            ) : (
-              <span className="flex size-8 items-center justify-center rounded-full bg-m-chip text-[10px] font-bold text-m-chip-fg">
-                {t === settings.myTeam ? "You" : "AI"}
-              </span>
-            )}
-            <span className="max-w-full truncate text-center text-[11px] font-semibold text-m-card-fg">
-              {teamName(settings, t)}
-            </span>
-          </div>
-        ))}
+            </div>
+          );
+        })}
 
         {Array.from({ length: settings.rounds }, (_, r) => r + 1).map((round) => {
           const ltr = !settings.snake || round % 2 === 1;
@@ -124,9 +149,19 @@ export function MobileMockDraftBoard({
                         {pickLabel}
                       </span>
                     </div>
-                    <span className="line-clamp-2 text-[12px] font-bold leading-tight">
-                      {shortName(player.name)}
-                    </span>
+                    {onOpenPlayer ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenPlayer(player.id)}
+                        className="line-clamp-2 text-left text-[12px] font-bold leading-tight"
+                      >
+                        {shortName(player.name)}
+                      </button>
+                    ) : (
+                      <span className="line-clamp-2 text-[12px] font-bold leading-tight">
+                        {shortName(player.name)}
+                      </span>
+                    )}
                     <span
                       className="absolute bottom-1 right-1.5 text-[10px] opacity-50"
                       aria-hidden
