@@ -10,7 +10,7 @@
  * - Projection week fan-out capped at 2 concurrent
  */
 import { normalizeFumbleRaw } from "@/lib/game-log-normalize";
-import { getCached } from "@/lib/sleeper-cache";
+import { getCached, readCache } from "@/lib/sleeper-cache";
 import {
   SLEEPER_BASE,
   byeWeeksFromSchedule,
@@ -20,6 +20,7 @@ import {
   type Pos,
 } from "@/lib/players-build";
 import type { CareerSeasonRow, GameLog, NextGame, PlayerBio } from "@/lib/players.server";
+import { hasScorableProjectionStats } from "@/lib/scoring-map";
 import { acquireSleeperPermit, waitForSleeperPermit } from "@/lib/sleeper-rate-budget";
 
 const HOUR = 60 * 60 * 1000;
@@ -317,23 +318,91 @@ type WeekProjBundle = Record<
   }
 >;
 
+function weekProjEntryScorable(
+  entry: WeekProjBundle[string] | null | undefined,
+): boolean {
+  if (!entry) return false;
+  if (entry.std != null && entry.std > 0) return true;
+  if (entry.half != null && entry.half > 0) return true;
+  if (entry.ppr != null && entry.ppr > 0) return true;
+  return hasScorableProjectionStats(entry.raw);
+}
+
+/**
+ * Sleeper often strips past-week counting stats after a mid-game injury
+ * (leaving ADP-only stubs). Keep any earlier scorable line we already cached.
+ */
+function mergeWeekProjBundles(
+  prev: WeekProjBundle | null | undefined,
+  next: WeekProjBundle,
+): WeekProjBundle {
+  if (!prev || Object.keys(prev).length === 0) return next;
+  const out: WeekProjBundle = { ...next };
+  for (const [id, oldEntry] of Object.entries(prev)) {
+    if (!weekProjEntryScorable(oldEntry)) continue;
+    if (weekProjEntryScorable(out[id])) continue;
+    const fresh = next[id];
+    out[id] = {
+      ...oldEntry,
+      injuryStatus: fresh?.injuryStatus ?? oldEntry.injuryStatus,
+      injuryBodyPart: fresh?.injuryBodyPart ?? oldEntry.injuryBodyPart,
+    };
+  }
+  return out;
+}
+
+function projTripleUsable(
+  proj: { std: number | null; half: number | null; ppr: number | null } | null | undefined,
+): boolean {
+  if (!proj) return false;
+  return (
+    (proj.std != null && proj.std > 0) ||
+    (proj.half != null && proj.half > 0) ||
+    (proj.ppr != null && proj.ppr > 0)
+  );
+}
+
+/**
+ * Kickoff-locked Sleeper pts from the public accuracy Gist (browser → gist only).
+ * Soft-empty when the season file is missing — never Fluid.
+ */
+async function frozenSleeperWeekProjLookup(
+  season: string,
+): Promise<Record<string, { std: number | null; half: number | null; ppr: number | null }>> {
+  return getCached(`frozen-sleeper-week-proj-v1:${season}`, 12 * HOUR, async () => {
+    try {
+      const { fetchAccuracyFile, frozenSleeperPtsFromAccuracy } = await import(
+        "@/lib/projection-analytics"
+      );
+      const acc = await fetchAccuracyFile(Number(season));
+      return frozenSleeperPtsFromAccuracy(acc);
+    } catch {
+      return {};
+    }
+  });
+}
+
 /** Shared IndexedDB week projection bundle (game logs + matchup proj fill). */
 export async function weekProjectionBundle(season: string, week: number): Promise<WeekProjBundle> {
-  // v2: includes injury fields so ATP overlay reuses the same download.
-  // Past weeks are immutable — hold longer so game-log Proj columns stay warm
-  // without re-hitting Sleeper after the first visitor download.
+  // v3: sticky-merge past-week rows so mid-game injury wipes don't erase Proj.
+  // Past weeks hold longer so game-log Proj columns stay warm without re-hitting
+  // Sleeper after the first visitor download.
   const safeWeek = Math.max(1, Math.min(18, Math.floor(Number(week) || 1)));
+  const cacheKey = `week-proj-bundle-v3:${season}|${safeWeek}`;
   let ttlMs = 30 * 60 * 1000;
   try {
     const state = await fetchNflStateClient();
-    if (season === state.season && safeWeek < state.week) ttlMs = 12 * HOUR;
+    if (season === state.season && safeWeek < state.week) ttlMs = 14 * DAY;
   } catch {
     /* keep default TTL */
   }
-  return getCached(`week-proj-bundle-v2:${season}|${safeWeek}`, ttlMs, async () => {
+  return getCached(cacheKey, ttlMs, async () => {
     const url = `${SLEEPER_BASE}/projections/nfl/${season}/${safeWeek}?season_type=regular&${positionsQuery()}`;
     const res = await sleeperFetch(url);
-    if (!res.ok) return {};
+    if (!res.ok) {
+      const prior = await readCache<WeekProjBundle>(cacheKey);
+      return prior?.data ?? {};
+    }
     const rows = (await res.json()) as Array<{
       player_id?: string;
       stats?: Record<string, number>;
@@ -358,7 +427,10 @@ export async function weekProjectionBundle(season: string, week: number): Promis
         injuryBodyPart: row.player?.injury_body_part?.trim() || null,
       };
     }
-    return map;
+    // Merge with expired cache so Sleeper's ADP-only post-injury stubs do not
+    // overwrite kickoff projections we already stored for this week.
+    const prior = await readCache<WeekProjBundle>(cacheKey);
+    return mergeWeekProjBundles(prior?.data, map);
   });
 }
 
@@ -443,21 +515,30 @@ export async function fetchGameLogsClient(
 
     // Weeks 1–18 projection bundles (current + past seasons when requested).
     // Shared in IndexedDB across every player popup; concurrency stays capped.
-    // Past weeks are immutable — still fine under the shared 30m bundle TTL.
+    // Past weeks sticky-merge + kickoff-locked Gist fallback retain Proj after
+    // Sleeper strips mid-game injury lines.
     const projWeeks = withProj ? Array.from({ length: 18 }, (_, i) => i + 1) : [];
-    const projHits = await mapPool(projWeeks, PROJ_WEEK_CONCURRENCY, async (w) => {
-      const bundle = await weekProjectionBundle(year, w);
-      return [w, bundle[clean] ?? null] as const;
-    });
+    const [projHits, frozenLookup] = await Promise.all([
+      mapPool(projWeeks, PROJ_WEEK_CONCURRENCY, async (w) => {
+        const bundle = await weekProjectionBundle(year, w);
+        return [w, bundle[clean] ?? null] as const;
+      }),
+      withProj ? frozenSleeperWeekProjLookup(year) : Promise.resolve({}),
+    ]);
     const projByWeek = new Map(projHits.filter(([, b]) => b != null));
 
     const logs: GameLog[] = [];
     for (let week = 1; week <= 18; week++) {
       const hit = byWeek.get(week);
       const bundle = projByWeek.get(week) ?? null;
-      const proj = bundle
+      let proj = bundle
         ? { std: bundle.std, half: bundle.half, ppr: bundle.ppr }
         : null;
+      // Keep kickoff Proj when Sleeper later clears the weekly line (injury).
+      if (!projTripleUsable(proj)) {
+        const frozen = frozenLookup[`${week}|${clean}`];
+        if (projTripleUsable(frozen)) proj = frozen;
+      }
       if (hit) {
         logs.push({ ...hit, proj, projRaw: bundle?.raw ?? {} });
         continue;
