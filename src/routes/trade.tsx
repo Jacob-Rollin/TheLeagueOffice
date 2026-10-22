@@ -12,6 +12,7 @@ import { PlayerPicker } from "@/components/league/PlayerPicker";
 import { PositionBadge } from "@/components/draft/PositionBadge";
 import { PlayerAvatar, teamLogo } from "@/components/draft/PlayerAvatar";
 import { PlayerModal } from "@/components/draft/PlayerModal";
+import { TradeSideCompare } from "@/components/trade/TradeSideCompare";
 import { rosterSize, teamName, type Player, type Scoring } from "@/lib/draft";
 import { buildSandboxTeams, injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { grade } from "@/lib/evaluate";
@@ -22,7 +23,6 @@ import {
   executiveSummary,
   headlineVerdict,
   injuryRisk,
-  leagueWeekly,
   opponentImpact as computeOpponentImpact,
   packageScore,
   positionalDepth,
@@ -46,7 +46,6 @@ import { cn } from "@/lib/utils";
 import { useDraft } from "@/hooks/use-draft";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useLeagueProjections } from "@/hooks/useLeagueProjections";
-
 
 const playersQuery = queryOptions({
   queryKey: ["players-catalog"],
@@ -99,66 +98,6 @@ export const Route = createFileRoute("/trade")({
   },
   component: TradeRoute,
 });
-
-const WEEKS = 17;
-
-type Metrics = {
-  player: Player;
-  projTotal: number;
-  projPerWk: number;
-  prevTotal: number;
-  prevGames: number;
-  prevPerGame: number;
-  seasonTotal: number;
-  seasonGames: number;
-  seasonPerGame: number;
-  rosTotal: number;
-  rosPerGame: number;
-  currentStats: StatLine | null;
-  prevStats: StatLine | null;
-  weekly: number;
-};
-
-type StatLine = { season: string; posRank: number | null; line: { label: string; value: string }[] };
-
-const LOWER_IS_BETTER = new Set(["Pts allowed"]);
-
-function metricsFor(
-  player: Player,
-  detail: PlayerDetail | undefined,
-  scoring: Scoring,
-  value: InSeasonValue,
-): Metrics {
-  const prevLine = detail?.history?.[0] ?? null;
-  const currentLine = detail?.seasonToDate ?? null;
-  const projTotal = detail?.projection?.points?.[scoring] ?? player.proj?.[scoring] ?? 0;
-  const prevTotal = prevLine?.points?.[scoring] ?? player.prev?.[scoring] ?? 0;
-  const prevGames = prevLine?.games ?? 0;
-  const prevPerGame = prevGames > 0 ? prevTotal / prevGames : 0;
-  const projPerWk = projTotal / WEEKS;
-  return {
-    player,
-    projTotal,
-    projPerWk,
-    prevTotal,
-    prevGames,
-    prevPerGame,
-    seasonTotal: value.seasonTotal,
-    seasonGames: value.seasonGames,
-    seasonPerGame: value.seasonPerGame ?? 0,
-    rosTotal: value.rosTotal ?? 0,
-    rosPerGame: value.rosPerGame ?? 0,
-    currentStats: currentLine
-      ? { season: currentLine.season, posRank: currentLine.posRank ?? null, line: currentLine.line }
-      : null,
-    prevStats: prevLine
-      ? { season: prevLine.season, posRank: prevLine.posRank ?? null, line: prevLine.line }
-      : null,
-    weekly: value.weekly,
-  };
-}
-
-
 
 /**
  * Site-standard trade asset card: headshot overlaid on the team's graphical
@@ -230,8 +169,6 @@ function TradeAssetCard({
   );
 }
 
-
-
 type OpponentTeam = { key: string; name: string; owner: string; players: Player[] };
 
 /** Light-themed ghost-state mask for the roster sidebars when no league is synced. */
@@ -246,8 +183,6 @@ function SidebarLock({
   return <SyncLock authenticated={authenticated}>{children}</SyncLock>;
 }
 
-
-
 function TradeRoute() {
   const { activeLeagueId } = useActiveLeague();
   return (
@@ -256,7 +191,6 @@ function TradeRoute() {
     </PlaybookShell>
   );
 }
-
 
 function TradePage() {
   const { data } = useSuspenseQuery(playersQuery);
@@ -275,11 +209,8 @@ function TradePage() {
     return { value, trendPct };
   };
 
-
-
   const [give, setGive] = useState<Player[]>([]);
   const [get, setGet] = useState<Player[]>([]);
-  const [tab, setTab] = useState<"overview" | "stats">("overview");
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const scoring = draft.settings.scoring;
 
@@ -302,7 +233,6 @@ function TradePage() {
    */
   const locked = !sandboxMode && (!authReady || !user || !activeLeague?.id);
 
-
   const byId = useMemo(() => new Map(data.players.map((p) => [p.id, p])), [data.players]);
   const league = useLeagueRosters(data.players);
   /**
@@ -310,9 +240,13 @@ function TradePage() {
    * simulation with the host league's own scoring multipliers. Sandbox and
    * unsynced desks pass no context and keep the generic projection fallback.
    */
-  const { format: leagueFormat } = useLeagueProjections();
+  const { format: leagueFormat, rankFor } = useLeagueProjections();
   /** Synced desks value players in the host league's format; others use the draft setting. */
   const valueScoring: Scoring = league?.synced ? (leagueFormat as Scoring) : scoring;
+  const seasonPosRankFor = useCallback(
+    (playerId: string) => rankFor(playerId, valueScoring).pos,
+    [rankFor, valueScoring],
+  );
 
   /**
    * In-season value basis: this season's production, last season and
@@ -341,15 +275,6 @@ function TradePage() {
   );
   const leagueScoring = null;
 
-  const giveRows = useMemo(
-    () => give.map((p) => metricsFor(p, details.map.get(p.id), valueScoring, valueOf(p))),
-    [give, details.map, valueScoring, valueOf],
-  );
-  const getRows = useMemo(
-    () => get.map((p) => metricsFor(p, details.map.get(p.id), valueScoring, valueOf(p))),
-    [get, details.map, valueScoring, valueOf],
-  );
-  const inSeason = (valueBasis?.week ?? 1) > 1 || [...giveRows, ...getRows].some((r) => r.seasonGames > 0);
   const rostersByTeam = useMemo(() => {
     const map = new Map<number, Player[]>();
     for (let t = 1; t <= draft.settings.teams; t++) map.set(t, []);
@@ -388,8 +313,8 @@ function TradePage() {
 
   const myTeamLabel = sandboxMode
     ? "My Team"
-    : (league?.synced ? (league?.myTeam?.team ?? league?.myTeamName) : null) ??
-      teamName(draft.settings, draft.settings.myTeam);
+    : ((league?.synced ? (league?.myTeam?.team ?? league?.myTeamName) : null) ??
+      teamName(draft.settings, draft.settings.myTeam));
 
   const otherTeams = useMemo(() => {
     if (sandboxMode) {
@@ -421,8 +346,6 @@ function TradePage() {
       }));
   }, [sandboxMode, sandboxTeams, league?.synced, league?.teams, rostersByTeam, draft.settings]);
 
-
-
   /**
    * Flush the sidebar templates and re-seed them from the active league the
    * moment the global selection (or its resolved rosters) changes.
@@ -443,9 +366,6 @@ function TradePage() {
     setOpponentRosters(Object.fromEntries(otherTeams.map((t) => [t.key, t.players])));
   }, [roster, otherTeams]);
 
-
-
-
   /** Data-driven roster fit: positional scarcity before vs. after the deal. */
   const fit = useMemo(
     () =>
@@ -460,18 +380,17 @@ function TradePage() {
   );
   const needDelta = fit.pct;
 
-
   /**
    * Asymmetric packages: the side sending more bodies takes a consolidation
    * discount, so a 2-for-1 must clear a higher bar than a straight swap.
    */
   const giveWeekly = packageScore(
-    giveRows.map((r) => r.weekly),
-    getRows.length,
+    give.map((p) => valueOf(p).weekly),
+    get.length,
   );
   const rawGetWeekly = packageScore(
-    getRows.map((r) => r.weekly),
-    giveRows.length,
+    get.map((p) => valueOf(p).weekly),
+    give.length,
   );
 
   /** Bench vacancy check: receiving more players than you send can force a drop. */
@@ -496,7 +415,6 @@ function TradePage() {
     bench: benchPool,
     starters: draft.settings.roster as unknown as Record<string, number>,
   });
-
 
   const getWeekly = Math.max(0, rawGetWeekly - constraint.penalty);
   const basePct = ((getWeekly - giveWeekly) / Math.max(giveWeekly, getWeekly, 0.01)) * 100;
@@ -537,7 +455,6 @@ function TradePage() {
    */
   const isSandbox = sandboxMode || !league?.synced || userRoster.length === 0;
 
-
   /** Sandbox / unsynced desks show asset value only — no lineup telemetry. */
   const valueOnly = isSandbox;
   const marketValue = (list: Player[]) =>
@@ -567,84 +484,9 @@ function TradePage() {
     overflow: constraint.overflow,
     ...(isSandbox ? {} : { impact }),
     opponentImpact: isSandbox ? null : rivalImpact,
-
   });
 
   const balanceTilt = valueOnly ? valueTilt : (valueTilt + adjustedPct) / 2;
-
-
-
-  const sum = (rows: Metrics[], key: keyof Metrics) =>
-    rows.reduce((s, r) => s + (typeof r[key] === "number" ? (r[key] as number) : 0), 0);
-
-  const currentSeason = valueBasis?.season ?? null;
-  const prevSeasonLabel = currentSeason ? String(Number(currentSeason) - 1) : "Last Season";
-  const showRos = Boolean(inSeason && valueBasis?.rosAvailable);
-  /** Stats tab: this season once anyone in the deal has played, otherwise last season. */
-  const statsIsCurrent = [...giveRows, ...getRows].some((r) => r.currentStats);
-  const statsOf = (r: Metrics) => (statsIsCurrent ? r.currentStats : r.prevStats);
-  const statsSeason = statsIsCurrent
-    ? (currentSeason ?? giveRows.concat(getRows).find((r) => r.currentStats)?.currentStats?.season ?? "Current")
-    : (giveRows.concat(getRows).find((r) => r.prevStats)?.prevStats?.season ?? "Last");
-
-  const overviewRows: CompareRow[] = [
-    ...(inSeason && currentSeason
-      ? [
-          buildRow(`${currentSeason} Total`, sum(giveRows, "seasonTotal"), sum(getRows, "seasonTotal")),
-          buildRow(`${currentSeason} Avg.`, sum(giveRows, "seasonPerGame"), sum(getRows, "seasonPerGame")),
-          buildRow(`${currentSeason} Games`, sum(giveRows, "seasonGames"), sum(getRows, "seasonGames"), {
-            digits: 0,
-          }),
-        ]
-      : []),
-    ...(showRos
-      ? [
-          buildRow("Rest of Season (proj)", sum(giveRows, "rosTotal"), sum(getRows, "rosTotal")),
-          buildRow("ROS Avg. (proj)", sum(giveRows, "rosPerGame"), sum(getRows, "rosPerGame")),
-        ]
-      : [
-          buildRow("Season Total (proj)", sum(giveRows, "projTotal"), sum(getRows, "projTotal")),
-          buildRow("Season Avg. (proj)", sum(giveRows, "projPerWk"), sum(getRows, "projPerWk")),
-        ]),
-    buildRow(`${prevSeasonLabel} Total`, sum(giveRows, "prevTotal"), sum(getRows, "prevTotal")),
-    buildRow(`${prevSeasonLabel} Avg.`, sum(giveRows, "prevPerGame"), sum(getRows, "prevPerGame")),
-    buildRow(`${prevSeasonLabel} Games`, sum(giveRows, "prevGames"), sum(getRows, "prevGames"), {
-      digits: 0,
-    }),
-  ];
-
-  const bestRank = (rows: Metrics[]) => {
-    const ranks = rows.map((r) => statsOf(r)?.posRank).filter((n): n is number => Boolean(n));
-    return ranks.length ? Math.min(...ranks) : null;
-  };
-  const lineTotal = (rows: Metrics[], label: string) => {
-    const vals = rows
-      .flatMap((r) => (statsOf(r)?.line ?? []).filter((l) => l.label === label).map((l) => Number(l.value)))
-      .filter((n) => Number.isFinite(n));
-    return vals.length ? vals.reduce((s, v) => s + v, 0) : null;
-  };
-  const labels: string[] = [];
-  for (const r of [...giveRows, ...getRows])
-    for (const l of statsOf(r)?.line ?? []) if (!labels.includes(l.label)) labels.push(l.label);
-
-  const statRows: CompareRow[] = [
-    buildRow("Position Rank", bestRank(giveRows), bestRank(getRows), {
-      lowerBetter: true,
-      digits: 0,
-      prefix: "#",
-    }),
-    statsIsCurrent
-      ? buildRow("Fantasy Pts", sum(giveRows, "seasonTotal"), sum(getRows, "seasonTotal"))
-      : buildRow("Fantasy Pts", sum(giveRows, "prevTotal"), sum(getRows, "prevTotal")),
-    statsIsCurrent
-      ? buildRow("Fantasy Pts / Game", sum(giveRows, "seasonPerGame"), sum(getRows, "seasonPerGame"))
-      : buildRow("Fantasy Pts / Game", sum(giveRows, "prevPerGame"), sum(getRows, "prevPerGame")),
-    ...labels.map((label) =>
-      buildRow(label, lineTotal(giveRows, label), lineTotal(getRows, label), {
-        lowerBetter: LOWER_IS_BETTER.has(label),
-      }),
-    ),
-  ];
 
   /* ---------- Modular dashboard analytics ---------- */
 
@@ -682,7 +524,6 @@ function TradePage() {
   const depthRows = positionalDepth(giveAssets, getAssets);
   const risk = injuryRisk(giveAssets, getAssets);
 
-
   return (
     <div className="grid w-full gap-4 xl:grid-cols-[16rem_minmax(0,1fr)_18rem]">
       {locked ? (
@@ -709,131 +550,91 @@ function TradePage() {
       )}
 
       <main className="min-w-0">
-
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="display-title text-3xl">
-            Trade <span className="text-primary">Analyzer</span>
-          </h1>
-          <ActiveLeagueLabel className="mt-2 inline-block" />
-        </div>
-        <div className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-          Scoring: <b className="text-foreground">{scoring}</b> · Team:{" "}
-          <b className="text-foreground">{draft.settings.myTeam}</b>
-        </div>
-      </div>
-
-      {/* Fused trade desk block: both sides share one cohesive card spine. */}
-      <section className="mt-4 rounded-xl border border-border bg-card shadow-sm">
-        <div className="grid gap-2 sm:grid-cols-2 sm:gap-0">
-          <div className="bg-card px-4 pb-4 pt-3 md:px-5">
-            <PlayerPicker
-              bare
-              label="You give"
-              players={data.players}
-              selected={give}
-              onAdd={(p) => setGive((s) => [...s, p])}
-              onRemove={(id) => setGive((s) => s.filter((p) => p.id !== id))}
-              renderRow={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
-              renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
-            />
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="display-title text-3xl">
+              Trade <span className="text-primary">Analyzer</span>
+            </h1>
+            <ActiveLeagueLabel className="mt-2 inline-block" />
           </div>
-          <div className="bg-muted/[0.18] px-4 pb-4 pt-3 md:px-5">
-            <PlayerPicker
-              bare
-              label="You receive"
-              accent="get"
-              players={data.players}
-              selected={get}
-              onAdd={(p) => setGet((s) => [...s, p])}
-              onRemove={(id) => setGet((s) => s.filter((p) => p.id !== id))}
-              renderRow={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
-              renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
-            />
+          <div className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+            Scoring: <b className="text-foreground">{scoring}</b> · Team:{" "}
+            <b className="text-foreground">{draft.settings.myTeam}</b>
           </div>
         </div>
-      </section>
 
+        {/* Fused trade desk block: both sides share one cohesive card spine. */}
+        <section className="mt-4 rounded-xl border border-border bg-card shadow-sm">
+          <div className="grid gap-2 sm:grid-cols-2 sm:gap-0">
+            <div className="bg-card px-4 pb-4 pt-3 md:px-5">
+              <PlayerPicker
+                bare
+                label="You give"
+                players={data.players}
+                selected={give}
+                onAdd={(p) => setGive((s) => [...s, p])}
+                onRemove={(id) => setGive((s) => s.filter((p) => p.id !== id))}
+                renderRow={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+                renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+              />
+            </div>
+            <div className="bg-muted/[0.18] px-4 pb-4 pt-3 md:px-5">
+              <PlayerPicker
+                bare
+                label="You receive"
+                accent="get"
+                players={data.players}
+                selected={get}
+                onAdd={(p) => setGet((s) => [...s, p])}
+                onRemove={(id) => setGet((s) => s.filter((p) => p.id !== id))}
+                renderRow={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+                renderOption={(p) => <TradeAssetCard player={p} {...assetMetrics(p)} />}
+              />
+            </div>
+          </div>
+        </section>
 
-      <TradeDashboard
-        ready={ready}
-        tilt={balanceTilt}
-        giveValue={giveValue}
-        getValue={getValue}
-        giveWeekly={giveWeekly}
-        getWeekly={getWeekly}
-        fitPct={needDelta}
-        valueOnly={valueOnly}
-        gradeLetter={ready ? adjustedGrade.letter : "—"}
-        gradeTone={adjustedGrade.tone}
-        headline={headlineVerdict({ ready, pct: adjustedPct })}
-        verdict={verdict}
-        fitNote={fit.note}
-        giveBullets={giveBullets}
-        getBullets={getBullets}
-        depth={depthRows}
-        risk={risk}
-        showRosterRow={ready && !valueOnly && userRoster.length > 0}
-        dropSlots={benchSlotsRequired}
-      />
+        <TradeDashboard
+          ready={ready}
+          tilt={balanceTilt}
+          giveValue={giveValue}
+          getValue={getValue}
+          giveWeekly={giveWeekly}
+          getWeekly={getWeekly}
+          fitPct={needDelta}
+          valueOnly={valueOnly}
+          gradeLetter={ready ? adjustedGrade.letter : "—"}
+          gradeTone={adjustedGrade.tone}
+          headline={headlineVerdict({ ready, pct: adjustedPct })}
+          verdict={verdict}
+          fitNote={fit.note}
+          giveBullets={giveBullets}
+          getBullets={getBullets}
+          depth={depthRows}
+          risk={risk}
+          showRosterRow={ready && !valueOnly && userRoster.length > 0}
+          dropSlots={benchSlotsRequired}
+        />
 
-
-      <div className="mt-4 flex gap-1">
-        {(
-          [
-            ["overview", "Overview"],
-            ["stats", "Stats"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={cn(
-              "flex-1 rounded-md border px-3 py-1.5 font-display text-sm uppercase tracking-wide transition-colors",
-              tab === key
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-card text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {details.loading && (
-        <p className="mt-3 text-center text-xs text-muted-foreground">Loading player stats…</p>
-      )}
-
-      <section className="mt-3 overflow-hidden rounded-xl border border-border bg-card">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 p-3">
-          <SideHead rows={giveRows} title="You give" />
-          <span className="self-center rounded-full border border-border bg-surface px-2 py-1 font-display text-[10px] uppercase tracking-widest text-muted-foreground">
-            vs
-          </span>
-          <SideHead rows={getRows} title="You receive" align="right" />
-        </div>
-
-        {!ready ? (
-          <p className="border-t border-border p-4 text-center text-xs text-muted-foreground">
-            Add at least one player to each side to compare.
-          </p>
-        ) : tab === "overview" ? (
-          <CompareTable title="Fantasy Points" rows={overviewRows} />
-        ) : (
-          <CompareTable title={`${statsSeason} Season Stats`} rows={statRows} />
-        )}
-      </section>
-
-      <p className="mt-3 text-center text-[11px] text-muted-foreground">
-        Green numbers hold the statistical advantage. Grades blend this year's projections (65%)
-        with last season's per-game production (35%), apply a consolidation discount to the wider
-        package, then adjust for open roster slots configured in the War Room.
-      </p>
+        <TradeSideCompare
+          give={give}
+          get={get}
+          scoring={valueScoring}
+          valueBasis={valueBasis}
+          detailsById={details.map}
+          loading={details.loading}
+          seasonPosRankFor={seasonPosRankFor}
+        />
       </main>
 
       {locked ? (
         <SidebarLock authenticated={Boolean(user)} onSignIn={() => setAuthOpen(true)}>
-          <OtherTeamsColumn teams={[]} selectedIds={new Set()} onPick={() => {}} onOpenPlayer={() => {}} />
+          <OtherTeamsColumn
+            teams={[]}
+            selectedIds={new Set()}
+            onPick={() => {}}
+            onOpenPlayer={() => {}}
+          />
         </SidebarLock>
       ) : (
         <OtherTeamsColumn
@@ -852,124 +653,8 @@ function TradePage() {
         onSelectPlayer={setSelectedPlayerId}
       />
     </div>
-
-  );
-
-}
-
-function better(a: number, b: number) {
-  return a > b && Math.abs(a - b) > 0.05;
-}
-
-type CompareRow = {
-  label: string;
-  give: string;
-  get: string;
-  giveWin: boolean;
-  getWin: boolean;
-};
-
-function buildRow(
-  label: string,
-  a: number | null,
-  b: number | null,
-  opts: { lowerBetter?: boolean; digits?: number; prefix?: string } = {},
-): CompareRow {
-  const digits = opts.digits ?? 1;
-  const fmt = (v: number | null) =>
-    v === null || !Number.isFinite(v) ? "—" : `${opts.prefix ?? ""}${v.toFixed(digits)}`;
-  const valid = a !== null && b !== null && Number.isFinite(a) && Number.isFinite(b);
-  const aWins = valid && (opts.lowerBetter ? better(b!, a!) : better(a!, b!));
-  const bWins = valid && (opts.lowerBetter ? better(a!, b!) : better(b!, a!));
-  return { label, give: fmt(a), get: fmt(b), giveWin: aWins, getWin: bWins };
-}
-
-function CompareTable({ title, rows }: { title: string; rows: CompareRow[] }) {
-  if (!rows.length)
-    return (
-      <p className="border-t border-border p-4 text-center text-xs text-muted-foreground">
-        No stats available for these players.
-      </p>
-    );
-  return (
-    <table className="w-full border-t border-border text-sm">
-      <thead>
-        <tr className="bg-surface">
-          <th
-            colSpan={3}
-            className="px-3 py-2 text-center font-display text-[11px] uppercase tracking-widest text-muted-foreground"
-          >
-            {title}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.label} className="border-t border-border">
-            <td
-              className={cn(
-                "w-1/3 px-3 py-2 text-left text-base tabular-nums",
-                r.giveWin ? "font-bold text-emerald-600" : "font-semibold text-foreground",
-              )}
-            >
-              {r.give}
-            </td>
-            <td className="px-2 py-2 text-center text-[11px] uppercase tracking-wide text-muted-foreground">
-              {r.label}
-            </td>
-            <td
-              className={cn(
-                "w-1/3 px-3 py-2 text-right text-base tabular-nums",
-                r.getWin ? "font-bold text-emerald-600" : "font-semibold text-foreground",
-              )}
-            >
-              {r.get}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }
-
-function SideHead({
-  rows,
-  title,
-  align,
-}: {
-  rows: Metrics[];
-  title: string;
-  align?: "right";
-}) {
-  return (
-    <div className={cn("min-w-0", align === "right" && "text-right")}>
-      <p className="eyebrow">{title}</p>
-      {!rows.length && <p className="mt-1 text-xs text-muted-foreground">No players.</p>}
-      <div className="mt-1 space-y-1.5">
-        {rows.map((m) => (
-          <div
-            key={m.player.id}
-            className={cn(
-              "flex items-center gap-2",
-              align === "right" && "flex-row-reverse text-right",
-            )}
-          >
-            <PositionBadge pos={m.player.pos} className="h-5 shrink-0 text-[10px]" />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-tight">{m.player.name}</p>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                {m.player.pos} · {m.player.team}
-                {m.player.bye ? ` · Bye ${m.player.bye}` : ""}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-
 
 function RosterRow({
   player,
@@ -1209,7 +894,9 @@ function OtherTeamsColumn({
                   </summary>
                   <div className="space-y-0.5 border-t border-border p-1">
                     {players.length === 0 ? (
-                      <p className="px-2 py-1.5 text-xs text-muted-foreground">No players rostered.</p>
+                      <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                        No players rostered.
+                      </p>
                     ) : (
                       players.map((p) => (
                         <RosterRow
@@ -1312,7 +999,6 @@ function TradeDashboard({
       {/* ---------- Top analytical row ---------- */}
       <div className="grid gap-3 lg:grid-cols-2">
         <section className={cn("rounded-xl border-2 bg-card p-4 shadow-sm", haloTone)}>
-
           <div className="flex items-start gap-4">
             <div
               className={cn(
@@ -1413,7 +1099,10 @@ function TradeDashboard({
           <div className="relative mt-2 flex h-5 items-center justify-between text-xs text-muted-foreground">
             <span className="tabnum">{giveScaled > 0 ? giveScaled.toFixed(1) : "—"}</span>
             <span
-              className={cn("absolute left-1/2 -translate-x-1/2 tabnum text-sm font-bold", textTone)}
+              className={cn(
+                "absolute left-1/2 -translate-x-1/2 tabnum text-sm font-bold",
+                textTone,
+              )}
             >
               {ready ? `${clamped > 0 ? "+" : ""}${clamped.toFixed(1)}%` : "0.0%"}
             </span>
