@@ -71,10 +71,10 @@ function nearestSheetSnap(pct: number, collapsedPct: number): SheetSnap {
 }
 
 /**
- * Nested vertical + horizontal scrollers with strict gesture axis lock.
- * First 8px decides the axis; after that we preventDefault and drive only that
- * scroller so diagonal pans cannot move both. Never toggles overflow (that
- * resets scrollLeft and pops the list left).
+ * Nested vertical + horizontal scrollers with directional lock.
+ * Native scrolling (and momentum) stay on the winning axis; the other axis is
+ * pinned. Avoids touch-none/preventDefault ownership, which felt laggy.
+ * Never toggles overflow (that resets scrollLeft).
  */
 function DualAxisScroll({
   className,
@@ -95,6 +95,18 @@ function DualAxisScroll({
     const horiz = horizRef.current;
     if (!vert || !horiz) return;
 
+    const pinOffAxis = () => {
+      if (axisRef.current === "x") {
+        if (vert.scrollTop !== startRef.current.scrollTop) {
+          vert.scrollTop = startRef.current.scrollTop;
+        }
+      } else if (axisRef.current === "y") {
+        if (horiz.scrollLeft !== startRef.current.scrollLeft) {
+          horiz.scrollLeft = startRef.current.scrollLeft;
+        }
+      }
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       const t = e.touches[0];
       if (!t) return;
@@ -113,38 +125,39 @@ function DualAxisScroll({
       const dx = t.clientX - startRef.current.x;
       const dy = t.clientY - startRef.current.y;
       if (axisRef.current == null) {
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
         axisRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-        // Undo any diagonal drift from the decision window.
+        // Cancel diagonal drift from the decision window, then let native
+        // scrolling own the winning axis for the rest of the gesture.
         vert.scrollTop = startRef.current.scrollTop;
         horiz.scrollLeft = startRef.current.scrollLeft;
       }
-      // Own the gesture so the browser cannot pan the off-axis scroller.
-      e.preventDefault();
-      if (axisRef.current === "x") {
-        horiz.scrollLeft = startRef.current.scrollLeft - dx;
-        vert.scrollTop = startRef.current.scrollTop;
-      } else {
-        vert.scrollTop = startRef.current.scrollTop - dy;
-        horiz.scrollLeft = startRef.current.scrollLeft;
-      }
+      pinOffAxis();
     };
 
     const onTouchEnd = () => {
-      axisRef.current = null;
+      // Keep lock briefly so inertial scroll can't nudge the off-axis.
+      const axis = axisRef.current;
+      if (axis == null) return;
+      window.setTimeout(() => {
+        if (axisRef.current === axis) axisRef.current = null;
+      }, 120);
     };
 
     vert.addEventListener("touchstart", onTouchStart, { passive: true, capture: true });
-    // Non-passive so preventDefault can stop diagonal browser scrolling.
-    vert.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
+    vert.addEventListener("touchmove", onTouchMove, { passive: true, capture: true });
     vert.addEventListener("touchend", onTouchEnd, { passive: true, capture: true });
     vert.addEventListener("touchcancel", onTouchEnd, { passive: true, capture: true });
+    vert.addEventListener("scroll", pinOffAxis, { passive: true });
+    horiz.addEventListener("scroll", pinOffAxis, { passive: true });
 
     return () => {
       vert.removeEventListener("touchstart", onTouchStart, true);
       vert.removeEventListener("touchmove", onTouchMove, true);
       vert.removeEventListener("touchend", onTouchEnd, true);
       vert.removeEventListener("touchcancel", onTouchEnd, true);
+      vert.removeEventListener("scroll", pinOffAxis);
+      horiz.removeEventListener("scroll", pinOffAxis);
     };
   }, []);
 
@@ -152,14 +165,13 @@ function DualAxisScroll({
     <div
       ref={vertRef}
       className={cn(
-        // touch-none: browser must not pan either axis; JS owns the gesture after axis lock.
-        "min-h-0 flex-1 touch-none overflow-y-auto overflow-x-hidden overscroll-contain",
+        "min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         className,
       )}
     >
       <div
         ref={horizRef}
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain touch-none [-webkit-overflow-scrolling:touch]"
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
         onScroll={onHorizScroll}
       >
         {children}
@@ -172,6 +184,15 @@ function DualAxisScroll({
 const NAME_SCROLL_THRESHOLD_PX = 168;
 const NAME_COL_CLASS = "w-[7.25rem]";
 const STAR_COL_CLASS = "w-8";
+
+/** Toggle sticky mini-name class without React state (keeps pans off the render path). */
+function onNameStripScroll(e: UIEvent<HTMLDivElement>) {
+  const el = e.currentTarget;
+  const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
+  if (el.classList.contains("is-scrolled-x") !== on) {
+    el.classList.toggle("is-scrolled-x", on);
+  }
+}
 
 export function MobileMockDraftSheet({
   tab,
@@ -223,13 +244,19 @@ export function MobileMockDraftSheet({
 }) {
   const prevYear = Math.max(2000, (Number(season) || new Date().getFullYear()) - 1);
   // Season projections omit rec_tgt — sum weekly proj targets (desktop popup source).
-  const { data: projTgtById = {} } = useQuery({
+  const { data: projTgtRaw } = useQuery({
     queryKey: ["season-proj-rec-tgt", season],
     queryFn: () => fetchSeasonProjectedRecTgt(season),
     enabled: Boolean(season) && /^\d{4}$/.test(season),
     staleTime: 1000 * 60 * 60 * 12,
     placeholderData: (prev) => prev,
   });
+  // Defer painting target overlays so a late fetch doesn't hitch an active fling.
+  const [projTgtById, setProjTgtById] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!projTgtRaw) return;
+    startTransition(() => setProjTgtById(projTgtRaw));
+  }, [projTgtRaw]);
   const draftedPlayers = useMemo(() => {
     return picks
       .slice()
@@ -574,16 +601,7 @@ function PlayersPane({
         </div>
       ) : null}
 
-      <DualAxisScroll
-        className="px-2 pb-3"
-        onHorizScroll={(e) => {
-          const el = e.currentTarget;
-          const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
-          if (el.classList.contains("is-scrolled-x") !== on) {
-            el.classList.toggle("is-scrolled-x", on);
-          }
-        }}
-      >
+      <DualAxisScroll className="px-2 pb-3" onHorizScroll={onNameStripScroll}>
         {filtered.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-m-muted">
             {draftedOnly
@@ -709,16 +727,7 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <DualAxisScroll
-          className="px-2 pb-3"
-          onHorizScroll={(e) => {
-            const el = e.currentTarget;
-            const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
-            if (el.classList.contains("is-scrolled-x") !== on) {
-              el.classList.toggle("is-scrolled-x", on);
-            }
-          }}
-        >
+        <DualAxisScroll className="px-2 pb-3" onHorizScroll={onNameStripScroll}>
           <div className="min-w-max">
             {queuedPlayers.map((p, i) => (
               <PlayerStatsRow
@@ -900,10 +909,10 @@ function PlayerStatsRow({
   const posCols = POS_STAT_COLUMNS[player.pos] ?? [];
 
   return (
-    <div className="relative border-b border-m-border/60">
-      {/* Overlay mini-name — no display/height toggle (avoids layout thrash while panning). */}
+    <div className="relative border-b border-m-border/60 [content-visibility:auto] [contain-intrinsic-size:auto_3.25rem]">
+      {/* Overlay mini-name — solid fill (no blur/transition; those janked while panning). */}
       <div className="pointer-events-none sticky left-0 z-20 h-0 w-0 overflow-visible">
-        <div className="absolute left-0 top-0 max-w-[75vw] whitespace-nowrap bg-m-sheet/95 px-1 py-0.5 opacity-0 backdrop-blur-sm transition-opacity duration-100 [.is-scrolled-x_&]:pointer-events-auto [.is-scrolled-x_&]:opacity-100">
+        <div className="absolute left-0 top-0 hidden max-w-[75vw] whitespace-nowrap bg-m-sheet px-1 py-0.5 [.is-scrolled-x_&]:pointer-events-auto [.is-scrolled-x_&]:block">
           <button
             type="button"
             onClick={() => onOpenPlayer(player.id)}
