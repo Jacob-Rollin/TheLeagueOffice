@@ -4,7 +4,14 @@ import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
-import { fillRoster, roundOf, type Pick as DraftPick, type Player, type Settings } from "@/lib/draft";
+import {
+  fillRoster,
+  posDisplayLabel,
+  roundOf,
+  type Pick as DraftPick,
+  type Player,
+  type Settings,
+} from "@/lib/draft";
 
 /** Sticky sidebar shell used by the War Room and Mock Draft workspaces. */
 export function SideCard({
@@ -115,7 +122,7 @@ export function MyTeamColumn({
                 )}
               >
                 <span className="w-7 shrink-0 font-display text-[10px] uppercase text-slate-500">
-                  {s.slot === "DEF" ? "DST" : s.slot}
+                  {posDisplayLabel(s.slot)}
                 </span>
                 <PlayerAvatar
                   id={s.player.id}
@@ -177,7 +184,7 @@ export function MyTeamColumn({
                 )}
               >
                 <span className="w-8 shrink-0 font-display text-[10px] uppercase text-slate-500">
-                  {s.slot === "DEF" ? "DST" : s.slot}
+                  {posDisplayLabel(s.slot)}
                 </span>
                 <span className="text-xs text-slate-400" style={{ fontSize: metaSize }}>
                   Empty
