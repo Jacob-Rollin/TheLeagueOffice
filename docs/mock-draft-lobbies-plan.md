@@ -13,8 +13,9 @@
 | Data home | **Dedicated TiDB Starter D** = source of truth for rooms/picks; Supabase = Auth + Realtime fan-out only (no lobby rows in Postgres). |
 | Completed boards | Freeze a compact JSON snapshot on complete; retain **7–14 days**; share via opaque token; CSV/JSON export client-side from that snapshot. |
 | Shared room reads | **Room read key** + `GET /api/mock-draft/room/$id?k=` with **`public, s-maxage=1–2`** so all seats share one edge cache. |
-| Vercel writes | Fluid `createServerFn` for create/join/pick/host only; after commit → Broadcast. Clock/AI via lean cron (also Broadcasts). |
-| Safety net | Resync GET on **reconnect / tab focus / version gap** only; optional 30s poll solely if Broadcast reports disconnected. |
+| Vercel (user path) | UI + Fluid **mutations only** (create/join/pick/host) + rare shared GET on join/gap. |
+| Worker (Coolify) | **All mock cron / AI timeout / expiry** (`/api/cron/mock-draft-tick`) and prefer other `/api/cron/*` here — see §0.4. Goal: mocks **off Vercel for the most part**. |
+| Safety net | Resync GET on **reconnect / tab focus / version gap** only while Realtime connected. |
 | Pick timer | **One duration for every seat** (host `pick_time_limit_sec`). Shared wall-clock `pick_deadline_at` — all clients show the same remaining time. |
 | Realtime peak 200 | **Accepted** — product will not target >200 concurrent mock tabs. |
 
@@ -116,8 +117,8 @@ Push + shared CDN already removes almost all poll burn. Extra cuts using **curre
 | --- | --- | --- |
 | **No safety poll while Realtime connected** | Supabase Realtime | Drops the ~2.4k browser GETs/room-hour from §0.3; Vercel origin hits near **mutations + join + cron only** (~300/room) |
 | **Rich Broadcast deltas** (`pick`, `deadlineAt`, seats) | Supabase Realtime | Avoid mid-draft shared GETs entirely except gaps |
-| **Move `mock-draft-tick` off Vercel** | GitHub Actions → Coolify/Oracle worker (free-tier Phase 1) | Cron Autopick/AI CPU leaves Hobby Active CPU; Actions still schedules |
-| **Until Coolify exists: cron ≤1/min, batch all due rooms in one invocation** | Actions + Vercel | One Function/min globally, not per room |
+| **Coolify worker for mock-draft-tick (locked for rollout)** | Actions → worker `APP_URL` / `CRON_APP_URL` | Autopick/AI/expiry **0 Hobby** — §0.4 |
+| **Until worker is live: cron ≤1/min on Vercel as temporary bridge** | Actions + Vercel | Ship UX first; flip URL when Coolify is up |
 | **Completed recap: client already has board** | Browser | Recap UI from in-memory state; optional one cached GET only for share-link visitors who weren’t in the room |
 | **Share-link recap long cache** | Vercel `s-maxage` on `/recap/$shareId` | Repeat openers don’t re-hit TiDB/Fluid |
 | **Keep mutations as the only Fluid `createServerFn`s** | Vercel | Reads stay Nitro API routes (or edge cache hits) |
@@ -166,7 +167,23 @@ Assumptions: 10 visible humans, 15 rounds (**150 picks**), Broadcast on each pic
 | Supabase Realtime peak conns | 200 | **10** | Fine — we will not exceed 200 concurrent tabs |
 | TiDB D RUs | 50M | ~150 writes + few reads | **≪1%** |
 
-**Remaining Vercel knob after this:** move cron worker off Vercel (Coolify). Realtime peak 200 is an accepted ceiling, not a design worry.
+**Remaining Vercel on mocks after Coolify:** pick/join/create Fluid + join/gap GETs only (~150–200 invocations per 10×2h room). Realtime peak 200 is an accepted ceiling.
+
+### 0.4 Coolify worker — get mocks off Vercel (most of the way)
+
+Full infra checklist lives in [`free-tier-and-ux-scale-plan.md`](free-tier-and-ux-scale-plan.md) Phase 1. Mock-specific lock-in:
+
+| Piece | Where it runs at rollout |
+| --- | --- |
+| Host/join/pick/pause UI + mutations | **Vercel** (unavoidable user path) |
+| Shared room/recap GET | **Vercel** edge cache (rare) |
+| `mock-draft-tick` (deadline autopick, AI seats, TTL purge, Broadcast after AI) | **Coolify worker** |
+| GitHub Actions schedule | Stays on Actions; `CRON_APP_URL` → worker |
+| Solo `/mock-draft` | **Browser only** (already) |
+
+**Rollout sequence:** implement tick route so it runs on **either** host → ship multiplayer with Actions hitting Vercel briefly if needed → **you** stand up Coolify + DNS + secrets → point `CRON_APP_URL` at worker → confirm Vercel no longer receives mock ticks.
+
+**You:** VPS, Coolify, DNS `worker.…`, env paste, GitHub secret. **Agent:** tick + Broadcast code, `CRON_APP_URL` workflow support, env checklist, verify `authorizeCronRequest`.
 
 #### Compare sync strategies
 
@@ -254,10 +271,12 @@ flowchart LR
     Host[Host signed in]
     Guest[Guest or member]
   end
-  subgraph vercel [Vercel]
-    Mut[Fluid createServerFn mutations]
-    Read["API GET shared readKey\ns-maxage edge"]
-    Cron["/api/cron/mock-draft-tick"]
+  subgraph vercel [Vercel user path]
+    Mut[Fluid mutations]
+    Read["Shared GET join or gap"]
+  end
+  subgraph coolify [Coolify worker]
+    Cron["mock-draft-tick cron"]
   end
   subgraph supa [Supabase]
     Auth[Auth host]
@@ -276,8 +295,8 @@ flowchart LR
   Cron --> RT
   RT -->|pick delta| Host
   RT -->|pick delta| Guest
-  Host -->|safety or gap| Read
-  Guest -->|safety or gap| Read
+  Host -->|join or gap| Read
+  Guest -->|join or gap| Read
   Read --> Rooms
   Host --> Auth
 ```
@@ -505,7 +524,8 @@ Common elsewhere (FantasyPros Draft Wizard, Sleeper mocks, ESPN/Yahoo mocks, RTS
 1. Create TiDB Starter D; wire `DATABASE_URL_MOCK` + `mockTidbExecute`.
 2. DDL (`read_key`, `state_version`, `share_id`, `result_snapshot`); migrate on D.
 3. create/join + `GET ...?k=` with `s-maxage`; guest tokens; caps.
-4. Smoke without UI.
+4. Implement `/api/cron/mock-draft-tick` (works on Vercel **or** Coolify).
+5. Smoke without UI.
 
 ### Phase 1 — Lobby + Broadcast
 1. Setup hub: Solo | Host | Join.
@@ -517,12 +537,58 @@ Common elsewhere (FantasyPros Draft Wizard, Sleeper mocks, ESPN/Yahoo mocks, RTS
 2. Cron autopick/AI + Broadcast; host pause/force.
 3. Complete → snapshot → unsubscribe → `MockRecap` + share/export.
 
+### Phase 2b — Coolify cutover (same release train as live, or immediately after)
+1. You: Coolify worker + DNS + env (`CRON_SECRET`, `DATABASE_URL_MOCK`, Supabase service role for Broadcast).
+2. Agent: `CRON_APP_URL` in mock-tick (and optionally other cron) workflows.
+3. You: point secret at worker; confirm ticks **do not** appear in Vercel logs.
+4. Prefer moving **all** `/api/cron/*` to the worker while the box is open (biggest Hobby win — not mock-only).
+
 ### Phase 3 — Polish
-1. Expiry sweeper; gap resync UX; kick/reconnect.
-2. Pick queues; mobile parity; Realtime connection monitoring vs 200 peak.
-3. Optional save-to-account / War Room import; RU/invocation dashboards.
+1. Expiry sweeper on worker; gap resync UX; kick/reconnect.
+2. Pick queues; mobile parity.
+3. Optional save-to-account / War Room import; light dashboards (active rooms, tick latency).
 
 **Non-goals for v1:** auction, public matchmaking, voice/chat, ELO, native season hitch, Postgres lobby tables.
+
+---
+
+## 11b. Rollout extras (worth implementing with v1)
+
+Ship these alongside lobbies unless noted — high leverage, low scope creep.
+
+### Reliability & sync
+- **Your-turn toast + optional sound** (tab title / beep) — Broadcast already delivers the event; big UX win for multi-human rooms.
+- **Duplicate-tab guard** — second tab same seat: read-only or “take over” to avoid double intent_ids.
+- **Optimistic pick + rollback on 409** — snappy UI; Broadcast is source of convergence.
+- **Version-gap banner** — “Reconnecting…” when applying Broadcast fails and GET resync runs.
+- **Server `serverNow` on every delta** — keeps clocks aligned after pause/resume.
+
+### Abuse & caps (protect TiDB D + Fluid mutations)
+- Rate-limit **join-by-code** and **pick** per seat (e.g. 1 pick/sec, 10 joins/ip/min).
+- Caps: rooms/host/day, concurrent lobby+live/host, max humans/room.
+- Invalidate / rotate `read_key` when host kicks all or regenerates link.
+- Autopick when human disconnects past deadline (already via cron) — don’t stall the room.
+
+### Host / lobby quality
+- Copy join link + code in one click; QR optional later.
+- **Fill remaining with AI** one click before start; show personas.
+- **Ready** optional; host can start anyway (don’t block on ready for v1).
+- Mid-draft: pause, force-pick, kick → open/AI.
+
+### Draft aids (reuse existing UI)
+- **Pick queue** per seat (timeout drafts from queue) — schema like `native_draft_queues`.
+- Watchlist import from War Room when signed in.
+- ADP reach/value toggle (practice mode).
+
+### Observability (so we know limits are healthy)
+- Log tick: `roomsDue`, `picksMade`, `ms`, host=`vercel|coolify`.
+- Counter: active `live` rooms (TiDB D); alert if tick fails twice.
+- After Coolify: confirm Hobby mock-tick invocations ≈ 0.
+
+### Docs / ops checklist at launch
+- Env matrix: Vercel vs Coolify (what each needs).
+- “How to host a mock” short help on setup page.
+- Keep solo simulator linked and regression-tested every release.
 
 ---
 
