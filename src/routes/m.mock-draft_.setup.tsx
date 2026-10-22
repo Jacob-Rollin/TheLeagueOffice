@@ -1,18 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { MobileMockDraftSetupPage } from "@/components/mobile/mock-draft/MobileMockDraftSetupPage";
-
+/**
+ * Legacy setup URL — lobby lives at `/m/mock-draft` with settings behind the gear.
+ * Keep this route so old bookmarks land on the lobby.
+ */
 export const Route = createFileRoute("/m/mock-draft_/setup")({
   ssr: false,
-  head: () => ({
-    meta: [
-      { title: "Mock Draft Setup — The League Office" },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
-  component: MobileMockDraftSetupRoute,
+  beforeLoad: () => {
+    throw redirect({ to: "/m/mock-draft" });
+  },
+  component: () => null,
 });
-
-function MobileMockDraftSetupRoute() {
-  return <MobileMockDraftSetupPage />;
-}
