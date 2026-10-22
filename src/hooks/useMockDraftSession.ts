@@ -53,7 +53,7 @@ const playersQuery = queryOptions({
 export type UseMockDraftSessionOptions = {
   /** When config is missing, called once so the host can seed defaults / redirect. */
   onMissingConfig: () => void;
-  /** Prefer queue order when the pick clock expires (mobile auto-pick toggle). */
+  /** When on, draft the top available queued player on the user's turn. */
   queueAutopick?: boolean;
   /**
    * Bump to re-read sessionStorage config and restart the board (e.g. after
@@ -149,6 +149,14 @@ export function useMockDraftSession({
     [watch, byId, draftedIds],
   );
 
+  // Drop anyone drafted by any team (AI or user) so the queue stays available-only.
+  useEffect(() => {
+    setWatch((prev) => {
+      const next = prev.filter((id) => !draftedIds.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [draftedIds]);
+
   const commitPick = useCallback((playerId: string, team: number) => {
     setPicks((prev) => {
       if (prev.some((p) => p.playerId === playerId)) return prev;
@@ -230,15 +238,33 @@ export function useMockDraftSession({
     if (live && myTurn && timerSeconds !== null) setClock(timerSeconds);
   }, [live, myTurn, timerSeconds, picks.length]);
 
+  // Queue auto-pick: on the user's turn, draft rank #1 (still available) quickly.
+  useEffect(() => {
+    if (!live || !myTurn || paused || !pageVisible || complete) return;
+    if (!queueAutopickOn) return;
+    const top = queuedPlayers[0];
+    if (!top) return;
+    const id = window.setTimeout(() => {
+      commitPick(top.id, settings.myTeam);
+    }, 350);
+    return () => window.clearTimeout(id);
+  }, [
+    live,
+    myTurn,
+    paused,
+    pageVisible,
+    complete,
+    queueAutopickOn,
+    queuedPlayers,
+    settings.myTeam,
+    commitPick,
+  ]);
+
+  // Clock expiry: needs-based pick when queue autopick is off or the queue is empty.
   useEffect(() => {
     if (!live || !myTurn || paused || !pageVisible || clock !== 0) return;
-    let choice: Player | null = null;
-    if (queueAutopickOn) {
-      choice = queuedPlayers[0] ?? null;
-    }
-    if (!choice) {
-      choice = autoPickForUser(available, myPlayers, settings, picks.length + 1);
-    }
+    if (queueAutopickOn && queuedPlayers[0]) return;
+    const choice = autoPickForUser(available, myPlayers, settings, picks.length + 1);
     if (choice) commitPick(choice.id, settings.myTeam);
   }, [
     live,
@@ -324,6 +350,27 @@ export function useMockDraftSession({
     setWatch((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, []);
 
+  /** Move a queued player up (-1) or down (+1) in autopick priority. */
+  const moveQueued = useCallback((id: string, dir: -1 | 1) => {
+    setWatch((prev) => {
+      const i = prev.indexOf(id);
+      if (i < 0) return prev;
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = prev.slice();
+      const a = next[i]!;
+      next[i] = next[j]!;
+      next[j] = a;
+      return next;
+    });
+  }, []);
+
+  const removeQueued = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    const drop = new Set(ids);
+    setWatch((prev) => prev.filter((id) => !drop.has(id)));
+  }, []);
+
   const undoPick = useCallback(() => setPicks((prev) => prev.slice(0, -1)), []);
 
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 1);
@@ -373,6 +420,8 @@ export function useMockDraftSession({
     draftForUser,
     runAiPick,
     toggleWatch,
+    moveQueued,
+    removeQueued,
     undoPick,
     clearSession: clearMockSession,
   };

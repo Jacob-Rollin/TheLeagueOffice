@@ -10,7 +10,18 @@ import {
   type UIEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChartLine, FilePlus2, Search, Star } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChartLine,
+  Circle,
+  CircleDot,
+  FilePlus2,
+  Info,
+  Search,
+  Star,
+  Trash2,
+} from "lucide-react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import {
@@ -31,10 +42,13 @@ import {
   type CountingStats,
 } from "@/lib/players-build";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
-import { fetchSeasonProjectedRecTgt } from "@/lib/sleeper-client";
+import {
+  fetchSeasonProjectedBoardExtras,
+  type SeasonProjBoardExtras,
+} from "@/lib/sleeper-client";
 import { cn } from "@/lib/utils";
 
-import { POS_DOT, posCellClass } from "./posCellStyles";
+import { POS_DOT, posSlotBadgeClass } from "./posCellStyles";
 import { pickLabelForOverall } from "./MobileMockDraftBoard";
 
 type SheetTab = "players" | "queue" | "team";
@@ -68,6 +82,17 @@ function nearestSheetSnap(pct: number, collapsedPct: number): SheetSnap {
     }
   }
   return best;
+}
+
+/** Next snap in the flick direction (up = taller sheet). */
+function sheetSnapInDirection(
+  from: SheetSnap,
+  dir: "up" | "down",
+): SheetSnap {
+  const order: SheetSnap[] = ["collapsed", "peek", "expanded"];
+  const i = order.indexOf(from);
+  if (dir === "up") return order[Math.min(order.length - 1, i + 1)]!;
+  return order[Math.max(0, i - 1)]!;
 }
 
 /**
@@ -180,15 +205,21 @@ function DualAxisScroll({
   );
 }
 
-/** Approx. Draft + rank + name width — past this, Sleeper-style mini name sticks. */
-const NAME_SCROLL_THRESHOLD_PX = 168;
+/** Fallback if the name-end sentinel isn't in the DOM yet. */
+const NAME_SCROLL_THRESHOLD_PX = 120;
 const NAME_COL_CLASS = "w-[7.25rem]";
 const STAR_COL_CLASS = "w-8";
 
-/** Toggle sticky mini-name class without React state (keeps pans off the render path). */
+/**
+ * Compact name appears once the player column scrolls past the left edge
+ * (`[data-name-scroll-end]` sits immediately after the name cell — before star).
+ */
 function onNameStripScroll(e: UIEvent<HTMLDivElement>) {
   const el = e.currentTarget;
-  const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
+  el.style.setProperty("--m-draft-scrollport-w", `${el.clientWidth}px`);
+  const end = el.querySelector<HTMLElement>("[data-name-scroll-end]");
+  const threshold = end != null ? end.offsetLeft : NAME_SCROLL_THRESHOLD_PX;
+  const on = el.scrollLeft >= threshold;
   if (el.classList.contains("is-scrolled-x") !== on) {
     el.classList.toggle("is-scrolled-x", on);
   }
@@ -216,6 +247,8 @@ export function MobileMockDraftSheet({
   onRosterTeamChange,
   onDraft,
   onToggleQueue,
+  onMoveQueued,
+  onRemoveQueued,
   onOpenPlayer,
 }: {
   tab: SheetTab;
@@ -240,23 +273,27 @@ export function MobileMockDraftSheet({
   onRosterTeamChange: (t: number) => void;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
+  onMoveQueued: (id: string, dir: -1 | 1) => void;
+  onRemoveQueued: (ids: string[]) => void;
   onOpenPlayer: (id: string) => void;
 }) {
   const prevYear = Math.max(2000, (Number(season) || new Date().getFullYear()) - 1);
-  // Season projections omit rec_tgt — sum weekly proj targets (desktop popup source).
-  const { data: projTgtRaw } = useQuery({
-    queryKey: ["season-proj-rec-tgt", season],
-    queryFn: () => fetchSeasonProjectedRecTgt(season),
+  // Season projections omit some counting stats — sum weekly bundles (popup source).
+  const { data: projExtrasRaw } = useQuery({
+    queryKey: ["season-proj-board-extras", season],
+    queryFn: () => fetchSeasonProjectedBoardExtras(season),
     enabled: Boolean(season) && /^\d{4}$/.test(season),
     staleTime: 1000 * 60 * 60 * 12,
     placeholderData: (prev) => prev,
   });
-  // Defer painting target overlays so a late fetch doesn't hitch an active fling.
-  const [projTgtById, setProjTgtById] = useState<Record<string, number>>({});
+  // Defer painting overlays so a late fetch doesn't hitch an active fling.
+  const [projExtrasById, setProjExtrasById] = useState<
+    Record<string, SeasonProjBoardExtras>
+  >({});
   useEffect(() => {
-    if (!projTgtRaw) return;
-    startTransition(() => setProjTgtById(projTgtRaw));
-  }, [projTgtRaw]);
+    if (!projExtrasRaw) return;
+    startTransition(() => setProjExtrasById(projExtrasRaw));
+  }, [projExtrasRaw]);
   const draftedPlayers = useMemo(() => {
     return picks
       .slice()
@@ -274,6 +311,10 @@ export function MobileMockDraftSheet({
     startPct: number;
     parentH: number;
     moved: boolean;
+    lastY: number;
+    lastT: number;
+    /** px/ms, positive = finger moving up (sheet expanding). */
+    velocityY: number;
   } | null>(null);
   /** After a vertical drag on the header, ignore the synthetic click on a tab. */
   const suppressTabClickRef = useRef(false);
@@ -299,6 +340,8 @@ export function MobileMockDraftSheet({
   }, [complete]);
 
   const DRAG_THRESHOLD_PX = 8;
+  /** ~0.45 px/ms ≈ quick flick; prefer directional snap over nearest. */
+  const FLICK_VELOCITY_PX_MS = 0.45;
 
   const onHeaderPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -306,17 +349,29 @@ export function MobileMockDraftSheet({
     const parentH = sheetRef.current?.parentElement?.clientHeight ?? window.innerHeight;
     const nextCollapsed = measureCollapsedPct();
     setCollapsedPct(nextCollapsed);
+    const now = performance.now();
     dragRef.current = {
       startY: e.clientY,
       startPct: heightPct,
       parentH,
       moved: false,
+      lastY: e.clientY,
+      lastT: now,
+      velocityY: 0,
     };
   };
 
   const onHeaderPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.parentH <= 0) return;
+    const now = performance.now();
+    const dt = now - drag.lastT;
+    if (dt > 0 && dt < 64) {
+      // Finger up (smaller Y) expands the sheet → positive velocity.
+      drag.velocityY = (drag.lastY - e.clientY) / dt;
+    }
+    drag.lastY = e.clientY;
+    drag.lastT = now;
     const deltaY = drag.startY - e.clientY;
     if (!drag.moved) {
       if (Math.abs(e.clientY - drag.startY) < DRAG_THRESHOLD_PX) return;
@@ -334,7 +389,28 @@ export function MobileMockDraftSheet({
       const floor = measureCollapsedPct();
       setCollapsedPct(floor);
       const current = dragPct ?? snapPct(snap);
-      setSnap(nearestSheetSnap(current, floor));
+      const vy = drag.velocityY;
+      // Project ~180ms of coast so a quick flick lands on the intended snap.
+      const projected =
+        current + ((vy * 180) / Math.max(1, drag.parentH)) * 100;
+      let next: SheetSnap;
+      if (vy >= FLICK_VELOCITY_PX_MS) {
+        next = sheetSnapInDirection(snap, "up");
+        // If already past the next stop, prefer projected nearest.
+        const dirTarget = snapPct(next);
+        if (projected > dirTarget + 4) {
+          next = nearestSheetSnap(projected, floor);
+        }
+      } else if (vy <= -FLICK_VELOCITY_PX_MS) {
+        next = sheetSnapInDirection(snap, "down");
+        const dirTarget = next === "collapsed" ? floor : snapPct(next);
+        if (projected < dirTarget - 4) {
+          next = nearestSheetSnap(projected, floor);
+        }
+      } else {
+        next = nearestSheetSnap(projected, floor);
+      }
+      setSnap(next);
       // Swallow the click that follows a drag; clear if no click arrives.
       suppressTabClickRef.current = true;
       window.setTimeout(() => {
@@ -358,7 +434,7 @@ export function MobileMockDraftSheet({
   return (
     <div
       ref={sheetRef}
-      className="flex shrink-0 flex-col overflow-hidden rounded-t-2xl border-t border-m-border bg-m-sheet shadow-[0_-8px_24px_rgba(0,0,0,0.28)] transition-[height] duration-200 ease-out"
+      className="flex shrink-0 flex-col overflow-hidden rounded-t-2xl border-t border-m-border bg-m-sheet shadow-[0_-8px_24px_rgba(0,0,0,0.28)] transition-[height] duration-300 ease-out"
       style={{
         height: `${heightPct}%`,
         transitionProperty: dragPct == null ? "height" : "none",
@@ -433,7 +509,7 @@ export function MobileMockDraftSheet({
           myCounts={myCounts}
           nextUserOverall={nextUserOverall}
           prevYear={prevYear}
-          projTgtById={projTgtById}
+          projExtrasById={projExtrasById}
           onDraft={onDraft}
           onToggleQueue={onToggleQueue}
           onOpenPlayer={onOpenPlayer}
@@ -447,9 +523,9 @@ export function MobileMockDraftSheet({
           complete={complete}
           queueAutopickOn={queueAutopickOn}
           onQueueAutopickChange={onQueueAutopickChange}
-          projTgtById={projTgtById}
           onDraft={onDraft}
-          onToggleQueue={onToggleQueue}
+          onMoveQueued={onMoveQueued}
+          onRemoveQueued={onRemoveQueued}
           onOpenPlayer={onOpenPlayer}
         />
       ) : null}
@@ -479,7 +555,7 @@ function PlayersPane({
   myCounts,
   nextUserOverall,
   prevYear,
-  projTgtById,
+  projExtrasById,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -493,7 +569,7 @@ function PlayersPane({
   myCounts: Record<string, number>;
   nextUserOverall: number | null;
   prevYear: number;
-  projTgtById: Record<string, number>;
+  projExtrasById: Record<string, SeasonProjBoardExtras>;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -633,7 +709,7 @@ function PlayersPane({
                 complete={complete || draftedOnly}
                 showPrevYear={showPrevYear}
                 prevYear={prevYear}
-                projTgt={projTgtById[p.id]}
+                projExtras={projExtrasById[p.id]}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
@@ -678,9 +754,9 @@ function QueuePane({
   complete,
   queueAutopickOn,
   onQueueAutopickChange,
-  projTgtById,
   onDraft,
-  onToggleQueue,
+  onMoveQueued,
+  onRemoveQueued,
   onOpenPlayer,
 }: {
   queuedPlayers: Player[];
@@ -689,19 +765,37 @@ function QueuePane({
   complete: boolean;
   queueAutopickOn: boolean;
   onQueueAutopickChange: (on: boolean) => void;
-  projTgtById: Record<string, number>;
   onDraft: (id: string) => void;
-  onToggleQueue: (id: string) => void;
+  onMoveQueued: (id: string, dir: -1 | 1) => void;
+  onRemoveQueued: (ids: string[]) => void;
   onOpenPlayer: (id: string) => void;
 }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedIndex = selectedId
+    ? queuedPlayers.findIndex((p) => p.id === selectedId)
+    : -1;
+
+  useEffect(() => {
+    if (selectedId && !queuedPlayers.some((p) => p.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [queuedPlayers, selectedId]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-end gap-2 px-3 py-2">
-        <span className="text-xs text-m-muted">Auto-pick</span>
+        <span
+          className="inline-flex items-center gap-1 text-xs text-m-muted"
+          title="When on, drafts the #1 available player in your queue on your turn."
+        >
+          <Info className="size-3.5" strokeWidth={2.25} aria-hidden />
+          Auto-pick
+        </span>
         <button
           type="button"
           role="switch"
           aria-checked={queueAutopickOn}
+          aria-label="Queue auto-pick"
           onClick={() => onQueueAutopickChange(!queueAutopickOn)}
           className={cn(
             "relative h-6 w-11 rounded-full transition-colors",
@@ -727,28 +821,125 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <DualAxisScroll className="px-2 pb-3" onHorizScroll={onNameStripScroll}>
-          <div className="min-w-max">
-            {queuedPlayers.map((p, i) => (
-              <PlayerStatsRow
+        <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
+          {queuedPlayers.map((p, i) => {
+            const adp = value(p, settings.scoring).adp;
+            const short = shortName(p.name);
+            const meta = `${posDisplayLabel(p.pos)} - ${p.team}${p.bye ? ` (${p.bye})` : ""}`;
+            const selected = selectedId === p.id;
+            return (
+              <li
                 key={p.id}
-                player={p}
-                settings={settings}
-                rank={i + 1}
-                queued
-                myTurn={myTurn}
-                complete={complete}
-                showPrevYear={false}
-                prevYear={0}
-                projTgt={projTgtById[p.id]}
-                onDraft={onDraft}
-                onToggleQueue={onToggleQueue}
-                onOpenPlayer={onOpenPlayer}
-              />
-            ))}
-          </div>
-        </DualAxisScroll>
+                className="flex items-center gap-2 border-b border-m-border/60 py-2"
+              >
+                {!complete ? (
+                  <button
+                    type="button"
+                    disabled={!myTurn}
+                    onClick={() => onDraft(p.id)}
+                    className={cn(
+                      "h-9 w-[3.25rem] shrink-0 rounded-lg font-display text-[11px] font-extrabold uppercase tracking-wide",
+                      myTurn
+                        ? "bg-m-accent text-m-accent-fg"
+                        : "bg-m-chip text-m-muted opacity-70",
+                    )}
+                  >
+                    Draft
+                  </button>
+                ) : null}
+                <span className="tabnum w-5 shrink-0 text-center text-sm font-semibold text-m-card-fg">
+                  {i + 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onOpenPlayer(p.id)}
+                  className="min-w-0 flex-1 py-0.5 text-left"
+                >
+                  <span className="block truncate text-[13px] font-bold text-m-card-fg">
+                    {short}
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-1 text-[11px] text-m-muted">
+                    <span
+                      className={cn(
+                        "size-1.5 shrink-0 rounded-full",
+                        POS_DOT[p.pos] ?? "bg-m-muted",
+                      )}
+                      aria-hidden
+                    />
+                    <span className="truncate">{meta}</span>
+                  </span>
+                </button>
+                <div className="w-12 shrink-0 text-right">
+                  <span className="block text-[9px] font-semibold uppercase tracking-wide text-m-muted">
+                    ADP
+                  </span>
+                  <span className="tabnum block text-sm font-semibold text-m-card-fg">
+                    {adp < 900 ? adp.toFixed(1) : "—"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  aria-label={selected ? "Deselect queue player" : "Select queue player"}
+                  aria-pressed={selected}
+                  onClick={() => setSelectedId(selected ? null : p.id)}
+                  className={cn(
+                    "flex size-9 shrink-0 items-center justify-center",
+                    selected ? "text-m-accent" : "text-m-muted",
+                  )}
+                >
+                  {selected ? (
+                    <CircleDot className="size-5" strokeWidth={2.25} />
+                  ) : (
+                    <Circle className="size-5" strokeWidth={2} />
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
+      {selectedId && selectedIndex >= 0 ? (
+        <div className="flex items-center gap-3 border-t border-m-border bg-m-sheet px-4 py-2.5">
+          <button
+            type="button"
+            aria-label="Remove from queue"
+            onClick={() => {
+              onRemoveQueued([selectedId]);
+              setSelectedId(null);
+            }}
+            className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg"
+          >
+            <Trash2 className="size-5" strokeWidth={2.25} />
+          </button>
+          <div className="flex flex-1 items-center justify-center gap-3">
+            <button
+              type="button"
+              aria-label="Move up in queue"
+              disabled={selectedIndex <= 0}
+              onClick={() => onMoveQueued(selectedId, -1)}
+              className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
+            >
+              <ArrowUp className="size-5" strokeWidth={2.25} />
+            </button>
+            <button
+              type="button"
+              aria-label="Move down in queue"
+              disabled={selectedIndex >= queuedPlayers.length - 1}
+              onClick={() => onMoveQueued(selectedId, 1)}
+              className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
+            >
+              <ArrowDown className="size-5" strokeWidth={2.25} />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedId(null)}
+            className="font-display text-sm font-bold uppercase tracking-wide text-m-accent"
+          >
+            Done
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -805,9 +996,8 @@ function TeamPane({
             >
               <span
                 className={cn(
-                  "inline-flex h-8 min-w-[2.6rem] items-center justify-center rounded-md px-1.5 font-display text-[11px] font-bold uppercase",
-                  s.player ? posCellClass(s.player.pos) : "bg-m-chip text-m-chip-fg",
-                  !s.player && (POS_DOT[s.slot] ? "" : ""),
+                  "inline-flex h-8 min-w-[2.6rem] items-center justify-center rounded-md px-1.5 font-display text-[11px] font-bold uppercase tracking-wide",
+                  posSlotBadgeClass(s.slot),
                 )}
               >
                 {s.slot === "DEF"
@@ -863,8 +1053,9 @@ function TeamPane({
 }
 
 /**
- * Full row scrolls (Draft + name + star + stats). Mini name sticks via CSS when
- * the scroll parent has `.is-scrolled-x` (no React re-render on pan).
+ * Full row scrolls (Draft + name + star + stats). When scrolled past the name
+ * column, a Sleeper-style identity band sits above the stats (in-flow — no
+ * overlap with ADP/Pts labels).
  */
 function PlayerStatsRow({
   player,
@@ -875,7 +1066,7 @@ function PlayerStatsRow({
   complete,
   showPrevYear,
   prevYear,
-  projTgt,
+  projExtras,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -888,8 +1079,8 @@ function PlayerStatsRow({
   complete: boolean;
   showPrevYear: boolean;
   prevYear: number;
-  /** Season total from summed weekly projection targets (desktop Projections tab). */
-  projTgt?: number | undefined;
+  /** Weekly-sum overlays for stats omitted from season projection rows. */
+  projExtras?: SeasonProjBoardExtras | undefined;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -902,42 +1093,57 @@ function PlayerStatsRow({
     resolveInjuryStatus(player) ?? player.injury_status ?? player.injury,
   );
   const baseLine: CountingStats = player.projLine ?? EMPTY_COUNTING_STATS;
-  const projLine: CountingStats =
-    projTgt != null && projTgt > 0 ? { ...baseLine, rec_tgt: projTgt } : baseLine;
+  const projLine: CountingStats = projExtras
+    ? {
+        ...baseLine,
+        ...(projExtras.rec_tgt != null && projExtras.rec_tgt > 0
+          ? { rec_tgt: projExtras.rec_tgt }
+          : null),
+        ...(projExtras.fgm != null && projExtras.fgm > 0 ? { fgm: projExtras.fgm } : null),
+        ...(projExtras.fga != null && projExtras.fga > 0 ? { fga: projExtras.fga } : null),
+        ...(projExtras.def_st_td != null && projExtras.def_st_td > 0
+          ? { def_st_td: projExtras.def_st_td }
+          : null),
+        ...(projExtras.pts_allow != null && projExtras.pts_allow > 0
+          ? { pts_allow: projExtras.pts_allow }
+          : null),
+      }
+    : baseLine;
   const prevLine = player.prevLine;
   const prevAdp = player.prevAdp?.[settings.scoring];
   const posCols = POS_STAT_COLUMNS[player.pos] ?? [];
 
   return (
-    <div className="relative border-b border-m-border/60 [content-visibility:auto] [contain-intrinsic-size:auto_3.25rem]">
-      {/* Overlay mini-name — solid fill (no blur/transition; those janked while panning). */}
-      <div className="pointer-events-none sticky left-0 z-20 h-0 w-0 overflow-visible">
-        <div className="absolute left-0 top-0 hidden max-w-[75vw] whitespace-nowrap bg-m-sheet px-1 py-0.5 [.is-scrolled-x_&]:pointer-events-auto [.is-scrolled-x_&]:block">
-          <button
-            type="button"
-            onClick={() => onOpenPlayer(player.id)}
-            className="flex items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
-          >
-            <span className="truncate text-m-card-fg">{short}</span>
+    <div className="relative border-b border-m-border/60 [content-visibility:auto] [contain-intrinsic-size:auto_4rem]">
+      {/* In-flow sticky identity — only when scrolled past name; stats sit below. */}
+      <div
+        className="sticky left-0 z-20 hidden bg-m-sheet px-2 pt-1 [.is-scrolled-x_&]:block"
+        style={{ width: "var(--m-draft-scrollport-w, 100%)" }}
+      >
+        <button
+          type="button"
+          onClick={() => onOpenPlayer(player.id)}
+          className="flex max-w-full items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
+        >
+          <span className="truncate text-m-card-fg">{short}</span>
+          <span
+            className={cn("size-1 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
+            aria-hidden
+          />
+          <span className="truncate">{meta}</span>
+          {injury ? (
             <span
-              className={cn("size-1 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
-              aria-hidden
-            />
-            <span className="truncate">{meta}</span>
-            {injury ? (
-              <span
-                title={injury.text}
-                className={cn(
-                  "inline-flex h-3.5 min-w-[0.9rem] shrink-0 items-center justify-center rounded px-0.5 text-[8px] font-black leading-none",
-                  injury.className,
-                )}
-              >
-                {injury.letter}
-              </span>
-            ) : null}
-          </button>
-          <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
-        </div>
+              title={injury.text}
+              className={cn(
+                "inline-flex h-3.5 min-w-[0.9rem] shrink-0 items-center justify-center rounded px-0.5 text-[8px] font-black leading-none",
+                injury.className,
+              )}
+            >
+              {injury.letter}
+            </span>
+          ) : null}
+        </button>
+        <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
       </div>
 
       <div className="flex items-stretch gap-1.5 py-1.5">
@@ -984,6 +1190,8 @@ function PlayerStatsRow({
             ) : null}
           </span>
         </button>
+        {/* Compact-name threshold: fires once this marker scrolls past the left edge. */}
+        <span data-name-scroll-end className="w-0 shrink-0" aria-hidden />
         <button
           type="button"
           aria-label={queued ? "Remove from queue" : "Add to queue"}
