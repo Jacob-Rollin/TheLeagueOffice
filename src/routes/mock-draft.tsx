@@ -42,6 +42,7 @@ import {
   type MockConfig,
   type MockSessionState,
 } from "@/lib/mock-config";
+import { usePageVisible } from "@/lib/page-visibility";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 import { cn } from "@/lib/utils";
 
@@ -84,6 +85,7 @@ const EMPTY_PAYLOAD = { season: "", updatedAt: 0, players: [] as Player[] };
 
 function MockDraftPage() {
   const navigate = useNavigate();
+  const pageVisible = usePageVisible();
   const cache = useSleeperPlayers();
   const fallback = useQuery({ ...playersQuery, enabled: Boolean(cache.error) && !cache.data });
   const data = cache.data ?? fallback.data ?? EMPTY_PAYLOAD;
@@ -195,28 +197,38 @@ function MockDraftPage() {
   }, [complete, started, picks, settings, byId, available, rosters, personas, commitPick]);
 
   // Simulation loop: computer slots pick automatically at the active speed.
+  // Pause while the tab is hidden so background tabs do not burn client CPU.
   const runRef = useRef(runAiPick);
   runRef.current = runAiPick;
   useEffect(() => {
-    if (!started || complete || myTurn || paused || speed === "manual" || !data.players.length)
+    if (
+      !started ||
+      complete ||
+      myTurn ||
+      paused ||
+      !pageVisible ||
+      speed === "manual" ||
+      !data.players.length
+    ) {
       return;
+    }
     const id = setTimeout(() => runRef.current(), SPEED_DELAY[speed]);
     return () => clearTimeout(id);
-  }, [started, complete, myTurn, paused, speed, picks.length, data.players.length]);
+  }, [started, complete, myTurn, paused, pageVisible, speed, picks.length, data.players.length]);
 
-  // Pick clock: counts down only while the human is on the clock and unpaused.
+  // Pick clock: counts down only while the human is on the clock, unpaused, and visible.
   // Off-turn / AI slots show --:-- so the timer does not look stuck.
   useEffect(() => {
     if (!myTurn || timerSeconds === null) {
       setClock(null);
       return;
     }
-    if (paused) return;
+    if (paused || !pageVisible) return;
     const id = setInterval(() => {
       setClock((c) => (c === null ? null : Math.max(0, c - 1)));
     }, 1000);
     return () => clearInterval(id);
-  }, [myTurn, timerSeconds, picks.length, paused]);
+  }, [myTurn, timerSeconds, picks.length, paused, pageVisible]);
 
   // Reset the clock at the start of each of the user's turns.
   useEffect(() => {
@@ -225,10 +237,10 @@ function MockDraftPage() {
 
   // Auto-draft with the Suggested engine when the clock expires.
   useEffect(() => {
-    if (!myTurn || paused || clock !== 0) return;
+    if (!myTurn || paused || !pageVisible || clock !== 0) return;
     const choice = autoPickForUser(available, myPlayers, settings, picks.length + 1);
     if (choice) commitPick(choice.id, settings.myTeam);
-  }, [clock, myTurn, paused, available, myPlayers, settings, picks.length, commitPick]);
+  }, [clock, myTurn, paused, pageVisible, available, myPlayers, settings, picks.length, commitPick]);
 
   // Boot the arena from setup config; restore an in-progress session when it matches.
   useEffect(() => {

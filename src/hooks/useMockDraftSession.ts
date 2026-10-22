@@ -2,6 +2,7 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import { usePageVisible } from "@/lib/page-visibility";
 import {
   DEFAULT_SETTINGS,
   nextPicksFor,
@@ -54,13 +55,20 @@ export type UseMockDraftSessionOptions = {
   onMissingConfig: () => void;
   /** Prefer queue order when the pick clock expires (mobile auto-pick toggle). */
   queueAutopick?: boolean;
+  /**
+   * Bump to re-read sessionStorage config and restart the board (e.g. after
+   * mid-draft settings save) without a full document reload.
+   */
+  bootKey?: number;
 };
 
 /** Shared solo mock-draft engine (AI opponents, clock, sessionStorage). */
 export function useMockDraftSession({
   onMissingConfig,
   queueAutopick = false,
+  bootKey = 0,
 }: UseMockDraftSessionOptions) {
+  const pageVisible = usePageVisible();
   const cache = useSleeperPlayers();
   const fallback = useQuery({ ...playersQuery, enabled: Boolean(cache.error) && !cache.data });
   const data = cache.data ?? fallback.data ?? EMPTY_PAYLOAD;
@@ -171,31 +179,51 @@ export function useMockDraftSession({
 
   const runRef = useRef(runAiPick);
   runRef.current = runAiPick;
+  // Pause AI when the user pauses OR the tab is hidden — avoids background CPU
+  // and accidental autopicks while the visitor is elsewhere.
   useEffect(() => {
-    if (!started || complete || myTurn || paused || speed === "manual" || !data.players.length)
+    if (
+      !started ||
+      complete ||
+      myTurn ||
+      paused ||
+      !pageVisible ||
+      speed === "manual" ||
+      !data.players.length
+    ) {
       return;
+    }
     const id = setTimeout(() => runRef.current(), SPEED_DELAY[speed]);
     return () => clearTimeout(id);
-  }, [started, complete, myTurn, paused, speed, picks.length, data.players.length]);
+  }, [
+    started,
+    complete,
+    myTurn,
+    paused,
+    pageVisible,
+    speed,
+    picks.length,
+    data.players.length,
+  ]);
 
   useEffect(() => {
     if (!myTurn || timerSeconds === null) {
       setClock(null);
       return;
     }
-    if (paused) return;
+    if (paused || !pageVisible) return;
     const id = setInterval(() => {
       setClock((c) => (c === null ? null : Math.max(0, c - 1)));
     }, 1000);
     return () => clearInterval(id);
-  }, [myTurn, timerSeconds, picks.length, paused]);
+  }, [myTurn, timerSeconds, picks.length, paused, pageVisible]);
 
   useEffect(() => {
     if (myTurn && timerSeconds !== null) setClock(timerSeconds);
   }, [myTurn, timerSeconds, picks.length]);
 
   useEffect(() => {
-    if (!myTurn || paused || clock !== 0) return;
+    if (!myTurn || paused || !pageVisible || clock !== 0) return;
     let choice: Player | null = null;
     if (queueAutopickOn) {
       choice = queuedPlayers[0] ?? null;
@@ -208,6 +236,7 @@ export function useMockDraftSession({
     clock,
     myTurn,
     paused,
+    pageVisible,
     queueAutopickOn,
     queuedPlayers,
     available,
@@ -265,7 +294,7 @@ export function useMockDraftSession({
       clearMockSession();
     }
     setConfig(nextConfig);
-  }, []);
+  }, [bootKey]);
 
   useEffect(() => {
     if (!config || !started) return;

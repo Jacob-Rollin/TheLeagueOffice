@@ -24,6 +24,7 @@ export function MobileMockDraftArena() {
   const navigate = useNavigate();
   const modalRef = useRef<PlayerModalHandle>(null);
   const [jumpSignal, setJumpSignal] = useState(0);
+  const [bootKey, setBootKey] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<MockConfig>(DEFAULT_MOCK_CONFIG);
@@ -33,7 +34,7 @@ export function MobileMockDraftArena() {
     void navigate({ to: "/m/mock-draft/setup" });
   }, [navigate]);
 
-  const session = useMockDraftSession({ onMissingConfig: goSetup });
+  const session = useMockDraftSession({ onMissingConfig: goSetup, bootKey });
   const {
     data,
     syncing,
@@ -102,7 +103,10 @@ export function MobileMockDraftArena() {
     clearMockSession();
     saveMockConfig(clean);
     setSettingsOpen(false);
-    window.location.assign("/m/mock-draft");
+    setShowRecap(false);
+    // Remount session from the new config without a full document reload
+    // (avoids re-hitting bootstrap / catalog warm paths unnecessarily).
+    setBootKey((k) => k + 1);
   };
 
   if (!started) {
@@ -382,12 +386,16 @@ export function MobileMockDraftArena() {
       <PlayerModalHost
         ref={modalRef}
         showDraftActions
+        canDraft={myTurn}
         resolveDraftRosterLabel={(playerId) => {
           const pick = picks.find((p) => p.playerId === playerId);
           return pick ? teamName(settings, pick.team) : null;
         }}
         isSessionDrafted={(playerId) => draftedIds.has(playerId)}
         onSessionDraft={draftForUser}
+        isSessionWatched={(playerId) => watchIds.has(playerId)}
+        onSessionToggleWatch={toggleWatch}
+        scoringFormat={settings.scoring}
       />
     </div>
   );
