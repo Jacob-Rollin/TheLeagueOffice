@@ -169,6 +169,12 @@ function DualAxisScroll({
       }, 120);
     };
 
+    // Keep compact-name fade in sync on mount / resize (not only on scroll).
+    const syncCompact = () => updateCompactNameFade(horiz);
+    syncCompact();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncCompact) : null;
+    ro?.observe(horiz);
+
     vert.addEventListener("touchstart", onTouchStart, { passive: true, capture: true });
     vert.addEventListener("touchmove", onTouchMove, { passive: true, capture: true });
     vert.addEventListener("touchend", onTouchEnd, { passive: true, capture: true });
@@ -177,6 +183,7 @@ function DualAxisScroll({
     horiz.addEventListener("scroll", pinOffAxis, { passive: true });
 
     return () => {
+      ro?.disconnect();
       vert.removeEventListener("touchstart", onTouchStart, true);
       vert.removeEventListener("touchmove", onTouchMove, true);
       vert.removeEventListener("touchend", onTouchEnd, true);
@@ -206,31 +213,44 @@ function DualAxisScroll({
 }
 
 /** Fallback if the name-end sentinel isn't in the DOM yet. */
-const NAME_SCROLL_THRESHOLD_PX = 120;
+const NAME_SCROLL_THRESHOLD_PX = 168;
 const NAME_COL_CLASS = "w-[7.25rem]";
 const STAR_COL_CLASS = "w-8";
 
-/** Fade distance (px) after the name column clears — Sleeper-like soft reveal. */
-const COMPACT_NAME_FADE_PX = 36;
+/**
+ * Right edge of the player name column in scroll-content coordinates.
+ * Uses getBoundingClientRect so it stays correct inside nested flex rows
+ * (offsetLeft is relative to offsetParent and was giving a bad threshold).
+ */
+function nameColumnEndPx(scrollEl: HTMLElement): number {
+  const end = scrollEl.querySelector<HTMLElement>("[data-name-scroll-end]");
+  if (!end) return NAME_SCROLL_THRESHOLD_PX;
+  const sRect = scrollEl.getBoundingClientRect();
+  const eRect = end.getBoundingClientRect();
+  return Math.max(1, eRect.left - sRect.left + scrollEl.scrollLeft);
+}
 
 /**
- * Compact name fades in once the player column scrolls past the left edge
- * (`[data-name-scroll-end]` sits immediately after the name cell — before star).
- * Opacity is progressive so it eases in; layout height stays reserved (no snap).
+ * Scroll-linked compact-name opacity (no CSS transition — that lagged flings).
+ * Fades 0→1 while the name column leaves the viewport; fully opaque once none
+ * of the name column remains on screen (`scrollLeft >= nameEnd`).
  */
-function onNameStripScroll(e: UIEvent<HTMLDivElement>) {
-  const el = e.currentTarget;
-  el.style.setProperty("--m-draft-scrollport-w", `${el.clientWidth}px`);
-  const end = el.querySelector<HTMLElement>("[data-name-scroll-end]");
-  const threshold = end != null ? end.offsetLeft : NAME_SCROLL_THRESHOLD_PX;
-  const past = el.scrollLeft - threshold;
-  const opacity =
-    past <= 0 ? 0 : Math.min(1, past / COMPACT_NAME_FADE_PX);
-  el.style.setProperty("--m-draft-compact-opacity", opacity.toFixed(3));
-  const on = opacity > 0.02;
-  if (el.classList.contains("is-scrolled-x") !== on) {
-    el.classList.toggle("is-scrolled-x", on);
+function updateCompactNameFade(scrollEl: HTMLElement) {
+  // Hidden keep-alive panes report 0 width — skip so we don't clobber opacity.
+  if (scrollEl.clientWidth <= 0) return;
+  scrollEl.style.setProperty("--m-draft-scrollport-w", `${scrollEl.clientWidth}px`);
+  const nameEnd = nameColumnEndPx(scrollEl);
+  // 0 at rest → 1 once the name column has fully left the scrollport.
+  const opacity = Math.min(1, Math.max(0, scrollEl.scrollLeft / nameEnd));
+  scrollEl.style.setProperty("--m-draft-compact-opacity", opacity.toFixed(3));
+  const on = opacity > 0.04;
+  if (scrollEl.classList.contains("is-scrolled-x") !== on) {
+    scrollEl.classList.toggle("is-scrolled-x", on);
   }
+}
+
+function onNameStripScroll(e: UIEvent<HTMLDivElement>) {
+  updateCompactNameFade(e.currentTarget);
 }
 
 export function MobileMockDraftSheet({
@@ -429,12 +449,24 @@ export function MobileMockDraftSheet({
     dragRef.current = null;
   };
 
+  // Keep panes mounted after first visit so tab swaps don't remount the
+  // heavy players list (that was the main tab-switch hitch).
+  const [mountedTabs, setMountedTabs] = useState<Record<SheetTab, boolean>>({
+    players: true,
+    queue: false,
+    team: false,
+  });
+  useEffect(() => {
+    setMountedTabs((prev) => (prev[tab] ? prev : { ...prev, [tab]: true }));
+  }, [tab]);
+
   const onTabPress = (key: SheetTab) => {
     if (suppressTabClickRef.current) {
       suppressTabClickRef.current = false;
       return;
     }
-    onTabChange(key);
+    // Transition keeps the tab underline snappy while the pane paints.
+    startTransition(() => onTabChange(key));
     // Opening a tab from fully collapsed pulls the sheet to peek.
     if (snap === "collapsed") setSnap("peek");
   };
@@ -506,48 +538,63 @@ export function MobileMockDraftSheet({
         </div>
       </div>
 
-      {tab === "players" ? (
-        <PlayersPane
-          settings={settings}
-          available={available}
-          draftedPlayers={draftedPlayers}
-          watchIds={watchIds}
-          myTurn={myTurn}
-          complete={complete}
-          myCounts={myCounts}
-          nextUserOverall={nextUserOverall}
-          prevYear={prevYear}
-          projExtrasById={projExtrasById}
-          onDraft={onDraft}
-          onToggleQueue={onToggleQueue}
-          onOpenPlayer={onOpenPlayer}
-        />
+      {mountedTabs.players ? (
+        <div
+          className={cn("flex min-h-0 flex-1 flex-col", tab !== "players" && "hidden")}
+          aria-hidden={tab !== "players"}
+        >
+          <PlayersPane
+            settings={settings}
+            available={available}
+            draftedPlayers={draftedPlayers}
+            watchIds={watchIds}
+            myTurn={myTurn}
+            complete={complete}
+            myCounts={myCounts}
+            nextUserOverall={nextUserOverall}
+            prevYear={prevYear}
+            projExtrasById={projExtrasById}
+            onDraft={onDraft}
+            onToggleQueue={onToggleQueue}
+            onOpenPlayer={onOpenPlayer}
+          />
+        </div>
       ) : null}
-      {tab === "queue" ? (
-        <QueuePane
-          queuedPlayers={queuedPlayers}
-          settings={settings}
-          myTurn={myTurn}
-          complete={complete}
-          queueAutopickOn={queueAutopickOn}
-          onQueueAutopickChange={onQueueAutopickChange}
-          onDraft={onDraft}
-          onMoveQueued={onMoveQueued}
-          onRemoveQueued={onRemoveQueued}
-          onOpenPlayer={onOpenPlayer}
-        />
+      {mountedTabs.queue ? (
+        <div
+          className={cn("flex min-h-0 flex-1 flex-col", tab !== "queue" && "hidden")}
+          aria-hidden={tab !== "queue"}
+        >
+          <QueuePane
+            queuedPlayers={queuedPlayers}
+            settings={settings}
+            myTurn={myTurn}
+            complete={complete}
+            queueAutopickOn={queueAutopickOn}
+            onQueueAutopickChange={onQueueAutopickChange}
+            onDraft={onDraft}
+            onMoveQueued={onMoveQueued}
+            onRemoveQueued={onRemoveQueued}
+            onOpenPlayer={onOpenPlayer}
+          />
+        </div>
       ) : null}
-      {tab === "team" ? (
-        <TeamPane
-          settings={settings}
-          picks={picks}
-          byId={byId}
-          draftedIds={draftedIds}
-          rosterTeam={rosterTeam}
-          onRosterTeamChange={onRosterTeamChange}
-          onOpenPlayer={onOpenPlayer}
-          currentOverall={currentOverall}
-        />
+      {mountedTabs.team ? (
+        <div
+          className={cn("flex min-h-0 flex-1 flex-col", tab !== "team" && "hidden")}
+          aria-hidden={tab !== "team"}
+        >
+          <TeamPane
+            settings={settings}
+            picks={picks}
+            byId={byId}
+            draftedIds={draftedIds}
+            rosterTeam={rosterTeam}
+            onRosterTeamChange={onRosterTeamChange}
+            onOpenPlayer={onOpenPlayer}
+            currentOverall={currentOverall}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -1138,13 +1185,13 @@ function PlayerStatsRow({
   const posCols = POS_STAT_COLUMNS[player.pos] ?? [];
 
   return (
-    <div className="relative border-b border-m-border/60 [content-visibility:auto] [contain-intrinsic-size:auto_4.5rem]">
+    <div className="relative border-b border-m-border/60">
       {/*
-        Always-reserved sticky band (fixed height) so toggling scroll never
-        reflows the row. Opacity is driven by --m-draft-compact-opacity.
+        Always-reserved sticky band (fixed height) so scroll never reflows the
+        row. Opacity is scroll-linked (no CSS transition — avoids fling lag).
       */}
       <div
-        className="sticky left-0 z-20 h-5 overflow-hidden bg-m-sheet px-2 pointer-events-none [.is-scrolled-x_&]:pointer-events-auto"
+        className="pointer-events-none sticky left-0 z-20 h-5 overflow-hidden bg-m-sheet px-2 invisible [.is-scrolled-x_&]:pointer-events-auto [.is-scrolled-x_&]:visible"
         style={{
           width: "var(--m-draft-scrollport-w, 100%)",
           opacity: "var(--m-draft-compact-opacity, 0)",
@@ -1175,9 +1222,8 @@ function PlayerStatsRow({
           ) : null}
         </button>
       </div>
-      {/* Hairline under the reserved band — always present so spacing matches scrolled state. */}
       <div
-        className="sticky left-0 z-20 h-px bg-m-border/70 pointer-events-none"
+        className="pointer-events-none sticky left-0 z-20 h-px bg-m-border/70 invisible [.is-scrolled-x_&]:visible"
         style={{
           width: "var(--m-draft-scrollport-w, 100%)",
           opacity: "var(--m-draft-compact-opacity, 0)",
