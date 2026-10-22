@@ -196,7 +196,7 @@ function DualAxisScroll({
     >
       <div
         ref={horizRef}
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] [--m-draft-compact-opacity:0]"
         onScroll={onHorizScroll}
       >
         {children}
@@ -210,16 +210,24 @@ const NAME_SCROLL_THRESHOLD_PX = 120;
 const NAME_COL_CLASS = "w-[7.25rem]";
 const STAR_COL_CLASS = "w-8";
 
+/** Fade distance (px) after the name column clears — Sleeper-like soft reveal. */
+const COMPACT_NAME_FADE_PX = 36;
+
 /**
- * Compact name appears once the player column scrolls past the left edge
+ * Compact name fades in once the player column scrolls past the left edge
  * (`[data-name-scroll-end]` sits immediately after the name cell — before star).
+ * Opacity is progressive so it eases in; layout height stays reserved (no snap).
  */
 function onNameStripScroll(e: UIEvent<HTMLDivElement>) {
   const el = e.currentTarget;
   el.style.setProperty("--m-draft-scrollport-w", `${el.clientWidth}px`);
   const end = el.querySelector<HTMLElement>("[data-name-scroll-end]");
   const threshold = end != null ? end.offsetLeft : NAME_SCROLL_THRESHOLD_PX;
-  const on = el.scrollLeft >= threshold;
+  const past = el.scrollLeft - threshold;
+  const opacity =
+    past <= 0 ? 0 : Math.min(1, past / COMPACT_NAME_FADE_PX);
+  el.style.setProperty("--m-draft-compact-opacity", opacity.toFixed(3));
+  const on = opacity > 0.02;
   if (el.classList.contains("is-scrolled-x") !== on) {
     el.classList.toggle("is-scrolled-x", on);
   }
@@ -602,14 +610,14 @@ function PlayersPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex items-center gap-2 overflow-x-auto px-2 py-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
           aria-label="Search players"
           onClick={() => setSearchOpen((o) => !o)}
-          className="shrink-0 rounded-lg bg-m-icon-bg p-2 text-m-icon-fg"
+          className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
         >
-          <Search className="size-4" strokeWidth={2.5} />
+          <Search className="size-5" strokeWidth={2.5} />
         </button>
         {POS_FILTERS.map((p) => {
           const drafted =
@@ -622,24 +630,37 @@ function PlayersPane({
               : p === "DEF"
                 ? settings.roster.DEF
                 : Number(settings.roster[p as keyof typeof settings.roster] ?? 0);
+          const showCount = p === "ALL" || totalSlots > 0;
+          const countLabel = showCount
+            ? `${drafted}/${p === "ALL" ? totalSlots : Math.max(totalSlots, drafted)}`
+            : "";
           return (
             <button
               key={p}
               type="button"
               onClick={() => startTransition(() => setPos(p))}
               className={cn(
-                "shrink-0 rounded-full px-2.5 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide",
+                "inline-flex size-12 shrink-0 flex-col items-center justify-center rounded-full font-display leading-none",
                 pos === p ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
               )}
             >
-              {p === "DEF" ? "DST" : p}
-              {p === "ALL" || totalSlots > 0
-                ? ` ${drafted}/${p === "ALL" ? totalSlots : Math.max(totalSlots, drafted)}`
-                : ""}
+              <span className="text-[11px] font-extrabold uppercase tracking-wide">
+                {p === "DEF" ? "DST" : p}
+              </span>
+              {showCount ? (
+                <span
+                  className={cn(
+                    "mt-0.5 text-[9px] font-semibold tabular-nums",
+                    pos === p ? "text-m-bg/75" : "text-m-muted",
+                  )}
+                >
+                  {countLabel}
+                </span>
+              ) : null}
             </button>
           );
         })}
-        <span className="mx-0.5 h-5 w-px shrink-0 bg-m-border" aria-hidden />
+        <span className="mx-0.5 h-7 w-px shrink-0 bg-m-border" aria-hidden />
         <ToolChip
           active={watchOnly}
           onClick={() => {
@@ -899,7 +920,10 @@ function QueuePane({
         </ul>
       )}
       {selectedId && selectedIndex >= 0 ? (
-        <div className="flex items-center gap-3 border-t border-m-border bg-m-sheet px-4 py-2.5">
+        <div
+          className="flex items-center gap-4 border-t border-m-border bg-m-sheet px-4 pt-3"
+          style={{ paddingBottom: "max(0.85rem, env(safe-area-inset-bottom, 0px))" }}
+        >
           <button
             type="button"
             aria-label="Remove from queue"
@@ -907,34 +931,34 @@ function QueuePane({
               onRemoveQueued([selectedId]);
               setSelectedId(null);
             }}
-            className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg"
+            className="inline-flex size-12 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg"
           >
-            <Trash2 className="size-5" strokeWidth={2.25} />
+            <Trash2 className="size-6" strokeWidth={2.25} />
           </button>
-          <div className="flex flex-1 items-center justify-center gap-3">
+          <div className="flex flex-1 items-center justify-center gap-4">
             <button
               type="button"
               aria-label="Move up in queue"
               disabled={selectedIndex <= 0}
               onClick={() => onMoveQueued(selectedId, -1)}
-              className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
+              className="inline-flex size-12 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
             >
-              <ArrowUp className="size-5" strokeWidth={2.25} />
+              <ArrowUp className="size-6" strokeWidth={2.25} />
             </button>
             <button
               type="button"
               aria-label="Move down in queue"
               disabled={selectedIndex >= queuedPlayers.length - 1}
               onClick={() => onMoveQueued(selectedId, 1)}
-              className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
+              className="inline-flex size-12 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
             >
-              <ArrowDown className="size-5" strokeWidth={2.25} />
+              <ArrowDown className="size-6" strokeWidth={2.25} />
             </button>
           </div>
           <button
             type="button"
             onClick={() => setSelectedId(null)}
-            className="font-display text-sm font-bold uppercase tracking-wide text-m-accent"
+            className="min-h-12 px-1 font-display text-base font-bold uppercase tracking-wide text-m-accent"
           >
             Done
           </button>
@@ -1053,9 +1077,9 @@ function TeamPane({
 }
 
 /**
- * Full row scrolls (Draft + name + star + stats). When scrolled past the name
- * column, a Sleeper-style identity band sits above the stats (in-flow — no
- * overlap with ADP/Pts labels).
+ * Full row scrolls (Draft + name + star + stats). Compact identity band height
+ * is always reserved above the stats (no layout snap); it fades in after the
+ * name column clears — same idea as Sleeper.
  */
 function PlayerStatsRow({
   player,
@@ -1114,16 +1138,23 @@ function PlayerStatsRow({
   const posCols = POS_STAT_COLUMNS[player.pos] ?? [];
 
   return (
-    <div className="relative border-b border-m-border/60 [content-visibility:auto] [contain-intrinsic-size:auto_4rem]">
-      {/* In-flow sticky identity — only when scrolled past name; stats sit below. */}
+    <div className="relative border-b border-m-border/60 [content-visibility:auto] [contain-intrinsic-size:auto_4.5rem]">
+      {/*
+        Always-reserved sticky band (fixed height) so toggling scroll never
+        reflows the row. Opacity is driven by --m-draft-compact-opacity.
+      */}
       <div
-        className="sticky left-0 z-20 hidden bg-m-sheet px-2 pt-1 [.is-scrolled-x_&]:block"
-        style={{ width: "var(--m-draft-scrollport-w, 100%)" }}
+        className="sticky left-0 z-20 h-5 overflow-hidden bg-m-sheet px-2 pointer-events-none [.is-scrolled-x_&]:pointer-events-auto"
+        style={{
+          width: "var(--m-draft-scrollport-w, 100%)",
+          opacity: "var(--m-draft-compact-opacity, 0)",
+        }}
       >
         <button
           type="button"
+          tabIndex={-1}
           onClick={() => onOpenPlayer(player.id)}
-          className="flex max-w-full items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
+          className="flex h-full max-w-full items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
         >
           <span className="truncate text-m-card-fg">{short}</span>
           <span
@@ -1143,8 +1174,16 @@ function PlayerStatsRow({
             </span>
           ) : null}
         </button>
-        <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
       </div>
+      {/* Hairline under the reserved band — always present so spacing matches scrolled state. */}
+      <div
+        className="sticky left-0 z-20 h-px bg-m-border/70 pointer-events-none"
+        style={{
+          width: "var(--m-draft-scrollport-w, 100%)",
+          opacity: "var(--m-draft-compact-opacity, 0)",
+        }}
+        aria-hidden
+      />
 
       <div className="flex items-stretch gap-1.5 py-1.5">
         {!complete ? (
