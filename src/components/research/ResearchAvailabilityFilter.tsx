@@ -1,4 +1,4 @@
-import { startTransition, type ReactNode } from "react";
+import { startTransition, useId, type ReactNode } from "react";
 
 import { Switch } from "@/components/ui/switch";
 import {
@@ -72,6 +72,7 @@ export function ResearchMyTeamToggle({
   disabled = false,
   className,
 }: MyTeamProps) {
+  const id = useId();
   return (
     <div
       className={cn(
@@ -81,13 +82,13 @@ export function ResearchMyTeamToggle({
       )}
     >
       <label
-        htmlFor="research-my-team-toggle"
+        htmlFor={id}
         className="cursor-pointer select-none text-sm font-medium text-slate-700"
       >
         My Team
       </label>
       <Switch
-        id="research-my-team-toggle"
+        id={id}
         checked={checked}
         disabled={disabled}
         onCheckedChange={(next) => startTransition(() => onCheckedChange(next))}
