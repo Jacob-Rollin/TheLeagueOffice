@@ -880,16 +880,6 @@ function TradeAnalyzerPage() {
         </div>
       )}
 
-      <TradeSideCompare
-        give={give}
-        get={get}
-        scoring={valueScoring}
-        valueBasis={valueBasis}
-        detailsById={details.map}
-        loading={details.loading}
-        seasonPosRankFor={seasonPosRankFor}
-      />
-
       <PlayerModalHost ref={modalRef} />
     </div>
   );
