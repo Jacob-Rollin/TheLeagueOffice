@@ -140,6 +140,63 @@ flowchart LR
 
 **Bottom line:** Dedicated TiDB D protects **research RUs**. Vercel survival depends on **HTTP-cached coalesced GETs + mutation-only Fluid + slow visible polls + cron clock**, not on which TiDB cluster holds the rows.
 
+### 0.3 Worked example — 10 humans, 2 hours
+
+Assumptions (worst-case humans, planned cadence):
+
+| Knob | Value |
+| --- | --- |
+| Seats | **10 humans**, all tabs **visible** entire time |
+| Duration | **2 hours** live (ignore short lobby) |
+| Poll | **every 2s** → `GET /api/mock-draft/room/$id` |
+| Roster | Default 15 rounds → **150 picks** |
+| Cron | **1/min** during the window |
+| Setup | 1 create + 9 joins + 1 start = **11** mutations |
+
+#### Request counts (this one room)
+
+| Traffic | Formula | Count |
+| --- | --- | --- |
+| Room GETs (origin, no browser cache help) | \(10 \times (3600/2) \times 2\) | **36,000** |
+| Pick POSTs | 150 | **150** |
+| Setup POSTs | 11 | **11** |
+| Cron ticks (shared global; attributed here) | \(2 \times 60\) | **120** |
+| Recap GET after complete | ~10 once | **~10** |
+| **Total function invocations (upper)** | | **~36.3k** |
+
+With `Cache-Control: private, max-age=2` + ETag, many polls become **304** or browser cache hits. Treat **~15k–36k** origin hits as the realistic band (304s still often count as invocations but are cheaper on Active CPU / TiDB).
+
+#### Vs monthly free limits (this room alone)
+
+| Limit | Free pool | This 10×2h draft | Share of monthly |
+| --- | --- | --- | --- |
+| Vercel **invocations** | 1,000,000 | ~36k (upper) | **~3.6%** |
+| Vercel **Active CPU** | 4 CPU-hrs | Mostly I/O wait; estimate **~0.05–0.2 CPU-hrs** if ~5–20ms CPU/GET on miss + cheap 304s | **~1–5%** |
+| Vercel **provisioned memory** | 360 GB-hrs | One/few warm isolates for 2h — small | **≪1%** typically |
+| Vercel **data transfer** | 100 GB | Snapshot ~5–30 KB × 36k ≈ **0.2–1 GB** upper | **~0.2–1%** |
+| TiDB D **RUs** | 50,000,000 | Memoized: ~1 read/room/s × 7200s ≈ 7k TiDB loads + 150 pick writes; ballpark **low hundreds of thousands RU** (order-of-magnitude; depends on row bytes) | **≲1%** typical |
+| TiDB D **storage** | 5 GiB | One room + snapshot ≪ 1 MB | negligible |
+| Supabase | Auth only | 10 sessions / JWTs | negligible |
+
+**How many such drafts fit in a month (mocks-only ceiling, ignoring rest of site)?**
+
+| Resource | Rough capacity at this shape |
+| --- | --- |
+| Invocations | \(1\text{M} / 36\text{k} ≈\) **~25–30** full 10-human × 2h rooms (if every poll hits origin) |
+| Active CPU | Often **higher** than invocations if GETs stay I/O-light — tens of rooms before CPU is the bottleneck |
+| TiDB D RUs | **Hundreds** of rooms before 50M is the story — Vercel invocations hit first |
+
+So for this plan, **Vercel invocations (then Active CPU) gate scale**, not TiDB D. Mixed with the rest of the site (research CDN misses, ESPN Fluid, crons), budget **a handful of busy multiplayer rooms per day**, not unlimited open lobbies.
+
+#### Same draft, lighter variants
+
+| Variant | Approx origin GETs | Notes |
+| --- | --- | --- |
+| 10 humans × 2h × 2s (above) | ~36k | Worst |
+| 4 humans + 6 AI × 2h × 2s | ~14.4k | Typical “friends + bots” |
+| 10 humans, half tabs hidden half the time | ~18k | Visibility helper |
+| Poll live at **3s** instead of 2s | ~24k | Easy dial if invocations climb |
+
 ---
 
 ## 1. Current state
