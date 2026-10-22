@@ -9,11 +9,12 @@
 | Join | **Anyone with the room code** — signed-in users claim a seat with `user_id`; guests get a signed `guest_token` bound to that seat |
 | Solo simulator | Keep `/mock-draft/setup` → `/mock-draft` as-is (client-only AI). Multiplayer is a parallel path. |
 | Native live snake | **Out of scope.** Remains deferred in [`native-leagues-plan.md`](native-leagues-plan.md) Phase 2. Do not hitch mock rooms to `native_*` tables or `/league/$linkId/draft`. |
-| Realtime | **Visibility-aware short polling** (same posture as native §6.6). No websockets / Supabase Realtime for TiDB state. |
-| Data home | **Dedicated TiDB Starter D** for `mock_draft_*`; **Supabase** for auth only (optional thin “my past mocks” index later). |
+| Live sync | **Push-first:** Supabase **Realtime Broadcast** on each pick/lobby change; clients apply deltas (or one shared CDN GET). **Not** 1–2s polling. |
+| Data home | **Dedicated TiDB Starter D** = source of truth for rooms/picks; Supabase = Auth + Realtime fan-out only (no lobby rows in Postgres). |
 | Completed boards | Freeze a compact JSON snapshot on complete; retain **7–14 days**; share via opaque token; CSV/JSON export client-side from that snapshot. |
-| Vercel reads | **`/api/mock-draft/*` GET** with `processMemo` + private cache/ETag — **not** poll-via-`createServerFn`. |
-| Vercel writes | Fluid `createServerFn` for create/join/pick/host only. Clock advance via lean cron. |
+| Shared room reads | **Room read key** + `GET /api/mock-draft/room/$id?k=` with **`public, s-maxage=1–2`** so all seats share one edge cache. |
+| Vercel writes | Fluid `createServerFn` for create/join/pick/host only; after commit → Broadcast. Clock/AI via lean cron (also Broadcasts). |
+| Safety net | Visible **slow** poll every **20–30s** (or on reconnect) — not the live path. |
 
 Mobile already labels the entry point **“Mock Draft Lobby”** ([`MobileMockDraftCard`](../src/components/mobile/MobileHomeSections.tsx)) but it only links to solo setup. This plan makes that label real.
 
@@ -32,27 +33,26 @@ TiDB Cloud allows **up to 5 free Starter instances** per org, each with its own 
 | **3** | Stay on **current** TiDB (research/synced) | Same instance as warehouse | No | OK for a quiet beta only; mocks compete with research RUs |
 | **4** | **Upstash Redis / Vercel KV** live + TiDB snapshot | Ephemeral KV | Depends on KV free tier | Excellent for hot state later; new vendor + ops; not required for v1 |
 | **Avoid** | **Supabase Postgres** for lobby/picks | Auth project DB | No — shares 500 MB / 5 GB egress / pause with Auth | Draft polls can starve or pause the whole site |
-| **Avoid as SoT** | **Supabase Realtime** (Broadcast/Presence) alone | Push only | 200 conns / 2M msgs — separate caps, still need a DB | Fan-out layer at best; not authoritative picks/clock |
+| **Use as fan-out only** | **Supabase Realtime Broadcast** | Push pick/lobby events | 200 peak conns / 2M msgs/mo | **Yes for live UX** — never store picks in Postgres |
 
-### Can we “use Supabase for the lobby + TiDB for mocks”?
-
-**Not as the best design.** Useful split of responsibilities:
+### Split of responsibilities (locked)
 
 | Layer | Store |
 | --- | --- |
-| Sign-in / host identity | **Supabase Auth** (already) |
-| Live seats, clock, picks, join codes | **TiDB** (prefer dedicated Starter D) |
-| Optional “My saved mocks” list | Thin Supabase **or** TiDB index rows (low churn) |
-| Realtime push | Skip v1; optional later Broadcast **on top of** TiDB authority |
+| Sign-in / host identity | **Supabase Auth** |
+| Live seats, clock, picks, join codes | **TiDB D** (authoritative) |
+| Instant “everyone updates on pick” | **Supabase Realtime Broadcast** (ephemeral; channel secret = room read key) |
+| Optional “My saved mocks” list | Thin Supabase **or** TiDB index (low churn) |
+| Coalesced snapshot GET | Vercel `/api/mock-draft/room/$id?k=` + edge `s-maxage` |
 
-Putting the **lobby itself** on Supabase (rows + poll or Realtime) while picks live on TiDB doubles write paths, still burns Supabase Free (egress/connections/pause), and does not give a cleaner free-tier story than a dedicated TiDB instance.
+Do **not** put lobby/pick **rows** in Supabase Postgres (pause/egress). Do **use** Realtime as a megaphone after TiDB commits.
 
 ### Recommended path
 
-1. **Provision TiDB Starter D** for mocks (see §0.1) before multiplayer leaves quiet beta.
-2. Always: **coalesce polls** on Vercel (`processMemo` + short private cache), visible-only refresh, room caps, TTL — protects **both** TiDB RUs and Fluid.
-3. Keep Supabase out of the live pick path; guests never open a Supabase DB session for the room.
-4. Revisit Redis/KV only if dedicated TiDB RUs still hurt under real concurrent rooms.
+1. **Provision TiDB Starter D** for mocks (see §0.1).
+2. **Push-first sync** (§0.2): Broadcast on pick; shared CDN GET when a full refresh is needed; slow safety poll only.
+3. Guests never need Supabase Auth; they still subscribe to Realtime with the room read key (public channel name derived from secret).
+4. Revisit Redis/KV only if TiDB D or Realtime caps hurt under real load.
 
 **Org quota note:** 5 free Starters total. Suggested map: A research · B synced/warehouse · C native · **D mocks** · (one spare).
 
@@ -67,135 +67,96 @@ Putting the **lobby itself** on Supabase (rows + poll or Realtime) while picks l
 | Migrate | Extend [`tidb-migrate.server.ts`](../src/lib/tidb-migrate.server.ts) (or sibling) with `mock-draft-ddl.server.ts` statements against the mock URL only |
 | Monitor | TiDB console RU chart for D alone; alert if mocks approach ~50% of monthly free RU while research is healthy |
 
-**Important:** Cluster D **does not** reduce Vercel Fluid burn. It only isolates TiDB RUs. Poll traffic still enters through Vercel (§0.2).
+**Important:** Cluster D isolates TiDB RUs only. **Live UX must not 1–2s poll Vercel** — use push + shared edge reads (§0.2).
 
-### 0.2 Vercel limit burn (Hobby) — and how to cut it
+### 0.2 Live sync — share the room, push on pick (min limits)
 
-Hobby allowances that mocks can hit ([Vercel Hobby](https://vercel.com/docs/plans/hobby)):
-
-| Resource | Included | Mock risk |
-| --- | --- | --- |
-| **Fluid Active CPU** | **4 CPU-hrs / mo** | Highest concern historically; only **CPU execute** time (TiDB wait is mostly I/O, not Active CPU) |
-| **Provisioned Memory** | 360 GB-hrs | Warm isolates holding poll traffic |
-| **Function Invocations** | 1M / mo | Every poll / pick / cron hit |
-| Fast Data Transfer | 100 GB | Small JSON snapshots — low |
-| CDN Requests | 1M | Only if we put cacheable GETs on the edge |
-
-**Naive anti-pattern (do not ship):** every seat polls `createServerFn(getMockDraftRoom)` every 1–2s → N invocations × draft duration, little coalescing across clients, Autopick side effects on every GET. That pattern is how a solo tester burned a large share of monthly Fluid before.
-
-#### Rough invocation math (live draft)
-
-Assume 4 human clients, 2s poll, 60 min draft, visible entire time:
-
-- \(4 \times 30 \text{ polls/min} \times 60 = 7{,}200\) GETs **per room-hour**
-- 10 such rooms/day × 30 days ≈ **2.2M** invocations if uncached — already over Hobby’s 1M **before** the rest of the site
-
-With **1s `processMemo` per room** on one warm isolate: many concurrent clients collapse toward **~1 TiDB read / room / second**, but **each browser request can still count as an invocation** unless the platform serves a cached response at the edge. So we need **HTTP caching + fewer polls**, not memo alone.
-
-#### Architecture that limits Vercel burn
+**Goal:** everyone sees a pick **immediately**, while Vercel invocations stay near “mutations + rare refresh,” not tens of thousands of polls.
 
 ```mermaid
-flowchart LR
-  Clients[Browsers]
-  Edge["GET /api/mock-draft/room/$id\nprivate Cache-Control + ETag"]
-  Memo[processMemo roomId 1s]
-  Mut["POST createServerFn\npick / join / host"]
-  Cron["GET /api/cron/mock-draft-tick\nCRON_SECRET ≤1/min"]
-  TidbD[TiDB Starter D]
-  Clients -->|"poll visible only"| Edge
-  Edge --> Memo
-  Memo --> TidbD
-  Clients -->|"user actions only"| Mut
-  Mut --> TidbD
-  Cron --> TidbD
+sequenceDiagram
+  participant A as ClientA
+  participant B as ClientB
+  participant V as VercelFluid
+  participant T as TiDB_D
+  participant R as SupabaseBroadcast
+  participant E as EdgeCache
+  A->>V: pickPlayer
+  V->>T: FOR UPDATE commit
+  V->>R: broadcast pick delta plus version
+  R-->>A: pick event
+  R-->>B: pick event
+  Note over A,B: Apply delta locally board updates now
+  B->>E: GET room optional if gap
+  E->>V: miss once per s-maxage
+  V->>T: read snapshot
 ```
 
-| Rule | Why |
+#### Mechanisms (all three together)
+
+| Mechanism | Role |
 | --- | --- |
-| **Reads ≠ Fluid `createServerFn`** | Use Nitro **`/api/mock-draft/room/$roomId`** (and `/recap/$shareId`) like [`/api/data/league/$id`](../src/routes/api/data/league.$id.ts): `processMemo` + `Cache-Control: private, max-age=1–2` (or 2–3 lobby) + **ETag** / `If-None-Match` → cheap 304 when unchanged |
-| **Mutations = Fluid OK** | `create` / `join` / `pick` / `hostControl` stay `createServerFn` — rare, user-driven |
-| **GET is read-mostly** | Do **not** run autopick as a side effect on every poll. Advance clock via **cron tick** (and optionally on pick POST if deadline already passed). Keeps GETs cacheable |
-| **Visible-only polls** | [`visibleRefetchInterval`](../src/lib/page-visibility.ts); hidden tabs = 0 invocations |
-| **Slower cadence** | Lobby **3s**; live **2s** (not 1s); after complete → **stop** polling, fetch snapshot once |
-| **One snapshot payload** | Never N calls per seat/player |
-| **Cron lean** | Actions → `/api/cron/mock-draft-tick` ≤1/min globally; batch due rooms; same `CRON_SECRET` pattern as other crons |
-| **Caps** | Concurrent rooms/host, rooms/day, max humans — bound worst-case invocation rate |
-| **ssr: false** on room routes | Avoid SSR Fluid waterfalls on navigation |
-| **No prefetch of mock APIs** | Intent preload must not hit room endpoints |
-| **Long-term** | Move cron/tick worker off Vercel (Coolify/Oracle — free-tier Phase 1) so draft clock doesn’t compete with Hobby Active CPU |
+| **1. Realtime Broadcast** | After every successful TiDB write (human pick, AI/cron pick, lobby seat change, pause/start), server sends a small event on channel `mock:{roomId}:{readKey}`: `{ v, type, pick?, deadlineAt?, status? }`. Clients patch local state **instantly**. |
+| **2. Shared room read key + CDN** | `read_key` minted at create; given to every joiner. `GET /api/mock-draft/room/$id?k=$readKey` uses `Cache-Control: public, s-maxage=1–2, stale-while-revalidate=1`. All seats share **one** edge object — not 10 private Function hits. |
+| **3. Slow safety poll** | Every **20–30s** while visible (and on tab focus / reconnect): one shared GET. Catches missed Broadcasts. **Not** the live path. |
 
-#### What still burns Active CPU (acceptable)
+**Payload rule:** prefer **deltas** in Broadcast (under Realtime’s ~256 KB cap). Full board only via shared GET when `v` gaps or client joins mid-draft.
 
-- JSON parse/serialize of room snapshot on cache miss
-- Guest-token / JWT verify on mutations
-- Pick transaction + AI pick CPU on timeout (cron / pick path — infrequent)
+**Auth rule:** mutation still needs seat guest token / JWT. Read GET only needs `readKey` (anyone with the link can spectate — acceptable for a practice room; rotate key if host kicks everyone).
 
-#### What we are optimizing away
+**Clock:** client countdowns from `pick_deadline_at` in the last event; cron/AI commits + Broadcasts when time expires — no per-second server polls.
 
-- Per-client Fluid RPC polls
-- Autopick SQL on every GET
-- Background polls in hidden tabs
-- Recap polling after complete
-- Fan-out per seat
+#### What we are not doing
 
-**Bottom line:** Dedicated TiDB D protects **research RUs**. Vercel survival depends on **HTTP-cached coalesced GETs + mutation-only Fluid + slow visible polls + cron clock**, not on which TiDB cluster holds the rows.
+- 1–2s Fluid or API polling as the live path  
+- Storing picks in Supabase Postgres  
+- Per-user `Authorization` on the cached GET (that defeats shared `s-maxage`)  
+- Autopick side effects on GET  
 
-### 0.3 Worked example — 10 humans, 2 hours
+#### Hobby + Supabase Free impact (push-first)
 
-Assumptions (worst-case humans, planned cadence):
-
-| Knob | Value |
+| Limit | How mocks use it |
 | --- | --- |
-| Seats | **10 humans**, all tabs **visible** entire time |
-| Duration | **2 hours** live (ignore short lobby) |
-| Poll | **every 2s** → `GET /api/mock-draft/room/$id` |
-| Roster | Default 15 rounds → **150 picks** |
-| Cron | **1/min** during the window |
-| Setup | 1 create + 9 joins + 1 start = **11** mutations |
+| Vercel invocations | create/join/pick/host + cron + rare safety/CDN-miss GETs |
+| Vercel Active CPU | Mutation + occasional snapshot serialize |
+| Supabase Realtime connections | **1 per open client tab** (Free peak **200**) |
+| Supabase Realtime messages | ~1 event × N subscribers per pick (Free **2M/mo**) |
+| TiDB D RUs | Writes per pick + rare full reads |
 
-#### Request counts (this one room)
+### 0.3 Worked example — 10 humans, 2 hours (push-first)
 
-| Traffic | Formula | Count |
+Assumptions: 10 visible humans, 15 rounds (**150 picks**), Broadcast on each pick, safety poll **30s**, shared `s-maxage=2`.
+
+| Traffic | Count | Notes |
 | --- | --- | --- |
-| Room GETs (origin, no browser cache help) | \(10 \times (3600/2) \times 2\) | **36,000** |
-| Pick POSTs | 150 | **150** |
-| Setup POSTs | 11 | **11** |
-| Cron ticks (shared global; attributed here) | \(2 \times 60\) | **120** |
-| Recap GET after complete | ~10 once | **~10** |
-| **Total function invocations (upper)** | | **~36.3k** |
+| Pick POSTs | **150** | Fluid |
+| Setup POSTs | **11** | create/joins/start |
+| Cron ticks | **~120** | ≤1/min; AI/timeout + Broadcast |
+| Broadcast events | **~150** (+ lobby noise) | Fan-out to 10 clients ≈ **~1.5k message deliveries** |
+| Safety GETs (browser) | \(10 \times (7200/30) =\) **2,400** | Most served from **shared edge** |
+| Origin GETs after CDN coalesce | **~240–400** | ~1 miss / 2s window when anyone polls; often far fewer if polls align |
+| Join + final recap GETs | **~20** | |
+| **Vercel invocations (typical)** | **~500–800** | vs ~36k with naive 2s polling |
 
-With `Cache-Control: private, max-age=2` + ETag, many polls become **304** or browser cache hits. Treat **~15k–36k** origin hits as the realistic band (304s still often count as invocations but are cheaper on Active CPU / TiDB).
+#### Vs monthly free limits (this room)
 
-#### Vs monthly free limits (this room alone)
-
-| Limit | Free pool | This 10×2h draft | Share of monthly |
+| Limit | Free / mo | This draft | Share |
 | --- | --- | --- | --- |
-| Vercel **invocations** | 1,000,000 | ~36k (upper) | **~3.6%** |
-| Vercel **Active CPU** | 4 CPU-hrs | Mostly I/O wait; estimate **~0.05–0.2 CPU-hrs** if ~5–20ms CPU/GET on miss + cheap 304s | **~1–5%** |
-| Vercel **provisioned memory** | 360 GB-hrs | One/few warm isolates for 2h — small | **≪1%** typically |
-| Vercel **data transfer** | 100 GB | Snapshot ~5–30 KB × 36k ≈ **0.2–1 GB** upper | **~0.2–1%** |
-| TiDB D **RUs** | 50,000,000 | Memoized: ~1 read/room/s × 7200s ≈ 7k TiDB loads + 150 pick writes; ballpark **low hundreds of thousands RU** (order-of-magnitude; depends on row bytes) | **≲1%** typical |
-| TiDB D **storage** | 5 GiB | One room + snapshot ≪ 1 MB | negligible |
-| Supabase | Auth only | 10 sessions / JWTs | negligible |
+| Vercel invocations | 1M | **~0.5–0.8k** | **~0.05–0.08%** |
+| Vercel Active CPU | 4 hrs | Tiny (mutations + rare GET) | **≪1%** |
+| Supabase Realtime messages | 2M | **~1.5k** deliveries | **~0.08%** |
+| Supabase Realtime peak conns | 200 | **10** during room | **5% of peak cap** while live |
+| TiDB D RUs | 50M | ~150 writes + few hundred reads | **≪1%** |
 
-**How many such drafts fit in a month (mocks-only ceiling, ignoring rest of site)?**
+**Ceiling (mocks-shaped, ignore rest of site):** invocations allow **thousands** of such rooms/month; Realtime **peak 200 connections** ≈ **20** concurrent 10-seat rooms — that becomes the concurrency gate, not Vercel polls.
 
-| Resource | Rough capacity at this shape |
-| --- | --- |
-| Invocations | \(1\text{M} / 36\text{k} ≈\) **~25–30** full 10-human × 2h rooms (if every poll hits origin) |
-| Active CPU | Often **higher** than invocations if GETs stay I/O-light — tens of rooms before CPU is the bottleneck |
-| TiDB D RUs | **Hundreds** of rooms before 50M is the story — Vercel invocations hit first |
+#### Compare sync strategies
 
-So for this plan, **Vercel invocations (then Active CPU) gate scale**, not TiDB D. Mixed with the rest of the site (research CDN misses, ESPN Fluid, crons), budget **a handful of busy multiplayer rooms per day**, not unlimited open lobbies.
-
-#### Same draft, lighter variants
-
-| Variant | Approx origin GETs | Notes |
+| Strategy | Vercel invocations (10×2h) | Instant on pick? |
 | --- | --- | --- |
-| 10 humans × 2h × 2s (above) | ~36k | Worst |
-| 4 humans + 6 AI × 2h × 2s | ~14.4k | Typical “friends + bots” |
-| 10 humans, half tabs hidden half the time | ~18k | Visibility helper |
-| Poll live at **3s** instead of 2s | ~24k | Easy dial if invocations climb |
+| Naive 2s poll each client | ~36k | Lag up to 2s |
+| Shared CDN + 2s poll | ~3.6k | Lag up to 2s |
+| **Push + shared GET + 30s safety (locked)** | **~0.5–0.8k** | **Yes** |
 
 ---
 
@@ -276,31 +237,37 @@ flowchart LR
   end
   subgraph vercel [Vercel]
     Mut[Fluid createServerFn mutations]
-    Read["API GET /api/mock-draft/room\nmemo + ETag"]
+    Read["API GET shared readKey\ns-maxage edge"]
     Cron["/api/cron/mock-draft-tick"]
+  end
+  subgraph supa [Supabase]
+    Auth[Auth host]
+    RT[Realtime Broadcast]
   end
   subgraph tidb [TiDB Starter D]
     Rooms[mock_draft_rooms]
     Seats[mock_draft_seats]
     Picks[mock_draft_picks]
   end
-  Host -->|Bearer JWT| Mut
-  Guest -->|guest_token or JWT| Mut
-  Host -->|poll visible| Read
-  Guest -->|poll visible| Read
+  Host -->|JWT| Mut
+  Guest -->|guest_token| Mut
   Mut --> Rooms
-  Mut --> Seats
-  Mut --> Picks
-  Read --> Rooms
+  Mut --> RT
   Cron --> Rooms
-  Cron --> Picks
+  Cron --> RT
+  RT -->|pick delta| Host
+  RT -->|pick delta| Guest
+  Host -->|safety or gap| Read
+  Guest -->|safety or gap| Read
+  Read --> Rooms
+  Host --> Auth
 ```
 
-**Why Fluid for mutations only:** credentials, guest-token verification, and `FOR UPDATE` pick serialization — same pattern as native league ops ([`native-league.functions.ts`](../src/lib/native-league.functions.ts)). Polling via Fluid would burn Hobby Active CPU / invocations (§0.2).
+**Why Fluid for mutations only:** credentials, guest-token verification, and `FOR UPDATE` pick serialization — same pattern as native league ops ([`native-league.functions.ts`](../src/lib/native-league.functions.ts)).
 
-**Why not hitch to `native_*`:** rooms are ephemeral practice; no rosters/schedules/standings; different auth (guests); different lifecycle; **separate TiDB D**. Reuse **code** (`draft.ts`, `mock-ai.ts`, UI), not tables.
+**Why Broadcast (not tight polling):** instant multi-client UX; invocations stay on the write path; Free Realtime message/connection quotas are ample for practice rooms (§0.2–0.3). TiDB remains source of truth — Realtime never stores picks.
 
-**Why polling (not Realtime):** matches native §6.6 and free-tier posture. Lobby ~3s; live ~2s while visible; backoff when hidden via [`page-visibility.ts`](../src/lib/page-visibility.ts) / `visibleRefetchInterval`. Draft clock advances via **cron tick** (≤1/min) + deadline check on pick POST — not autopick-on-every-GET.
+**Why not hitch to `native_*`:** ephemeral practice; guests; separate TiDB D. Reuse `draft.ts` / `mock-ai.ts` / draft UI only.
 
 ---
 
@@ -325,6 +292,8 @@ mock_draft_rooms
   pick_deadline_at DATETIME NULL
   settings_version INT NOT NULL DEFAULT 1
   expires_at DATETIME NOT NULL             -- hard TTL from create
+  read_key VARCHAR(32) NOT NULL            -- shared CDN / Realtime channel secret
+  state_version INT NOT NULL DEFAULT 0     -- bump on every mutating event
   created_at / updated_at
 
 mock_draft_seats
@@ -375,18 +344,29 @@ Module sketch: `src/lib/mock-draft-lobby.server.ts` (TiDB D pool) + `src/lib/moc
 | `pickMockDraftPlayer` | JWT or guest token; must own current seat | `FOR UPDATE` room row; if deadline passed, autopick prior seat first; verify turn + player free; insert pick; advance cursor + deadline; idempotent on `intent_id` |
 | `hostMockDraftControl` | Host JWT | pause / resume / force-pick / undo last (v1: undo only before next pick lands) |
 
-### 5.2 Reads — `/api/mock-draft/*` (not Fluid polls)
+### 5.2 Reads — shared key + edge cache
 
 | Route | Auth | Behavior |
 | --- | --- | --- |
-| `GET /api/mock-draft/room/$roomId` | Bearer **or** `x-mock-guest-token` (seat must belong to room) | Read-only snapshot: room, seats, picks, `serverNow`, `etag`; `processMemo(roomId, ~1000ms)`; `Cache-Control: private, max-age=1–2`; honor `If-None-Match` |
-| `GET /api/mock-draft/recap/$shareId` | None | Completed `result_snapshot` only; longer private/public cache (e.g. max-age=60) |
+| `GET /api/mock-draft/room/$roomId?k=$readKey` | Valid `readKey` only (query) | Read-only snapshot + `state_version`; `processMemo`; **`Cache-Control: public, s-maxage=1–2, stale-while-revalidate=1`**; ETag = version. Used on join, gap recovery, 30s safety. |
+| `GET /api/mock-draft/recap/$shareId` | None | Completed snapshot; longer cache (e.g. max-age=60) |
 
-### 5.3 Cron
+### 5.3 Realtime Broadcast
 
-`GET /api/cron/mock-draft-tick` (`CRON_SECRET`) — scan due `live` rooms on TiDB D; autopick/AI for passed deadlines; expire rooms; purge old snapshots. **≤1/min.** This is the primary clock/AI driver so room GETs stay cacheable.
+After every TiDB-mutating success (pick, lobby, pause, start, cron autopick), `supabaseAdmin` (or Realtime HTTP API) publishes to channel `mock:{roomId}:{readKey}`:
 
-Guest token: `HMAC-SHA256(roomId|guestId|seatSlot, MOCK_DRAFT_GUEST_SECRET)` (or sealed payload). Store only hash on seat; client keeps raw token (header on GET/POST).
+```ts
+// conceptual payload — keep small
+{ v: state_version, type: "pick" | "lobby" | "clock" | "complete", pick?, deadlineAt?, status? }
+```
+
+Clients: subscribe on enter → apply delta if `v === localV + 1` → else shared GET to resync.
+
+### 5.4 Cron
+
+`GET /api/cron/mock-draft-tick` (`CRON_SECRET`) — due deadlines → autopick/AI on TiDB D → **Broadcast** → expire/purge. **≤1/min.**
+
+Guest token (mutations): `HMAC-SHA256(roomId|guestId|seatSlot, MOCK_DRAFT_GUEST_SECRET)`. Read path uses `readKey`, not guest token (so CDN can coalesce).
 
 ---
 
@@ -414,15 +394,15 @@ AI seats: reuse [`aiPick`](../src/lib/mock-ai.ts) with seat `persona` (server im
 | Max rooms created per user / day | e.g. 10 |
 | Max concurrent `lobby`+`live` rooms per host | e.g. 3 |
 | Team count | 8–16 (match solo `TEAM_CHOICES`) |
-| Room TTL | 6h from create; extend +2h while `live` and any seat polled in last 10m |
-| Lobby poll | **3s** visible only → `/api/mock-draft/room/$id` |
-| Live poll | **2s** visible only; pause when hidden |
-| Cron tick | ≤1/min; clock + AI + expiry (not per-visitor) |
-| Complete retention | On complete: write `result_snapshot` JSON; keep **7–14 days**; stop room polls; recap uses `/api/mock-draft/recap/$shareId` |
-| Share links | Opaque `share_id` (not join code); read-only; no auth required |
-| In-progress rooms | Private API GET (guest token or JWT) — **not** public snap-cdn; **not** Fluid poll |
+| Room TTL | 6h from create; extend +2h while `live` and any seat heartbeated in last 10m |
+| Live sync | **Broadcast deltas**; safety GET **20–30s** visible only |
+| Shared reads | `read_key` + `public, s-maxage=1–2` on room GET |
+| Cron tick | ≤1/min; clock + AI + Broadcast + expiry |
+| Complete retention | Snapshot 7–14 days; unsubscribe Realtime; recap route only |
+| Share links | Opaque `share_id`; join code separate from `read_key` |
+| Caps | Concurrent rooms; soft cap concurrent Realtime tabs (Free peak 200) |
 
-Do **not** fan out N calls per seat. One room GET returns the full snapshot. Do **not** poll via `createServerFn`.
+Do **not** 1–2s poll. Do **not** poll via `createServerFn`. Do **not** put pick rows in Supabase Postgres.
 
 ---
 
@@ -483,7 +463,7 @@ Common elsewhere (FantasyPros Draft Wizard, Sleeper mocks, ESPN/Yahoo mocks, RTS
 - Voice rooms
 - ELO / leaderboards for public mocks
 
-**Non-goals remain:** hitching results into native season rosters; Realtime; auction in v1.
+**Non-goals remain:** hitching results into native season rosters; Postgres-backed Realtime as SoT; auction in v1.
 
 ---
 
@@ -501,29 +481,28 @@ Common elsewhere (FantasyPros Draft Wizard, Sleeper mocks, ESPN/Yahoo mocks, RTS
 
 ## 11. Phased rollout
 
-### Phase 0 — TiDB D + server skeleton
+### Phase 0 — TiDB D + mutations + shared GET
 1. Create TiDB Starter D; wire `DATABASE_URL_MOCK` + `mockTidbExecute`.
-2. DDL for `mock_draft_*` (include `share_id` / `result_snapshot`); migrate against D only.
-3. Mutations: create / join; GET `/api/mock-draft/room/$id` with memo/ETag; guest token helpers; caps.
-4. No UI yet beyond smoke.
+2. DDL (`read_key`, `state_version`, `share_id`, `result_snapshot`); migrate on D.
+3. create/join + `GET ...?k=` with `s-maxage`; guest tokens; caps.
+4. Smoke without UI.
 
-### Phase 1 — Lobby UX
+### Phase 1 — Lobby + Broadcast
 1. Setup hub: Solo | Host | Join.
-2. Room lobby page: seats, share code/link, host start, polling.
+2. Room lobby: seats, codes; subscribe Broadcast; safety poll 30s.
 3. Deep link `/mock-draft/join?code=`.
 
 ### Phase 2 — Live multiplayer draft
-1. `pickMockDraftPlayer` + turn gating wired to existing board/list.
-2. Server clock + autopick on timeout; host pause/force.
-3. AI fill for empty seats; complete → freeze snapshot → `MockRecap` + share/export.
+1. `pickMockDraftPlayer` → TiDB → Broadcast delta → all clients patch board.
+2. Cron autopick/AI + Broadcast; host pause/force.
+3. Complete → snapshot → unsubscribe → `MockRecap` + share/export.
 
 ### Phase 3 — Polish
-1. Cron tick + expiry sweeper Actions workflow (live TTL + result retention).
-2. Kick / reconnect / seat transfer; display names from profiles when signed in.
-3. Pick queues; mobile lobby parity; rate-limit hardening; optional “save to account” / War Room import.
-4. Basic observability (pick latency, active room count, RU proxies).
+1. Expiry sweeper; gap resync UX; kick/reconnect.
+2. Pick queues; mobile parity; Realtime connection monitoring vs 200 peak.
+3. Optional save-to-account / War Room import; RU/invocation dashboards.
 
-**Non-goals for v1:** auction, public open matchmaking browser, voice/chat, ranking/ELO, persisting mock results into native season leagues, hitching to native live snake, Supabase Realtime.
+**Non-goals for v1:** auction, public matchmaking, voice/chat, ELO, native season hitch, Postgres lobby tables.
 
 ---
 
@@ -543,10 +522,11 @@ Shared libraries only: `draft.ts`, `mock-ai.ts`, draft UI components. When nativ
 ## 13. Testing checklist
 
 - Host create → join code works for signed-in and guest in two browsers.
-- Double-click pick / retry with same `intent_id` → one pick.
-- Two clients race different players on same turn → one `409`, board converges.
-- Timer expiry → autopick without client write.
-- AI seats advance without human action.
-- Hidden tab stops polling; visible resume catches up via get snapshot.
+- Pick on A appears on B **without waiting for safety poll** (Broadcast).
+- Double-click / same `intent_id` → one pick; race → one `409`, then Broadcast converges.
+- Kill Broadcast mid-draft → safety poll / focus resync repairs within ~30s.
+- Ten clients share one CDN cache key (verify one origin miss per window in logs).
+- Timer expiry → cron autopick + Broadcast; AI seats advance.
+- Hidden tab: no safety polls; on visible → resync GET.
 - Room past `expires_at` rejects joins/picks.
-- Solo `/mock-draft` path unchanged regression.
+- Solo `/mock-draft` unchanged.
