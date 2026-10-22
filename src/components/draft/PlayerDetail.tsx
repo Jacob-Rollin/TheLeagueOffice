@@ -1,6 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ArrowRight, ChevronDown, ChevronUp, Cloud, CloudRain, CloudSnow, Star, Sun } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  Cloud,
+  CloudRain,
+  CloudSnow,
+  Star,
+  Sun,
+  X,
+} from "lucide-react";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { playerImage, teamLogo } from "./PlayerAvatar";
@@ -397,7 +407,7 @@ export function PlayerDetail({
         <div className="pointer-events-none sticky top-0 z-[150] h-0 w-full">
           {compactHeader ? (
             <div
-              className="pointer-events-auto absolute inset-x-0 top-0 flex items-center gap-2.5 px-4 py-2.5 pr-14 text-white shadow-sm"
+              className="pointer-events-auto absolute inset-x-0 top-0 flex items-center gap-2.5 px-4 py-2.5 text-white shadow-sm"
               style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
             >
               {compactLogo ? (
@@ -440,6 +450,14 @@ export function PlayerDetail({
               </button>
               <DesktopPlayerCompare anchorPlayer={player} tone="hero" />
               {showNativeFantasyRosterActions ? <NativeFantasyPopupRosterButtons /> : null}
+              <button
+                type="button"
+                onClick={() => onClose?.()}
+                aria-label="Close popup"
+                className="ml-auto flex h-8 w-8 shrink-0 cursor-pointer select-none items-center justify-center rounded-lg border border-white/45 bg-transparent text-white transition-colors hover:border-white/80 hover:bg-white/10 focus:outline-none"
+              >
+                <X className="size-4 shrink-0" strokeWidth={2.5} />
+              </button>
             </div>
           ) : null}
         </div>
