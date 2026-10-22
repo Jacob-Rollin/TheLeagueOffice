@@ -1231,7 +1231,7 @@ function GameLogsPanel({
 
   const { data, isLoading } = useQuery({
     // v2: past-week Proj columns from shared week projection bundles.
-    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v4"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v5"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -1461,7 +1461,7 @@ function ProjectionsPanel({
 
   const { data, isLoading } = useQuery({
     // v2: past-week rows keep Sleeper proj lines for the Projections sub-tab.
-    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v4"],
+    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v5"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -1962,7 +1962,7 @@ function OutlookPanel({
   const { data: logsBundle } = useQuery({
     // Current season only — career years load when Game Logs opens.
     // v2: past-week Proj from shared week projection bundles.
-    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v4"],
+    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v5"],
     enabled: Boolean(playerId && pos),
     queryFn: () =>
       fetchGameLogsClient(playerId, team || "FA", pos || "WR", null, { includeCareer: false }),

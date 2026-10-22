@@ -251,6 +251,42 @@ async function weeklyRawClient(
   });
 }
 
+/** Season-to-date / full-season totals for one player (includes pos_rank_*). */
+async function seasonTotalsClient(
+  id: string,
+  season: string,
+): Promise<Record<string, number>> {
+  return getCached(`season-totals-v1:${season}:${id}`, 30 * 60 * 1000, async () => {
+    const res = await sleeperFetch(
+      `${SLEEPER_BASE}/stats/nfl/player/${encodeURIComponent(id)}?season_type=regular&season=${season}`,
+    );
+    if (!res.ok) return {};
+    const j = (await res.json()) as { stats?: Record<string, number> | null } | null;
+    const stats = j?.stats;
+    if (!stats || typeof stats !== "object") return {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(stats)) {
+      if (v != null && Number.isFinite(Number(v))) out[k] = Number(v);
+    }
+    return out;
+  });
+}
+
+/** Sleeper season pos ranks; treat missing / 0 / ≥900 sentinel as empty. */
+function seasonPosRankTriple(
+  stats: Record<string, number> | null | undefined,
+): { std: number | null; half: number | null; ppr: number | null } {
+  const clean = (raw: number | undefined): number | null => {
+    if (raw == null || !Number.isFinite(raw) || raw <= 0 || raw >= 900) return null;
+    return Math.round(raw);
+  };
+  return {
+    std: clean(stats?.["pos_rank_std"]),
+    half: clean(stats?.["pos_rank_half_ppr"]),
+    ppr: clean(stats?.["pos_rank_ppr"]),
+  };
+}
+
 const LOG_KEYS = [
   "rush_att",
   "rush_yd",
@@ -663,6 +699,12 @@ export async function fetchGameLogsClient(
   const careerLogs = includeCareer
     ? await Promise.all(careerYears.map((y) => buildLogs(y, false)))
     : [];
+  // One cheap per-player season totals fetch per career year (pos_rank_* live here).
+  const careerSeasonTotals = includeCareer
+    ? await Promise.all(
+        careerYears.map((y) => seasonTotalsClient(clean, y).catch(() => ({} as Record<string, number>))),
+      )
+    : [];
 
   const career: CareerSeasonRow[] = careerYears.map((year, i) => {
     const seasonLogs = careerLogs[i] ?? [];
@@ -690,7 +732,7 @@ export async function fetchGameLogsClient(
         half: any ? Math.round(pts.half * 10) / 10 : null,
         ppr: any ? Math.round(pts.ppr * 10) / 10 : null,
       },
-      posRank: { std: null, half: null, ppr: null },
+      posRank: seasonPosRankTriple(careerSeasonTotals[i]),
       raw,
     };
   });
