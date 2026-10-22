@@ -11,7 +11,9 @@ import { useLeagueRosters, type ResolvedRosterTeam } from "@/hooks/useLeagueRost
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/draft";
+import { injuryBadgeInfo } from "@/lib/injury-badge";
 import { starterRequirements } from "@/lib/power-rankings";
+import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { scaleValue } from "@/lib/trade-engine";
 import { cn } from "@/lib/utils";
 
@@ -165,40 +167,43 @@ function RosterInjuryBadge({
     );
   }
 
-  const label = injuryTier(player);
-  if (!label) return null;
+  const badge = injuryMicroBadge(resolveInjuryStatus(player));
+  if (!badge) return null;
 
   return (
     <span
       className={cn(
         "shrink-0 rounded px-1 py-0.5 text-[8px] font-black uppercase leading-none tracking-wider text-white",
-        INJURY_TIER_TONE[label],
+        badge.className,
       )}
     >
-      {label}
+      {badge.label}
     </span>
   );
 }
 
+/** Health-summary buckets — shared badge letters folded into IR / O / D / Q. */
 type InjuryTier = "IR" | "O" | "D" | "Q";
 
-const INJURY_TIER_TONE: Record<InjuryTier, string> = {
-  IR: "bg-red-700",
-  O: "bg-rose-600",
-  D: "bg-rose-600",
-  Q: "bg-amber-500",
-};
-
 function injuryTier(player: Player): InjuryTier | null {
-  const raw = (player.injury || player.injury_status || player.injuryStatus || "")
-    .trim()
-    .toUpperCase();
-  if (!raw || /^(HEALTHY|ACTIVE|NONE)$/.test(raw)) return null;
-  if (raw === "IR" || raw === "INJURED RESERVE" || raw === "PUP") return "IR";
-  if (raw === "Q" || raw === "QUESTIONABLE") return "Q";
-  if (raw === "D" || raw === "DOUBTFUL") return "D";
-  if (["O", "OUT", "SUSPENDED", "NA", "INACTIVE"].includes(raw)) return "O";
-  return null;
+  const info = injuryBadgeInfo(resolveInjuryStatus(player));
+  if (!info) return null;
+  switch (info.letter) {
+    case "Q":
+      return "Q";
+    case "D":
+      return "D";
+    case "IR":
+    case "PUP":
+      return "IR";
+    case "O":
+    case "SUS":
+    case "NA":
+    case "COV":
+      return "O";
+    default:
+      return null;
+  }
 }
 
 function PlaybookRostersPage() {

@@ -9,6 +9,7 @@ import { useLeagueProjections } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Player } from "@/lib/players-build";
+import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { projectionPoints } from "@/lib/scoring-map";
 import { cn } from "@/lib/utils";
 
@@ -335,7 +336,9 @@ function ComparePickerTable({
                       </span>
                     );
                   })()}
-                  <InjuryAvatarBadge status={p.injury_status ?? p.injury} />
+                  <InjuryAvatarBadge
+                    status={resolveInjuryStatus(p) ?? p.injury_status ?? p.injury}
+                  />
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-[15px] font-semibold leading-tight">{shortName(p)}</p>

@@ -43,8 +43,10 @@ import { usePositionalDefenseRanks } from "@/hooks/usePositionalDefenseRanks";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { useWeeklyActualStats } from "@/hooks/useWeeklyActualStats";
 import type { Player } from "@/lib/draft";
+import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { resolveHostOrBoxScore } from "@/lib/scoring-map";
 import { starterRequirements } from "@/lib/power-rankings";
+import { cn } from "@/lib/utils";
 import {
   computeDynamicWinProbability,
   computeTeamDisplayProjection,
@@ -55,7 +57,6 @@ import {
 } from "@/lib/rolling-live-projection";
 import { sosStarsFromRank, weeklySosMatchupFor, type SosMatchup } from "@/lib/sos-presentation";
 import { buildStartSitAdvice } from "@/lib/trade-engine";
-import { cn } from "@/lib/utils";
 import { currentSeason, fetchSchedule, type ScheduleGame } from "@/lib/players-build";
 import { getCached } from "@/lib/sleeper-cache";
 
@@ -681,32 +682,28 @@ function MatchupInjuryBadge({
 
   if (!playerId) return null;
 
-  const injury = data?.player?.injury;
-  if (!injury || injury === "Healthy" || injury === "Active" || injury === "None") {
-    return null;
-  }
-
-  let label: "Q" | "O" | "D" | "IR" | "NA" | null = null;
-  if (injury === "Questionable") label = "Q";
-  else if (injury === "Doubtful") label = "D";
-  else if (injury === "Out") label = "O";
-  else if (injury === "IR") label = "IR";
-  else if (injury === "NA") label = "NA";
-
-  if (!label) return null;
+  const detail = data?.player;
+  const status = detail
+    ? resolveInjuryStatus({
+        id: playerId,
+        injury: detail.injury,
+        injury_status: detail.injury_status ?? detail.injury,
+      })
+    : undefined;
+  const badge = injuryMicroBadge(status);
+  if (!badge) return null;
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`${playerName} injury status ${label}`}
-      className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white transition-all hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-      style={{
-        backgroundColor:
-          label === "Q" ? "#f59e0b" : "#e11d48",
-      }}
+      aria-label={`${playerName} injury status ${badge.label}`}
+      className={cn(
+        "inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white transition-all hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        badge.className,
+      )}
     >
-      {label}
+      {badge.label}
     </button>
   );
 }

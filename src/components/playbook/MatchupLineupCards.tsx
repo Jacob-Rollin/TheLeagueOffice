@@ -188,15 +188,15 @@ function MatchupInjuryBadge({
     ...detailQuery(player.id),
     enabled: Boolean(player.id),
   });
-  const detailInjury = data?.player?.injury;
-  const status =
-    detailInjury &&
-    detailInjury !== "Healthy" &&
-    detailInjury !== "Active" &&
-    detailInjury !== "None"
-      ? detailInjury
-      : catalogStatus;
-  const badge = injuryMicroBadge(status);
+  const detailPlayer = data?.player;
+  const detailStatus = detailPlayer
+    ? resolveInjuryStatus({
+        id: player.id,
+        injury: detailPlayer.injury,
+        injury_status: detailPlayer.injury_status ?? detailPlayer.injury,
+      })
+    : undefined;
+  const badge = injuryMicroBadge(detailStatus ?? catalogStatus);
   if (!badge) return null;
 
   return (

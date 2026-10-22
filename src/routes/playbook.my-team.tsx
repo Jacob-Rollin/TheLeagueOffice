@@ -30,6 +30,7 @@ import {
 } from "@/lib/rolling-live-projection";
 import { MatchupBoardSkeleton } from "@/components/research/ResearchTableSkeleton";
 import { playerHoverPrefetchProps } from "@/lib/prefetch-player-detail";
+import { injuryBadgeInfo } from "@/lib/injury-badge";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import {
   hasScorableProjectionStats,
@@ -530,24 +531,16 @@ function isGoofyOrMismatchedCopy(player: Player, text: string | null | undefined
   return false;
 }
 
-const SLEEPER_INJURY_SHORT: Record<string, string> = {
-  questionable: "Q",
-  doubtful: "D",
-  out: "OUT",
-  ir: "IR",
-  pup: "PUP",
-  sus: "SUSP",
-  suspended: "SUSP",
-  na: "NA",
-  dnr: "DNR",
-  cov: "COV",
-};
-
-/** Sleeper designation in the injury report's short form; "" when healthy. */
+/**
+ * Injury report chip codes (InjuryReportCard STATUS_CHIP keys).
+ * Shared resolve → badge letter, then map O/SUS onto OUT/SUSP for the card.
+ */
 function injuryShortFor(player: Player): string {
-  const raw = (player.injury_status ?? player.injury ?? "").trim().toLowerCase();
-  if (!raw || raw === "healthy" || raw === "active" || raw === "none") return "";
-  return SLEEPER_INJURY_SHORT[raw] ?? raw.toUpperCase().slice(0, 4);
+  const info = injuryBadgeInfo(resolveInjuryStatus(player));
+  if (!info) return "";
+  if (info.letter === "O") return "OUT";
+  if (info.letter === "SUS") return "SUSP";
+  return info.letter;
 }
 
 /** RotoWire blurbs lead with the news sentence; the rest is their fantasy analysis. */

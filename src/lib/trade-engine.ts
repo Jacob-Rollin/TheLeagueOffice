@@ -106,11 +106,20 @@ export function seedMarketValueFromProjection(p: FantasyCalcSeedPlayer): number 
   return 0;
 }
 
+/** Dev-only Trade Radar / FantasyCalc tracing — never spam production consoles. */
+function debugLog(...args: unknown[]) {
+  try {
+    if (import.meta.env.DEV) console.log(...args);
+  } catch {
+    /* import.meta unavailable */
+  }
+}
+
 export async function loadFantasyCalcMarketMap(
   players: FantasyCalcSeedPlayer[],
 ): Promise<FantasyCalcMarketMap> {
   const rows = await fetchFantasyCalcRows().catch((err) => {
-    console.log(
+    debugLog(
       "DEBUG FantasyCalc - fetch failed, will seed from local projections:",
       err instanceof Error ? err.message : err,
     );
@@ -142,7 +151,7 @@ export async function loadFantasyCalcMarketMap(
 
   const liveKeys = Object.keys(out).length;
   if (liveKeys === 0) {
-    console.log(
+    debugLog(
       "DEBUG FantasyCalc - map keys: 0 after API parse; seeding fallback from local projections. Catalog size:",
       players.length,
     );
@@ -169,11 +178,11 @@ export async function loadFantasyCalcMarketMap(
       filled += 1;
     }
     if (filled > 0) {
-      console.log("DEBUG FantasyCalc - live keys:", liveKeys, "projection-filled gaps:", filled);
+      debugLog("DEBUG FantasyCalc - live keys:", liveKeys, "projection-filled gaps:", filled);
     }
   }
 
-  console.log("DEBUG FantasyCalc - final map keys:", Object.keys(out).length);
+  debugLog("DEBUG FantasyCalc - final map keys:", Object.keys(out).length);
   return out;
 }
 
@@ -197,7 +206,7 @@ export function ensureMarketValueMap(
     }
     return out;
   }
-  console.log("DEBUG TRADE RADAR - empty marketValueById; seeding from roster weekly projections");
+  debugLog("DEBUG TRADE RADAR - empty marketValueById; seeding from roster weekly projections");
   for (const pool of pools) {
     for (const p of pool) {
       if (!p.id) continue;
@@ -205,7 +214,7 @@ export function ensureMarketValueMap(
       if (seeded > 0) out[p.id] = seeded;
     }
   }
-  console.log("DEBUG TRADE RADAR - seeded market map keys:", Object.keys(out).length);
+  debugLog("DEBUG TRADE RADAR - seeded market map keys:", Object.keys(out).length);
   return out;
 }
 
@@ -2129,7 +2138,7 @@ export function suggestMarketRadarTrade(input: {
   const marketValueById = ensureMarketValueMap(input.marketValueById, [myRoster, ...oppPools]);
 
   // Browser DevTools (F12) tracing — authentic roster / FantasyCalc key alignment.
-  console.log(
+  debugLog(
     "DEBUG TRADE RADAR - User Roster Size:",
     userPlayers?.length,
     "Opponent Teams Found:",
@@ -2142,14 +2151,14 @@ export function suggestMarketRadarTrade(input: {
     for (const player of samplePlayers) {
       const catalogHit =
         player?.id != null && player.id !== "" ? marketValueById[player.id] : undefined;
-      console.log(
+      debugLog(
         "DEBUG KEY MATCH - Roster Player ID Sample:",
         player?.id,
         "Catalog ID Match:",
         catalogHit != null ? catalogHit : undefined,
       );
     }
-    console.log(
+    debugLog(
       "DEBUG TRADE RADAR - FantasyCalc map keys:",
       Object.keys(marketValueById).length,
       "My bench size:",
@@ -2180,7 +2189,7 @@ export function suggestMarketRadarTrade(input: {
 
   // Pass A — strict 1:1
   const myPool = [...myRoster].sort((a, b) => b.weekly - a.weekly).slice(0, 8);
-  console.log(
+  debugLog(
     "DEBUG TRADE RADAR - Pass A 1:1 pool sizes — myPool:",
     myPool.length,
     "opponents:",
@@ -2189,7 +2198,7 @@ export function suggestMarketRadarTrade(input: {
   for (const opp of input.opponents) {
     const oppRoster = applyLeagueScoring(resolveOppPlayers(opp), scoring);
     const getPool = [...oppRoster].sort((a, b) => b.weekly - a.weekly).slice(0, 10);
-    console.log(
+    debugLog(
       "DEBUG TRADE RADAR - 1:1 opponent scan:",
       opp.label,
       "oppRoster:",
@@ -2220,7 +2229,7 @@ export function suggestMarketRadarTrade(input: {
   }
 
   if (state.best) {
-    console.log(
+    debugLog(
       "DEBUG TRADE RADAR - early return after 1:1 hit:",
       state.best.packageKind,
       state.best.managerLabel,
@@ -2231,7 +2240,7 @@ export function suggestMarketRadarTrade(input: {
     );
     return state.best;
   }
-  console.log("DEBUG TRADE RADAR - no 1:1 cleared filters; entering Package Scan");
+  debugLog("DEBUG TRADE RADAR - no 1:1 cleared filters; entering Package Scan");
   const myNeed = skillWeakness(myRoster, starters);
   const myMarketStrength = marketPosStrength(myRoster, marketValueById);
 
@@ -2359,6 +2368,6 @@ export function suggestMarketRadarTrade(input: {
   }
 
   const packageResult: MarketRadarTradeSuggestion | null = state["best"];
-  console.log("DEBUG TRADE RADAR - Package Scan complete. Result:", packageResult);
+  debugLog("DEBUG TRADE RADAR - Package Scan complete. Result:", packageResult);
   return packageResult;
 }
