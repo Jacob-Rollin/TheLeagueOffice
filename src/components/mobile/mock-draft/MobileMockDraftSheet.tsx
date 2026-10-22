@@ -236,6 +236,8 @@ function nameColumnEndPx(scrollEl: HTMLElement): number {
  * of the name column remains on screen (`scrollLeft >= nameEnd`).
  */
 function updateCompactNameFade(scrollEl: HTMLElement) {
+  // Hidden keep-alive panes report 0 width — skip so we don't clobber opacity.
+  if (scrollEl.clientWidth <= 0) return;
   scrollEl.style.setProperty("--m-draft-scrollport-w", `${scrollEl.clientWidth}px`);
   const nameEnd = nameColumnEndPx(scrollEl);
   // 0 at rest → 1 once the name column has fully left the scrollport.
@@ -447,12 +449,24 @@ export function MobileMockDraftSheet({
     dragRef.current = null;
   };
 
+  // Keep panes mounted after first visit so tab swaps don't remount the
+  // heavy players list (that was the main tab-switch hitch).
+  const [mountedTabs, setMountedTabs] = useState<Record<SheetTab, boolean>>({
+    players: true,
+    queue: false,
+    team: false,
+  });
+  useEffect(() => {
+    setMountedTabs((prev) => (prev[tab] ? prev : { ...prev, [tab]: true }));
+  }, [tab]);
+
   const onTabPress = (key: SheetTab) => {
     if (suppressTabClickRef.current) {
       suppressTabClickRef.current = false;
       return;
     }
-    onTabChange(key);
+    // Transition keeps the tab underline snappy while the pane paints.
+    startTransition(() => onTabChange(key));
     // Opening a tab from fully collapsed pulls the sheet to peek.
     if (snap === "collapsed") setSnap("peek");
   };
@@ -524,48 +538,63 @@ export function MobileMockDraftSheet({
         </div>
       </div>
 
-      {tab === "players" ? (
-        <PlayersPane
-          settings={settings}
-          available={available}
-          draftedPlayers={draftedPlayers}
-          watchIds={watchIds}
-          myTurn={myTurn}
-          complete={complete}
-          myCounts={myCounts}
-          nextUserOverall={nextUserOverall}
-          prevYear={prevYear}
-          projExtrasById={projExtrasById}
-          onDraft={onDraft}
-          onToggleQueue={onToggleQueue}
-          onOpenPlayer={onOpenPlayer}
-        />
+      {mountedTabs.players ? (
+        <div
+          className={cn("flex min-h-0 flex-1 flex-col", tab !== "players" && "hidden")}
+          aria-hidden={tab !== "players"}
+        >
+          <PlayersPane
+            settings={settings}
+            available={available}
+            draftedPlayers={draftedPlayers}
+            watchIds={watchIds}
+            myTurn={myTurn}
+            complete={complete}
+            myCounts={myCounts}
+            nextUserOverall={nextUserOverall}
+            prevYear={prevYear}
+            projExtrasById={projExtrasById}
+            onDraft={onDraft}
+            onToggleQueue={onToggleQueue}
+            onOpenPlayer={onOpenPlayer}
+          />
+        </div>
       ) : null}
-      {tab === "queue" ? (
-        <QueuePane
-          queuedPlayers={queuedPlayers}
-          settings={settings}
-          myTurn={myTurn}
-          complete={complete}
-          queueAutopickOn={queueAutopickOn}
-          onQueueAutopickChange={onQueueAutopickChange}
-          onDraft={onDraft}
-          onMoveQueued={onMoveQueued}
-          onRemoveQueued={onRemoveQueued}
-          onOpenPlayer={onOpenPlayer}
-        />
+      {mountedTabs.queue ? (
+        <div
+          className={cn("flex min-h-0 flex-1 flex-col", tab !== "queue" && "hidden")}
+          aria-hidden={tab !== "queue"}
+        >
+          <QueuePane
+            queuedPlayers={queuedPlayers}
+            settings={settings}
+            myTurn={myTurn}
+            complete={complete}
+            queueAutopickOn={queueAutopickOn}
+            onQueueAutopickChange={onQueueAutopickChange}
+            onDraft={onDraft}
+            onMoveQueued={onMoveQueued}
+            onRemoveQueued={onRemoveQueued}
+            onOpenPlayer={onOpenPlayer}
+          />
+        </div>
       ) : null}
-      {tab === "team" ? (
-        <TeamPane
-          settings={settings}
-          picks={picks}
-          byId={byId}
-          draftedIds={draftedIds}
-          rosterTeam={rosterTeam}
-          onRosterTeamChange={onRosterTeamChange}
-          onOpenPlayer={onOpenPlayer}
-          currentOverall={currentOverall}
-        />
+      {mountedTabs.team ? (
+        <div
+          className={cn("flex min-h-0 flex-1 flex-col", tab !== "team" && "hidden")}
+          aria-hidden={tab !== "team"}
+        >
+          <TeamPane
+            settings={settings}
+            picks={picks}
+            byId={byId}
+            draftedIds={draftedIds}
+            rosterTeam={rosterTeam}
+            onRosterTeamChange={onRosterTeamChange}
+            onOpenPlayer={onOpenPlayer}
+            currentOverall={currentOverall}
+          />
+        </div>
       ) : null}
     </div>
   );

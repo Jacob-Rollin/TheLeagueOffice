@@ -331,6 +331,7 @@ export function useMockDraftSession({
     setConfig(nextConfig);
   }, [bootKey]);
 
+  // Debounce session writes so rapid tab swaps / picks don't hitch the UI.
   useEffect(() => {
     if (!config || !started) return;
     const payload: MockSessionState = {
@@ -340,10 +341,11 @@ export function useMockDraftSession({
       customOrder,
       speed,
       paused,
-      tab: tab === "queue" ? "players" : tab,
+      tab,
       rosterTeam,
     };
-    saveMockSession(payload);
+    const id = window.setTimeout(() => saveMockSession(payload), 120);
+    return () => window.clearTimeout(id);
   }, [config, started, picks, watch, customOrder, speed, paused, tab, rosterTeam]);
 
   const toggleWatch = useCallback((id: string) => {
