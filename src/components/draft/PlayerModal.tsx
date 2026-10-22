@@ -91,18 +91,16 @@ export function PlayerModal({
         className="relative h-full max-h-full w-full max-w-5xl overflow-x-visible overflow-y-auto rounded-xl border border-border bg-background shadow-2xl pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Sticky host so Close stays visible over the team-color compact bar. */}
-        <div className="pointer-events-none sticky top-0 z-[200] h-0 w-full">
-          <button
-            type="button"
-            onMouseDown={handleClose}
-            onClick={handleClose}
-            className="pointer-events-auto absolute right-3 top-3 flex h-8 w-8 cursor-pointer select-none items-center justify-center rounded-lg border border-white/45 bg-black/25 text-white shadow-sm backdrop-blur-sm transition-colors hover:border-white/80 hover:bg-white/15 focus:outline-none"
-            aria-label="Close popup"
-          >
-            <X className="size-4 shrink-0" strokeWidth={2.5} />
-          </button>
-        </div>
+        {/* Hero close only — scrolls with the banner. Compact bar owns its own X. */}
+        <button
+          type="button"
+          onMouseDown={handleClose}
+          onClick={handleClose}
+          className="pointer-events-auto absolute right-4 top-4 z-[200] flex h-8 w-8 cursor-pointer select-none items-center justify-center rounded-lg border border-white/45 bg-transparent text-white transition-colors hover:border-white/80 hover:bg-white/10 focus:outline-none"
+          aria-label="Close popup"
+        >
+          <X className="size-4 shrink-0" strokeWidth={2.5} />
+        </button>
         <PlayerDetail
           id={id}
           onSelectPlayer={onSelectPlayer}
