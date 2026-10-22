@@ -47,25 +47,31 @@ export function normPlayerName(name: string): string {
     .replace(/[^a-z]/g, "");
 }
 
-/** Maps a Sleeper/ESPN injury token to a game designation (IR, PUP, suspended count as Out). */
+/**
+ * Maps a Sleeper/ESPN token to an official **game** designation (Q / D / Out).
+ *
+ * IR / IR-R / PUP / NFI are roster statuses, not Friday game statuses. Mapping
+ * them to Out was wiping Chance to Play for designated-to-return players who
+ * are practicing (e.g. Jordan Mason FP midweek while still listed IR). Leave
+ * those null so midweek practice marks grade the chance. Suspended / NA still
+ * count as Out.
+ */
 export function designationFromStatus(status: string | null | undefined): GameStatus | null {
   const v = (status ?? "").trim().toLowerCase();
   if (!v) return null;
   if (v === "questionable" || v === "q") return "Questionable";
   if (v === "doubtful" || v === "d") return "Doubtful";
-  if (
-    v === "out" ||
-    v === "o" ||
-    v === "ir" ||
-    v.includes("injured reserve") ||
-    v.startsWith("pup") ||
-    v === "na" ||
-    v.includes("suspend") ||
-    v === "nfi"
-  ) {
-    return "Out";
-  }
+  if (v === "out" || v === "o") return "Out";
+  if (v === "na" || v === "dnr" || v.includes("suspend")) return "Out";
   return null;
+}
+
+/** True when ESPN/Sleeper marks a player as IR designated to return (IR-R). */
+export function isDesignatedToReturn(status: string | null | undefined): boolean {
+  const v = (status ?? "").trim().toUpperCase().replace(/_/g, " ");
+  if (!v) return false;
+  if (/\bIR-R\b/.test(v) || /\bIRR\b/.test(v)) return true;
+  return /DESIGNATED TO RETURN/.test(v);
 }
 
 export function latestMark(days: PracticeDay[]): PracticeMark | null {
@@ -81,6 +87,7 @@ export function chanceToPlay(line: InjuryReportLine): number | null {
   const last = latestMark(line.days);
   const nir = /not injury related|\bNIR\b/i.test(line.injury ?? "");
 
+  // Official game designation (or final report) wins — never invent Out from IR.
   if (line.final || line.gameStatus) {
     const rate = FINAL_RATES[line.gameStatus ?? "None"][last ?? "None"];
     return nir && line.gameStatus !== "Out" && line.gameStatus !== "Doubtful" ? Math.max(rate, 95) : rate;

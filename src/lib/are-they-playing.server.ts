@@ -5,6 +5,7 @@
  */
 
 import {
+  isDesignatedToReturn,
   normPlayerName,
   type AreTheyPlayingPayload,
   type GameStatus,
@@ -162,6 +163,8 @@ type EspnInjury = {
   team: string;
   pos: string;
   status: GameStatus | null;
+  /** Raw ESPN status / fantasy abbreviation (e.g. Injured Reserve, IR-R). */
+  rosterStatus: string | null;
   injury: string | null;
   date: number;
   comments: string[];
@@ -176,7 +179,10 @@ type EspnFeed = {
       shortComment?: string;
       longComment?: string;
       type?: { name?: string };
-      details?: { type?: string };
+      details?: {
+        type?: string;
+        fantasyStatus?: { description?: string; abbreviation?: string };
+      };
       athlete?: { displayName?: string; position?: { abbreviation?: string } };
     }>;
   }>;
@@ -188,8 +194,33 @@ function espnStatus(typeName: string | undefined, status: string | undefined): G
   const v = `${typeName ?? ""} ${status ?? ""}`.toUpperCase();
   if (v.includes("QUESTIONABLE")) return "Questionable";
   if (v.includes("DOUBTFUL")) return "Doubtful";
+  // Do not treat IR / Injured Reserve as Out — returnees practice while still IR.
+  if (/\bIR\b|INJURED RESERVE|INJURY_STATUS_IR/.test(v)) return null;
   if (/\bOUT\b|INJURY_STATUS_OUT/.test(v)) return "Out";
   return null;
+}
+
+function espnRosterStatus(inj: {
+  status?: string;
+  type?: { name?: string };
+  details?: { fantasyStatus?: { description?: string; abbreviation?: string } };
+}): string | null {
+  const fantasy =
+    inj.details?.fantasyStatus?.abbreviation?.trim() ||
+    inj.details?.fantasyStatus?.description?.trim() ||
+    "";
+  const raw = fantasy || inj.status?.trim() || inj.type?.name?.trim() || "";
+  return raw || null;
+}
+
+/** Include IR-R / practice-active IR rows even without a Q/D/Out game status. */
+function espnShouldAddWithoutGameStatus(news: EspnInjury): boolean {
+  if (isDesignatedToReturn(news.rosterStatus)) return true;
+  const roster = (news.rosterStatus ?? "").toUpperCase();
+  const onIr = /\bIR\b|INJURED RESERVE/.test(roster);
+  if (!onIr) return false;
+  const { marks, addedOn } = practiceFromNews(news.comments, news.date);
+  return marks.size > 0 || Boolean(addedOn);
 }
 
 async function fetchEspnInjuries(): Promise<EspnInjury[]> {
@@ -212,6 +243,7 @@ async function fetchEspnInjuries(): Promise<EspnInjury[]> {
         team,
         pos,
         status: espnStatus(inj.type?.name, inj.status),
+        rosterStatus: espnRosterStatus(inj),
         injury: injuryType && !/not specified|undisclosed/i.test(injuryType) ? injuryType : null,
         date: Date.parse(inj.date ?? "") || 0,
         comments: [inj.shortComment, inj.longComment].filter((c): c is string => Boolean(c?.trim())),
@@ -503,10 +535,12 @@ function mergeEspn(reports: ClubReport[], espn: EspnInjury[], now: number): Inju
     }
   }
 
-  // Designated this week but not on the club's posted report yet.
+  // Designated this week but not on the club's posted report yet — including
+  // IR-R / practicing IR returnees who have no Q/D/Out game status yet.
   for (const news of fresh) {
     const key = `${normPlayerName(news.name)}|${news.team}`;
-    if (seen.has(key) || !news.status) continue;
+    if (seen.has(key)) continue;
+    if (!news.status && !espnShouldAddWithoutGameStatus(news)) continue;
     if (onReport.has(`${lastName(news.name)}|${news.team}|${news.pos}`)) continue;
     seen.add(key);
     const dayCols = dayColsByTeam.get(news.team) ?? ["Wed", "Thu", "Fri"];
