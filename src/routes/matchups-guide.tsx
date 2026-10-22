@@ -6,6 +6,10 @@ import { Fragment, startTransition, useDeferredValue, useMemo, useRef, useState 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import {
+  ResearchAvailabilityPoolFilter,
+  ResearchFilterTrailing,
+} from "@/components/research/ResearchAvailabilityFilter";
+import {
   ScoringFormatSelect,
   scoringFormatLabel,
   useResearchScoringFormat,
@@ -31,6 +35,12 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos } from "@/lib/draft";
 import { usePrefetchSiblingFormats } from "@/lib/prefetch-research-formats";
+import {
+  matchesResearchAvailability,
+  RESEARCH_OWNERSHIP_META,
+  type ResearchAvailabilityPool,
+  type ResearchOwnership,
+} from "@/lib/research-availability";
 import { fetchResearchMatchupsGuide, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import type { MatchupDefenseCell } from "@/lib/players.server";
 import { isUnavailableInjury } from "@/lib/injury-badge";
@@ -91,14 +101,6 @@ const SCORE_BAR: Record<SosDifficultyTone, string> = {
   bye: "bg-slate-300",
 };
 
-type Ownership = "roster" | "taken" | "available";
-
-const OWNERSHIP_ROW: Record<Ownership, string> = {
-  roster: "bg-sky-50/90",
-  taken: "bg-white",
-  available: "bg-emerald-50/80",
-};
-
 type SortKey = "rank" | "player" | "opp" | "score";
 
 type GuideRow = {
@@ -109,7 +111,7 @@ type GuideRow = {
   metaLine: string;
   injuryLabel: string | null;
   injuryClass: string | null;
-  ownership: Ownership;
+  ownership: ResearchOwnership;
   ownerTeam: string | null;
   opp: string;
   home: boolean;
@@ -145,6 +147,8 @@ function MatchupsGuidePage() {
   const [pos, setPos] = useState<Pos>("WR");
   const [grade, setGrade] = useState<GradeFilter>("all");
   const [teamFilter, setTeamFilter] = useState("all");
+  const [pool, setPool] = useState<ResearchAvailabilityPool>("all");
+  const [myTeamOnly, setMyTeamOnly] = useState(false);
   const [week, setWeek] = useState<number | null>(null);
   const [q, setQ] = useState("");
   const deferredQ = useDeferredValue(q);
@@ -183,7 +187,8 @@ function MatchupsGuidePage() {
   const players = playersPayload?.players ?? [];
   const brain = usePlayerBrain();
   const { projectFor, nflWeek } = useLeagueProjections(activeWeek);
-  const { teams, myTeam, rosteredIds } = useLeagueRosters(players);
+  const { teams, myTeam, rosteredIds, synced } = useLeagueRosters(players);
+  const myTeamFilter = synced && myTeamOnly;
   // Live Sleeper designations (via useSleeperPlayers overlay) only describe the
   // current week — hide IR/Out/etc. for current + future boards, not history.
   const hideUnavailableInjuries =
@@ -255,7 +260,11 @@ function MatchupsGuidePage() {
       const weekly = Math.max(proj ?? 0, seasonWeekly);
       if (!owner && weekly < STARTER_PROJ[pos]) continue;
 
-      const ownership: Ownership = myIds.has(p.id) ? "roster" : rosteredIds.has(p.id) ? "taken" : "available";
+      const ownership: ResearchOwnership = myIds.has(p.id)
+        ? "roster"
+        : rosteredIds.has(p.id)
+          ? "taken"
+          : "available";
       const difficulty = sosDifficultyFromStars(sosStarsFromRank(cell.rank));
       const tone = difficulty.tone === "bye" ? "neutral" : difficulty.tone;
       const z = scoreScale ? (cell.pa - scoreScale.mean) / scoreScale.sd : 0;
@@ -301,7 +310,9 @@ function MatchupsGuidePage() {
     const needle = deferredQ.trim().toLowerCase();
     const filtered = baseRows.filter((row) => {
       if (grade !== "all" && row.tone !== grade) return false;
-      if (teamFilter === "available" && row.ownership !== "available") return false;
+      if (!matchesResearchAvailability(row.ownership, { pool, myTeamOnly: myTeamFilter })) {
+        return false;
+      }
       if (teamFilter.startsWith("team:")) {
         const slot = Number(teamFilter.slice(5));
         if (ownerById.get(row.id)?.slot !== slot) return false;
@@ -327,7 +338,7 @@ function MatchupsGuidePage() {
       const cmp = sortKey === "player" ? a.name.localeCompare(b.name) : a.opp.localeCompare(b.opp);
       return cmp * dir || a.rank - b.rank;
     });
-  }, [baseRows, grade, teamFilter, deferredQ, ownerById, sortKey, sortDir]);
+  }, [baseRows, grade, pool, myTeamFilter, teamFilter, deferredQ, ownerById, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     const next = nextSortState(sortKey, sortDir, key, key === "score" ? "desc" : "asc");
@@ -401,8 +412,14 @@ function MatchupsGuidePage() {
         ))}
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2 sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
+          <ResearchAvailabilityPoolFilter
+            value={pool}
+            onChange={setPool}
+            inactive={myTeamFilter}
+          />
+
           <Select value={teamFilter} onValueChange={(v) => startTransition(() => setTeamFilter(v))}>
             <SelectTrigger
               aria-label="Filter by team"
@@ -412,7 +429,6 @@ function MatchupsGuidePage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Players</SelectItem>
-              <SelectItem value="available">Available</SelectItem>
               {teamOptions.map((t) => (
                 <SelectItem key={t.slot} value={`team:${t.slot}`}>
                   {t.team}
@@ -479,13 +495,19 @@ function MatchupsGuidePage() {
             }
           />
         </div>
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search a player or team"
-          className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
-        />
+        <ResearchFilterTrailing
+          myTeamOnly={myTeamFilter}
+          onMyTeamChange={setMyTeamOnly}
+          myTeamDisabled={!synced}
+        >
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search a player or team"
+            className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
+          />
+        </ResearchFilterTrailing>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -562,7 +584,7 @@ function MatchupsGuidePage() {
                       <tr
                         className={cn(
                           "cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50/80",
-                          OWNERSHIP_ROW[row.ownership],
+                          RESEARCH_OWNERSHIP_META[row.ownership].row,
                         )}
                         onClick={() => setExpanded(open ? null : row.id)}
                       >

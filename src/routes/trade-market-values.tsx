@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronDown } from "lucide-react";
 import {
   memo,
   startTransition,
@@ -15,6 +14,10 @@ import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import {
+  ResearchAvailabilityPoolFilter,
+  ResearchFilterTrailing,
+} from "@/components/research/ResearchAvailabilityFilter";
+import {
   ScoringFormatSelect,
   scoringFormatLabel,
   useResearchScoringFormat,
@@ -27,12 +30,6 @@ import {
   type SortDir,
 } from "@/components/research/SortHeader";
 import { ValueTrendCell } from "@/components/research/ValueTrendCell";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useLeagueScoringMeta } from "@/hooks/useLeagueProjections";
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
@@ -40,6 +37,12 @@ import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import { fetchMarketHistoryClient } from "@/lib/market-history-client";
 import { usePrefetchSiblingFormats } from "@/lib/prefetch-research-formats";
+import {
+  matchesResearchAvailability,
+  RESEARCH_OWNERSHIP_META,
+  type ResearchAvailabilityPool,
+  type ResearchOwnership,
+} from "@/lib/research-availability";
 import { fetchSnapTradeMarket } from "@/lib/snap-cdn";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { scaleValue } from "@/lib/trade-engine";
@@ -73,7 +76,6 @@ export const Route = createFileRoute("/trade-market-values")({
 
 type PosFilter = "ALL" | MarketPos;
 type TargetView = "all" | TargetKind;
-type Ownership = "roster" | "taken" | "available";
 type SortKey = "player" | "value" | "freq" | "opp" | "ppg" | "gap";
 
 const POS_TABS: PosFilter[] = ["ALL", "QB", "RB", "WR", "TE"];
@@ -82,12 +84,6 @@ const TARGET_VIEWS: { id: TargetView; label: string }[] = [
   { id: "buy", label: "Buy Low" },
   { id: "sell", label: "Sell High" },
 ];
-
-const OWNERSHIP_META: Record<Ownership, { label: string; row: string }> = {
-  roster: { label: "Rostered", row: "bg-sky-50/90" },
-  taken: { label: "Taken", row: "bg-white" },
-  available: { label: "Available", row: "bg-emerald-50/80" },
-};
 
 const TARGET_COPY: Record<TargetKind, { title: string; tag: string; tone: string; body: string }> = {
   buy: {
@@ -105,7 +101,7 @@ const TARGET_COPY: Record<TargetKind, { title: string; tag: string; tone: string
 };
 
 type EnrichedRow = MarketRow & {
-  ownership: Ownership;
+  ownership: ResearchOwnership;
   injuryLabel: string | null;
   injuryClass: string | null;
   metaLine: string;
@@ -135,9 +131,8 @@ function TradeMarketPage() {
     const t = window.setTimeout(() => setDeferredQ(q), 300);
     return () => window.clearTimeout(t);
   }, [q]);
-  const [showRoster, setShowRoster] = useState(true);
-  const [showTaken, setShowTaken] = useState(true);
-  const [showAvailable, setShowAvailable] = useState(true);
+  const [pool, setPool] = useState<ResearchAvailabilityPool>("all");
+  const [myTeamOnly, setMyTeamOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const modalRef = useRef<PlayerModalHandle>(null);
@@ -154,11 +149,12 @@ function TradeMarketPage() {
     for (const p of players) map.set(p.id, p);
     return map;
   }, [players]);
-  const { myTeam, rosteredIds } = useLeagueRosters(players);
+  const { myTeam, rosteredIds, synced } = useLeagueRosters(players);
   const myOwnedIds = useMemo(
     () => new Set((myTeam?.players ?? []).map((p) => p.id)),
     [myTeam?.players],
   );
+  const myTeamFilter = synced && myTeamOnly;
 
   const query = useQuery({
     queryKey: ["trade-market", format],
@@ -187,7 +183,7 @@ function TradeMarketPage() {
       .filter((r) => (pos === "ALL" ? true : r.pos === pos))
       .filter((r) => (view === "all" ? true : targets.get(r.id)?.kind === view))
       .map((r): Omit<EnrichedRow, "rank"> => {
-        const ownership: Ownership = myOwnedIds.has(r.id)
+        const ownership: ResearchOwnership = myOwnedIds.has(r.id)
           ? "roster"
           : rosteredIds.has(r.id)
             ? "taken"
@@ -240,9 +236,9 @@ function TradeMarketPage() {
 
     return sorted
       .filter((r) => {
-        if (r.ownership === "roster" && !showRoster) return false;
-        if (r.ownership === "taken" && !showTaken) return false;
-        if (r.ownership === "available" && !showAvailable) return false;
+        if (!matchesResearchAvailability(r.ownership, { pool, myTeamOnly: myTeamFilter })) {
+          return false;
+        }
         if (!needle) return true;
         return (
           r.name.toLowerCase().includes(needle) ||
@@ -257,9 +253,8 @@ function TradeMarketPage() {
     view,
     targets,
     deferredQ,
-    showRoster,
-    showTaken,
-    showAvailable,
+    pool,
+    myTeamFilter,
     myOwnedIds,
     rosteredIds,
     playerById,
@@ -288,9 +283,6 @@ function TradeMarketPage() {
       setSortKey(null);
       setSortDir("desc");
     });
-
-  const filterTriggerClass =
-    "inline-flex h-9 min-w-[8.5rem] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-primary/30";
 
   const showGap = view !== "all";
   const colSpan = showGap ? 8 : 7;
@@ -326,38 +318,20 @@ function TradeMarketPage() {
         ))}
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger className={filterTriggerClass}>
-              Availability
-              <ChevronDown className="size-4 opacity-50" aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48 p-1">
-              {(
-                [
-                  ["roster", showRoster, setShowRoster],
-                  ["taken", showTaken, setShowTaken],
-                  ["available", showAvailable, setShowAvailable],
-                ] as const
-              ).map(([key, on, setOn]) => {
-                const meta = OWNERSHIP_META[key];
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={key}
-                    checked={on}
-                    onCheckedChange={(checked) => startTransition(() => setOn(Boolean(checked)))}
-                    onSelect={(e) => e.preventDefault()}
-                    className={cn("rounded-sm", on ? meta.row : undefined)}
-                  >
-                    {meta.label}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ResearchAvailabilityPoolFilter
+            value={pool}
+            onChange={setPool}
+            inactive={myTeamFilter}
+          />
           <ScoringFormatSelect value={format} onChange={(f) => startTransition(() => setFormat(f))} />
         </div>
+        <ResearchFilterTrailing
+          myTeamOnly={myTeamFilter}
+          onMyTeamChange={setMyTeamOnly}
+          myTeamDisabled={!synced}
+        />
       </div>
 
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-border">
@@ -526,7 +500,7 @@ const MarketRowView = memo(function MarketRowView({
   showGap: boolean;
   onOpen: (id: string) => void;
 }) {
-  const ownTone = OWNERSHIP_META[row.ownership].row;
+  const ownTone = RESEARCH_OWNERSHIP_META[row.ownership].row;
   const tone = row.ownership === "taken" && zebra ? "bg-slate-50/50" : ownTone;
   const freq = row.tradeFrequency;
 
