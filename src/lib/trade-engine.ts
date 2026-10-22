@@ -106,11 +106,20 @@ export function seedMarketValueFromProjection(p: FantasyCalcSeedPlayer): number 
   return 0;
 }
 
+/** Dev-only Trade Radar / FantasyCalc tracing — never spam production consoles. */
+function debugLog(...args: unknown[]) {
+  try {
+    if (import.meta.env.DEV) console.log(...args);
+  } catch {
+    /* import.meta unavailable */
+  }
+}
+
 export async function loadFantasyCalcMarketMap(
   players: FantasyCalcSeedPlayer[],
 ): Promise<FantasyCalcMarketMap> {
   const rows = await fetchFantasyCalcRows().catch((err) => {
-    console.log(
+    debugLog(
       "DEBUG FantasyCalc - fetch failed, will seed from local projections:",
       err instanceof Error ? err.message : err,
     );
@@ -142,7 +151,7 @@ export async function loadFantasyCalcMarketMap(
 
   const liveKeys = Object.keys(out).length;
   if (liveKeys === 0) {
-    console.log(
+    debugLog(
       "DEBUG FantasyCalc - map keys: 0 after API parse; seeding fallback from local projections. Catalog size:",
       players.length,
     );
@@ -169,11 +178,11 @@ export async function loadFantasyCalcMarketMap(
       filled += 1;
     }
     if (filled > 0) {
-      console.log("DEBUG FantasyCalc - live keys:", liveKeys, "projection-filled gaps:", filled);
+      debugLog("DEBUG FantasyCalc - live keys:", liveKeys, "projection-filled gaps:", filled);
     }
   }
 
-  console.log("DEBUG FantasyCalc - final map keys:", Object.keys(out).length);
+  debugLog("DEBUG FantasyCalc - final map keys:", Object.keys(out).length);
   return out;
 }
 
@@ -197,7 +206,7 @@ export function ensureMarketValueMap(
     }
     return out;
   }
-  console.log("DEBUG TRADE RADAR - empty marketValueById; seeding from roster weekly projections");
+  debugLog("DEBUG TRADE RADAR - empty marketValueById; seeding from roster weekly projections");
   for (const pool of pools) {
     for (const p of pool) {
       if (!p.id) continue;
@@ -205,7 +214,7 @@ export function ensureMarketValueMap(
       if (seeded > 0) out[p.id] = seeded;
     }
   }
-  console.log("DEBUG TRADE RADAR - seeded market map keys:", Object.keys(out).length);
+  debugLog("DEBUG TRADE RADAR - seeded market map keys:", Object.keys(out).length);
   return out;
 }
 
@@ -302,6 +311,18 @@ export const BASE_STARTERS: Record<string, number> = {
   FLEX: 1,
 };
 
+/**
+ * Use the league starter template when present. Only fall back to BASE_STARTERS
+ * when the config is empty — never fill missing K/DEF onto a no-kicker / no-DST
+ * (or otherwise custom) league by spreading BASE over a partial template.
+ */
+export function effectiveStarters(
+  starters: Record<string, number> | null | undefined,
+): Record<string, number> {
+  if (starters && Object.keys(starters).length > 0) return { ...starters };
+  return { ...BASE_STARTERS };
+}
+
 const FLEX_ELIGIBLE = ["RB", "WR", "TE"];
 
 export type Lineup = {
@@ -327,7 +348,7 @@ export function optimizeLineup(
   starters: Record<string, number>,
   scoring?: LeagueScoringContext | null,
 ): Lineup {
-  const req = { ...BASE_STARTERS, ...starters };
+  const req = effectiveStarters(starters);
   // League scoring inheritance: re-price every projection in the host format.
   players = applyLeagueScoring(players, scoring);
   // Airtight isolation: clone every entry so sandbox / live roster objects are
@@ -430,7 +451,7 @@ export function marginalImpact(input: {
   starters: Record<string, number>;
   scoring?: LeagueScoringContext | null;
 }): MarginalImpact {
-  const req = { ...BASE_STARTERS, ...input.starters };
+  const req = effectiveStarters(input.starters);
   const roster = applyLeagueScoring(input.roster, input.scoring);
   const give = applyLeagueScoring(input.give, input.scoring);
   const get = applyLeagueScoring(input.get, input.scoring);
@@ -463,7 +484,7 @@ export function rosterFit(input: {
   starters: Record<string, number>;
   scoring?: LeagueScoringContext | null;
 }): RosterFit & { impact: MarginalImpact; eligible: boolean } {
-  const req = { ...BASE_STARTERS, ...input.starters };
+  const req = effectiveStarters(input.starters);
   const roster = applyLeagueScoring(input.roster, input.scoring);
   const give = applyLeagueScoring(input.give, input.scoring);
   const get = applyLeagueScoring(input.get, input.scoring);
@@ -598,7 +619,7 @@ export function tradeStarterEligible(input: {
   starters: Record<string, number>;
   scoring?: LeagueScoringContext | null;
 }): { eligible: boolean; reason: string; fillsVacancy: boolean; cracksLineup: boolean } {
-  const req = { ...BASE_STARTERS, ...input.starters };
+  const req = effectiveStarters(input.starters);
   const roster = applyLeagueScoring(input.roster, input.scoring);
   const give = applyLeagueScoring(input.give, input.scoring);
   const get = applyLeagueScoring(input.get, input.scoring);
@@ -694,7 +715,7 @@ export function rosterConstraint(input: {
   const over = projected - input.rosterCap;
   if (over <= 0) return none;
 
-  const starters = { ...BASE_STARTERS, ...(input.starters ?? {}) };
+  const starters = effectiveStarters(input.starters);
   const remaining: Record<string, number> = {};
   for (const p of input.bench) {
     const pos = p.pos ?? "";
@@ -1076,6 +1097,7 @@ export function benchSlotWarning(count: number): string {
 const FROZEN_STATUS: Record<string, string> = {
   EXEMPT: "roster-exempt list",
   SUSPENDED: "suspension",
+  SUS: "suspension",
   PUP: "PUP list",
   IR: "injured reserve",
   NA: "inactive roster designation",
@@ -1244,11 +1266,15 @@ const RISK_WEIGHT: Record<string, number> = {
   IR: 4,
   PUP: 4,
   SUSPENDED: 4,
+  SUS: 4,
   EXEMPT: 3,
   NA: 3,
   DOUBTFUL: 3,
+  D: 3,
   OUT: 3,
+  O: 3,
   QUESTIONABLE: 2,
+  Q: 2,
   PROBABLE: 1,
   DTD: 1,
 };
@@ -1459,10 +1485,12 @@ const WAIVER_INJURY_BLACKLIST = new Set([
   "OUT",
   "O",
   "DOUBTFUL",
+  "D",
   "IR",
   "INJURED RESERVE",
   "PUP",
   "SUSPENDED",
+  "SUS",
   "NA",
   "EXEMPT",
   "QUESTIONABLE",
@@ -1514,7 +1542,7 @@ export function isDropProtected(
   starters: Record<string, number>,
   scoring?: LeagueScoringContext | null,
 ): boolean {
-  const req = { ...BASE_STARTERS, ...starters };
+  const req = effectiveStarters(starters);
   const pool = applyLeagueScoring(roster, scoring);
   const target = applyLeagueScoring([candidate], scoring)[0]!;
   const pos = fitPos(target);
@@ -1568,7 +1596,7 @@ export function suggestWaiverTransactions(input: {
   /** Optional player id → injury status override. */
   injuryById?: Record<string, string>;
 }): WaiverDropAddSuggestion[] {
-  const req = { ...BASE_STARTERS, ...input.starters };
+  const req = effectiveStarters(input.starters);
   const roster = applyLeagueScoring(input.roster, input.scoring);
   const dropPoolRaw = input.bench?.length ? input.bench : input.roster;
   const dropPool = applyLeagueScoring(dropPoolRaw, input.scoring);
@@ -1858,7 +1886,7 @@ function skillWeakness(
   roster: FitPlayer[],
   starters: Record<string, number>,
 ): { pos: string; pts: number } | null {
-  const req = { ...BASE_STARTERS, ...starters };
+  const req = effectiveStarters(starters);
   const lineup = optimizeLineup(roster, req);
   let worst: { pos: string; pts: number } | null = null;
   for (const pos of PACKAGE_SKILL_POS) {
@@ -1924,7 +1952,7 @@ function evaluateDeal(input: {
 }): MarketRadarTradeSuggestion | null {
   const scoring = input.scoring ?? null;
   const marketValueById = input.marketValueById ?? {};
-  const req = { ...BASE_STARTERS, ...input.starters };
+  const req = effectiveStarters(input.starters);
 
   if (exceedsQbRosterCapacity(input.myRoster, input.give, input.get)) return null;
   if (exceedsQbRosterCapacity(input.oppRoster, input.get, input.give)) return null;
@@ -2086,7 +2114,7 @@ export function suggestMarketRadarTrade(input: {
   // with `.starters` + `.bench` + `.ir` as fallbacks).
   const userPlayers = extractRosterPlayers(input.myRoster);
   const myRoster = applyLeagueScoring(userPlayers, input.scoring);
-  const starters = { ...BASE_STARTERS, ...input.starters };
+  const starters = effectiveStarters(input.starters);
   const scoring = input.scoring ?? null;
 
   const resolveOppPlayers = (opp: (typeof input.opponents)[number]): FitPlayer[] => {
@@ -2110,7 +2138,7 @@ export function suggestMarketRadarTrade(input: {
   const marketValueById = ensureMarketValueMap(input.marketValueById, [myRoster, ...oppPools]);
 
   // Browser DevTools (F12) tracing — authentic roster / FantasyCalc key alignment.
-  console.log(
+  debugLog(
     "DEBUG TRADE RADAR - User Roster Size:",
     userPlayers?.length,
     "Opponent Teams Found:",
@@ -2123,14 +2151,14 @@ export function suggestMarketRadarTrade(input: {
     for (const player of samplePlayers) {
       const catalogHit =
         player?.id != null && player.id !== "" ? marketValueById[player.id] : undefined;
-      console.log(
+      debugLog(
         "DEBUG KEY MATCH - Roster Player ID Sample:",
         player?.id,
         "Catalog ID Match:",
         catalogHit != null ? catalogHit : undefined,
       );
     }
-    console.log(
+    debugLog(
       "DEBUG TRADE RADAR - FantasyCalc map keys:",
       Object.keys(marketValueById).length,
       "My bench size:",
@@ -2161,7 +2189,7 @@ export function suggestMarketRadarTrade(input: {
 
   // Pass A — strict 1:1
   const myPool = [...myRoster].sort((a, b) => b.weekly - a.weekly).slice(0, 8);
-  console.log(
+  debugLog(
     "DEBUG TRADE RADAR - Pass A 1:1 pool sizes — myPool:",
     myPool.length,
     "opponents:",
@@ -2170,7 +2198,7 @@ export function suggestMarketRadarTrade(input: {
   for (const opp of input.opponents) {
     const oppRoster = applyLeagueScoring(resolveOppPlayers(opp), scoring);
     const getPool = [...oppRoster].sort((a, b) => b.weekly - a.weekly).slice(0, 10);
-    console.log(
+    debugLog(
       "DEBUG TRADE RADAR - 1:1 opponent scan:",
       opp.label,
       "oppRoster:",
@@ -2201,7 +2229,7 @@ export function suggestMarketRadarTrade(input: {
   }
 
   if (state.best) {
-    console.log(
+    debugLog(
       "DEBUG TRADE RADAR - early return after 1:1 hit:",
       state.best.packageKind,
       state.best.managerLabel,
@@ -2212,7 +2240,7 @@ export function suggestMarketRadarTrade(input: {
     );
     return state.best;
   }
-  console.log("DEBUG TRADE RADAR - no 1:1 cleared filters; entering Package Scan");
+  debugLog("DEBUG TRADE RADAR - no 1:1 cleared filters; entering Package Scan");
   const myNeed = skillWeakness(myRoster, starters);
   const myMarketStrength = marketPosStrength(myRoster, marketValueById);
 
@@ -2340,6 +2368,6 @@ export function suggestMarketRadarTrade(input: {
   }
 
   const packageResult: MarketRadarTradeSuggestion | null = state["best"];
-  console.log("DEBUG TRADE RADAR - Package Scan complete. Result:", packageResult);
+  debugLog("DEBUG TRADE RADAR - Package Scan complete. Result:", packageResult);
   return packageResult;
 }

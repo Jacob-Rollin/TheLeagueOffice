@@ -19,12 +19,14 @@ const RESYNC_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
 /**
  * ESPN/Yahoo browse delta only on surfaces that read live league boards.
- * Research, injury, Projection Analytics, Account, HOF, home, etc. must not
- * spend Fluid on `deltaSyncLeague` — cron owns the warm (`sleeperOnly=0`).
+ * Research, injury, Projection Analytics, Account, HOF, home, mobile settings,
+ * etc. must not spend Fluid on `deltaSyncLeague` — cron owns the warm
+ * (`sleeperOnly=0`). Mobile home `/m` and `/m/settings` are excluded; only
+ * `/m/league/*` (and desktop league tools) warm.
  */
 function needsLeagueWarmPath(pathname: string): boolean {
-  if (pathname.startsWith("/playbook") || pathname.startsWith("/m/")) return true;
-  if (pathname === "/m") return true;
+  if (pathname.startsWith("/playbook")) return true;
+  if (pathname.startsWith("/m/league/") || pathname === "/m/league") return true;
   if (pathname === "/trade" || pathname.startsWith("/trade/")) return true;
   if (pathname === "/trade-analyzer") return true;
   if (pathname === "/waiver" || pathname.startsWith("/waiver/")) return true;

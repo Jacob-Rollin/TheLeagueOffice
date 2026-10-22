@@ -1102,7 +1102,7 @@ function PlayerTransactionHistory({ playerId }: { playerId: string }) {
   );
 }
 
-/** Career season totals (current + prior 2) — Sleeper client, IndexedDB coalesced. */
+/** Career season totals (current + prior 2) — loaded only after the user expands. */
 function PlayerCareerTotals({
   id,
   team,
@@ -1114,9 +1114,10 @@ function PlayerCareerTotals({
   pos: string;
   format: Format;
 }) {
+  const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v2"],
-    enabled: Boolean(id && pos),
+    enabled: Boolean(id && pos && open),
     staleTime: 30 * 60 * 1000,
     retry: false,
     queryFn: () =>
@@ -1135,10 +1136,24 @@ function PlayerCareerTotals({
 
   return (
     <section className="pb-6">
-      <h3 className="px-4 pb-2 pt-6 font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
-        Career
-      </h3>
-      {isLoading ? (
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-center justify-between gap-3 px-4 pb-2 pt-6 text-left"
+      >
+        <h3 className="font-display text-base font-bold uppercase tracking-[0.08em] text-m-muted">
+          Career
+        </h3>
+        <span
+          className={cn(
+            "text-[11px] font-bold uppercase tracking-wide",
+            open ? "text-m-accent" : "text-m-muted",
+          )}
+        >
+          {open ? "Hide" : "View"}
+        </span>
+      </button>
+      {!open ? null : isLoading ? (
         <p className="px-4 text-sm text-m-muted">Loading career stats...</p>
       ) : !career.length ? (
         <p className="px-4 text-sm text-m-muted">No career stats available yet.</p>

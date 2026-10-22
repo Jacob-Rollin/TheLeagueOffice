@@ -44,7 +44,10 @@ async function mapPool<T, R>(
 
 async function weekStatRows(season: string, week: number): Promise<SleeperRow[]> {
   const safeWeek = Math.min(18, Math.max(1, week));
-  return getCached(`leaders-week-stats-v1:${season}|${safeWeek}`, 30 * 60 * 1000, async () => {
+  // Non-/v1 array endpoint includes nested `player` (name/pos/team). Do not use
+  // `/v1/stats/nfl/{season}/{week}?season_type=regular` (empty {}) or the flat
+  // `/v1/stats/nfl/regular/...` dict here — those lack player metadata for leaders.
+  return getCached(`leaders-week-stats-v2-array:${season}|${safeWeek}`, 30 * 60 * 1000, async () => {
     const url = `${SLEEPER_BASE}/stats/nfl/${season}/${safeWeek}?season_type=regular&${positionsQuery()}`;
     const json = await sleeperFetchJson<unknown>(url, "warm");
     return Array.isArray(json) ? (json as SleeperRow[]) : [];

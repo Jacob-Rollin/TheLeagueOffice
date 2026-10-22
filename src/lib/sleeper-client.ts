@@ -377,7 +377,8 @@ export async function fetchGameLogsClient(
 ): Promise<{ season: string; logs: GameLog[]; career: CareerSeasonRow[] } | null> {
   const clean = String(id ?? "").slice(0, 32);
   if (!clean) return null;
-  const includeCareer = opts?.includeCareer !== false;
+  // Default off — only load multi-year career when a UI surface asks for it.
+  const includeCareer = opts?.includeCareer === true;
   const current = currentSeason();
   const requested = (seasonRequest ?? "").trim();
   const season = requested && /^\d{4}$/.test(requested) ? requested : current;
@@ -388,7 +389,7 @@ export async function fetchGameLogsClient(
     ? [current, String(Number(current) - 1), String(Number(current) - 2)].filter(
         (y, i, arr) => /^\d{4}$/.test(y) && arr.indexOf(y) === i,
       )
-    : [season];
+    : [];
 
   const buildLogs = async (year: string, withProj: boolean): Promise<GameLog[]> => {
     const [raw, schedule] = await Promise.all([
@@ -488,10 +489,12 @@ export async function fetchGameLogsClient(
     return logs;
   };
 
-  const [logs, careerLogs] = await Promise.all([
-    buildLogs(season, true),
-    Promise.all(careerYears.map((y) => buildLogs(y, false))),
-  ]);
+  const logs = await buildLogs(season, true);
+
+  // Skip multi-year career fan-out unless explicitly requested (Game Logs / Career UI).
+  const careerLogs = includeCareer
+    ? await Promise.all(careerYears.map((y) => buildLogs(y, false)))
+    : [];
 
   const career: CareerSeasonRow[] = careerYears.map((year, i) => {
     const seasonLogs = careerLogs[i] ?? [];

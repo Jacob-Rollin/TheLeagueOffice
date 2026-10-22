@@ -147,46 +147,35 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
       } = await import("@/lib/espn-fluid-cache");
       const allowFluid =
         typeof import.meta !== "undefined" && import.meta.env?.DEV === true;
-      const syncedTokens = await Promise.all(
-        rows.map(async ({ s2, swid, ...row }) => {
-          const base = { ...row, s2, swid };
-          if ((row.platform !== "sleeper" && row.platform !== "espn") || !row.leagueId) return base;
-          try {
-            // Sleeper: browser meta (no Fluid). Always resolve — a 6+ digit
-            // string may be a numeric user id that fails /league/{id}.
-            let sleeperId = row.leagueId;
-            if (row.platform === "sleeper") {
-              const resolved = await ensureSleeperNumericLeagueId(sleeperId).catch(() => null);
-              if (resolved) {
-                if (resolved !== sleeperId) void persistResolvedSleeperLeagueId(row.id, resolved);
-                sleeperId = resolved;
-              } else if (!allowFluid) {
-                return base;
-              }
+
+      /** Cap parallel meta/resolve fan-out across many synced leagues. */
+      const META_CONCURRENCY = 2;
+      let preferredId: string | null = null;
+      try {
+        preferredId = window.localStorage.getItem(STORAGE_KEY);
+      } catch {
+        /* storage unavailable */
+      }
+
+      type Row = (typeof rows)[number];
+      const enrichRow = async ({ s2, swid, ...row }: Row): Promise<ActiveLeagueToken> => {
+        const base: ActiveLeagueToken = { ...row, s2, swid };
+        if ((row.platform !== "sleeper" && row.platform !== "espn") || !row.leagueId) return base;
+        try {
+          // Sleeper: browser meta (no Fluid). Always resolve — a 6+ digit
+          // string may be a numeric user id that fails /league/{id}.
+          let sleeperId = row.leagueId;
+          if (row.platform === "sleeper") {
+            const resolved = await ensureSleeperNumericLeagueId(sleeperId).catch(() => null);
+            if (resolved) {
+              if (resolved !== sleeperId) void persistResolvedSleeperLeagueId(row.id, resolved);
+              sleeperId = resolved;
+            } else if (!allowFluid) {
+              return base;
             }
-            if (canFetchMetaClient(row.platform, sleeperId)) {
-              const meta = await fetchSleeperMetaClient(sleeperId, row.name);
-              return {
-                ...base,
-                leagueId: sleeperId,
-                name: meta?.leagueName ?? row.name,
-                teamName: meta?.teamName ?? null,
-                avatar: meta?.avatar ?? null,
-              };
-            }
-            // ESPN (or rare Sleeper resolve miss in DEV) may still use Fluid.
-            if (row.platform === "sleeper" && !allowFluid) return base;
-            const fluidKey = espnFluidCacheKey("meta", sleeperId, row.platform);
-            const meta = await espnFluidMemo(fluidKey, ESPN_FLUID_SETTINGS_TTL_MS, () =>
-              getConnectionMeta({
-                data: {
-                  identifier: sleeperId,
-                  platform: row.platform,
-                  ...(s2 ? { s2 } : {}),
-                  ...(swid ? { swid } : {}),
-                },
-              }),
-            );
+          }
+          if (canFetchMetaClient(row.platform, sleeperId)) {
+            const meta = await fetchSleeperMetaClient(sleeperId, row.name);
             return {
               ...base,
               leagueId: sleeperId,
@@ -194,11 +183,46 @@ export function ActiveLeagueProvider({ children }: { children: ReactNode }) {
               teamName: meta?.teamName ?? null,
               avatar: meta?.avatar ?? null,
             };
-          } catch {
-            return base;
           }
-        }),
-      );
+          // ESPN (or rare Sleeper resolve miss in DEV) may still use Fluid.
+          if (row.platform === "sleeper" && !allowFluid) return base;
+          const fluidKey = espnFluidCacheKey("meta", sleeperId, row.platform);
+          const meta = await espnFluidMemo(fluidKey, ESPN_FLUID_SETTINGS_TTL_MS, () =>
+            getConnectionMeta({
+              data: {
+                identifier: sleeperId,
+                platform: row.platform,
+                ...(s2 ? { s2 } : {}),
+                ...(swid ? { swid } : {}),
+              },
+            }),
+          );
+          return {
+            ...base,
+            leagueId: sleeperId,
+            name: meta?.leagueName ?? row.name,
+            teamName: meta?.teamName ?? null,
+            avatar: meta?.avatar ?? null,
+          };
+        } catch {
+          return base;
+        }
+      };
+
+      // Start the active league first, then hydrate the rest with a small pool.
+      const preferred = preferredId ? rows.find((r) => r.id === preferredId) : undefined;
+      const rest = preferred ? rows.filter((r) => r.id !== preferred.id) : rows;
+      const preferredToken = preferred ? await enrichRow(preferred) : null;
+      const restTokens: ActiveLeagueToken[] = new Array(rest.length);
+      let next = 0;
+      const workers = Array.from({ length: Math.min(META_CONCURRENCY, rest.length || 1) }, async () => {
+        while (next < rest.length) {
+          const i = next++;
+          restTokens[i] = await enrichRow(rest[i]!);
+        }
+      });
+      await Promise.all(workers);
+      const syncedTokens = preferredToken ? [preferredToken, ...restTokens] : restTokens;
 
       return [...nativeTokens, ...syncedTokens];
     },

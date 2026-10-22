@@ -12,6 +12,26 @@ import { sleeperFetchJson } from "@/lib/sleeper-http";
 const SLEEPER = "https://api.sleeper.app/v1";
 const ACTIVITY_TTL_MS = 5 * 60 * 1000;
 const CATALOG_KEY = "players-v3";
+/** Cap season transaction week fan-out (same spirit as projection week pools). */
+const TXN_WEEK_CONCURRENCY = 2;
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (!items.length) return [];
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
 
 type SleeperTxn = {
   transaction_id?: string;
@@ -229,13 +249,15 @@ async function loadLog(leagueId: string, scope: "recent" | "season"): Promise<Le
     const weekCount = scope === "season" ? week : Math.min(week, 4);
     const weeks = Array.from({ length: weekCount }, (_, i) => week - i).filter((w) => w >= 1);
 
-    const [rosters, users, names, ...weekTxnLists] = await Promise.all([
+    const [rosters, users, names, weekTxnLists] = await Promise.all([
       sleeperJson<{ roster_id: number; owner_id: string | null }[]>(`${SLEEPER}/league/${clean}/rosters`),
       sleeperJson<{ user_id: string; display_name: string; metadata?: { team_name?: string } }[]>(
         `${SLEEPER}/league/${clean}/users`,
       ),
       playerNameMap(),
-      ...weeks.map((w) => sleeperJson<SleeperTxn[]>(`${SLEEPER}/league/${clean}/transactions/${w}`)),
+      mapPool(weeks, TXN_WEEK_CONCURRENCY, (w) =>
+        sleeperJson<SleeperTxn[]>(`${SLEEPER}/league/${clean}/transactions/${w}`),
+      ),
     ]);
 
     const byUser = new Map((users ?? []).map((u) => [u.user_id, u]));
