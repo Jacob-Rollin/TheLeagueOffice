@@ -6,6 +6,8 @@ import {
   useState,
   startTransition,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  type UIEvent,
 } from "react";
 import { ChartLine, FilePlus2, Search, Star } from "lucide-react";
 
@@ -21,6 +23,8 @@ import {
   type Pos,
   type Settings,
 } from "@/lib/draft";
+import { injuryBadgeInfo } from "@/lib/injury-badge";
+import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 
 import { POS_DOT, posCellClass } from "./posCellStyles";
@@ -57,6 +61,78 @@ function nearestSheetSnap(pct: number, collapsedPct: number): SheetSnap {
     }
   }
   return best;
+}
+
+/**
+ * Overflow container that locks to horizontal OR vertical for a gesture —
+ * diagonal pan cannot scroll both axes at once (Sleeper-style).
+ */
+function AxisLockedScroll({
+  className,
+  onScroll,
+  children,
+}: {
+  className?: string;
+  onScroll?: (e: UIEvent<HTMLDivElement>) => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const axisRef = useRef<"x" | "y" | null>(null);
+  const startRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const unlock = () => {
+      axisRef.current = null;
+      el.style.overflowX = "auto";
+      el.style.overflowY = "auto";
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      axisRef.current = null;
+      startRef.current = { x: t.clientX, y: t.clientY };
+      el.style.overflowX = "auto";
+      el.style.overflowY = "auto";
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      if (axisRef.current != null) return;
+      const dx = t.clientX - startRef.current.x;
+      const dy = t.clientY - startRef.current.y;
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      axisRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      if (axisRef.current === "x") {
+        el.style.overflowY = "hidden";
+        el.style.overflowX = "auto";
+      } else {
+        el.style.overflowX = "hidden";
+        el.style.overflowY = "auto";
+      }
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("touchend", unlock, { passive: true });
+    el.addEventListener("touchcancel", unlock, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", unlock);
+      el.removeEventListener("touchcancel", unlock);
+    };
+  }, []);
+
+  return (
+    <div ref={ref} className={className} onScroll={onScroll}>
+      {children}
+    </div>
+  );
 }
 
 /** Approx. Draft + rank + name width — past this, Sleeper-style mini name sticks. */
@@ -454,7 +530,7 @@ function PlayersPane({
         </div>
       ) : null}
 
-      <div
+      <AxisLockedScroll
         className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
         onScroll={(e) => {
           const next = e.currentTarget.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
@@ -500,7 +576,7 @@ function PlayersPane({
             </div>
           ))}
         </div>
-      </div>
+      </AxisLockedScroll>
     </div>
   );
 }
@@ -586,7 +662,7 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <div
+        <AxisLockedScroll
           className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
           onScroll={(e) => {
             const next = e.currentTarget.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
@@ -612,7 +688,7 @@ function QueuePane({
               />
             ))}
           </div>
-        </div>
+        </AxisLockedScroll>
       )}
     </div>
   );
@@ -762,7 +838,11 @@ function PlayerStatsRow({
   const v = value(player, settings.scoring);
   const short = shortName(player.name);
   const yearLabel = String(prevYear);
+  const yearShort = `'${yearLabel.slice(-2)}`;
   const meta = `${posDisplayLabel(player.pos)} - ${player.team}${player.bye ? ` (${player.bye})` : ""}`;
+  const injury = injuryBadgeInfo(
+    resolveInjuryStatus(player) ?? player.injury_status ?? player.injury,
+  );
 
   return (
     <div className="border-b border-m-border/60">
@@ -779,6 +859,17 @@ function PlayerStatsRow({
               aria-hidden
             />
             <span className="truncate">{meta}</span>
+            {injury ? (
+              <span
+                title={injury.text}
+                className={cn(
+                  "inline-flex h-3.5 min-w-[0.9rem] shrink-0 items-center justify-center rounded px-0.5 text-[8px] font-black leading-none",
+                  injury.className,
+                )}
+              >
+                {injury.letter}
+              </span>
+            ) : null}
           </button>
           <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
         </div>
@@ -809,12 +900,23 @@ function PlayerStatsRow({
           className={cn(NAME_COL_CLASS, "shrink-0 py-0.5 text-left")}
         >
           <span className="block truncate text-[13px] font-bold text-m-card-fg">{short}</span>
-          <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">
+          <span className="mt-0.5 flex items-center gap-1 text-[11px] text-m-muted">
             <span
               className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
               aria-hidden
             />
-            <span className="truncate">{meta}</span>
+            <span className="min-w-0 truncate">{meta}</span>
+            {injury ? (
+              <span
+                title={injury.text}
+                className={cn(
+                  "inline-flex h-4 min-w-[1rem] shrink-0 items-center justify-center rounded px-0.5 text-[9px] font-black leading-none",
+                  injury.className,
+                )}
+              >
+                {injury.letter}
+              </span>
+            ) : null}
           </span>
         </button>
         <button
@@ -831,13 +933,14 @@ function PlayerStatsRow({
         </button>
         <div className="flex shrink-0 items-center gap-3 self-center pr-4">
           <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
-          <StatPair
-            label="Pts"
-            current={v.proj.toFixed(1)}
-            showPrev={showPrevYear}
-            prevYear={yearLabel}
-            prev={v.prev != null ? v.prev.toFixed(1) : "—"}
-          />
+          <StatCell label="Pts" value={v.proj > 0 ? v.proj.toFixed(1) : "—"} />
+          {showPrevYear ? (
+            <StatCell
+              label={yearShort}
+              value={v.prev != null && v.prev > 0 ? v.prev.toFixed(1) : "—"}
+              muted
+            />
+          ) : null}
           <StatCell label="Rank" value={v.rank < 900 ? String(v.rank) : "—"} />
           <StatCell
             label="Pos rk"
@@ -851,48 +954,37 @@ function PlayerStatsRow({
             label="ADP hi"
             value={player.adpRange.max < 900 ? player.adpRange.max.toFixed(0) : "—"}
           />
+          <StatCell label="Age" value={player.age != null ? String(player.age) : "—"} />
+          <StatCell label="Bye" value={player.bye != null ? String(player.bye) : "—"} />
+          <StatCell label="Exp" value={player.exp != null ? String(player.exp) : "—"} />
         </div>
       </div>
     </div>
   );
 }
 
-function StatCell({ label, value }: { label: string; value: string }) {
+function StatCell({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
   return (
     <div className="w-12 shrink-0 text-left">
       <span className="block text-[9px] font-semibold uppercase tracking-wide text-m-muted">
         {label}
       </span>
-      <span className="tabnum block text-sm font-semibold text-m-card-fg">{value}</span>
-    </div>
-  );
-}
-
-/** Current stat with optional prior-season column beside it (image-style '25 pair). */
-function StatPair({
-  label,
-  current,
-  showPrev,
-  prevYear,
-  prev,
-}: {
-  label: string;
-  current: string;
-  showPrev: boolean;
-  prevYear: string;
-  prev: string;
-}) {
-  return (
-    <div className="flex shrink-0 items-end gap-3">
-      <StatCell label={label} value={current} />
-      {showPrev ? (
-        <div className="w-12 shrink-0 text-left">
-          <span className="block text-[9px] font-semibold uppercase tracking-wide text-m-muted">
-            {prevYear}
-          </span>
-          <span className="tabnum block text-sm font-semibold text-m-muted">{prev}</span>
-        </div>
-      ) : null}
+      <span
+        className={cn(
+          "tabnum block text-sm font-semibold",
+          muted ? "text-m-muted" : "text-m-card-fg",
+        )}
+      >
+        {value}
+      </span>
     </div>
   );
 }

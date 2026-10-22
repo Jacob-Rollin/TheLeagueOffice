@@ -5,7 +5,7 @@ import { Crosshair, Settings, Timer, X } from "lucide-react";
 import { MockRecap } from "@/components/draft/MockRecap";
 import { useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { formatClock, useMockDraftSession } from "@/hooks/useMockDraftSession";
-import { SCORING_LABEL, teamName } from "@/lib/draft";
+import { SCORING_LABEL } from "@/lib/draft";
 import {
   clearMockSession,
   DEFAULT_MOCK_CONFIG,
@@ -62,7 +62,6 @@ export function MobileMockDraftArena() {
     myTurn,
     complete,
     currentOverall,
-    mySlotLabel,
     clock,
     paused,
     setPaused,
@@ -272,11 +271,6 @@ export function MobileMockDraftArena() {
                   >
                     <Timer className="size-3.5" strokeWidth={2.5} />
                     {formatClock(clock)}
-                  </span>
-                ) : null}
-                {!complete && !myTurn ? (
-                  <span className="text-center text-[10px] uppercase tracking-wider text-m-muted">
-                    {teamName(settings, session.onTheClock)} · Pick {mySlotLabel}
                   </span>
                 ) : null}
               </>
