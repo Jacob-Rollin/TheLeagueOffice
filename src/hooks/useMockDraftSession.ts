@@ -222,8 +222,10 @@ export function useMockDraftSession({
     data.players.length,
   ]);
 
+  // Pick clock runs for every team (AI + user), Sleeper-style — not only on
+  // the user's turn. Auto-pick / queue still only fire when `myTurn`.
   useEffect(() => {
-    if (!live || !myTurn || timerSeconds === null) {
+    if (!live || complete || timerSeconds === null) {
       setClock(null);
       return;
     }
@@ -232,11 +234,11 @@ export function useMockDraftSession({
       setClock((c) => (c === null ? null : Math.max(0, c - 1)));
     }, 1000);
     return () => clearInterval(id);
-  }, [live, myTurn, timerSeconds, picks.length, paused, pageVisible]);
+  }, [live, complete, timerSeconds, picks.length, paused, pageVisible]);
 
   useEffect(() => {
-    if (live && myTurn && timerSeconds !== null) setClock(timerSeconds);
-  }, [live, myTurn, timerSeconds, picks.length]);
+    if (live && !complete && timerSeconds !== null) setClock(timerSeconds);
+  }, [live, complete, timerSeconds, picks.length]);
 
   // Queue auto-pick: on the user's turn, draft rank #1 (still available) quickly.
   useEffect(() => {
