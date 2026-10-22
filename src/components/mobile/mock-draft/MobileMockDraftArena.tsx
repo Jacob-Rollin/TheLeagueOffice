@@ -77,9 +77,6 @@ export function MobileMockDraftArena() {
     clearSession,
     myCounts,
     nextUserOverall,
-    speed,
-    setSpeed,
-    runAiPick,
   } = session;
 
   // Resume an in-progress session into live mode; otherwise stay in lobby.
@@ -213,58 +210,80 @@ export function MobileMockDraftArena() {
         className="shrink-0 border-b border-m-border px-2 pb-2.5"
         style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >
-        {/* Icon row — no absolute center overlay (was colliding with status bar). */}
-        <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            aria-label="Exit draft"
-            onClick={() =>
-              confirmLeave("Leave this mock draft?", () => {
-                clearSession();
-                void navigate({ to: "/m" });
-              })
-            }
-            className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
-          >
-            <X className="size-5" strokeWidth={2.5} />
-          </button>
-
-          {inLobby ? (
+        {/* Equal side rails keep Your Turn / clock on the true page center (Sleeper). */}
+        <div className="flex items-start gap-1">
+          <div className="flex w-[5.75rem] shrink-0 justify-start">
             <button
               type="button"
-              onClick={startDraft}
-              disabled={!slotClaimed}
-              className={cn(
-                "min-w-0 flex-1 rounded-full px-4 py-2.5 font-display text-sm font-extrabold uppercase tracking-wide",
-                slotClaimed
-                  ? "bg-m-accent text-m-accent-fg"
-                  : "bg-m-chip text-m-muted",
-              )}
+              aria-label="Exit draft"
+              onClick={() =>
+                confirmLeave("Leave this mock draft?", () => {
+                  clearSession();
+                  void navigate({ to: "/m" });
+                })
+              }
+              className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
             >
-              Start Mock Draft
+              <X className="size-5" strokeWidth={2.5} />
             </button>
-          ) : (
-            <div className="flex min-w-0 flex-1 flex-col items-center">
-              <span
+          </div>
+
+          <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5 pt-0.5">
+            {inLobby ? (
+              <button
+                type="button"
+                onClick={startDraft}
+                disabled={!slotClaimed}
                 className={cn(
-                  "rounded-full px-4 py-1.5 font-display text-xs font-extrabold uppercase tracking-wider",
-                  complete || myTurn
+                  "w-full rounded-full px-3 py-2.5 font-display text-sm font-extrabold uppercase tracking-wide",
+                  slotClaimed
                     ? "bg-m-accent text-m-accent-fg"
-                    : "bg-m-chip text-m-chip-fg",
+                    : "bg-m-chip text-m-muted",
                 )}
               >
-                {complete
-                  ? "Draft Complete!"
-                  : paused
-                    ? "Paused"
-                    : myTurn
-                      ? "Your Turn"
-                      : "On the Clock"}
-              </span>
-            </div>
-          )}
+                Start Mock Draft
+              </button>
+            ) : (
+              <>
+                <span
+                  className={cn(
+                    "rounded-full px-4 py-1.5 font-display text-xs font-extrabold uppercase tracking-wider",
+                    complete || myTurn
+                      ? "bg-m-accent text-m-accent-fg"
+                      : "bg-m-chip text-m-chip-fg",
+                  )}
+                >
+                  {complete
+                    ? "Draft Complete!"
+                    : paused
+                      ? "Paused"
+                      : myTurn
+                        ? "Your Turn"
+                        : "On the Clock"}
+                </span>
+                {!complete ? (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 font-display text-sm tabular-nums",
+                      myTurn && clock !== null && clock <= 10 && !paused
+                        ? "text-red-500"
+                        : "text-m-card-fg",
+                    )}
+                  >
+                    <Timer className="size-3.5" strokeWidth={2.5} />
+                    {formatClock(clock)}
+                  </span>
+                ) : null}
+                {!complete && !myTurn ? (
+                  <span className="text-center text-[10px] uppercase tracking-wider text-m-muted">
+                    {teamName(settings, session.onTheClock)} · Pick {mySlotLabel}
+                  </span>
+                ) : null}
+              </>
+            )}
+          </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex w-[5.75rem] shrink-0 items-center justify-end gap-1">
             {!inLobby ? (
               <button
                 type="button"
@@ -285,59 +304,6 @@ export function MobileMockDraftArena() {
             </button>
           </div>
         </div>
-
-        {!inLobby && !complete ? (
-          <div className="mt-2 flex flex-col items-center gap-1.5">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 font-display text-sm tabular-nums",
-                myTurn && clock !== null && clock <= 10 && !paused
-                  ? "text-red-500"
-                  : "text-m-card-fg",
-              )}
-            >
-              <Timer className="size-3.5" strokeWidth={2.5} />
-              {formatClock(clock)}
-            </span>
-            {!myTurn ? (
-              <span className="text-[10px] uppercase tracking-wider text-m-muted">
-                {teamName(settings, session.onTheClock)} · Pick {mySlotLabel}
-              </span>
-            ) : null}
-            <div className="flex items-center justify-center gap-1">
-              {(
-                [
-                  ["normal", "Normal"],
-                  ["fast", "Fast"],
-                  ["manual", "Manual"],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setSpeed(key)}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 font-display text-[10px] font-bold uppercase tracking-wide",
-                    speed === key
-                      ? "bg-m-accent text-m-accent-fg"
-                      : "bg-m-chip text-m-chip-fg",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-              {speed === "manual" && !myTurn ? (
-                <button
-                  type="button"
-                  onClick={runAiPick}
-                  className="rounded-full bg-m-cta px-2.5 py-1 font-display text-[10px] font-bold uppercase text-m-cta-fg"
-                >
-                  Advance
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
 
         {!inLobby && complete ? (
           <div className="mt-2 flex flex-col items-center gap-2">
