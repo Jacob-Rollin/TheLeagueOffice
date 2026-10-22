@@ -70,8 +70,8 @@ export const POS_STAT_COLUMNS: Record<Pos, Array<{ key: keyof CountingStats; lab
     { key: "rec_yd", label: "Rec Yd", digits: 0 },
     { key: "rec_td", label: "Rec TD", digits: 0 },
   ],
-  // Season projections omit rec_tgt; mock draft fills it by summing weekly
-  // projection targets (same lines as the desktop player Projections tab).
+  // Season projections omit rec_tgt (and K fgm/fga, DEF TD/PA); mock draft
+  // fills those by summing weekly projection bundles (player Projections tab).
   WR: [
     { key: "rec_tgt", label: "Tgt", digits: 0 },
     { key: "rec", label: "Rec", digits: 0 },

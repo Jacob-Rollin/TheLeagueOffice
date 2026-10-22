@@ -741,33 +741,79 @@ export async function fetchGameLogsClient(
   return { season, logs, career };
 }
 
+/** Season totals filled from weekly projection bundles (popup Projections tab). */
+export type SeasonProjBoardExtras = {
+  rec_tgt?: number;
+  fgm?: number;
+  fga?: number;
+  /** Mapped from weekly `def_td` (season rows omit a single TD total). */
+  def_st_td?: number;
+  pts_allow?: number;
+};
+
 /**
- * Season projected targets by summing weekly Sleeper projection `rec_tgt`
- * (same week bundles as the desktop player Projections tab). Season-long
- * `/projections/nfl/{season}` rows omit targets.
+ * Season counting stats omitted from `/projections/nfl/{season}` but present on
+ * weekly bundles (same source as desktop/mobile player Projections tabs):
+ * `rec_tgt`, K `fgm`/`fga`, DEF `def_td`→`def_st_td`, `pts_allow`.
  */
-export async function fetchSeasonProjectedRecTgt(
+export async function fetchSeasonProjectedBoardExtras(
   season: string,
-): Promise<Record<string, number>> {
+): Promise<Record<string, SeasonProjBoardExtras>> {
   const safeSeason = String(season || "").trim();
   if (!/^\d{4}$/.test(safeSeason)) return {};
-  const cacheKey = `season-proj-rec-tgt-v1:${safeSeason}`;
+  const cacheKey = `season-proj-board-extras-v1:${safeSeason}`;
   return getCached(cacheKey, DAY, async () => {
     const weeks = Array.from({ length: 18 }, (_, i) => i + 1);
-    const totals: Record<string, number> = {};
+    const sums: Record<
+      string,
+      { rec_tgt: number; fgm: number; fga: number; def_st_td: number; pts_allow: number }
+    > = {};
+    const bump = (pid: string, key: keyof (typeof sums)[string], n: number) => {
+      if (!Number.isFinite(n) || n <= 0) return;
+      const row = (sums[pid] ??= {
+        rec_tgt: 0,
+        fgm: 0,
+        fga: 0,
+        def_st_td: 0,
+        pts_allow: 0,
+      });
+      row[key] += n;
+    };
     await mapPool(weeks, PROJ_WEEK_CONCURRENCY, async (w) => {
       const bundle = await weekProjectionBundle(safeSeason, w);
       for (const [pid, entry] of Object.entries(bundle)) {
-        const t = entry.raw?.["rec_tgt"];
-        if (typeof t !== "number" || !Number.isFinite(t) || t <= 0) continue;
-        totals[pid] = (totals[pid] ?? 0) + t;
+        const raw = entry.raw ?? {};
+        bump(pid, "rec_tgt", Number(raw["rec_tgt"]));
+        bump(pid, "fgm", Number(raw["fgm"]));
+        bump(pid, "fga", Number(raw["fga"]));
+        // Weekly DST TD key is `def_td` (popups); board column uses `def_st_td`.
+        bump(pid, "def_st_td", Number(raw["def_td"] ?? raw["def_st_td"]));
+        bump(pid, "pts_allow", Number(raw["pts_allow"]));
       }
     });
-    // Round once for board display (counting-stat columns use 0 decimals).
-    for (const pid of Object.keys(totals)) {
-      totals[pid] = Math.round(totals[pid]!);
+    const out: Record<string, SeasonProjBoardExtras> = {};
+    for (const [pid, s] of Object.entries(sums)) {
+      const row: SeasonProjBoardExtras = {};
+      if (s.rec_tgt > 0) row.rec_tgt = Math.round(s.rec_tgt);
+      if (s.fgm > 0) row.fgm = Math.round(s.fgm);
+      if (s.fga > 0) row.fga = Math.round(s.fga);
+      if (s.def_st_td > 0) row.def_st_td = Math.round(s.def_st_td);
+      if (s.pts_allow > 0) row.pts_allow = Math.round(s.pts_allow);
+      if (Object.keys(row).length) out[pid] = row;
     }
-    return totals;
+    return out;
   });
+}
+
+/** @deprecated Prefer `fetchSeasonProjectedBoardExtras` — kept for call-site clarity. */
+export async function fetchSeasonProjectedRecTgt(
+  season: string,
+): Promise<Record<string, number>> {
+  const extras = await fetchSeasonProjectedBoardExtras(season);
+  const out: Record<string, number> = {};
+  for (const [pid, row] of Object.entries(extras)) {
+    if (row.rec_tgt != null && row.rec_tgt > 0) out[pid] = row.rec_tgt;
+  }
+  return out;
 }
 
