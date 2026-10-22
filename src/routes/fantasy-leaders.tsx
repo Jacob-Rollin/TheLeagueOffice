@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
-import { ChevronDown } from "lucide-react";
 import {
   memo,
   startTransition,
@@ -14,6 +13,10 @@ import {
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import {
+  ResearchAvailabilityPoolFilter,
+  ResearchFilterTrailing,
+} from "@/components/research/ResearchAvailabilityFilter";
 import { playerHoverPrefetchProps } from "@/lib/prefetch-player-detail";
 import {
   nextSortState,
@@ -31,12 +34,6 @@ import {
 } from "@/components/research/ScoringFormatSelect";
 import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -49,6 +46,12 @@ import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos } from "@/lib/draft";
+import {
+  matchesResearchAvailability,
+  RESEARCH_OWNERSHIP_META,
+  type ResearchAvailabilityPool,
+  type ResearchOwnership,
+} from "@/lib/research-availability";
 import { fetchResearchFantasyLeaders, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import type { ScoringFormat } from "@/lib/scoring-map";
@@ -84,14 +87,6 @@ const POS_TABS: { value: PosTab; label: string }[] = [
 const ROW_HEIGHT = 58;
 const FORMAT_INDEX: Record<ScoringFormat, 0 | 1 | 2> = { std: 0, half: 1, ppr: 2 };
 
-type Ownership = "roster" | "taken" | "available";
-
-const OWNERSHIP_META: Record<Ownership, { label: string; row: string }> = {
-  roster: { label: "Rostered", row: "bg-sky-50/90" },
-  taken: { label: "Taken", row: "bg-white" },
-  available: { label: "Available", row: "bg-emerald-50/80" },
-};
-
 type SortKey = "rank" | "player" | "gp" | "avg" | "ttl" | `w${number}`;
 
 type LeaderRow = {
@@ -103,7 +98,7 @@ type LeaderRow = {
   metaLine: string;
   injuryLabel: string | null;
   injuryClass: string | null;
-  ownership: Ownership;
+  ownership: ResearchOwnership;
   /** Points for each week in the selected range; null when the player did not appear. */
   weekPts: (number | null)[];
   gp: number;
@@ -151,9 +146,8 @@ function FantasyLeadersPage() {
   /** Inclusive week range; null means the season's first / latest available week. */
   const [weekFrom, setWeekFrom] = useState<number | null>(null);
   const [weekTo, setWeekTo] = useState<number | null>(null);
-  const [showRoster, setShowRoster] = useState(true);
-  const [showTaken, setShowTaken] = useState(true);
-  const [showAvailable, setShowAvailable] = useState(true);
+  const [pool, setPool] = useState<ResearchAvailabilityPool>("all");
+  const [myTeamOnly, setMyTeamOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey | null>("ttl");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const modalRef = useRef<PlayerModalHandle>(null);
@@ -171,12 +165,13 @@ function FantasyLeadersPage() {
     for (const p of players) map.set(p.id, p);
     return map;
   }, [players]);
-  const { myTeam, rosteredIds } = useLeagueRosters(players);
+  const { myTeam, rosteredIds, synced } = useLeagueRosters(players);
   const myOwnedIds = useMemo(() => {
     const ids = new Set<string>();
     for (const p of myTeam?.players ?? []) ids.add(p.id);
     return ids;
   }, [myTeam?.players]);
+  const myTeamFilter = synced && myTeamOnly;
 
   const query = useQuery({
     queryKey: ["fantasy-leaders", season],
@@ -209,14 +204,12 @@ function FantasyLeadersPage() {
     const enriched: LeaderRow[] = [];
     for (const r of list) {
       if (pos !== "ALL" && r.pos !== pos) continue;
-      const ownership: Ownership = myOwnedIds.has(r.id)
+      const ownership: ResearchOwnership = myOwnedIds.has(r.id)
         ? "roster"
         : rosteredIds.has(r.id)
           ? "taken"
           : "available";
-      if (ownership === "roster" && !showRoster) continue;
-      if (ownership === "taken" && !showTaken) continue;
-      if (ownership === "available" && !showAvailable) continue;
+      if (!matchesResearchAvailability(ownership, { pool, myTeamOnly: myTeamFilter })) continue;
 
       const weekPts = rangeWeeks.map((w) => r.weeks[w - 1]?.[fmt] ?? null);
       const played = weekPts.filter((v): v is number => v != null);
@@ -279,9 +272,8 @@ function FantasyLeadersPage() {
     sortDir,
     rangeWeeks,
     shownFrom,
-    showRoster,
-    showTaken,
-    showAvailable,
+    pool,
+    myTeamFilter,
     myOwnedIds,
     rosteredIds,
     playerById,
@@ -303,9 +295,6 @@ function FantasyLeadersPage() {
       : payload
         ? `No regular season games played yet in ${payload.season}`
         : "Loading fantasy leaders…";
-
-  const filterTriggerClass =
-    "inline-flex h-9 min-w-[8.5rem] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-primary/30";
 
   return (
     <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
@@ -349,33 +338,13 @@ function FantasyLeadersPage() {
         ))}
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2 sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger className={filterTriggerClass}>
-              Availability
-              <ChevronDown className="size-4 opacity-50" aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48 p-1">
-              {(
-                [
-                  ["roster", showRoster, setShowRoster],
-                  ["taken", showTaken, setShowTaken],
-                  ["available", showAvailable, setShowAvailable],
-                ] as const
-              ).map(([key, on, setOn]) => (
-                <DropdownMenuCheckboxItem
-                  key={key}
-                  checked={on}
-                  onCheckedChange={(checked) => startTransition(() => setOn(Boolean(checked)))}
-                  onSelect={(e) => e.preventDefault()}
-                  className={cn("rounded-sm", on ? OWNERSHIP_META[key].row : undefined)}
-                >
-                  {OWNERSHIP_META[key].label}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ResearchAvailabilityPoolFilter
+            value={pool}
+            onChange={setPool}
+            inactive={myTeamFilter}
+          />
 
           <Select
             value={season}
@@ -458,13 +427,19 @@ function FantasyLeadersPage() {
             onChange={(next) => startTransition(() => setScoringFormat(next))}
           />
         </div>
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search players"
-          className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
-        />
+        <ResearchFilterTrailing
+          myTeamOnly={myTeamFilter}
+          onMyTeamChange={setMyTeamOnly}
+          myTeamDisabled={!synced}
+        >
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search players"
+            className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
+          />
+        </ResearchFilterTrailing>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -695,7 +670,7 @@ function LeadersTable({
                 return (
                   <tr
                     key={row.id}
-                    className={cn("border-b border-slate-100", OWNERSHIP_META[row.ownership].row)}
+                    className={cn("border-b border-slate-100", RESEARCH_OWNERSHIP_META[row.ownership].row)}
                   >
                     <LeaderRowCells row={row} weeks={weeks} onOpen={onOpen} />
                   </tr>

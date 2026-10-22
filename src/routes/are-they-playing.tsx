@@ -5,6 +5,10 @@ import { memo, startTransition, useDeferredValue, useMemo, useRef, useState } fr
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import {
+  ResearchAvailabilityPoolFilter,
+  ResearchFilterTrailing,
+} from "@/components/research/ResearchAvailabilityFilter";
 import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
   nextSortState,
@@ -31,6 +35,12 @@ import {
 } from "@/lib/are-they-playing";
 import { currentSeason, fetchSchedule, type Player } from "@/lib/players-build";
 import { visibleRefetchInterval } from "@/lib/page-visibility";
+import {
+  matchesResearchAvailability,
+  RESEARCH_OWNERSHIP_META,
+  type ResearchAvailabilityPool,
+  type ResearchOwnership,
+} from "@/lib/research-availability";
 import { fetchResearchAreTheyPlaying, RESEARCH_CLIENT_STALE_MS } from "@/lib/research-cdn";
 import { useLiveInjuryStatuses } from "@/hooks/useLiveInjuryStatuses";
 import { playerHoverPrefetchProps } from "@/lib/prefetch-player-detail";
@@ -55,7 +65,6 @@ export const Route = createFileRoute("/are-they-playing")({
 
 type PosFilter = "ALL" | "QB" | "RB" | "WR" | "TE";
 type ChanceBand = "likely" | "uncertain" | "unlikely" | "pending";
-type Ownership = "roster" | "taken" | "available";
 type SortKey = "player" | "chance";
 
 const POS_TABS: PosFilter[] = ["ALL", "QB", "RB", "WR", "TE"];
@@ -67,12 +76,6 @@ const BAND_META: Record<ChanceBand, { label: string; row: string }> = {
   pending: { label: "Not yet graded", row: "bg-slate-50" },
 };
 
-const OWNERSHIP_META: Record<Ownership, { label: string; row: string }> = {
-  roster: { label: "Rostered", row: "bg-sky-50/90" },
-  taken: { label: "Taken", row: "bg-white" },
-  available: { label: "Available", row: "bg-emerald-50/80" },
-};
-
 type Row = {
   key: string;
   line: InjuryReportLine;
@@ -81,7 +84,7 @@ type Row = {
   injuryStatus: string | undefined;
   chance: number | null;
   band: ChanceBand;
-  ownership: Ownership;
+  ownership: ResearchOwnership;
   opp: string;
   practice: string;
 };
@@ -108,11 +111,8 @@ function AreTheyPlayingPage() {
   const [q, setQ] = useState("");
   const deferredQ = useDeferredValue(q);
   const [band, setBand] = useState<ChanceBand | null>(null);
-  const [owned, setOwned] = useState<Record<Ownership, boolean>>({
-    roster: true,
-    taken: true,
-    available: true,
-  });
+  const [pool, setPool] = useState<ResearchAvailabilityPool>("all");
+  const [myTeamOnly, setMyTeamOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const modalRef = useRef<PlayerModalHandle>(null);
@@ -124,8 +124,9 @@ function AreTheyPlayingPage() {
 
   const { data: playersPayload } = useSleeperPlayers();
   const players = playersPayload?.players ?? [];
-  const { myTeam, rosteredIds } = useLeagueRosters(players);
+  const { myTeam, rosteredIds, synced } = useLeagueRosters(players);
   const myOwnedIds = useMemo(() => new Set((myTeam?.players ?? []).map((p) => p.id)), [myTeam?.players]);
+  const myTeamFilter = synced && myTeamOnly;
 
   const query = useQuery({
     queryKey: ["are-they-playing", week],
@@ -207,7 +208,10 @@ function AreTheyPlayingPage() {
     const needle = deferredQ.trim().toLowerCase();
     const filtered = allRows.filter((r) => {
       if (pos !== "ALL" && r.player.pos !== pos) return false;
-      if ((band && r.band !== band) || !owned[r.ownership]) return false;
+      if (band && r.band !== band) return false;
+      if (!matchesResearchAvailability(r.ownership, { pool, myTeamOnly: myTeamFilter })) {
+        return false;
+      }
       if (!needle) return true;
       return (
         r.player.name.toLowerCase().includes(needle) ||
@@ -227,7 +231,7 @@ function AreTheyPlayingPage() {
       }
       return relevance(a) - relevance(b);
     });
-  }, [allRows, pos, band, owned, deferredQ, sortKey, sortDir]);
+  }, [allRows, pos, band, pool, myTeamFilter, deferredQ, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     const next = nextSortState(sortKey, sortDir, key, key === "player" ? "asc" : "desc");
@@ -241,6 +245,8 @@ function AreTheyPlayingPage() {
     ? new Date(query.data.updatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
     : null;
   const colSpan = 5;
+  const searchInputClass =
+    "h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64";
 
   return (
     <main className="mx-auto w-full max-w-shell px-3 pb-16 pt-6">
@@ -288,8 +294,13 @@ function AreTheyPlayingPage() {
         ))}
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
+          <ResearchAvailabilityPoolFilter
+            value={pool}
+            onChange={setPool}
+            inactive={myTeamFilter}
+          />
           <DropdownMenu>
             <DropdownMenuTrigger className={filterTriggerClass}>
               Chance to Play
@@ -309,36 +320,20 @@ function AreTheyPlayingPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger className={filterTriggerClass}>
-              Availability
-              <ChevronDown className="size-4 opacity-50" aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48 p-1">
-              {(Object.keys(OWNERSHIP_META) as Ownership[]).map((key) => (
-                <DropdownMenuCheckboxItem
-                  key={key}
-                  checked={owned[key]}
-                  onCheckedChange={(checked) =>
-                    startTransition(() => setOwned((prev) => ({ ...prev, [key]: Boolean(checked) })))
-                  }
-                  onSelect={(e) => e.preventDefault()}
-                  className={cn("rounded-sm", owned[key] ? OWNERSHIP_META[key].row : undefined)}
-                >
-                  {OWNERSHIP_META[key].label}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
-        <input
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search players"
-          className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2"
-        />
+        <ResearchFilterTrailing
+          myTeamOnly={myTeamFilter}
+          onMyTeamChange={setMyTeamOnly}
+          myTeamDisabled={!synced}
+        >
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search players"
+            className={searchInputClass}
+          />
+        </ResearchFilterTrailing>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -419,7 +414,11 @@ const PlayingRow = memo(function PlayingRow({
 }) {
   const { player, line } = row;
   const tone =
-    row.ownership === "roster" ? OWNERSHIP_META.roster.row : zebra ? "bg-slate-50/50" : "bg-white";
+    row.ownership === "roster"
+      ? RESEARCH_OWNERSHIP_META.roster.row
+      : zebra
+        ? "bg-slate-50/50"
+        : "bg-white";
   const badge = injuryMicroBadge(row.injuryStatus);
   const posLabel = player.pos;
 

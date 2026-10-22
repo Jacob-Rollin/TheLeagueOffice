@@ -1,6 +1,5 @@
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronDown } from "lucide-react";
 import {
   memo,
   startTransition,
@@ -15,6 +14,10 @@ import {
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
+import {
+  ResearchAvailabilityPoolFilter,
+  ResearchFilterTrailing,
+} from "@/components/research/ResearchAvailabilityFilter";
 import {
   PROJECTION_OWNERSHIP_META,
   PROJECTION_ROW_HEIGHT,
@@ -48,12 +51,6 @@ import {
 import { ValueTrendCell } from "@/components/research/ValueTrendCell";
 import { competitionRanksByMetric } from "@/components/research/statRanks";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -65,6 +62,10 @@ import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections"
 import { useLeagueRosters } from "@/hooks/useLeagueRosters";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
+import {
+  matchesResearchAvailability,
+  type ResearchAvailabilityPool,
+} from "@/lib/research-availability";
 import { injuryMicroBadge, resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { hasDisplayableProjection } from "@/lib/scoring-map";
 import { scaleValue } from "@/lib/trade-engine";
@@ -124,18 +125,18 @@ function WeeklyProjectionsPage() {
   // Catalog only — same player universe as PlayerDetail / getPlayerDetail.
   // Projection-only stubs opened "Player not found" in the shared popup.
   const players = catalogPlayers;
-  const { teams, myTeam, rosteredIds, loading: rostersLoading } = useLeagueRosters(players);
+  const { teams, myTeam, rosteredIds, synced, loading: rostersLoading } = useLeagueRosters(players);
   const { format: scoringFormat, override: scoringOverride, setFormat: setScoringFormat } =
     useResearchScoringFormat(leagueFormat);
 
   const [posFilter, setPosFilter] = useState<ProjectionPosFilter>("QB");
-  const [showRoster, setShowRoster] = useState(true);
-  const [showTaken, setShowTaken] = useState(true);
-  const [showAvailable, setShowAvailable] = useState(true);
+  const [pool, setPool] = useState<ResearchAvailabilityPool>("all");
+  const [myTeamOnly, setMyTeamOnly] = useState(false);
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [sortKey, setSortKey] = useState<SortKey | null>("proj");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const myTeamFilter = synced && myTeamOnly;
 
   const statGroups = useMemo(() => projectionGroupsForPos(posFilter), [posFilter]);
   const statCols = useMemo(() => flattenProjectionGroups(statGroups), [statGroups]);
@@ -177,12 +178,9 @@ function WeeklyProjectionsPage() {
         if (posFilter === "FLEX") return PROJECTION_FLEX_OK.has(p.pos);
         return p.pos === posFilter;
       })
-      .filter((p) => {
-        const own = ownershipOf(p.id);
-        if (own === "roster") return showRoster;
-        if (own === "taken") return showTaken;
-        return showAvailable;
-      })
+      .filter((p) =>
+        matchesResearchAvailability(ownershipOf(p.id), { pool, myTeamOnly: myTeamFilter }),
+      )
       .filter((p) => {
         if (!q) return true;
         return (
@@ -257,9 +255,8 @@ function WeeklyProjectionsPage() {
   }, [
     players,
     posFilter,
-    showRoster,
-    showTaken,
-    showAvailable,
+    pool,
+    myTeamFilter,
     deferredQuery,
     statsFor,
     scoringFormat,
@@ -350,38 +347,13 @@ function WeeklyProjectionsPage() {
         })}
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2 sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-nowrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger className="inline-flex h-9 min-w-[8.5rem] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-primary/30">
-              Availability
-              <ChevronDown className="size-4 opacity-50" aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48 p-1">
-              {(
-                [
-                  ["roster", showRoster, setShowRoster],
-                  ["taken", showTaken, setShowTaken],
-                  ["available", showAvailable, setShowAvailable],
-                ] as const
-              ).map(([key, on, setOn]) => {
-                const meta = PROJECTION_OWNERSHIP_META[key];
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={key}
-                    checked={on}
-                    onCheckedChange={(checked) =>
-                      startTransition(() => setOn(Boolean(checked)))
-                    }
-                    onSelect={(e) => e.preventDefault()}
-                    className={cn("rounded-sm", on ? meta.row : undefined)}
-                  >
-                    {meta.label}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ResearchAvailabilityPoolFilter
+            value={pool}
+            onChange={setPool}
+            inactive={myTeamFilter}
+          />
           <Select
             value={String(activeWeek)}
             onValueChange={(value) =>
@@ -407,13 +379,19 @@ function WeeklyProjectionsPage() {
             onChange={(next) => startTransition(() => setScoringFormat(next))}
           />
         </div>
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search players"
-          className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
-        />
+        <ResearchFilterTrailing
+          myTeamOnly={myTeamFilter}
+          onMyTeamChange={setMyTeamOnly}
+          myTeamDisabled={!synced}
+        >
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search players"
+            className="h-9 w-full max-w-xs rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none ring-primary/30 placeholder:text-slate-400 focus:ring-2 sm:w-64"
+          />
+        </ResearchFilterTrailing>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

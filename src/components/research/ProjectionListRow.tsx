@@ -24,7 +24,7 @@ export const PROJECTION_OWNERSHIP_META: Record<
   { label: string; swatch: string; row: string }
 > = {
   roster: {
-    label: "Rostered",
+    label: "My team",
     swatch: "bg-sky-100 border-sky-300",
     row: "bg-sky-50/90",
   },
