@@ -219,10 +219,9 @@ function MockDraftPage() {
     return () => clearTimeout(id);
   }, [started, complete, myTurn, paused, pageVisible, speed, picks.length, data.players.length]);
 
-  // Pick clock: counts down only while the human is on the clock, unpaused, and visible.
-  // Off-turn / AI slots show --:-- so the timer does not look stuck.
+  // Pick clock runs for every team (AI + user). Auto-pick still only on myTurn.
   useEffect(() => {
-    if (!myTurn || timerSeconds === null) {
+    if (complete || timerSeconds === null) {
       setClock(null);
       return;
     }
@@ -231,12 +230,12 @@ function MockDraftPage() {
       setClock((c) => (c === null ? null : Math.max(0, c - 1)));
     }, 1000);
     return () => clearInterval(id);
-  }, [myTurn, timerSeconds, picks.length, paused, pageVisible]);
+  }, [complete, timerSeconds, picks.length, paused, pageVisible]);
 
-  // Reset the clock at the start of each of the user's turns.
+  // Reset the clock at the start of each pick.
   useEffect(() => {
-    if (myTurn && timerSeconds !== null) setClock(timerSeconds);
-  }, [myTurn, timerSeconds, picks.length]);
+    if (!complete && timerSeconds !== null) setClock(timerSeconds);
+  }, [complete, timerSeconds, picks.length]);
 
   // Auto-draft with the Suggested engine when the clock expires.
   useEffect(() => {

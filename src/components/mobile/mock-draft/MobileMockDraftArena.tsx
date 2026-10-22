@@ -265,29 +265,27 @@ export function MobileMockDraftArena() {
               </button>
             ) : (
               <>
-                <span
-                  className={cn(
-                    "rounded-full px-4 py-1.5 font-display text-xs font-extrabold uppercase tracking-wider",
-                    complete || myTurn
-                      ? "bg-m-accent text-m-accent-fg"
-                      : "bg-m-chip text-m-chip-fg",
-                  )}
-                >
-                  {complete
-                    ? "Draft Complete!"
-                    : paused
-                      ? "Paused"
-                      : myTurn
-                        ? "Your Turn"
-                        : "On the Clock"}
-                </span>
+                {/* Sleeper: "Your Turn" only on your pick; AI turns show timer alone. */}
+                {complete || paused || myTurn ? (
+                  <span
+                    className={cn(
+                      "rounded-full px-4 py-1.5 font-display text-xs font-extrabold uppercase tracking-wider",
+                      complete || myTurn
+                        ? "bg-m-accent text-m-accent-fg"
+                        : "bg-m-chip text-m-chip-fg",
+                    )}
+                  >
+                    {complete ? "Draft Complete!" : paused ? "Paused" : "Your Turn"}
+                  </span>
+                ) : null}
                 {!complete ? (
                   <span
                     className={cn(
                       "inline-flex items-center gap-1 font-display text-sm tabular-nums",
-                      myTurn && clock !== null && clock <= 10 && !paused
+                      clock !== null && clock <= 10 && !paused
                         ? "text-red-500"
                         : "text-m-card-fg",
+                      !myTurn && !paused && "pt-1",
                     )}
                   >
                     <Timer className="size-3.5" strokeWidth={2.5} />
@@ -350,7 +348,6 @@ export function MobileMockDraftArena() {
         picks={picks}
         byId={byId}
         currentOverall={currentOverall}
-        myTurn={myTurn}
         complete={complete || inLobby}
         jumpSignal={jumpSignal}
         lobby={inLobby}

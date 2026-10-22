@@ -18,7 +18,6 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   picks,
   byId,
   currentOverall,
-  myTurn,
   complete,
   jumpSignal = 0,
   lobby = false,
@@ -30,7 +29,6 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   picks: Pick[];
   byId: Map<string, Player>;
   currentOverall: number;
-  myTurn: boolean;
   complete: boolean;
   /** Increment to re-center the on-the-clock cell. */
   jumpSignal?: number;
@@ -49,6 +47,8 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   }, [currentOverall, jumpSignal]);
 
   const colW = 112;
+  /** Highlight the user's column once their slot is known (lobby claim or live). */
+  const mineColActive = !lobby || slotClaimed;
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
@@ -60,9 +60,7 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
         }}
       >
         {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => {
-          const isMine = slotClaimed
-            ? t === settings.myTeam
-            : !lobby && t === settings.myTeam;
+          const isMine = mineColActive && t === settings.myTeam;
           const showClaim = lobby && (!slotClaimed || t !== settings.myTeam);
           const label =
             lobby && !slotClaimed ? `Slot ${t}` : teamName(settings, t);
@@ -70,8 +68,10 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
             <div
               key={`h-${t}`}
               className={cn(
-                "sticky top-0 z-10 flex flex-col items-center gap-0.5 bg-m-bg/95 px-0.5 py-1 backdrop-blur",
-                isMine && "rounded-md ring-1 ring-m-accent",
+                "sticky top-0 z-10 flex flex-col items-center gap-0.5 px-0.5 py-1 backdrop-blur",
+                isMine
+                  ? "rounded-t-md bg-m-accent/20 ring-1 ring-m-accent"
+                  : "bg-m-bg/95",
               )}
             >
               {lobby ? (
@@ -118,6 +118,7 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
             const pick = pickByOverall.get(overall);
             const player = pick ? byId.get(pick.playerId) : undefined;
             const isClock = !complete && overall === currentOverall;
+            const isMineCol = mineColActive && team === settings.myTeam;
             const pickLabel = `${round}.${(((overall - 1) % settings.teams) + 1)}`;
             // Last pick of a snake/linear round gets ↓ (Sleeper-style turn marker).
             const isRoundEnd =
@@ -135,7 +136,12 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                     ? posCellClass(player.pos)
                     : isClock
                       ? "bg-m-card ring-2 ring-m-accent"
-                      : "bg-m-card/70 text-m-muted",
+                      : isMineCol
+                        ? "bg-m-accent/12 text-m-muted"
+                        : "bg-m-card/70 text-m-muted",
+                  // Column wash for filled picks — keeps pos colors, marks "your" lane.
+                  isMineCol && player && "ring-1 ring-inset ring-m-accent/45",
+                  isMineCol && !player && !isClock && "ring-1 ring-inset ring-m-accent/25",
                 )}
               >
                 {player ? (
@@ -173,7 +179,7 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                   <div className="flex h-full flex-col items-center justify-center gap-1 text-m-accent">
                     <Timer className="size-3.5" strokeWidth={2.5} />
                     <span className="font-display text-[10px] font-bold uppercase tracking-wider">
-                      {myTurn ? "Your pick" : "On the clock"}
+                      On the clock
                     </span>
                     <span className="tabnum text-[10px] text-m-muted">{pickLabel}</span>
                   </div>
