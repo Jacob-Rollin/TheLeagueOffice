@@ -10,7 +10,18 @@ import {
   type UIEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChartLine, FilePlus2, Search, Star } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChartLine,
+  Circle,
+  CircleDot,
+  FilePlus2,
+  Info,
+  Search,
+  Star,
+  Trash2,
+} from "lucide-react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import {
@@ -236,6 +247,8 @@ export function MobileMockDraftSheet({
   onRosterTeamChange,
   onDraft,
   onToggleQueue,
+  onMoveQueued,
+  onRemoveQueued,
   onOpenPlayer,
 }: {
   tab: SheetTab;
@@ -260,6 +273,8 @@ export function MobileMockDraftSheet({
   onRosterTeamChange: (t: number) => void;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
+  onMoveQueued: (id: string, dir: -1 | 1) => void;
+  onRemoveQueued: (ids: string[]) => void;
   onOpenPlayer: (id: string) => void;
 }) {
   const prevYear = Math.max(2000, (Number(season) || new Date().getFullYear()) - 1);
@@ -508,9 +523,9 @@ export function MobileMockDraftSheet({
           complete={complete}
           queueAutopickOn={queueAutopickOn}
           onQueueAutopickChange={onQueueAutopickChange}
-          projExtrasById={projExtrasById}
           onDraft={onDraft}
-          onToggleQueue={onToggleQueue}
+          onMoveQueued={onMoveQueued}
+          onRemoveQueued={onRemoveQueued}
           onOpenPlayer={onOpenPlayer}
         />
       ) : null}
@@ -739,9 +754,9 @@ function QueuePane({
   complete,
   queueAutopickOn,
   onQueueAutopickChange,
-  projExtrasById,
   onDraft,
-  onToggleQueue,
+  onMoveQueued,
+  onRemoveQueued,
   onOpenPlayer,
 }: {
   queuedPlayers: Player[];
@@ -750,19 +765,37 @@ function QueuePane({
   complete: boolean;
   queueAutopickOn: boolean;
   onQueueAutopickChange: (on: boolean) => void;
-  projExtrasById: Record<string, SeasonProjBoardExtras>;
   onDraft: (id: string) => void;
-  onToggleQueue: (id: string) => void;
+  onMoveQueued: (id: string, dir: -1 | 1) => void;
+  onRemoveQueued: (ids: string[]) => void;
   onOpenPlayer: (id: string) => void;
 }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedIndex = selectedId
+    ? queuedPlayers.findIndex((p) => p.id === selectedId)
+    : -1;
+
+  useEffect(() => {
+    if (selectedId && !queuedPlayers.some((p) => p.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [queuedPlayers, selectedId]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-end gap-2 px-3 py-2">
-        <span className="text-xs text-m-muted">Auto-pick</span>
+        <span
+          className="inline-flex items-center gap-1 text-xs text-m-muted"
+          title="When on, drafts the #1 available player in your queue on your turn."
+        >
+          <Info className="size-3.5" strokeWidth={2.25} aria-hidden />
+          Auto-pick
+        </span>
         <button
           type="button"
           role="switch"
           aria-checked={queueAutopickOn}
+          aria-label="Queue auto-pick"
           onClick={() => onQueueAutopickChange(!queueAutopickOn)}
           className={cn(
             "relative h-6 w-11 rounded-full transition-colors",
@@ -788,28 +821,125 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <DualAxisScroll className="px-2 pb-3" onHorizScroll={onNameStripScroll}>
-          <div className="min-w-max">
-            {queuedPlayers.map((p, i) => (
-              <PlayerStatsRow
+        <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
+          {queuedPlayers.map((p, i) => {
+            const adp = value(p, settings.scoring).adp;
+            const short = shortName(p.name);
+            const meta = `${posDisplayLabel(p.pos)} - ${p.team}${p.bye ? ` (${p.bye})` : ""}`;
+            const selected = selectedId === p.id;
+            return (
+              <li
                 key={p.id}
-                player={p}
-                settings={settings}
-                rank={i + 1}
-                queued
-                myTurn={myTurn}
-                complete={complete}
-                showPrevYear={false}
-                prevYear={0}
-                projExtras={projExtrasById[p.id]}
-                onDraft={onDraft}
-                onToggleQueue={onToggleQueue}
-                onOpenPlayer={onOpenPlayer}
-              />
-            ))}
-          </div>
-        </DualAxisScroll>
+                className="flex items-center gap-2 border-b border-m-border/60 py-2"
+              >
+                {!complete ? (
+                  <button
+                    type="button"
+                    disabled={!myTurn}
+                    onClick={() => onDraft(p.id)}
+                    className={cn(
+                      "h-9 w-[3.25rem] shrink-0 rounded-lg font-display text-[11px] font-extrabold uppercase tracking-wide",
+                      myTurn
+                        ? "bg-m-accent text-m-accent-fg"
+                        : "bg-m-chip text-m-muted opacity-70",
+                    )}
+                  >
+                    Draft
+                  </button>
+                ) : null}
+                <span className="tabnum w-5 shrink-0 text-center text-sm font-semibold text-m-card-fg">
+                  {i + 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onOpenPlayer(p.id)}
+                  className="min-w-0 flex-1 py-0.5 text-left"
+                >
+                  <span className="block truncate text-[13px] font-bold text-m-card-fg">
+                    {short}
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-1 text-[11px] text-m-muted">
+                    <span
+                      className={cn(
+                        "size-1.5 shrink-0 rounded-full",
+                        POS_DOT[p.pos] ?? "bg-m-muted",
+                      )}
+                      aria-hidden
+                    />
+                    <span className="truncate">{meta}</span>
+                  </span>
+                </button>
+                <div className="w-12 shrink-0 text-right">
+                  <span className="block text-[9px] font-semibold uppercase tracking-wide text-m-muted">
+                    ADP
+                  </span>
+                  <span className="tabnum block text-sm font-semibold text-m-card-fg">
+                    {adp < 900 ? adp.toFixed(1) : "—"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  aria-label={selected ? "Deselect queue player" : "Select queue player"}
+                  aria-pressed={selected}
+                  onClick={() => setSelectedId(selected ? null : p.id)}
+                  className={cn(
+                    "flex size-9 shrink-0 items-center justify-center",
+                    selected ? "text-m-accent" : "text-m-muted",
+                  )}
+                >
+                  {selected ? (
+                    <CircleDot className="size-5" strokeWidth={2.25} />
+                  ) : (
+                    <Circle className="size-5" strokeWidth={2} />
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
+      {selectedId && selectedIndex >= 0 ? (
+        <div className="flex items-center gap-3 border-t border-m-border bg-m-sheet px-4 py-2.5">
+          <button
+            type="button"
+            aria-label="Remove from queue"
+            onClick={() => {
+              onRemoveQueued([selectedId]);
+              setSelectedId(null);
+            }}
+            className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg"
+          >
+            <Trash2 className="size-5" strokeWidth={2.25} />
+          </button>
+          <div className="flex flex-1 items-center justify-center gap-3">
+            <button
+              type="button"
+              aria-label="Move up in queue"
+              disabled={selectedIndex <= 0}
+              onClick={() => onMoveQueued(selectedId, -1)}
+              className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
+            >
+              <ArrowUp className="size-5" strokeWidth={2.25} />
+            </button>
+            <button
+              type="button"
+              aria-label="Move down in queue"
+              disabled={selectedIndex >= queuedPlayers.length - 1}
+              onClick={() => onMoveQueued(selectedId, 1)}
+              className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
+            >
+              <ArrowDown className="size-5" strokeWidth={2.25} />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedId(null)}
+            className="font-display text-sm font-bold uppercase tracking-wide text-m-accent"
+          >
+            Done
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

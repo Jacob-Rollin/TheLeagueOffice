@@ -73,6 +73,8 @@ export function MobileMockDraftArena() {
     setQueueAutopickOn,
     draftForUser,
     toggleWatch,
+    moveQueued,
+    removeQueued,
     clearSession,
     myCounts,
     nextUserOverall,
@@ -366,6 +368,8 @@ export function MobileMockDraftArena() {
         onRosterTeamChange={setRosterTeam}
         onDraft={draftForUser}
         onToggleQueue={toggleWatch}
+        onMoveQueued={moveQueued}
+        onRemoveQueued={removeQueued}
         onOpenPlayer={openPlayer}
       />
 
