@@ -58,6 +58,42 @@ Implement as capacity pressure appears — not all at once.
 - **Keep on Vercel:** UI, auth, `/api/data/*` CDN reads, ESPN credentialed Fluid (for now)
 - Retarget GitHub Actions `APP_URL` to the worker
 
+#### Coolify — what it is here
+
+A small always-on (or wake-on-request) **Nitro host** of this same repo that only serves **cron/admin** routes. GitHub Actions keeps the schedule; it just calls `https://worker.yourdomain/...` instead of `https://www.theleagueoffice.app/...`. Browser users still use Vercel.
+
+#### Steps (you vs agent)
+
+| # | Step | Who |
+| --- | --- | --- |
+| 1 | Get a VPS (Hetzner/Oracle free ARM/etc.) + install **Coolify** (or use a hosted Coolify) | **You** |
+| 2 | Point a hostname e.g. `worker.theleagueoffice.app` → Coolify (DNS) | **You** |
+| 3 | Create Coolify app from this GitHub repo; set build to same Nitro production build the app already uses | **You** (agent can document Dockerfile/`NITRO_PRESET` if missing) |
+| 4 | Paste env on Coolify: `CRON_SECRET`, `DATABASE_URL`, later `DATABASE_URL_MOCK`, Supabase service role (for Broadcast from cron), etc. **No** need for all Vercel UI secrets | **You** (agent lists exact keys per route) |
+| 5 | Confirm `authorizeCronRequest` works: `curl -H "Authorization: Bearer $CRON_SECRET" https://worker…/api/cron/…` | **You** smoke-test; agent can add a health route if useful |
+| 6 | GitHub secret `APP_URL` → worker origin (or add `CRON_APP_URL` and patch workflows to prefer it) | **You** change secret; **agent** patches workflows if dual URL needed |
+| 7 | Optionally leave Vercel cron routes in place but **unscheduled** (Actions-only) so Hobby isn’t double-hit | **Agent** can disable/document; **you** turn off any Vercel Cron UI jobs |
+| 8 | Mock draft: implement `/api/cron/mock-draft-tick` against TiDB D + Broadcast | **Agent** (code); ticks hit Coolify once Actions `APP_URL` points there |
+| 9 | Monitor Hobby Active CPU before/after | **You** (Vercel dashboard) |
+
+**Agent cannot:** create your Coolify account, buy/SSH a VPS, or edit GitHub org secrets / DNS. **Agent can:** code the tick route, dual-URL workflow support, env checklist, Dockerfile/Nitro preset notes, and keep Vercel UI free of cron work.
+
+#### How Coolify saves Vercel limits (examples)
+
+GitHub Actions → `APP_URL` today hits **Vercel Functions**. Each hit burns **invocations** + some **Active CPU** (and memory while warm).
+
+| Workload | Today on Vercel | After Coolify worker | Hobby saved |
+| --- | --- | --- | --- |
+| `league-delta-sync` hourly gameday | Dozens–hundreds of Function runs/day | Same schedule, CPU on VPS | Large share of historical Fluid burn |
+| `research-aggregates` / warehouse / planning snaps | Heavy serialize + TiDB on Fluid | Same on worker | Active CPU + long invocations |
+| `mock-draft-tick` ≤1/min while rooms live | ~1,440 invocations/day if always on | **0** on Vercel | ~1.4k invocations/day + AI pick CPU |
+| One 10×2h mock (cron only) | ~120 tick invocations on Hobby | **0** on Hobby | Those 120 + autopick Active CPU |
+| User picks / join / page loads | Stay on Vercel | Stay on Vercel | Unchanged (already small with push-first) |
+
+**Example month:** If crons are ~40% of Hobby Active CPU today, moving them to Coolify can drop that toward **near zero on Vercel**, leaving the 4 CPU-hrs for real user traffic (playbook, ESPN Fluid, mock **mutations** only). Mock ticks at 1/min are small alone (~0.1% of 1M invocations/day×30) but **AI pick CPU on Fluid** during busy mock evenings adds up — Coolify absorbs that.
+
+**What Coolify does *not* save:** browser hits to `www` (UI, `/api/data/*`, pick POSTs). Those need push-first mocks + snap-cdn discipline (already planned).
+
 ### Phase 2 — Split TiDB free clusters
 | Cluster | Tables |
 |---|---|
