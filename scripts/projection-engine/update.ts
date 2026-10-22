@@ -50,9 +50,10 @@ export async function runUpdate(opts: RunOptions): Promise<void> {
   console.log(`[update] ${season} week ${week}${dryRun ? " (dry run)" : ""}`);
 
   const locksName = GIST_FILES.locks(season);
+  const linesArchiveName = GIST_FILES.sleeperWeekLines(season);
   const [identity, stored] = await Promise.all([
     loadIdentity(),
-    readFiles([GIST_FILES.projections, locksName], dryRun),
+    readFiles([GIST_FILES.projections, locksName, linesArchiveName], dryRun),
   ]);
   const prev = parseJson<ProjectionFile>(stored[GIST_FILES.projections] ?? null);
   const samePrev = prev && prev.season === season && prev.week === week ? prev : null;
@@ -62,6 +63,20 @@ export async function runUpdate(opts: RunOptions): Promise<void> {
     hash: "",
     updatedAt: nowIso,
     weeks: {},
+  };
+  type LinesArchive = {
+    version: 1;
+    season: number;
+    hash: string;
+    updatedAt: string;
+    lines: Record<string, Record<string, number>>;
+  };
+  const linesArchive: LinesArchive = parseJson<LinesArchive>(stored[linesArchiveName] ?? null) ?? {
+    version: 1,
+    season,
+    hash: "",
+    updatedAt: nowIso,
+    lines: {},
   };
 
   const [sleeper, espn, cbs, nfl] = await Promise.all([
@@ -211,6 +226,17 @@ export async function runUpdate(opts: RunOptions): Promise<void> {
   for (const [id, entry] of Object.entries(players)) {
     const game = games.get(entry.team);
     if (!game || hasStarted(game, now)) continue;
+    const sleeperStats = entry.lines.sleeper;
+    const sleeperPts = entry.pts.sleeper;
+    let sleeperLine: Record<string, number> | undefined;
+    if (sleeperStats) {
+      sleeperLine = { ...sleeperStats };
+      if (sleeperPts) {
+        sleeperLine.pts_std = sleeperPts[0];
+        sleeperLine.pts_half_ppr = sleeperPts[1];
+        sleeperLine.pts_ppr = sleeperPts[2];
+      }
+    }
     weekLocks[id] = {
       name: entry.name,
       pos: entry.pos,
@@ -218,12 +244,23 @@ export async function runUpdate(opts: RunOptions): Promise<void> {
       opp: entry.opp,
       kickoff: game.kickoff,
       pts: entry.pts,
+      ...(sleeperLine ? { sleeperLine } : {}),
     };
   }
   for (const [id, locked] of Object.entries(weekLocks)) {
     const game = games.get(locked.team);
     if (!players[id] && game && !hasStarted(game, now)) delete weekLocks[id];
   }
+  // Flush kickoff-locked Sleeper lines into the season archive before pruning
+  // old lock weeks — player popups keep Proj columns after injury wipes.
+  const nextArchiveLines = { ...linesArchive.lines };
+  for (const [wk, weekMap] of Object.entries(locks.weeks)) {
+    for (const [id, locked] of Object.entries(weekMap)) {
+      if (!locked.sleeperLine || !Object.keys(locked.sleeperLine).length) continue;
+      nextArchiveLines[`${wk}|${id}`] = locked.sleeperLine;
+    }
+  }
+  const linesArchiveHash = sha1(nextArchiveLines);
   // Keep enough history for a missed Tuesday audit (hourly catch-up grades finished weeks).
   for (const key of Object.keys(locks.weeks)) {
     if (Number(key) < week - 4) delete locks.weeks[key];
@@ -234,6 +271,15 @@ export async function runUpdate(opts: RunOptions): Promise<void> {
   if (hash !== prev?.hash) changed[GIST_FILES.projections] = JSON.stringify(projection);
   if (locksHash !== locks.hash) {
     changed[locksName] = JSON.stringify({ ...locks, hash: locksHash, updatedAt: nowIso });
+  }
+  if (linesArchiveHash !== linesArchive.hash) {
+    changed[linesArchiveName] = JSON.stringify({
+      version: 1 as const,
+      season,
+      hash: linesArchiveHash,
+      updatedAt: nowIso,
+      lines: nextArchiveLines,
+    });
   }
   await writeFiles(changed, dryRun);
 
