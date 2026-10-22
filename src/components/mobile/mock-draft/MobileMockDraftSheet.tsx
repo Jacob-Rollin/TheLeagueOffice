@@ -69,9 +69,10 @@ function nearestSheetSnap(pct: number, collapsedPct: number): SheetSnap {
 }
 
 /**
- * Nested scrollers so vertical and horizontal never fight on one element.
- * Changing overflow-x to `hidden` on a dual-axis scroller resets scrollLeft
- * (that was popping the list back to the left when scrolling down).
+ * Nested vertical + horizontal scrollers with strict gesture axis lock.
+ * First 8px decides the axis; after that we preventDefault and drive only that
+ * scroller so diagonal pans cannot move both. Never toggles overflow (that
+ * resets scrollLeft and pops the list left).
  */
 function DualAxisScroll({
   className,
@@ -82,10 +83,81 @@ function DualAxisScroll({
   onHorizScroll?: (e: UIEvent<HTMLDivElement>) => void;
   children: ReactNode;
 }) {
+  const vertRef = useRef<HTMLDivElement | null>(null);
+  const horizRef = useRef<HTMLDivElement | null>(null);
+  const axisRef = useRef<"x" | "y" | null>(null);
+  const startRef = useRef({ x: 0, y: 0, scrollTop: 0, scrollLeft: 0 });
+
+  useEffect(() => {
+    const vert = vertRef.current;
+    const horiz = horizRef.current;
+    if (!vert || !horiz) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      axisRef.current = null;
+      startRef.current = {
+        x: t.clientX,
+        y: t.clientY,
+        scrollTop: vert.scrollTop,
+        scrollLeft: horiz.scrollLeft,
+      };
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      const dx = t.clientX - startRef.current.x;
+      const dy = t.clientY - startRef.current.y;
+      if (axisRef.current == null) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        axisRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+        // Undo any diagonal drift from the decision window.
+        vert.scrollTop = startRef.current.scrollTop;
+        horiz.scrollLeft = startRef.current.scrollLeft;
+      }
+      // Own the gesture so the browser cannot pan the off-axis scroller.
+      e.preventDefault();
+      if (axisRef.current === "x") {
+        horiz.scrollLeft = startRef.current.scrollLeft - dx;
+        vert.scrollTop = startRef.current.scrollTop;
+      } else {
+        vert.scrollTop = startRef.current.scrollTop - dy;
+        horiz.scrollLeft = startRef.current.scrollLeft;
+      }
+    };
+
+    const onTouchEnd = () => {
+      axisRef.current = null;
+    };
+
+    vert.addEventListener("touchstart", onTouchStart, { passive: true, capture: true });
+    // Non-passive so preventDefault can stop diagonal browser scrolling.
+    vert.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
+    vert.addEventListener("touchend", onTouchEnd, { passive: true, capture: true });
+    vert.addEventListener("touchcancel", onTouchEnd, { passive: true, capture: true });
+
+    return () => {
+      vert.removeEventListener("touchstart", onTouchStart, true);
+      vert.removeEventListener("touchmove", onTouchMove, true);
+      vert.removeEventListener("touchend", onTouchEnd, true);
+      vert.removeEventListener("touchcancel", onTouchEnd, true);
+    };
+  }, []);
+
   return (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain", className)}>
+    <div
+      ref={vertRef}
+      className={cn(
+        // touch-none: browser must not pan either axis; JS owns the gesture after axis lock.
+        "min-h-0 flex-1 touch-none overflow-y-auto overflow-x-hidden overscroll-contain",
+        className,
+      )}
+    >
       <div
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch]"
+        ref={horizRef}
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain touch-none [-webkit-overflow-scrolling:touch]"
         onScroll={onHorizScroll}
       >
         {children}
