@@ -64,7 +64,7 @@ export type MockSessionState = {
   customOrder: string[];
   speed: "normal" | "fast" | "manual";
   paused: boolean;
-  tab: "players" | "board" | "team";
+  tab: "players" | "board" | "team" | "queue";
   rosterTeam: number;
 };
 
