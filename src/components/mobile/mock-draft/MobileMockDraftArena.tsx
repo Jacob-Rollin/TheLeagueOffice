@@ -35,6 +35,7 @@ export function MobileMockDraftArena() {
 
   const session = useMockDraftSession({ onMissingConfig: goSetup });
   const {
+    data,
     syncing,
     config,
     started,
@@ -302,6 +303,7 @@ export function MobileMockDraftArena() {
         tab={tab}
         onTabChange={setTab}
         settings={settings}
+        season={data.season}
         available={available}
         queuedPlayers={queuedPlayers}
         watchIds={watchIds}

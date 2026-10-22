@@ -7,7 +7,7 @@ import {
   startTransition,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { FilePlus2, Search, Star } from "lucide-react";
+import { ChartLine, FilePlus2, Search, Star } from "lucide-react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import {
@@ -41,6 +41,7 @@ export function MobileMockDraftSheet({
   tab,
   onTabChange,
   settings,
+  season,
   available,
   queuedPlayers,
   watchIds,
@@ -63,6 +64,8 @@ export function MobileMockDraftSheet({
   tab: SheetTab;
   onTabChange: (t: SheetTab) => void;
   settings: Settings;
+  /** Catalog season (e.g. "2026"); previous-year toggle uses season - 1. */
+  season: string;
   available: Player[];
   queuedPlayers: Player[];
   watchIds: Set<string>;
@@ -82,6 +85,14 @@ export function MobileMockDraftSheet({
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
+  const prevYear = Math.max(2000, (Number(season) || new Date().getFullYear()) - 1);
+  const draftedPlayers = useMemo(() => {
+    return picks
+      .slice()
+      .sort((a, b) => a.overall - b.overall)
+      .map((p) => byId.get(p.playerId))
+      .filter((p): p is Player => p != null);
+  }, [picks, byId]);
   const [snap, setSnap] = useState<SheetSnap>("peek");
   const [dragPct, setDragPct] = useState<number | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
@@ -180,11 +191,13 @@ export function MobileMockDraftSheet({
         <PlayersPane
           settings={settings}
           available={available}
+          draftedPlayers={draftedPlayers}
           watchIds={watchIds}
           myTurn={myTurn}
           complete={complete}
           myCounts={myCounts}
           nextUserOverall={nextUserOverall}
+          prevYear={prevYear}
           onDraft={onDraft}
           onToggleQueue={onToggleQueue}
           onOpenPlayer={onOpenPlayer}
@@ -196,6 +209,7 @@ export function MobileMockDraftSheet({
           settings={settings}
           myTurn={myTurn}
           complete={complete}
+          prevYear={prevYear}
           queueAutopickOn={queueAutopickOn}
           onQueueAutopickChange={onQueueAutopickChange}
           onDraft={onDraft}
@@ -222,22 +236,26 @@ export function MobileMockDraftSheet({
 function PlayersPane({
   settings,
   available,
+  draftedPlayers,
   watchIds,
   myTurn,
   complete,
   myCounts,
   nextUserOverall,
+  prevYear,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
 }: {
   settings: Settings;
   available: Player[];
+  draftedPlayers: Player[];
   watchIds: Set<string>;
   myTurn: boolean;
   complete: boolean;
   myCounts: Record<string, number>;
   nextUserOverall: number | null;
+  prevYear: number;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -245,21 +263,28 @@ function PlayersPane({
   const [pos, setPos] = useState<"ALL" | Pos>("ALL");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [watchOnly, setWatchOnly] = useState(false);
+  const [draftedOnly, setDraftedOnly] = useState(false);
+  const [showPrevYear, setShowPrevYear] = useState(false);
   const deferredQuery = useDeferredValue(query);
 
   const filtered = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
-    return available.filter((p) => {
+    const pool = draftedOnly ? draftedPlayers : available;
+    return pool.filter((p) => {
+      if (watchOnly && !watchIds.has(p.id)) return false;
       if (pos !== "ALL" && p.pos !== pos) return false;
       if (!q) return true;
       return p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q);
     });
-  }, [available, pos, deferredQuery]);
+  }, [available, draftedPlayers, draftedOnly, watchOnly, watchIds, pos, deferredQuery]);
 
   const projIndex =
-    nextUserOverall == null
+    draftedOnly || nextUserOverall == null
       ? -1
       : filtered.findIndex((p) => value(p, settings.scoring).adp >= nextUserOverall);
+
+  const prevShort = `'${String(prevYear).slice(-2)}`;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -303,6 +328,33 @@ function PlayersPane({
           })}
         </div>
       </div>
+
+      <div className="flex gap-1.5 overflow-x-auto px-3 pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ToolChip
+          active={watchOnly}
+          onClick={() => {
+            setWatchOnly((v) => !v);
+            if (!watchOnly) setDraftedOnly(false);
+          }}
+        >
+          <Star className={cn("size-3.5", watchOnly && "fill-current")} strokeWidth={2.5} />
+          Watchlist
+        </ToolChip>
+        <ToolChip
+          active={draftedOnly}
+          onClick={() => {
+            setDraftedOnly((v) => !v);
+            if (!draftedOnly) setWatchOnly(false);
+          }}
+        >
+          Drafted
+        </ToolChip>
+        <ToolChip active={showPrevYear} onClick={() => setShowPrevYear((v) => !v)}>
+          <ChartLine className="size-3.5" strokeWidth={2.5} />
+          {prevShort} Stats
+        </ToolChip>
+      </div>
+
       {searchOpen ? (
         <div className="px-3 pb-2">
           <input
@@ -317,6 +369,15 @@ function PlayersPane({
 
       <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
         <div className="min-w-max pb-3">
+          {filtered.length === 0 ? (
+            <p className="sticky left-0 px-4 py-8 text-center text-sm text-m-muted">
+              {draftedOnly
+                ? "No drafted players match these filters."
+                : watchOnly
+                  ? "No watchlist players match these filters."
+                  : "No players match these filters."}
+            </p>
+          ) : null}
           {filtered.map((p, i) => (
             <div key={p.id}>
               {projIndex === i && nextUserOverall != null ? (
@@ -334,7 +395,9 @@ function PlayersPane({
                 settings={settings}
                 queued={watchIds.has(p.id)}
                 myTurn={myTurn}
-                complete={complete}
+                complete={complete || draftedOnly}
+                showPrevYear={showPrevYear}
+                prevYear={prevYear}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
@@ -347,11 +410,37 @@ function PlayersPane({
   );
 }
 
+function ToolChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide transition-colors",
+        active
+          ? "border-m-accent bg-m-accent/15 text-m-accent"
+          : "border-m-border bg-m-chip text-m-chip-fg",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function QueuePane({
   queuedPlayers,
   settings,
   myTurn,
   complete,
+  prevYear,
   queueAutopickOn,
   onQueueAutopickChange,
   onDraft,
@@ -362,33 +451,43 @@ function QueuePane({
   settings: Settings;
   myTurn: boolean;
   complete: boolean;
+  prevYear: number;
   queueAutopickOn: boolean;
   onQueueAutopickChange: (on: boolean) => void;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
+  const [showPrevYear, setShowPrevYear] = useState(false);
+  const prevShort = `'${String(prevYear).slice(-2)}`;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-end gap-2 px-4 py-2">
-        <span className="text-xs text-m-muted">Auto-pick</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={queueAutopickOn}
-          onClick={() => onQueueAutopickChange(!queueAutopickOn)}
-          className={cn(
-            "relative h-6 w-11 rounded-full transition-colors",
-            queueAutopickOn ? "bg-m-accent" : "bg-m-border",
-          )}
-        >
-          <span
+      <div className="flex items-center justify-between gap-2 px-3 py-2">
+        <ToolChip active={showPrevYear} onClick={() => setShowPrevYear((v) => !v)}>
+          <ChartLine className="size-3.5" strokeWidth={2.5} />
+          {prevShort} Stats
+        </ToolChip>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-m-muted">Auto-pick</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={queueAutopickOn}
+            onClick={() => onQueueAutopickChange(!queueAutopickOn)}
             className={cn(
-              "absolute top-0.5 size-5 rounded-full bg-white transition-transform",
-              queueAutopickOn ? "left-5" : "left-0.5",
+              "relative h-6 w-11 rounded-full transition-colors",
+              queueAutopickOn ? "bg-m-accent" : "bg-m-border",
             )}
-          />
-        </button>
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 size-5 rounded-full bg-white transition-transform",
+                queueAutopickOn ? "left-5" : "left-0.5",
+              )}
+            />
+          </button>
+        </div>
       </div>
       {queuedPlayers.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 pb-8 text-center">
@@ -411,6 +510,8 @@ function QueuePane({
                 queued
                 myTurn={myTurn}
                 complete={complete}
+                showPrevYear={showPrevYear}
+                prevYear={prevYear}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
@@ -539,6 +640,8 @@ function PlayerStatsRow({
   queued,
   myTurn,
   complete,
+  showPrevYear,
+  prevYear,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -548,12 +651,15 @@ function PlayerStatsRow({
   queued: boolean;
   myTurn: boolean;
   complete: boolean;
+  showPrevYear: boolean;
+  prevYear: number;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
   const v = value(player, settings.scoring);
   const short = shortName(player.name);
+  const yearLabel = String(prevYear);
 
   return (
     <div className="flex border-b border-m-border/70">
@@ -602,17 +708,19 @@ function PlayerStatsRow({
         </button>
       </div>
 
-      <div className="flex items-end gap-4 py-2.5 pr-4">
+      <div className="flex items-end gap-3 py-2.5 pr-4">
         <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
-        <StatCell label="Pts" value={v.proj.toFixed(1)} />
+        <StatPair
+          label="Pts"
+          current={v.proj.toFixed(1)}
+          showPrev={showPrevYear}
+          prevYear={yearLabel}
+          prev={v.prev != null ? v.prev.toFixed(1) : "—"}
+        />
         <StatCell label="Rank" value={v.rank < 900 ? String(v.rank) : "—"} />
         <StatCell
           label="Pos rk"
           value={player.posRank > 0 ? `${posDisplayLabel(player.pos)}${player.posRank}` : "—"}
-        />
-        <StatCell
-          label="Prev"
-          value={v.prev != null ? v.prev.toFixed(1) : "—"}
         />
         <StatCell
           label="ADP lo"
@@ -634,6 +742,35 @@ function StatCell({ label, value }: { label: string; value: string }) {
         {label}
       </span>
       <span className="tabnum block text-sm font-semibold text-m-card-fg">{value}</span>
+    </div>
+  );
+}
+
+/** Current stat with optional prior-season column beside it (image-style '25 pair). */
+function StatPair({
+  label,
+  current,
+  showPrev,
+  prevYear,
+  prev,
+}: {
+  label: string;
+  current: string;
+  showPrev: boolean;
+  prevYear: string;
+  prev: string;
+}) {
+  return (
+    <div className="flex shrink-0 items-end gap-3">
+      <StatCell label={label} value={current} />
+      {showPrev ? (
+        <div className="w-12 shrink-0 text-left">
+          <span className="block text-[9px] font-semibold uppercase tracking-wide text-m-muted">
+            {prevYear}
+          </span>
+          <span className="tabnum block text-sm font-semibold text-m-muted">{prev}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
