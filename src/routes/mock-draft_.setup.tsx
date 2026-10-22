@@ -22,12 +22,23 @@ import {
   saveMockConfig,
   type MockConfig,
 } from "@/lib/mock-config";
+import { prefetchMockDraftClientCaches } from "@/lib/mock-draft-warm";
+import { loadPlayersCatalog } from "@/lib/players-catalog";
 import { cn } from "@/lib/utils";
 
 
 export const Route = createFileRoute("/mock-draft_/setup")({
   // Client-only setup — SSR would burn Fluid Active CPU on every visit.
   ssr: false,
+  // Warm the day-cached catalog while the user configures the draft.
+  loader: ({ context }) => {
+    void context.queryClient.ensureQueryData({
+      queryKey: ["players-catalog"],
+      queryFn: () => loadPlayersCatalog(),
+      staleTime: 1000 * 60 * 30,
+    });
+    prefetchMockDraftClientCaches();
+  },
   head: () => ({
     meta: [
       { title: "Mock Draft Setup — The League Office" },

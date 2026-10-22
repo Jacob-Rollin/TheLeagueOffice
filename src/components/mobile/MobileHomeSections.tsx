@@ -1,10 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 import { LeagueAvatar } from "@/components/league/LeagueAvatar";
 import type { ActiveLeagueToken } from "@/context/ActiveLeagueContext";
 import { listPublishedArticles } from "@/lib/articles";
 import { fetchEspnNflNewsJson } from "@/lib/espn-public-client";
+import { prefetchMockDraftClientCaches } from "@/lib/mock-draft-warm";
 
 import { MobileCard, MobileSectionTitle } from "./MobileShell";
 
@@ -102,6 +104,19 @@ function MobileLeagueCard({ league }: { league: ActiveLeagueToken }) {
 }
 
 export function MobileMockDraftCard() {
+  // Warm Sleeper catalog + board extras while the home card is on screen so
+  // the mock-draft splash rarely needs a cold download (day-cache / rate-budgeted).
+  useEffect(() => {
+    const run = () => prefetchMockDraftClientCaches();
+    const ric = window.requestIdleCallback?.bind(window);
+    if (ric) {
+      const id = ric(run, { timeout: 2500 });
+      return () => window.cancelIdleCallback?.(id);
+    }
+    const t = window.setTimeout(run, 400);
+    return () => window.clearTimeout(t);
+  }, []);
+
   return (
     <MobileCard className="mt-3 p-5">
       <h2 className="font-display text-xl font-bold tracking-wide">Mock Draft Lobby</h2>
@@ -110,6 +125,8 @@ export function MobileMockDraftCard() {
       </p>
       <Link
         to="/m/mock-draft"
+        onPointerEnter={() => prefetchMockDraftClientCaches()}
+        onFocus={() => prefetchMockDraftClientCaches()}
         className="mt-5 block w-full rounded-lg bg-m-chip px-4 py-3 text-center font-display text-base font-bold uppercase tracking-widest text-m-chip-fg"
       >
         Mock Drafts

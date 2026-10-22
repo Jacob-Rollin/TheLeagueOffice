@@ -15,6 +15,7 @@ import {
   saveMockConfig,
   type MockConfig,
 } from "@/lib/mock-config";
+import { warmMockDraftClientCaches } from "@/lib/mock-draft-warm";
 import { cn } from "@/lib/utils";
 
 import { MobileMockDraftBoard } from "./MobileMockDraftBoard";
@@ -34,6 +35,8 @@ export function MobileMockDraftArena() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<MockConfig>(DEFAULT_MOCK_CONFIG);
   const [showRecap, setShowRecap] = useState(false);
+  /** Splash waits for day-cached catalog (+ board extras) like desktop. */
+  const [cacheReady, setCacheReady] = useState(false);
 
   const seedDefaults = useCallback(() => {
     if (!loadMockConfig()) {
@@ -79,6 +82,20 @@ export function MobileMockDraftArena() {
     myCounts,
     nextUserOverall,
   } = session;
+
+  // Warm IndexedDB Sleeper catalog + season board extras during splash so the
+  // lobby never mounts an empty player sheet (getCached / rate-budgeted).
+  useEffect(() => {
+    let cancelled = false;
+    void warmMockDraftClientCaches()
+      .catch(() => null)
+      .finally(() => {
+        if (!cancelled) setCacheReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Resume an in-progress session into live mode; otherwise stay in lobby.
   useEffect(() => {
@@ -150,13 +167,15 @@ export function MobileMockDraftArena() {
     setLive(true);
   };
 
-  if (!started) {
+  // Hold splash until config boots and the client catalog is warm — avoids the
+  // lobby flashing "Syncing players…" then rebuilding the sheet.
+  if (!started || !cacheReady || syncing) {
     return (
       <div
         className="fixed inset-0 z-40 mx-auto flex max-w-md flex-col items-center justify-center bg-m-bg px-6 text-center font-display text-sm font-semibold uppercase tracking-widest text-m-muted"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        Loading mock draft…
+        {syncing || !cacheReady ? "Syncing players…" : "Loading mock draft…"}
       </div>
     );
   }
@@ -326,25 +345,19 @@ export function MobileMockDraftArena() {
         ) : null}
       </header>
 
-      {syncing ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-m-muted">
-          Syncing players…
-        </div>
-      ) : (
-        <MobileMockDraftBoard
-          settings={settings}
-          picks={picks}
-          byId={byId}
-          currentOverall={currentOverall}
-          myTurn={myTurn}
-          complete={complete || inLobby}
-          jumpSignal={jumpSignal}
-          lobby={inLobby}
-          slotClaimed={slotClaimed}
-          onClaimSlot={claimSlot}
-          onOpenPlayer={openPlayer}
-        />
-      )}
+      <MobileMockDraftBoard
+        settings={settings}
+        picks={picks}
+        byId={byId}
+        currentOverall={currentOverall}
+        myTurn={myTurn}
+        complete={complete || inLobby}
+        jumpSignal={jumpSignal}
+        lobby={inLobby}
+        slotClaimed={slotClaimed}
+        onClaimSlot={claimSlot}
+        onOpenPlayer={openPlayer}
+      />
 
       <MobileMockDraftSheet
         tab={tab}
