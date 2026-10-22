@@ -503,7 +503,13 @@ export function PlayerDetail({
             </div>
           </div>
 
-          <div className="relative z-10 flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pb-9 pl-6 pr-12 text-left">
+          <div
+            className={cn(
+              // When the scoring menu is open, lift above Game Logs year chips (z-20 trap).
+              "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pb-9 pl-6 pr-12 text-left",
+              isScoringOpen ? "z-40" : "z-10",
+            )}
+          >
             {showDraftActions ? (
               draftRosterLabel ? (
                 <div className="mb-0.5 flex min-w-0 max-w-full items-center gap-1 text-[11px] font-semibold leading-snug text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.55)]">
@@ -615,14 +621,14 @@ export function PlayerDetail({
                 <span>
                   {`${Math.round(Number(startedPct ?? 0))}%`} STARTED
                 </span>
-                <div ref={scoringMenuRef} className="relative z-50 ml-6 inline-block text-left">
+                <div ref={scoringMenuRef} className="relative z-[60] ml-6 inline-block text-left">
                   <button
                     type="button"
                     aria-label="Scoring format"
                     aria-expanded={isScoringOpen}
                     aria-haspopup="listbox"
                     onClick={() => setIsScoringOpen(!isScoringOpen)}
-                    className="relative z-30 flex min-w-[64px] cursor-pointer items-center justify-between rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-white transition-all select-none hover:bg-white/15"
+                    className="relative flex min-w-[64px] cursor-pointer items-center justify-between rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-white transition-all select-none hover:bg-white/15"
                   >
                     <span>
                       {SCORING_OPTIONS.find((o) => o.value === scoringFormat)?.label ?? "HALF"}
@@ -637,7 +643,7 @@ export function PlayerDetail({
                     <div
                       role="listbox"
                       aria-label="Scoring formats"
-                      className="absolute top-full right-0 z-50 mt-1.5 flex w-20 origin-top-right transform flex-col overflow-visible rounded-lg border border-slate-200/80 bg-white py-0.5 text-left shadow-xl transition-all"
+                      className="absolute top-full right-0 z-[60] mt-1.5 flex w-20 origin-top-right flex-col overflow-visible rounded-lg border border-slate-200/80 bg-white py-0.5 text-left shadow-xl"
                     >
                       {SCORING_OPTIONS.map((option) => {
                         const active = scoringFormat === option.value;
@@ -1149,7 +1155,7 @@ function GameLogsPanel({
 
   return (
     <div className="w-full">
-      <div className="relative z-20 flex w-full select-none items-center space-x-2.5 overflow-x-auto whitespace-nowrap border-b border-slate-100 bg-white px-6 py-2.5 shadow-sm [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex w-full select-none items-center space-x-2.5 overflow-x-auto whitespace-nowrap border-b border-slate-100 bg-white px-6 py-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {availableSeasons.map((option) => {
           const isActive = season === option;
           return (
