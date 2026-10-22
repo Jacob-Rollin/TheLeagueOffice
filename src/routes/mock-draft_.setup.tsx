@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 
 
 export const Route = createFileRoute("/mock-draft_/setup")({
+  // Client-only setup — SSR would burn Fluid Active CPU on every visit.
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Mock Draft Setup — The League Office" },

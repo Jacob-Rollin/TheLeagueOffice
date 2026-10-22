@@ -44,6 +44,8 @@ const playersQuery = queryOptions({
 });
 
 export const Route = createFileRoute("/mock-draft")({
+  // Client-only simulator — SSR would burn Fluid Active CPU on every visit.
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Mock Draft Simulator — The League Office" },

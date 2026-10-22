@@ -1209,6 +1209,8 @@ function GameLogsPanel({
   const [season, setSeason] = useState<LogSeason>(
     () => availableSeasons[0] ?? "2026",
   );
+  // Career totals fan out multi-year Sleeper fetches — load only when expanded.
+  const [showCareer, setShowCareer] = useState(false);
 
   useEffect(() => {
     if (!availableSeasons.includes(season)) {
@@ -1230,14 +1232,22 @@ function GameLogsPanel({
   } = useLeagueProjections();
 
   const { data, isLoading } = useQuery({
-    // v2: past-week Proj columns from shared week projection bundles.
-    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v5"],
-    queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
+    // Season logs only on open — career is a separate opt-in fetch below.
+    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v5"],
+    queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
 
-  const career = data?.career ?? [];
+  const { data: careerData, isLoading: careerLoading } = useQuery({
+    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v5"],
+    queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
+    enabled: showCareer,
+    staleTime: 1000 * 60 * 15,
+    retry: false,
+  });
+
+  const career = careerData?.career ?? [];
 
   return (
     <div className="w-full">
@@ -1367,10 +1377,27 @@ function GameLogsPanel({
           </div>
 
           <div className="px-6 pb-6">
-            <span className="mb-2.5 mt-6 block w-full text-left text-xs font-black uppercase tracking-widest text-slate-900">
-              CAREER TOTALS
-            </span>
-            {career.length === 0 ? (
+            <div className="mb-2.5 mt-6 flex w-full items-center justify-between gap-3">
+              <span className="text-left text-xs font-black uppercase tracking-widest text-slate-900">
+                Career Totals
+              </span>
+              {!showCareer ? (
+                <button
+                  type="button"
+                  onClick={() => setShowCareer(true)}
+                  className="text-xs font-semibold text-blue-700 transition-colors hover:text-blue-900"
+                >
+                  Load career
+                </button>
+              ) : null}
+            </div>
+            {!showCareer ? (
+              <p className="py-4 text-center text-sm text-slate-400">
+                Season logs load first. Expand career totals when you need prior years.
+              </p>
+            ) : careerLoading ? (
+              <p className="py-4 text-center text-sm text-slate-400">Loading career totals…</p>
+            ) : career.length === 0 ? (
               <p className="py-4 text-center text-sm text-slate-400">No career season totals yet.</p>
             ) : (
               <div className="overflow-x-auto">

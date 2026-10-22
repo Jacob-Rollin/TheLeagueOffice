@@ -16,13 +16,14 @@ import {
   nextPicksFor,
   positionNeeds,
   POSITIONS,
-  FLEX_POSITIONS,
   byeMatrix,
+  fillRoster,
   roundOf,
   SCORING_LABEL,
   teamName,
   type Pick as DraftPick,
   type Player,
+  type Pos,
   type Settings,
 } from "@/lib/draft";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
@@ -35,6 +36,8 @@ const playersQuery = queryOptions({
   staleTime: 1000 * 60 * 30,
 });
 export const Route = createFileRoute("/draft")({
+  // Client catalog only — SSR would burn Fluid Active CPU on every visit.
+  ssr: false,
   head: () => ({
     meta: [
       { title: "War Room — The League Office" },
@@ -198,7 +201,7 @@ function DraftRoom() {
             onClick={cache.resync}
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
-            [ ↻ Resync ]
+            Resync
           </button>
         </div>
         <nav className="flex gap-1 px-3 py-2">
@@ -246,29 +249,19 @@ function DraftRoom() {
         )}
 
         {tab === "team" && (
-          <div className="mb-3 flex flex-col gap-3 md:mb-0 md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)]">
-            <div className="rounded-xl border border-border bg-card p-3">
-              <div className="mb-2 font-display text-sm uppercase tracking-widest">
-                Bye Week Matrix
-              </div>
-              {myPlayers.length ? (
-                <ByeMatrix players={myPlayers} layout="column" />
-              ) : (
-                <p className="p-3 text-center text-xs text-muted-foreground">
-                  Draft players to see bye weeks.
-                </p>
-              )}
-            </div>
-            <RosterTelemetry players={myPlayers} settings={settings} />
+          <div className="mb-3 md:mb-0 md:sticky md:top-[calc(var(--wr-header-h,0px)+0.75rem)]">
+            <RosterAnalysisPanel players={myPlayers} settings={settings} />
           </div>
         )}
 
         <div className="flex min-w-0 flex-col gap-3">
           {tab === "team" && (
-            <div className="rounded-xl border border-border bg-card">
-              <div className="border-b border-border px-3 py-2">
-                <div className="font-display text-sm uppercase tracking-widest">My Team</div>
-                <div className="text-[11px] text-muted-foreground">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 bg-slate-50/80 px-3 py-2">
+                <div className="font-display text-sm uppercase tracking-widest text-slate-900">
+                  My Team
+                </div>
+                <div className="text-[11px] text-slate-500">
                   {teamName(settings, settings.myTeam)}
                 </div>
               </div>
@@ -348,91 +341,132 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
   );
 }
 
-function RosterTelemetry({
+const POS_BAR_CLASS: Record<string, string> = {
+  QB: "bg-qb",
+  RB: "bg-rb",
+  WR: "bg-wr",
+  TE: "bg-te",
+  K: "bg-k",
+  DEF: "bg-def",
+  FLEX: "bg-primary",
+};
+
+function posDisplayLabel(pos: string): string {
+  return pos === "DEF" ? "DST" : pos;
+}
+
+function RosterAnalysisPanel({
   players,
   settings,
 }: {
   players: Player[];
   settings: Settings;
 }) {
-  const alerts: { level: "critical" | "warn" | "ok"; tag: string; text: string }[] = [];
-  const counts: Record<string, number> = {};
-  for (const p of players) counts[p.pos] = (counts[p.pos] ?? 0) + 1;
+  const slots = fillRoster(players, settings.roster);
+  const starterSlots = slots.filter((s) => s.slot !== "BN");
+  const unfilledStarters = starterSlots.filter((s) => !s.player);
 
-  // Full roster capacity: dedicated starters (+ flex share for flex-eligible spots)
-  const tiers = POSITIONS.map((pos) => {
-    const starters =
-      Math.max(0, settings.roster[pos]) + (FLEX_POSITIONS.includes(pos) ? settings.roster.FLEX : 0);
-    const required = Math.max(1, starters);
-    const have = counts[pos] ?? 0;
-    const startersFilled = Math.min(have, required);
-    const bench = Math.max(0, have - required);
-    const pct = Math.min(100, Math.round((startersFilled / required) * 100));
-    const label = `${startersFilled}/${required} Starters (${bench > 0 ? `+${bench}` : "0"} Bench)`;
-    return { pos, have, required, startersFilled, bench, pct, label };
+  // Dedicated slots + a single FLEX row (do not add FLEX into every flex position).
+  const tierKeys: Array<Pos | "FLEX"> = [
+    ...POSITIONS.filter((pos) => settings.roster[pos] > 0),
+    ...(settings.roster.FLEX > 0 ? (["FLEX"] as const) : []),
+  ];
+  const tiers = tierKeys.map((key) => {
+    const required = key === "FLEX" ? settings.roster.FLEX : settings.roster[key];
+    const filled = starterSlots.filter((s) => s.slot === key && s.player).length;
+    const pct = required > 0 ? Math.min(100, Math.round((filled / required) * 100)) : 0;
+    return {
+      key,
+      label: posDisplayLabel(key),
+      required,
+      filled,
+      pct,
+      complete: filled >= required,
+    };
   });
 
+  const alerts: { level: "critical" | "warn" | "ok"; text: string }[] = [];
   for (const t of tiers) {
-    if (t.startersFilled < t.required) {
+    if (!t.complete) {
       alerts.push({
         level: "critical",
-        tag: "CRITICAL",
-        text: `${t.pos} starting slots unfilled — ${t.startersFilled}/${t.required} rostered`,
+        text: `${t.label} starting slots unfilled — ${t.filled}/${t.required} rostered`,
       });
-    } else if (t.bench === 0) {
-      alerts.push({ level: "ok", tag: "OK", text: `${t.pos} starters filled — no bench depth yet` });
     }
   }
-
 
   const { weeks, unknown } = byeMatrix(players);
-  for (const w of weeks) {
-    if (w.conflict) {
-      alerts.push({
-        level: "warn",
-        tag: "WARN",
-        text: `Week ${w.week} bye conflict — ${w.players.length} players idle (${w.players.map((p) => p.pos).join(", ")})`,
-      });
-    }
+  const crowdedWeeks = weeks.filter((w) => w.conflict);
+  for (const w of crowdedWeeks) {
+    alerts.push({
+      level: "warn",
+      text: `Week ${w.week} bye cluster — ${w.players.length} players idle (${w.players.map((p) => posDisplayLabel(p.pos)).join(", ")})`,
+    });
   }
   if (unknown.length) {
-    alerts.push({ level: "warn", tag: "WARN", text: `Bye week unknown for ${unknown.map((p) => p.name).join(", ")}` });
+    alerts.push({
+      level: "warn",
+      text: `Bye week unknown for ${unknown.map((p) => p.name).join(", ")}`,
+    });
   }
   if (!players.length) {
-    alerts.push({ level: "warn", tag: "WARN", text: "No players drafted yet — awaiting roster input" });
-  } else if (!alerts.length) {
-    alerts.push({ level: "ok", tag: "OK", text: "Starting lineup filled, no bye clusters detected" });
+    alerts.push({ level: "warn", text: "No players drafted yet." });
+  } else if (alerts.length === 0 && unfilledStarters.length === 0) {
+    alerts.push({ level: "ok", text: "Starting lineup filled with no bye clusters." });
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card">
-      <div className="border-b border-border px-3 py-2 font-display text-sm uppercase tracking-widest">
-        Roster Analysis
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 bg-slate-50/80 px-3 py-2">
+        <div className="font-display text-sm uppercase tracking-widest text-slate-900">
+          Roster Analysis
+        </div>
+        <div className="text-[11px] text-slate-500">
+          Depth, bye weeks, and lineup gaps
+        </div>
       </div>
-      <div className="grid gap-4 p-3">
+
+      <div className="grid gap-5 p-3">
         <section>
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            Position Depth Tiers
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h3 className="font-display text-xs uppercase tracking-widest text-slate-500">
+              Bye weeks
+            </h3>
+            <span className="tabnum text-xs text-slate-500">
+              {crowdedWeeks.length
+                ? `${crowdedWeeks.length} crowded`
+                : players.length
+                  ? "No conflicts"
+                  : ""}
+            </span>
           </div>
-          <ul className="space-y-2">
+          {players.length ? (
+            <ByeMatrix players={players} layout="column" hideTitle />
+          ) : (
+            <p className="py-2 text-center text-xs text-slate-500">
+              Draft players to see bye weeks.
+            </p>
+          )}
+        </section>
+
+        <section>
+          <h3 className="mb-2 font-display text-xs uppercase tracking-widest text-slate-500">
+            Position depth
+          </h3>
+          <ul className="space-y-2.5">
             {tiers.map((t) => (
-              <li key={t.pos} className="space-y-1">
-                <div className="flex items-center justify-between gap-2 font-mono text-[11px]">
-                  <span className="font-semibold">{t.pos}</span>
-                  <span
-                    className={cn(
-                      t.startersFilled < t.required ? "text-destructive" : "text-primary",
-                    )}
-                  >
-                    {t.label}
+              <li key={t.key} className="space-y-1">
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="font-semibold text-slate-800">{t.label}</span>
+                  <span className={cn(t.complete ? "text-slate-500" : "font-semibold text-red-600")}>
+                    {t.filled}/{t.required} starters
                   </span>
                 </div>
-
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all",
-                      t.startersFilled < t.required ? "bg-destructive" : "bg-primary",
+                      t.complete ? (POS_BAR_CLASS[t.key] ?? "bg-primary") : "bg-red-500",
                     )}
                     style={{ width: `${t.pct}%` }}
                   />
@@ -441,25 +475,37 @@ function RosterTelemetry({
             ))}
           </ul>
         </section>
+
         <section>
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            System Diagnostics Log
-          </div>
-          <ul className="space-y-1.5 font-mono text-[11px]">
+          <h3 className="mb-2 font-display text-xs uppercase tracking-widest text-slate-500">
+            Notes
+          </h3>
+          <ul className="space-y-1.5 text-[12px] leading-snug">
             {alerts.map((a, i) => (
               <li
                 key={i}
                 className={cn(
-                  "flex items-start gap-2 rounded border px-2 py-1.5",
+                  "rounded-md border-l-4 px-2.5 py-1.5",
                   a.level === "critical"
-                    ? "border-destructive/50 bg-destructive/10 text-destructive"
+                    ? "border-l-red-500 bg-red-50 text-slate-800"
                     : a.level === "warn"
-                      ? "border-amber-500/50 bg-amber-500/10 text-amber-500"
-                      : "border-primary/40 bg-primary/10 text-primary",
+                      ? "border-l-amber-500 bg-amber-50 text-slate-800"
+                      : "border-l-blue-600 bg-blue-50 text-slate-800",
                 )}
               >
-                <span className="shrink-0 font-semibold">[{a.tag}]</span>
-                <span className="min-w-0 text-foreground/80">{a.text}</span>
+                <span
+                  className={cn(
+                    "mr-1.5 font-semibold",
+                    a.level === "critical"
+                      ? "text-red-700"
+                      : a.level === "warn"
+                        ? "text-amber-700"
+                        : "text-blue-700",
+                  )}
+                >
+                  {a.level === "critical" ? "Critical" : a.level === "warn" ? "Warning" : "OK"}
+                </span>
+                <span className="text-slate-700">{a.text}</span>
               </li>
             ))}
           </ul>
@@ -467,5 +513,4 @@ function RosterTelemetry({
       </div>
     </div>
   );
-
 }
