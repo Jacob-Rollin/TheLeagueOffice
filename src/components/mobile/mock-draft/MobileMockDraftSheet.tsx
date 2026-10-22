@@ -144,7 +144,11 @@ export function MobileMockDraftSheet({
       const current = dragPct ?? SNAP_PCT[snap];
       const mid = (SNAP_PCT.peek + SNAP_PCT.expanded) / 2;
       setSnap(current >= mid ? "expanded" : "peek");
+      // Swallow the click that follows a drag; clear if no click arrives.
       suppressTabClickRef.current = true;
+      window.setTimeout(() => {
+        suppressTabClickRef.current = false;
+      }, 50);
     }
     setDragPct(null);
     dragRef.current = null;
