@@ -24,6 +24,11 @@ import {
   type Settings,
 } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
+import {
+  EMPTY_COUNTING_STATS,
+  POS_STAT_COLUMNS,
+  type CountingStats,
+} from "@/lib/players-build";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
 import { cn } from "@/lib/utils";
 
@@ -432,7 +437,6 @@ function PlayersPane({
   const [watchOnly, setWatchOnly] = useState(false);
   const [draftedOnly, setDraftedOnly] = useState(false);
   const [showPrevYear, setShowPrevYear] = useState(false);
-  const [showMiniNames, setShowMiniNames] = useState(false);
   const deferredQuery = useDeferredValue(query);
 
   const filtered = useMemo(() => {
@@ -533,8 +537,12 @@ function PlayersPane({
       <AxisLockedScroll
         className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
         onScroll={(e) => {
-          const next = e.currentTarget.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
-          setShowMiniNames((prev) => (prev === next ? prev : next));
+          // Class toggle only — avoid React state (was re-rendering every row).
+          const el = e.currentTarget;
+          const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
+          if (el.classList.contains("is-scrolled-x") !== on) {
+            el.classList.toggle("is-scrolled-x", on);
+          }
         }}
       >
         {filtered.length === 0 ? (
@@ -568,7 +576,6 @@ function PlayersPane({
                 complete={complete || draftedOnly}
                 showPrevYear={showPrevYear}
                 prevYear={prevYear}
-                showMiniName={showMiniNames}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
@@ -627,8 +634,6 @@ function QueuePane({
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
-  const [showMiniNames, setShowMiniNames] = useState(false);
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-end gap-2 px-3 py-2">
@@ -665,8 +670,11 @@ function QueuePane({
         <AxisLockedScroll
           className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
           onScroll={(e) => {
-            const next = e.currentTarget.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
-            setShowMiniNames((prev) => (prev === next ? prev : next));
+            const el = e.currentTarget;
+            const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
+            if (el.classList.contains("is-scrolled-x") !== on) {
+              el.classList.toggle("is-scrolled-x", on);
+            }
           }}
         >
           <div className="min-w-max">
@@ -681,7 +689,6 @@ function QueuePane({
                 complete={complete}
                 showPrevYear={false}
                 prevYear={0}
-                showMiniName={showMiniNames}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
@@ -804,9 +811,8 @@ function TeamPane({
 }
 
 /**
- * Full row scrolls (Draft + name + star + stats). When the list is scrolled past
- * the name zone, a thin sticky mini-name line appears (Sleeper). Stars use a
- * fixed column so they stay vertically aligned.
+ * Full row scrolls (Draft + name + star + stats). Mini name sticks via CSS when
+ * the scroll parent has `.is-scrolled-x` (no React re-render on pan).
  */
 function PlayerStatsRow({
   player,
@@ -817,7 +823,6 @@ function PlayerStatsRow({
   complete,
   showPrevYear,
   prevYear,
-  showMiniName = false,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -830,50 +835,50 @@ function PlayerStatsRow({
   complete: boolean;
   showPrevYear: boolean;
   prevYear: number;
-  showMiniName?: boolean;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
   const v = value(player, settings.scoring);
   const short = shortName(player.name);
-  const yearLabel = String(prevYear);
-  const yearShort = `'${yearLabel.slice(-2)}`;
+  const yearShort = `'${String(prevYear).slice(-2)}`;
   const meta = `${posDisplayLabel(player.pos)} - ${player.team}${player.bye ? ` (${player.bye})` : ""}`;
   const injury = injuryBadgeInfo(
     resolveInjuryStatus(player) ?? player.injury_status ?? player.injury,
   );
+  const projLine: CountingStats = player.projLine ?? EMPTY_COUNTING_STATS;
+  const prevLine = player.prevLine;
+  const prevAdp = player.prevAdp?.[settings.scoring];
+  const posCols = POS_STAT_COLUMNS[player.pos] ?? [];
 
   return (
     <div className="border-b border-m-border/60">
-      {showMiniName ? (
-        <div className="sticky left-0 z-20 w-max max-w-[75vw] bg-m-sheet px-1 py-0.5">
-          <button
-            type="button"
-            onClick={() => onOpenPlayer(player.id)}
-            className="flex items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
-          >
-            <span className="truncate text-m-card-fg">{short}</span>
+      <div className="sticky left-0 z-20 hidden w-max max-w-[75vw] bg-m-sheet px-1 py-0.5 [.is-scrolled-x_&]:block">
+        <button
+          type="button"
+          onClick={() => onOpenPlayer(player.id)}
+          className="flex items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
+        >
+          <span className="truncate text-m-card-fg">{short}</span>
+          <span
+            className={cn("size-1 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
+            aria-hidden
+          />
+          <span className="truncate">{meta}</span>
+          {injury ? (
             <span
-              className={cn("size-1 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
-              aria-hidden
-            />
-            <span className="truncate">{meta}</span>
-            {injury ? (
-              <span
-                title={injury.text}
-                className={cn(
-                  "inline-flex h-3.5 min-w-[0.9rem] shrink-0 items-center justify-center rounded px-0.5 text-[8px] font-black leading-none",
-                  injury.className,
-                )}
-              >
-                {injury.letter}
-              </span>
-            ) : null}
-          </button>
-          <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
-        </div>
-      ) : null}
+              title={injury.text}
+              className={cn(
+                "inline-flex h-3.5 min-w-[0.9rem] shrink-0 items-center justify-center rounded px-0.5 text-[8px] font-black leading-none",
+                injury.className,
+              )}
+            >
+              {injury.letter}
+            </span>
+          ) : null}
+        </button>
+        <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
+      </div>
 
       <div className="flex items-stretch gap-1.5 py-1.5">
         {!complete ? (
@@ -933,30 +938,40 @@ function PlayerStatsRow({
         </button>
         <div className="flex shrink-0 items-center gap-3 self-center pr-4">
           <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
+          {showPrevYear ? (
+            <StatCell
+              label={`${yearShort} ADP`}
+              value={prevAdp != null && prevAdp < 900 ? prevAdp.toFixed(1) : "—"}
+              muted
+            />
+          ) : null}
           <StatCell label="Pts" value={v.proj > 0 ? v.proj.toFixed(1) : "—"} />
           {showPrevYear ? (
             <StatCell
-              label={yearShort}
+              label={`${yearShort} Pts`}
               value={v.prev != null && v.prev > 0 ? v.prev.toFixed(1) : "—"}
               muted
             />
           ) : null}
-          <StatCell label="Rank" value={v.rank < 900 ? String(v.rank) : "—"} />
-          <StatCell
-            label="Pos rk"
-            value={player.posRank > 0 ? `${posDisplayLabel(player.pos)}${player.posRank}` : "—"}
-          />
-          <StatCell
-            label="ADP lo"
-            value={player.adpRange.min < 900 ? player.adpRange.min.toFixed(0) : "—"}
-          />
-          <StatCell
-            label="ADP hi"
-            value={player.adpRange.max < 900 ? player.adpRange.max.toFixed(0) : "—"}
-          />
-          <StatCell label="Age" value={player.age != null ? String(player.age) : "—"} />
-          <StatCell label="Bye" value={player.bye != null ? String(player.bye) : "—"} />
-          <StatCell label="Exp" value={player.exp != null ? String(player.exp) : "—"} />
+          {posCols.map((col) => {
+            const cur = projLine[col.key];
+            const prior = prevLine?.[col.key];
+            return (
+              <div key={col.key} className="flex shrink-0 items-center gap-3">
+                <StatCell
+                  label={col.label}
+                  value={cur > 0 ? cur.toFixed(col.digits) : "—"}
+                />
+                {showPrevYear ? (
+                  <StatCell
+                    label={yearShort}
+                    value={prior != null && prior > 0 ? prior.toFixed(col.digits) : "—"}
+                    muted
+                  />
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

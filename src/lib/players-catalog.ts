@@ -6,7 +6,7 @@
 import { buildPlayersPayload, type PlayersPayload } from "@/lib/players-build";
 import { getCached } from "@/lib/sleeper-cache";
 
-const CACHE_KEY = "players-v3";
+const CACHE_KEY = "players-v4";
 const DAY = 1000 * 60 * 60 * 24;
 
 export type { PlayersPayload };

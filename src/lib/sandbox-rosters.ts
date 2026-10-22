@@ -1,5 +1,6 @@
 import type { Player, Pos } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
+import { EMPTY_COUNTING_STATS } from "@/lib/players-build";
 
 /**
  * Shared sandbox/demo roster sourcing.
@@ -145,6 +146,9 @@ function stubPlayer(spec: SandboxSpec): Player {
     posRank: 999,
     proj: { std: 0, half: 0, ppr: 0 },
     prev: { std: 0, half: 0, ppr: 0 },
+    projLine: { ...EMPTY_COUNTING_STATS },
+    prevLine: null,
+    prevAdp: null,
   };
 }
 

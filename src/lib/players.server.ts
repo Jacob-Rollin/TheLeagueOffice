@@ -1,5 +1,6 @@
 import {
   POSITIONS,
+  SLEEPER_BASE,
   adpPick,
   adpSpread,
   buildPlayersFromRows,
@@ -394,13 +395,23 @@ type Built = {
 const buildPlayers = memo<Built>(6 * HOUR, async () => {
   const { season, rows: projRows } = await projectionsFor(currentSeason());
   const prevSeason = String(Number(season) - 1);
-  const prevStats = await seasonStats(prevSeason);
-  const byeByTeam = await byeWeeks(season).catch(() => new Map<string, number>());
+  const [prevStats, byeByTeam, prevProjRows] = await Promise.all([
+    seasonStats(prevSeason),
+    byeWeeks(season).catch(() => new Map<string, number>()),
+    fetchRows(
+      `${SLEEPER_BASE}/projections/nfl/${prevSeason}?season_type=regular&${positionsQuery()}&order_by=adp_half_ppr`,
+    ).catch(() => [] as SleeperRow[]),
+  ]);
+  const prevProjById = new Map<string, Stats>();
+  for (const row of prevProjRows) {
+    if (row.stats) prevProjById.set(row.player_id, row.stats);
+  }
 
   const { players: all, rawProj } = buildPlayersFromRows({
     season,
     projRows,
     prevStats,
+    prevProjById,
     byeByTeam,
   });
 
