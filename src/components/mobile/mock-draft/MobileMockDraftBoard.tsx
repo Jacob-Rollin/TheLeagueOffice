@@ -1,0 +1,152 @@
+import { useEffect, useRef } from "react";
+import { Timer } from "lucide-react";
+
+import {
+  roundOf,
+  teamForPick,
+  teamName,
+  type Pick,
+  type Player,
+  type Settings,
+} from "@/lib/draft";
+import { cn } from "@/lib/utils";
+
+import { posCellClass } from "./posCellStyles";
+
+export function MobileMockDraftBoard({
+  settings,
+  picks,
+  byId,
+  currentOverall,
+  myTurn,
+  complete,
+  jumpSignal = 0,
+}: {
+  settings: Settings;
+  picks: Pick[];
+  byId: Map<string, Player>;
+  currentOverall: number;
+  myTurn: boolean;
+  complete: boolean;
+  /** Increment to re-center the on-the-clock cell. */
+  jumpSignal?: number;
+}) {
+  const pickByOverall = new Map(picks.map((p) => [p.overall, p]));
+  const clockRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    clockRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [currentOverall, jumpSignal]);
+
+  const colW = 112;
+
+  return (
+    <div className="min-h-0 flex-1 overflow-auto">
+      <div
+        className="inline-grid gap-1 p-2 pb-4"
+        style={{
+          gridTemplateColumns: `repeat(${settings.teams}, ${colW}px)`,
+          minWidth: settings.teams * (colW + 4),
+        }}
+      >
+        {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => (
+          <div
+            key={`h-${t}`}
+            className={cn(
+              "sticky top-0 z-10 flex flex-col items-center gap-1 rounded-lg bg-m-bg/95 px-1 py-2 backdrop-blur",
+              t === settings.myTeam && "ring-1 ring-m-accent",
+            )}
+          >
+            <span className="flex size-8 items-center justify-center rounded-full bg-m-chip text-[10px] font-bold text-m-chip-fg">
+              {t === settings.myTeam ? "You" : "AI"}
+            </span>
+            <span className="max-w-full truncate text-center text-[11px] font-semibold text-m-card-fg">
+              {teamName(settings, t)}
+            </span>
+          </div>
+        ))}
+
+        {Array.from({ length: settings.rounds }, (_, r) => r + 1).map((round) => {
+          const ltr = !settings.snake || round % 2 === 1;
+          return Array.from({ length: settings.teams }, (_, i) => {
+            const team = i + 1;
+            const overall = Array.from(
+              { length: settings.teams },
+              (_, k) => (round - 1) * settings.teams + k + 1,
+            ).find((o) => teamForPick(o, settings.teams, settings.snake) === team)!;
+            const pick = pickByOverall.get(overall);
+            const player = pick ? byId.get(pick.playerId) : undefined;
+            const isClock = !complete && overall === currentOverall;
+            const pickLabel = `${round}.${(((overall - 1) % settings.teams) + 1)}`;
+
+            return (
+              <div
+                key={`${round}-${team}`}
+                ref={isClock ? clockRef : undefined}
+                className={cn(
+                  "relative flex h-[72px] flex-col justify-between overflow-hidden rounded-lg px-1.5 py-1.5",
+                  player
+                    ? posCellClass(player.pos)
+                    : isClock
+                      ? "bg-m-card ring-2 ring-m-accent"
+                      : "bg-m-card/70 text-m-muted",
+                )}
+              >
+                {player ? (
+                  <>
+                    <div className="flex items-start justify-between gap-1">
+                      <span className="truncate text-[9px] font-bold uppercase opacity-80">
+                        {player.pos === "DEF" ? "DST" : player.pos} · {player.team}
+                        {player.bye ? ` (${player.bye})` : ""}
+                      </span>
+                      <span className="tabnum shrink-0 text-[9px] font-semibold opacity-70">
+                        {pickLabel}
+                      </span>
+                    </div>
+                    <span className="line-clamp-2 text-[12px] font-bold leading-tight">
+                      {shortName(player.name)}
+                    </span>
+                    <span
+                      className="absolute bottom-1 right-1.5 text-[10px] opacity-50"
+                      aria-hidden
+                    >
+                      {ltr ? "→" : "←"}
+                    </span>
+                  </>
+                ) : isClock ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-1 text-m-accent">
+                    <Timer className="size-3.5" strokeWidth={2.5} />
+                    <span className="font-display text-[10px] font-bold uppercase tracking-wider">
+                      {myTurn ? "Your pick" : "On the clock"}
+                    </span>
+                    <span className="tabnum text-[10px] text-m-muted">{pickLabel}</span>
+                  </div>
+                ) : (
+                  <>
+                    <span className="tabnum self-end text-[10px]">{pickLabel}</span>
+                    <span className="absolute bottom-1 right-1.5 text-[10px] opacity-40" aria-hidden>
+                      {ltr ? "→" : "←"}
+                    </span>
+                  </>
+                )}
+              </div>
+            );
+          });
+        })}
+      </div>
+    </div>
+  );
+}
+
+function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+  const first = parts[0]!;
+  return `${first[0]}. ${parts.slice(1).join(" ")}`;
+}
+
+export function pickLabelForOverall(overall: number, teams: number): string {
+  const round = roundOf(overall, teams);
+  const slot = ((overall - 1) % teams) + 1;
+  return `${round}.${slot}`;
+}
