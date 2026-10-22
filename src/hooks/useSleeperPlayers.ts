@@ -4,8 +4,8 @@ import { applyLiveInjuryOverlay, useLiveInjuryStatuses } from "@/hooks/useLiveIn
 import { buildPlayersPayload, type PlayersPayload } from "@/lib/players-build";
 import { clearCache, getCached, readCache } from "@/lib/sleeper-cache";
 
-// v3: catalog drops all-zero projection stubs (hasScorableProjectionStats).
-const CACHE_KEY = "players-v3";
+// v4: catalog includes proj/prev counting lines + prior-season ADP for draft boards.
+const CACHE_KEY = "players-v4";
 const DAY = 1000 * 60 * 60 * 24;
 
 export type SleeperPlayersState = {

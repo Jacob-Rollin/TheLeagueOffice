@@ -14,7 +14,7 @@ export type PlayerNewsClient = {
   items: NewsItem[];
 };
 
-const CATALOG_KEY = "players-v3";
+const CATALOG_KEY = "players-v4";
 const HOUR = 60 * 60 * 1000;
 
 function allowFluidFallback(): boolean {

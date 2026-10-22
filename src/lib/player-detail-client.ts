@@ -13,7 +13,7 @@ import { sosFromBoard } from "@/lib/sos-from-board";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import type { PlayersPayload } from "@/lib/players-build";
 
-const CATALOG_KEY = "players-v3";
+const CATALOG_KEY = "players-v4";
 
 function emptySeasonLine(season: string, raw: Record<string, number> = {}): SeasonLine {
   return {

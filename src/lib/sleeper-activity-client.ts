@@ -11,7 +11,7 @@ import { sleeperFetchJson } from "@/lib/sleeper-http";
 
 const SLEEPER = "https://api.sleeper.app/v1";
 const ACTIVITY_TTL_MS = 5 * 60 * 1000;
-const CATALOG_KEY = "players-v3";
+const CATALOG_KEY = "players-v4";
 /** Cap season transaction week fan-out (same spirit as projection week pools). */
 const TXN_WEEK_CONCURRENCY = 2;
 

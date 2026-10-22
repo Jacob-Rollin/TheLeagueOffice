@@ -9,6 +9,117 @@ import { hasScorableProjectionStats } from "./scoring-map";
 
 export type Pos = "QB" | "RB" | "WR" | "TE" | "K" | "DEF";
 
+/** Slim counting-stat line shared by season projections and prior-year totals. */
+export type CountingStats = {
+  pass_yd: number;
+  pass_td: number;
+  pass_int: number;
+  rush_att: number;
+  rush_yd: number;
+  rush_td: number;
+  rec_tgt: number;
+  rec: number;
+  rec_yd: number;
+  rec_td: number;
+  fgm: number;
+  fga: number;
+  xpm: number;
+  sack: number;
+  int: number;
+  fum_rec: number;
+  def_st_td: number;
+  pts_allow: number;
+};
+
+export const EMPTY_COUNTING_STATS: CountingStats = {
+  pass_yd: 0,
+  pass_td: 0,
+  pass_int: 0,
+  rush_att: 0,
+  rush_yd: 0,
+  rush_td: 0,
+  rec_tgt: 0,
+  rec: 0,
+  rec_yd: 0,
+  rec_td: 0,
+  fgm: 0,
+  fga: 0,
+  xpm: 0,
+  sack: 0,
+  int: 0,
+  fum_rec: 0,
+  def_st_td: 0,
+  pts_allow: 0,
+};
+
+/** Position → draft-board columns (Sleeper key + short label + decimals). */
+export const POS_STAT_COLUMNS: Record<Pos, Array<{ key: keyof CountingStats; label: string; digits: number }>> = {
+  QB: [
+    { key: "pass_yd", label: "Pass Yd", digits: 0 },
+    { key: "pass_td", label: "Pass TD", digits: 0 },
+    { key: "pass_int", label: "INT", digits: 0 },
+    { key: "rush_yd", label: "Rush Yd", digits: 0 },
+    { key: "rush_td", label: "Rush TD", digits: 0 },
+  ],
+  RB: [
+    { key: "rush_att", label: "Att", digits: 0 },
+    { key: "rush_yd", label: "Rush Yd", digits: 0 },
+    { key: "rush_td", label: "Rush TD", digits: 0 },
+    { key: "rec", label: "Rec", digits: 0 },
+    { key: "rec_yd", label: "Rec Yd", digits: 0 },
+    { key: "rec_td", label: "Rec TD", digits: 0 },
+  ],
+  WR: [
+    { key: "rec_tgt", label: "Tgt", digits: 0 },
+    { key: "rec", label: "Rec", digits: 0 },
+    { key: "rec_yd", label: "Rec Yd", digits: 0 },
+    { key: "rec_td", label: "Rec TD", digits: 0 },
+    { key: "rush_yd", label: "Rush Yd", digits: 0 },
+  ],
+  TE: [
+    { key: "rec_tgt", label: "Tgt", digits: 0 },
+    { key: "rec", label: "Rec", digits: 0 },
+    { key: "rec_yd", label: "Rec Yd", digits: 0 },
+    { key: "rec_td", label: "Rec TD", digits: 0 },
+  ],
+  K: [
+    { key: "fgm", label: "FGM", digits: 0 },
+    { key: "fga", label: "FGA", digits: 0 },
+    { key: "xpm", label: "XPM", digits: 0 },
+  ],
+  DEF: [
+    { key: "sack", label: "Sack", digits: 0 },
+    { key: "int", label: "INT", digits: 0 },
+    { key: "fum_rec", label: "FR", digits: 0 },
+    { key: "def_st_td", label: "TD", digits: 0 },
+    { key: "pts_allow", label: "PA", digits: 0 },
+  ],
+};
+
+export function countingStatsFrom(stats: Stats | null | undefined): CountingStats {
+  const s = stats ?? {};
+  return {
+    pass_yd: num(s["pass_yd"], 0),
+    pass_td: num(s["pass_td"], 0),
+    pass_int: num(s["pass_int"], 0),
+    rush_att: num(s["rush_att"], 0),
+    rush_yd: num(s["rush_yd"], 0),
+    rush_td: num(s["rush_td"], 0),
+    rec_tgt: num(s["rec_tgt"], 0),
+    rec: num(s["rec"], 0),
+    rec_yd: num(s["rec_yd"], 0),
+    rec_td: num(s["rec_td"], 0),
+    fgm: num(s["fgm"], 0),
+    fga: num(s["fga"], 0),
+    xpm: num(s["xpm"], 0),
+    sack: num(s["sack"], 0),
+    int: num(s["int"], 0),
+    fum_rec: num(s["fum_rec"], 0),
+    def_st_td: num(s["def_st_td"], 0),
+    pts_allow: num(s["pts_allow"], 0),
+  };
+}
+
 export type Player = {
   id: string;
   name: string;
@@ -31,6 +142,12 @@ export type Player = {
   posRank: number;
   proj: { std: number; half: number; ppr: number };
   prev: { std: number; half: number; ppr: number } | null;
+  /** Season projection counting stats (pass/rush/rec/…). Absent on legacy stubs. */
+  projLine?: CountingStats;
+  /** Prior-season actual counting stats when available. */
+  prevLine?: CountingStats | null;
+  /** Prior-season ADP by scoring format (999 when unknown). */
+  prevAdp?: { std: number; half: number; ppr: number } | null;
   /** Sandbox/demo override for injury badge rendering. */
   injuryStatus?: string;
   /** Sleeper native affected body region (e.g. Hamstring). */
@@ -158,9 +275,11 @@ export function buildPlayersFromRows(input: {
   season: string;
   projRows: SleeperRow[];
   prevStats: Map<string, Stats>;
+  /** Optional prior-season projection rows — used only for historical ADP. */
+  prevProjById?: Map<string, Stats>;
   byeByTeam: Map<string, number>;
 }): { players: Player[]; rawProj: Map<string, Stats> } {
-  const { season: _season, projRows, prevStats, byeByTeam } = input;
+  const { season: _season, projRows, prevStats, prevProjById, byeByTeam } = input;
   const players: Player[] = [];
   const rawProj = new Map<string, Stats>();
 
@@ -184,8 +303,12 @@ export function buildPlayersFromRows(input: {
     if (!name) continue;
 
     const prev = prevStats.get(row.player_id);
+    const prevProj = prevProjById?.get(row.player_id);
     rawProj.set(row.player_id, s);
     const injuryStatus = p.injury_status ?? null;
+    const prevAdpHalf = prevProj
+      ? adpPick(prevProj["adp_half_ppr"], prevProj["adp_ppr"], prevProj["adp_std"])
+      : 999;
     players.push({
       id: row.player_id,
       name,
@@ -220,6 +343,16 @@ export function buildPlayersFromRows(input: {
             ppr: num(prev["pts_ppr"], 0),
           }
         : null,
+      projLine: countingStatsFrom(s),
+      prevLine: prev ? countingStatsFrom(prev) : null,
+      prevAdp:
+        prevProj && prevAdpHalf < 999
+          ? {
+              std: adpPick(prevProj["adp_std"], prevProj["adp_half_ppr"], prevProj["adp_ppr"]),
+              half: prevAdpHalf,
+              ppr: adpPick(prevProj["adp_ppr"], prevProj["adp_half_ppr"], prevProj["adp_std"]),
+            }
+          : null,
     });
   }
 
@@ -290,17 +423,27 @@ export async function fetchSchedule(season: string, type = "regular"): Promise<S
   return Array.isArray(json) ? json : [];
 }
 
-/** Full client-side build: three Sleeper calls, one ranked payload. */
+/** Full client-side build: current projections + prior stats/ADP, one ranked payload. */
 export async function buildPlayersPayload(): Promise<PlayersPayload> {
   const { season, rows } = await fetchProjections(currentSeason());
-  const [prevStats, schedule] = await Promise.all([
-    fetchSeasonStats(String(Number(season) - 1)),
+  const prevSeason = String(Number(season) - 1);
+  const [prevStats, schedule, prevProj] = await Promise.all([
+    fetchSeasonStats(prevSeason),
     fetchSchedule(season),
+    // Prior-season projections are ADP-only context for the year-stats toggle.
+    fetchRows(
+      `${SLEEPER_BASE}/projections/nfl/${prevSeason}?season_type=regular&${positionsQuery()}&order_by=adp_half_ppr`,
+    ).catch(() => [] as SleeperRow[]),
   ]);
+  const prevProjById = new Map<string, Stats>();
+  for (const row of prevProj) {
+    if (row.stats) prevProjById.set(row.player_id, row.stats);
+  }
   const { players } = buildPlayersFromRows({
     season,
     projRows: rows,
     prevStats,
+    prevProjById,
     byeByTeam: byeWeeksFromSchedule(schedule),
   });
   return { season, updatedAt: Date.now(), players };
