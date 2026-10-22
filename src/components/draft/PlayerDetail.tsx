@@ -835,11 +835,11 @@ const GROUP_EDGE = "border-l border-slate-200";
 const FPTS_COL_BG = "bg-[#e3f4f9]";
 
 /**
- * Soft heat for weekly Sleeper pos_rank_* (1 = best at position that week).
- * Same 10 / 22 bands as mobile player sheet.
+ * Soft heat for Sleeper pos_rank_* (1 = best at position) — weekly Game Log
+ * Rank and Career Totals Pos Rank share the same 10 / 22 bands as mobile.
  */
-function weeklyPosRankCellClass(rank: number | null | undefined): string | undefined {
-  if (rank == null || !Number.isFinite(rank) || rank <= 0) return undefined;
+function posRankHeatCellClass(rank: number | null | undefined): string | undefined {
+  if (rank == null || !Number.isFinite(rank) || rank <= 0 || rank >= 900) return undefined;
   if (rank <= 10) return "bg-emerald-500/25 font-semibold text-emerald-950";
   if (rank <= 22) return "bg-amber-400/30 font-semibold text-amber-950";
   return "bg-rose-500/25 font-semibold text-rose-950";
@@ -1309,7 +1309,7 @@ function GameLogsPanel({
                   const weekRank = played
                     ? weeklyPosRankDisplay(g.raw?.[rankKey])
                     : null;
-                  const rankHeat = weeklyPosRankCellClass(weekRank);
+                  const rankHeat = posRankHeatCellClass(weekRank);
 
                   return (
                     <tr
@@ -1384,7 +1384,12 @@ function GameLogsPanel({
                   <tbody>
                     {career.map((row: CareerSeasonRow, index) => {
                       const pts = ptsForFormat(row.pts, scoringFormat);
-                      const rank = row.posRank?.[scoringFormat] ?? null;
+                      const rankRaw = row.posRank?.[scoringFormat] ?? null;
+                      const rank =
+                        rankRaw != null && Number.isFinite(rankRaw) && rankRaw > 0 && rankRaw < 900
+                          ? Math.round(rankRaw)
+                          : null;
+                      const rankHeat = posRankHeatCellClass(rank);
                       return (
                         <tr
                           key={row.year}
@@ -1411,8 +1416,13 @@ function GameLogsPanel({
                           >
                             {fmtFantasyPts(pts)}
                           </td>
-                          <td className="px-3 py-2.5 text-center font-mono text-slate-700">
-                            {rank != null && rank > 0 ? String(rank) : "-"}
+                          <td
+                            className={cn(
+                              "px-3 py-2.5 text-center font-mono text-slate-700",
+                              rankHeat,
+                            )}
+                          >
+                            {rank != null ? String(rank) : "-"}
                           </td>
                           {renderGroupedStatCells(row.raw, statGroups, true)}
                         </tr>
@@ -1516,7 +1526,7 @@ function ProjectionsPanel({
                 ? cn("font-semibold", sosOppTextClass(sosRank))
                 : "text-slate-600";
             const weekRank = played ? weeklyPosRankDisplay(g.raw?.[rankKey]) : null;
-            const rankHeat = weeklyPosRankCellClass(weekRank);
+            const rankHeat = posRankHeatCellClass(weekRank);
 
             return (
               <tr
