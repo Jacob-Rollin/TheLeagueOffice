@@ -183,8 +183,8 @@ export function seasonPositionRoomRanks(
   for (const team of teams) {
     const row = {} as Record<NeedPos, number>;
     for (const pos of NEED_POSITIONS) {
-      const slots =
-        starters[pos] ?? (pos === "QB" || pos === "TE" || pos === "K" || pos === "DEF" ? 1 : 0);
+      // Missing keys mean the league does not start that slot (e.g. no K/DST).
+      const slots = Math.max(0, starters[pos] ?? 0);
       row[pos] = seasonRoomStrength(team.players, pos, slots, posRankFor);
     }
     strength.set(team.rosterId, row);
@@ -360,9 +360,8 @@ export function scoreSeasonNeeds(
   const scored: ScoredNeed[] = [];
 
   for (const pos of NEED_POSITIONS) {
-    // Match seasonPositionRoomRanks defaults so K/DST/QB/TE are never skipped.
-    const slots =
-      starters[pos] ?? (pos === "QB" || pos === "TE" || pos === "K" || pos === "DEF" ? 1 : 0);
+    // Missing keys mean the league does not start that slot (e.g. no K/DST).
+    const slots = Math.max(0, starters[pos] ?? 0);
     if (slots <= 0) continue;
 
     const best = bestSeasonPosRank(players, pos, posRankFor);

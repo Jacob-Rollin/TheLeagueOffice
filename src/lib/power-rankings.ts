@@ -1,6 +1,6 @@
 import type { Player } from "@/lib/draft";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
-import { BASE_STARTERS, optimizeLineup, scaleValue } from "@/lib/trade-engine";
+import { effectiveStarters, optimizeLineup, scaleValue } from "@/lib/trade-engine";
 
 export type PowerRankingInputs = {
   slot: number;
@@ -47,7 +47,7 @@ export function starterRequirements(rosterPositions: string[]): Record<string, n
     if (!["QB", "RB", "WR", "TE", "FLEX", "K", "DEF"].includes(key)) continue;
     req[key] = (req[key] ?? 0) + 1;
   }
-  return Object.keys(req).length ? req : { ...BASE_STARTERS };
+  return effectiveStarters(req);
 }
 
 function minMaxNormalize(values: number[]): number[] {

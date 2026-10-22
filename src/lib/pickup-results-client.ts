@@ -15,6 +15,8 @@ import { sleeperFetchJson } from "@/lib/sleeper-http";
 
 const SLEEPER = "https://api.sleeper.app/v1";
 const STATS_TTL_MS = 30 * 60 * 1000;
+/** Keep week-stat fan-out polite (same spirit as projection / leaders pools). */
+const WEEK_STATS_CONCURRENCY = 2;
 
 export type PickupRequest = { key: string; playerId: string; fromWeek: number; toWeek: number };
 export type PickupResult = { pts: number; games: number };
@@ -23,12 +25,30 @@ async function sleeperJson<T>(url: string): Promise<T | null> {
   return sleeperFetchJson<T>(url, "warm");
 }
 
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (!items.length) return [];
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 async function weekStatMap(season: string, week: number): Promise<Map<string, Record<string, number>>> {
-  // v2: flat Sleeper week-stat dict (playerId → stat line).
-  return getCached(`sleeper-week-stats-v2:${season}:${week}`, STATS_TTL_MS, async () => {
+  // v3: `/v1/stats/nfl/regular/{season}/{week}` — the query-string form returns empty {}.
+  return getCached(`sleeper-week-stats-v3-regular:${season}:${week}`, STATS_TTL_MS, async () => {
     const { parseSleeperWeekStatMap } = await import("@/lib/sleeper-week-stats");
     const rows = await sleeperJson<unknown>(
-      `${SLEEPER}/stats/nfl/${season}/${week}?season_type=regular`,
+      `${SLEEPER}/stats/nfl/regular/${encodeURIComponent(season)}/${week}`,
     );
     return parseSleeperWeekStatMap(rows);
   });
@@ -72,12 +92,12 @@ export async function fetchPickupResultsPreferred(input: {
       for (const r of requests) {
         for (let w = Math.max(1, r.fromWeek); w <= Math.min(lastWeek, r.toWeek); w++) weeks.add(w);
       }
-      const lines = new Map<number, Map<string, Record<string, number>>>();
-      await Promise.all(
-        [...weeks].map(async (w) => {
-          lines.set(w, await weekStatMap(state.season, w));
-        }),
+      const weekList = [...weeks];
+      const weekMaps = await mapPool(weekList, WEEK_STATS_CONCURRENCY, (w) =>
+        weekStatMap(state.season, w),
       );
+      const lines = new Map<number, Map<string, Record<string, number>>>();
+      weekList.forEach((w, i) => lines.set(w, weekMaps[i]!));
 
       const out: Record<string, PickupResult> = {};
       for (const r of requests) {

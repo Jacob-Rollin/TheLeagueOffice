@@ -60,7 +60,18 @@ export function resolveInjuryStatus(
     ) {
       return undefined;
     }
-    if (lower === "na" || lower === "suspended" || lower.includes("suspended")) {
+    // Suspended is its own designation (SUS badge + higher risk) — never fold into NA.
+    if (lower === "suspended" || lower === "sus" || lower.includes("suspended")) {
+      return "Suspended";
+    }
+    if (
+      lower === "na" ||
+      lower === "ia" ||
+      lower === "inactive" ||
+      lower === "not active" ||
+      lower === "exempt" ||
+      lower === "dnr"
+    ) {
       return "NA";
     }
     return trimmed;
