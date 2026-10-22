@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Crosshair, Settings, Timer, X } from "lucide-react";
 
 import { MockRecap } from "@/components/draft/MockRecap";
 import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
 import { formatClock, useMockDraftSession } from "@/hooks/useMockDraftSession";
-import { teamName } from "@/lib/draft";
+import { SCORING_LABEL, teamName } from "@/lib/draft";
 import {
   clearMockSession,
   DEFAULT_MOCK_CONFIG,
@@ -69,10 +69,6 @@ export function MobileMockDraftArena() {
   } = session;
 
   const openPlayer = useCallback((id: string) => modalRef.current?.open(id), []);
-
-  useEffect(() => {
-    if (complete) setShowRecap(true);
-  }, [complete]);
 
   const leaveToHome = () => {
     clearSession();
@@ -180,31 +176,44 @@ export function MobileMockDraftArena() {
             <span
               className={cn(
                 "rounded-full px-4 py-1.5 font-display text-xs font-extrabold uppercase tracking-wider",
-                myTurn
+                complete || myTurn
                   ? "bg-m-accent text-m-accent-fg"
-                  : paused
-                    ? "bg-m-chip text-m-chip-fg"
-                    : "bg-m-chip text-m-chip-fg",
+                  : "bg-m-chip text-m-chip-fg",
               )}
             >
-              {complete ? "Complete" : paused ? "Paused" : myTurn ? "Your Turn" : "On the Clock"}
+              {complete
+                ? "Draft Complete!"
+                : paused
+                  ? "Paused"
+                  : myTurn
+                    ? "Your Turn"
+                    : "On the Clock"}
             </span>
-            <span
-              className={cn(
-                "mt-1 inline-flex items-center gap-1 font-display text-sm tabular-nums",
-                myTurn && clock !== null && clock <= 10 && !paused
-                  ? "text-red-500"
-                  : "text-m-card-fg",
-              )}
-            >
-              <Timer className="size-3.5" strokeWidth={2.5} />
-              {formatClock(clock)}
-            </span>
-            {!myTurn && !complete ? (
-              <span className="mt-0.5 text-[10px] uppercase tracking-wider text-m-muted">
-                {teamName(settings, session.onTheClock)} · Pick {mySlotLabel}
+            {complete ? (
+              <span className="mt-1 text-[11px] font-semibold text-m-muted">
+                {settings.teams}-team {SCORING_LABEL[settings.scoring]}{" "}
+                {settings.snake ? "Snake" : "Linear"}
               </span>
-            ) : null}
+            ) : (
+              <>
+                <span
+                  className={cn(
+                    "mt-1 inline-flex items-center gap-1 font-display text-sm tabular-nums",
+                    myTurn && clock !== null && clock <= 10 && !paused
+                      ? "text-red-500"
+                      : "text-m-card-fg",
+                  )}
+                >
+                  <Timer className="size-3.5" strokeWidth={2.5} />
+                  {formatClock(clock)}
+                </span>
+                {!myTurn ? (
+                  <span className="mt-0.5 text-[10px] uppercase tracking-wider text-m-muted">
+                    {teamName(settings, session.onTheClock)} · Pick {mySlotLabel}
+                  </span>
+                ) : null}
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-1">
@@ -227,38 +236,50 @@ export function MobileMockDraftArena() {
           </div>
         </div>
 
-        <div className="mt-2 flex items-center justify-center gap-1">
-          {(
-            [
-              ["normal", "Normal"],
-              ["fast", "Fast"],
-              ["manual", "Manual"],
-            ] as const
-          ).map(([key, label]) => (
+        {!complete ? (
+          <div className="mt-2 flex items-center justify-center gap-1">
+            {(
+              [
+                ["normal", "Normal"],
+                ["fast", "Fast"],
+                ["manual", "Manual"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSpeed(key)}
+                className={cn(
+                  "rounded-full px-2.5 py-1 font-display text-[10px] font-bold uppercase tracking-wide",
+                  speed === key
+                    ? "bg-m-accent text-m-accent-fg"
+                    : "bg-m-chip text-m-chip-fg",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+            {speed === "manual" && !myTurn ? (
+              <button
+                type="button"
+                onClick={runAiPick}
+                className="rounded-full bg-m-cta px-2.5 py-1 font-display text-[10px] font-bold uppercase text-m-cta-fg"
+              >
+                Advance
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mt-2 flex justify-center">
             <button
-              key={key}
               type="button"
-              onClick={() => setSpeed(key)}
-              className={cn(
-                "rounded-full px-2.5 py-1 font-display text-[10px] font-bold uppercase tracking-wide",
-                speed === key
-                  ? "bg-m-accent text-m-accent-fg"
-                  : "bg-m-chip text-m-chip-fg",
-              )}
+              onClick={() => setShowRecap(true)}
+              className="rounded-full bg-m-accent px-4 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide text-m-accent-fg"
             >
-              {label}
+              View Recap
             </button>
-          ))}
-          {speed === "manual" && !myTurn && !complete ? (
-            <button
-              type="button"
-              onClick={runAiPick}
-              className="rounded-full bg-m-cta px-2.5 py-1 font-display text-[10px] font-bold uppercase text-m-cta-fg"
-            >
-              Advance
-            </button>
-          ) : null}
-        </div>
+          </div>
+        )}
       </header>
 
       {syncing ? (
@@ -288,6 +309,7 @@ export function MobileMockDraftArena() {
         picks={picks}
         byId={byId}
         myTurn={myTurn}
+        complete={complete}
         myCounts={myCounts}
         currentOverall={currentOverall}
         nextUserOverall={nextUserOverall}

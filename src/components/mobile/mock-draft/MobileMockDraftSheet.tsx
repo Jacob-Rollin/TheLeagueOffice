@@ -1,4 +1,12 @@
-import { useDeferredValue, useMemo, useState, startTransition } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  startTransition,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { FilePlus2, Search, Star } from "lucide-react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
@@ -19,8 +27,15 @@ import { POS_DOT, posCellClass } from "./posCellStyles";
 import { pickLabelForOverall } from "./MobileMockDraftBoard";
 
 type SheetTab = "players" | "queue" | "team";
+type SheetSnap = "peek" | "expanded";
 
 const POS_FILTERS: Array<"ALL" | Pos> = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"];
+
+/** Peek is a short drawer; expanded fills nearly all remaining arena height. */
+const SNAP_PCT: Record<SheetSnap, number> = {
+  peek: 36,
+  expanded: 88,
+};
 
 export function MobileMockDraftSheet({
   tab,
@@ -33,6 +48,7 @@ export function MobileMockDraftSheet({
   picks,
   byId,
   myTurn,
+  complete,
   myCounts,
   currentOverall,
   nextUserOverall,
@@ -54,6 +70,7 @@ export function MobileMockDraftSheet({
   picks: Pick[];
   byId: Map<string, Player>;
   myTurn: boolean;
+  complete: boolean;
   myCounts: Record<string, number>;
   currentOverall: number;
   nextUserOverall: number | null;
@@ -65,10 +82,77 @@ export function MobileMockDraftSheet({
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
+  const [snap, setSnap] = useState<SheetSnap>("peek");
+  const [dragPct, setDragPct] = useState<number | null>(null);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ startY: number; startPct: number; parentH: number } | null>(null);
+
+  const heightPct = dragPct ?? SNAP_PCT[snap];
+
+  useEffect(() => {
+    if (complete) setSnap("peek");
+  }, [complete]);
+
+  const onHandlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const parentH = sheetRef.current?.parentElement?.clientHeight ?? window.innerHeight;
+    dragRef.current = { startY: e.clientY, startPct: heightPct, parentH };
+    setDragPct(heightPct);
+  };
+
+  const onHandlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.parentH <= 0) return;
+    const deltaY = drag.startY - e.clientY;
+    const deltaPct = (deltaY / drag.parentH) * 100;
+    const next = Math.min(92, Math.max(26, drag.startPct + deltaPct));
+    setDragPct(next);
+  };
+
+  const onHandlePointerUp = () => {
+    if (dragRef.current == null && dragPct == null) return;
+    const current = dragPct ?? SNAP_PCT[snap];
+    const mid = (SNAP_PCT.peek + SNAP_PCT.expanded) / 2;
+    const nextSnap: SheetSnap = current >= mid ? "expanded" : "peek";
+    setSnap(nextSnap);
+    setDragPct(null);
+    dragRef.current = null;
+  };
+
   return (
-    <div className="flex max-h-[48vh] min-h-[38vh] flex-col rounded-t-2xl border-t border-m-border bg-m-sheet shadow-[0_-8px_24px_rgba(0,0,0,0.25)]">
-      <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-m-border" aria-hidden />
-      <div className="flex items-end gap-1 border-b border-m-border px-2 pt-1">
+    <div
+      ref={sheetRef}
+      className="flex shrink-0 flex-col rounded-t-2xl border-t border-m-border bg-m-sheet shadow-[0_-8px_24px_rgba(0,0,0,0.28)] transition-[height] duration-200 ease-out"
+      style={{
+        height: `${heightPct}%`,
+        transitionProperty: dragPct == null ? "height" : "none",
+      }}
+    >
+      <div
+        role="slider"
+        aria-label="Resize player sheet"
+        aria-valuemin={SNAP_PCT.peek}
+        aria-valuemax={SNAP_PCT.expanded}
+        aria-valuenow={Math.round(heightPct)}
+        tabIndex={0}
+        onPointerDown={onHandlePointerDown}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={onHandlePointerUp}
+        onPointerCancel={onHandlePointerUp}
+        onDoubleClick={() => setSnap((s) => (s === "peek" ? "expanded" : "peek"))}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowUp") setSnap("expanded");
+          if (e.key === "ArrowDown") setSnap("peek");
+        }}
+        className="flex cursor-grab touch-none flex-col items-center py-2 active:cursor-grabbing"
+      >
+        <span className="h-1 w-10 rounded-full bg-m-border" aria-hidden />
+        <span className="mt-1 text-[9px] font-semibold uppercase tracking-widest text-m-muted">
+          {snap === "expanded" ? "Pull down" : "Pull up"}
+        </span>
+      </div>
+
+      <div className="flex items-end gap-1 border-b border-m-border px-2">
         {(
           [
             ["players", "Players"],
@@ -98,6 +182,7 @@ export function MobileMockDraftSheet({
           available={available}
           watchIds={watchIds}
           myTurn={myTurn}
+          complete={complete}
           myCounts={myCounts}
           nextUserOverall={nextUserOverall}
           onDraft={onDraft}
@@ -110,6 +195,7 @@ export function MobileMockDraftSheet({
           queuedPlayers={queuedPlayers}
           settings={settings}
           myTurn={myTurn}
+          complete={complete}
           queueAutopickOn={queueAutopickOn}
           onQueueAutopickChange={onQueueAutopickChange}
           onDraft={onDraft}
@@ -138,6 +224,7 @@ function PlayersPane({
   available,
   watchIds,
   myTurn,
+  complete,
   myCounts,
   nextUserOverall,
   onDraft,
@@ -148,6 +235,7 @@ function PlayersPane({
   available: Player[];
   watchIds: Set<string>;
   myTurn: boolean;
+  complete: boolean;
   myCounts: Record<string, number>;
   nextUserOverall: number | null;
   onDraft: (id: string) => void;
@@ -203,13 +291,13 @@ function PlayersPane({
                 onClick={() => startTransition(() => setPos(p))}
                 className={cn(
                   "shrink-0 rounded-full px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide",
-                  pos === p
-                    ? "bg-m-card-fg text-m-bg"
-                    : "bg-m-chip text-m-chip-fg",
+                  pos === p ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
                 )}
               >
                 {p === "DEF" ? "DST" : p}
-                {p === "ALL" || totalSlots > 0 ? ` ${drafted}/${p === "ALL" ? totalSlots : Math.max(totalSlots, drafted)}` : ""}
+                {p === "ALL" || totalSlots > 0
+                  ? ` ${drafted}/${p === "ALL" ? totalSlots : Math.max(totalSlots, drafted)}`
+                  : ""}
               </button>
             );
           })}
@@ -226,25 +314,35 @@ function PlayersPane({
           />
         </div>
       ) : null}
-      <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-        {filtered.map((p, i) => (
-          <li key={p.id}>
-            {projIndex === i && nextUserOverall != null ? (
-              <ProjPickLine overall={nextUserOverall} teams={settings.teams} />
-            ) : null}
-            <PlayerRow
-              player={p}
-              settings={settings}
-              rank={i + 1}
-              queued={watchIds.has(p.id)}
-              myTurn={myTurn}
-              onDraft={onDraft}
-              onToggleQueue={onToggleQueue}
-              onOpenPlayer={onOpenPlayer}
-            />
-          </li>
-        ))}
-      </ul>
+
+      <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+        <div className="min-w-max pb-3">
+          {filtered.map((p, i) => (
+            <div key={p.id}>
+              {projIndex === i && nextUserOverall != null ? (
+                <div className="sticky left-0 z-[5] my-1 flex w-[100vw] max-w-md items-center gap-2 px-3">
+                  <span className="h-px flex-1 bg-m-accent/70" />
+                  <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
+                    Proj pick: Round {roundOf(nextUserOverall, settings.teams)} Overall #
+                    {nextUserOverall}
+                  </span>
+                  <span className="h-px flex-1 bg-m-accent/70" />
+                </div>
+              ) : null}
+              <PlayerStatsRow
+                player={p}
+                settings={settings}
+                queued={watchIds.has(p.id)}
+                myTurn={myTurn}
+                complete={complete}
+                onDraft={onDraft}
+                onToggleQueue={onToggleQueue}
+                onOpenPlayer={onOpenPlayer}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -253,6 +351,7 @@ function QueuePane({
   queuedPlayers,
   settings,
   myTurn,
+  complete,
   queueAutopickOn,
   onQueueAutopickChange,
   onDraft,
@@ -262,6 +361,7 @@ function QueuePane({
   queuedPlayers: Player[];
   settings: Settings;
   myTurn: boolean;
+  complete: boolean;
   queueAutopickOn: boolean;
   onQueueAutopickChange: (on: boolean) => void;
   onDraft: (id: string) => void;
@@ -301,21 +401,23 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-          {queuedPlayers.map((p, i) => (
-            <PlayerRow
-              key={p.id}
-              player={p}
-              settings={settings}
-              rank={i + 1}
-              queued
-              myTurn={myTurn}
-              onDraft={onDraft}
-              onToggleQueue={onToggleQueue}
-              onOpenPlayer={onOpenPlayer}
-            />
-          ))}
-        </ul>
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+          <div className="min-w-max pb-3">
+            {queuedPlayers.map((p) => (
+              <PlayerStatsRow
+                key={p.id}
+                player={p}
+                settings={settings}
+                queued
+                myTurn={myTurn}
+                complete={complete}
+                onDraft={onDraft}
+                onToggleQueue={onToggleQueue}
+                onOpenPlayer={onOpenPlayer}
+              />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -356,9 +458,7 @@ function TeamPane({
             onClick={() => onRosterTeamChange(t)}
             className={cn(
               "shrink-0 rounded-full px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide",
-              rosterTeam === t
-                ? "bg-m-card-fg text-m-bg"
-                : "bg-m-chip text-m-chip-fg",
+              rosterTeam === t ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
             )}
           >
             {t === settings.myTeam ? teamName(settings, t) : `Slot ${t}`}
@@ -380,7 +480,15 @@ function TeamPane({
                   !s.player && (POS_DOT[s.slot] ? "" : ""),
                 )}
               >
-                {s.slot === "DEF" ? "DST" : s.slot === "BN" ? "BN" : s.slot === "SUPER_FLEX" ? "SF" : s.slot === "FLEX" ? "WRT" : s.slot}
+                {s.slot === "DEF"
+                  ? "DST"
+                  : s.slot === "BN"
+                    ? "BN"
+                    : s.slot === "SUPER_FLEX"
+                      ? "SF"
+                      : s.slot === "FLEX"
+                        ? "WRT"
+                        : s.slot}
               </span>
               {s.player ? (
                 <button
@@ -424,90 +532,115 @@ function TeamPane({
   );
 }
 
-function PlayerRow({
+/** Sticky identity column + horizontally scrolling fantasy stats (ADP / pts / rank). */
+function PlayerStatsRow({
   player,
   settings,
-  rank,
   queued,
   myTurn,
+  complete,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
 }: {
   player: Player;
   settings: Settings;
-  rank: number;
   queued: boolean;
   myTurn: boolean;
+  complete: boolean;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
   const v = value(player, settings.scoring);
+  const short = shortName(player.name);
+
   return (
-    <div className="flex items-center gap-2 border-b border-m-border/70 py-2">
-      <button
-        type="button"
-        disabled={!myTurn}
-        onClick={() => onDraft(player.id)}
-        className={cn(
-          "shrink-0 rounded-full px-3 py-1.5 font-display text-[11px] font-extrabold uppercase tracking-wide",
-          myTurn
-            ? "bg-m-accent text-m-accent-fg"
-            : "bg-m-chip text-m-muted opacity-60",
-        )}
-      >
-        Draft
-      </button>
-      <button
-        type="button"
-        onClick={() => onOpenPlayer(player.id)}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
-      >
-        <span className="tabnum w-5 shrink-0 text-center text-xs text-m-muted">{rank}</span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-bold text-m-card-fg">{player.name}</span>
-          <span className="block text-[11px] text-m-muted">
-            {posDisplayLabel(player.pos)} · {player.team}
-            {player.bye ? ` (${player.bye})` : ""}
+    <div className="flex border-b border-m-border/70">
+      <div className="sticky left-0 z-10 flex w-[11.5rem] shrink-0 items-start gap-1.5 bg-m-sheet py-2.5 pl-2 pr-2 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.35)]">
+        {!complete ? (
+          <button
+            type="button"
+            disabled={!myTurn}
+            onClick={() => onDraft(player.id)}
+            className={cn(
+              "mt-0.5 shrink-0 rounded-full px-2.5 py-1 font-display text-[10px] font-extrabold uppercase tracking-wide",
+              myTurn
+                ? "bg-m-accent text-m-accent-fg"
+                : "bg-m-chip text-m-muted opacity-60",
+            )}
+          >
+            Draft
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => onOpenPlayer(player.id)}
+          className="min-w-0 flex-1 text-left"
+        >
+          <span className="block truncate text-[13px] font-extrabold uppercase tracking-wide text-m-card-fg">
+            {short}
           </span>
-        </span>
-      </button>
-      <button
-        type="button"
-        aria-label={queued ? "Remove from queue" : "Add to queue"}
-        onClick={() => onToggleQueue(player.id)}
-        className={cn(
-          "rounded-lg p-1.5",
-          queued ? "text-m-accent" : "text-m-muted",
-        )}
-      >
-        <Star className={cn("size-4", queued && "fill-current")} strokeWidth={2.5} />
-      </button>
-      <div className="w-12 shrink-0 text-right">
-        <span className="block text-[9px] uppercase text-m-muted">ADP</span>
-        <span className="tabnum block text-xs font-semibold text-m-card-fg">
-          {v.adp < 900 ? v.adp.toFixed(1) : "—"}
-        </span>
+          <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">
+            <span
+              className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
+              aria-hidden
+            />
+            <span>
+              {posDisplayLabel(player.pos)} - {player.team}
+              {player.bye ? ` (${player.bye})` : ""}
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          aria-label={queued ? "Remove from queue" : "Add to queue"}
+          onClick={() => onToggleQueue(player.id)}
+          className={cn("mt-0.5 shrink-0 p-1", queued ? "text-m-accent" : "text-m-muted")}
+        >
+          <Star className={cn("size-3.5", queued && "fill-current")} strokeWidth={2.5} />
+        </button>
       </div>
-      <div className="w-10 shrink-0 text-right">
-        <span className="block text-[9px] uppercase text-m-muted">Pts</span>
-        <span className="tabnum block text-xs font-semibold text-m-card-fg">
-          {v.proj.toFixed(0)}
-        </span>
+
+      <div className="flex items-end gap-4 py-2.5 pr-4">
+        <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
+        <StatCell label="Pts" value={v.proj.toFixed(1)} />
+        <StatCell label="Rank" value={v.rank < 900 ? String(v.rank) : "—"} />
+        <StatCell
+          label="Pos rk"
+          value={player.posRank > 0 ? `${posDisplayLabel(player.pos)}${player.posRank}` : "—"}
+        />
+        <StatCell
+          label="Prev"
+          value={v.prev != null ? v.prev.toFixed(1) : "—"}
+        />
+        <StatCell
+          label="ADP lo"
+          value={player.adpRange.min < 900 ? player.adpRange.min.toFixed(0) : "—"}
+        />
+        <StatCell
+          label="ADP hi"
+          value={player.adpRange.max < 900 ? player.adpRange.max.toFixed(0) : "—"}
+        />
       </div>
     </div>
   );
 }
 
-function ProjPickLine({ overall, teams }: { overall: number; teams: number }) {
+function StatCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="my-1 flex items-center gap-2 px-1">
-      <span className="h-px flex-1 bg-m-accent/70" />
-      <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
-        Proj pick: Round {roundOf(overall, teams)} Overall #{overall}
+    <div className="w-12 shrink-0 text-left">
+      <span className="block text-[9px] font-semibold uppercase tracking-wide text-m-muted">
+        {label}
       </span>
-      <span className="h-px flex-1 bg-m-accent/70" />
+      <span className="tabnum block text-sm font-semibold text-m-card-fg">{value}</span>
     </div>
   );
+}
+
+function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name.toUpperCase();
+  const first = parts[0]!;
+  return `${first[0]}. ${parts.slice(1).join(" ")}`.toUpperCase();
 }
