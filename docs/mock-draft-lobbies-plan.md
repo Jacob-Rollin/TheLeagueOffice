@@ -17,27 +17,43 @@ Mobile already labels the entry point **“Mock Draft Lobby”** ([`MobileMockDr
 
 ---
 
-## 0. TiDB vs Supabase (limits)
+## 0. Where to host lobbies (options ranked)
 
-**Verdict: host live lobbies on TiDB. Do not put live pick/poll traffic on Supabase Postgres.**
+TiDB Cloud allows **up to 5 free Starter instances** per org, each with its own **~50M RU/mo + 5 GiB** pool. That is the lever for “mocks don’t steal research RUs” — not moving live traffic onto Supabase.
 
-| Concern | TiDB Starter | Supabase Free |
-| --- | --- | --- |
-| What burns | Request Units (RU) on read/write | DB size, egress, connections; whole project can **auto-pause** ~7d idle |
-| Live draft shape | Many short reads + contested writes — controllable with caps, TTL, visible-only poll, pick-on-read | Same traffic hits the **same Postgres** as auth/`profiles` — a draft night can starve or pause the whole site |
-| Contested picks | `FOR UPDATE` / tx already used for native ops | RLS + client writes are a poor fit; still need server RPC + locks |
-| Idle risk | No inactivity pause | Auth/health pings do **not** count as activity ([`free-tier-and-ux-scale-plan.md`](free-tier-and-ux-scale-plan.md)) |
-| Fit with roadmap | Same store as future native live snake patterns; optional later split to TiDB cluster C | Keep for auth + low-churn index rows only |
+### Ranked options
 
-**Safest limit posture**
+| Rank | Option | Live lobby + picks | Separate free pool? | Verdict |
+| --- | --- | --- | --- | --- |
+| **1 (recommended)** | **Dedicated TiDB Starter “D – Mocks”** | `mock_draft_*` only | **Yes** — own 50M RU | Best isolation; same code patterns as native; no auth-DB coupling |
+| **2** | TiDB cluster **C with native** (`native_*` + `mock_draft_*`) | Shared instance | Shared 50M with native seasons | Fine if native traffic is still low; simpler ops (one extra cluster, not two) |
+| **3** | Stay on **current** TiDB (research/synced) | Same instance as warehouse | No | OK for a quiet beta only; mocks compete with research RUs |
+| **4** | **Upstash Redis / Vercel KV** live + TiDB snapshot | Ephemeral KV | Depends on KV free tier | Excellent for hot state later; new vendor + ops; not required for v1 |
+| **Avoid** | **Supabase Postgres** for lobby/picks | Auth project DB | No — shares 500 MB / 5 GB egress / pause with Auth | Draft polls can starve or pause the whole site |
+| **Avoid as SoT** | **Supabase Realtime** (Broadcast/Presence) alone | Push only | 200 conns / 2M msgs — separate caps, still need a DB | Fan-out layer at best; not authoritative picks/clock |
 
-1. **Live state → TiDB** (`lobby` / `live` / `paused`): aggressive TTL, seat caps, no poll when tab hidden, one snapshot RPC per client.
-2. **Auth → Supabase** (unchanged). Guests never open a Supabase DB session for the room.
-3. **Do not** enable Supabase Realtime for mocks in v1 — connection/message quotas + another moving part; polling matches native §6.6.
-4. **Completed boards → TiDB snapshot row** (small JSON, rare reads). Optional later: thin Supabase `mock_draft_saves` index (`user_id`, `share_id`, title, created_at) pointing at TiDB/share id for “My mocks” — **not** full pick streams on Supabase.
-5. If TiDB RUs contend with research/native later, mocks move with native to **TiDB cluster C** (already sketched in the free-tier plan) — still not onto Supabase live path.
+### Can we “use Supabase for the lobby + TiDB for mocks”?
 
-**When Supabase would be wrong here:** every client polling `postgres` every 1–2s during a 12-team draft, plus guest joins, plus auth — that is exactly the high-churn load we already refused for native leagues.
+**Not as the best design.** Useful split of responsibilities:
+
+| Layer | Store |
+| --- | --- |
+| Sign-in / host identity | **Supabase Auth** (already) |
+| Live seats, clock, picks, join codes | **TiDB** (prefer dedicated Starter D) |
+| Optional “My saved mocks” list | Thin Supabase **or** TiDB index rows (low churn) |
+| Realtime push | Skip v1; optional later Broadcast **on top of** TiDB authority |
+
+Putting the **lobby itself** on Supabase (rows + poll or Realtime) while picks live on TiDB doubles write paths, still burns Supabase Free (egress/connections/pause), and does not give a cleaner free-tier story than a dedicated TiDB instance.
+
+### Recommended path
+
+1. **Ship v1** against a **dedicated TiDB Starter for mocks** (cluster **D**), env like `TIDB_MOCK_DATABASE_URL` / separate pool in [`tidb.ts`](../src/lib/tidb.ts) — wire only `mock_draft_*` there.
+2. If you want fewer clusters short-term: put mocks on **C with native** when that cluster is created ([`free-tier-and-ux-scale-plan.md`](free-tier-and-ux-scale-plan.md) Phase 2); accept shared RU until mock volume justifies D.
+3. Always: **coalesce polls** (`processMemo` / short private cache per `roomId`), visible-only refresh, room caps, TTL — so even a dedicated 50M pool lasts.
+4. Keep Supabase out of the live pick path; guests never open a Supabase DB session for the room.
+5. Revisit Redis/KV only if dedicated TiDB RUs still hurt under real concurrent rooms.
+
+**Org quota note:** 5 free Starters total. Suggested map if fully split: A research · B synced/warehouse · C native · **D mocks** · (one spare). Don’t create D until mocks leave beta if A/B are still one instance — but **do** create D (or C) before mock poll traffic shares a stressed research cluster.
 
 ---
 

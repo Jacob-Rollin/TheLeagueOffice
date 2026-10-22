@@ -64,8 +64,9 @@ Implement as capacity pressure appears — not all at once.
 | A – Research | `agg_*` |
 | B – Synced / warehouse | `player_warehouse`, `synced_*` |
 | C – Native | `native_*` |
+| D – Mocks (optional) | `mock_draft_*` — own 50M RU pool; see [`mock-draft-lobbies-plan.md`](mock-draft-lobbies-plan.md). Until D exists, mocks may share C with native. |
 
-Start with A + B; add C when native leagues see real traffic.
+Start with A + B; add C when native leagues see real traffic; add D when multiplayer mock lobbies leave quiet beta (or put mocks on C first). Org allows up to **5** free Starter instances.
 
 ### Phase 3 — Product host splits (optional)
 | Slice | Host | Shared |
