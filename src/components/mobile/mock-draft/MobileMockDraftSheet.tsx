@@ -196,7 +196,7 @@ function DualAxisScroll({
     >
       <div
         ref={horizRef}
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] [--m-draft-compact-opacity:0]"
         onScroll={onHorizScroll}
       >
         {children}
@@ -210,16 +210,24 @@ const NAME_SCROLL_THRESHOLD_PX = 120;
 const NAME_COL_CLASS = "w-[7.25rem]";
 const STAR_COL_CLASS = "w-8";
 
+/** Fade distance (px) after the name column clears — Sleeper-like soft reveal. */
+const COMPACT_NAME_FADE_PX = 36;
+
 /**
- * Compact name appears once the player column scrolls past the left edge
+ * Compact name fades in once the player column scrolls past the left edge
  * (`[data-name-scroll-end]` sits immediately after the name cell — before star).
+ * Opacity is progressive so it eases in; layout height stays reserved (no snap).
  */
 function onNameStripScroll(e: UIEvent<HTMLDivElement>) {
   const el = e.currentTarget;
   el.style.setProperty("--m-draft-scrollport-w", `${el.clientWidth}px`);
   const end = el.querySelector<HTMLElement>("[data-name-scroll-end]");
   const threshold = end != null ? end.offsetLeft : NAME_SCROLL_THRESHOLD_PX;
-  const on = el.scrollLeft >= threshold;
+  const past = el.scrollLeft - threshold;
+  const opacity =
+    past <= 0 ? 0 : Math.min(1, past / COMPACT_NAME_FADE_PX);
+  el.style.setProperty("--m-draft-compact-opacity", opacity.toFixed(3));
+  const on = opacity > 0.02;
   if (el.classList.contains("is-scrolled-x") !== on) {
     el.classList.toggle("is-scrolled-x", on);
   }
@@ -1053,9 +1061,9 @@ function TeamPane({
 }
 
 /**
- * Full row scrolls (Draft + name + star + stats). When scrolled past the name
- * column, a Sleeper-style identity band sits above the stats (in-flow — no
- * overlap with ADP/Pts labels).
+ * Full row scrolls (Draft + name + star + stats). Compact identity band height
+ * is always reserved above the stats (no layout snap); it fades in after the
+ * name column clears — same idea as Sleeper.
  */
 function PlayerStatsRow({
   player,
@@ -1114,16 +1122,23 @@ function PlayerStatsRow({
   const posCols = POS_STAT_COLUMNS[player.pos] ?? [];
 
   return (
-    <div className="relative border-b border-m-border/60 [content-visibility:auto] [contain-intrinsic-size:auto_4rem]">
-      {/* In-flow sticky identity — only when scrolled past name; stats sit below. */}
+    <div className="relative border-b border-m-border/60 [content-visibility:auto] [contain-intrinsic-size:auto_4.5rem]">
+      {/*
+        Always-reserved sticky band (fixed height) so toggling scroll never
+        reflows the row. Opacity is driven by --m-draft-compact-opacity.
+      */}
       <div
-        className="sticky left-0 z-20 hidden bg-m-sheet px-2 pt-1 [.is-scrolled-x_&]:block"
-        style={{ width: "var(--m-draft-scrollport-w, 100%)" }}
+        className="sticky left-0 z-20 h-5 overflow-hidden bg-m-sheet px-2 pointer-events-none [.is-scrolled-x_&]:pointer-events-auto"
+        style={{
+          width: "var(--m-draft-scrollport-w, 100%)",
+          opacity: "var(--m-draft-compact-opacity, 0)",
+        }}
       >
         <button
           type="button"
+          tabIndex={-1}
           onClick={() => onOpenPlayer(player.id)}
-          className="flex max-w-full items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
+          className="flex h-full max-w-full items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
         >
           <span className="truncate text-m-card-fg">{short}</span>
           <span
@@ -1143,8 +1158,16 @@ function PlayerStatsRow({
             </span>
           ) : null}
         </button>
-        <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
       </div>
+      {/* Hairline under the reserved band — always present so spacing matches scrolled state. */}
+      <div
+        className="sticky left-0 z-20 h-px bg-m-border/70 pointer-events-none"
+        style={{
+          width: "var(--m-draft-scrollport-w, 100%)",
+          opacity: "var(--m-draft-compact-opacity, 0)",
+        }}
+        aria-hidden
+      />
 
       <div className="flex items-stretch gap-1.5 py-1.5">
         {!complete ? (
