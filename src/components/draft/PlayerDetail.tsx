@@ -393,50 +393,49 @@ export function PlayerDetail({
       {isPopup ? (
         <div className="pointer-events-none sticky top-0 z-[150] h-0 w-full">
           {compactHeader ? (
-            <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-center gap-3 border-b border-slate-200 bg-white/95 px-4 py-2.5 pr-14 shadow-sm backdrop-blur-sm">
+            <div
+              className="pointer-events-auto absolute inset-x-0 top-0 flex items-center gap-2.5 px-4 py-2.5 pr-14 text-white shadow-sm"
+              style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
+            >
               {compactLogo ? (
                 <img
                   src={compactLogo}
                   alt=""
-                  className="size-8 shrink-0 rounded-full border border-slate-100 bg-slate-50 object-contain p-0.5"
+                  className="size-8 shrink-0 rounded-full bg-white/10 object-contain p-0.5"
                 />
               ) : null}
-              <div className="flex min-w-0 flex-1 items-center gap-2">
-                <p className="min-w-0 truncate font-display text-base font-bold uppercase tracking-wide text-slate-900">
-                  {compactPlayerName(player.name)}
-                </p>
-                {compactInjury ? (
-                  <span
-                    className={cn(
-                      "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
-                      compactInjury.className,
-                    )}
-                  >
-                    {compactInjury.text}
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  aria-label={watched ? "Unwatch" : "Watch"}
-                  aria-pressed={watched}
-                  onClick={() => draft.toggleWatch(player.id)}
-                  className="group inline-flex max-w-[38px] cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-slate-700 shadow-sm transition-all duration-300 hover:max-w-[130px] hover:border-blue-600 hover:text-blue-700"
+              <p className="min-w-0 max-w-[40%] truncate font-display text-base font-bold uppercase tracking-wide text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.45)]">
+                {compactPlayerName(player.name)}
+              </p>
+              {compactInjury ? (
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
+                    compactInjury.className,
+                  )}
                 >
-                  <Star
-                    className={cn(
-                      "size-3.5 shrink-0",
-                      watched ? "fill-amber-400 text-amber-400" : "text-slate-600",
-                    )}
-                    strokeWidth={watched ? 0 : 2}
-                  />
-                  <span className="ml-1.5 text-[10px] font-black uppercase tracking-wider opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                    {watched ? "Unwatch" : "Watch"}
-                  </span>
-                </button>
-                <DesktopPlayerCompare anchorPlayer={player} tone="surface" />
-              </div>
+                  {compactInjury.text}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                aria-label={watched ? "Unwatch" : "Watch"}
+                aria-pressed={watched}
+                onClick={() => draft.toggleWatch(player.id)}
+                className="group inline-flex max-w-[38px] shrink-0 cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-2.5 py-1.5 transition-all duration-300 hover:max-w-[130px] hover:border-white/40 hover:bg-white/10"
+              >
+                <Star
+                  className={cn(
+                    "size-3.5 shrink-0",
+                    watched ? "fill-amber-400 text-amber-400" : "text-white/90",
+                  )}
+                  strokeWidth={watched ? 0 : 2}
+                />
+                <span className="ml-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                  {watched ? "Unwatch" : "Watch"}
+                </span>
+              </button>
+              <DesktopPlayerCompare anchorPlayer={player} tone="hero" />
             </div>
           ) : null}
         </div>
