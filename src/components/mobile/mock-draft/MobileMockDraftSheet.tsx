@@ -907,7 +907,10 @@ function QueuePane({
         </ul>
       )}
       {selectedId && selectedIndex >= 0 ? (
-        <div className="flex items-center gap-3 border-t border-m-border bg-m-sheet px-4 py-2.5">
+        <div
+          className="flex items-center gap-4 border-t border-m-border bg-m-sheet px-4 pt-3"
+          style={{ paddingBottom: "max(0.85rem, env(safe-area-inset-bottom, 0px))" }}
+        >
           <button
             type="button"
             aria-label="Remove from queue"
@@ -915,34 +918,34 @@ function QueuePane({
               onRemoveQueued([selectedId]);
               setSelectedId(null);
             }}
-            className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg"
+            className="inline-flex size-12 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg"
           >
-            <Trash2 className="size-5" strokeWidth={2.25} />
+            <Trash2 className="size-6" strokeWidth={2.25} />
           </button>
-          <div className="flex flex-1 items-center justify-center gap-3">
+          <div className="flex flex-1 items-center justify-center gap-4">
             <button
               type="button"
               aria-label="Move up in queue"
               disabled={selectedIndex <= 0}
               onClick={() => onMoveQueued(selectedId, -1)}
-              className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
+              className="inline-flex size-12 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
             >
-              <ArrowUp className="size-5" strokeWidth={2.25} />
+              <ArrowUp className="size-6" strokeWidth={2.25} />
             </button>
             <button
               type="button"
               aria-label="Move down in queue"
               disabled={selectedIndex >= queuedPlayers.length - 1}
               onClick={() => onMoveQueued(selectedId, 1)}
-              className="inline-flex size-10 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
+              className="inline-flex size-12 items-center justify-center rounded-full border border-m-border bg-m-card text-m-card-fg disabled:opacity-40"
             >
-              <ArrowDown className="size-5" strokeWidth={2.25} />
+              <ArrowDown className="size-6" strokeWidth={2.25} />
             </button>
           </div>
           <button
             type="button"
             onClick={() => setSelectedId(null)}
-            className="font-display text-sm font-bold uppercase tracking-wide text-m-accent"
+            className="min-h-12 px-1 font-display text-base font-bold uppercase tracking-wide text-m-accent"
           >
             Done
           </button>
