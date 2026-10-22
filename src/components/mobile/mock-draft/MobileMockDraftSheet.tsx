@@ -716,11 +716,11 @@ function PlayerStatsRow({
         <span className="tabnum flex w-5 shrink-0 items-center justify-center text-xs text-m-muted">
           {rank}
         </span>
-        <div className="flex w-[8.5rem] items-center gap-0">
+        <div className="flex max-w-[9.5rem] items-center gap-0.5">
           <button
             type="button"
             onClick={() => onOpenPlayer(player.id)}
-            className="min-w-0 flex-1 py-0.5 text-left"
+            className="min-w-0 shrink py-0.5 text-left"
           >
             <span className="block truncate text-[13px] font-bold text-m-card-fg">{short}</span>
             <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">

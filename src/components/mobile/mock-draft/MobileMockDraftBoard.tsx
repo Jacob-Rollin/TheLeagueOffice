@@ -60,14 +60,18 @@ export function MobileMockDraftBoard({
         }}
       >
         {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => {
-          const isMine = slotClaimed && t === settings.myTeam;
+          const isMine = slotClaimed
+            ? t === settings.myTeam
+            : !lobby && t === settings.myTeam;
           const showClaim = lobby && (!slotClaimed || t !== settings.myTeam);
+          const label =
+            lobby && !slotClaimed ? `Slot ${t}` : teamName(settings, t);
           return (
             <div
               key={`h-${t}`}
               className={cn(
-                "sticky top-0 z-10 flex flex-col items-center gap-1 rounded-lg bg-m-bg/95 px-1 py-2 backdrop-blur",
-                isMine && "ring-1 ring-m-accent",
+                "sticky top-0 z-10 flex flex-col items-center gap-0.5 bg-m-bg/95 px-0.5 py-1 backdrop-blur",
+                isMine && "rounded-md ring-1 ring-m-accent",
               )}
             >
               {lobby ? (
@@ -75,24 +79,29 @@ export function MobileMockDraftBoard({
                   <button
                     type="button"
                     onClick={() => onClaimSlot?.(t)}
-                    className="rounded-full bg-m-chip px-2.5 py-1 font-display text-[10px] font-extrabold uppercase tracking-wide text-m-chip-fg active:bg-m-accent active:text-m-accent-fg"
+                    className="rounded-full bg-m-chip px-2 py-0.5 font-display text-[9px] font-extrabold uppercase tracking-wide text-m-chip-fg active:bg-m-accent active:text-m-accent-fg"
                   >
                     Claim
                   </button>
                 ) : (
-                  <span className="rounded-full bg-m-accent px-2.5 py-1 font-display text-[10px] font-extrabold uppercase tracking-wide text-m-accent-fg">
+                  <span className="flex size-6 items-center justify-center rounded-full bg-m-accent text-[9px] font-bold text-m-accent-fg">
                     You
                   </span>
                 )
               ) : (
-                <span className="flex size-8 items-center justify-center rounded-full bg-m-chip text-[10px] font-bold text-m-chip-fg">
-                  {t === settings.myTeam ? "You" : "AI"}
+                <span
+                  className={cn(
+                    "flex size-6 items-center justify-center rounded-full text-[9px] font-bold",
+                    isMine
+                      ? "bg-m-accent text-m-accent-fg"
+                      : "bg-m-chip text-m-chip-fg",
+                  )}
+                >
+                  {isMine ? "You" : "AI"}
                 </span>
               )}
-              <span className="max-w-full truncate text-center text-[11px] font-semibold text-m-card-fg">
-                {lobby && !slotClaimed
-                  ? `Slot ${t}`
-                  : teamName(settings, t)}
+              <span className="max-w-full truncate text-center text-[9px] font-semibold leading-tight text-m-card-fg">
+                {label}
               </span>
             </div>
           );
