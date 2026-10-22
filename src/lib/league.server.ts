@@ -230,6 +230,7 @@ export type RosterSlotCounts = {
   WR: number;
   TE: number;
   FLEX: number;
+  SUPER_FLEX: number;
   K: number;
   DEF: number;
   BENCH: number;
@@ -260,7 +261,17 @@ function scoringKey(settings: Record<string, unknown> | null | undefined): "std"
 }
 
 function slotCounts(positions: string[] | undefined): RosterSlotCounts {
-  const roster: RosterSlotCounts = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DEF: 0, BENCH: 0 };
+  const roster: RosterSlotCounts = {
+    QB: 0,
+    RB: 0,
+    WR: 0,
+    TE: 0,
+    FLEX: 0,
+    SUPER_FLEX: 0,
+    K: 0,
+    DEF: 0,
+    BENCH: 0,
+  };
   for (const raw of positions ?? []) {
     const p = String(raw).toUpperCase();
     if (p === "QB") roster.QB++;
@@ -269,7 +280,9 @@ function slotCounts(positions: string[] | undefined): RosterSlotCounts {
     else if (p === "TE") roster.TE++;
     else if (p === "K") roster.K++;
     else if (p === "DEF" || p === "DST") roster.DEF++;
-    else if (p.includes("FLEX") || p === "SUPER_FLEX" || p === "REC_FLEX") roster.FLEX++;
+    else if (p === "SUPER_FLEX" || p === "SUPERFLEX" || p === "SFLEX" || p === "Q/W/R/T")
+      roster.SUPER_FLEX++;
+    else if (p.includes("FLEX") || p === "REC_FLEX") roster.FLEX++;
     // Only standard bench / taxi slots count toward draft bench. IR is explicitly
     // excluded because injured-reserve spots are not picked during a draft.
     else if (p === "BN" || p === "TAXI") roster.BENCH++;
@@ -299,9 +312,12 @@ export async function loadLeagueSync(
     json<{ roster_id: number; owner_id: string | null; players?: string[] | null }[]>(
       `${BASE}/league/${id}/rosters`,
     ),
-    json<{ user_id: string; display_name: string; metadata?: { team_name?: string } }[]>(
-      `${BASE}/league/${id}/users`,
-    ),
+    json<{
+      user_id: string;
+      display_name: string;
+      username?: string;
+      metadata?: { team_name?: string };
+    }[]>(`${BASE}/league/${id}/users`),
   ]);
   if (!league || !rosters) return null;
 
@@ -330,12 +346,24 @@ export async function loadLeagueSync(
   const picks: { playerId: string; team: number }[] = [];
   let myTeam: number | null = null;
   const wanted = (username ?? "").trim().replace(/^@/, "").toLowerCase();
+  const me = wanted
+    ? await json<{ user_id?: string }>(`${BASE}/user/${encodeURIComponent(wanted)}`)
+    : null;
+  const myUserId = me?.user_id ?? null;
 
   for (const r of ordered) {
     const slot = slotByRoster.get(r.roster_id) ?? r.roster_id;
     const u = r.owner_id ? byUser.get(r.owner_id) : undefined;
     teamNames[String(slot)] = u?.metadata?.team_name?.trim() || u?.display_name || `Team ${slot}`;
-    if (wanted && u && u.display_name.toLowerCase() === wanted) myTeam = slot;
+    if (
+      wanted &&
+      u &&
+      ((myUserId && u.user_id === myUserId) ||
+        u.display_name.toLowerCase() === wanted ||
+        (u.username && u.username.toLowerCase() === wanted))
+    ) {
+      myTeam = slot;
+    }
     for (const pid of r.players ?? []) picks.push({ playerId: String(pid), team: slot });
   }
 
@@ -344,6 +372,7 @@ export async function loadLeagueSync(
   // the slot counts above, so this total is the correct draft capacity.
   const total = Object.values(roster).reduce((a, b) => a + b, 0);
   const teams = league.total_rosters || ordered.length || 12;
+  const draftType = (draft?.type ?? "snake").toLowerCase();
 
   return {
     league: {
@@ -356,7 +385,7 @@ export async function loadLeagueSync(
     },
     teams,
     rounds: total || Number(draft?.settings?.rounds) || 15,
-    snake: (draft?.type ?? "snake") !== "linear",
+    snake: draftType !== "linear" && draftType !== "auction",
     playoffStartWeek: Number(league.settings?.["playoff_week_start"]) || 15,
     scoring: scoringKey(league.scoring_settings),
     roster,
@@ -718,7 +747,17 @@ type EspnRosterSettings = {
 };
 
 function espnSlotCounts(lineupSlotCounts: Record<string, number> | undefined): RosterSlotCounts {
-  const roster: RosterSlotCounts = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, K: 0, DEF: 0, BENCH: 0 };
+  const roster: RosterSlotCounts = {
+    QB: 0,
+    RB: 0,
+    WR: 0,
+    TE: 0,
+    FLEX: 0,
+    SUPER_FLEX: 0,
+    K: 0,
+    DEF: 0,
+    BENCH: 0,
+  };
   if (!lineupSlotCounts) return roster;
   for (const [raw, count] of Object.entries(lineupSlotCounts)) {
     const id = Number(raw);
@@ -730,6 +769,8 @@ function espnSlotCounts(lineupSlotCounts: Record<string, number> | undefined): R
     else if (id === 17) roster.K += c;
     else if (id === 16) roster.DEF += c;
     else if (id === 23) roster.FLEX += c;
+    // ESPN "OP" / Superflex-style offensive player slot.
+    else if (id === 7) roster.SUPER_FLEX += c;
     else if (id === 20) roster.BENCH += c;
     // id === 21 is IR; explicitly excluded because IR spots are not drafted.
   }
@@ -761,7 +802,17 @@ export async function loadConnectionSync(
 
     // Pull real roster slot counts from ESPN settings, excluding IR.
     const season = new Date().getFullYear();
-    let roster: RosterSlotCounts = { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DEF: 1, BENCH: 6 };
+    let roster: RosterSlotCounts = {
+      QB: 1,
+      RB: 2,
+      WR: 2,
+      TE: 1,
+      FLEX: 1,
+      SUPER_FLEX: 0,
+      K: 1,
+      DEF: 1,
+      BENCH: 6,
+    };
     for (const year of [season, season - 1]) {
       const settings = await espnJson<EspnRosterSettings>(
         `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${year}/segments/0/leagues/${encodeURIComponent(clean)}?view=mSettings`,
@@ -3754,6 +3805,7 @@ export async function fetchYahooLeague(
     WR: 0,
     TE: 0,
     FLEX: 0,
+    SUPER_FLEX: 0,
     K: 0,
     DEF: 0,
     BENCH: 0,
@@ -3771,6 +3823,8 @@ export async function fetchYahooLeague(
     else if (pos === "TE") draftSlots.TE += count;
     else if (pos === "K") draftSlots.K += count;
     else if (pos === "DEF" || pos === "DST") draftSlots.DEF += count;
+    else if (pos === "SUPER_FLEX" || pos === "SUPERFLEX" || pos === "Q/W/R/T")
+      draftSlots.SUPER_FLEX += count;
     else if (pos.includes("FLEX") || pos === "W/R/T" || pos === "W/R") draftSlots.FLEX += count;
     else if (pos === "BN") draftSlots.BENCH += count;
     else if (pos === "IR" || pos === "IL" || pos === "IL+") ir += count;

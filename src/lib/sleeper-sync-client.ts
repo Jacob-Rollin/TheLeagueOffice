@@ -4,6 +4,11 @@
  * burn Active CPU for public Sleeper leagues.
  */
 
+import {
+  ESPN_FLUID_SETTINGS_TTL_MS,
+  espnFluidCacheKey,
+  espnFluidMemo,
+} from "@/lib/espn-fluid-cache";
 import type { ConnectionSync, RosterSlotCounts } from "@/lib/league.server";
 import {
   canFetchSettingsClient,
@@ -35,12 +40,17 @@ function rosterFromSettings(roster: Record<string, number>): RosterSlotCounts {
     FLEX:
       (Number(roster["FLEX"] ?? 0) || 0) +
       (Number(roster["WRRB"] ?? 0) || 0) +
-      (Number(roster["WRTE"] ?? 0) || 0) +
-      (Number(roster["SFLEX"] ?? 0) || 0),
+      (Number(roster["WRTE"] ?? 0) || 0),
+    SUPER_FLEX: Number(roster["SFLEX"] ?? roster["SUPER_FLEX"] ?? 0) || 0,
     K: Number(roster["K"] ?? 0) || 0,
     DEF: Number(roster["DEF"] ?? 0) || 0,
     BENCH: (Number(roster["BN"] ?? 0) || 0) + (Number(roster["TAXI"] ?? 0) || 0),
   };
+}
+
+function isSnakeDraftType(type: string | null | undefined): boolean {
+  const t = String(type ?? "snake").trim().toLowerCase();
+  return t !== "linear" && t !== "auction";
 }
 
 export async function fetchConnectionSyncPreferred(input: {
@@ -87,7 +97,7 @@ export async function fetchConnectionSyncPreferred(input: {
           rounds,
           myTeam: Math.max(1, Number(mine) || 1),
           scoring: scoringFromMap(settings.scoring),
-          snake: (settings.draft.type ?? "").toLowerCase() !== "auction",
+          snake: isSnakeDraftType(settings.draft.type),
           playoffStartWeek: settings.playoffStartWeek ?? 15,
           roster,
           teamNames,
@@ -99,13 +109,17 @@ export async function fetchConnectionSyncPreferred(input: {
     }
   }
 
+  // ESPN / Yahoo still need Fluid credentials — memoize like settings/scoring.
   const { getConnectionSync } = await import("@/lib/league.functions");
-  return getConnectionSync({
-    data: {
-      identifier: leagueId,
-      platform,
-      ...(input.s2 ? { s2: input.s2 } : {}),
-      ...(input.swid ? { swid: input.swid } : {}),
-    },
-  });
+  const fluidKey = espnFluidCacheKey("connection-sync", leagueId, platform);
+  return espnFluidMemo(fluidKey, ESPN_FLUID_SETTINGS_TTL_MS, () =>
+    getConnectionSync({
+      data: {
+        identifier: leagueId,
+        platform,
+        ...(input.s2 ? { s2: input.s2 } : {}),
+        ...(input.swid ? { swid: input.swid } : {}),
+      },
+    }),
+  );
 }

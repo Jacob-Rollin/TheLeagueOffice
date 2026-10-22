@@ -53,7 +53,8 @@ function letter(pct: number): { grade: string; tone: "good" | "even" | "bad" } {
 }
 
 function tagFor(picks: TeamPick[]): string {
-  const early = picks.filter((p) => p.pick.overall <= 0 || true).slice(0, 4);
+  // First four picks by overall (early-round strategy tags).
+  const early = [...picks].sort((a, b) => a.pick.overall - b.pick.overall).slice(0, 4);
   const count = (pos: string, list: TeamPick[]) => list.filter((p) => p.player.pos === pos).length;
   const rbEarly = count("RB", early);
   const wrEarly = count("WR", early);

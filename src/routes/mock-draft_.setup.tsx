@@ -17,6 +17,7 @@ import {
   SCORING_CHOICES,
   TEAM_CHOICES,
   TIMER_CHOICES,
+  clearMockSession,
   loadMockConfig,
   saveMockConfig,
   type MockConfig,
@@ -25,6 +26,8 @@ import { cn } from "@/lib/utils";
 
 
 export const Route = createFileRoute("/mock-draft_/setup")({
+  // Client-only setup — SSR would burn Fluid Active CPU on every visit.
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Mock Draft Setup — The League Office" },
@@ -74,10 +77,11 @@ function MockDraftSetupPage() {
       }),
   });
 
-  // Auto-populate the left form the moment an active league resolves.
+  // Auto-populate once per active league — do not overwrite later user edits.
   useEffect(() => {
     const id = activeLeague?.id ?? null;
     if (!id || !synced) return;
+    if (appliedRef.current === id) return;
     const teams = Number(synced?.teams) || DEFAULT_MOCK_CONFIG.teams;
     const roster = { ...DEFAULT_MOCK_CONFIG.roster, ...(synced?.roster ?? {}) };
     const slot = Math.min(Math.max(Number(synced?.myTeam) || 1, 1), teams);
@@ -96,13 +100,10 @@ function MockDraftSetupPage() {
       playoffsStartWeek:
         Number(synced?.playoffStartWeek) || DEFAULT_MOCK_CONFIG.playoffsStartWeek,
     };
-    const signature = `${id}:${JSON.stringify(next)}`;
-    if (appliedRef.current === signature) return;
-    appliedRef.current = signature;
+    appliedRef.current = id;
     syncedRef.current = next;
     setConfig((c) => ({ ...next, timerLabel: c.timerLabel }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [synced, activeLeague?.id]);
+  }, [synced, activeLeague?.id, activeLeague?.teamName]);
 
   // Default the team name to the signed-in profile name.
   useEffect(() => {
@@ -123,6 +124,8 @@ function MockDraftSetupPage() {
 
 
   const begin = () => {
+    // Fresh board for this setup — do not resume a prior in-progress session.
+    clearMockSession();
     const clean: MockConfig = {
       ...config,
       teamName: config.teamName.trim() || "My Team",
@@ -133,8 +136,8 @@ function MockDraftSetupPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[hsl(0_0%_98%)]">
-      <div className="mx-auto w-full max-w-[1200px] px-4 py-8">
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto w-full max-w-shell px-3 py-8 pb-16">
         <header className="mb-6">
           <h1 className="display-title text-3xl">
             Mock Draft <span className="text-primary">Setup</span>
@@ -371,13 +374,13 @@ function ConnectedSyncCard({
           <h2 className="font-display text-xs uppercase tracking-widest text-muted-foreground">
             Connected Sync Data
           </h2>
-          <p className="text-sm font-semibold text-black">
+          <p className="text-sm font-semibold text-slate-900">
             {league?.name ?? "League"}{" "}
             <span className="font-normal text-muted-foreground">
-              [{platformLabel(league?.platform)}]
+              {platformLabel(league?.platform)}
             </span>
           </p>
-          <p className="text-xs text-black">{league?.teamName ?? "Your team"}</p>
+          <p className="text-xs text-slate-700">{league?.teamName ?? "Your team"}</p>
           {modified && (
             <div className="pt-2">
               <p className="text-xs font-semibold text-red-600">
@@ -386,7 +389,7 @@ function ConnectedSyncCard({
               <button
                 type="button"
                 onClick={onRestore}
-                className="mt-1 text-xs font-semibold text-black underline underline-offset-4"
+                className="mt-1 text-xs font-semibold text-slate-900 underline underline-offset-4"
               >
                 Restore Synced Defaults
               </button>

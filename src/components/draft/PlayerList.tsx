@@ -404,8 +404,8 @@ function PlayerListImpl({
   };
 
   return (
-    <div className="flex flex-col">
-      <div className="sticky top-[var(--wr-header-h,0px)] z-20 space-y-3 border-b border-border bg-surface/95 p-3 backdrop-blur">
+    <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="sticky top-[var(--wr-header-h,0px)] z-20 space-y-3 border-b border-slate-200 bg-slate-50/90 p-3 backdrop-blur">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -441,7 +441,7 @@ function PlayerListImpl({
                     : "border-border bg-card text-muted-foreground hover:text-foreground",
                 )}
               >
-                {p}
+                {p === "DEF" ? "DST" : p}
                 {p !== "ALL" && (settings.roster[p as Pos] ?? 0) > 0 ? (
                   <span className="tabnum ml-1 text-[10px] opacity-70">
                     {counts?.[p] ?? 0}/{settings.roster[p as Pos]}
@@ -608,7 +608,7 @@ function PlayerListImpl({
         )}
         <ul
           ref={listRef}
-          className="divide-y divide-border"
+          className="divide-y divide-slate-100"
           onPointerMove={onPointerMove}
           onPointerUp={() => setDragId(null)}
           onPointerCancel={() => setDragId(null)}

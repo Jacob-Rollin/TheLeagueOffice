@@ -22,13 +22,13 @@ export function SideCard({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card",
+        "flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm",
         fit ? "h-full" : "max-h-full",
       )}
     >
-      <div className="shrink-0 border-b border-border px-3 py-1.5">
-        <div className="font-display text-sm uppercase tracking-widest">{title}</div>
-        {subtitle && <div className="text-[11px] text-muted-foreground">{subtitle}</div>}
+      <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 px-3 py-1.5">
+        <div className="font-display text-sm uppercase tracking-widest text-slate-900">{title}</div>
+        {subtitle && <div className="text-[11px] text-slate-500">{subtitle}</div>}
       </div>
       <div className={cn("min-h-0 flex-1 p-2", fit ? "overflow-hidden" : "no-scrollbar overflow-y-auto")}>
         {children}
@@ -77,7 +77,7 @@ export function MyTeamColumn({
   return (
     <div className={cn("flex min-h-0 flex-col", fit && "h-full")}>
       {showHeader && (
-        <div className="mb-1 flex shrink-0 items-center gap-2 border-b border-border px-2 pb-1.5 font-display text-[10px] uppercase tracking-widest text-muted-foreground">
+        <div className="mb-1 flex shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50/80 px-2 py-1.5 font-display text-[10px] uppercase tracking-widest text-slate-500">
           <span className="w-7 shrink-0">Pos</span>
           <span className="w-9 shrink-0" />
           <span className="min-w-0 flex-1">Player</span>
@@ -110,12 +110,12 @@ export function MyTeamColumn({
               <button
                 onClick={() => onOpen(s.player!.id)}
                 className={cn(
-                  "flex w-full items-center gap-2 overflow-hidden rounded border border-border bg-background px-2 text-left hover:border-primary",
+                  "flex w-full items-center gap-2 overflow-hidden rounded-md border border-slate-200 bg-white px-2 text-left hover:border-primary",
                   fit ? "h-full py-0.5" : "py-1.5",
                 )}
               >
-                <span className="w-7 shrink-0 font-display text-[10px] uppercase text-muted-foreground">
-                  {s.slot}
+                <span className="w-7 shrink-0 font-display text-[10px] uppercase text-slate-500">
+                  {s.slot === "DEF" ? "DST" : s.slot}
                 </span>
                 <PlayerAvatar
                   id={s.player.id}
@@ -172,14 +172,14 @@ export function MyTeamColumn({
             ) : (
               <div
                 className={cn(
-                  "flex flex-1 items-center gap-2 rounded border border-dashed border-border px-2",
+                  "flex flex-1 items-center gap-2 rounded-md border border-dashed border-slate-200 px-2",
                   fit ? "h-full py-0.5" : "py-1.5",
                 )}
               >
-                <span className="w-8 shrink-0 font-display text-[10px] uppercase text-muted-foreground">
-                  {s.slot}
+                <span className="w-8 shrink-0 font-display text-[10px] uppercase text-slate-500">
+                  {s.slot === "DEF" ? "DST" : s.slot}
                 </span>
-                <span className="text-xs text-muted-foreground" style={{ fontSize: metaSize }}>
+                <span className="text-xs text-slate-400" style={{ fontSize: metaSize }}>
                   Empty
                 </span>
               </div>

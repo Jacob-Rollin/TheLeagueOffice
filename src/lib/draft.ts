@@ -10,6 +10,8 @@ export type RosterSlots = {
   WR: number;
   TE: number;
   FLEX: number;
+  /** QB/RB/WR/TE — Superflex. Defaults to 0 when absent in older persisted settings. */
+  SUPER_FLEX: number;
   K: number;
   DEF: number;
   BENCH: number;
@@ -33,6 +35,12 @@ export type Pick = {
 
 export const POSITIONS: Pos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
 export const FLEX_POSITIONS: Pos[] = ["RB", "WR", "TE"];
+export const SUPER_FLEX_POSITIONS: Pos[] = ["QB", "RB", "WR", "TE"];
+
+/** UI label for filter chips / badges (internal pos stays DEF). */
+export function posDisplayLabel(pos: string): string {
+  return pos === "DEF" ? "DST" : pos;
+}
 
 export const DEFAULT_ROSTER: RosterSlots = {
   QB: 1,
@@ -40,6 +48,7 @@ export const DEFAULT_ROSTER: RosterSlots = {
   WR: 2,
   TE: 1,
   FLEX: 1,
+  SUPER_FLEX: 0,
   K: 1,
   DEF: 1,
   BENCH: 6,
@@ -106,28 +115,60 @@ export function value(p: Player, scoring: Scoring) {
 }
 
 /**
+ * Assign remaining flex (or superflex) demand to a single neediest position
+ * so Suggested picks are not tripled across every flex-eligible spot.
+ */
+function assignSharedNeed(
+  needs: Record<Pos, number>,
+  have: Record<string, number>,
+  eligible: Pos[],
+  left: number,
+) {
+  if (left <= 0 || !eligible.length) return;
+  let best = eligible[0]!;
+  let bestScore = -Infinity;
+  for (const pos of eligible) {
+    // Prefer open dedicated needs; otherwise the sparsest rostered position.
+    const score = needs[pos] * 100 - (have[pos] ?? 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = pos;
+    }
+  }
+  needs[best] += left;
+}
+
+/**
  * Remaining starting-lineup needs by position for a team, given who they have
- * already drafted. Flex demand is spread across RB/WR/TE.
+ * already drafted. Shared FLEX / SUPER_FLEX demand is assigned once.
  */
 export function positionNeeds(drafted: Player[], roster: RosterSlots): Record<Pos, number> {
   const have: Record<string, number> = {};
   for (const p of drafted) have[p.pos] = (have[p.pos] ?? 0) + 1;
 
   const needs = {} as Record<Pos, number>;
-  let flexLeft = roster.FLEX;
+  let flexLeft = Math.max(0, roster.FLEX ?? 0);
+  let superFlexLeft = Math.max(0, roster.SUPER_FLEX ?? 0);
   for (const pos of POSITIONS) {
     const dedicated = roster[pos];
     const used = Math.min(have[pos] ?? 0, dedicated);
     needs[pos] = Math.max(0, dedicated - used);
-    // leftover bodies at this position can soak up flex slots
-    if (FLEX_POSITIONS.includes(pos)) {
-      const spare = Math.max(0, (have[pos] ?? 0) - dedicated);
-      flexLeft = Math.max(0, flexLeft - spare);
-    }
   }
-  if (flexLeft > 0) {
-    for (const pos of FLEX_POSITIONS) needs[pos] += flexLeft;
+  // Spares beyond dedicated starters soak shared flex / superflex first.
+  for (const pos of FLEX_POSITIONS) {
+    const spare = Math.max(0, (have[pos] ?? 0) - roster[pos]);
+    const takeFlex = Math.min(spare, flexLeft);
+    flexLeft -= takeFlex;
+    const takeSf = Math.min(spare - takeFlex, superFlexLeft);
+    superFlexLeft -= takeSf;
   }
+  {
+    const qbSpare = Math.max(0, (have.QB ?? 0) - roster.QB);
+    const takeSf = Math.min(qbSpare, superFlexLeft);
+    superFlexLeft -= takeSf;
+  }
+  assignSharedNeed(needs, have, FLEX_POSITIONS, flexLeft);
+  assignSharedNeed(needs, have, SUPER_FLEX_POSITIONS, superFlexLeft);
   return needs;
 }
 
@@ -145,15 +186,23 @@ export function fillRoster(players: Player[], roster: RosterSlots) {
     ["WR", ["WR"]],
     ["TE", ["TE"]],
     ["FLEX", FLEX_POSITIONS],
+    ["SUPER_FLEX", SUPER_FLEX_POSITIONS],
     ["K", ["K"]],
     ["DEF", ["DEF"]],
   ];
   for (const [name, pos] of order) {
-    for (let i = 0; i < roster[name]; i++) slots.push({ slot: name, player: take(pos) });
+    const count = Math.max(0, roster[name] ?? 0);
+    for (let i = 0; i < count; i++) slots.push({ slot: name, player: take(pos) });
   }
   for (let i = 0; i < roster.BENCH; i++) slots.push({ slot: "BN", player: pool.shift() ?? null });
   for (const extra of pool) slots.push({ slot: "BN", player: extra });
   return slots;
+}
+
+/** Snake drafts only — linear and auction are not snake. */
+export function isSnakeDraft(type: string | null | undefined): boolean {
+  const t = String(type ?? "snake").trim().toLowerCase();
+  return t !== "linear" && t !== "auction";
 }
 
 /** Weeks 4-18 bye grid for a set of drafted players. */

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import {
+  DEFAULT_ROSTER,
   DEFAULT_SETTINGS,
   teamForPick,
   type Pick,
@@ -146,7 +147,15 @@ function hydrate() {
     if (raw) {
       const parsed = JSON.parse(raw) as Persisted;
       loaded = {
-        ...(parsed.settings ? { settings: { ...DEFAULT_SETTINGS, ...parsed.settings } } : {}),
+        ...(parsed.settings
+          ? {
+              settings: {
+                ...DEFAULT_SETTINGS,
+                ...parsed.settings,
+                roster: { ...DEFAULT_ROSTER, ...(parsed.settings.roster ?? {}) },
+              },
+            }
+          : {}),
         ...(Array.isArray(parsed.picks) ? { picks: parsed.picks } : {}),
         ...(Array.isArray(parsed.watch) ? { watch: parsed.watch } : {}),
         ...(Array.isArray(parsed.order) ? { customOrder: parsed.order } : {}),
@@ -179,7 +188,8 @@ const SERVER_SNAPSHOT: StoreState = {
   hydrated: false,
 };
 
-export function useDraft() {
+export function useDraft(opts?: { enableLeagueSync?: boolean }) {
+  const enableLeagueSync = opts?.enableLeagueSync !== false;
   const { link: globalLink } = useLeagueLink();
   const store = useSyncExternalStore(
     subscribe,
@@ -274,7 +284,7 @@ export function useDraft() {
       rounds,
       snake: sync.snake,
       scoring: sync.scoring,
-      roster: sync.roster,
+      roster: { ...DEFAULT_ROSTER, ...sync.roster },
       teamNames: sync.teamNames,
       myTeam: sync.myTeam && sync.myTeam <= teams ? sync.myTeam : Math.min(prev.myTeam, teams),
     }));
@@ -293,10 +303,13 @@ export function useDraft() {
     for (let round = 0; round < Math.min(deepest, rounds); round++) {
       for (let i = 0; i < teams; i++) {
         const team = sync.snake && round % 2 === 1 ? teams - i : i + 1;
+        // Snake overall index for this cell — keep empty slots empty so the
+        // DraftBoard (keyed by overall) stays aligned with ownership.
+        const overall = round * teams + i + 1;
         const playerId = byTeam.get(team)?.[round];
         if (!playerId || seen.has(playerId)) continue;
         seen.add(playerId);
-        next.push({ playerId, team, overall: next.length + 1 });
+        next.push({ playerId, team, overall });
       }
     }
     setPicks(next);
@@ -316,8 +329,11 @@ export function useDraft() {
 
   // Keep the War Room in lockstep with the globally shared Sleeper link:
   // linking or unlinking anywhere (homepage, trade desk) applies here automatically.
+  // Mock Draft player modal passes enableLeagueSync:false so browsing players
+  // does not kick off an unrelated league sync.
   const globalKey = globalLink ? `${globalLink.leagueId}:${globalLink.syncedAt ?? ""}` : null;
   useEffect(() => {
+    if (!enableLeagueSync) return;
     if (!hydrated) return;
     if (!globalLink) {
       autoSyncKey = null;
@@ -342,7 +358,7 @@ export function useDraft() {
       .catch(() => {
         autoSyncKey = null;
       });
-  }, [globalKey, hydrated, globalLink, applyLeague, clearLinkedLeagueState]);
+  }, [enableLeagueSync, globalKey, hydrated, globalLink, applyLeague, clearLinkedLeagueState]);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
