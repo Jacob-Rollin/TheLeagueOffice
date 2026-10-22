@@ -610,14 +610,14 @@ function PlayersPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1.5 overflow-x-auto px-2 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex items-center gap-2 overflow-x-auto px-2 py-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
           aria-label="Search players"
           onClick={() => setSearchOpen((o) => !o)}
-          className="shrink-0 rounded-lg bg-m-icon-bg p-2 text-m-icon-fg"
+          className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
         >
-          <Search className="size-4" strokeWidth={2.5} />
+          <Search className="size-5" strokeWidth={2.5} />
         </button>
         {POS_FILTERS.map((p) => {
           const drafted =
@@ -630,24 +630,37 @@ function PlayersPane({
               : p === "DEF"
                 ? settings.roster.DEF
                 : Number(settings.roster[p as keyof typeof settings.roster] ?? 0);
+          const showCount = p === "ALL" || totalSlots > 0;
+          const countLabel = showCount
+            ? `${drafted}/${p === "ALL" ? totalSlots : Math.max(totalSlots, drafted)}`
+            : "";
           return (
             <button
               key={p}
               type="button"
               onClick={() => startTransition(() => setPos(p))}
               className={cn(
-                "shrink-0 rounded-full px-2.5 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide",
+                "inline-flex size-12 shrink-0 flex-col items-center justify-center rounded-full font-display leading-none",
                 pos === p ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
               )}
             >
-              {p === "DEF" ? "DST" : p}
-              {p === "ALL" || totalSlots > 0
-                ? ` ${drafted}/${p === "ALL" ? totalSlots : Math.max(totalSlots, drafted)}`
-                : ""}
+              <span className="text-[11px] font-extrabold uppercase tracking-wide">
+                {p === "DEF" ? "DST" : p}
+              </span>
+              {showCount ? (
+                <span
+                  className={cn(
+                    "mt-0.5 text-[9px] font-semibold tabular-nums",
+                    pos === p ? "text-m-bg/75" : "text-m-muted",
+                  )}
+                >
+                  {countLabel}
+                </span>
+              ) : null}
             </button>
           );
         })}
-        <span className="mx-0.5 h-5 w-px shrink-0 bg-m-border" aria-hidden />
+        <span className="mx-0.5 h-7 w-px shrink-0 bg-m-border" aria-hidden />
         <ToolChip
           active={watchOnly}
           onClick={() => {
