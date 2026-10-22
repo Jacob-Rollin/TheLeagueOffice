@@ -130,6 +130,19 @@ export function fetchAccuracyFile(season: number): Promise<AccuracyFile | null> 
   return fetchGistFile<AccuracyFile>(`accuracy-${season}.json`);
 }
 
+/**
+ * Growing kickoff-locked Sleeper raw lines published by the projection engine.
+ * Keyed by `${week}|${playerId}`. Null when the season file is not on the Gist yet.
+ */
+export async function fetchSleeperWeekLinesFile(
+  season: number,
+): Promise<Record<string, Record<string, number>> | null> {
+  const file = await fetchGistFile<{
+    lines?: Record<string, Record<string, number>>;
+  }>(`sleeper-week-lines-${season}.json`);
+  return file?.lines ?? null;
+}
+
 export type FrozenSleeperPts = {
   std: number | null;
   half: number | null;

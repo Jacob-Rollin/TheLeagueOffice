@@ -45,7 +45,11 @@ import {
 } from "@/lib/players-build";
 import { formatNflGameStatusLabel, formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { fetchLeagueScoringPreferred } from "@/lib/scoring-client";
-import { projectionPoints, type ScoringMap } from "@/lib/scoring-map";
+import {
+  hasScorableProjectionStats,
+  projectionPoints,
+  type ScoringMap,
+} from "@/lib/scoring-map";
 import {
   fetchGameLogsClient,
   fetchNextGameClient,
@@ -1227,7 +1231,7 @@ function GameLogsPanel({
 
   const { data, isLoading } = useQuery({
     // v2: past-week Proj columns from shared week projection bundles.
-    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v3"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v4"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -1457,7 +1461,7 @@ function ProjectionsPanel({
 
   const { data, isLoading } = useQuery({
     // v2: past-week rows keep Sleeper proj lines for the Projections sub-tab.
-    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v3"],
+    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v4"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -1501,7 +1505,8 @@ function ProjectionsPanel({
                 : null;
             const ptsVal = leaguePts ?? ptsForFormat(g.points, scoringFormat);
             const fpts = played && ptsVal != null ? fmtFantasyPts(ptsVal) : "-";
-            const showStats = !isBye && Boolean(g.projRaw && Object.keys(g.projRaw).length);
+            const showStats =
+              !isBye && hasScorableProjectionStats(g.projRaw);
             const oppLabel = formatOppLabel(
               g as { opp?: string | null; isAway?: boolean; location?: string },
             );
@@ -1957,7 +1962,7 @@ function OutlookPanel({
   const { data: logsBundle } = useQuery({
     // Current season only — career years load when Game Logs opens.
     // v2: past-week Proj from shared week projection bundles.
-    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v3"],
+    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v4"],
     enabled: Boolean(playerId && pos),
     queryFn: () =>
       fetchGameLogsClient(playerId, team || "FA", pos || "WR", null, { includeCareer: false }),

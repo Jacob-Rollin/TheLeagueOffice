@@ -32,6 +32,8 @@ export const GIST_FILES = {
   projections: "projections-current.json",
   locks: (season: number) => `locks-${season}.json`,
   accuracy: (season: number) => `accuracy-${season}.json`,
+  /** Growing kickoff-locked Sleeper raw lines for player-popup Projections tabs. */
+  sleeperWeekLines: (season: number) => `sleeper-week-lines-${season}.json`,
   dashboard: "accuracy-dashboard.md",
 } as const;
 

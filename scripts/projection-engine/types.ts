@@ -64,6 +64,8 @@ export interface LockedPlayer {
   opp: string | null;
   kickoff: string;
   pts: Partial<Record<TrackKey, Pts>>;
+  /** Kickoff-locked Sleeper counting stats (popup Projections columns). */
+  sleeperLine?: Record<string, number>;
 }
 
 export interface LocksFile {
