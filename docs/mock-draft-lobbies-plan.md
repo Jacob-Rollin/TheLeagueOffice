@@ -10,9 +10,34 @@
 | Solo simulator | Keep `/mock-draft/setup` → `/mock-draft` as-is (client-only AI). Multiplayer is a parallel path. |
 | Native live snake | **Out of scope.** Remains deferred in [`native-leagues-plan.md`](native-leagues-plan.md) Phase 2. Do not hitch mock rooms to `native_*` tables or `/league/$linkId/draft`. |
 | Realtime | **Visibility-aware short polling** (same posture as native §6.6). No websockets / Supabase Realtime for TiDB state. |
-| Data home | **TiDB** for room + picks; **Supabase** only for host auth (and optional profile display names). No Supabase membership index required for ephemeral rooms. |
+| Data home | **TiDB** for live rooms + picks + short-lived completed snapshots; **Supabase** for auth only (optional thin “my past mocks” index later). |
+| Completed boards | Freeze a compact JSON snapshot on complete; retain **7–14 days**; share via opaque token; CSV/JSON export client-side from that snapshot. |
 
 Mobile already labels the entry point **“Mock Draft Lobby”** ([`MobileMockDraftCard`](../src/components/mobile/MobileHomeSections.tsx)) but it only links to solo setup. This plan makes that label real.
+
+---
+
+## 0. TiDB vs Supabase (limits)
+
+**Verdict: host live lobbies on TiDB. Do not put live pick/poll traffic on Supabase Postgres.**
+
+| Concern | TiDB Starter | Supabase Free |
+| --- | --- | --- |
+| What burns | Request Units (RU) on read/write | DB size, egress, connections; whole project can **auto-pause** ~7d idle |
+| Live draft shape | Many short reads + contested writes — controllable with caps, TTL, visible-only poll, pick-on-read | Same traffic hits the **same Postgres** as auth/`profiles` — a draft night can starve or pause the whole site |
+| Contested picks | `FOR UPDATE` / tx already used for native ops | RLS + client writes are a poor fit; still need server RPC + locks |
+| Idle risk | No inactivity pause | Auth/health pings do **not** count as activity ([`free-tier-and-ux-scale-plan.md`](free-tier-and-ux-scale-plan.md)) |
+| Fit with roadmap | Same store as future native live snake patterns; optional later split to TiDB cluster C | Keep for auth + low-churn index rows only |
+
+**Safest limit posture**
+
+1. **Live state → TiDB** (`lobby` / `live` / `paused`): aggressive TTL, seat caps, no poll when tab hidden, one snapshot RPC per client.
+2. **Auth → Supabase** (unchanged). Guests never open a Supabase DB session for the room.
+3. **Do not** enable Supabase Realtime for mocks in v1 — connection/message quotas + another moving part; polling matches native §6.6.
+4. **Completed boards → TiDB snapshot row** (small JSON, rare reads). Optional later: thin Supabase `mock_draft_saves` index (`user_id`, `share_id`, title, created_at) pointing at TiDB/share id for “My mocks” — **not** full pick streams on Supabase.
+5. If TiDB RUs contend with research/native later, mocks move with native to **TiDB cluster C** (already sketched in the free-tier plan) — still not onto Supabase live path.
+
+**When Supabase would be wrong here:** every client polling `postgres` every 1–2s during a 12-team draft, plus guest joins, plus auth — that is exactly the high-churn load we already refused for native leagues.
 
 ---
 
@@ -225,14 +250,76 @@ AI seats: reuse [`aiPick`](../src/lib/mock-ai.ts) with seat `persona` (server im
 | Lobby poll | 2–3s visible only |
 | Live poll | 1–2s visible only; pause when hidden |
 | Cron tick | ≤1/min; also expiry sweep |
-| Complete retention | Keep picks ~24h for recap refresh; then delete or soft-expire |
+| Complete retention | On complete: write `result_snapshot` JSON; keep **7–14 days** for share/recap; purge picks+seats earlier if needed; cron deletes expired |
+| Share links | Opaque `share_id` (not join code); read-only; no auth required |
 | No public CDN of in-progress rooms | Private Fluid reads only (guest token or JWT) |
 
 Do **not** fan out N Fluid calls per seat. One `getMockDraftRoom` returns the full snapshot.
 
 ---
 
-## 8. UI implementation notes
+## 8. Results, share, and export
+
+On `status=complete`, server freezes a **compact snapshot** (settings, seat names, ordered picks with player id/name/pos/team, timestamps). Live polling stops; recap/share read the snapshot only.
+
+| Feature | How | Limit impact |
+| --- | --- | --- |
+| **Recap page** | `/mock-draft/recap/$shareId` (or `?share=`) — read-only board + existing [`MockRecap`](../src/components/draft/MockRecap.tsx) | One Fluid GET; cacheable short private TTL |
+| **Copy link** | Host/any seat copies share URL after complete (and optionally while live: “spectator link” = room id + read token — defer) | None |
+| **Export JSON** | Download snapshot file from client | Zero server storage beyond snapshot |
+| **Export CSV** | One row per pick: overall, round, seat, player, pos, team, source | Client-side |
+| **Export text board** | Plaintext round-by-round for Discord/Reddit paste | Client-side |
+| **Save to account** (phase 3+) | Signed-in only: insert thin Supabase or TiDB “my mocks” row keyed by `share_id` | Low churn; cap e.g. 20 saves/user |
+| **Import to War Room** (phase 3+) | “Load my seat’s roster into War Room / sandbox” from snapshot — local only | No TiDB write |
+
+Do **not** publish per-room JSON to the `snap-cdn` branch (orphan CDN is for shared public data, not private boards).
+
+Schema add on `mock_draft_rooms` (or side table):
+
+```
+share_id CHAR(26) UNIQUE NULL      -- set at create or on complete
+result_snapshot JSON NULL          -- frozen on complete
+result_expires_at DATETIME NULL
+```
+
+---
+
+## 9. Feature ideas from other mock platforms (prioritized)
+
+Common elsewhere (FantasyPros Draft Wizard, Sleeper mocks, ESPN/Yahoo mocks, RTSports, etc.) mapped to us:
+
+### Ship with multiplayer v1 (or immediately after live)
+- **Private room + join code** (locked) + AI fillers
+- **Pick queue** per seat (draft from queue / autopick from queue on timeout) — schema cousin of `native_draft_queues`
+- **Host pause / force-pick / kick**
+- **Pick clock** with visible deadline
+- **Post-draft grades / recap** (already have `MockRecap`) + **share link + CSV/JSON**
+- **Restart with same settings** (new room, same config)
+- **Reach / value vs ADP** toggle (solo currently hides tags in live mock — offer “show ADP delta” for practice)
+
+### Strong v1.5
+- **Pre-draft rankings / watchlist sync** from War Room watch list
+- **Positional needs / scarcity** strip (starters filled vs remaining ADP at position)
+- **Spectator / late join read-only** after start
+- **Custom draft order** drag in lobby (solo already has `customOrder` concepts in places)
+- **Keeper pre-loads** (mark kept players before start — practice for keeper leagues)
+- **Slow / hyper / no-timer** speeds (solo has speed already — host setting)
+
+### Later / nice-to-have (do not block lobbies)
+- Public open matchmaking lobby browser
+- In-draft chat or emoji reactions
+- In-draft trades
+- Auction / salary-cap mocks
+- Upload custom rankings CSV
+- Historical “my mock archive” beyond 14-day snapshot
+- Voice rooms
+- ELO / leaderboards for public mocks
+
+**Non-goals remain:** hitching results into native season rosters; Realtime; auction in v1.
+
+---
+
+## 10. UI implementation notes
 
 - Preserve SiteNav + ScoreTicker via root layout; Broadcast tokens; no new theme.
 - Split solo page logic: extract shared arena presentational pieces from [`mock-draft.tsx`](../src/routes/mock-draft.tsx) into something like `components/draft/MockDraftArena.tsx` that accepts either local controllers (solo) or room snapshot + mutation callbacks (multiplayer).
@@ -240,13 +327,14 @@ Do **not** fan out N Fluid calls per seat. One `getMockDraftRoom` returns the fu
 - Wire `PlayerModalHost` draft overrides to `pickMockDraftPlayer` with `intent_id` (uuid per click).
 - Mobile: update `MobileMockDraftCard` to hub (Host / Join / Solo); room route under existing desktop shell first; `/m/mock-draft/...` can follow if needed.
 - Auth gate on Host: reuse `AuthDialog`; Join stays open with display-name field.
+- After complete: share URL + Export menu (JSON / CSV / plaintext) on recap.
 
 ---
 
-## 9. Phased rollout
+## 11. Phased rollout
 
 ### Phase 0 — Schema + server skeleton
-1. TiDB DDL for `mock_draft_*`; migrate path.
+1. TiDB DDL for `mock_draft_*` (include `share_id` / `result_snapshot`); migrate path.
 2. Server module: create / join / get (lobby only); guest token helpers; caps.
 3. No UI yet beyond smoke via functions.
 
@@ -258,23 +346,24 @@ Do **not** fan out N Fluid calls per seat. One `getMockDraftRoom` returns the fu
 ### Phase 2 — Live multiplayer draft
 1. `pickMockDraftPlayer` + turn gating wired to existing board/list.
 2. Server clock + autopick on timeout; host pause/force.
-3. AI fill for empty seats; complete → `MockRecap`.
+3. AI fill for empty seats; complete → freeze snapshot → `MockRecap` + share/export.
 
 ### Phase 3 — Polish
-1. Cron tick + expiry sweeper Actions workflow.
+1. Cron tick + expiry sweeper Actions workflow (live TTL + result retention).
 2. Kick / reconnect / seat transfer; display names from profiles when signed in.
-3. Mobile lobby parity; rate-limit hardening; basic observability (pick latency, active room count).
+3. Pick queues; mobile lobby parity; rate-limit hardening; optional “save to account” / War Room import.
+4. Basic observability (pick latency, active room count, RU proxies).
 
-**Non-goals for v1:** auction, public open matchmaking browser, voice/chat, ranking/ELO, persisting mock results into War Room or native leagues, hitching to native live snake.
+**Non-goals for v1:** auction, public open matchmaking browser, voice/chat, ranking/ELO, persisting mock results into native season leagues, hitching to native live snake, Supabase Realtime.
 
 ---
 
-## 10. Explicit separation from native live snake
+## 12. Explicit separation from native live snake
 
 | | Mock lobby | Native live snake (later) |
 | --- | --- | --- |
 | Tables | `mock_draft_*` | `native_leagues` / `native_draft_picks` |
-| After draft | Recap only; discard | Rosters + schedules + in-season |
+| After draft | Snapshot recap + share; TTL purge | Rosters + schedules + in-season |
 | Guests | Allowed with token | Members only |
 | Entry | `/mock-draft/...` | `/league/$linkId/draft` |
 
@@ -282,7 +371,7 @@ Shared libraries only: `draft.ts`, `mock-ai.ts`, draft UI components. When nativ
 
 ---
 
-## 11. Testing checklist
+## 13. Testing checklist
 
 - Host create → join code works for signed-in and guest in two browsers.
 - Double-click pick / retry with same `intent_id` → one pick.
