@@ -21,6 +21,7 @@ import {
   FilePlus2,
   Info,
   Search,
+  Shield,
   Star,
   Trash2,
 } from "lucide-react";
@@ -1161,22 +1162,46 @@ const TeamPane = memo(function TeamPane({
   const slots = fillRoster(players, settings.roster);
   const pickByPlayer = new Map(roster.map((r) => [r.player.id, r.pick]));
 
+  // User's slot first (far left), then remaining slots in draft order — Sleeper.
+  const teamOrder = useMemo(() => {
+    const mine = settings.myTeam;
+    const all = Array.from({ length: settings.teams }, (_, i) => i + 1);
+    if (mine < 1 || mine > settings.teams) return all;
+    return [mine, ...all.filter((t) => t !== mine)];
+  }, [settings.teams, settings.myTeam]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex gap-1.5 overflow-x-auto px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => onRosterTeamChange(t)}
-            className={cn(
-              "shrink-0 rounded-full px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide",
-              rosterTeam === t ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
-            )}
-          >
-            {t === settings.myTeam ? teamName(settings, t) : `Slot ${t}`}
-          </button>
-        ))}
+      <div className="flex gap-2 overflow-x-auto px-3 py-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {teamOrder.map((t) => {
+          const mine = t === settings.myTeam;
+          const selected = rosterTeam === t;
+          const label = mine ? teamName(settings, t) : `Slot ${t}`;
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => onRosterTeamChange(t)}
+              className={cn(
+                "inline-flex h-12 shrink-0 items-center gap-2.5 rounded-full px-4 font-display text-sm font-bold tracking-wide",
+                selected
+                  ? "bg-m-card-fg text-m-bg"
+                  : "border border-m-border bg-m-chip text-m-chip-fg",
+              )}
+            >
+              <span
+                className={cn(
+                  "inline-flex size-8 items-center justify-center rounded-full",
+                  selected ? "bg-m-bg/15 text-m-bg" : "bg-m-bg/40 text-m-accent",
+                )}
+                aria-hidden
+              >
+                <Shield className="size-4" strokeWidth={2.25} />
+              </span>
+              <span className="max-w-[7.5rem] truncate">{label}</span>
+            </button>
+          );
+        })}
       </div>
       <ul className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         {slots.map((s, i) => {
