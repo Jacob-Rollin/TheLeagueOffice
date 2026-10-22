@@ -404,8 +404,9 @@ function PlayerListImpl({
   };
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="sticky top-[var(--wr-header-h,0px)] z-20 space-y-3 border-b border-slate-200 bg-slate-50/90 p-3 backdrop-blur">
+    // No overflow-hidden on the outer sheet — it would clip the sticky filter bar.
+    <div className="flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="sticky top-[var(--wr-header-h,0px)] z-20 space-y-3 rounded-t-xl border-b border-slate-200 bg-slate-50/90 p-3 backdrop-blur">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

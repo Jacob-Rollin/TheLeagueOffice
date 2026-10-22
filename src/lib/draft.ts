@@ -37,9 +37,11 @@ export const POSITIONS: Pos[] = ["QB", "RB", "WR", "TE", "K", "DEF"];
 export const FLEX_POSITIONS: Pos[] = ["RB", "WR", "TE"];
 export const SUPER_FLEX_POSITIONS: Pos[] = ["QB", "RB", "WR", "TE"];
 
-/** UI label for filter chips / badges (internal pos stays DEF). */
+/** UI label for filter chips / badges (internal pos stays DEF / SUPER_FLEX). */
 export function posDisplayLabel(pos: string): string {
-  return pos === "DEF" ? "DST" : pos;
+  if (pos === "DEF") return "DST";
+  if (pos === "SUPER_FLEX") return "SF";
+  return pos;
 }
 
 export const DEFAULT_ROSTER: RosterSlots = {
@@ -150,20 +152,21 @@ export function positionNeeds(drafted: Player[], roster: RosterSlots): Record<Po
   let flexLeft = Math.max(0, roster.FLEX ?? 0);
   let superFlexLeft = Math.max(0, roster.SUPER_FLEX ?? 0);
   for (const pos of POSITIONS) {
-    const dedicated = roster[pos];
+    const dedicated = Math.max(0, roster[pos] ?? 0);
     const used = Math.min(have[pos] ?? 0, dedicated);
     needs[pos] = Math.max(0, dedicated - used);
   }
   // Spares beyond dedicated starters soak shared flex / superflex first.
   for (const pos of FLEX_POSITIONS) {
-    const spare = Math.max(0, (have[pos] ?? 0) - roster[pos]);
+    const dedicated = Math.max(0, roster[pos] ?? 0);
+    const spare = Math.max(0, (have[pos] ?? 0) - dedicated);
     const takeFlex = Math.min(spare, flexLeft);
     flexLeft -= takeFlex;
     const takeSf = Math.min(spare - takeFlex, superFlexLeft);
     superFlexLeft -= takeSf;
   }
   {
-    const qbSpare = Math.max(0, (have.QB ?? 0) - roster.QB);
+    const qbSpare = Math.max(0, (have.QB ?? 0) - Math.max(0, roster.QB ?? 0));
     const takeSf = Math.min(qbSpare, superFlexLeft);
     superFlexLeft -= takeSf;
   }
@@ -194,7 +197,9 @@ export function fillRoster(players: Player[], roster: RosterSlots) {
     const count = Math.max(0, roster[name] ?? 0);
     for (let i = 0; i < count; i++) slots.push({ slot: name, player: take(pos) });
   }
-  for (let i = 0; i < roster.BENCH; i++) slots.push({ slot: "BN", player: pool.shift() ?? null });
+  for (let i = 0; i < Math.max(0, roster.BENCH ?? 0); i++) {
+    slots.push({ slot: "BN", player: pool.shift() ?? null });
+  }
   for (const extra of pool) slots.push({ slot: "BN", player: extra });
   return slots;
 }

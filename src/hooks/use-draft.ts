@@ -227,7 +227,10 @@ export function useDraft(opts?: { enableLeagueSync?: boolean }) {
 
 
   const totalPicks = settings.teams * settings.rounds;
-  const currentOverall = Math.min(picks.length + 1, totalPicks);
+  // Synced boards may use sparse snake overalls (empty cells skipped). Next pick
+  // must be max(overall)+1, not picks.length+1, or DraftBoard Map collisions occur.
+  const maxOverall = picks.reduce((m, p) => Math.max(m, p.overall), 0);
+  const currentOverall = Math.min(maxOverall + 1, totalPicks);
   const onTheClock = teamForPick(currentOverall, settings.teams, settings.snake);
   const complete = picks.length >= totalPicks;
 
@@ -239,10 +242,14 @@ export function useDraft(opts?: { enableLeagueSync?: boolean }) {
       setPicks((prev) => {
         if (prev.length >= settings.teams * settings.rounds) return prev;
         if (prev.some((p) => p.playerId === playerId)) return prev;
-        const overall = prev.length + 1;
+        const nextOverall = prev.reduce((m, p) => Math.max(m, p.overall), 0) + 1;
         return [
           ...prev,
-          { playerId, overall, team: teamForPick(overall, settings.teams, settings.snake) },
+          {
+            playerId,
+            overall: nextOverall,
+            team: teamForPick(nextOverall, settings.teams, settings.snake),
+          },
         ];
       });
     },
@@ -255,7 +262,15 @@ export function useDraft(opts?: { enableLeagueSync?: boolean }) {
     );
   }, []);
 
-  const undo = useCallback(() => setPicks((prev) => prev.slice(0, -1)), []);
+  const undo = useCallback(
+    () =>
+      setPicks((prev) => {
+        if (!prev.length) return prev;
+        const top = Math.max(...prev.map((p) => p.overall));
+        return prev.filter((p) => p.overall !== top);
+      }),
+    [],
+  );
 
   /** Remove a mis-clicked pick anywhere on the board and renumber the rest. */
   const removePick = useCallback(

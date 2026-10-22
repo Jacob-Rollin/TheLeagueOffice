@@ -390,33 +390,36 @@ function RosterAnalysisPanel({
   });
 
   const alerts: { level: "critical" | "warn" | "ok"; text: string }[] = [];
-  for (const t of tiers) {
-    if (!t.complete) {
-      alerts.push({
-        level: "critical",
-        text: `${t.label} starting slots unfilled — ${t.filled}/${t.required} rostered`,
-      });
-    }
-  }
-
   const { weeks, unknown } = byeMatrix(players);
   const crowdedWeeks = weeks.filter((w) => w.conflict);
-  for (const w of crowdedWeeks) {
-    alerts.push({
-      level: "warn",
-      text: `Week ${w.week} bye cluster — ${w.players.length} players idle (${w.players.map((p) => posDisplayLabel(p.pos)).join(", ")})`,
-    });
-  }
-  if (unknown.length) {
-    alerts.push({
-      level: "warn",
-      text: `Bye week unknown for ${unknown.map((p) => p.name).join(", ")}`,
-    });
-  }
+
   if (!players.length) {
+    // Single empty-state note — skip per-slot Critical spam before any picks.
     alerts.push({ level: "warn", text: "No players drafted yet." });
-  } else if (alerts.length === 0 && unfilledStarters.length === 0) {
-    alerts.push({ level: "ok", text: "Starting lineup filled with no bye clusters." });
+  } else {
+    for (const t of tiers) {
+      if (!t.complete) {
+        alerts.push({
+          level: "critical",
+          text: `${t.label} starting slots unfilled — ${t.filled}/${t.required} rostered`,
+        });
+      }
+    }
+    for (const w of crowdedWeeks) {
+      alerts.push({
+        level: "warn",
+        text: `Week ${w.week} bye cluster — ${w.players.length} players idle (${w.players.map((p) => posDisplayLabel(p.pos)).join(", ")})`,
+      });
+    }
+    if (unknown.length) {
+      alerts.push({
+        level: "warn",
+        text: `Bye week unknown for ${unknown.map((p) => p.name).join(", ")}`,
+      });
+    }
+    if (alerts.length === 0 && unfilledStarters.length === 0) {
+      alerts.push({ level: "ok", text: "Starting lineup filled with no bye clusters." });
+    }
   }
 
   return (

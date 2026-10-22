@@ -259,14 +259,18 @@ function MockDraftPage() {
     setPersonas(personaMap);
 
     const session = loadMockSession();
-    if (mockSessionMatchesConfig(session, nextConfig) && session && session.picks.length > 0) {
-      setPicks(session.picks);
+    // Restore matching sessions even with zero picks (watchlist / speed / tab).
+    if (mockSessionMatchesConfig(session, nextConfig) && session) {
+      setPicks(session.picks ?? []);
       setWatch(session.watch ?? []);
       setCustomOrder(session.customOrder ?? []);
       setSpeed(session.speed ?? "normal");
       setPaused(Boolean(session.paused));
       setTab(session.tab ?? "players");
       setRosterTeam(session.rosterTeam || slot);
+      if (session.config?.scoring) {
+        setSettings((prev) => ({ ...prev, scoring: session.config.scoring }));
+      }
     } else {
       setPicks([]);
       setWatch([]);
@@ -555,7 +559,7 @@ function MockDraftPage() {
                   Bye Week Matrix
                 </div>
                 {(rosters.get(rosterTeam) ?? []).length ? (
-                  <ByeMatrix players={rosters.get(rosterTeam) ?? []} layout="column" />
+                  <ByeMatrix players={rosters.get(rosterTeam) ?? []} layout="column" hideTitle />
                 ) : (
                   <p className="p-3 text-center text-xs text-slate-500">
                     No picks yet for this team.
@@ -575,9 +579,10 @@ function MockDraftPage() {
         showDraftActions
         canDraft={myTurn}
         scoringFormat={settings.scoring}
-        onScoringFormatChange={(format) =>
-          setSettings((prev) => ({ ...prev, scoring: format }))
-        }
+        onScoringFormatChange={(format) => {
+          setSettings((prev) => ({ ...prev, scoring: format }));
+          setConfig((prev) => (prev ? { ...prev, scoring: format } : prev));
+        }}
         resolveDraftRosterLabel={(playerId) => {
           const pick = picks.find((p) => p.playerId === playerId);
           return pick ? teamName(settings, pick.team) : null;
