@@ -242,7 +242,6 @@ export function MobileMockDraftSheet({
           settings={settings}
           myTurn={myTurn}
           complete={complete}
-          prevYear={prevYear}
           queueAutopickOn={queueAutopickOn}
           onQueueAutopickChange={onQueueAutopickChange}
           onDraft={onDraft}
@@ -470,7 +469,6 @@ function QueuePane({
   settings,
   myTurn,
   complete,
-  prevYear,
   queueAutopickOn,
   onQueueAutopickChange,
   onDraft,
@@ -481,43 +479,33 @@ function QueuePane({
   settings: Settings;
   myTurn: boolean;
   complete: boolean;
-  prevYear: number;
   queueAutopickOn: boolean;
   onQueueAutopickChange: (on: boolean) => void;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
-  const [showPrevYear, setShowPrevYear] = useState(false);
-  const prevShort = `'${String(prevYear).slice(-2)}`;
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <ToolChip active={showPrevYear} onClick={() => setShowPrevYear((v) => !v)}>
-          <ChartLine className="size-3.5" strokeWidth={2.5} />
-          {prevShort} Stats
-        </ToolChip>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-m-muted">Auto-pick</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={queueAutopickOn}
-            onClick={() => onQueueAutopickChange(!queueAutopickOn)}
+      <div className="flex items-center justify-end gap-2 px-3 py-2">
+        <span className="text-xs text-m-muted">Auto-pick</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={queueAutopickOn}
+          onClick={() => onQueueAutopickChange(!queueAutopickOn)}
+          className={cn(
+            "relative h-6 w-11 rounded-full transition-colors",
+            queueAutopickOn ? "bg-m-accent" : "bg-m-border",
+          )}
+        >
+          <span
             className={cn(
-              "relative h-6 w-11 rounded-full transition-colors",
-              queueAutopickOn ? "bg-m-accent" : "bg-m-border",
+              "absolute top-0.5 size-5 rounded-full bg-white transition-transform",
+              queueAutopickOn ? "left-5" : "left-0.5",
             )}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 size-5 rounded-full bg-white transition-transform",
-                queueAutopickOn ? "left-5" : "left-0.5",
-              )}
-            />
-          </button>
-        </div>
+          />
+        </button>
       </div>
       {queuedPlayers.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 pb-8 text-center">
@@ -541,8 +529,8 @@ function QueuePane({
                 queued
                 myTurn={myTurn}
                 complete={complete}
-                showPrevYear={showPrevYear}
-                prevYear={prevYear}
+                showPrevYear={false}
+                prevYear={0}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
