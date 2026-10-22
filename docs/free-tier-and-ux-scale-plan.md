@@ -68,6 +68,8 @@ Implement as capacity pressure appears — not all at once.
 
 Start with A + B; add C when native leagues see real traffic; add D when multiplayer mock lobbies leave quiet beta (or put mocks on C first). Org allows up to **5** free Starter instances.
 
+**Mocks + Vercel:** Cluster D does **not** reduce Hobby Fluid. Mock room **polls must use** `/api/mock-draft/*` + `processMemo`/ETag (like `/api/data/league`), **not** `createServerFn` polling. Mutations stay Fluid; clock via ≤1/min cron. Details in mock-draft lobbies plan §0.2.
+
 ### Phase 3 — Product host splits (optional)
 | Slice | Host | Shared |
 |---|---|---|
