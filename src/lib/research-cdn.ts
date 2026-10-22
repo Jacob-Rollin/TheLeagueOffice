@@ -3,7 +3,8 @@
  * Prefer public Cloudflare R2 (zero Vercel/TiDB), then `/api/data/research/*`.
  *
  * Production: never fall back to createServerFn — a miss must soft-empty
- * so we do not burn Fluid CPU. Dev/local may still use Fluid when snaps are absent.
+ * (browser and SSR) so we do not burn Fluid CPU. Dev/local may still use
+ * Fluid when snaps are absent.
  */
 
 import { R2_RESEARCH_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
@@ -58,8 +59,8 @@ export async function fetchResearchFpa(format: ResearchFormat = "half") {
       Awaited<ReturnType<typeof import("./players.functions").getFantasyPointsAllowed>>
     >(R2_RESEARCH_KEYS.fpa(fmt), `/api/data/research/fpa?format=${fmt}`);
     if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
-    if (!allowFluidFallback()) return { season: "", weeksFrom: 0, weeksTo: 0, rows: [] };
   }
+  if (!allowFluidFallback()) return { season: "", weeksFrom: 0, weeksTo: 0, rows: [] };
   const { getFantasyPointsAllowed } = await import("./players.functions");
   return getFantasyPointsAllowed({ data: { format: fmt } });
 }
@@ -83,9 +84,9 @@ export async function fetchResearchMatchupsGuide(
   format: ResearchFormat = "half",
 ) {
   const fmt = normalizeFormat(format);
+  const wKnown = week != null && Number.isFinite(week) ? Math.round(week) : null;
   if (typeof window !== "undefined") {
     const qs = new URLSearchParams({ format: fmt });
-    const wKnown = week != null && Number.isFinite(week) ? Math.round(week) : null;
     if (wKnown != null) qs.set("week", String(wKnown));
     const apiPath = `/api/data/research/matchups-guide?${qs}`;
 
@@ -105,20 +106,19 @@ export async function fetchResearchMatchupsGuide(
       Awaited<ReturnType<typeof import("./players.functions").getMatchupsGuide>>
     >(apiPath);
     if (isWarmMatchupsGuide(api)) return api;
-
-    if (!allowFluidFallback()) {
-      const w = wKnown ?? 1;
-      return {
-        season: "",
-        week: w,
-        currentWeek: w,
-        priorSeason: null,
-        dataThroughWeek: 0,
-        updatedAt: new Date(0).toISOString(),
-        games: {},
-        defense: {},
-      };
-    }
+  }
+  if (!allowFluidFallback()) {
+    const w = wKnown ?? 1;
+    return {
+      season: "",
+      week: w,
+      currentWeek: w,
+      priorSeason: null,
+      dataThroughWeek: 0,
+      updatedAt: new Date(0).toISOString(),
+      games: {},
+      defense: {},
+    };
   }
   const { getMatchupsGuide } = await import("./players.functions");
   return getMatchupsGuide({ data: { week: week ?? null, format: fmt } });
@@ -131,17 +131,17 @@ export async function fetchResearchSosAnalysis(format: ResearchFormat = "half") 
       Awaited<ReturnType<typeof import("./players.functions").getSosAnalysis>>
     >(R2_RESEARCH_KEYS.sosAnalysis(fmt), `/api/data/research/sos-analysis?format=${fmt}`);
     if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
-    if (!allowFluidFallback()) {
-      return {
-        season: "",
-        fromWeek: 0,
-        toWeek: 0,
-        dataThroughWeek: 0,
-        priorSeason: null,
-        updatedAt: new Date(0).toISOString(),
-        rows: [],
-      };
-    }
+  }
+  if (!allowFluidFallback()) {
+    return {
+      season: "",
+      fromWeek: 0,
+      toWeek: 0,
+      dataThroughWeek: 0,
+      priorSeason: null,
+      updatedAt: new Date(0).toISOString(),
+      rows: [],
+    };
   }
   const { getSosAnalysis } = await import("./players.functions");
   return getSosAnalysis({ data: { format: fmt } });
@@ -173,8 +173,8 @@ export async function fetchResearchSosBoard(season?: string) {
       Awaited<ReturnType<typeof import("./players.functions").getSosBoard>>
     >(R2_RESEARCH_KEYS.sosBoard(), `/api/data/research/sos-board${qs}`);
     if (hit && Array.isArray((hit as { schedule?: unknown[] }).schedule)) return hit;
-    if (!allowFluidFallback()) return { season: season ?? "", schedule: [], ranks: {} };
   }
+  if (!allowFluidFallback()) return { season: season ?? "", schedule: [], ranks: {} };
   const { getSosBoard } = await import("./players.functions");
   return getSosBoard({ data: season ? { season } : {} });
 }
@@ -185,10 +185,10 @@ export async function fetchResearchRedZone(opts?: {
   weekFrom?: number | null;
   weekTo?: number | null;
 }) {
+  const yardline = opts?.yardline ?? 20;
   if (typeof window !== "undefined") {
     const qs = new URLSearchParams();
     if (opts?.season) qs.set("season", opts.season);
-    const yardline = opts?.yardline ?? 20;
     qs.set("yardline", String(yardline));
     if (opts?.weekFrom != null) qs.set("weekFrom", String(opts.weekFrom));
     if (opts?.weekTo != null) qs.set("weekTo", String(opts.weekTo));
@@ -196,16 +196,16 @@ export async function fetchResearchRedZone(opts?: {
       Awaited<ReturnType<typeof import("./players.functions").getRedZoneStats>>
     >(R2_RESEARCH_KEYS.redzone(yardline), `/api/data/research/redzone?${qs}`);
     if (hit && (hit as { rowsByPos?: unknown }).rowsByPos) return hit;
-    if (!allowFluidFallback()) {
-      return {
-        season: opts?.season ?? "",
-        weeksFrom: 0,
-        weeksTo: 0,
-        maxWeek: 0,
-        yardline,
-        rowsByPos: { QB: [], RB: [], WR: [], TE: [] },
-      };
-    }
+  }
+  if (!allowFluidFallback()) {
+    return {
+      season: opts?.season ?? "",
+      weeksFrom: 0,
+      weeksTo: 0,
+      maxWeek: 0,
+      yardline,
+      rowsByPos: { QB: [], RB: [], WR: [], TE: [] },
+    };
   }
   const { getRedZoneStats } = await import("./players.functions");
   const data: {
@@ -229,8 +229,8 @@ export async function fetchResearchTargets(season?: string) {
       Awaited<ReturnType<typeof import("./players.functions").getMostTargetedPlayers>>
     >(R2_RESEARCH_KEYS.targets(), `/api/data/research/targets${qs}`);
     if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
-    if (!allowFluidFallback()) return { season: season ?? "", maxWeek: 0, rows: [] };
   }
+  if (!allowFluidFallback()) return { season: season ?? "", maxWeek: 0, rows: [] };
   const { getMostTargetedPlayers } = await import("./players.functions");
   return getMostTargetedPlayers({ data: season ? { season } : {} });
 }
@@ -245,9 +245,9 @@ export async function fetchResearchAreTheyPlaying(week: number) {
       `/api/data/research/are-they-playing?week=${safeWeek}`,
     );
     if (hit && Array.isArray((hit as { lines?: unknown[] }).lines)) return hit;
-    if (!allowFluidFallback()) {
-      return { week: safeWeek, lines: [], updatedAt: 0 };
-    }
+  }
+  if (!allowFluidFallback()) {
+    return { week: safeWeek, lines: [], updatedAt: 0 };
   }
   const { getAreTheyPlaying } = await import("./players.functions");
   return getAreTheyPlaying({ data: { week: safeWeek } });
