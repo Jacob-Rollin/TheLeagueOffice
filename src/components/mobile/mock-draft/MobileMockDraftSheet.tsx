@@ -360,7 +360,7 @@ function PlayersPane({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
+      <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3">
         {filtered.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-m-muted">
             {draftedOnly
@@ -370,33 +370,35 @@ function PlayersPane({
                 : "No players match these filters."}
           </p>
         ) : null}
-        {filtered.map((p, i) => (
-          <div key={p.id}>
-            {projIndex === i && nextUserOverall != null ? (
-              <div className="my-1 flex items-center gap-2 px-1">
-                <span className="h-px flex-1 bg-m-accent/70" />
-                <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
-                  Proj pick: Round {roundOf(nextUserOverall, settings.teams)} Overall #
-                  {nextUserOverall}
-                </span>
-                <span className="h-px flex-1 bg-m-accent/70" />
-              </div>
-            ) : null}
-            <PlayerStatsRow
-              player={p}
-              settings={settings}
-              rank={i + 1}
-              queued={watchIds.has(p.id)}
-              myTurn={myTurn}
-              complete={complete || draftedOnly}
-              showPrevYear={showPrevYear}
-              prevYear={prevYear}
-              onDraft={onDraft}
-              onToggleQueue={onToggleQueue}
-              onOpenPlayer={onOpenPlayer}
-            />
-          </div>
-        ))}
+        <div className="min-w-max">
+          {filtered.map((p, i) => (
+            <div key={p.id}>
+              {projIndex === i && nextUserOverall != null ? (
+                <div className="my-1 flex items-center gap-2 px-1">
+                  <span className="h-px flex-1 bg-m-accent/70" />
+                  <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
+                    Proj pick: Round {roundOf(nextUserOverall, settings.teams)} Overall #
+                    {nextUserOverall}
+                  </span>
+                  <span className="h-px flex-1 bg-m-accent/70" />
+                </div>
+              ) : null}
+              <PlayerStatsRow
+                player={p}
+                settings={settings}
+                rank={i + 1}
+                queued={watchIds.has(p.id)}
+                myTurn={myTurn}
+                complete={complete || draftedOnly}
+                showPrevYear={showPrevYear}
+                prevYear={prevYear}
+                onDraft={onDraft}
+                onToggleQueue={onToggleQueue}
+                onOpenPlayer={onOpenPlayer}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -492,23 +494,25 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
-          {queuedPlayers.map((p, i) => (
-            <PlayerStatsRow
-              key={p.id}
-              player={p}
-              settings={settings}
-              rank={i + 1}
-              queued
-              myTurn={myTurn}
-              complete={complete}
-              showPrevYear={showPrevYear}
-              prevYear={prevYear}
-              onDraft={onDraft}
-              onToggleQueue={onToggleQueue}
-              onOpenPlayer={onOpenPlayer}
-            />
-          ))}
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3">
+          <div className="min-w-max">
+            {queuedPlayers.map((p, i) => (
+              <PlayerStatsRow
+                key={p.id}
+                player={p}
+                settings={settings}
+                rank={i + 1}
+                queued
+                myTurn={myTurn}
+                complete={complete}
+                showPrevYear={showPrevYear}
+                prevYear={prevYear}
+                onDraft={onDraft}
+                onToggleQueue={onToggleQueue}
+                onOpenPlayer={onOpenPlayer}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -655,51 +659,57 @@ function PlayerStatsRow({
   const yearLabel = String(prevYear);
 
   return (
-    <div className="flex items-stretch gap-2 border-b border-m-border/60 py-1.5">
-      {!complete ? (
-        <button
-          type="button"
-          disabled={!myTurn}
-          onClick={() => onDraft(player.id)}
-          className={cn(
-            "my-0.5 shrink-0 self-stretch rounded-lg px-3 font-display text-[11px] font-extrabold uppercase tracking-wide",
-            myTurn
-              ? "bg-m-accent text-m-accent-fg"
-              : "bg-m-chip text-m-muted opacity-70",
-          )}
-        >
-          Draft
-        </button>
-      ) : null}
-      <span className="tabnum flex w-5 shrink-0 items-center justify-center text-xs text-m-muted">
-        {rank}
-      </span>
-      <button
-        type="button"
-        onClick={() => onOpenPlayer(player.id)}
-        className="min-w-0 flex-1 py-0.5 text-left"
-      >
-        <span className="block truncate text-[13px] font-bold text-m-card-fg">{short}</span>
-        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">
-          <span
-            className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
-            aria-hidden
-          />
-          <span>
-            {posDisplayLabel(player.pos)} - {player.team}
-            {player.bye ? ` (${player.bye})` : ""}
-          </span>
+    <div className="flex border-b border-m-border/60">
+      {/* Compact sticky identity — star sits next to the name; no shadow seam. */}
+      <div className="sticky left-0 z-10 flex shrink-0 items-stretch gap-1.5 border-r border-m-border/50 bg-m-sheet py-1.5 pl-0 pr-1.5">
+        {!complete ? (
+          <button
+            type="button"
+            disabled={!myTurn}
+            onClick={() => onDraft(player.id)}
+            className={cn(
+              "my-0.5 shrink-0 self-stretch rounded-lg px-3 font-display text-[11px] font-extrabold uppercase tracking-wide",
+              myTurn
+                ? "bg-m-accent text-m-accent-fg"
+                : "bg-m-chip text-m-muted opacity-70",
+            )}
+          >
+            Draft
+          </button>
+        ) : null}
+        <span className="tabnum flex w-5 shrink-0 items-center justify-center text-xs text-m-muted">
+          {rank}
         </span>
-      </button>
-      <button
-        type="button"
-        aria-label={queued ? "Remove from queue" : "Add to queue"}
-        onClick={() => onToggleQueue(player.id)}
-        className={cn("shrink-0 self-center p-1.5", queued ? "text-m-accent" : "text-m-muted")}
-      >
-        <Star className={cn("size-4", queued && "fill-current")} strokeWidth={2.5} />
-      </button>
-      <div className="flex shrink-0 items-center gap-3 self-center pr-1">
+        <div className="flex w-[8.5rem] items-center gap-0">
+          <button
+            type="button"
+            onClick={() => onOpenPlayer(player.id)}
+            className="min-w-0 flex-1 py-0.5 text-left"
+          >
+            <span className="block truncate text-[13px] font-bold text-m-card-fg">{short}</span>
+            <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">
+              <span
+                className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
+                aria-hidden
+              />
+              <span className="truncate">
+                {posDisplayLabel(player.pos)} - {player.team}
+                {player.bye ? ` (${player.bye})` : ""}
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            aria-label={queued ? "Remove from queue" : "Add to queue"}
+            onClick={() => onToggleQueue(player.id)}
+            className={cn("shrink-0 self-center p-0.5", queued ? "text-m-accent" : "text-m-muted")}
+          >
+            <Star className={cn("size-4", queued && "fill-current")} strokeWidth={2.5} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 self-stretch py-1.5 pr-4">
         <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
         <StatPair
           label="Pts"
@@ -707,6 +717,19 @@ function PlayerStatsRow({
           showPrev={showPrevYear}
           prevYear={yearLabel}
           prev={v.prev != null ? v.prev.toFixed(1) : "—"}
+        />
+        <StatCell label="Rank" value={v.rank < 900 ? String(v.rank) : "—"} />
+        <StatCell
+          label="Pos rk"
+          value={player.posRank > 0 ? `${posDisplayLabel(player.pos)}${player.posRank}` : "—"}
+        />
+        <StatCell
+          label="ADP lo"
+          value={player.adpRange.min < 900 ? player.adpRange.min.toFixed(0) : "—"}
+        />
+        <StatCell
+          label="ADP hi"
+          value={player.adpRange.max < 900 ? player.adpRange.max.toFixed(0) : "—"}
         />
       </div>
     </div>

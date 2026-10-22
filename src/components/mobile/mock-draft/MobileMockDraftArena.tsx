@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Crosshair, Settings, Timer, X } from "lucide-react";
 
 import { MockRecap } from "@/components/draft/MockRecap";
-import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/PlayerModalHost";
+import { useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
 import { formatClock, useMockDraftSession } from "@/hooks/useMockDraftSession";
 import { SCORING_LABEL, teamName } from "@/lib/draft";
 import {
@@ -24,10 +24,12 @@ import { MobileMockDraftSheet } from "./MobileMockDraftSheet";
 
 export function MobileMockDraftArena() {
   const navigate = useNavigate();
-  const modalRef = useRef<PlayerModalHandle>(null);
+  const openPlayer = useOpenMobilePlayer();
   const [jumpSignal, setJumpSignal] = useState(0);
   const [bootKey, setBootKey] = useState(0);
   const [live, setLive] = useState(false);
+  /** Lobby: AI names stay hidden until the user claims a draft slot. */
+  const [slotClaimed, setSlotClaimed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<MockConfig>(DEFAULT_MOCK_CONFIG);
@@ -86,14 +88,26 @@ export function MobileMockDraftArena() {
     const stored = loadMockSession();
     if (mockSessionMatchesConfig(stored, config) && (stored?.picks.length ?? 0) > 0) {
       setLive(true);
+      setSlotClaimed(true);
     }
   }, [started, config, bootKey]);
-
-  const openPlayer = useCallback((id: string) => modalRef.current?.open(id), []);
 
   const leaveToHome = () => {
     clearSession();
     void navigate({ to: "/m" });
+  };
+
+  const claimSlot = (team: number) => {
+    const base = config ?? loadMockConfig() ?? DEFAULT_MOCK_CONFIG;
+    const clean: MockConfig = {
+      ...base,
+      slot: Math.min(Math.max(1, team), base.teams),
+      teamName: base.teamName.trim() || "My Team",
+    };
+    clearMockSession();
+    saveMockConfig(clean);
+    setSlotClaimed(true);
+    setBootKey((k) => k + 1);
   };
 
   const confirmLeave = (message: string, then: () => void) => {
@@ -125,10 +139,15 @@ export function MobileMockDraftArena() {
     setSettingsOpen(false);
     setShowRecap(false);
     setLive(false);
+    setSlotClaimed(true);
     setBootKey((k) => k + 1);
   };
 
   const startDraft = () => {
+    if (!slotClaimed) {
+      window.alert("Claim a draft slot first.");
+      return;
+    }
     if (!loadMockConfig()) saveMockConfig(config ?? DEFAULT_MOCK_CONFIG);
     setLive(true);
   };
@@ -165,6 +184,7 @@ export function MobileMockDraftArena() {
             onClick={() => {
               clearSession();
               setLive(false);
+              setSlotClaimed(false);
               setShowRecap(false);
               setBootKey((k) => k + 1);
             }}
@@ -213,7 +233,13 @@ export function MobileMockDraftArena() {
             <button
               type="button"
               onClick={startDraft}
-              className="min-w-0 flex-1 rounded-full bg-m-accent px-4 py-2.5 font-display text-sm font-extrabold uppercase tracking-wide text-m-accent-fg"
+              disabled={!slotClaimed}
+              className={cn(
+                "min-w-0 flex-1 rounded-full px-4 py-2.5 font-display text-sm font-extrabold uppercase tracking-wide",
+                slotClaimed
+                  ? "bg-m-accent text-m-accent-fg"
+                  : "bg-m-chip text-m-muted",
+              )}
             >
               Start Mock Draft
             </button>
@@ -332,7 +358,8 @@ export function MobileMockDraftArena() {
         {inLobby ? (
           <p className="mt-2 text-center text-[11px] text-m-muted">
             {settings.teams}-team {SCORING_LABEL[settings.scoring]} ·{" "}
-            {settings.snake ? "Snake" : "Linear"} · Slot {settings.myTeam}
+            {settings.snake ? "Snake" : "Linear"}
+            {slotClaimed ? ` · Slot ${settings.myTeam}` : " · Claim a slot to start"}
           </p>
         ) : null}
       </header>
@@ -351,6 +378,9 @@ export function MobileMockDraftArena() {
           complete={complete || inLobby}
           jumpSignal={jumpSignal}
           lobby={inLobby}
+          slotClaimed={slotClaimed}
+          onClaimSlot={claimSlot}
+          onOpenPlayer={openPlayer}
         />
       )}
 
@@ -433,21 +463,6 @@ export function MobileMockDraftArena() {
           </div>
         </div>
       ) : null}
-
-      <PlayerModalHost
-        ref={modalRef}
-        showDraftActions={!inLobby}
-        canDraft={myTurn}
-        resolveDraftRosterLabel={(playerId) => {
-          const pick = picks.find((p) => p.playerId === playerId);
-          return pick ? teamName(settings, pick.team) : null;
-        }}
-        isSessionDrafted={(playerId) => draftedIds.has(playerId)}
-        onSessionDraft={draftForUser}
-        isSessionWatched={(playerId) => watchIds.has(playerId)}
-        onSessionToggleWatch={toggleWatch}
-        scoringFormat={settings.scoring}
-      />
     </div>
   );
 }
