@@ -99,6 +99,14 @@ function VitalsDivider() {
 
 type DetailTab = "logs" | "projections" | "sos" | "outlook" | "depth" | "news";
 
+/** Mobile-style short name for the desktop compact sticky bar. */
+function compactPlayerName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "";
+  if (parts.length === 1) return parts[0]!.toUpperCase();
+  return `${parts[0]![0]!.toUpperCase()}. ${parts.slice(1).join(" ").toUpperCase()}`;
+}
+
 const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "logs", label: "Game Logs" },
   { key: "projections", label: "Projections" },
@@ -208,6 +216,10 @@ export function PlayerDetail({
       : hookSos;
   const [isScoringOpen, setIsScoringOpen] = useState(false);
   const scoringMenuRef = useRef<HTMLDivElement>(null);
+  /** Popup-only compact chrome after the hero scrolls away. */
+  const [compactHeader, setCompactHeader] = useState(false);
+  const heroSentinelRef = useRef<HTMLDivElement>(null);
+  const isPopup = Boolean(onClose);
 
   const leagueScoringQuery = useQuery({
     queryKey: [
@@ -245,6 +257,31 @@ export function PlayerDetail({
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [isScoringOpen]);
+
+  useEffect(() => {
+    setCompactHeader(false);
+  }, [id]);
+
+  // Compact sticky bar once the team-color hero leaves the popup scroller.
+  // Sticky zero-height host + absolute bar = no layout jump (same idea as mobile fixed).
+  useEffect(() => {
+    if (!isPopup) {
+      setCompactHeader(false);
+      return;
+    }
+    const root = document.getElementById("player-popup-scroll-container");
+    const sentinel = heroSentinelRef.current;
+    if (!root || !sentinel) {
+      setCompactHeader(false);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => setCompactHeader(!entry?.isIntersecting),
+      { root, threshold: 0, rootMargin: "0px" },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [id, isPopup, isLoading, data?.player?.id]);
 
   if (isLoading) return <p className="p-6 text-center text-sm text-muted-foreground">Loading player…</p>;
   if (!data) return <p className="p-6 text-center text-sm text-muted-foreground">Player not found.</p>;
@@ -348,8 +385,63 @@ export function PlayerDetail({
         ? overallRank
         : "—";
 
+  const compactLogo = teamLogo(player.team);
+  const compactInjury = injuryBadgeInfo(injuryStatusRaw);
+
   return (
     <div className="overflow-visible pb-8">
+      {isPopup ? (
+        <div className="pointer-events-none sticky top-0 z-[150] h-0 w-full">
+          {compactHeader ? (
+            <div className="pointer-events-auto absolute inset-x-0 top-0 flex items-center gap-3 border-b border-slate-200 bg-white/95 px-4 py-2.5 pr-14 shadow-sm backdrop-blur-sm">
+              {compactLogo ? (
+                <img
+                  src={compactLogo}
+                  alt=""
+                  className="size-8 shrink-0 rounded-full border border-slate-100 bg-slate-50 object-contain p-0.5"
+                />
+              ) : null}
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <p className="min-w-0 truncate font-display text-base font-bold uppercase tracking-wide text-slate-900">
+                  {compactPlayerName(player.name)}
+                </p>
+                {compactInjury ? (
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide",
+                      compactInjury.className,
+                    )}
+                  >
+                    {compactInjury.text}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  aria-label={watched ? "Unwatch" : "Watch"}
+                  aria-pressed={watched}
+                  onClick={() => draft.toggleWatch(player.id)}
+                  className="group inline-flex max-w-[38px] cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-slate-700 shadow-sm transition-all duration-300 hover:max-w-[130px] hover:border-blue-600 hover:text-blue-700"
+                >
+                  <Star
+                    className={cn(
+                      "size-3.5 shrink-0",
+                      watched ? "fill-amber-400 text-amber-400" : "text-slate-600",
+                    )}
+                    strokeWidth={watched ? 0 : 2}
+                  />
+                  <span className="ml-1.5 text-[10px] font-black uppercase tracking-wider opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                    {watched ? "Unwatch" : "Watch"}
+                  </span>
+                </button>
+                <DesktopPlayerCompare anchorPlayer={player} tone="surface" />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <header className="overflow-visible">
         <div
           className={cn(
@@ -575,6 +667,8 @@ export function PlayerDetail({
               </div>
             </div>
           </div>
+          {/* Compact chrome engages once this sentinel leaves the popup viewport. */}
+          <div ref={heroSentinelRef} className="pointer-events-none absolute bottom-0 left-0 h-px w-px" aria-hidden />
         </div>
 
         <div className="flex w-full select-none items-center justify-between overflow-visible border-b border-slate-100 bg-white px-6">

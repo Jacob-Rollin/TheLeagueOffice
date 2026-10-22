@@ -12,9 +12,12 @@ import type { Player } from "@/lib/players-build";
  */
 export function DesktopPlayerCompare({
   anchorPlayer,
+  tone = "hero",
 }: {
   /** Current player on the detail view (left side of the compare pair). */
   anchorPlayer: Player;
+  /** `hero` = on team-color banner; `surface` = compact sticky bar on white. */
+  tone?: "hero" | "surface";
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [comparePair, setComparePair] = useState<{ leftId: string; rightId: string } | null>(
@@ -65,6 +68,8 @@ export function DesktopPlayerCompare({
         ? comparePair.rightId
         : anchorPlayer.id;
 
+  const surface = tone === "surface";
+
   return (
     <>
       <button
@@ -74,10 +79,23 @@ export function DesktopPlayerCompare({
           setReplaceSide(null);
           setPickerOpen(true);
         }}
-        className="group inline-flex max-w-[38px] cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-2.5 py-1.5 transition-all duration-300 hover:max-w-[140px] hover:border-white/40 hover:bg-white/10"
+        className={
+          surface
+            ? "group inline-flex max-w-[38px] cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-slate-700 shadow-sm transition-all duration-300 hover:max-w-[140px] hover:border-blue-600 hover:text-blue-700"
+            : "group inline-flex max-w-[38px] cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-2.5 py-1.5 transition-all duration-300 hover:max-w-[140px] hover:border-white/40 hover:bg-white/10"
+        }
       >
-        <Columns2 className="size-3.5 shrink-0 text-white/90" strokeWidth={2.25} />
-        <span className="ml-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <Columns2
+          className={surface ? "size-3.5 shrink-0" : "size-3.5 shrink-0 text-white/90"}
+          strokeWidth={2.25}
+        />
+        <span
+          className={
+            surface
+              ? "ml-1.5 text-[10px] font-black uppercase tracking-wider opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+              : "ml-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+          }
+        >
           Compare
         </span>
       </button>

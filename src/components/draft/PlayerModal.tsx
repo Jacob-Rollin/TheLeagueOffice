@@ -95,7 +95,7 @@ export function PlayerModal({
           type="button"
           onMouseDown={handleClose}
           onClick={handleClose}
-          className="pointer-events-auto absolute right-4 top-4 z-[200] flex h-8 w-8 cursor-pointer select-none items-center justify-center rounded-lg border border-white/45 bg-transparent text-white transition-colors hover:border-white/80 hover:bg-white/10 focus:outline-none"
+          className="pointer-events-auto absolute right-3 top-3 z-[200] flex h-8 w-8 cursor-pointer select-none items-center justify-center rounded-lg border border-slate-200/80 bg-white/95 text-slate-700 shadow-sm backdrop-blur-sm transition-colors hover:border-slate-300 hover:bg-white hover:text-slate-900 focus:outline-none"
           aria-label="Close popup"
         >
           <X className="size-4 shrink-0" strokeWidth={2.5} />
