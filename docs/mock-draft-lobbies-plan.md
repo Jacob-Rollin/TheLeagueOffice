@@ -14,7 +14,9 @@
 | Completed boards | Freeze a compact JSON snapshot on complete; retain **7–14 days**; share via opaque token; CSV/JSON export client-side from that snapshot. |
 | Shared room reads | **Room read key** + `GET /api/mock-draft/room/$id?k=` with **`public, s-maxage=1–2`** so all seats share one edge cache. |
 | Vercel writes | Fluid `createServerFn` for create/join/pick/host only; after commit → Broadcast. Clock/AI via lean cron (also Broadcasts). |
-| Safety net | Visible **slow** poll every **20–30s** (or on reconnect) — not the live path. |
+| Safety net | Resync GET on **reconnect / tab focus / version gap** only; optional 30s poll solely if Broadcast reports disconnected. |
+| Pick timer | **One duration for every seat** (host `pick_time_limit_sec`). Shared wall-clock `pick_deadline_at` — all clients show the same remaining time. |
+| Realtime peak 200 | **Accepted** — product will not target >200 concurrent mock tabs. |
 
 Mobile already labels the entry point **“Mock Draft Lobby”** ([`MobileMockDraftCard`](../src/components/mobile/MobileHomeSections.tsx)) but it only links to solo setup. This plan makes that label real.
 
@@ -98,13 +100,31 @@ sequenceDiagram
 | --- | --- |
 | **1. Realtime Broadcast** | After every successful TiDB write (human pick, AI/cron pick, lobby seat change, pause/start), server sends a small event on channel `mock:{roomId}:{readKey}`: `{ v, type, pick?, deadlineAt?, status? }`. Clients patch local state **instantly**. |
 | **2. Shared room read key + CDN** | `read_key` minted at create; given to every joiner. `GET /api/mock-draft/room/$id?k=$readKey` uses `Cache-Control: public, s-maxage=1–2, stale-while-revalidate=1`. All seats share **one** edge object — not 10 private Function hits. |
-| **3. Slow safety poll** | Every **20–30s** while visible (and on tab focus / reconnect): one shared GET. Catches missed Broadcasts. **Not** the live path. |
+| **3. Resync GET (not a live poll)** | On join, reconnect, tab focus, or `v` gap only. Skip periodic polling while the Realtime channel is connected. |
 
-**Payload rule:** prefer **deltas** in Broadcast (under Realtime’s ~256 KB cap). Full board only via shared GET when `v` gaps or client joins mid-draft.
+**Payload rule:** prefer **deltas** in Broadcast (under Realtime’s ~256 KB cap), including `deadlineAt` + `serverNow` so timers stay aligned without a GET. Full board only via shared GET on join/gap.
 
 **Auth rule:** mutation still needs seat guest token / JWT. Read GET only needs `readKey` (anyone with the link can spectate — acceptable for a practice room; rotate key if host kicks everyone).
 
-**Clock:** client countdowns from `pick_deadline_at` in the last event; cron/AI commits + Broadcasts when time expires — no per-second server polls.
+**Pick timer (same for everyone):** Host sets one `pick_time_limit_sec` (or None) for the room. After each pick commits, server sets `pick_deadline_at = now + limit`. **Every client** countdowns from that same timestamp (correct with `serverNow` skew). Whose turn it is does **not** change the duration — seat 1 and seat 10 both get e.g. 60s. Pause freezes / clears deadline; resume sets a fresh deadline. No per-second server traffic for the clock UI.
+
+### 0.2.1 Further Vercel savings (platforms we already have)
+
+Push + shared CDN already removes almost all poll burn. Extra cuts using **current** stack only:
+
+| Lever | Platform | What it saves |
+| --- | --- | --- |
+| **No safety poll while Realtime connected** | Supabase Realtime | Drops the ~2.4k browser GETs/room-hour from §0.3; Vercel origin hits near **mutations + join + cron only** (~300/room) |
+| **Rich Broadcast deltas** (`pick`, `deadlineAt`, seats) | Supabase Realtime | Avoid mid-draft shared GETs entirely except gaps |
+| **Move `mock-draft-tick` off Vercel** | GitHub Actions → Coolify/Oracle worker (free-tier Phase 1) | Cron Autopick/AI CPU leaves Hobby Active CPU; Actions still schedules |
+| **Until Coolify exists: cron ≤1/min, batch all due rooms in one invocation** | Actions + Vercel | One Function/min globally, not per room |
+| **Completed recap: client already has board** | Browser | Recap UI from in-memory state; optional one cached GET only for share-link visitors who weren’t in the room |
+| **Share-link recap long cache** | Vercel `s-maxage` on `/recap/$shareId` | Repeat openers don’t re-hit TiDB/Fluid |
+| **Keep mutations as the only Fluid `createServerFn`s** | Vercel | Reads stay Nitro API routes (or edge cache hits) |
+| **ssr: false + no intent-preload of room APIs** | Router | No accidental SSR/Fluid storms on navigate |
+| **Solo mock stays 100% client** | Existing `/mock-draft` | Zero Vercel/TiDB for single-player practice |
+
+**Not worth it for mocks (same platforms):** putting pick writes on Supabase Edge Functions (splits SoT, doesn’t help TiDB locks); publishing live boards to `snap-cdn` (public orphan branch — wrong privacy model).
 
 #### What we are not doing
 
@@ -125,30 +145,28 @@ sequenceDiagram
 
 ### 0.3 Worked example — 10 humans, 2 hours (push-first)
 
-Assumptions: 10 visible humans, 15 rounds (**150 picks**), Broadcast on each pick, safety poll **30s**, shared `s-maxage=2`.
+Assumptions: 10 visible humans, 15 rounds (**150 picks**), Broadcast on each pick (with `deadlineAt`), **no periodic safety poll** while Realtime connected, shared GET only on join/gap.
 
 | Traffic | Count | Notes |
 | --- | --- | --- |
 | Pick POSTs | **150** | Fluid |
 | Setup POSTs | **11** | create/joins/start |
-| Cron ticks | **~120** | ≤1/min; AI/timeout + Broadcast |
-| Broadcast events | **~150** (+ lobby noise) | Fan-out to 10 clients ≈ **~1.5k message deliveries** |
-| Safety GETs (browser) | \(10 \times (7200/30) =\) **2,400** | Most served from **shared edge** |
-| Origin GETs after CDN coalesce | **~240–400** | ~1 miss / 2s window when anyone polls; often far fewer if polls align |
-| Join + final recap GETs | **~20** | |
-| **Vercel invocations (typical)** | **~500–800** | vs ~36k with naive 2s polling |
+| Cron ticks | **~120** | ≤1/min global; AI/timeout + Broadcast |
+| Broadcast events | **~150** | ~**1.5k** deliveries to 10 clients |
+| Shared GETs | **~10–30** | join + rare gap/focus |
+| **Vercel invocations (typical)** | **~300–400** | vs ~36k naive poll |
 
 #### Vs monthly free limits (this room)
 
 | Limit | Free / mo | This draft | Share |
 | --- | --- | --- | --- |
-| Vercel invocations | 1M | **~0.5–0.8k** | **~0.05–0.08%** |
-| Vercel Active CPU | 4 hrs | Tiny (mutations + rare GET) | **≪1%** |
-| Supabase Realtime messages | 2M | **~1.5k** deliveries | **~0.08%** |
-| Supabase Realtime peak conns | 200 | **10** during room | **5% of peak cap** while live |
-| TiDB D RUs | 50M | ~150 writes + few hundred reads | **≪1%** |
+| Vercel invocations | 1M | **~0.3–0.4k** | **~0.03–0.04%** |
+| Vercel Active CPU | 4 hrs | Mutations + cron | **≪1%** |
+| Supabase Realtime messages | 2M | **~1.5k** | **~0.08%** |
+| Supabase Realtime peak conns | 200 | **10** | Fine — we will not exceed 200 concurrent tabs |
+| TiDB D RUs | 50M | ~150 writes + few reads | **≪1%** |
 
-**Ceiling (mocks-shaped, ignore rest of site):** invocations allow **thousands** of such rooms/month; Realtime **peak 200 connections** ≈ **20** concurrent 10-seat rooms — that becomes the concurrency gate, not Vercel polls.
+**Remaining Vercel knob after this:** move cron worker off Vercel (Coolify). Realtime peak 200 is an accepted ceiling, not a design worry.
 
 #### Compare sync strategies
 
@@ -156,7 +174,8 @@ Assumptions: 10 visible humans, 15 rounds (**150 picks**), Broadcast on each pic
 | --- | --- | --- |
 | Naive 2s poll each client | ~36k | Lag up to 2s |
 | Shared CDN + 2s poll | ~3.6k | Lag up to 2s |
-| **Push + shared GET + 30s safety (locked)** | **~0.5–0.8k** | **Yes** |
+| Push + 30s safety poll | ~0.5–0.8k | Yes |
+| **Push + join/gap GET only (locked)** | **~0.3–0.4k** | **Yes** |
 
 ---
 
@@ -395,7 +414,8 @@ AI seats: reuse [`aiPick`](../src/lib/mock-ai.ts) with seat `persona` (server im
 | Max concurrent `lobby`+`live` rooms per host | e.g. 3 |
 | Team count | 8–16 (match solo `TEAM_CHOICES`) |
 | Room TTL | 6h from create; extend +2h while `live` and any seat heartbeated in last 10m |
-| Live sync | **Broadcast deltas**; safety GET **20–30s** visible only |
+| Live sync | **Broadcast deltas** + local timer from shared `pick_deadline_at`; GET only join/gap/focus |
+| Pick clock | Same `pick_time_limit_sec` for every seat; one room-wide deadline timestamp |
 | Shared reads | `read_key` + `public, s-maxage=1–2` on room GET |
 | Cron tick | ≤1/min; clock + AI + Broadcast + expiry |
 | Complete retention | Snapshot 7–14 days; unsubscribe Realtime; recap route only |
@@ -489,7 +509,7 @@ Common elsewhere (FantasyPros Draft Wizard, Sleeper mocks, ESPN/Yahoo mocks, RTS
 
 ### Phase 1 — Lobby + Broadcast
 1. Setup hub: Solo | Host | Join.
-2. Room lobby: seats, codes; subscribe Broadcast; safety poll 30s.
+2. Room lobby: seats, codes; subscribe Broadcast; resync GET on gap/focus only.
 3. Deep link `/mock-draft/join?code=`.
 
 ### Phase 2 — Live multiplayer draft
@@ -524,9 +544,9 @@ Shared libraries only: `draft.ts`, `mock-ai.ts`, draft UI components. When nativ
 - Host create → join code works for signed-in and guest in two browsers.
 - Pick on A appears on B **without waiting for safety poll** (Broadcast).
 - Double-click / same `intent_id` → one pick; race → one `409`, then Broadcast converges.
-- Kill Broadcast mid-draft → safety poll / focus resync repairs within ~30s.
-- Ten clients share one CDN cache key (verify one origin miss per window in logs).
+- Kill Broadcast mid-draft → focus/reconnect GET repairs board + deadline.
+- All clients show the **same** countdown for the active pick (skew-corrected).
 - Timer expiry → cron autopick + Broadcast; AI seats advance.
-- Hidden tab: no safety polls; on visible → resync GET.
+- Hidden tab: no periodic GETs; on visible → resync if channel was dropped.
 - Room past `expires_at` rejects joins/picks.
 - Solo `/mock-draft` unchanged.
