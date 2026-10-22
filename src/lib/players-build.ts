@@ -65,19 +65,22 @@ export const POS_STAT_COLUMNS: Record<Pos, Array<{ key: keyof CountingStats; lab
     { key: "rush_att", label: "Att", digits: 0 },
     { key: "rush_yd", label: "Rush Yd", digits: 0 },
     { key: "rush_td", label: "Rush TD", digits: 0 },
+    { key: "rec_tgt", label: "Tgt", digits: 0 },
     { key: "rec", label: "Rec", digits: 0 },
     { key: "rec_yd", label: "Rec Yd", digits: 0 },
     { key: "rec_td", label: "Rec TD", digits: 0 },
   ],
-  // Sleeper season projections omit rec_tgt — targets only exist on prior-year
-  // actuals (shown via the year-stats chip in the draft sheet).
+  // Season projections omit rec_tgt; mock draft fills it by summing weekly
+  // projection targets (same lines as the desktop player Projections tab).
   WR: [
+    { key: "rec_tgt", label: "Tgt", digits: 0 },
     { key: "rec", label: "Rec", digits: 0 },
     { key: "rec_yd", label: "Rec Yd", digits: 0 },
     { key: "rec_td", label: "Rec TD", digits: 0 },
     { key: "rush_yd", label: "Rush Yd", digits: 0 },
   ],
   TE: [
+    { key: "rec_tgt", label: "Tgt", digits: 0 },
     { key: "rec", label: "Rec", digits: 0 },
     { key: "rec_yd", label: "Rec Yd", digits: 0 },
     { key: "rec_td", label: "Rec TD", digits: 0 },

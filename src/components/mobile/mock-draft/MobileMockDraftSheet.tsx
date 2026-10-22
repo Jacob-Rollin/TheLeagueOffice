@@ -9,6 +9,7 @@ import {
   type ReactNode,
   type UIEvent,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChartLine, FilePlus2, Search, Star } from "lucide-react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
@@ -30,6 +31,7 @@ import {
   type CountingStats,
 } from "@/lib/players-build";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
+import { fetchSeasonProjectedRecTgt } from "@/lib/sleeper-client";
 import { cn } from "@/lib/utils";
 
 import { POS_DOT, posCellClass } from "./posCellStyles";
@@ -220,6 +222,14 @@ export function MobileMockDraftSheet({
   onOpenPlayer: (id: string) => void;
 }) {
   const prevYear = Math.max(2000, (Number(season) || new Date().getFullYear()) - 1);
+  // Season projections omit rec_tgt — sum weekly proj targets (desktop popup source).
+  const { data: projTgtById = {} } = useQuery({
+    queryKey: ["season-proj-rec-tgt", season],
+    queryFn: () => fetchSeasonProjectedRecTgt(season),
+    enabled: Boolean(season) && /^\d{4}$/.test(season),
+    staleTime: 1000 * 60 * 60 * 12,
+    placeholderData: (prev) => prev,
+  });
   const draftedPlayers = useMemo(() => {
     return picks
       .slice()
@@ -396,6 +406,7 @@ export function MobileMockDraftSheet({
           myCounts={myCounts}
           nextUserOverall={nextUserOverall}
           prevYear={prevYear}
+          projTgtById={projTgtById}
           onDraft={onDraft}
           onToggleQueue={onToggleQueue}
           onOpenPlayer={onOpenPlayer}
@@ -409,6 +420,7 @@ export function MobileMockDraftSheet({
           complete={complete}
           queueAutopickOn={queueAutopickOn}
           onQueueAutopickChange={onQueueAutopickChange}
+          projTgtById={projTgtById}
           onDraft={onDraft}
           onToggleQueue={onToggleQueue}
           onOpenPlayer={onOpenPlayer}
@@ -440,6 +452,7 @@ function PlayersPane({
   myCounts,
   nextUserOverall,
   prevYear,
+  projTgtById,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -453,6 +466,7 @@ function PlayersPane({
   myCounts: Record<string, number>;
   nextUserOverall: number | null;
   prevYear: number;
+  projTgtById: Record<string, number>;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -601,6 +615,7 @@ function PlayersPane({
                 complete={complete || draftedOnly}
                 showPrevYear={showPrevYear}
                 prevYear={prevYear}
+                projTgt={projTgtById[p.id]}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
@@ -645,6 +660,7 @@ function QueuePane({
   complete,
   queueAutopickOn,
   onQueueAutopickChange,
+  projTgtById,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -655,6 +671,7 @@ function QueuePane({
   complete: boolean;
   queueAutopickOn: boolean;
   onQueueAutopickChange: (on: boolean) => void;
+  projTgtById: Record<string, number>;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -714,6 +731,7 @@ function QueuePane({
                 complete={complete}
                 showPrevYear={false}
                 prevYear={0}
+                projTgt={projTgtById[p.id]}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
@@ -848,6 +866,7 @@ function PlayerStatsRow({
   complete,
   showPrevYear,
   prevYear,
+  projTgt,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -860,6 +879,8 @@ function PlayerStatsRow({
   complete: boolean;
   showPrevYear: boolean;
   prevYear: number;
+  /** Season total from summed weekly projection targets (desktop Projections tab). */
+  projTgt?: number | undefined;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -871,15 +892,12 @@ function PlayerStatsRow({
   const injury = injuryBadgeInfo(
     resolveInjuryStatus(player) ?? player.injury_status ?? player.injury,
   );
-  const projLine: CountingStats = player.projLine ?? EMPTY_COUNTING_STATS;
+  const baseLine: CountingStats = player.projLine ?? EMPTY_COUNTING_STATS;
+  const projLine: CountingStats =
+    projTgt != null && projTgt > 0 ? { ...baseLine, rec_tgt: projTgt } : baseLine;
   const prevLine = player.prevLine;
   const prevAdp = player.prevAdp?.[settings.scoring];
   const posCols = POS_STAT_COLUMNS[player.pos] ?? [];
-
-  const showPrevTgt =
-    showPrevYear &&
-    (player.pos === "WR" || player.pos === "TE") &&
-    (prevLine?.rec_tgt ?? 0) > 0;
 
   return (
     <div className="relative border-b border-m-border/60">
@@ -983,13 +1001,6 @@ function PlayerStatsRow({
             <StatCell
               label={`${yearShort} Pts`}
               value={v.prev != null && v.prev > 0 ? v.prev.toFixed(1) : "—"}
-              muted
-            />
-          ) : null}
-          {showPrevTgt ? (
-            <StatCell
-              label={`${yearShort} Tgt`}
-              value={(prevLine?.rec_tgt ?? 0).toFixed(0)}
               muted
             />
           ) : null}

@@ -741,3 +741,33 @@ export async function fetchGameLogsClient(
   return { season, logs, career };
 }
 
+/**
+ * Season projected targets by summing weekly Sleeper projection `rec_tgt`
+ * (same week bundles as the desktop player Projections tab). Season-long
+ * `/projections/nfl/{season}` rows omit targets.
+ */
+export async function fetchSeasonProjectedRecTgt(
+  season: string,
+): Promise<Record<string, number>> {
+  const safeSeason = String(season || "").trim();
+  if (!/^\d{4}$/.test(safeSeason)) return {};
+  const cacheKey = `season-proj-rec-tgt-v1:${safeSeason}`;
+  return getCached(cacheKey, DAY, async () => {
+    const weeks = Array.from({ length: 18 }, (_, i) => i + 1);
+    const totals: Record<string, number> = {};
+    await mapPool(weeks, PROJ_WEEK_CONCURRENCY, async (w) => {
+      const bundle = await weekProjectionBundle(safeSeason, w);
+      for (const [pid, entry] of Object.entries(bundle)) {
+        const t = entry.raw?.["rec_tgt"];
+        if (typeof t !== "number" || !Number.isFinite(t) || t <= 0) continue;
+        totals[pid] = (totals[pid] ?? 0) + t;
+      }
+    });
+    // Round once for board display (counting-stat columns use 0 decimals).
+    for (const pid of Object.keys(totals)) {
+      totals[pid] = Math.round(totals[pid]!);
+    }
+    return totals;
+  });
+}
+
