@@ -251,6 +251,42 @@ async function weeklyRawClient(
   });
 }
 
+/** Season-to-date / full-season totals for one player (includes pos_rank_*). */
+async function seasonTotalsClient(
+  id: string,
+  season: string,
+): Promise<Record<string, number>> {
+  return getCached(`season-totals-v1:${season}:${id}`, 30 * 60 * 1000, async () => {
+    const res = await sleeperFetch(
+      `${SLEEPER_BASE}/stats/nfl/player/${encodeURIComponent(id)}?season_type=regular&season=${season}`,
+    );
+    if (!res.ok) return {};
+    const j = (await res.json()) as { stats?: Record<string, number> | null } | null;
+    const stats = j?.stats;
+    if (!stats || typeof stats !== "object") return {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(stats)) {
+      if (v != null && Number.isFinite(Number(v))) out[k] = Number(v);
+    }
+    return out;
+  });
+}
+
+/** Sleeper season pos ranks; treat missing / 0 / ≥900 sentinel as empty. */
+function seasonPosRankTriple(
+  stats: Record<string, number> | null | undefined,
+): { std: number | null; half: number | null; ppr: number | null } {
+  const clean = (raw: number | undefined): number | null => {
+    if (raw == null || !Number.isFinite(raw) || raw <= 0 || raw >= 900) return null;
+    return Math.round(raw);
+  };
+  return {
+    std: clean(stats?.["pos_rank_std"]),
+    half: clean(stats?.["pos_rank_half_ppr"]),
+    ppr: clean(stats?.["pos_rank_ppr"]),
+  };
+}
+
 const LOG_KEYS = [
   "rush_att",
   "rush_yd",
@@ -362,23 +398,94 @@ function projTripleUsable(
   );
 }
 
+type FrozenWeekProj = {
+  std: number | null;
+  half: number | null;
+  ppr: number | null;
+  /** Kickoff-locked Sleeper counting stats for Projections-tab columns. */
+  raw?: Record<string, number>;
+};
+
+function ptsFromRawStats(
+  raw: Record<string, number> | null | undefined,
+): { std: number | null; half: number | null; ppr: number | null } | null {
+  if (!raw) return null;
+  const std = Number(raw["pts_std"]);
+  const half = Number(raw["pts_half_ppr"]);
+  const ppr = Number(raw["pts_ppr"]);
+  const triple = {
+    std: Number.isFinite(std) && std > 0 ? std : null,
+    half: Number.isFinite(half) && half > 0 ? half : null,
+    ppr: Number.isFinite(ppr) && ppr > 0 ? ppr : null,
+  };
+  return projTripleUsable(triple) ? triple : null;
+}
+
 /**
- * Kickoff-locked Sleeper pts from the public accuracy Gist (browser → gist only).
- * Soft-empty when the season file is missing — never Fluid.
+ * Kickoff-locked Sleeper pts + raw lines when live weekly projections were
+ * stripped after a mid-game injury. Accuracy Gist (pts) + bundled / gist lines.
+ * Soft-empty on miss — never Fluid.
  */
 async function frozenSleeperWeekProjLookup(
   season: string,
-): Promise<Record<string, { std: number | null; half: number | null; ppr: number | null }>> {
-  return getCached(`frozen-sleeper-week-proj-v1:${season}`, 12 * HOUR, async () => {
+): Promise<Record<string, FrozenWeekProj>> {
+  return getCached(`frozen-sleeper-week-proj-v2:${season}`, 12 * HOUR, async () => {
+    const out: Record<string, FrozenWeekProj> = {};
     try {
       const { fetchAccuracyFile, frozenSleeperPtsFromAccuracy } = await import(
         "@/lib/projection-analytics"
       );
       const acc = await fetchAccuracyFile(Number(season));
-      return frozenSleeperPtsFromAccuracy(acc);
+      for (const [key, pts] of Object.entries(frozenSleeperPtsFromAccuracy(acc))) {
+        out[key] = { ...pts };
+      }
     } catch {
-      return {};
+      /* soft-empty pts */
     }
+
+    // Bundled pre-wipe snapshots for early 2026 weeks (gist history backfill).
+    if (season === "2026") {
+      try {
+        const bundled = (await import("@/data/frozen-sleeper-week-lines-2026.json")).default as {
+          lines?: Record<string, Record<string, number>>;
+        };
+        for (const [key, raw] of Object.entries(bundled.lines ?? {})) {
+          if (!hasScorableProjectionStats(raw)) continue;
+          const fromRaw = ptsFromRawStats(raw);
+          const prev = out[key];
+          out[key] = {
+            std: prev?.std ?? fromRaw?.std ?? null,
+            half: prev?.half ?? fromRaw?.half ?? null,
+            ppr: prev?.ppr ?? fromRaw?.ppr ?? null,
+            raw: { ...raw },
+          };
+        }
+      } catch {
+        /* optional chunk */
+      }
+    }
+
+    // Growing season archive published by the projection-engine audit/update.
+    try {
+      const { fetchSleeperWeekLinesFile } = await import("@/lib/projection-analytics");
+      const remote = await fetchSleeperWeekLinesFile(Number(season));
+      for (const [key, raw] of Object.entries(remote ?? {})) {
+        if (!hasScorableProjectionStats(raw)) continue;
+        const fromRaw = ptsFromRawStats(raw);
+        const prev = out[key];
+        out[key] = {
+          std: prev?.std ?? fromRaw?.std ?? null,
+          half: prev?.half ?? fromRaw?.half ?? null,
+          ppr: prev?.ppr ?? fromRaw?.ppr ?? null,
+          // Prefer remote (newer locks) over bundled backfill when both exist.
+          raw: { ...raw },
+        };
+      }
+    } catch {
+      /* soft-empty remote lines */
+    }
+
+    return out;
   });
 }
 
@@ -429,8 +536,13 @@ export async function weekProjectionBundle(season: string, week: number): Promis
     }
     // Merge with expired cache so Sleeper's ADP-only post-injury stubs do not
     // overwrite kickoff projections we already stored for this week.
-    const prior = await readCache<WeekProjBundle>(cacheKey);
-    return mergeWeekProjBundles(prior?.data, map);
+    // Merge expired v3 cache, and migrate any still-warm v2 bundle so the
+    // cache-key bump does not drop kickoff lines we already downloaded.
+    const prior =
+      (await readCache<WeekProjBundle>(cacheKey))?.data ??
+      (await readCache<WeekProjBundle>(`week-proj-bundle-v2:${season}|${safeWeek}`))?.data ??
+      null;
+    return mergeWeekProjBundles(prior, map);
   });
 }
 
@@ -534,13 +646,24 @@ export async function fetchGameLogsClient(
       let proj = bundle
         ? { std: bundle.std, half: bundle.half, ppr: bundle.ppr }
         : null;
-      // Keep kickoff Proj when Sleeper later clears the weekly line (injury).
+      let projRaw = bundle?.raw ?? {};
+      const frozen = frozenLookup[`${week}|${clean}`];
+      // Keep kickoff counting stats for the Projections tab when Sleeper
+      // strips the weekly line after a mid-game injury.
+      if (!hasScorableProjectionStats(projRaw) && frozen?.raw && hasScorableProjectionStats(frozen.raw)) {
+        projRaw = frozen.raw;
+      }
+      // Keep kickoff Proj points when live pts_* were cleared.
       if (!projTripleUsable(proj)) {
-        const frozen = frozenLookup[`${week}|${clean}`];
-        if (projTripleUsable(frozen)) proj = frozen;
+        if (projTripleUsable(frozen)) {
+          proj = { std: frozen!.std, half: frozen!.half, ppr: frozen!.ppr };
+        } else {
+          const fromRaw = ptsFromRawStats(projRaw);
+          if (fromRaw) proj = fromRaw;
+        }
       }
       if (hit) {
-        logs.push({ ...hit, proj, projRaw: bundle?.raw ?? {} });
+        logs.push({ ...hit, proj, projRaw });
         continue;
       }
       const isBye = byeWeek != null && week === byeWeek;
@@ -564,7 +687,7 @@ export async function fetchGameLogsClient(
         isBye,
         seasonYear: year,
         proj,
-        projRaw: bundle?.raw ?? {},
+        projRaw,
       });
     }
     return logs;
@@ -575,6 +698,12 @@ export async function fetchGameLogsClient(
   // Skip multi-year career fan-out unless explicitly requested (Game Logs / Career UI).
   const careerLogs = includeCareer
     ? await Promise.all(careerYears.map((y) => buildLogs(y, false)))
+    : [];
+  // One cheap per-player season totals fetch per career year (pos_rank_* live here).
+  const careerSeasonTotals = includeCareer
+    ? await Promise.all(
+        careerYears.map((y) => seasonTotalsClient(clean, y).catch(() => ({} as Record<string, number>))),
+      )
     : [];
 
   const career: CareerSeasonRow[] = careerYears.map((year, i) => {
@@ -603,7 +732,7 @@ export async function fetchGameLogsClient(
         half: any ? Math.round(pts.half * 10) / 10 : null,
         ppr: any ? Math.round(pts.ppr * 10) / 10 : null,
       },
-      posRank: { std: null, half: null, ppr: null },
+      posRank: seasonPosRankTriple(careerSeasonTotals[i]),
       raw,
     };
   });
