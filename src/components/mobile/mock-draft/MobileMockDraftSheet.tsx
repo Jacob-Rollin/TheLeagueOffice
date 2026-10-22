@@ -96,7 +96,14 @@ export function MobileMockDraftSheet({
   const [snap, setSnap] = useState<SheetSnap>("peek");
   const [dragPct, setDragPct] = useState<number | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ startY: number; startPct: number; parentH: number } | null>(null);
+  const dragRef = useRef<{
+    startY: number;
+    startPct: number;
+    parentH: number;
+    moved: boolean;
+  } | null>(null);
+  /** After a vertical drag on the header, ignore the synthetic click on a tab. */
+  const suppressTabClickRef = useRef(false);
 
   const heightPct = dragPct ?? SNAP_PCT[snap];
 
@@ -104,30 +111,51 @@ export function MobileMockDraftSheet({
     if (complete) setSnap("peek");
   }, [complete]);
 
-  const onHandlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+  const DRAG_THRESHOLD_PX = 8;
+
+  const onHeaderPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const parentH = sheetRef.current?.parentElement?.clientHeight ?? window.innerHeight;
-    dragRef.current = { startY: e.clientY, startPct: heightPct, parentH };
-    setDragPct(heightPct);
+    dragRef.current = {
+      startY: e.clientY,
+      startPct: heightPct,
+      parentH,
+      moved: false,
+    };
   };
 
-  const onHandlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+  const onHeaderPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.parentH <= 0) return;
     const deltaY = drag.startY - e.clientY;
+    if (!drag.moved) {
+      if (Math.abs(e.clientY - drag.startY) < DRAG_THRESHOLD_PX) return;
+      drag.moved = true;
+    }
     const deltaPct = (deltaY / drag.parentH) * 100;
-    const next = Math.min(92, Math.max(26, drag.startPct + deltaPct));
-    setDragPct(next);
+    setDragPct(Math.min(92, Math.max(26, drag.startPct + deltaPct)));
   };
 
-  const onHandlePointerUp = () => {
-    if (dragRef.current == null && dragPct == null) return;
-    const current = dragPct ?? SNAP_PCT[snap];
-    const mid = (SNAP_PCT.peek + SNAP_PCT.expanded) / 2;
-    const nextSnap: SheetSnap = current >= mid ? "expanded" : "peek";
-    setSnap(nextSnap);
+  const onHeaderPointerUp = () => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (drag.moved) {
+      const current = dragPct ?? SNAP_PCT[snap];
+      const mid = (SNAP_PCT.peek + SNAP_PCT.expanded) / 2;
+      setSnap(current >= mid ? "expanded" : "peek");
+      suppressTabClickRef.current = true;
+    }
     setDragPct(null);
     dragRef.current = null;
+  };
+
+  const onTabPress = (key: SheetTab) => {
+    if (suppressTabClickRef.current) {
+      suppressTabClickRef.current = false;
+      return;
+    }
+    onTabChange(key);
   };
 
   return (
@@ -139,6 +167,7 @@ export function MobileMockDraftSheet({
         transitionProperty: dragPct == null ? "height" : "none",
       }}
     >
+      {/* Entire chrome (grabber + tabs) resizes the sheet; tabs only change on tap. */}
       <div
         role="slider"
         aria-label="Resize player sheet"
@@ -146,42 +175,45 @@ export function MobileMockDraftSheet({
         aria-valuemax={SNAP_PCT.expanded}
         aria-valuenow={Math.round(heightPct)}
         tabIndex={0}
-        onPointerDown={onHandlePointerDown}
-        onPointerMove={onHandlePointerMove}
-        onPointerUp={onHandlePointerUp}
-        onPointerCancel={onHandlePointerUp}
+        onPointerDown={onHeaderPointerDown}
+        onPointerMove={onHeaderPointerMove}
+        onPointerUp={onHeaderPointerUp}
+        onPointerCancel={onHeaderPointerUp}
         onDoubleClick={() => setSnap((s) => (s === "peek" ? "expanded" : "peek"))}
         onKeyDown={(e) => {
           if (e.key === "ArrowUp") setSnap("expanded");
           if (e.key === "ArrowDown") setSnap("peek");
         }}
-        className="flex cursor-grab touch-none items-center justify-center pt-1.5 pb-0.5 active:cursor-grabbing"
+        className="cursor-grab touch-none select-none active:cursor-grabbing"
       >
-        <span className="h-1 w-9 rounded-full bg-m-border" aria-hidden />
-      </div>
-
-      <div className="flex items-end gap-1 border-b border-m-border px-2">
-        {(
-          [
-            ["players", "Players"],
-            ["queue", queuedPlayers.length ? `Queue (${queuedPlayers.length})` : "Queue"],
-            ["team", "Team"],
-          ] as [SheetTab, string][]
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => onTabChange(key)}
-            className={cn(
-              "flex-1 border-b-2 px-2 py-2 font-display text-xs font-bold uppercase tracking-widest transition-colors",
-              tab === key
-                ? "border-m-accent text-m-accent"
-                : "border-transparent text-m-muted",
-            )}
-          >
-            {label}
-          </button>
-        ))}
+        <div className="flex items-center justify-center pt-1.5 pb-0.5">
+          <span className="h-1 w-9 rounded-full bg-m-border" aria-hidden />
+        </div>
+        <div className="flex items-end gap-1 border-b border-m-border px-2" role="tablist">
+          {(
+            [
+              ["players", "Players"],
+              ["queue", queuedPlayers.length ? `Queue (${queuedPlayers.length})` : "Queue"],
+              ["team", "Team"],
+            ] as [SheetTab, string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => onTabPress(key)}
+              className={cn(
+                "flex-1 border-b-2 px-2 py-2 font-display text-xs font-bold uppercase tracking-widest transition-colors",
+                tab === key
+                  ? "border-m-accent text-m-accent"
+                  : "border-transparent text-m-muted",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === "players" ? (
