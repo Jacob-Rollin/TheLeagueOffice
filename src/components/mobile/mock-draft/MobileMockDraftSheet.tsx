@@ -37,6 +37,11 @@ const SNAP_PCT: Record<SheetSnap, number> = {
   expanded: 88,
 };
 
+/** Approx. Draft + rank + name width — past this, Sleeper-style mini name sticks. */
+const NAME_SCROLL_THRESHOLD_PX = 168;
+const NAME_COL_CLASS = "w-[7.25rem]";
+const STAR_COL_CLASS = "w-8";
+
 export function MobileMockDraftSheet({
   tab,
   onTabChange,
@@ -298,6 +303,7 @@ function PlayersPane({
   const [watchOnly, setWatchOnly] = useState(false);
   const [draftedOnly, setDraftedOnly] = useState(false);
   const [showPrevYear, setShowPrevYear] = useState(false);
+  const [showMiniNames, setShowMiniNames] = useState(false);
   const deferredQuery = useDeferredValue(query);
 
   const filtered = useMemo(() => {
@@ -395,7 +401,13 @@ function PlayersPane({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3">
+      <div
+        className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
+        onScroll={(e) => {
+          const next = e.currentTarget.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
+          setShowMiniNames((prev) => (prev === next ? prev : next));
+        }}
+      >
         {filtered.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-m-muted">
             {draftedOnly
@@ -409,7 +421,7 @@ function PlayersPane({
           {filtered.map((p, i) => (
             <div key={p.id}>
               {projIndex === i && nextUserOverall != null ? (
-                <div className="my-1 flex items-center gap-2 px-1">
+                <div className="my-1 flex w-[100vw] max-w-md items-center gap-2 px-1">
                   <span className="h-px flex-1 bg-m-accent/70" />
                   <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
                     Proj pick: Round {roundOf(nextUserOverall, settings.teams)} Overall #
@@ -427,6 +439,7 @@ function PlayersPane({
                 complete={complete || draftedOnly}
                 showPrevYear={showPrevYear}
                 prevYear={prevYear}
+                showMiniName={showMiniNames}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
@@ -485,6 +498,8 @@ function QueuePane({
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
+  const [showMiniNames, setShowMiniNames] = useState(false);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-end gap-2 px-3 py-2">
@@ -518,7 +533,13 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3">
+        <div
+          className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
+          onScroll={(e) => {
+            const next = e.currentTarget.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
+            setShowMiniNames((prev) => (prev === next ? prev : next));
+          }}
+        >
           <div className="min-w-max">
             {queuedPlayers.map((p, i) => (
               <PlayerStatsRow
@@ -531,6 +552,7 @@ function QueuePane({
                 complete={complete}
                 showPrevYear={false}
                 prevYear={0}
+                showMiniName={showMiniNames}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
@@ -652,7 +674,11 @@ function TeamPane({
   );
 }
 
-/** Compact Sleeper-style row — no sticky name column / shadow seam. */
+/**
+ * Full row scrolls (Draft + name + star + stats). When the list is scrolled past
+ * the name zone, a thin sticky mini-name line appears (Sleeper). Stars use a
+ * fixed column so they stay vertically aligned.
+ */
 function PlayerStatsRow({
   player,
   settings,
@@ -662,6 +688,7 @@ function PlayerStatsRow({
   complete,
   showPrevYear,
   prevYear,
+  showMiniName = false,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -674,6 +701,7 @@ function PlayerStatsRow({
   complete: boolean;
   showPrevYear: boolean;
   prevYear: number;
+  showMiniName?: boolean;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -681,18 +709,36 @@ function PlayerStatsRow({
   const v = value(player, settings.scoring);
   const short = shortName(player.name);
   const yearLabel = String(prevYear);
+  const meta = `${posDisplayLabel(player.pos)} - ${player.team}${player.bye ? ` (${player.bye})` : ""}`;
 
   return (
-    <div className="flex border-b border-m-border/60">
-      {/* Compact sticky identity — star sits next to the name; no shadow seam. */}
-      <div className="sticky left-0 z-10 flex shrink-0 items-stretch gap-1.5 border-r border-m-border/50 bg-m-sheet py-1.5 pl-0 pr-1.5">
+    <div className="border-b border-m-border/60">
+      {showMiniName ? (
+        <div className="sticky left-0 z-20 w-max max-w-[75vw] bg-m-sheet px-1 py-0.5">
+          <button
+            type="button"
+            onClick={() => onOpenPlayer(player.id)}
+            className="flex items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
+          >
+            <span className="truncate text-m-card-fg">{short}</span>
+            <span
+              className={cn("size-1 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
+              aria-hidden
+            />
+            <span className="truncate">{meta}</span>
+          </button>
+          <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
+        </div>
+      ) : null}
+
+      <div className="flex items-stretch gap-1.5 py-1.5">
         {!complete ? (
           <button
             type="button"
             disabled={!myTurn}
             onClick={() => onDraft(player.id)}
             className={cn(
-              "my-0.5 shrink-0 self-stretch rounded-lg px-3 font-display text-[11px] font-extrabold uppercase tracking-wide",
+              "my-0.5 w-[3.25rem] shrink-0 self-stretch rounded-lg font-display text-[11px] font-extrabold uppercase tracking-wide",
               myTurn
                 ? "bg-m-accent text-m-accent-fg"
                 : "bg-m-chip text-m-muted opacity-70",
@@ -704,57 +750,55 @@ function PlayerStatsRow({
         <span className="tabnum flex w-5 shrink-0 items-center justify-center text-xs text-m-muted">
           {rank}
         </span>
-        <div className="flex max-w-[9.5rem] items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => onOpenPlayer(player.id)}
-            className="min-w-0 shrink py-0.5 text-left"
-          >
-            <span className="block truncate text-[13px] font-bold text-m-card-fg">{short}</span>
-            <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">
-              <span
-                className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
-                aria-hidden
-              />
-              <span className="truncate">
-                {posDisplayLabel(player.pos)} - {player.team}
-                {player.bye ? ` (${player.bye})` : ""}
-              </span>
-            </span>
-          </button>
-          <button
-            type="button"
-            aria-label={queued ? "Remove from queue" : "Add to queue"}
-            onClick={() => onToggleQueue(player.id)}
-            className={cn("shrink-0 self-center p-0.5", queued ? "text-m-accent" : "text-m-muted")}
-          >
-            <Star className={cn("size-4", queued && "fill-current")} strokeWidth={2.5} />
-          </button>
+        <button
+          type="button"
+          onClick={() => onOpenPlayer(player.id)}
+          className={cn(NAME_COL_CLASS, "shrink-0 py-0.5 text-left")}
+        >
+          <span className="block truncate text-[13px] font-bold text-m-card-fg">{short}</span>
+          <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-m-muted">
+            <span
+              className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
+              aria-hidden
+            />
+            <span className="truncate">{meta}</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          aria-label={queued ? "Remove from queue" : "Add to queue"}
+          onClick={() => onToggleQueue(player.id)}
+          className={cn(
+            STAR_COL_CLASS,
+            "flex shrink-0 items-center justify-center self-center",
+            queued ? "text-m-accent" : "text-m-muted",
+          )}
+        >
+          <Star className={cn("size-4", queued && "fill-current")} strokeWidth={2.5} />
+        </button>
+        <div className="flex shrink-0 items-center gap-3 self-center pr-4">
+          <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
+          <StatPair
+            label="Pts"
+            current={v.proj.toFixed(1)}
+            showPrev={showPrevYear}
+            prevYear={yearLabel}
+            prev={v.prev != null ? v.prev.toFixed(1) : "—"}
+          />
+          <StatCell label="Rank" value={v.rank < 900 ? String(v.rank) : "—"} />
+          <StatCell
+            label="Pos rk"
+            value={player.posRank > 0 ? `${posDisplayLabel(player.pos)}${player.posRank}` : "—"}
+          />
+          <StatCell
+            label="ADP lo"
+            value={player.adpRange.min < 900 ? player.adpRange.min.toFixed(0) : "—"}
+          />
+          <StatCell
+            label="ADP hi"
+            value={player.adpRange.max < 900 ? player.adpRange.max.toFixed(0) : "—"}
+          />
         </div>
-      </div>
-
-      <div className="flex items-center gap-3 self-stretch py-1.5 pr-4">
-        <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
-        <StatPair
-          label="Pts"
-          current={v.proj.toFixed(1)}
-          showPrev={showPrevYear}
-          prevYear={yearLabel}
-          prev={v.prev != null ? v.prev.toFixed(1) : "—"}
-        />
-        <StatCell label="Rank" value={v.rank < 900 ? String(v.rank) : "—"} />
-        <StatCell
-          label="Pos rk"
-          value={player.posRank > 0 ? `${posDisplayLabel(player.pos)}${player.posRank}` : "—"}
-        />
-        <StatCell
-          label="ADP lo"
-          value={player.adpRange.min < 900 ? player.adpRange.min.toFixed(0) : "—"}
-        />
-        <StatCell
-          label="ADP hi"
-          value={player.adpRange.max < 900 ? player.adpRange.max.toFixed(0) : "—"}
-        />
       </div>
     </div>
   );
