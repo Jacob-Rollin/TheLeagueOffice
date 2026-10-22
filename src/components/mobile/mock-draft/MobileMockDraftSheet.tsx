@@ -69,73 +69,27 @@ function nearestSheetSnap(pct: number, collapsedPct: number): SheetSnap {
 }
 
 /**
- * Overflow container that locks to horizontal OR vertical for a gesture —
- * diagonal pan cannot scroll both axes at once (Sleeper-style).
+ * Nested scrollers so vertical and horizontal never fight on one element.
+ * Changing overflow-x to `hidden` on a dual-axis scroller resets scrollLeft
+ * (that was popping the list back to the left when scrolling down).
  */
-function AxisLockedScroll({
+function DualAxisScroll({
   className,
-  onScroll,
+  onHorizScroll,
   children,
 }: {
   className?: string;
-  onScroll?: (e: UIEvent<HTMLDivElement>) => void;
+  onHorizScroll?: (e: UIEvent<HTMLDivElement>) => void;
   children: ReactNode;
 }) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const axisRef = useRef<"x" | "y" | null>(null);
-  const startRef = useRef({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const unlock = () => {
-      axisRef.current = null;
-      el.style.overflowX = "auto";
-      el.style.overflowY = "auto";
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (!t) return;
-      axisRef.current = null;
-      startRef.current = { x: t.clientX, y: t.clientY };
-      el.style.overflowX = "auto";
-      el.style.overflowY = "auto";
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (!t) return;
-      if (axisRef.current != null) return;
-      const dx = t.clientX - startRef.current.x;
-      const dy = t.clientY - startRef.current.y;
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      axisRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
-      if (axisRef.current === "x") {
-        el.style.overflowY = "hidden";
-        el.style.overflowX = "auto";
-      } else {
-        el.style.overflowX = "hidden";
-        el.style.overflowY = "auto";
-      }
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: true });
-    el.addEventListener("touchend", unlock, { passive: true });
-    el.addEventListener("touchcancel", unlock, { passive: true });
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", unlock);
-      el.removeEventListener("touchcancel", unlock);
-    };
-  }, []);
-
   return (
-    <div ref={ref} className={className} onScroll={onScroll}>
-      {children}
+    <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain", className)}>
+      <div
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [-webkit-overflow-scrolling:touch]"
+        onScroll={onHorizScroll}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -534,10 +488,9 @@ function PlayersPane({
         </div>
       ) : null}
 
-      <AxisLockedScroll
-        className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
-        onScroll={(e) => {
-          // Class toggle only — avoid React state (was re-rendering every row).
+      <DualAxisScroll
+        className="px-2 pb-3"
+        onHorizScroll={(e) => {
           const el = e.currentTarget;
           const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
           if (el.classList.contains("is-scrolled-x") !== on) {
@@ -583,7 +536,7 @@ function PlayersPane({
             </div>
           ))}
         </div>
-      </AxisLockedScroll>
+      </DualAxisScroll>
     </div>
   );
 }
@@ -667,9 +620,9 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <AxisLockedScroll
-          className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
-          onScroll={(e) => {
+        <DualAxisScroll
+          className="px-2 pb-3"
+          onHorizScroll={(e) => {
             const el = e.currentTarget;
             const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
             if (el.classList.contains("is-scrolled-x") !== on) {
@@ -695,7 +648,7 @@ function QueuePane({
               />
             ))}
           </div>
-        </AxisLockedScroll>
+        </DualAxisScroll>
       )}
     </div>
   );
@@ -851,33 +804,41 @@ function PlayerStatsRow({
   const prevAdp = player.prevAdp?.[settings.scoring];
   const posCols = POS_STAT_COLUMNS[player.pos] ?? [];
 
+  const showPrevTgt =
+    showPrevYear &&
+    (player.pos === "WR" || player.pos === "TE") &&
+    (prevLine?.rec_tgt ?? 0) > 0;
+
   return (
-    <div className="border-b border-m-border/60">
-      <div className="sticky left-0 z-20 hidden w-max max-w-[75vw] bg-m-sheet px-1 py-0.5 [.is-scrolled-x_&]:block">
-        <button
-          type="button"
-          onClick={() => onOpenPlayer(player.id)}
-          className="flex items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
-        >
-          <span className="truncate text-m-card-fg">{short}</span>
-          <span
-            className={cn("size-1 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
-            aria-hidden
-          />
-          <span className="truncate">{meta}</span>
-          {injury ? (
+    <div className="relative border-b border-m-border/60">
+      {/* Overlay mini-name — no display/height toggle (avoids layout thrash while panning). */}
+      <div className="pointer-events-none sticky left-0 z-20 h-0 w-0 overflow-visible">
+        <div className="absolute left-0 top-0 max-w-[75vw] whitespace-nowrap bg-m-sheet/95 px-1 py-0.5 opacity-0 backdrop-blur-sm transition-opacity duration-100 [.is-scrolled-x_&]:pointer-events-auto [.is-scrolled-x_&]:opacity-100">
+          <button
+            type="button"
+            onClick={() => onOpenPlayer(player.id)}
+            className="flex items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
+          >
+            <span className="truncate text-m-card-fg">{short}</span>
             <span
-              title={injury.text}
-              className={cn(
-                "inline-flex h-3.5 min-w-[0.9rem] shrink-0 items-center justify-center rounded px-0.5 text-[8px] font-black leading-none",
-                injury.className,
-              )}
-            >
-              {injury.letter}
-            </span>
-          ) : null}
-        </button>
-        <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
+              className={cn("size-1 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
+              aria-hidden
+            />
+            <span className="truncate">{meta}</span>
+            {injury ? (
+              <span
+                title={injury.text}
+                className={cn(
+                  "inline-flex h-3.5 min-w-[0.9rem] shrink-0 items-center justify-center rounded px-0.5 text-[8px] font-black leading-none",
+                  injury.className,
+                )}
+              >
+                {injury.letter}
+              </span>
+            ) : null}
+          </button>
+          <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
+        </div>
       </div>
 
       <div className="flex items-stretch gap-1.5 py-1.5">
@@ -950,6 +911,13 @@ function PlayerStatsRow({
             <StatCell
               label={`${yearShort} Pts`}
               value={v.prev != null && v.prev > 0 ? v.prev.toFixed(1) : "—"}
+              muted
+            />
+          ) : null}
+          {showPrevTgt ? (
+            <StatCell
+              label={`${yearShort} Tgt`}
+              value={(prevLine?.rec_tgt ?? 0).toFixed(0)}
               muted
             />
           ) : null}
