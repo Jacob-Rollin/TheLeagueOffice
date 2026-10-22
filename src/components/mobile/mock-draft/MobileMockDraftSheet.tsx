@@ -9,6 +9,7 @@ import {
   type ReactNode,
   type UIEvent,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChartLine, FilePlus2, Search, Star } from "lucide-react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
@@ -30,6 +31,7 @@ import {
   type CountingStats,
 } from "@/lib/players-build";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
+import { fetchSeasonProjectedRecTgt } from "@/lib/sleeper-client";
 import { cn } from "@/lib/utils";
 
 import { POS_DOT, posCellClass } from "./posCellStyles";
@@ -69,73 +71,99 @@ function nearestSheetSnap(pct: number, collapsedPct: number): SheetSnap {
 }
 
 /**
- * Overflow container that locks to horizontal OR vertical for a gesture —
- * diagonal pan cannot scroll both axes at once (Sleeper-style).
+ * Nested vertical + horizontal scrollers with strict gesture axis lock.
+ * First 8px decides the axis; after that we preventDefault and drive only that
+ * scroller so diagonal pans cannot move both. Never toggles overflow (that
+ * resets scrollLeft and pops the list left).
  */
-function AxisLockedScroll({
+function DualAxisScroll({
   className,
-  onScroll,
+  onHorizScroll,
   children,
 }: {
   className?: string;
-  onScroll?: (e: UIEvent<HTMLDivElement>) => void;
+  onHorizScroll?: (e: UIEvent<HTMLDivElement>) => void;
   children: ReactNode;
 }) {
-  const ref = useRef<HTMLDivElement | null>(null);
+  const vertRef = useRef<HTMLDivElement | null>(null);
+  const horizRef = useRef<HTMLDivElement | null>(null);
   const axisRef = useRef<"x" | "y" | null>(null);
-  const startRef = useRef({ x: 0, y: 0 });
+  const startRef = useRef({ x: 0, y: 0, scrollTop: 0, scrollLeft: 0 });
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const unlock = () => {
-      axisRef.current = null;
-      el.style.overflowX = "auto";
-      el.style.overflowY = "auto";
-    };
+    const vert = vertRef.current;
+    const horiz = horizRef.current;
+    if (!vert || !horiz) return;
 
     const onTouchStart = (e: TouchEvent) => {
       const t = e.touches[0];
       if (!t) return;
       axisRef.current = null;
-      startRef.current = { x: t.clientX, y: t.clientY };
-      el.style.overflowX = "auto";
-      el.style.overflowY = "auto";
+      startRef.current = {
+        x: t.clientX,
+        y: t.clientY,
+        scrollTop: vert.scrollTop,
+        scrollLeft: horiz.scrollLeft,
+      };
     };
 
     const onTouchMove = (e: TouchEvent) => {
       const t = e.touches[0];
       if (!t) return;
-      if (axisRef.current != null) return;
       const dx = t.clientX - startRef.current.x;
       const dy = t.clientY - startRef.current.y;
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-      axisRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      if (axisRef.current == null) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        axisRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+        // Undo any diagonal drift from the decision window.
+        vert.scrollTop = startRef.current.scrollTop;
+        horiz.scrollLeft = startRef.current.scrollLeft;
+      }
+      // Own the gesture so the browser cannot pan the off-axis scroller.
+      e.preventDefault();
       if (axisRef.current === "x") {
-        el.style.overflowY = "hidden";
-        el.style.overflowX = "auto";
+        horiz.scrollLeft = startRef.current.scrollLeft - dx;
+        vert.scrollTop = startRef.current.scrollTop;
       } else {
-        el.style.overflowX = "hidden";
-        el.style.overflowY = "auto";
+        vert.scrollTop = startRef.current.scrollTop - dy;
+        horiz.scrollLeft = startRef.current.scrollLeft;
       }
     };
 
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: true });
-    el.addEventListener("touchend", unlock, { passive: true });
-    el.addEventListener("touchcancel", unlock, { passive: true });
+    const onTouchEnd = () => {
+      axisRef.current = null;
+    };
+
+    vert.addEventListener("touchstart", onTouchStart, { passive: true, capture: true });
+    // Non-passive so preventDefault can stop diagonal browser scrolling.
+    vert.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
+    vert.addEventListener("touchend", onTouchEnd, { passive: true, capture: true });
+    vert.addEventListener("touchcancel", onTouchEnd, { passive: true, capture: true });
+
     return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", unlock);
-      el.removeEventListener("touchcancel", unlock);
+      vert.removeEventListener("touchstart", onTouchStart, true);
+      vert.removeEventListener("touchmove", onTouchMove, true);
+      vert.removeEventListener("touchend", onTouchEnd, true);
+      vert.removeEventListener("touchcancel", onTouchEnd, true);
     };
   }, []);
 
   return (
-    <div ref={ref} className={className} onScroll={onScroll}>
-      {children}
+    <div
+      ref={vertRef}
+      className={cn(
+        // touch-none: browser must not pan either axis; JS owns the gesture after axis lock.
+        "min-h-0 flex-1 touch-none overflow-y-auto overflow-x-hidden overscroll-contain",
+        className,
+      )}
+    >
+      <div
+        ref={horizRef}
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain touch-none [-webkit-overflow-scrolling:touch]"
+        onScroll={onHorizScroll}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -194,6 +222,14 @@ export function MobileMockDraftSheet({
   onOpenPlayer: (id: string) => void;
 }) {
   const prevYear = Math.max(2000, (Number(season) || new Date().getFullYear()) - 1);
+  // Season projections omit rec_tgt — sum weekly proj targets (desktop popup source).
+  const { data: projTgtById = {} } = useQuery({
+    queryKey: ["season-proj-rec-tgt", season],
+    queryFn: () => fetchSeasonProjectedRecTgt(season),
+    enabled: Boolean(season) && /^\d{4}$/.test(season),
+    staleTime: 1000 * 60 * 60 * 12,
+    placeholderData: (prev) => prev,
+  });
   const draftedPlayers = useMemo(() => {
     return picks
       .slice()
@@ -370,6 +406,7 @@ export function MobileMockDraftSheet({
           myCounts={myCounts}
           nextUserOverall={nextUserOverall}
           prevYear={prevYear}
+          projTgtById={projTgtById}
           onDraft={onDraft}
           onToggleQueue={onToggleQueue}
           onOpenPlayer={onOpenPlayer}
@@ -383,6 +420,7 @@ export function MobileMockDraftSheet({
           complete={complete}
           queueAutopickOn={queueAutopickOn}
           onQueueAutopickChange={onQueueAutopickChange}
+          projTgtById={projTgtById}
           onDraft={onDraft}
           onToggleQueue={onToggleQueue}
           onOpenPlayer={onOpenPlayer}
@@ -414,6 +452,7 @@ function PlayersPane({
   myCounts,
   nextUserOverall,
   prevYear,
+  projTgtById,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -427,6 +466,7 @@ function PlayersPane({
   myCounts: Record<string, number>;
   nextUserOverall: number | null;
   prevYear: number;
+  projTgtById: Record<string, number>;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -534,10 +574,9 @@ function PlayersPane({
         </div>
       ) : null}
 
-      <AxisLockedScroll
-        className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
-        onScroll={(e) => {
-          // Class toggle only — avoid React state (was re-rendering every row).
+      <DualAxisScroll
+        className="px-2 pb-3"
+        onHorizScroll={(e) => {
           const el = e.currentTarget;
           const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
           if (el.classList.contains("is-scrolled-x") !== on) {
@@ -576,6 +615,7 @@ function PlayersPane({
                 complete={complete || draftedOnly}
                 showPrevYear={showPrevYear}
                 prevYear={prevYear}
+                projTgt={projTgtById[p.id]}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
@@ -583,7 +623,7 @@ function PlayersPane({
             </div>
           ))}
         </div>
-      </AxisLockedScroll>
+      </DualAxisScroll>
     </div>
   );
 }
@@ -620,6 +660,7 @@ function QueuePane({
   complete,
   queueAutopickOn,
   onQueueAutopickChange,
+  projTgtById,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -630,6 +671,7 @@ function QueuePane({
   complete: boolean;
   queueAutopickOn: boolean;
   onQueueAutopickChange: (on: boolean) => void;
+  projTgtById: Record<string, number>;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -667,9 +709,9 @@ function QueuePane({
           </p>
         </div>
       ) : (
-        <AxisLockedScroll
-          className="min-h-0 flex-1 overflow-auto overscroll-contain px-2 pb-3"
-          onScroll={(e) => {
+        <DualAxisScroll
+          className="px-2 pb-3"
+          onHorizScroll={(e) => {
             const el = e.currentTarget;
             const on = el.scrollLeft > NAME_SCROLL_THRESHOLD_PX;
             if (el.classList.contains("is-scrolled-x") !== on) {
@@ -689,13 +731,14 @@ function QueuePane({
                 complete={complete}
                 showPrevYear={false}
                 prevYear={0}
+                projTgt={projTgtById[p.id]}
                 onDraft={onDraft}
                 onToggleQueue={onToggleQueue}
                 onOpenPlayer={onOpenPlayer}
               />
             ))}
           </div>
-        </AxisLockedScroll>
+        </DualAxisScroll>
       )}
     </div>
   );
@@ -823,6 +866,7 @@ function PlayerStatsRow({
   complete,
   showPrevYear,
   prevYear,
+  projTgt,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -835,6 +879,8 @@ function PlayerStatsRow({
   complete: boolean;
   showPrevYear: boolean;
   prevYear: number;
+  /** Season total from summed weekly projection targets (desktop Projections tab). */
+  projTgt?: number | undefined;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -846,38 +892,43 @@ function PlayerStatsRow({
   const injury = injuryBadgeInfo(
     resolveInjuryStatus(player) ?? player.injury_status ?? player.injury,
   );
-  const projLine: CountingStats = player.projLine ?? EMPTY_COUNTING_STATS;
+  const baseLine: CountingStats = player.projLine ?? EMPTY_COUNTING_STATS;
+  const projLine: CountingStats =
+    projTgt != null && projTgt > 0 ? { ...baseLine, rec_tgt: projTgt } : baseLine;
   const prevLine = player.prevLine;
   const prevAdp = player.prevAdp?.[settings.scoring];
   const posCols = POS_STAT_COLUMNS[player.pos] ?? [];
 
   return (
-    <div className="border-b border-m-border/60">
-      <div className="sticky left-0 z-20 hidden w-max max-w-[75vw] bg-m-sheet px-1 py-0.5 [.is-scrolled-x_&]:block">
-        <button
-          type="button"
-          onClick={() => onOpenPlayer(player.id)}
-          className="flex items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
-        >
-          <span className="truncate text-m-card-fg">{short}</span>
-          <span
-            className={cn("size-1 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
-            aria-hidden
-          />
-          <span className="truncate">{meta}</span>
-          {injury ? (
+    <div className="relative border-b border-m-border/60">
+      {/* Overlay mini-name — no display/height toggle (avoids layout thrash while panning). */}
+      <div className="pointer-events-none sticky left-0 z-20 h-0 w-0 overflow-visible">
+        <div className="absolute left-0 top-0 max-w-[75vw] whitespace-nowrap bg-m-sheet/95 px-1 py-0.5 opacity-0 backdrop-blur-sm transition-opacity duration-100 [.is-scrolled-x_&]:pointer-events-auto [.is-scrolled-x_&]:opacity-100">
+          <button
+            type="button"
+            onClick={() => onOpenPlayer(player.id)}
+            className="flex items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
+          >
+            <span className="truncate text-m-card-fg">{short}</span>
             <span
-              title={injury.text}
-              className={cn(
-                "inline-flex h-3.5 min-w-[0.9rem] shrink-0 items-center justify-center rounded px-0.5 text-[8px] font-black leading-none",
-                injury.className,
-              )}
-            >
-              {injury.letter}
-            </span>
-          ) : null}
-        </button>
-        <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
+              className={cn("size-1 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
+              aria-hidden
+            />
+            <span className="truncate">{meta}</span>
+            {injury ? (
+              <span
+                title={injury.text}
+                className={cn(
+                  "inline-flex h-3.5 min-w-[0.9rem] shrink-0 items-center justify-center rounded px-0.5 text-[8px] font-black leading-none",
+                  injury.className,
+                )}
+              >
+                {injury.letter}
+              </span>
+            ) : null}
+          </button>
+          <div className="mt-0.5 h-px w-full bg-m-border/70" aria-hidden />
+        </div>
       </div>
 
       <div className="flex items-stretch gap-1.5 py-1.5">
