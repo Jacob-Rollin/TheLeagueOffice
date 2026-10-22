@@ -6,7 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { playerImage, teamLogo } from "./PlayerAvatar";
 import { RosteredOnLabel } from "./RosteredOnLabel";
 import { DesktopPlayerCompare } from "@/components/compare/DesktopPlayerCompare";
-import { NativeFantasyPopupRosterActions } from "@/components/native/fantasy/NativeFantasyPopupRosterActions";
+import {
+  NativeFantasyPopupRosterButtons,
+  NativeFantasyPopupRosterProvider,
+} from "@/components/native/fantasy/NativeFantasyPopupRosterActions";
 import { SosStars } from "@/components/sos/SosStars";
 import { useActiveLeague } from "@/context/ActiveLeagueContext";
 import { useDraft } from "@/hooks/use-draft";
@@ -388,7 +391,7 @@ export function PlayerDetail({
   const compactLogo = teamLogo(player.team);
   const compactInjury = injuryBadgeInfo(injuryStatusRaw);
 
-  return (
+  const detail = (
     <div className="overflow-visible pb-8">
       {isPopup ? (
         <div className="pointer-events-none sticky top-0 z-[150] h-0 w-full">
@@ -404,7 +407,7 @@ export function PlayerDetail({
                   className="size-8 shrink-0 rounded-full bg-white/10 object-contain p-0.5"
                 />
               ) : null}
-              <p className="min-w-0 max-w-[40%] truncate font-display text-base font-bold uppercase tracking-wide text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.45)]">
+              <p className="min-w-0 max-w-[32%] truncate font-display text-base font-bold uppercase tracking-wide text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.45)]">
                 {compactPlayerName(player.name)}
               </p>
               {compactInjury ? (
@@ -436,6 +439,7 @@ export function PlayerDetail({
                 </span>
               </button>
               <DesktopPlayerCompare anchorPlayer={player} tone="hero" />
+              {showNativeFantasyRosterActions ? <NativeFantasyPopupRosterButtons /> : null}
             </div>
           ) : null}
         </div>
@@ -548,9 +552,7 @@ export function PlayerDetail({
                   </span>
                 </button>
                 <DesktopPlayerCompare anchorPlayer={player} />
-                {showNativeFantasyRosterActions ? (
-                  <NativeFantasyPopupRosterActions player={player} />
-                ) : null}
+                {showNativeFantasyRosterActions ? <NativeFantasyPopupRosterButtons /> : null}
                 {showDraftActions ? (
                   <button
                     type="button"
@@ -772,6 +774,13 @@ export function PlayerDetail({
       </div>
     </div>
   );
+
+  if (showNativeFantasyRosterActions) {
+    return (
+      <NativeFantasyPopupRosterProvider player={player}>{detail}</NativeFantasyPopupRosterProvider>
+    );
+  }
+  return detail;
 }
 
 /* ------------------------------------------------------------------ */
