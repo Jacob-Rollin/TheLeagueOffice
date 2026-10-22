@@ -92,6 +92,9 @@ export function SettingsSheet({
   orderLocked?: boolean;
 }) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  // Only pull connection-sync while the sheet is open — avoids duplicating
+  // useDraft's fetchLeagueSyncPreferred on every War Room browse.
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { activeLeague } = useActiveLeague();
   const { user } = useAuth();
   // Baseline captured from the synced league configuration on first render.
@@ -101,7 +104,7 @@ export function SettingsSheet({
 
   const { data: synced } = useQuery({
     queryKey: ["connection-sync", activeLeague?.id ?? null],
-    enabled: Boolean(activeLeague?.leagueId),
+    enabled: sheetOpen && Boolean(activeLeague?.leagueId),
     retry: false,
     staleTime: 5 * 60 * 1000,
     queryFn: async () =>
@@ -115,10 +118,17 @@ export function SettingsSheet({
       }),
   });
 
-  // Populate the form instantly whenever synced league data loads or changes.
+  // Reset apply gate when the active league changes so a new sync can land.
   useEffect(() => {
+    appliedRef.current = null;
+  }, [activeLeague?.id]);
+
+  // Apply synced settings once per league when the open sheet resolves data.
+  useEffect(() => {
+    if (!sheetOpen) return;
     const id = activeLeague?.id ?? null;
     if (!id || !synced) return;
+    if (appliedRef.current === id) return;
     const teams = Number(synced?.teams) || DEFAULT_SETTINGS.teams;
     const roster = {
       ...DEFAULT_ROSTER,
@@ -126,9 +136,7 @@ export function SettingsSheet({
     } as RosterSlots;
     // ROUNDS always snaps to the synced total roster slot capacity.
     const rounds = rosterSize(roster) || Number(synced?.rounds) || DEFAULT_SETTINGS.rounds;
-    const signature = `${id}:${JSON.stringify([teams, rounds, synced?.myTeam, synced?.scoring, synced?.snake, roster, synced?.teamNames])}`;
-    if (appliedRef.current === signature) return;
-    appliedRef.current = signature;
+    appliedRef.current = id;
     const patch: Partial<Settings> = {
       teams,
       rounds,
@@ -141,7 +149,7 @@ export function SettingsSheet({
     syncedRef.current = { ...settings, ...patch } as Settings;
     update(patch);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [synced, activeLeague?.id]);
+  }, [sheetOpen, synced, activeLeague?.id]);
 
   const setRoster = (key: keyof RosterSlots, v: number) => {
     const roster = { ...settings.roster, [key]: v };
@@ -165,7 +173,7 @@ export function SettingsSheet({
 
 
   return (
-    <Sheet>
+    <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger asChild>
         <Button variant="secondary" size="sm" className="gap-1.5">
           <Settings2 className="size-4" />

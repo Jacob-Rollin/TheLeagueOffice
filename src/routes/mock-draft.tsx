@@ -550,19 +550,19 @@ function MockDraftPage() {
               ))}
             </div>
             <div className="md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] md:items-start md:gap-3">
-              <div className="mb-3 rounded-xl border border-border bg-card p-3 md:mb-0">
-                <div className="mb-2 font-display text-sm uppercase tracking-widest">
+              <div className="mb-3 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:mb-0">
+                <div className="mb-2 font-display text-sm uppercase tracking-widest text-slate-900">
                   Bye Week Matrix
                 </div>
                 {(rosters.get(rosterTeam) ?? []).length ? (
                   <ByeMatrix players={rosters.get(rosterTeam) ?? []} layout="column" />
                 ) : (
-                  <p className="p-3 text-center text-xs text-muted-foreground">
+                  <p className="p-3 text-center text-xs text-slate-500">
                     No picks yet for this team.
                   </p>
                 )}
               </div>
-              <div className="rounded-xl border border-border bg-card">
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                 <RosterPanel settings={settings} picks={picks} byId={byId} team={rosterTeam} />
               </div>
             </div>
