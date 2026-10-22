@@ -92,6 +92,8 @@ function MobileHeader() {
   const { theme } = useMobileTheme();
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Mock draft owns its own full-screen chrome (setup + arena).
+  if (pathname.startsWith("/m/mock-draft")) return null;
   const inLeague = pathname.startsWith("/m/league/");
   const [, , , leagueId, subpage] = pathname.replace(/\/+$/, "").split("/");
   const subpageTitle = inLeague && subpage ? SUBPAGE_TITLES[subpage] : undefined;

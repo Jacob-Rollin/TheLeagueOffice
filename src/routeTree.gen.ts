@@ -47,6 +47,7 @@ import { Route as AuthConfirmedRouteImport } from './routes/auth_.confirmed'
 import { Route as AuthResetPasswordRouteImport } from './routes/auth_.reset-password'
 import { Route as LeagueLinkIdRouteImport } from './routes/league.$linkId'
 import { Route as MIndexRouteImport } from './routes/m.index'
+import { Route as MMockDraftRouteImport } from './routes/m.mock-draft'
 import { Route as MSettingsRouteImport } from './routes/m.settings'
 import { Route as MockDraftSetupRouteImport } from './routes/mock-draft_.setup'
 import { Route as NflTeamNflIdRouteImport } from './routes/nfl-team.$nflId'
@@ -91,6 +92,7 @@ import { Route as LeagueLinkIdTradesRouteImport } from './routes/league.$linkId.
 import { Route as LeagueLinkIdTransactionsRouteImport } from './routes/league.$linkId.transactions'
 import { Route as LeagueLinkIdWaiversRouteImport } from './routes/league.$linkId.waivers'
 import { Route as MLeagueLeagueIdRouteImport } from './routes/m.league.$leagueId'
+import { Route as MMockDraftSetupRouteImport } from './routes/m.mock-draft_.setup'
 import { Route as AccountLeaguesNativeIndexRouteImport } from './routes/account.leagues.native.index'
 import { Route as AccountLeaguesNativeLinkIdRouteImport } from './routes/account.leagues.native.$linkId'
 import { Route as ApiAuthYahooCallbackRouteImport } from './routes/api/auth/yahoo/callback'
@@ -296,6 +298,11 @@ const LeagueLinkIdRoute = LeagueLinkIdRouteImport.update({
 const MIndexRoute = MIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => MRoute,
+} as any)
+const MMockDraftRoute = MMockDraftRouteImport.update({
+  id: '/mock-draft',
+  path: '/mock-draft',
   getParentRoute: () => MRoute,
 } as any)
 const MSettingsRoute = MSettingsRouteImport.update({
@@ -524,6 +531,11 @@ const MLeagueLeagueIdRoute = MLeagueLeagueIdRouteImport.update({
   path: '/league/$leagueId',
   getParentRoute: () => MRoute,
 } as any)
+const MMockDraftSetupRoute = MMockDraftSetupRouteImport.update({
+  id: '/mock-draft_/setup',
+  path: '/mock-draft/setup',
+  getParentRoute: () => MRoute,
+} as any)
 const AccountLeaguesNativeIndexRoute =
   AccountLeaguesNativeIndexRouteImport.update({
     id: '/',
@@ -639,6 +651,7 @@ export interface FileRoutesByFullPath {
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/league/$linkId': typeof LeagueLinkIdRouteWithChildren
+  '/m/mock-draft': typeof MMockDraftRoute
   '/m/settings': typeof MSettingsRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -683,6 +696,7 @@ export interface FileRoutesByFullPath {
   '/league/$linkId/transactions': typeof LeagueLinkIdTransactionsRoute
   '/league/$linkId/waivers': typeof LeagueLinkIdWaiversRoute
   '/m/league/$leagueId': typeof MLeagueLeagueIdRouteWithChildren
+  '/m/mock-draft/setup': typeof MMockDraftSetupRoute
   '/account/leagues/': typeof AccountLeaguesIndexRoute
   '/league/$linkId/': typeof LeagueLinkIdIndexRoute
   '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
@@ -735,6 +749,7 @@ export interface FileRoutesByTo {
   '/articles/$slug': typeof ArticlesSlugRoute
   '/auth/confirmed': typeof AuthConfirmedRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
+  '/m/mock-draft': typeof MMockDraftRoute
   '/m/settings': typeof MSettingsRoute
   '/mock-draft/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -777,6 +792,7 @@ export interface FileRoutesByTo {
   '/league/$linkId/trades': typeof LeagueLinkIdTradesRoute
   '/league/$linkId/transactions': typeof LeagueLinkIdTransactionsRoute
   '/league/$linkId/waivers': typeof LeagueLinkIdWaiversRoute
+  '/m/mock-draft/setup': typeof MMockDraftSetupRoute
   '/account/leagues': typeof AccountLeaguesIndexRoute
   '/league/$linkId': typeof LeagueLinkIdIndexRoute
   '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
@@ -833,6 +849,7 @@ export interface FileRoutesById {
   '/auth_/confirmed': typeof AuthConfirmedRoute
   '/auth_/reset-password': typeof AuthResetPasswordRoute
   '/league/$linkId': typeof LeagueLinkIdRouteWithChildren
+  '/m/mock-draft': typeof MMockDraftRoute
   '/m/settings': typeof MSettingsRoute
   '/mock-draft_/setup': typeof MockDraftSetupRoute
   '/nfl-team/$nflId': typeof NflTeamNflIdRoute
@@ -877,6 +894,7 @@ export interface FileRoutesById {
   '/league/$linkId/transactions': typeof LeagueLinkIdTransactionsRoute
   '/league/$linkId/waivers': typeof LeagueLinkIdWaiversRoute
   '/m/league/$leagueId': typeof MLeagueLeagueIdRouteWithChildren
+  '/m/mock-draft_/setup': typeof MMockDraftSetupRoute
   '/account/leagues/': typeof AccountLeaguesIndexRoute
   '/league/$linkId/': typeof LeagueLinkIdIndexRoute
   '/account/leagues/native/$linkId': typeof AccountLeaguesNativeLinkIdRoute
@@ -934,6 +952,7 @@ export interface FileRouteTypes {
     | '/auth/confirmed'
     | '/auth/reset-password'
     | '/league/$linkId'
+    | '/m/mock-draft'
     | '/m/settings'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
@@ -978,6 +997,7 @@ export interface FileRouteTypes {
     | '/league/$linkId/transactions'
     | '/league/$linkId/waivers'
     | '/m/league/$leagueId'
+    | '/m/mock-draft/setup'
     | '/account/leagues/'
     | '/league/$linkId/'
     | '/account/leagues/native/$linkId'
@@ -1030,6 +1050,7 @@ export interface FileRouteTypes {
     | '/articles/$slug'
     | '/auth/confirmed'
     | '/auth/reset-password'
+    | '/m/mock-draft'
     | '/m/settings'
     | '/mock-draft/setup'
     | '/nfl-team/$nflId'
@@ -1072,6 +1093,7 @@ export interface FileRouteTypes {
     | '/league/$linkId/trades'
     | '/league/$linkId/transactions'
     | '/league/$linkId/waivers'
+    | '/m/mock-draft/setup'
     | '/account/leagues'
     | '/league/$linkId'
     | '/account/leagues/native/$linkId'
@@ -1127,6 +1149,7 @@ export interface FileRouteTypes {
     | '/auth_/confirmed'
     | '/auth_/reset-password'
     | '/league/$linkId'
+    | '/m/mock-draft'
     | '/m/settings'
     | '/mock-draft_/setup'
     | '/nfl-team/$nflId'
@@ -1171,6 +1194,7 @@ export interface FileRouteTypes {
     | '/league/$linkId/transactions'
     | '/league/$linkId/waivers'
     | '/m/league/$leagueId'
+    | '/m/mock-draft_/setup'
     | '/account/leagues/'
     | '/league/$linkId/'
     | '/account/leagues/native/$linkId'
@@ -1528,6 +1552,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MIndexRouteImport
       parentRoute: typeof MRoute
     }
+    '/m/mock-draft': {
+      id: '/m/mock-draft'
+      path: '/mock-draft'
+      fullPath: '/m/mock-draft'
+      preLoaderRoute: typeof MMockDraftRouteImport
+      parentRoute: typeof MRoute
+    }
     '/m/settings': {
       id: '/m/settings'
       path: '/settings'
@@ -1836,6 +1867,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MLeagueLeagueIdRouteImport
       parentRoute: typeof MRoute
     }
+    '/m/mock-draft_/setup': {
+      id: '/m/mock-draft_/setup'
+      path: '/mock-draft/setup'
+      fullPath: '/m/mock-draft/setup'
+      preLoaderRoute: typeof MMockDraftSetupRouteImport
+      parentRoute: typeof MRoute
+    }
     '/account/leagues/native/': {
       id: '/account/leagues/native/'
       path: '/'
@@ -1969,15 +2007,19 @@ const MLeagueLeagueIdRouteWithChildren = MLeagueLeagueIdRoute._addFileChildren(
 )
 
 interface MRouteChildren {
+  MMockDraftRoute: typeof MMockDraftRoute
   MSettingsRoute: typeof MSettingsRoute
   MIndexRoute: typeof MIndexRoute
   MLeagueLeagueIdRoute: typeof MLeagueLeagueIdRouteWithChildren
+  MMockDraftSetupRoute: typeof MMockDraftSetupRoute
 }
 
 const MRouteChildren: MRouteChildren = {
+  MMockDraftRoute: MMockDraftRoute,
   MSettingsRoute: MSettingsRoute,
   MIndexRoute: MIndexRoute,
   MLeagueLeagueIdRoute: MLeagueLeagueIdRouteWithChildren,
+  MMockDraftSetupRoute: MMockDraftSetupRoute,
 }
 
 const MRouteWithChildren = MRoute._addFileChildren(MRouteChildren)
@@ -2123,3 +2165,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
