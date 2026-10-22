@@ -358,7 +358,9 @@ export function MobileMockDraftArena() {
         picks={picks}
         byId={byId}
         myTurn={myTurn}
-        complete={complete || inLobby}
+        // Keep Draft buttons visible in the lobby (disabled until live); only
+        // hide them when the draft itself is finished.
+        complete={complete}
         myCounts={myCounts}
         currentOverall={currentOverall}
         nextUserOverall={inLobby ? null : nextUserOverall}
