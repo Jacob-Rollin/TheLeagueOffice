@@ -16,6 +16,7 @@ import {
   type MockConfig,
 } from "@/lib/mock-config";
 import {
+  installMockDraftAudioResume,
   isMockDraftSoundsMuted,
   playMockDraftSound,
   setMockDraftSoundsMuted,
@@ -121,6 +122,9 @@ export function MobileMockDraftArena() {
     };
   }, []);
 
+  // Re-arm Web Audio after backgrounding / settings overlays (iOS suspends it).
+  useEffect(() => installMockDraftAudioResume(), []);
+
   // Resume an in-progress session into live mode; otherwise stay in lobby.
   useEffect(() => {
     if (!started || !config) return;
@@ -157,19 +161,26 @@ export function MobileMockDraftArena() {
   };
 
   const openSettings = () => {
+    unlockMockDraftAudio();
     setMenuOpen(false);
     setSettingsDraft(config ?? loadMockConfig() ?? DEFAULT_MOCK_CONFIG);
     setSettingsOpen(true);
+  };
+
+  const closeSettings = () => {
+    unlockMockDraftAudio();
+    setSettingsOpen(false);
   };
 
   const toggleSounds = () => {
     const next = !soundsMuted;
     setSoundsMuted(next);
     setMockDraftSoundsMuted(next);
-    if (!next) unlockMockDraftAudio();
+    unlockMockDraftAudio();
   };
 
   const saveSettings = () => {
+    unlockMockDraftAudio();
     const clean: MockConfig = {
       ...settingsDraft,
       teamName: settingsDraft.teamName.trim() || "My Team",
@@ -410,7 +421,10 @@ export function MobileMockDraftArena() {
             <button
               type="button"
               aria-label="Draft menu"
-              onClick={() => setMenuOpen(true)}
+              onClick={() => {
+                unlockMockDraftAudio();
+                setMenuOpen(true);
+              }}
               className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
             >
               <Settings className="size-5" strokeWidth={2.5} />
@@ -491,13 +505,18 @@ export function MobileMockDraftArena() {
         paused={paused}
         soundsMuted={soundsMuted}
         canStart={slotClaimed}
-        onClose={() => setMenuOpen(false)}
+        onClose={() => {
+          unlockMockDraftAudio();
+          setMenuOpen(false);
+        }}
         onStartDraft={startDraft}
         onPauseToggle={() => {
+          unlockMockDraftAudio();
           setPaused((p) => !p);
           setMenuOpen(false);
         }}
         onEndDraft={() => {
+          unlockMockDraftAudio();
           setMenuOpen(false);
           if (!complete && picks.length > 0) {
             if (!window.confirm("End this draft early and view the recap?")) return;
@@ -522,7 +541,7 @@ export function MobileMockDraftArena() {
             <button
               type="button"
               aria-label="Close settings"
-              onClick={() => setSettingsOpen(false)}
+              onClick={closeSettings}
               className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
             >
               <X className="size-5" strokeWidth={2.5} />

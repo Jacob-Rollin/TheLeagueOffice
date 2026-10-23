@@ -17,6 +17,7 @@ const SR = 44100;
 const MUTE_KEY = "mock-draft-sounds-muted";
 
 let sharedCtx: AudioContext | null = null;
+let resumeHookInstalled = false;
 
 /** Persisted mute preference (localStorage). Default: sounds on. */
 export function isMockDraftSoundsMuted(): boolean {
@@ -37,23 +38,118 @@ export function setMockDraftSoundsMuted(muted: boolean) {
   }
 }
 
-function getCtx(): AudioContext | null {
+function audioContextCtor(): (typeof AudioContext) | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as {
     AudioContext?: typeof AudioContext;
     webkitAudioContext?: typeof AudioContext;
   };
-  const AC = w.AudioContext || w.webkitAudioContext;
+  return w.AudioContext || w.webkitAudioContext || null;
+}
+
+function getCtx(): AudioContext | null {
+  const AC = audioContextCtor();
   if (!AC) return null;
-  if (!sharedCtx) sharedCtx = new AC();
+  if (sharedCtx && sharedCtx.state === "closed") {
+    sharedCtx = null;
+  }
+  if (!sharedCtx) {
+    try {
+      sharedCtx = new AC();
+    } catch {
+      return null;
+    }
+  }
   return sharedCtx;
 }
 
-/** Call from a user gesture so later AI / clock sounds can play. */
+function recreateCtx(): AudioContext | null {
+  const AC = audioContextCtor();
+  if (!AC) return null;
+  if (sharedCtx) {
+    try {
+      void sharedCtx.close();
+    } catch {
+      /* ignore */
+    }
+    sharedCtx = null;
+  }
+  try {
+    sharedCtx = new AC();
+    return sharedCtx;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureRunning(ctx: AudioContext): Promise<AudioContext | null> {
+  if (ctx.state === "closed") return recreateCtx();
+  if (ctx.state === "running") return ctx;
+  try {
+    await ctx.resume();
+  } catch {
+    /* fall through — may still be suspended without a gesture */
+  }
+  if (ctx.state === "running") return ctx;
+  // Closed or stuck suspended after a long background — rebuild once.
+  if (ctx.state === "closed") return recreateCtx();
+  return ctx;
+}
+
+/**
+ * Call from a user gesture (or when the tab becomes visible again) so later
+ * AI / clock sounds can play. Mobile browsers suspend AudioContext in the
+ * background; resume() often only sticks when tied to a gesture.
+ */
 export function unlockMockDraftAudio() {
   const ctx = getCtx();
   if (!ctx) return;
-  if (ctx.state === "suspended") void ctx.resume();
+  if (ctx.state === "running") return;
+  void ensureRunning(ctx).then((ready) => {
+    if (!ready || ready.state !== "running") return;
+    // Tiny silent blip keeps some WebKit contexts alive after resume.
+    try {
+      const buffer = ready.createBuffer(1, 1, ready.sampleRate || SR);
+      const src = ready.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ready.destination);
+      src.start(0);
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+/**
+ * Resume on tab focus and the next pointer/key gesture. Safe to call once from
+ * the mock-draft arena mount.
+ */
+export function installMockDraftAudioResume() {
+  if (typeof window === "undefined" || resumeHookInstalled) return () => undefined;
+  resumeHookInstalled = true;
+
+  const onVisible = () => {
+    if (document.visibilityState === "visible") unlockMockDraftAudio();
+  };
+  const onGesture = () => unlockMockDraftAudio();
+
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("pageshow", onVisible);
+  window.addEventListener("focus", onVisible);
+  // Capture so sheet / menu / board taps all re-arm audio after backgrounding.
+  document.addEventListener("pointerdown", onGesture, true);
+  document.addEventListener("keydown", onGesture, true);
+
+  if (document.visibilityState === "visible") unlockMockDraftAudio();
+
+  return () => {
+    resumeHookInstalled = false;
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("pageshow", onVisible);
+    window.removeEventListener("focus", onVisible);
+    document.removeEventListener("pointerdown", onGesture, true);
+    document.removeEventListener("keydown", onGesture, true);
+  };
 }
 
 function clamp(x: number, lo = -1, hi = 1) {
@@ -401,6 +497,20 @@ function samplesFor(event: MockDraftSoundEvent): Float32Array {
   }
 }
 
+function startSound(ctx: AudioContext, event: MockDraftSoundEvent) {
+  const samples = samplesFor(event);
+  const buffer = ctx.createBuffer(1, samples.length, SR);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < samples.length; i++) channel[i] = clamp(samples[i]!);
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.9;
+  src.connect(gain);
+  gain.connect(ctx.destination);
+  src.start();
+}
+
 export function playMockDraftSound(event: MockDraftSoundEvent) {
   if (typeof window === "undefined") return;
   if (isMockDraftSoundsMuted()) return;
@@ -409,27 +519,23 @@ export function playMockDraftSound(event: MockDraftSoundEvent) {
   const ctx = getCtx();
   if (!ctx) return;
 
-  const run = () => {
+  void (async () => {
+    let ready = await ensureRunning(ctx);
+    if (!ready) return;
     try {
-      const samples = samplesFor(event);
-      const buffer = ctx.createBuffer(1, samples.length, SR);
-      const channel = buffer.getChannelData(0);
-      for (let i = 0; i < samples.length; i++) channel[i] = clamp(samples[i]!);
-      const src = ctx.createBufferSource();
-      src.buffer = buffer;
-      const gain = ctx.createGain();
-      gain.gain.value = 0.9;
-      src.connect(gain);
-      gain.connect(ctx.destination);
-      src.start();
+      startSound(ready, event);
     } catch {
-      /* ignore autoplay / decode failures */
+      // Context may have been closed under us — rebuild and retry once.
+      ready = recreateCtx();
+      if (!ready) return;
+      ready = (await ensureRunning(ready)) ?? ready;
+      if (ready.state !== "running" && ready.state !== "suspended") return;
+      try {
+        if (ready.state === "suspended") await ready.resume();
+        startSound(ready, event);
+      } catch {
+        /* ignore autoplay / decode failures */
+      }
     }
-  };
-
-  if (ctx.state === "suspended") {
-    void ctx.resume().then(run).catch(() => undefined);
-    return;
-  }
-  run();
+  })();
 }
