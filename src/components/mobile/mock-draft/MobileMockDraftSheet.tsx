@@ -7,6 +7,7 @@ import {
   useState,
   startTransition,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type RefObject,
   type UIEvent,
 } from "react";
@@ -102,8 +103,12 @@ function sheetSnapInDirection(
 const NAME_SCROLL_THRESHOLD_PX = 168;
 const NAME_COL_CLASS = "w-[7.25rem]";
 const STAR_COL_CLASS = "w-8";
-/** Compact band (h-5) + hairline + two-line identity row. */
-const PLAYER_ROW_ESTIMATE_PX = 76;
+/**
+ * Dense Sleeper-style row: two-line identity + value-only stats (labels live in
+ * the sticky header). Compact-name band overlays via negative margin — no
+ * reserved empty gap when it's faded out.
+ */
+const PLAYER_ROW_ESTIMATE_PX = 52;
 
 /**
  * Nested vertical + horizontal scrollers with directional lock.
@@ -745,6 +750,7 @@ const PlayersPane = memo(function PlayersPane({
         complete={complete || draftedOnly}
         showPrevYear={showPrevYear}
         prevYear={prevYear}
+        posFilter={pos}
         projExtrasById={projExtrasById}
         projIndex={projIndex}
         nextUserOverall={nextUserOverall}
@@ -772,6 +778,7 @@ function VirtualPlayersScroller({
   complete,
   showPrevYear,
   prevYear,
+  posFilter,
   projExtrasById,
   projIndex,
   nextUserOverall,
@@ -787,6 +794,7 @@ function VirtualPlayersScroller({
   complete: boolean;
   showPrevYear: boolean;
   prevYear: number;
+  posFilter: "ALL" | Pos;
   projExtrasById: Record<string, SeasonProjBoardExtras>;
   projIndex: number;
   nextUserOverall: number | null;
@@ -856,7 +864,7 @@ function VirtualPlayersScroller({
         ) : null}
         {/* Always-mounted probe so name-end stays measurable under virtualization. */}
         <div className="pointer-events-none h-0 overflow-hidden" aria-hidden>
-          <div className="flex items-stretch gap-1.5 py-1.5">
+          <div className="flex items-stretch gap-1.5 py-1">
             {!complete ? <span className="w-[3.25rem] shrink-0" /> : null}
             <span className="w-5 shrink-0" />
             <span className={cn(NAME_COL_CLASS, "shrink-0")} />
@@ -867,48 +875,97 @@ function VirtualPlayersScroller({
           Padding spacers keep rows in flow so min-w-max still drives horizontal
           scroll width (absolute rows would collapse that).
         */}
-        <div
-          className="min-w-max"
-          style={{ paddingTop: padTop, paddingBottom: padBottom }}
-        >
-          {items.map((item) => {
-            const p = filtered[item.index]!;
-            return (
-              <div
-                key={p.id}
-                data-index={item.index}
-                ref={virtualizer.measureElement}
-              >
-                {projIndex === item.index && nextUserOverall != null ? (
-                  <div className="my-1 flex w-[100vw] max-w-md items-center gap-2 px-1">
-                    <span className="h-px flex-1 bg-m-accent/70" />
-                    <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
-                      Proj pick: Round {roundOf(nextUserOverall, settings.teams)}{" "}
-                      Overall #{nextUserOverall}
-                    </span>
-                    <span className="h-px flex-1 bg-m-accent/70" />
-                  </div>
-                ) : null}
-                <PlayerStatsRow
-                  player={p}
-                  settings={settings}
-                  rank={item.index + 1}
-                  queued={watchIds.has(p.id)}
-                  myTurn={myTurn}
-                  complete={complete}
-                  showPrevYear={showPrevYear}
-                  prevYear={prevYear}
-                  projExtras={projExtrasById[p.id]}
-                  onDraft={onDraft}
-                  onToggleQueue={onToggleQueue}
-                  onOpenPlayer={onOpenPlayer}
-                />
-              </div>
-            );
-          })}
+        <div className="min-w-max">
+          <PlayerListStatsHeader
+            complete={complete}
+            showPrevYear={showPrevYear}
+            prevYear={prevYear}
+            posFilter={posFilter}
+          />
+          <div style={{ paddingTop: padTop, paddingBottom: padBottom }}>
+            {items.map((item) => {
+              const p = filtered[item.index]!;
+              return (
+                <div
+                  key={p.id}
+                  data-index={item.index}
+                  ref={virtualizer.measureElement}
+                >
+                  {projIndex === item.index && nextUserOverall != null ? (
+                    <div className="my-1 flex w-[100vw] max-w-md items-center gap-2 px-1">
+                      <span className="h-px flex-1 bg-m-accent/70" />
+                      <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
+                        Proj pick: Round {roundOf(nextUserOverall, settings.teams)}{" "}
+                        Overall #{nextUserOverall}
+                      </span>
+                      <span className="h-px flex-1 bg-m-accent/70" />
+                    </div>
+                  ) : null}
+                  <PlayerStatsRow
+                    player={p}
+                    settings={settings}
+                    rank={item.index + 1}
+                    queued={watchIds.has(p.id)}
+                    myTurn={myTurn}
+                    complete={complete}
+                    showPrevYear={showPrevYear}
+                    prevYear={prevYear}
+                    projExtras={projExtrasById[p.id]}
+                    onDraft={onDraft}
+                    onToggleQueue={onToggleQueue}
+                    onOpenPlayer={onOpenPlayer}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/** One column-label row (Sleeper) — values only on each player row. */
+function PlayerListStatsHeader({
+  complete,
+  showPrevYear,
+  prevYear,
+  posFilter,
+}: {
+  complete: boolean;
+  showPrevYear: boolean;
+  prevYear: number;
+  posFilter: "ALL" | Pos;
+}) {
+  const yearShort = `'${String(prevYear).slice(-2)}`;
+  const posCols = posFilter === "ALL" ? [] : (POS_STAT_COLUMNS[posFilter] ?? []);
+  return (
+    <div className="sticky top-0 z-30 flex items-end gap-1.5 border-b border-m-border bg-m-sheet pb-1 pt-0.5">
+      {!complete ? <span className="w-[3.25rem] shrink-0" aria-hidden /> : null}
+      <span className="w-5 shrink-0" aria-hidden />
+      <span className={cn(NAME_COL_CLASS, "shrink-0")} aria-hidden />
+      <span className={cn(STAR_COL_CLASS, "shrink-0")} aria-hidden />
+      <div className="flex shrink-0 items-end gap-3 pr-4">
+        <StatHeaderLabel>ADP</StatHeaderLabel>
+        {showPrevYear ? <StatHeaderLabel>{yearShort} ADP</StatHeaderLabel> : null}
+        <StatHeaderLabel>Pts</StatHeaderLabel>
+        {showPrevYear ? <StatHeaderLabel>{yearShort} Pts</StatHeaderLabel> : null}
+        {posCols.map((col) => (
+          <div key={col.key} className="flex shrink-0 items-end gap-3">
+            <StatHeaderLabel>{col.label}</StatHeaderLabel>
+            {showPrevYear ? <StatHeaderLabel>{yearShort}</StatHeaderLabel> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatHeaderLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="w-12 shrink-0 text-left text-[9px] font-semibold uppercase tracking-wide text-m-muted">
+      {children}
+    </span>
   );
 }
 
@@ -919,7 +976,7 @@ function ToolChip({
 }: {
   active: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button
@@ -1270,9 +1327,9 @@ const TeamPane = memo(function TeamPane({
 });
 
 /**
- * Full row scrolls (Draft + name + star + stats). Compact identity band height
- * is always reserved above the stats (no layout snap); it fades in after the
- * name column clears — same idea as Sleeper.
+ * Full row scrolls (Draft + name + star + stats). Compact identity overlays
+ * with negative margin (no reserved gap / no layout snap); hairline only when
+ * scrolled — Sleeper-style, no per-row dividers.
  */
 const PlayerStatsRow = memo(function PlayerStatsRow({
   player,
@@ -1304,7 +1361,6 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
 }) {
   const v = value(player, settings.scoring);
   const short = shortName(player.name);
-  const yearShort = `'${String(prevYear).slice(-2)}`;
   const meta = `${posDisplayLabel(player.pos)} - ${player.team}${player.bye ? ` (${player.bye})` : ""}`;
   const injury = injuryBadgeInfo(
     resolveInjuryStatus(player) ?? player.injury_status ?? player.injury,
@@ -1331,13 +1387,13 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
   const posCols = POS_STAT_COLUMNS[player.pos] ?? [];
 
   return (
-    <div className="relative border-b border-m-border/60">
+    <div className="relative">
       {/*
-        Always-reserved sticky band (fixed height) so scroll never reflows the
-        row. Opacity is scroll-linked (no CSS transition — avoids fling lag).
+        Overlay compact band: -mb collapses layout height so peek sheet fits
+        ~3 rows; opacity is scroll-linked (no CSS transition).
       */}
       <div
-        className="pointer-events-none sticky left-0 z-20 h-5 overflow-hidden bg-m-sheet px-2 invisible [.is-scrolled-x_&]:pointer-events-auto [.is-scrolled-x_&]:visible"
+        className="pointer-events-none sticky left-0 z-20 -mb-4 h-4 overflow-hidden bg-m-sheet px-2 invisible [.is-scrolled-x_&]:pointer-events-auto [.is-scrolled-x_&]:visible"
         style={{
           width: "var(--m-draft-scrollport-w, 100%)",
           opacity: "var(--m-draft-compact-opacity, 0)",
@@ -1368,8 +1424,9 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
           ) : null}
         </button>
       </div>
+      {/* Hairline only under the compact name header (not between rows). */}
       <div
-        className="pointer-events-none sticky left-0 z-20 h-px bg-m-border/70 invisible [.is-scrolled-x_&]:visible"
+        className="pointer-events-none sticky left-0 z-20 -mb-px h-px bg-m-border/70 invisible [.is-scrolled-x_&]:visible"
         style={{
           width: "var(--m-draft-scrollport-w, 100%)",
           opacity: "var(--m-draft-compact-opacity, 0)",
@@ -1377,7 +1434,7 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
         aria-hidden
       />
 
-      <div className="flex items-stretch gap-1.5 py-1.5">
+      <div className="flex items-stretch gap-1.5 py-1">
         {!complete ? (
           <button
             type="button"
@@ -1401,8 +1458,10 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
           onClick={() => onOpenPlayer(player.id)}
           className={cn(NAME_COL_CLASS, "shrink-0 py-0.5 text-left")}
         >
-          <span className="block truncate text-[13px] font-bold text-m-card-fg">{short}</span>
-          <span className="mt-0.5 flex items-center gap-1 text-[11px] text-m-muted">
+          <span className="block truncate text-[13px] font-bold leading-tight text-m-card-fg">
+            {short}
+          </span>
+          <span className="mt-0.5 flex items-center gap-1 text-[11px] leading-tight text-m-muted">
             <span
               className={cn("size-1.5 shrink-0 rounded-full", POS_DOT[player.pos] ?? "bg-m-muted")}
               aria-hidden
@@ -1434,18 +1493,16 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
           <Star className={cn("size-4", queued && "fill-current")} strokeWidth={2.5} />
         </button>
         <div className="flex shrink-0 items-center gap-3 self-center pr-4">
-          <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
+          <StatValue value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
           {showPrevYear ? (
-            <StatCell
-              label={`${yearShort} ADP`}
+            <StatValue
               value={prevAdp != null && prevAdp < 900 ? prevAdp.toFixed(1) : "—"}
               muted
             />
           ) : null}
-          <StatCell label="Pts" value={v.proj > 0 ? v.proj.toFixed(1) : "—"} />
+          <StatValue value={v.proj > 0 ? v.proj.toFixed(1) : "—"} />
           {showPrevYear ? (
-            <StatCell
-              label={`${yearShort} Pts`}
+            <StatValue
               value={v.prev != null && v.prev > 0 ? v.prev.toFixed(1) : "—"}
               muted
             />
@@ -1455,13 +1512,9 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
             const prior = prevLine?.[col.key];
             return (
               <div key={col.key} className="flex shrink-0 items-center gap-3">
-                <StatCell
-                  label={col.label}
-                  value={cur > 0 ? cur.toFixed(col.digits) : "—"}
-                />
+                <StatValue value={cur > 0 ? cur.toFixed(col.digits) : "—"} />
                 {showPrevYear ? (
-                  <StatCell
-                    label={yearShort}
+                  <StatValue
                     value={prior != null && prior > 0 ? prior.toFixed(col.digits) : "—"}
                     muted
                   />
@@ -1475,23 +1528,12 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
   );
 });
 
-function StatCell({
-  label,
-  value,
-  muted = false,
-}: {
-  label: string;
-  value: string;
-  muted?: boolean;
-}) {
+function StatValue({ value, muted = false }: { value: string; muted?: boolean }) {
   return (
     <div className="w-12 shrink-0 text-left">
-      <span className="block text-[9px] font-semibold uppercase tracking-wide text-m-muted">
-        {label}
-      </span>
       <span
         className={cn(
-          "tabnum block text-sm font-semibold",
+          "tabnum block text-sm font-semibold leading-none",
           muted ? "text-m-muted" : "text-m-card-fg",
         )}
       >
