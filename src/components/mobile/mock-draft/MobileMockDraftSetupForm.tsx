@@ -1,6 +1,7 @@
 import { Minus, Plus } from "lucide-react";
 
 import {
+  DRAFT_SPEED_CHOICES,
   PLAYOFF_WEEKS,
   ROSTER_FIELDS,
   SCORING_CHOICES,
@@ -106,6 +107,24 @@ export function MobileMockDraftSetupForm({ config, onChange, onNameTouched }: Pr
                     .replace(" Seconds", "s")
                     .replace(" Minutes", "m")
                     .replace(" Minute", "m")}
+            </Chip>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Draft Speed">
+        <p className="mb-2 text-sm text-m-muted">
+          How quickly AI managers pick between turns.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {DRAFT_SPEED_CHOICES.map((s) => (
+            <Chip
+              key={s.key}
+              active={config.draftSpeed === s.key}
+              onClick={() => patch({ draftSpeed: s.key })}
+            >
+              {s.label}
+              <span className="ml-1 font-normal opacity-70">{s.seconds}s</span>
             </Chip>
           ))}
         </div>

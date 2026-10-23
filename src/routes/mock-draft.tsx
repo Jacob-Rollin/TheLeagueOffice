@@ -34,9 +34,11 @@ import {
 } from "@/lib/mock-ai";
 import {
   clearMockSession,
+  draftAiSpeedDelayMs,
   loadMockConfig,
   loadMockSession,
   mockSessionMatchesConfig,
+  normalizeDraftAiSpeed,
   saveMockSession,
   timerSecondsFor,
   type MockConfig,
@@ -81,8 +83,7 @@ export const Route = createFileRoute("/mock-draft")({
 });
 
 type Tab = "players" | "board" | "team";
-type Speed = "normal" | "fast" | "manual";
-const SPEED_DELAY: Record<Speed, number> = { normal: 5000, fast: 1000, manual: 0 };
+type Speed = "fast" | "normal" | "slow" | "manual";
 
 const EMPTY_PAYLOAD = { season: "", updatedAt: 0, players: [] as Player[] };
 
@@ -215,7 +216,7 @@ function MockDraftPage() {
     ) {
       return;
     }
-    const id = setTimeout(() => runRef.current(), SPEED_DELAY[speed]);
+    const id = setTimeout(() => runRef.current(), draftAiSpeedDelayMs(speed));
     return () => clearTimeout(id);
   }, [started, complete, myTurn, paused, pageVisible, speed, picks.length, data.players.length]);
 
@@ -277,7 +278,11 @@ function MockDraftPage() {
       setPicks(session.picks);
       setWatch(session.watch ?? []);
       setCustomOrder(session.customOrder ?? []);
-      setSpeed(session.speed ?? "normal");
+      setSpeed(
+        session.speed === "manual"
+          ? "manual"
+          : normalizeDraftAiSpeed(session.speed ?? nextConfig.draftSpeed),
+      );
       setPaused(Boolean(session.paused));
       {
         const restored = session.tab ?? "players";
@@ -291,7 +296,7 @@ function MockDraftPage() {
       setWatch([]);
       setCustomOrder([]);
       setRosterTeam(slot);
-      setSpeed("normal");
+      setSpeed(normalizeDraftAiSpeed(nextConfig.draftSpeed));
       setPaused(false);
       setTab("players");
       clearMockSession();
@@ -394,8 +399,9 @@ function MockDraftPage() {
           <div className="flex overflow-hidden rounded-md border border-border">
             {(
               [
-                ["normal", "Normal"],
                 ["fast", "Fast"],
+                ["normal", "Normal"],
+                ["slow", "Slow"],
                 ["manual", "Manual"],
               ] as [Speed, string][]
             ).map(([key, label]) => (
