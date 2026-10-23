@@ -29,11 +29,7 @@ import {
 } from "lucide-react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import {
   FLEX_POSITIONS,
   fillRoster,
@@ -1111,32 +1107,41 @@ const QueuePane = memo(function QueuePane({
             </PopoverTrigger>
             <span>Auto-pick</span>
           </div>
-          <PopoverContent
-            side="top"
-            align="center"
-            sideOffset={8}
-            // Solid fill (not theme-token / popover alpha) — portals outside
-            // mobile-theme and was letting the board show through.
-            className="z-[90] w-[min(18.5rem,calc(100vw-2rem))] rounded-xl border border-[#d9d5cc] bg-[#ffffff] p-3.5 text-[#1f2328] shadow-lg opacity-100"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <p className="font-display text-sm font-bold text-[#1f2328]">Auto-pick</p>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setAutopickInfoOpen(false)}
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#f3f3f3] text-[#50565c]"
-              >
-                <X className="size-3" strokeWidth={2.5} aria-hidden />
-              </button>
-            </div>
-            <p className="mt-1.5 text-[13px] leading-snug text-[#1f2328]/90">
-              On your turn, drafts the next available player from the top of your
-              queue. If the queue is empty, picks the best available player for
-              your roster.
-            </p>
-            <PopoverPrimitive.Arrow className="fill-[#ffffff]" width={14} height={7} />
-          </PopoverContent>
+          <PopoverPrimitive.Portal>
+            <PopoverPrimitive.Content
+              side="top"
+              align="center"
+              sideOffset={8}
+              // Opaque card — skip shared PopoverContent fade/zoom (opacity
+              // animations) and theme tokens so the board never shows through.
+              style={{ backgroundColor: "#ffffff", opacity: 1 }}
+              className="z-[90] w-[min(18.5rem,calc(100vw-2rem))] rounded-xl border border-[#d9d5cc] p-3.5 text-[#1f2328] shadow-lg outline-none"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="font-display text-sm font-bold text-[#1f2328]">
+                  Auto-pick
+                </p>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  onClick={() => setAutopickInfoOpen(false)}
+                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#f3f3f3] text-[#50565c]"
+                >
+                  <X className="size-3" strokeWidth={2.5} aria-hidden />
+                </button>
+              </div>
+              <p className="mt-1.5 text-[13px] leading-snug text-[#1f2328]">
+                On your turn, drafts the next available player from the top of
+                your queue. If the queue is empty, picks the best available
+                player for your roster.
+              </p>
+              <PopoverPrimitive.Arrow
+                width={14}
+                height={7}
+                style={{ fill: "#ffffff" }}
+              />
+            </PopoverPrimitive.Content>
+          </PopoverPrimitive.Portal>
         </Popover>
         <button
           type="button"
