@@ -99,8 +99,10 @@ function sheetSnapInDirection(
   return order[Math.max(0, i - 1)]!;
 }
 
-/** Fallback if the name-end sentinel isn't in the DOM yet. */
-const NAME_SCROLL_THRESHOLD_PX = 168;
+/** Fallback name-column end if the sentinel isn't in the DOM yet. */
+const NAME_SCROLL_END_FALLBACK_PX = 168;
+/** Fallback name-column width (matches NAME_COL_CLASS) for fade-start math. */
+const NAME_COL_WIDTH_FALLBACK_PX = 116;
 const NAME_COL_CLASS = "w-[7.25rem]";
 const STAR_COL_CLASS = "w-8";
 /**
@@ -192,20 +194,29 @@ function useDualAxisLock(
   }, [vertRef, horizRef]);
 }
 
-/** Cached name-column end (content coords). Remeasured on resize / layout change. */
-const nameEndCache = new WeakMap<HTMLElement, number>();
+/** Cached name-column geometry (content coords). Remeasured on resize / layout. */
+const nameColCache = new WeakMap<HTMLElement, { end: number; width: number }>();
 
-function measureNameColumnEndPx(scrollEl: HTMLElement): number {
-  const end = scrollEl.querySelector<HTMLElement>("[data-name-scroll-end]");
-  if (!end) return NAME_SCROLL_THRESHOLD_PX;
+function measureNameColumnPx(scrollEl: HTMLElement): { end: number; width: number } {
+  const endEl = scrollEl.querySelector<HTMLElement>("[data-name-scroll-end]");
+  const colEl = scrollEl.querySelector<HTMLElement>("[data-name-scroll-col]");
+  if (!endEl) {
+    return { end: NAME_SCROLL_END_FALLBACK_PX, width: NAME_COL_WIDTH_FALLBACK_PX };
+  }
   const sRect = scrollEl.getBoundingClientRect();
-  const eRect = end.getBoundingClientRect();
-  return Math.max(1, eRect.left - sRect.left + scrollEl.scrollLeft);
+  const eRect = endEl.getBoundingClientRect();
+  const end = Math.max(1, eRect.left - sRect.left + scrollEl.scrollLeft);
+  const width = colEl
+    ? Math.max(1, colEl.getBoundingClientRect().width)
+    : NAME_COL_WIDTH_FALLBACK_PX;
+  return { end, width };
 }
 
 /**
- * Scroll-linked compact-name opacity. nameEnd is cached so scroll frames only
+ * Scroll-linked compact-name opacity. Geometry is cached so scroll frames only
  * write a quantized CSS var (virtualized rows keep the fan-out tiny).
+ * Fade stays at 0 until ≥ half the player-name column has scrolled past, then
+ * ramps to 1 by the time the column has fully left the scrollport.
  * Returns whether `is-scrolled-x` toggled (row height / pt changes — remeasure).
  */
 function updateCompactNameFade(scrollEl: HTMLElement, remeasure = false): boolean {
@@ -216,13 +227,15 @@ function updateCompactNameFade(scrollEl: HTMLElement, remeasure = false): boolea
     scrollEl.dataset["draftScrollportW"] = String(w);
     scrollEl.style.setProperty("--m-draft-scrollport-w", `${w}px`);
   }
-  let nameEnd = nameEndCache.get(scrollEl);
-  if (nameEnd == null || remeasure) {
-    nameEnd = measureNameColumnEndPx(scrollEl);
-    nameEndCache.set(scrollEl, nameEnd);
+  let geo = nameColCache.get(scrollEl);
+  if (geo == null || remeasure) {
+    geo = measureNameColumnPx(scrollEl);
+    nameColCache.set(scrollEl, geo);
   }
-  // 0 at rest → 1 once the name column has fully left the scrollport.
-  const opacity = Math.min(1, Math.max(0, scrollEl.scrollLeft / nameEnd));
+  // Hold until half the name column is off-screen; full once the column is gone.
+  const fadeStart = Math.max(0, geo.end - geo.width / 2);
+  const fadeRange = Math.max(1, geo.end - fadeStart);
+  const opacity = Math.min(1, Math.max(0, (scrollEl.scrollLeft - fadeStart) / fadeRange));
   // 5% steps: progressive enough, far fewer style invalidations on fling.
   const q = Math.round(opacity * 20) / 20;
   if (scrollEl.dataset["draftCompactOpacity"] !== String(q)) {
@@ -872,7 +885,7 @@ function VirtualPlayersScroller({
           <div className="flex items-stretch gap-1.5 py-2">
             {!complete ? <span className="w-[3.25rem] shrink-0" /> : null}
             <span className="w-5 shrink-0" />
-            <span className={cn(NAME_COL_CLASS, "shrink-0")} />
+            <span data-name-scroll-col className={cn(NAME_COL_CLASS, "shrink-0")} />
             <span data-name-scroll-end className="w-0 shrink-0" />
           </div>
         </div>
