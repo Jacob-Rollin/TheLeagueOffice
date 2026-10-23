@@ -24,6 +24,7 @@ import {
   Shield,
   Star,
   Trash2,
+  User,
   X,
 } from "lucide-react";
 
@@ -847,7 +848,7 @@ const PlayersPane = memo(function PlayersPane({
               if (!draftedOnly) setWatchOnly(false);
             }}
           >
-            <FootballIcon className="size-3.5" />
+            <User className="size-3.5" strokeWidth={2.5} />
             Drafted
           </ToolChip>
           <ToolChip active={showPrevYear} onClick={() => setShowPrevYear((v) => !v)}>
@@ -1055,31 +1056,6 @@ function ToolChip({
     >
       {children}
     </button>
-  );
-}
-
-/** Sleeper-style outline football (tilted + laces) — Lucide has no football icon. */
-function FootballIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      {/* Tilted oval body */}
-      <ellipse cx="12" cy="12" rx="9" ry="5.5" transform="rotate(-40 12 12)" />
-      {/* Center lace seam */}
-      <path d="M9.2 10.4 L14.8 13.6" />
-      {/* Lace ticks */}
-      <path d="M10.4 9.6 L11.2 11.2" />
-      <path d="M11.6 10.4 L12.4 12" />
-      <path d="M12.8 11.2 L13.6 12.8" />
-    </svg>
   );
 }
 
