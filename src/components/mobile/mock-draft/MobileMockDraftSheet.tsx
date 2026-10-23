@@ -104,11 +104,12 @@ const NAME_SCROLL_THRESHOLD_PX = 168;
 const NAME_COL_CLASS = "w-[7.25rem]";
 const STAR_COL_CLASS = "w-8";
 /**
- * Dense Sleeper-style row: two-line identity + value-only stats (labels live in
- * the sticky header). Compact-name band overlays via negative margin — no
- * reserved empty gap when it's faded out.
+ * Sleeper draft rows: two-line identity + per-column label/value stats on every
+ * row (ADP, PTS, and all pos stats). A little vertical padding between players
+ * gives room for those per-row labels. Compact-name band overlays via negative
+ * margin — no reserved empty gap when faded out.
  */
-const PLAYER_ROW_ESTIMATE_PX = 52;
+const PLAYER_ROW_ESTIMATE_PX = 64;
 
 /**
  * Nested vertical + horizontal scrollers with directional lock.
@@ -750,7 +751,6 @@ const PlayersPane = memo(function PlayersPane({
         complete={complete || draftedOnly}
         showPrevYear={showPrevYear}
         prevYear={prevYear}
-        posFilter={pos}
         projExtrasById={projExtrasById}
         projIndex={projIndex}
         nextUserOverall={nextUserOverall}
@@ -778,7 +778,6 @@ function VirtualPlayersScroller({
   complete,
   showPrevYear,
   prevYear,
-  posFilter,
   projExtrasById,
   projIndex,
   nextUserOverall,
@@ -794,7 +793,6 @@ function VirtualPlayersScroller({
   complete: boolean;
   showPrevYear: boolean;
   prevYear: number;
-  posFilter: "ALL" | Pos;
   projExtrasById: Record<string, SeasonProjBoardExtras>;
   projIndex: number;
   nextUserOverall: number | null;
@@ -805,7 +803,6 @@ function VirtualPlayersScroller({
 }) {
   const vertRef = useRef<HTMLDivElement | null>(null);
   const horizRef = useRef<HTMLDivElement | null>(null);
-  const headerTrackRef = useRef<HTMLDivElement | null>(null);
   const rafFadeRef = useRef(0);
 
   useDualAxisLock(vertRef, horizRef);
@@ -838,10 +835,6 @@ function VirtualPlayersScroller({
 
   const onHorizScroll = (e: UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
-    // Pin ADP/PTS header outside the Y scroller; mirror X so labels stay lined up.
-    if (headerTrackRef.current) {
-      headerTrackRef.current.style.transform = `translate3d(${-el.scrollLeft}px,0,0)`;
-    }
     if (rafFadeRef.current) return;
     rafFadeRef.current = requestAnimationFrame(() => {
       rafFadeRef.current = 0;
@@ -855,136 +848,73 @@ function VirtualPlayersScroller({
   const padBottom = Math.max(0, totalSize - (items[items.length - 1]?.end ?? 0));
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col px-2 pb-3">
-      {/*
-        Sleeper: ADP / PTS sit on a fixed strip under the filters (not inside the
-        vertical scroller — nested sticky was getting clipped / scrolling away).
-      */}
-      {filtered.length > 0 ? (
-        <div className="shrink-0 overflow-hidden border-b border-m-border bg-m-sheet">
-          <div ref={headerTrackRef} className="will-change-transform">
-            <PlayerListStatsHeader
-              complete={complete}
-              showPrevYear={showPrevYear}
-              prevYear={prevYear}
-              posFilter={posFilter}
-            />
-          </div>
-        </div>
-      ) : null}
+    <div
+      ref={vertRef}
+      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-2 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       <div
-        ref={vertRef}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        ref={horizRef}
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] [--m-draft-compact-opacity:0]"
+        onScroll={onHorizScroll}
       >
+        {filtered.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-m-muted">{emptyLabel}</p>
+        ) : null}
+        {/* Always-mounted probe so name-end stays measurable under virtualization. */}
+        <div className="pointer-events-none h-0 overflow-hidden" aria-hidden>
+          <div className="flex items-stretch gap-1.5 py-2">
+            {!complete ? <span className="w-[3.25rem] shrink-0" /> : null}
+            <span className="w-5 shrink-0" />
+            <span className={cn(NAME_COL_CLASS, "shrink-0")} />
+            <span data-name-scroll-end className="w-0 shrink-0" />
+          </div>
+        </div>
+        {/*
+          Padding spacers keep rows in flow so min-w-max still drives horizontal
+          scroll width (absolute rows would collapse that).
+        */}
         <div
-          ref={horizRef}
-          className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] [--m-draft-compact-opacity:0]"
-          onScroll={onHorizScroll}
+          className="min-w-max"
+          style={{ paddingTop: padTop, paddingBottom: padBottom }}
         >
-          {filtered.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-m-muted">{emptyLabel}</p>
-          ) : null}
-          {/* Always-mounted probe so name-end stays measurable under virtualization. */}
-          <div className="pointer-events-none h-0 overflow-hidden" aria-hidden>
-            <div className="flex items-stretch gap-1.5 py-1">
-              {!complete ? <span className="w-[3.25rem] shrink-0" /> : null}
-              <span className="w-5 shrink-0" />
-              <span className={cn(NAME_COL_CLASS, "shrink-0")} />
-              <span data-name-scroll-end className="w-0 shrink-0" />
-            </div>
-          </div>
-          {/*
-            Padding spacers keep rows in flow so min-w-max still drives horizontal
-            scroll width (absolute rows would collapse that).
-          */}
-          <div
-            className="min-w-max"
-            style={{ paddingTop: padTop, paddingBottom: padBottom }}
-          >
-            {items.map((item) => {
-              const p = filtered[item.index]!;
-              return (
-                <div
-                  key={p.id}
-                  data-index={item.index}
-                  ref={virtualizer.measureElement}
-                >
-                  {projIndex === item.index && nextUserOverall != null ? (
-                    <div className="my-1 flex w-[100vw] max-w-md items-center gap-2 px-1">
-                      <span className="h-px flex-1 bg-m-accent/70" />
-                      <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
-                        Proj pick: Round {roundOf(nextUserOverall, settings.teams)}{" "}
-                        Overall #{nextUserOverall}
-                      </span>
-                      <span className="h-px flex-1 bg-m-accent/70" />
-                    </div>
-                  ) : null}
-                  <PlayerStatsRow
-                    player={p}
-                    settings={settings}
-                    rank={item.index + 1}
-                    queued={watchIds.has(p.id)}
-                    myTurn={myTurn}
-                    complete={complete}
-                    showPrevYear={showPrevYear}
-                    prevYear={prevYear}
-                    projExtras={projExtrasById[p.id]}
-                    onDraft={onDraft}
-                    onToggleQueue={onToggleQueue}
-                    onOpenPlayer={onOpenPlayer}
-                  />
-                </div>
-              );
-            })}
-          </div>
+          {items.map((item) => {
+            const p = filtered[item.index]!;
+            return (
+              <div
+                key={p.id}
+                data-index={item.index}
+                ref={virtualizer.measureElement}
+              >
+                {projIndex === item.index && nextUserOverall != null ? (
+                  <div className="my-1 flex w-[100vw] max-w-md items-center gap-2 px-1">
+                    <span className="h-px flex-1 bg-m-accent/70" />
+                    <span className="font-display text-[10px] font-bold uppercase tracking-wider text-m-accent">
+                      Proj pick: Round {roundOf(nextUserOverall, settings.teams)}{" "}
+                      Overall #{nextUserOverall}
+                    </span>
+                    <span className="h-px flex-1 bg-m-accent/70" />
+                  </div>
+                ) : null}
+                <PlayerStatsRow
+                  player={p}
+                  settings={settings}
+                  rank={item.index + 1}
+                  queued={watchIds.has(p.id)}
+                  myTurn={myTurn}
+                  complete={complete}
+                  showPrevYear={showPrevYear}
+                  prevYear={prevYear}
+                  projExtras={projExtrasById[p.id]}
+                  onDraft={onDraft}
+                  onToggleQueue={onToggleQueue}
+                  onOpenPlayer={onOpenPlayer}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
-  );
-}
-
-/** Sleeper draft strip: ADP + PTS (and pos cols when filtered). */
-function PlayerListStatsHeader({
-  complete,
-  showPrevYear,
-  prevYear,
-  posFilter,
-}: {
-  complete: boolean;
-  showPrevYear: boolean;
-  prevYear: number;
-  posFilter: "ALL" | Pos;
-}) {
-  const yearShort = `'${String(prevYear).slice(-2)}`;
-  // On ALL, Sleeper only labels ADP/PTS; pos-specific headers appear when filtered.
-  const posCols = posFilter === "ALL" ? [] : (POS_STAT_COLUMNS[posFilter] ?? []);
-  return (
-    <div className="flex min-w-max items-end gap-1.5 px-0 pb-1 pt-1">
-      {!complete ? <span className="w-[3.25rem] shrink-0" aria-hidden /> : null}
-      <span className="w-5 shrink-0" aria-hidden />
-      <span className={cn(NAME_COL_CLASS, "shrink-0")} aria-hidden />
-      <span className={cn(STAR_COL_CLASS, "shrink-0")} aria-hidden />
-      <div className="flex shrink-0 items-end gap-3 pr-4">
-        <StatHeaderLabel>ADP</StatHeaderLabel>
-        {showPrevYear ? <StatHeaderLabel>{yearShort} ADP</StatHeaderLabel> : null}
-        <StatHeaderLabel>PTS</StatHeaderLabel>
-        {showPrevYear ? <StatHeaderLabel>{yearShort} PTS</StatHeaderLabel> : null}
-        {posCols.map((col) => (
-          <div key={col.key} className="flex shrink-0 items-end gap-3">
-            <StatHeaderLabel>{col.label}</StatHeaderLabel>
-            {showPrevYear ? <StatHeaderLabel>{yearShort}</StatHeaderLabel> : null}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function StatHeaderLabel({ children }: { children: ReactNode }) {
-  return (
-    <span className="w-12 shrink-0 text-left text-[9px] font-semibold uppercase tracking-wide text-m-muted">
-      {children}
-    </span>
   );
 }
 
@@ -1346,9 +1276,10 @@ const TeamPane = memo(function TeamPane({
 });
 
 /**
- * Full row scrolls (Draft + name + star + stats). Compact identity overlays
- * with negative margin (no reserved gap / no layout snap); hairline only when
- * scrolled — Sleeper-style, no per-row dividers.
+ * Full row scrolls (Draft + name + star + stats). Sleeper puts a tiny label
+ * above every stat value on each player row (ADP, PTS, and all pos cols) —
+ * not a sticky column header. Compact-name overlays with negative margin;
+ * hairline only under that band when scrolled X.
  */
 const PlayerStatsRow = memo(function PlayerStatsRow({
   player,
@@ -1380,6 +1311,7 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
 }) {
   const v = value(player, settings.scoring);
   const short = shortName(player.name);
+  const yearShort = `'${String(prevYear).slice(-2)}`;
   const meta = `${posDisplayLabel(player.pos)} - ${player.team}${player.bye ? ` (${player.bye})` : ""}`;
   const injury = injuryBadgeInfo(
     resolveInjuryStatus(player) ?? player.injury_status ?? player.injury,
@@ -1408,8 +1340,8 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
   return (
     <div className="relative">
       {/*
-        Overlay compact band: -mb collapses layout height so peek sheet fits
-        ~3 rows; opacity is scroll-linked (no CSS transition).
+        Overlay compact band: -mb collapses layout height; opacity is
+        scroll-linked (no CSS transition).
       */}
       <div
         className="pointer-events-none sticky left-0 z-20 -mb-4 h-4 overflow-hidden bg-m-sheet px-2 invisible [.is-scrolled-x_&]:pointer-events-auto [.is-scrolled-x_&]:visible"
@@ -1453,7 +1385,7 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
         aria-hidden
       />
 
-      <div className="flex items-stretch gap-1.5 py-1">
+      <div className="flex items-stretch gap-1.5 py-2">
         {!complete ? (
           <button
             type="button"
@@ -1512,16 +1444,18 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
           <Star className={cn("size-4", queued && "fill-current")} strokeWidth={2.5} />
         </button>
         <div className="flex shrink-0 items-center gap-3 self-center pr-4">
-          <StatValue value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
+          <StatCell label="ADP" value={v.adp < 900 ? v.adp.toFixed(1) : "—"} />
           {showPrevYear ? (
-            <StatValue
+            <StatCell
+              label={`${yearShort} ADP`}
               value={prevAdp != null && prevAdp < 900 ? prevAdp.toFixed(1) : "—"}
               muted
             />
           ) : null}
-          <StatValue value={v.proj > 0 ? v.proj.toFixed(1) : "—"} />
+          <StatCell label="PTS" value={v.proj > 0 ? v.proj.toFixed(1) : "—"} />
           {showPrevYear ? (
-            <StatValue
+            <StatCell
+              label={`${yearShort} PTS`}
               value={v.prev != null && v.prev > 0 ? v.prev.toFixed(1) : "—"}
               muted
             />
@@ -1531,9 +1465,13 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
             const prior = prevLine?.[col.key];
             return (
               <div key={col.key} className="flex shrink-0 items-center gap-3">
-                <StatValue value={cur > 0 ? cur.toFixed(col.digits) : "—"} />
+                <StatCell
+                  label={col.label}
+                  value={cur > 0 ? cur.toFixed(col.digits) : "—"}
+                />
                 {showPrevYear ? (
-                  <StatValue
+                  <StatCell
+                    label={yearShort}
                     value={prior != null && prior > 0 ? prior.toFixed(col.digits) : "—"}
                     muted
                   />
@@ -1547,12 +1485,24 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
   );
 });
 
-function StatValue({ value, muted = false }: { value: string; muted?: boolean }) {
+/** Tiny uppercase label above each value — same pattern on every player row. */
+function StatCell({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
   return (
     <div className="w-12 shrink-0 text-left">
+      <span className="block text-[9px] font-semibold uppercase leading-none tracking-wide text-m-muted">
+        {label}
+      </span>
       <span
         className={cn(
-          "tabnum block text-sm font-semibold leading-none",
+          "tabnum mt-0.5 block text-sm font-semibold leading-none",
           muted ? "text-m-muted" : "text-m-card-fg",
         )}
       >
