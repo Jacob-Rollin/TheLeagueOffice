@@ -108,9 +108,10 @@ const STAR_COL_CLASS = "w-8";
 /**
  * Sleeper draft rows: two-line identity + per-column label/value stats on every
  * row (ADP, PTS, and all pos stats). Compact-name band always reserves its
- * slot (h-4 + gap) so the fade-in never changes row height — only opacity.
+ * slot so the fade-in never changes row height — only opacity. Gap under the
+ * band stays tight (~Sleeper) so labels sit just below the name.
  */
-const PLAYER_ROW_ESTIMATE_PX = 76;
+const PLAYER_ROW_ESTIMATE_PX = 70;
 
 /**
  * Nested vertical + horizontal scrollers with directional lock.
