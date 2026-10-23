@@ -44,15 +44,30 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   const headerScrollRef = useRef<HTMLDivElement | null>(null);
   const bodyScrollRef = useRef<HTMLDivElement | null>(null);
   const syncingScrollRef = useRef(false);
+  const syncRafRef = useRef(0);
 
   // Keep teams row X in lockstep with the rounds board (teams stay pinned in Y).
+  // rAF-coalesce so flick momentum on the body isn't fighting sync every event.
   const syncScrollLeft = (source: HTMLElement, target: HTMLElement | null) => {
     if (!target || syncingScrollRef.current) return;
-    if (target.scrollLeft === source.scrollLeft) return;
-    syncingScrollRef.current = true;
-    target.scrollLeft = source.scrollLeft;
-    syncingScrollRef.current = false;
+    const left = source.scrollLeft;
+    if (target.scrollLeft === left) return;
+    if (syncRafRef.current) cancelAnimationFrame(syncRafRef.current);
+    syncRafRef.current = requestAnimationFrame(() => {
+      syncRafRef.current = 0;
+      if (!target || syncingScrollRef.current) return;
+      if (target.scrollLeft === left) return;
+      syncingScrollRef.current = true;
+      target.scrollLeft = left;
+      syncingScrollRef.current = false;
+    });
   };
+
+  useEffect(() => {
+    return () => {
+      if (syncRafRef.current) cancelAnimationFrame(syncRafRef.current);
+    };
+  }, []);
 
   // Target / pick-advance: fully reveal the on-the-clock cell (not just a sliver).
   useEffect(() => {
@@ -78,33 +93,8 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
     return () => window.cancelAnimationFrame(id);
   }, [currentOverall, jumpSignal]);
 
-  // Block iOS rubber-band pull past round 1 (empty gap under the pinned teams row).
-  useEffect(() => {
-    const el = bodyScrollRef.current;
-    if (!el) return;
-    const start = { x: 0, y: 0 };
-    const onTouchStart = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (!t) return;
-      start.x = t.clientX;
-      start.y = t.clientY;
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      const t = e.touches[0];
-      if (!t) return;
-      const dx = t.clientX - start.x;
-      const dy = t.clientY - start.y;
-      if (el.scrollTop <= 0 && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
-        e.preventDefault();
-      }
-    };
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-    };
-  }, []);
+  // No non-passive touchmove/preventDefault here — that kills iOS flick momentum.
+  // Pinned teams row + CSS overscroll-none is enough to stop pull-past-top.
 
   // Sleeper-sized cells — denser than the old 112×72 tiles.
   const colW = 96;
@@ -121,7 +111,7 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
       */}
       <div
         ref={headerScrollRef}
-        className="shrink-0 overflow-x-auto overflow-y-hidden overscroll-x-contain border-b border-m-border bg-m-bg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="shrink-0 overflow-x-auto overflow-y-hidden overscroll-x-contain border-b border-m-border bg-m-bg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
         onScroll={(e) => syncScrollLeft(e.currentTarget, bodyScrollRef.current)}
       >
         <div
@@ -181,7 +171,7 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
 
       <div
         ref={bodyScrollRef}
-        className="min-h-0 flex-1 overflow-auto overscroll-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="min-h-0 flex-1 overflow-auto overscroll-y-none overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
         onScroll={(e) => syncScrollLeft(e.currentTarget, headerScrollRef.current)}
       >
         <div
