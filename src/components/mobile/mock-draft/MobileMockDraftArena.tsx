@@ -15,6 +15,12 @@ import {
   saveMockConfig,
   type MockConfig,
 } from "@/lib/mock-config";
+import {
+  isMockDraftSoundsMuted,
+  playMockDraftSound,
+  setMockDraftSoundsMuted,
+  unlockMockDraftAudio,
+} from "@/lib/mock-draft-sounds";
 import { warmMockDraftClientCaches } from "@/lib/mock-draft-warm";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +42,7 @@ export function MobileMockDraftArena() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<MockConfig>(DEFAULT_MOCK_CONFIG);
   const [showRecap, setShowRecap] = useState(false);
+  const [soundsMuted, setSoundsMuted] = useState(() => isMockDraftSoundsMuted());
   /** Splash waits for day-cached catalog (+ board extras) like desktop. */
   const [cacheReady, setCacheReady] = useState(false);
 
@@ -130,6 +137,8 @@ export function MobileMockDraftArena() {
   };
 
   const claimSlot = (team: number) => {
+    unlockMockDraftAudio();
+    playMockDraftSound("claim-slot");
     const base = config ?? loadMockConfig() ?? DEFAULT_MOCK_CONFIG;
     const clean: MockConfig = {
       ...base,
@@ -151,6 +160,13 @@ export function MobileMockDraftArena() {
     setMenuOpen(false);
     setSettingsDraft(config ?? loadMockConfig() ?? DEFAULT_MOCK_CONFIG);
     setSettingsOpen(true);
+  };
+
+  const toggleSounds = () => {
+    const next = !soundsMuted;
+    setSoundsMuted(next);
+    setMockDraftSoundsMuted(next);
+    if (!next) unlockMockDraftAudio();
   };
 
   const saveSettings = () => {
@@ -204,7 +220,9 @@ export function MobileMockDraftArena() {
       window.alert("Claim a draft slot first.");
       return;
     }
+    unlockMockDraftAudio();
     if (!loadMockConfig()) saveMockConfig(config ?? DEFAULT_MOCK_CONFIG);
+    setMenuOpen(false);
     setLive(true);
   };
 
@@ -391,8 +409,8 @@ export function MobileMockDraftArena() {
             ) : null}
             <button
               type="button"
-              aria-label={inLobby ? "Draft settings" : "Draft menu"}
-              onClick={() => (inLobby ? openSettings() : setMenuOpen(true))}
+              aria-label="Draft menu"
+              onClick={() => setMenuOpen(true)}
               className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
             >
               <Settings className="size-5" strokeWidth={2.5} />
@@ -469,8 +487,12 @@ export function MobileMockDraftArena() {
 
       <MobileMockDraftMenu
         open={menuOpen}
+        lobby={inLobby}
         paused={paused}
+        soundsMuted={soundsMuted}
+        canStart={slotClaimed}
         onClose={() => setMenuOpen(false)}
+        onStartDraft={startDraft}
         onPauseToggle={() => {
           setPaused((p) => !p);
           setMenuOpen(false);
@@ -484,6 +506,7 @@ export function MobileMockDraftArena() {
           setShowRecap(true);
         }}
         onOpenSettings={openSettings}
+        onToggleSounds={toggleSounds}
         onDeleteDraft={() => {
           setMenuOpen(false);
           confirmLeave("Delete this mock draft and return home?", leaveToHome);

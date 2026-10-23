@@ -34,7 +34,11 @@ import {
   type MockConfig,
   type MockSessionState,
 } from "@/lib/mock-config";
+import { playMockDraftSound } from "@/lib/mock-draft-sounds";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
+
+/** Warn once when the pick clock enters this window (seconds). */
+const TURN_WARNING_AT = 10;
 
 export type MockDraftTab = "players" | "queue" | "team";
 export type MockDraftSpeed = DraftAiSpeed | "manual";
@@ -154,7 +158,12 @@ export function useMockDraftSession({
     });
   }, [draftedIds]);
 
+  const picksRef = useRef(picks);
+  picksRef.current = picks;
+
   const commitPick = useCallback((playerId: string, team: number) => {
+    if (picksRef.current.some((p) => p.playerId === playerId)) return;
+    playMockDraftSound("pick-locked");
     setPicks((prev) => {
       if (prev.some((p) => p.playerId === playerId)) return prev;
       return [...prev, { playerId, team, overall: prev.length + 1 }];
@@ -259,9 +268,41 @@ export function useMockDraftSession({
     commitPick,
   ]);
 
+  // Cue sounds for turn start / low clock / draft end. Resume mid-draft skips the
+  // initial "your turn" blast; a fresh start on the clock still cues once.
+  const soundPrimedRef = useRef(false);
+  const prevMyTurnRef = useRef(false);
+  const prevCompleteRef = useRef(false);
+  const warnedForPickRef = useRef<number | null>(null);
+  const expiredForPickRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    soundPrimedRef.current = false;
+    warnedForPickRef.current = null;
+    expiredForPickRef.current = null;
+    if (!live) {
+      prevMyTurnRef.current = myTurn;
+      prevCompleteRef.current = complete;
+      return;
+    }
+    const pickCount = picks.length;
+    const id = window.setTimeout(() => {
+      soundPrimedRef.current = true;
+      if (myTurn && !complete && pickCount === 0) {
+        playMockDraftSound("your-turn");
+      }
+      prevMyTurnRef.current = myTurn;
+      prevCompleteRef.current = complete;
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [live, bootKey]);
+
   // Clock expiry: needs-based pick when queue autopick is off or the queue is empty.
   useEffect(() => {
     if (!live || !myTurn || paused || !pageVisible || clock !== 0) return;
+    if (expiredForPickRef.current === picks.length) return;
+    expiredForPickRef.current = picks.length;
+    playMockDraftSound("clock-expired");
     if (queueAutopickOn && queuedPlayers[0]) return;
     const choice = autoPickForUser(available, myPlayers, settings, picks.length + 1);
     if (choice) commitPick(choice.id, settings.myTeam);
@@ -279,6 +320,30 @@ export function useMockDraftSession({
     picks.length,
     commitPick,
   ]);
+
+  useEffect(() => {
+    if (!live || !soundPrimedRef.current) return;
+    if (myTurn && !prevMyTurnRef.current && !complete) {
+      playMockDraftSound("your-turn");
+    }
+    prevMyTurnRef.current = myTurn;
+  }, [live, myTurn, complete]);
+
+  useEffect(() => {
+    if (!live || !soundPrimedRef.current) return;
+    if (complete && !prevCompleteRef.current) {
+      playMockDraftSound("draft-complete");
+    }
+    prevCompleteRef.current = complete;
+  }, [live, complete]);
+
+  useEffect(() => {
+    if (!live || !myTurn || paused || !pageVisible || complete) return;
+    if (clock === null || clock > TURN_WARNING_AT || clock <= 0) return;
+    if (warnedForPickRef.current === picks.length) return;
+    warnedForPickRef.current = picks.length;
+    playMockDraftSound("turn-warning");
+  }, [live, myTurn, paused, pageVisible, complete, clock, picks.length]);
 
   useEffect(() => {
     const stored = loadMockConfig();
@@ -351,8 +416,18 @@ export function useMockDraftSession({
     return () => window.clearTimeout(id);
   }, [config, started, picks, watch, customOrder, speed, paused, tab, rosterTeam]);
 
+  const watchRef = useRef(watch);
+  watchRef.current = watch;
+
   const toggleWatch = useCallback((id: string) => {
-    setWatch((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    const prev = watchRef.current;
+    if (prev.includes(id)) {
+      playMockDraftSound("queue-remove");
+      setWatch(prev.filter((x) => x !== id));
+    } else {
+      playMockDraftSound("queue-add");
+      setWatch([...prev, id]);
+    }
   }, []);
 
   /** Move a queued player up (-1) or down (+1) in autopick priority. */
@@ -373,7 +448,11 @@ export function useMockDraftSession({
   const removeQueued = useCallback((ids: string[]) => {
     if (!ids.length) return;
     const drop = new Set(ids);
-    setWatch((prev) => prev.filter((id) => !drop.has(id)));
+    const prev = watchRef.current;
+    const next = prev.filter((id) => !drop.has(id));
+    if (next.length === prev.length) return;
+    playMockDraftSound("queue-remove");
+    setWatch(next);
   }, []);
 
   const undoPick = useCallback(() => setPicks((prev) => prev.slice(0, -1)), []);
