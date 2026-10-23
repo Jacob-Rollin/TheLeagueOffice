@@ -134,7 +134,7 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                 key={`${round}-${team}`}
                 ref={isClock ? clockRef : undefined}
                 className={cn(
-                  "relative flex h-[54px] flex-col justify-between overflow-hidden rounded-md px-1 py-1",
+                  "relative flex h-[58px] flex-col justify-between overflow-hidden rounded-md px-1 py-1",
                   player
                     ? posCellClass(player.pos)
                     : isClock
@@ -162,14 +162,12 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                       <button
                         type="button"
                         onClick={() => onOpenPlayer(player.id)}
-                        className="truncate text-left text-[11px] font-bold leading-tight"
+                        className="min-w-0 text-left"
                       >
-                        {shortName(player.name)}
+                        <StackedPlayerName name={player.name} />
                       </button>
                     ) : (
-                      <span className="truncate text-[11px] font-bold leading-tight">
-                        {shortName(player.name)}
-                      </span>
+                      <StackedPlayerName name={player.name} />
                     )}
                     <span
                       className="absolute bottom-0.5 right-1 text-[9px] opacity-50"
@@ -203,11 +201,24 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   );
 });
 
-function shortName(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length < 2) return name;
-  const first = parts[0]!;
-  return `${first[0]}. ${parts.slice(1).join(" ")}`;
+/** Sleeper-style board names: first line, last (+ suffix) on the next. */
+function splitPlayerName(name: string): { first: string; last: string } {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { first: "", last: "" };
+  if (parts.length === 1) return { first: parts[0]!, last: "" };
+  return { first: parts[0]!, last: parts.slice(1).join(" ") };
+}
+
+function StackedPlayerName({ name }: { name: string }) {
+  const { first, last } = splitPlayerName(name);
+  return (
+    <span className="flex min-w-0 flex-col pr-2.5">
+      <span className="truncate text-[10px] font-bold leading-[1.15]">{first}</span>
+      {last ? (
+        <span className="truncate text-[10px] font-bold leading-[1.15]">{last}</span>
+      ) : null}
+    </span>
+  );
 }
 
 export function pickLabelForOverall(overall: number, teams: number): string {
