@@ -41,40 +41,46 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
 }) {
   const pickByOverall = new Map(picks.map((p) => [p.overall, p]));
   const clockRef = useRef<HTMLDivElement | null>(null);
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const headerScrollRef = useRef<HTMLDivElement | null>(null);
+  const bodyScrollRef = useRef<HTMLDivElement | null>(null);
+  const syncingScrollRef = useRef(false);
+
+  // Keep teams row X in lockstep with the rounds board (teams stay pinned in Y).
+  const syncScrollLeft = (source: HTMLElement, target: HTMLElement | null) => {
+    if (!target || syncingScrollRef.current) return;
+    if (target.scrollLeft === source.scrollLeft) return;
+    syncingScrollRef.current = true;
+    target.scrollLeft = source.scrollLeft;
+    syncingScrollRef.current = false;
+  };
 
   // Target / pick-advance: fully reveal the on-the-clock cell (not just a sliver).
-  // Account for the sticky teams bar so the box isn't tucked under the headers.
   useEffect(() => {
-    const scroller = scrollerRef.current;
+    const scroller = bodyScrollRef.current;
     const cell = clockRef.current;
     if (!scroller || !cell) return;
 
     const run = () => {
-      const header = scroller.querySelector<HTMLElement>("[data-draft-team-header]");
-      const headerH = header?.offsetHeight ?? 48;
       const sRect = scroller.getBoundingClientRect();
       const cRect = cell.getBoundingClientRect();
       const cellTop = cRect.top - sRect.top + scroller.scrollTop;
       const cellLeft = cRect.left - sRect.left + scroller.scrollLeft;
-      const freeH = Math.max(1, scroller.clientHeight - headerH);
-      // Vertically center in the area below the sticky teams bar.
-      const nextTop = cellTop - headerH - (freeH - cRect.height) / 2;
+      const nextTop = cellTop - (scroller.clientHeight - cRect.height) / 2;
       const nextLeft = cellLeft - (scroller.clientWidth - cRect.width) / 2;
       scroller.scrollTo({
         top: Math.max(0, nextTop),
         left: Math.max(0, nextLeft),
         behavior: "smooth",
       });
+      // Header X follows via the body's onScroll sync.
     };
-    // Wait a frame so the clock ref is attached after pick/round changes.
     const id = window.requestAnimationFrame(run);
     return () => window.cancelAnimationFrame(id);
   }, [currentOverall, jumpSignal]);
 
-  // Block iOS rubber-band pull past the teams bar / round 1 (empty gap under header).
+  // Block iOS rubber-band pull past round 1 (empty gap under the pinned teams row).
   useEffect(() => {
-    const el = scrollerRef.current;
+    const el = bodyScrollRef.current;
     if (!el) return;
     const start = { x: 0, y: 0 };
     const onTouchStart = (e: TouchEvent) => {
@@ -88,7 +94,6 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
       if (!t) return;
       const dx = t.clientX - start.x;
       const dy = t.clientY - start.y;
-      // Only clamp primarily-vertical pull-down at the top edge.
       if (el.scrollTop <= 0 && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
         e.preventDefault();
       }
@@ -104,167 +109,186 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   // Sleeper-sized cells — denser than the old 112×72 tiles.
   const colW = 96;
   const gapPx = 3;
+  const gridMinWidth = settings.teams * (colW + gapPx);
   /** Highlight the user's column once their slot is known (lobby claim or live). */
   const mineColActive = !lobby || slotClaimed;
 
   return (
-    <div
-      ref={scrollerRef}
-      className="min-h-0 flex-1 overflow-auto overscroll-none"
-    >
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-m-bg">
+      {/*
+        Teams row is pinned like the arena chrome (never rubber-bands vertically).
+        Horizontal scroll stays synced with the rounds board below.
+      */}
       <div
-        className="inline-grid p-1.5 pb-3"
-        style={{
-          // No row gap under the sticky teams bar — a vertical gutter lets
-          // on-the-clock rings peek through when the board is scrolled up.
-          // Round spacing comes from margin on pick cells instead.
-          columnGap: gapPx,
-          rowGap: 0,
-          gridTemplateColumns: `repeat(${settings.teams}, ${colW}px)`,
-          minWidth: settings.teams * (colW + gapPx),
-        }}
+        ref={headerScrollRef}
+        className="shrink-0 overflow-x-auto overflow-y-hidden overscroll-x-contain border-b border-m-border bg-m-bg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        onScroll={(e) => syncScrollLeft(e.currentTarget, bodyScrollRef.current)}
       >
-        {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => {
-          const isMine = mineColActive && t === settings.myTeam;
-          const showClaim = lobby && (!slotClaimed || t !== settings.myTeam);
-          const label =
-            lobby && !slotClaimed ? `Slot ${t}` : teamName(settings, t);
-          return (
-            <div
-              key={`h-${t}`}
-              data-draft-team-header
-              className={cn(
-                // Opaque sticky strip so scrolling cells never show through.
-                "sticky top-0 z-10 flex flex-col items-center gap-0.5 bg-m-bg px-0.5 py-1.5",
-                isMine &&
-                  "rounded-t-md bg-[color-mix(in_srgb,var(--m-accent)_16%,var(--m-bg))] ring-1 ring-inset ring-m-accent",
-              )}
-            >
-              {lobby ? (
-                showClaim ? (
-                  <button
-                    type="button"
-                    onClick={() => onClaimSlot?.(t)}
-                    className="rounded-full bg-m-chip px-2 py-0.5 font-display text-[9px] font-extrabold uppercase tracking-wide text-m-chip-fg active:bg-m-accent active:text-m-accent-fg"
-                  >
-                    Claim
-                  </button>
-                ) : (
-                  <span className="flex size-6 items-center justify-center rounded-full bg-m-accent text-[9px] font-bold text-m-accent-fg">
-                    You
-                  </span>
-                )
-              ) : (
-                <span
-                  className={cn(
-                    "flex size-6 items-center justify-center rounded-full text-[9px] font-bold",
-                    isMine
-                      ? "bg-m-accent text-m-accent-fg"
-                      : "bg-m-chip text-m-chip-fg",
-                  )}
-                >
-                  {isMine ? "You" : "AI"}
-                </span>
-              )}
-              <span className="max-w-full truncate text-center text-[9px] font-semibold leading-tight text-m-card-fg">
-                {label}
-              </span>
-            </div>
-          );
-        })}
-
-        {Array.from({ length: settings.rounds }, (_, r) => r + 1).map((round) => {
-          const ltr = !settings.snake || round % 2 === 1;
-          return Array.from({ length: settings.teams }, (_, i) => {
-            const team = i + 1;
-            const overall = Array.from(
-              { length: settings.teams },
-              (_, k) => (round - 1) * settings.teams + k + 1,
-            ).find((o) => teamForPick(o, settings.teams, settings.snake) === team)!;
-            const pick = pickByOverall.get(overall);
-            const player = pick ? byId.get(pick.playerId) : undefined;
-            const isClock = !complete && overall === currentOverall;
-            const isMineCol = mineColActive && team === settings.myTeam;
-            const pickLabel = `${round}.${(((overall - 1) % settings.teams) + 1)}`;
-            // Last pick of a snake/linear round gets ↓ (Sleeper-style turn marker).
-            const isRoundEnd =
-              round < settings.rounds &&
-              (settings.snake ? (ltr ? team === settings.teams : team === 1) : team === settings.teams);
-            const flowArrow = isRoundEnd ? "↓" : ltr ? "→" : "←";
-
+        <div
+          className="inline-flex px-1.5 pt-1.5 pb-1"
+          style={{ gap: gapPx, minWidth: gridMinWidth }}
+        >
+          {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => {
+            const isMine = mineColActive && t === settings.myTeam;
+            const showClaim = lobby && (!slotClaimed || t !== settings.myTeam);
+            const label =
+              lobby && !slotClaimed ? `Slot ${t}` : teamName(settings, t);
             return (
               <div
-                key={`${round}-${team}`}
-                ref={isClock ? clockRef : undefined}
+                key={`h-${t}`}
+                data-draft-team-header
+                style={{ width: colW }}
                 className={cn(
-                  "relative mb-[3px] flex h-[62px] flex-col gap-0.5 overflow-hidden rounded-md px-1 pt-1 pb-3.5",
-                  // Round 1 sits flush under the teams bar (no top ring peek).
-                  round === 1 && "rounded-t-none",
-                  player
-                    ? posCellClass(player.pos)
-                    : isClock
-                      ? "bg-m-card ring-2 ring-m-accent"
-                      : isMineCol
-                        ? "bg-m-accent/12 text-m-muted"
-                        : "bg-m-card/70 text-m-muted",
-                  // Column wash for filled picks — keeps pos colors, marks "your" lane.
-                  isMineCol && player && "ring-1 ring-inset ring-m-accent/45",
-                  isMineCol && !player && !isClock && "ring-1 ring-inset ring-m-accent/25",
-                  // Keep clock/mine rings from drawing above the sticky teams bar.
-                  round === 1 && (isClock || isMineCol) && "ring-inset",
+                  "flex shrink-0 flex-col items-center gap-0.5 bg-m-bg px-0.5 py-1",
+                  isMine &&
+                    "rounded-t-md bg-[color-mix(in_srgb,var(--m-accent)_16%,var(--m-bg))] ring-1 ring-inset ring-m-accent",
                 )}
               >
-                {player ? (
-                  <>
-                    <div className="flex shrink-0 items-start justify-between gap-0.5">
-                      <span className="truncate text-[7px] font-bold uppercase leading-none opacity-75">
-                        {player.pos === "DEF" ? "DST" : player.pos} · {player.team}
-                        {player.bye ? ` (${player.bye})` : ""}
-                      </span>
-                      <span className="tabnum shrink-0 text-[7px] font-semibold leading-none opacity-65">
-                        {pickLabel}
-                      </span>
-                    </div>
-                    {onOpenPlayer ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenPlayer(player.id)}
-                        className="min-h-0 min-w-0 flex-1 text-left"
-                      >
-                        <StackedPlayerName name={player.name} />
-                      </button>
-                    ) : (
-                      <div className="min-h-0 min-w-0 flex-1">
-                        <StackedPlayerName name={player.name} />
-                      </div>
-                    )}
-                    <span
-                      className="absolute bottom-0.5 right-1 text-[8px] opacity-45"
-                      aria-hidden
+                {lobby ? (
+                  showClaim ? (
+                    <button
+                      type="button"
+                      onClick={() => onClaimSlot?.(t)}
+                      className="rounded-full bg-m-chip px-2 py-0.5 font-display text-[9px] font-extrabold uppercase tracking-wide text-m-chip-fg active:bg-m-accent active:text-m-accent-fg"
                     >
-                      {flowArrow}
+                      Claim
+                    </button>
+                  ) : (
+                    <span className="flex size-6 items-center justify-center rounded-full bg-m-accent text-[9px] font-bold text-m-accent-fg">
+                      You
                     </span>
-                  </>
-                ) : isClock ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-0.5 text-m-accent">
-                    <Timer className="size-3" strokeWidth={2.5} />
-                    <span className="font-display text-[9px] font-extrabold uppercase tracking-wider">
-                      On the clock
-                    </span>
-                    <span className="tabnum text-[9px] text-m-muted">{pickLabel}</span>
-                  </div>
+                  )
                 ) : (
-                  <>
-                    <span className="tabnum self-end text-[9px]">{pickLabel}</span>
-                    <span className="absolute bottom-0.5 right-1 text-[8px] opacity-40" aria-hidden>
-                      {flowArrow}
-                    </span>
-                  </>
+                  <span
+                    className={cn(
+                      "flex size-6 items-center justify-center rounded-full text-[9px] font-bold",
+                      isMine
+                        ? "bg-m-accent text-m-accent-fg"
+                        : "bg-m-chip text-m-chip-fg",
+                    )}
+                  >
+                    {isMine ? "You" : "AI"}
+                  </span>
                 )}
+                <span className="max-w-full truncate text-center text-[9px] font-semibold leading-tight text-m-card-fg">
+                  {label}
+                </span>
               </div>
             );
-          });
-        })}
+          })}
+        </div>
+      </div>
+
+      <div
+        ref={bodyScrollRef}
+        className="min-h-0 flex-1 overflow-auto overscroll-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        onScroll={(e) => syncScrollLeft(e.currentTarget, headerScrollRef.current)}
+      >
+        <div
+          className="inline-grid px-1.5 pb-3 pt-1"
+          style={{
+            columnGap: gapPx,
+            rowGap: 0,
+            gridTemplateColumns: `repeat(${settings.teams}, ${colW}px)`,
+            minWidth: gridMinWidth,
+          }}
+        >
+          {Array.from({ length: settings.rounds }, (_, r) => r + 1).map((round) => {
+            const ltr = !settings.snake || round % 2 === 1;
+            return Array.from({ length: settings.teams }, (_, i) => {
+              const team = i + 1;
+              const overall = Array.from(
+                { length: settings.teams },
+                (_, k) => (round - 1) * settings.teams + k + 1,
+              ).find((o) => teamForPick(o, settings.teams, settings.snake) === team)!;
+              const pick = pickByOverall.get(overall);
+              const player = pick ? byId.get(pick.playerId) : undefined;
+              const isClock = !complete && overall === currentOverall;
+              const isMineCol = mineColActive && team === settings.myTeam;
+              const pickLabel = `${round}.${(((overall - 1) % settings.teams) + 1)}`;
+              // Last pick of a snake/linear round gets ↓ (Sleeper-style turn marker).
+              const isRoundEnd =
+                round < settings.rounds &&
+                (settings.snake
+                  ? ltr
+                    ? team === settings.teams
+                    : team === 1
+                  : team === settings.teams);
+              const flowArrow = isRoundEnd ? "↓" : ltr ? "→" : "←";
+
+              return (
+                <div
+                  key={`${round}-${team}`}
+                  ref={isClock ? clockRef : undefined}
+                  className={cn(
+                    "relative mb-[3px] flex h-[62px] flex-col gap-0.5 overflow-hidden rounded-md px-1 pt-1 pb-3.5",
+                    player
+                      ? posCellClass(player.pos)
+                      : isClock
+                        ? "bg-m-card ring-2 ring-inset ring-m-accent"
+                        : isMineCol
+                          ? "bg-m-accent/12 text-m-muted"
+                          : "bg-m-card/70 text-m-muted",
+                    // Column wash for filled picks — keeps pos colors, marks "your" lane.
+                    isMineCol && player && "ring-1 ring-inset ring-m-accent/45",
+                    isMineCol && !player && !isClock && "ring-1 ring-inset ring-m-accent/25",
+                  )}
+                >
+                  {player ? (
+                    <>
+                      <div className="flex shrink-0 items-start justify-between gap-0.5">
+                        <span className="truncate text-[7px] font-bold uppercase leading-none opacity-75">
+                          {player.pos === "DEF" ? "DST" : player.pos} · {player.team}
+                          {player.bye ? ` (${player.bye})` : ""}
+                        </span>
+                        <span className="tabnum shrink-0 text-[7px] font-semibold leading-none opacity-65">
+                          {pickLabel}
+                        </span>
+                      </div>
+                      {onOpenPlayer ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenPlayer(player.id)}
+                          className="min-h-0 min-w-0 flex-1 text-left"
+                        >
+                          <StackedPlayerName name={player.name} />
+                        </button>
+                      ) : (
+                        <div className="min-h-0 min-w-0 flex-1">
+                          <StackedPlayerName name={player.name} />
+                        </div>
+                      )}
+                      <span
+                        className="absolute bottom-0.5 right-1 text-[8px] opacity-45"
+                        aria-hidden
+                      >
+                        {flowArrow}
+                      </span>
+                    </>
+                  ) : isClock ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-0.5 text-m-accent">
+                      <Timer className="size-3" strokeWidth={2.5} />
+                      <span className="font-display text-[9px] font-extrabold uppercase tracking-wider">
+                        On the clock
+                      </span>
+                      <span className="tabnum text-[9px] text-m-muted">{pickLabel}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="tabnum self-end text-[9px]">{pickLabel}</span>
+                      <span
+                        className="absolute bottom-0.5 right-1 text-[8px] opacity-40"
+                        aria-hidden
+                      >
+                        {flowArrow}
+                      </span>
+                    </>
+                  )}
+                </div>
+              );
+            });
+          })}
+        </div>
       </div>
     </div>
   );
