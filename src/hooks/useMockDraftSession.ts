@@ -161,15 +161,18 @@ export function useMockDraftSession({
   const picksRef = useRef(picks);
   picksRef.current = picks;
 
-  const commitPick = useCallback((playerId: string, team: number) => {
-    if (picksRef.current.some((p) => p.playerId === playerId)) return;
-    playMockDraftSound("pick-locked");
-    setPicks((prev) => {
-      if (prev.some((p) => p.playerId === playerId)) return prev;
-      return [...prev, { playerId, team, overall: prev.length + 1 }];
-    });
-    setWatch((prev) => prev.filter((id) => id !== playerId));
-  }, []);
+  const commitPick = useCallback(
+    (playerId: string, team: number) => {
+      if (picksRef.current.some((p) => p.playerId === playerId)) return;
+      playMockDraftSound(team === settings.myTeam ? "pick-locked" : "ai-pick-locked");
+      setPicks((prev) => {
+        if (prev.some((p) => p.playerId === playerId)) return prev;
+        return [...prev, { playerId, team, overall: prev.length + 1 }];
+      });
+      setWatch((prev) => prev.filter((id) => id !== playerId));
+    },
+    [settings.myTeam],
+  );
 
   const draftForUser = useCallback(
     (playerId: string) => {

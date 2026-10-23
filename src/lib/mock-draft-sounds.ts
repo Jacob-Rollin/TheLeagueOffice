@@ -4,6 +4,9 @@
  */
 
 export type MockDraftSoundEvent =
+  | "pause"
+  | "resume"
+  | "ai-pick-locked"
   | "pick-locked"
   | "your-turn"
   | "turn-warning"
@@ -288,6 +291,74 @@ function padEnd(samples: Float32Array | number[], extraMs = 80) {
 /** User-selected recipes from the Draft Sound Picker. */
 function samplesFor(event: MockDraftSoundEvent): Float32Array {
   switch (event) {
+    case "pause":
+      // computer-b — muted hold chord
+      return padEnd(
+        mix(
+          tone({
+            freq: 392,
+            dur: 0.22,
+            type: "sine",
+            gain: 0.2,
+            a: 0.02,
+            d: 0.08,
+            s: 0.3,
+            r: 0.1,
+          }),
+          tone({
+            freq: 294,
+            dur: 0.22,
+            type: "sine",
+            gain: 0.14,
+            a: 0.025,
+            d: 0.08,
+            s: 0.25,
+            r: 0.1,
+          }),
+        ),
+      );
+    case "resume":
+      // computer-b — open chord bloom
+      return padEnd(
+        mix(
+          tone({
+            freq: 392,
+            dur: 0.22,
+            type: "sine",
+            gain: 0.18,
+            a: 0.02,
+            d: 0.08,
+            s: 0.25,
+            r: 0.1,
+            slideTo: 523,
+          }),
+          tone({
+            freq: 587,
+            dur: 0.22,
+            type: "sine",
+            gain: 0.14,
+            a: 0.025,
+            d: 0.08,
+            s: 0.2,
+            r: 0.1,
+            slideTo: 784,
+          }),
+        ),
+      );
+    case "ai-pick-locked":
+      // computer-a — soft distant tick
+      return padEnd(
+        tone({
+          freq: 1100,
+          dur: 0.035,
+          type: "triangle",
+          gain: 0.1,
+          a: 0.001,
+          d: 0.015,
+          s: 0.05,
+          r: 0.02,
+        }),
+      );
     case "pick-locked":
       // source-a — mechanical confirm tick
       return padEnd(
