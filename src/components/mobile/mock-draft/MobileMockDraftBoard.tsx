@@ -187,7 +187,8 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                     key={`${round}-${team}`}
                     ref={isClock ? clockRef : undefined}
                     className={cn(
-                      "relative mb-[3px] flex h-[62px] flex-col gap-0.5 overflow-hidden rounded-md px-1 pt-1 pb-3.5",
+                      // Sleeper-density tile: shorter cell, slightly larger meta line.
+                      "relative mb-[3px] flex h-[52px] flex-col gap-px overflow-hidden rounded-md px-1 pt-0.5 pb-2.5",
                       player
                         ? posCellClass(player.pos)
                         : isClock
@@ -205,12 +206,12 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                   >
                     {player ? (
                       <>
-                        <div className="flex shrink-0 items-start justify-between gap-0.5">
-                          <span className="truncate text-[7px] font-bold uppercase leading-none opacity-75">
+                        <div className="flex shrink-0 items-start gap-1">
+                          <span className="min-w-0 flex-1 truncate text-[8px] font-bold uppercase leading-none opacity-75">
                             {player.pos === "DEF" ? "DST" : player.pos} · {player.team}
                             {player.bye ? ` (${player.bye})` : ""}
                           </span>
-                          <span className="tabnum shrink-0 text-[7px] font-semibold leading-none opacity-65">
+                          <span className="tabnum shrink-0 text-[8px] font-semibold leading-none opacity-65">
                             {pickLabel}
                           </span>
                         </div>
@@ -228,25 +229,25 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                           </div>
                         )}
                         <span
-                          className="absolute bottom-0.5 right-1 text-[8px] opacity-45"
+                          className="absolute bottom-0.5 right-1 text-[7px] opacity-45"
                           aria-hidden
                         >
                           {flowArrow}
                         </span>
                       </>
                     ) : isClock ? (
-                      <div className="flex h-full flex-col items-center justify-center gap-0.5 text-m-accent">
-                        <Timer className="size-3" strokeWidth={2.5} />
-                        <span className="font-display text-[9px] font-extrabold uppercase tracking-wider">
+                      <div className="flex h-full flex-col items-center justify-center gap-px text-m-accent">
+                        <Timer className="size-2.5" strokeWidth={2.5} />
+                        <span className="font-display text-[8px] font-extrabold uppercase tracking-wider">
                           On the clock
                         </span>
-                        <span className="tabnum text-[9px] text-m-muted">{pickLabel}</span>
+                        <span className="tabnum text-[8px] text-m-muted">{pickLabel}</span>
                       </div>
                     ) : (
                       <>
-                        <span className="tabnum self-end text-[9px]">{pickLabel}</span>
+                        <span className="tabnum self-end text-[8px]">{pickLabel}</span>
                         <span
-                          className="absolute bottom-0.5 right-1 text-[8px] opacity-40"
+                          className="absolute bottom-0.5 right-1 text-[7px] opacity-40"
                           aria-hidden
                         >
                           {flowArrow}
@@ -275,12 +276,12 @@ function splitPlayerName(name: string): { first: string; last: string } {
 function StackedPlayerName({ name }: { name: string }) {
   const { first, last } = splitPlayerName(name);
   return (
-    <span className="flex min-w-0 flex-col pr-2.5">
-      <span className="truncate text-[12px] font-extrabold leading-[1.05] tracking-tight">
+    <span className="flex min-w-0 flex-col pr-2">
+      <span className="truncate text-[11px] font-extrabold leading-[1.05] tracking-tight">
         {first}
       </span>
       {last ? (
-        <span className="truncate text-[12px] font-extrabold leading-[1.05] tracking-tight">
+        <span className="truncate text-[11px] font-extrabold leading-[1.05] tracking-tight">
           {last}
         </span>
       ) : null}
