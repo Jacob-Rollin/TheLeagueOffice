@@ -4,6 +4,7 @@ import { Crosshair, Settings, Timer, X } from "lucide-react";
 
 import { MockRecap } from "@/components/draft/MockRecap";
 import { useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
+import { MobileSettingsOverlay } from "@/components/mobile/MobileSettings";
 import { formatClock, useMockDraftSession } from "@/hooks/useMockDraftSession";
 import { SCORING_LABEL } from "@/lib/draft";
 import {
@@ -41,6 +42,7 @@ export function MobileMockDraftArena() {
   const [slotClaimed, setSlotClaimed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [appSettingsOpen, setAppSettingsOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<MockConfig>(DEFAULT_MOCK_CONFIG);
   const [showRecap, setShowRecap] = useState(false);
   const [soundsMuted, setSoundsMuted] = useState(() => isMockDraftSoundsMuted());
@@ -167,9 +169,20 @@ export function MobileMockDraftArena() {
     setSettingsOpen(true);
   };
 
+  const openAppSettings = () => {
+    unlockMockDraftAudio();
+    setMenuOpen(false);
+    setAppSettingsOpen(true);
+  };
+
   const closeSettings = () => {
     unlockMockDraftAudio();
     setSettingsOpen(false);
+  };
+
+  const closeAppSettings = () => {
+    unlockMockDraftAudio();
+    setAppSettingsOpen(false);
   };
 
   const toggleSounds = () => {
@@ -526,12 +539,17 @@ export function MobileMockDraftArena() {
           setShowRecap(true);
         }}
         onOpenSettings={openSettings}
+        onOpenAppSettings={openAppSettings}
         onToggleSounds={toggleSounds}
         onDeleteDraft={() => {
           setMenuOpen(false);
           confirmLeave("Delete this mock draft and return home?", leaveToHome);
         }}
       />
+
+      {appSettingsOpen ? (
+        <MobileSettingsOverlay className="z-[90]" onClose={closeAppSettings} />
+      ) : null}
 
       {settingsOpen ? (
         <div className="fixed inset-0 z-[80] mx-auto flex max-w-md flex-col bg-m-bg">
