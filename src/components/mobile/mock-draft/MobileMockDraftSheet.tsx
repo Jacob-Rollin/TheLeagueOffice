@@ -1362,10 +1362,10 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
       {/*
         Compact band always keeps its layout slot (no -mb collapse / no
         scrolled-X padding toggle) so fade-in is opacity-only — no row jump.
-        mb-1.5 clears ADP/PTS labels below. Hairline paints on the band edge.
+        mb-px + pt-0.5 ≈ Sleeper’s tight gap above ADP/PTS labels.
       */}
       <div
-        className="pointer-events-none sticky left-0 z-20 mb-1.5 h-4 overflow-hidden bg-m-sheet px-2 relative [.is-scrolled-x_&]:pointer-events-auto"
+        className="pointer-events-none relative sticky left-0 z-20 mb-px h-4 overflow-hidden bg-m-sheet px-2 [.is-scrolled-x_&]:pointer-events-auto"
         style={{
           width: "var(--m-draft-scrollport-w, 100%)",
           opacity: "var(--m-draft-compact-opacity, 0)",
@@ -1375,7 +1375,7 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
           type="button"
           tabIndex={-1}
           onClick={() => onOpenPlayer(player.id)}
-          className="flex h-full max-w-full items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
+          className="flex h-full max-w-full items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase leading-none tracking-wide text-m-muted"
         >
           <span className="truncate text-m-card-fg">{short}</span>
           <span
@@ -1402,7 +1402,7 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
         />
       </div>
 
-      <div className="flex items-stretch gap-1.5 py-2">
+      <div className="flex items-stretch gap-1.5 pt-0.5 pb-2">
         {!complete ? (
           <button
             type="button"
