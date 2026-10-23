@@ -93,8 +93,8 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
     return () => window.cancelAnimationFrame(id);
   }, [currentOverall, jumpSignal]);
 
-  // No non-passive touchmove/preventDefault here — that kills iOS flick momentum.
-  // Pinned teams row + CSS overscroll-none is enough to stop pull-past-top.
+  // No non-passive touchmove/preventDefault — that kills iOS flick momentum.
+  // Teams row is pinned in Y; board body may rubber-band left / right / down.
 
   // Sleeper-sized cells — denser than the old 112×72 tiles.
   const colW = 96;
@@ -111,7 +111,7 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
       */}
       <div
         ref={headerScrollRef}
-        className="shrink-0 overflow-x-auto overflow-y-hidden overscroll-x-contain border-b border-m-border bg-m-bg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
+        className="shrink-0 overflow-x-auto overflow-y-hidden overscroll-x-auto border-b border-m-border bg-m-bg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
         onScroll={(e) => syncScrollLeft(e.currentTarget, bodyScrollRef.current)}
       >
         <div
@@ -171,7 +171,7 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
 
       <div
         ref={bodyScrollRef}
-        className="min-h-0 flex-1 overflow-auto overscroll-y-none overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
+        className="min-h-0 flex-1 overflow-auto overscroll-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
         onScroll={(e) => syncScrollLeft(e.currentTarget, headerScrollRef.current)}
       >
         <div
