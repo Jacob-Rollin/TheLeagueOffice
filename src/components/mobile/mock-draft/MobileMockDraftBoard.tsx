@@ -13,6 +13,9 @@ import { cn } from "@/lib/utils";
 
 import { posCellClass } from "./posCellStyles";
 
+/** Horizontal inset on both the teams track and the pick grid (px-1.5). */
+const PAD_X = 6;
+
 export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   settings,
   picks,
@@ -41,31 +44,48 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
 }) {
   const pickByOverall = new Map(picks.map((p) => [p.overall, p]));
   const clockRef = useRef<HTMLDivElement | null>(null);
-  const headerScrollRef = useRef<HTMLDivElement | null>(null);
+  const headerClipRef = useRef<HTMLDivElement | null>(null);
+  const headerTrackRef = useRef<HTMLDivElement | null>(null);
   const bodyScrollRef = useRef<HTMLDivElement | null>(null);
-  const syncingScrollRef = useRef(false);
-  const syncRafRef = useRef(0);
 
-  // Keep teams row X in lockstep with the rounds board (teams stay pinned in Y).
-  // rAF-coalesce so flick momentum on the body isn't fighting sync every event.
-  const syncScrollLeft = (source: HTMLElement, target: HTMLElement | null) => {
-    if (!target || syncingScrollRef.current) return;
-    const left = source.scrollLeft;
-    if (target.scrollLeft === left) return;
-    if (syncRafRef.current) cancelAnimationFrame(syncRafRef.current);
-    syncRafRef.current = requestAnimationFrame(() => {
-      syncRafRef.current = 0;
-      if (!target || syncingScrollRef.current) return;
-      if (target.scrollLeft === left) return;
-      syncingScrollRef.current = true;
-      target.scrollLeft = left;
-      syncingScrollRef.current = false;
-    });
+  // Teams row is not a second scrollport — it mirrors body.scrollLeft via
+  // translate3d so columns cannot drift during flick / rubber-band.
+  const mirrorHeaderX = (left: number) => {
+    const track = headerTrackRef.current;
+    if (track) track.style.transform = `translate3d(${-left}px,0,0)`;
   };
 
+  // Swipes on the pinned teams row still pan the board horizontally.
   useEffect(() => {
+    const clip = headerClipRef.current;
+    const body = bodyScrollRef.current;
+    if (!clip || !body) return;
+
+    let startX = 0;
+    let startLeft = 0;
+    let panning = false;
+
+    const onStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      startX = t.clientX;
+      startLeft = body.scrollLeft;
+      panning = false;
+    };
+    const onMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      const dx = t.clientX - startX;
+      if (!panning && Math.abs(dx) < 8) return;
+      panning = true;
+      body.scrollLeft = startLeft - dx;
+    };
+
+    clip.addEventListener("touchstart", onStart, { passive: true });
+    clip.addEventListener("touchmove", onMove, { passive: true });
     return () => {
-      if (syncRafRef.current) cancelAnimationFrame(syncRafRef.current);
+      clip.removeEventListener("touchstart", onStart);
+      clip.removeEventListener("touchmove", onMove);
     };
   }, []);
 
@@ -87,36 +107,41 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
         left: Math.max(0, nextLeft),
         behavior: "smooth",
       });
-      // Header X follows via the body's onScroll sync.
     };
     const id = window.requestAnimationFrame(run);
     return () => window.cancelAnimationFrame(id);
   }, [currentOverall, jumpSignal]);
 
-  // No non-passive touchmove/preventDefault — that kills iOS flick momentum.
-  // Teams row is pinned in Y; board body may rubber-band left / right / down.
-
   // Sleeper-sized cells — denser than the old 112×72 tiles.
   const colW = 96;
   const gapPx = 3;
-  const gridMinWidth = settings.teams * (colW + gapPx);
+  // Exact track width (N cols + N-1 gaps) — shared by teams row + pick grid.
+  const trackWidth =
+    settings.teams * colW + Math.max(0, settings.teams - 1) * gapPx;
+  const contentWidth = trackWidth + PAD_X * 2;
   /** Highlight the user's column once their slot is known (lobby claim or live). */
   const mineColActive = !lobby || slotClaimed;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-m-bg">
       {/*
-        Teams row is pinned like the arena chrome (never rubber-bands vertically).
-        Horizontal scroll stays synced with the rounds board below.
+        Teams row is pinned in Y (outside the board scroller). X position is a
+        translate mirror of the board — one source of truth, no dual-scroll drift.
       */}
       <div
-        ref={headerScrollRef}
-        className="shrink-0 overflow-x-auto overflow-y-hidden overscroll-x-auto border-b border-m-border bg-m-bg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
-        onScroll={(e) => syncScrollLeft(e.currentTarget, bodyScrollRef.current)}
+        ref={headerClipRef}
+        className="shrink-0 overflow-hidden border-b border-m-border bg-m-bg"
       >
         <div
-          className="inline-flex px-1.5 pt-1.5 pb-1"
-          style={{ gap: gapPx, minWidth: gridMinWidth }}
+          ref={headerTrackRef}
+          className="flex will-change-transform pt-1.5 pb-1"
+          style={{
+            width: contentWidth,
+            paddingLeft: PAD_X,
+            paddingRight: PAD_X,
+            gap: gapPx,
+            boxSizing: "border-box",
+          }}
         >
           {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => {
             const isMine = mineColActive && t === settings.myTeam;
@@ -172,15 +197,18 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
       <div
         ref={bodyScrollRef}
         className="min-h-0 flex-1 overflow-auto overscroll-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
-        onScroll={(e) => syncScrollLeft(e.currentTarget, headerScrollRef.current)}
+        onScroll={(e) => mirrorHeaderX(e.currentTarget.scrollLeft)}
       >
         <div
-          className="inline-grid px-1.5 pb-3 pt-1"
+          className="grid pb-3 pt-1"
           style={{
+            width: contentWidth,
+            paddingLeft: PAD_X,
+            paddingRight: PAD_X,
+            boxSizing: "border-box",
             columnGap: gapPx,
             rowGap: 0,
             gridTemplateColumns: `repeat(${settings.teams}, ${colW}px)`,
-            minWidth: gridMinWidth,
           }}
         >
           {Array.from({ length: settings.rounds }, (_, r) => r + 1).map((round) => {
