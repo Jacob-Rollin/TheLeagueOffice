@@ -524,7 +524,9 @@ export function MobileMockDraftSheet({
   return (
     <div
       ref={sheetRef}
-      className="flex shrink-0 flex-col overflow-hidden rounded-t-2xl border-t border-m-border bg-m-sheet shadow-[0_-8px_24px_rgba(0,0,0,0.28)] transition-[height] duration-300 ease-out"
+      // Absolute bottom overlay — height % is of the arena, not shared with the
+      // header in a flex column (that clipped the queue action bar at 97%).
+      className="absolute inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-2xl border-t border-m-border bg-m-sheet shadow-[0_-8px_24px_rgba(0,0,0,0.28)] transition-[height] duration-300 ease-out"
       style={{
         height: `${heightPct}%`,
         transitionProperty: dragPct == null ? "height" : "none",
@@ -1256,7 +1258,7 @@ const QueuePane = memo(function QueuePane({
       )}
       {selectedId && selectedIndex >= 0 ? (
         <div
-          className="flex items-center gap-4 border-t border-m-border bg-m-sheet px-4 pt-3"
+          className="relative z-10 flex shrink-0 items-center gap-4 border-t border-m-border bg-m-sheet px-4 pt-3"
           style={{ paddingBottom: "max(0.85rem, env(safe-area-inset-bottom, 0px))" }}
         >
           <button
