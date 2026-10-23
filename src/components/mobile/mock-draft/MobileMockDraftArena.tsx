@@ -18,10 +18,11 @@ import {
 import { warmMockDraftClientCaches } from "@/lib/mock-draft-warm";
 import { cn } from "@/lib/utils";
 
-import { MobileMockDraftBoard } from "./MobileMockDraftBoard";
+import { MobileMockDraftBoard, pickLabelForOverall } from "./MobileMockDraftBoard";
 import { MobileMockDraftMenu } from "./MobileMockDraftMenu";
 import { MobileMockDraftSetupForm } from "./MobileMockDraftSetupForm";
 import { MobileMockDraftSheet } from "./MobileMockDraftSheet";
+import { posCellClass } from "./posCellStyles";
 
 export function MobileMockDraftArena() {
   const navigate = useNavigate();
@@ -238,6 +239,8 @@ export function MobileMockDraftArena() {
   }
 
   const inLobby = !live && !complete;
+  const lastPick = picks.length > 0 ? picks[picks.length - 1]! : null;
+  const lastPlayer = lastPick ? byId.get(lastPick.playerId) : undefined;
 
   return (
     <div className="fixed inset-0 z-40 mx-auto flex max-w-md flex-col overflow-hidden overscroll-none bg-m-bg text-m-card-fg">
@@ -245,26 +248,25 @@ export function MobileMockDraftArena() {
         className="shrink-0 border-b border-m-border px-2 pb-2.5"
         style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >
-        {/* Equal side rails keep Your Turn / clock on the true page center (Sleeper). */}
-        <div className="flex items-start gap-1">
-          <div className="flex w-[5.75rem] shrink-0 justify-start">
-            <button
-              type="button"
-              aria-label="Exit draft"
-              onClick={() =>
-                confirmLeave("Leave this mock draft?", () => {
-                  clearSession();
-                  void navigate({ to: "/m" });
-                })
-              }
-              className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
-            >
-              <X className="size-5" strokeWidth={2.5} />
-            </button>
-          </div>
-
-          <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5 pt-0.5">
-            {inLobby ? (
+        {inLobby ? (
+          /* Equal side rails keep Start centered in the lobby. */
+          <div className="flex items-start gap-1">
+            <div className="flex w-[5.75rem] shrink-0 justify-start">
+              <button
+                type="button"
+                aria-label="Exit draft"
+                onClick={() =>
+                  confirmLeave("Leave this mock draft?", () => {
+                    clearSession();
+                    void navigate({ to: "/m" });
+                  })
+                }
+                className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
+              >
+                <X className="size-5" strokeWidth={2.5} />
+              </button>
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col items-center gap-0.5 pt-0.5">
               <button
                 type="button"
                 onClick={startDraft}
@@ -278,41 +280,98 @@ export function MobileMockDraftArena() {
               >
                 Start Mock Draft
               </button>
-            ) : (
-              <>
-                {/* Sleeper: "Your Turn" only on your pick; AI turns show timer alone. */}
-                {complete || paused || myTurn ? (
-                  <span
-                    className={cn(
-                      "rounded-full px-4 py-1.5 font-display text-xs font-extrabold uppercase tracking-wider",
-                      complete || myTurn
-                        ? "bg-m-accent text-m-accent-fg"
-                        : "bg-m-chip text-m-chip-fg",
-                    )}
-                  >
-                    {complete ? "Draft Complete!" : paused ? "Paused" : "Your Turn"}
-                  </span>
-                ) : null}
-                {!complete ? (
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1.5 font-display text-base font-extrabold tabular-nums tracking-wide",
-                      clock !== null && clock <= 10 && !paused
-                        ? "text-red-500"
-                        : "text-m-card-fg",
-                      !myTurn && !paused && "pt-1",
-                    )}
-                  >
-                    <Timer className="size-4" strokeWidth={2.75} />
-                    {formatClock(clock)}
-                  </span>
-                ) : null}
-              </>
-            )}
+            </div>
+            <div className="flex w-[5.75rem] shrink-0 items-center justify-end gap-1">
+              <button
+                type="button"
+                aria-label="Draft settings"
+                onClick={openSettings}
+                className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
+              >
+                <Settings className="size-5" strokeWidth={2.5} />
+              </button>
+            </div>
           </div>
+        ) : (
+          /*
+            Live: last-pick chip sits in the gap between Exit and the clock so
+            the sheet can cover the board without hiding who just went.
+          */
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              aria-label="Exit draft"
+              onClick={() =>
+                confirmLeave("Leave this mock draft?", () => {
+                  clearSession();
+                  void navigate({ to: "/m" });
+                })
+              }
+              className="shrink-0 rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
+            >
+              <X className="size-5" strokeWidth={2.5} />
+            </button>
 
-          <div className="flex w-[5.75rem] shrink-0 items-center justify-end gap-1">
-            {!inLobby ? (
+            <div className="min-w-0 flex-1">
+              {lastPick && lastPlayer ? (
+                <button
+                  type="button"
+                  onClick={() => openPlayer(lastPlayer.id)}
+                  aria-label={`Last pick ${lastPlayer.name}`}
+                  className={cn(
+                    "flex w-full max-w-[9.25rem] flex-col rounded-md px-1.5 py-1 text-left",
+                    posCellClass(lastPlayer.pos),
+                  )}
+                >
+                  <div className="flex items-center gap-1">
+                    <span className="min-w-0 flex-1 truncate text-[8px] font-bold uppercase leading-none opacity-80">
+                      {lastPlayer.pos === "DEF" ? "DST" : lastPlayer.pos} ·{" "}
+                      {lastPlayer.team}
+                    </span>
+                    <span className="tabnum shrink-0 text-[8px] font-semibold leading-none opacity-70">
+                      {pickLabelForOverall(lastPick.overall, settings.teams)}
+                    </span>
+                  </div>
+                  <span className="mt-0.5 truncate text-[10px] font-extrabold leading-tight tracking-tight">
+                    {shortHeaderName(lastPlayer.name)}
+                  </span>
+                </button>
+              ) : (
+                <span className="block truncate px-1 text-[10px] font-semibold uppercase tracking-wide text-m-muted">
+                  Waiting for first pick
+                </span>
+              )}
+            </div>
+
+            <div className="flex shrink-0 flex-col items-center gap-0.5 px-0.5">
+              {complete || paused || myTurn ? (
+                <span
+                  className={cn(
+                    "rounded-full px-3 py-1 font-display text-[11px] font-extrabold uppercase tracking-wider",
+                    complete || myTurn
+                      ? "bg-m-accent text-m-accent-fg"
+                      : "bg-m-chip text-m-chip-fg",
+                  )}
+                >
+                  {complete ? "Done" : paused ? "Paused" : "Your Turn"}
+                </span>
+              ) : null}
+              {!complete ? (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 font-display text-base font-extrabold tabular-nums tracking-wide",
+                    clock !== null && clock <= 10 && !paused
+                      ? "text-red-500"
+                      : "text-m-card-fg",
+                  )}
+                >
+                  <Timer className="size-4" strokeWidth={2.75} />
+                  {formatClock(clock)}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 items-center justify-end gap-1">
               <button
                 type="button"
                 aria-label="Jump to current pick"
@@ -321,17 +380,17 @@ export function MobileMockDraftArena() {
               >
                 <Crosshair className="size-5" strokeWidth={2.5} />
               </button>
-            ) : null}
-            <button
-              type="button"
-              aria-label={inLobby ? "Draft settings" : "Draft menu"}
-              onClick={() => (inLobby ? openSettings() : setMenuOpen(true))}
-              className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
-            >
-              <Settings className="size-5" strokeWidth={2.5} />
-            </button>
+              <button
+                type="button"
+                aria-label="Draft menu"
+                onClick={() => setMenuOpen(true)}
+                className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
+              >
+                <Settings className="size-5" strokeWidth={2.5} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {!inLobby && complete ? (
           <div className="mt-2 flex flex-col items-center gap-2">
@@ -456,4 +515,12 @@ export function MobileMockDraftArena() {
       ) : null}
     </div>
   );
+}
+
+/** Compact header name: "Ja'Marr Chase" → "J. Chase". */
+function shortHeaderName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return name;
+  const first = parts[0]!;
+  return `${first[0]}. ${parts.slice(1).join(" ")}`;
 }
