@@ -276,11 +276,13 @@ export function MobileMockDraftArena() {
                   onClick={() => openPlayer(lastPlayer.id)}
                   aria-label={`Last pick ${lastPlayer.name}`}
                   className={cn(
-                    "min-w-0 w-full max-w-[7.75rem] rounded-md px-1.5 py-1.5 text-left",
+                    // Width follows the "Last Pick" label only; name lines
+                    // use w-0/min-w-full so they ellipsis inside that box.
+                    "flex w-fit max-w-full flex-col rounded-md px-1.5 py-1.5 text-left",
                     posCellClass(lastPlayer.pos),
                   )}
                 >
-                  <span className="flex items-center gap-1">
+                  <span className="flex shrink-0 items-center gap-1 whitespace-nowrap">
                     <span
                       className={cn(
                         "size-1.5 shrink-0 rounded-full",
@@ -288,15 +290,15 @@ export function MobileMockDraftArena() {
                       )}
                       aria-hidden
                     />
-                    <span className="truncate text-[8px] font-bold uppercase leading-none tracking-wide opacity-80">
+                    <span className="text-[8px] font-bold uppercase leading-none tracking-wide opacity-80">
                       Last Pick
                     </span>
                   </span>
-                  <span className="mt-0.5 block truncate text-[11px] font-extrabold leading-[1.1] tracking-tight">
+                  <span className="mt-0.5 block w-0 min-w-full truncate text-[11px] font-extrabold leading-[1.1] tracking-tight">
                     {lastNameParts.first}
                   </span>
                   {lastNameParts.last ? (
-                    <span className="block truncate text-[11px] font-extrabold leading-[1.1] tracking-tight">
+                    <span className="block w-0 min-w-full truncate text-[11px] font-extrabold leading-[1.1] tracking-tight">
                       {lastNameParts.last}
                     </span>
                   ) : null}
