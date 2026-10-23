@@ -281,14 +281,14 @@ export function MobileMockDraftArena() {
                 {!complete ? (
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1 font-display text-sm tabular-nums",
+                      "inline-flex items-center gap-1.5 font-display text-base font-extrabold tabular-nums tracking-wide",
                       clock !== null && clock <= 10 && !paused
                         ? "text-red-500"
                         : "text-m-card-fg",
                       !myTurn && !paused && "pt-1",
                     )}
                   >
-                    <Timer className="size-3.5" strokeWidth={2.5} />
+                    <Timer className="size-4" strokeWidth={2.75} />
                     {formatClock(clock)}
                   </span>
                 ) : null}

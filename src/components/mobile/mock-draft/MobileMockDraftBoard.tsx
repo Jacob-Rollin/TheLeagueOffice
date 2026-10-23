@@ -46,17 +46,20 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
     clockRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [currentOverall, jumpSignal]);
 
-  const colW = 112;
+  // Sleeper-sized cells — denser than the old 112×72 tiles.
+  const colW = 96;
+  const gapPx = 3;
   /** Highlight the user's column once their slot is known (lobby claim or live). */
   const mineColActive = !lobby || slotClaimed;
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
       <div
-        className="inline-grid gap-1 p-2 pb-4"
+        className="inline-grid p-1.5 pb-3"
         style={{
+          gap: gapPx,
           gridTemplateColumns: `repeat(${settings.teams}, ${colW}px)`,
-          minWidth: settings.teams * (colW + 4),
+          minWidth: settings.teams * (colW + gapPx),
         }}
       >
         {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => {
@@ -131,7 +134,7 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                 key={`${round}-${team}`}
                 ref={isClock ? clockRef : undefined}
                 className={cn(
-                  "relative flex h-[72px] flex-col justify-between overflow-hidden rounded-lg px-1.5 py-1.5",
+                  "relative flex h-[54px] flex-col justify-between overflow-hidden rounded-md px-1 py-1",
                   player
                     ? posCellClass(player.pos)
                     : isClock
@@ -146,12 +149,12 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
               >
                 {player ? (
                   <>
-                    <div className="flex items-start justify-between gap-1">
-                      <span className="truncate text-[9px] font-bold uppercase opacity-80">
+                    <div className="flex items-start justify-between gap-0.5">
+                      <span className="truncate text-[8px] font-bold uppercase leading-tight opacity-80">
                         {player.pos === "DEF" ? "DST" : player.pos} · {player.team}
                         {player.bye ? ` (${player.bye})` : ""}
                       </span>
-                      <span className="tabnum shrink-0 text-[9px] font-semibold opacity-70">
+                      <span className="tabnum shrink-0 text-[8px] font-semibold opacity-70">
                         {pickLabel}
                       </span>
                     </div>
@@ -159,34 +162,34 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                       <button
                         type="button"
                         onClick={() => onOpenPlayer(player.id)}
-                        className="line-clamp-2 text-left text-[12px] font-bold leading-tight"
+                        className="truncate text-left text-[11px] font-bold leading-tight"
                       >
                         {shortName(player.name)}
                       </button>
                     ) : (
-                      <span className="line-clamp-2 text-[12px] font-bold leading-tight">
+                      <span className="truncate text-[11px] font-bold leading-tight">
                         {shortName(player.name)}
                       </span>
                     )}
                     <span
-                      className="absolute bottom-1 right-1.5 text-[10px] opacity-50"
+                      className="absolute bottom-0.5 right-1 text-[9px] opacity-50"
                       aria-hidden
                     >
                       {flowArrow}
                     </span>
                   </>
                 ) : isClock ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-1 text-m-accent">
-                    <Timer className="size-3.5" strokeWidth={2.5} />
-                    <span className="font-display text-[10px] font-bold uppercase tracking-wider">
+                  <div className="flex h-full flex-col items-center justify-center gap-0.5 text-m-accent">
+                    <Timer className="size-3" strokeWidth={2.5} />
+                    <span className="font-display text-[9px] font-bold uppercase tracking-wider">
                       On the clock
                     </span>
-                    <span className="tabnum text-[10px] text-m-muted">{pickLabel}</span>
+                    <span className="tabnum text-[9px] text-m-muted">{pickLabel}</span>
                   </div>
                 ) : (
                   <>
-                    <span className="tabnum self-end text-[10px]">{pickLabel}</span>
-                    <span className="absolute bottom-1 right-1.5 text-[10px] opacity-40" aria-hidden>
+                    <span className="tabnum self-end text-[9px]">{pickLabel}</span>
+                    <span className="absolute bottom-0.5 right-1 text-[9px] opacity-40" aria-hidden>
                       {flowArrow}
                     </span>
                   </>
