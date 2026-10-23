@@ -22,6 +22,7 @@ import { MobileMockDraftBoard } from "./MobileMockDraftBoard";
 import { MobileMockDraftMenu } from "./MobileMockDraftMenu";
 import { MobileMockDraftSetupForm } from "./MobileMockDraftSetupForm";
 import { MobileMockDraftSheet } from "./MobileMockDraftSheet";
+import { POS_DOT, posCellClass } from "./posCellStyles";
 
 export function MobileMockDraftArena() {
   const navigate = useNavigate();
@@ -240,6 +241,7 @@ export function MobileMockDraftArena() {
   const inLobby = !live && !complete;
   const lastPick = picks.length > 0 ? picks[picks.length - 1]! : null;
   const lastPlayer = lastPick ? byId.get(lastPick.playerId) : undefined;
+  const lastNameParts = lastPlayer ? splitHeaderName(lastPlayer.name) : null;
 
   return (
     <div className="fixed inset-0 z-40 mx-auto flex max-w-md flex-col overflow-hidden overscroll-none bg-m-bg text-m-card-fg">
@@ -252,7 +254,7 @@ export function MobileMockDraftArena() {
           Last-pick chip lives only in the left rail (between Exit and center).
         */}
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1">
-          <div className="flex min-w-0 items-center gap-1.5 justify-self-start">
+          <div className="flex w-full min-w-0 items-center gap-1 justify-self-stretch">
             <button
               type="button"
               aria-label="Exit draft"
@@ -266,21 +268,41 @@ export function MobileMockDraftArena() {
             >
               <X className="size-5" strokeWidth={2.5} />
             </button>
-            {!inLobby && lastPick && lastPlayer ? (
-              <button
-                type="button"
-                onClick={() => openPlayer(lastPlayer.id)}
-                aria-label={`Last pick ${lastPlayer.name}`}
-                className="min-w-0 max-w-[6.75rem] rounded-md border border-m-border bg-m-card px-1.5 py-1 text-left text-m-card-fg"
-              >
-                <span className="block text-[8px] font-bold uppercase leading-none tracking-wide text-m-muted">
-                  Last Pick
-                </span>
-                <span className="mt-0.5 block truncate text-[10px] font-extrabold leading-tight tracking-tight">
-                  {shortHeaderName(lastPlayer.name)}
-                </span>
-              </button>
-            ) : null}
+            {/* Center the chip in the remaining gap between Exit and the clock. */}
+            <div className="flex min-w-0 flex-1 justify-center px-0.5">
+              {!inLobby && lastPick && lastPlayer && lastNameParts ? (
+                <button
+                  type="button"
+                  onClick={() => openPlayer(lastPlayer.id)}
+                  aria-label={`Last pick ${lastPlayer.name}`}
+                  className={cn(
+                    "min-w-0 w-full max-w-[7.75rem] rounded-md px-1.5 py-1.5 text-left",
+                    posCellClass(lastPlayer.pos),
+                  )}
+                >
+                  <span className="flex items-center gap-1">
+                    <span
+                      className={cn(
+                        "size-1.5 shrink-0 rounded-full",
+                        POS_DOT[lastPlayer.pos] ?? "bg-m-muted",
+                      )}
+                      aria-hidden
+                    />
+                    <span className="truncate text-[8px] font-bold uppercase leading-none tracking-wide opacity-80">
+                      Last Pick
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] font-extrabold leading-[1.1] tracking-tight">
+                    {lastNameParts.first}
+                  </span>
+                  {lastNameParts.last ? (
+                    <span className="block truncate text-[11px] font-extrabold leading-[1.1] tracking-tight">
+                      {lastNameParts.last}
+                    </span>
+                  ) : null}
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <div className="flex min-w-0 flex-col items-center gap-0.5 px-1">
@@ -476,10 +498,10 @@ export function MobileMockDraftArena() {
   );
 }
 
-/** Compact header name: "Ja'Marr Chase" → "J. Chase". */
-function shortHeaderName(name: string): string {
+/** Split display name for the last-pick stack (first / rest). */
+function splitHeaderName(name: string): { first: string; last: string } {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length < 2) return name;
-  const first = parts[0]!;
-  return `${first[0]}. ${parts.slice(1).join(" ")}`;
+  if (parts.length === 0) return { first: "", last: "" };
+  if (parts.length === 1) return { first: parts[0]!, last: "" };
+  return { first: parts[0]!, last: parts.slice(1).join(" ") };
 }
