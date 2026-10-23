@@ -1291,8 +1291,8 @@ const TeamPane = memo(function TeamPane({
 /**
  * Full row scrolls (Draft + name + star + stats). Sleeper puts a tiny label
  * above every stat value on each player row (ADP, PTS, and all pos cols) —
- * not a sticky column header. Compact-name overlays with negative margin;
- * hairline only under that band when scrolled X.
+ * not a sticky column header. Compact-name band always reserves its slot;
+ * scroll only fades opacity (no row-height jump).
  */
 const PlayerStatsRow = memo(function PlayerStatsRow({
   player,
