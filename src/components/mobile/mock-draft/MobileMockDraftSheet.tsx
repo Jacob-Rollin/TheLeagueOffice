@@ -107,9 +107,10 @@ const STAR_COL_CLASS = "w-8";
  * Sleeper draft rows: two-line identity + per-column label/value stats on every
  * row (ADP, PTS, and all pos stats). A little vertical padding between players
  * gives room for those per-row labels. Compact-name band overlays via negative
- * margin — no reserved empty gap when faded out.
+ * margin when faded out; when scrolled-X the row gains top padding so the band
+ * sits cleanly above the ADP/PTS labels instead of covering them.
  */
-const PLAYER_ROW_ESTIMATE_PX = 64;
+const PLAYER_ROW_ESTIMATE_PX = 72;
 
 /**
  * Nested vertical + horizontal scrollers with directional lock.
@@ -205,10 +206,11 @@ function measureNameColumnEndPx(scrollEl: HTMLElement): number {
 /**
  * Scroll-linked compact-name opacity. nameEnd is cached so scroll frames only
  * write a quantized CSS var (virtualized rows keep the fan-out tiny).
+ * Returns whether `is-scrolled-x` toggled (row height / pt changes — remeasure).
  */
-function updateCompactNameFade(scrollEl: HTMLElement, remeasure = false) {
+function updateCompactNameFade(scrollEl: HTMLElement, remeasure = false): boolean {
   // Hidden keep-alive panes report 0 width — skip so we don't clobber opacity.
-  if (scrollEl.clientWidth <= 0) return;
+  if (scrollEl.clientWidth <= 0) return false;
   const w = scrollEl.clientWidth;
   if (scrollEl.dataset["draftScrollportW"] !== String(w)) {
     scrollEl.dataset["draftScrollportW"] = String(w);
@@ -230,7 +232,9 @@ function updateCompactNameFade(scrollEl: HTMLElement, remeasure = false) {
   const on = q > 0.04;
   if (scrollEl.classList.contains("is-scrolled-x") !== on) {
     scrollEl.classList.toggle("is-scrolled-x", on);
+    return true;
   }
+  return false;
 }
 
 export function MobileMockDraftSheet({
@@ -838,7 +842,10 @@ function VirtualPlayersScroller({
     if (rafFadeRef.current) return;
     rafFadeRef.current = requestAnimationFrame(() => {
       rafFadeRef.current = 0;
-      updateCompactNameFade(el, false);
+      // Scrolled-X toggles row pt (compact name clearance) — remeasure sizes.
+      if (updateCompactNameFade(el, false)) {
+        virtualizer.measure();
+      }
     });
   };
 
@@ -1340,8 +1347,9 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
   return (
     <div className="relative">
       {/*
-        Overlay compact band: -mb collapses layout height; opacity is
-        scroll-linked (no CSS transition).
+        Overlay compact band: -mb collapses layout height when faded out.
+        When scrolled-X, the main row’s extra pt clears this band so ADP/PTS
+        labels sit below the name (not under it). Opacity is scroll-linked.
       */}
       <div
         className="pointer-events-none sticky left-0 z-20 -mb-4 h-4 overflow-hidden bg-m-sheet px-2 invisible [.is-scrolled-x_&]:pointer-events-auto [.is-scrolled-x_&]:visible"
@@ -1385,7 +1393,11 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
         aria-hidden
       />
 
-      <div className="flex items-stretch gap-1.5 py-2">
+      {/*
+        pt-7 when scrolled-X ≈ compact h-4 + hairline + ~10px air so column
+        labels (ADP/PTS/…) clear the name band. Unscrolled keeps py-2 only.
+      */}
+      <div className="flex items-stretch gap-1.5 py-2 [.is-scrolled-x_&]:pt-7">
         {!complete ? (
           <button
             type="button"
