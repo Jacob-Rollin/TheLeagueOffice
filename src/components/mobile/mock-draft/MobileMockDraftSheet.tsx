@@ -760,7 +760,7 @@ const PlayersPane = memo(function PlayersPane({
             </button>
           );
         })}
-        <span className="mx-0.5 h-7 w-px shrink-0 bg-m-border" aria-hidden />
+        <span className="mx-0.5 h-12 w-px shrink-0 bg-m-border" aria-hidden />
         <ToolChip
           active={watchOnly}
           onClick={() => {
