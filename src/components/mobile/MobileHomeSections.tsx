@@ -13,6 +13,10 @@ import { MobileCard, MobileSectionTitle } from "./MobileShell";
 const ctaClass =
   "block w-full rounded-lg bg-m-cta px-4 py-3.5 text-center font-display text-lg font-extrabold italic uppercase tracking-wider text-m-cta-fg shadow-[0_3px_0_rgba(0,0,0,0.25)] transition-transform active:translate-y-px";
 
+/** Same blue filled style as the active league Standings tab. */
+const accentButtonClass =
+  "block w-full rounded-lg border border-m-tab-active-border bg-m-tab-active px-4 py-3 text-center font-display font-bold uppercase tracking-widest text-m-tab-active-fg shadow-[inset_0_-2px_0_var(--m-tab-active-border)] transition-transform active:translate-y-px";
+
 const PLATFORM_LABELS: Record<string, string> = {
   sleeper: "Sleeper",
   espn: "ESPN",
@@ -63,10 +67,7 @@ export function MobileMyLeagues({ leagues }: { leagues: ActiveLeagueToken[] }) {
         ))}
       </div>
       <div className="mx-4 mt-3">
-        <Link
-          to="/leaguesync"
-          className="block w-full rounded-lg bg-m-chip px-4 py-3 text-center font-display text-sm font-bold uppercase tracking-widest text-m-chip-fg"
-        >
+        <Link to="/leaguesync" className={`${accentButtonClass} text-sm`}>
           Sync Another League
         </Link>
       </div>
@@ -127,7 +128,7 @@ export function MobileMockDraftCard() {
         to="/m/mock-draft"
         onPointerEnter={() => prefetchMockDraftClientCaches()}
         onFocus={() => prefetchMockDraftClientCaches()}
-        className="mt-5 block w-full rounded-lg bg-m-chip px-4 py-3 text-center font-display text-base font-bold uppercase tracking-widest text-m-chip-fg"
+        className={`${accentButtonClass} mt-5 text-base`}
       >
         Mock Drafts
       </Link>
