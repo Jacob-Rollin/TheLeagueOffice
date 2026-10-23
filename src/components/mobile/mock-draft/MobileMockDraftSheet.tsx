@@ -604,6 +604,9 @@ export function MobileMockDraftSheet({
             nextUserOverall={nextUserOverall}
             prevYear={prevYear}
             projExtrasById={projExtrasById}
+            sheetSnap={snap}
+            paneActive={localTab === "players"}
+            onRequestExpand={() => setSnap("expanded")}
             onDraft={onDraft}
             onToggleQueue={onToggleQueue}
             onOpenPlayer={onOpenPlayer}
@@ -667,6 +670,9 @@ const PlayersPane = memo(function PlayersPane({
   nextUserOverall,
   prevYear,
   projExtrasById,
+  sheetSnap,
+  paneActive,
+  onRequestExpand,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -681,6 +687,9 @@ const PlayersPane = memo(function PlayersPane({
   nextUserOverall: number | null;
   prevYear: number;
   projExtrasById: Record<string, SeasonProjBoardExtras>;
+  sheetSnap: SheetSnap;
+  paneActive: boolean;
+  onRequestExpand: () => void;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -692,6 +701,34 @@ const PlayersPane = memo(function PlayersPane({
   const [draftedOnly, setDraftedOnly] = useState(false);
   const [showPrevYear, setShowPrevYear] = useState(false);
   const deferredQuery = useDeferredValue(query);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQuery("");
+    searchInputRef.current?.blur();
+  };
+
+  const openSearch = () => {
+    onRequestExpand();
+    setSearchOpen(true);
+  };
+
+  // Pulling the sheet down from full height dismisses search (Sleeper-style).
+  useEffect(() => {
+    if (searchOpen && sheetSnap !== "expanded") closeSearch();
+  }, [sheetSnap, searchOpen]);
+
+  // Leaving the Players tab dismisses search.
+  useEffect(() => {
+    if (!paneActive && searchOpen) closeSearch();
+  }, [paneActive, searchOpen]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const id = window.requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(id);
+  }, [searchOpen]);
 
   const filtered = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
@@ -717,86 +754,102 @@ const PlayersPane = memo(function PlayersPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 overflow-x-auto px-2 py-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <button
-          type="button"
-          aria-label="Search players"
-          onClick={() => setSearchOpen((o) => !o)}
-          className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
-        >
-          <Search className="size-5" strokeWidth={2.5} />
-        </button>
-        {POS_FILTERS.map((p) => {
-          const slots = posFilterSlotCount(p, myCounts, settings.roster);
-          // Hide FLEX when the league has no flex slot; other zero-slot pos
-          // chips stay (filter-only) without a count.
-          if (p === "FLEX" && slots == null) return null;
-          const showCount = slots != null;
-          const countLabel =
-            slots != null ? `${slots.drafted}/${slots.total}` : "";
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => startTransition(() => setPos(p))}
-              className={cn(
-                "inline-flex size-12 shrink-0 flex-col items-center justify-center rounded-full font-display leading-none",
-                pos === p ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
-              )}
-            >
-              <span className="text-[11px] font-extrabold uppercase tracking-wide">
-                {p === "DEF" ? "DST" : p}
-              </span>
-              {showCount ? (
-                <span
-                  className={cn(
-                    "mt-0.5 text-[9px] font-semibold tabular-nums",
-                    pos === p ? "text-m-bg/75" : "text-m-muted",
-                  )}
-                >
-                  {countLabel}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-        <span className="mx-0.5 h-12 w-px shrink-0 bg-m-border" aria-hidden />
-        <ToolChip
-          active={watchOnly}
-          onClick={() => {
-            setWatchOnly((v) => !v);
-            if (!watchOnly) setDraftedOnly(false);
-          }}
-        >
-          <Star className={cn("size-3.5", watchOnly && "fill-current")} strokeWidth={2.5} />
-          Watchlist
-        </ToolChip>
-        <ToolChip
-          active={draftedOnly}
-          onClick={() => {
-            setDraftedOnly((v) => !v);
-            if (!draftedOnly) setWatchOnly(false);
-          }}
-        >
-          Drafted
-        </ToolChip>
-        <ToolChip active={showPrevYear} onClick={() => setShowPrevYear((v) => !v)}>
-          <ChartLine className="size-3.5" strokeWidth={2.5} />
-          {prevShort} Stats
-        </ToolChip>
-      </div>
-
       {searchOpen ? (
-        <div className="px-3 pb-2">
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search players"
-            className="w-full rounded-lg border border-m-border bg-m-card px-3 py-2 text-sm text-m-card-fg outline-none placeholder:text-m-muted"
-          />
+        <div className="flex items-center gap-2 px-3 py-2.5">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-m-muted"
+              strokeWidth={2.5}
+              aria-hidden
+            />
+            <input
+              ref={searchInputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search players"
+              enterKeyHint="search"
+              // text-base (16px) — iOS won't zoom the page on focus.
+              className="h-12 w-full rounded-xl border border-m-border bg-m-card py-2 pl-10 pr-3 text-base text-m-card-fg outline-none placeholder:text-m-muted"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={closeSearch}
+            className="shrink-0 px-1 font-display text-sm font-bold uppercase tracking-wide text-m-accent"
+          >
+            Cancel
+          </button>
         </div>
-      ) : null}
+      ) : (
+        <div className="flex items-center gap-2 overflow-x-auto px-2 py-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <button
+            type="button"
+            aria-label="Search players"
+            onClick={openSearch}
+            className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+          >
+            <Search className="size-5" strokeWidth={2.5} />
+          </button>
+          {POS_FILTERS.map((p) => {
+            const slots = posFilterSlotCount(p, myCounts, settings.roster);
+            // Hide FLEX when the league has no flex slot; other zero-slot pos
+            // chips stay (filter-only) without a count.
+            if (p === "FLEX" && slots == null) return null;
+            const showCount = slots != null;
+            const countLabel =
+              slots != null ? `${slots.drafted}/${slots.total}` : "";
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => startTransition(() => setPos(p))}
+                className={cn(
+                  "inline-flex size-12 shrink-0 flex-col items-center justify-center rounded-full font-display leading-none",
+                  pos === p ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
+                )}
+              >
+                <span className="text-[11px] font-extrabold uppercase tracking-wide">
+                  {p === "DEF" ? "DST" : p}
+                </span>
+                {showCount ? (
+                  <span
+                    className={cn(
+                      "mt-0.5 text-[9px] font-semibold tabular-nums",
+                      pos === p ? "text-m-bg/75" : "text-m-muted",
+                    )}
+                  >
+                    {countLabel}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+          <span className="mx-0.5 h-12 w-px shrink-0 bg-m-border" aria-hidden />
+          <ToolChip
+            active={watchOnly}
+            onClick={() => {
+              setWatchOnly((v) => !v);
+              if (!watchOnly) setDraftedOnly(false);
+            }}
+          >
+            <Star className={cn("size-3.5", watchOnly && "fill-current")} strokeWidth={2.5} />
+            Watchlist
+          </ToolChip>
+          <ToolChip
+            active={draftedOnly}
+            onClick={() => {
+              setDraftedOnly((v) => !v);
+              if (!draftedOnly) setWatchOnly(false);
+            }}
+          >
+            Drafted
+          </ToolChip>
+          <ToolChip active={showPrevYear} onClick={() => setShowPrevYear((v) => !v)}>
+            <ChartLine className="size-3.5" strokeWidth={2.5} />
+            {prevShort} Stats
+          </ToolChip>
+        </div>
+      )}
 
       <VirtualPlayersScroller
         filtered={filtered}
