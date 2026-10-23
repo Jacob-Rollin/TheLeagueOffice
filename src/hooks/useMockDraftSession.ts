@@ -27,20 +27,17 @@ import {
   loadMockSession,
   mockSessionMatchesConfig,
   saveMockSession,
+  draftAiSpeedDelayMs,
+  normalizeDraftAiSpeed,
   timerSecondsFor,
+  type DraftAiSpeed,
   type MockConfig,
   type MockSessionState,
 } from "@/lib/mock-config";
 import { loadPlayersCatalog } from "@/lib/players-catalog";
 
 export type MockDraftTab = "players" | "queue" | "team";
-export type MockDraftSpeed = "normal" | "fast" | "manual";
-
-const SPEED_DELAY: Record<MockDraftSpeed, number> = {
-  normal: 5000,
-  fast: 1000,
-  manual: 0,
-};
+export type MockDraftSpeed = DraftAiSpeed | "manual";
 
 const EMPTY_PAYLOAD = { season: "", updatedAt: 0, players: [] as Player[] };
 
@@ -208,7 +205,7 @@ export function useMockDraftSession({
     ) {
       return;
     }
-    const id = setTimeout(() => runRef.current(), SPEED_DELAY[speed]);
+    const id = setTimeout(() => runRef.current(), draftAiSpeedDelayMs(speed));
     return () => clearTimeout(id);
   }, [
     live,
@@ -315,7 +312,11 @@ export function useMockDraftSession({
       setPicks(session.picks);
       setWatch(session.watch ?? []);
       setCustomOrder(session.customOrder ?? []);
-      setSpeed(session.speed ?? "normal");
+      setSpeed(
+        session.speed === "manual"
+          ? "manual"
+          : normalizeDraftAiSpeed(session.speed ?? nextConfig.draftSpeed),
+      );
       setPaused(Boolean(session.paused));
       const restoredTab = session.tab === "board" ? "players" : (session.tab as MockDraftTab) || "players";
       setTab(restoredTab === "queue" || restoredTab === "team" ? restoredTab : "players");
@@ -325,7 +326,7 @@ export function useMockDraftSession({
       setWatch([]);
       setCustomOrder([]);
       setRosterTeam(slot);
-      setSpeed("normal");
+      setSpeed(normalizeDraftAiSpeed(nextConfig.draftSpeed));
       setPaused(false);
       setTab("players");
       clearMockSession();

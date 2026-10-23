@@ -1,10 +1,15 @@
 import { DEFAULT_ROSTER, DEFAULT_SETTINGS, type RosterSlots, type Scoring } from "@/lib/draft";
 
+/** AI opponent pick delay (not the user pick clock). */
+export type DraftAiSpeed = "fast" | "normal" | "slow";
+
 export type MockConfig = {
   teamName: string;
   teams: number;
   slot: number;
   timerLabel: string;
+  /** Delay before each AI pick. */
+  draftSpeed: DraftAiSpeed;
   scoring: Scoring;
   roster: RosterSlots;
   /** true = snake order, false = linear order. */
@@ -21,6 +26,17 @@ export const TIMER_CHOICES: { label: string; seconds: number | null }[] = [
   { label: "60 Seconds", seconds: 60 },
   { label: "90 Seconds", seconds: 90 },
   { label: "2 Minutes", seconds: 120 },
+];
+
+export const DRAFT_SPEED_CHOICES: {
+  key: DraftAiSpeed;
+  label: string;
+  /** Seconds between AI picks. */
+  seconds: number;
+}[] = [
+  { key: "fast", label: "Fast", seconds: 1 },
+  { key: "normal", label: "Normal", seconds: 5 },
+  { key: "slow", label: "Slow", seconds: 15 },
 ];
 
 export const PLAYOFF_WEEKS = [14, 15, 16, 17];
@@ -48,6 +64,7 @@ export const DEFAULT_MOCK_CONFIG: MockConfig = {
   teams: 12,
   slot: 1,
   timerLabel: "60 Seconds",
+  draftSpeed: "normal",
   scoring: DEFAULT_SETTINGS.scoring,
   roster: { ...DEFAULT_ROSTER },
   snake: true,
@@ -62,7 +79,7 @@ export type MockSessionState = {
   picks: { playerId: string; team: number; overall: number }[];
   watch: string[];
   customOrder: string[];
-  speed: "normal" | "fast" | "manual";
+  speed: DraftAiSpeed | "manual";
   paused: boolean;
   tab: "players" | "board" | "team" | "queue";
   rosterTeam: number;
@@ -79,9 +96,11 @@ export function loadMockConfig(): MockConfig | null {
     const raw = window.sessionStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<MockConfig>;
+    const draftSpeed = normalizeDraftAiSpeed(parsed.draftSpeed);
     return {
       ...DEFAULT_MOCK_CONFIG,
       ...parsed,
+      draftSpeed,
       roster: { ...DEFAULT_MOCK_CONFIG.roster, ...(parsed.roster ?? {}) },
     };
   } catch {
@@ -135,4 +154,16 @@ export function mockSessionMatchesConfig(
 
 export function timerSecondsFor(label: string): number | null {
   return TIMER_CHOICES.find((t) => t.label === label)?.seconds ?? null;
+}
+
+export function normalizeDraftAiSpeed(raw: unknown): DraftAiSpeed {
+  if (raw === "fast" || raw === "normal" || raw === "slow") return raw;
+  return "normal";
+}
+
+/** Milliseconds to wait before an AI opponent picks. */
+export function draftAiSpeedDelayMs(speed: DraftAiSpeed | "manual"): number {
+  if (speed === "manual") return 0;
+  const secs = DRAFT_SPEED_CHOICES.find((c) => c.key === speed)?.seconds ?? 5;
+  return secs * 1000;
 }

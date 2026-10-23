@@ -82,6 +82,7 @@ export function MobileMockDraftArena() {
     clearSession,
     myCounts,
     nextUserOverall,
+    setSpeed,
   } = session;
 
   // Warm IndexedDB Sleeper catalog + season board extras during splash so the
@@ -158,20 +159,44 @@ export function MobileMockDraftArena() {
       teamName: settingsDraft.teamName.trim() || "My Team",
       slot: Math.min(Math.max(1, settingsDraft.slot), settingsDraft.teams),
     };
-    if (
-      live &&
-      picks.length > 0 &&
-      !window.confirm("Saving settings restarts this mock with the new configuration. Continue?")
-    ) {
+    const prev = config ?? loadMockConfig() ?? DEFAULT_MOCK_CONFIG;
+    const structuralChanged =
+      clean.teams !== prev.teams ||
+      clean.slot !== prev.slot ||
+      clean.scoring !== prev.scoring ||
+      clean.snake !== prev.snake ||
+      clean.teamName !== prev.teamName ||
+      clean.timerLabel !== prev.timerLabel ||
+      clean.playoffsStartWeek !== prev.playoffsStartWeek ||
+      JSON.stringify(clean.roster) !== JSON.stringify(prev.roster);
+
+    // AI speed can apply mid-draft without wiping picks.
+    setSpeed(clean.draftSpeed);
+    saveMockConfig(clean);
+
+    if (live && picks.length > 0 && structuralChanged) {
+      if (
+        !window.confirm(
+          "Saving settings restarts this mock with the new configuration. Continue?",
+        )
+      ) {
+        return;
+      }
+      clearMockSession();
+      setSettingsOpen(false);
+      setShowRecap(false);
+      setLive(false);
+      setSlotClaimed(true);
+      setBootKey((k) => k + 1);
       return;
     }
-    clearMockSession();
-    saveMockConfig(clean);
+
     setSettingsOpen(false);
-    setShowRecap(false);
-    setLive(false);
-    setSlotClaimed(true);
-    setBootKey((k) => k + 1);
+    if (!live || picks.length === 0) {
+      // Fresh / lobby: rebuild session from the saved config.
+      clearMockSession();
+      setBootKey((k) => k + 1);
+    }
   };
 
   const startDraft = () => {
