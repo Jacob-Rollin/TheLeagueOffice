@@ -272,8 +272,8 @@ export function MobileMockDraftArena() {
         >
           <button
             type="button"
-            aria-label="Close"
-            onClick={leaveToHome}
+            aria-label="Close recap"
+            onClick={() => setShowRecap(false)}
             className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
           >
             <X className="size-5" strokeWidth={2.5} />
@@ -447,11 +447,7 @@ export function MobileMockDraftArena() {
         </div>
 
         {!inLobby && complete ? (
-          <div className="mt-2 flex flex-col items-center gap-2">
-            <span className="text-[11px] font-semibold text-m-muted">
-              {settings.teams}-team {SCORING_LABEL[settings.scoring]}{" "}
-              {settings.snake ? "Snake" : "Linear"}
-            </span>
+          <div className="mt-2 flex flex-col items-center">
             <button
               type="button"
               onClick={() => setShowRecap(true)}

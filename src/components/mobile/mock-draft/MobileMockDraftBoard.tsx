@@ -91,7 +91,16 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-auto overscroll-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
       >
-        <div style={{ width: contentWidth }}>
+        {/*
+          Bottom inset matches the absolute player sheet (--m-draft-sheet-h) so
+          the last round can scroll up flush above the pull-up, with no gap.
+        */}
+        <div
+          style={{
+            width: contentWidth,
+            paddingBottom: "var(--m-draft-sheet-h, 0px)",
+          }}
+        >
           <div
             className="sticky top-0 z-10 border-b border-m-border bg-m-bg pt-1.5 pb-1"
             style={{ paddingLeft: PAD_X, paddingRight: PAD_X }}

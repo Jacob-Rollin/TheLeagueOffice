@@ -401,6 +401,25 @@ export function MobileMockDraftSheet({
   };
   const heightPct = dragPct ?? snapPct(snap);
 
+  // Publish sheet height so the board can pad its scroll content — last round
+  // scrolls flush above the pull-up (no dead gap, no rows trapped under it).
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    const parent = sheet?.parentElement;
+    if (!sheet || !parent) return;
+    const publish = () => {
+      parent.style.setProperty("--m-draft-sheet-h", `${sheet.offsetHeight}px`);
+    };
+    publish();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(publish);
+    ro.observe(sheet);
+    return () => {
+      ro.disconnect();
+      parent.style.removeProperty("--m-draft-sheet-h");
+    };
+  }, [heightPct]);
+
   const measureCollapsedPct = () => {
     const parentH = sheetRef.current?.parentElement?.clientHeight ?? window.innerHeight;
     const chromeH = chromeRef.current?.offsetHeight ?? 52;
