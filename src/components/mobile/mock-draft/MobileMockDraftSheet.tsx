@@ -34,6 +34,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  FLEX_POSITIONS,
   fillRoster,
   posDisplayLabel,
   roundOf,
@@ -42,6 +43,7 @@ import {
   type Pick,
   type Player,
   type Pos,
+  type RosterSlots,
   type Settings,
 } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
@@ -62,8 +64,44 @@ import { pickLabelForOverall } from "./MobileMockDraftBoard";
 
 type SheetTab = "players" | "queue" | "team";
 type SheetSnap = "collapsed" | "peek" | "expanded";
+type PosFilter = "ALL" | Pos | "FLEX";
 
-const POS_FILTERS: Array<"ALL" | Pos> = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"];
+/** Sleeper order: FLEX sits between TE and K. */
+const POS_FILTERS: PosFilter[] = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
+
+/**
+ * Drafted / slot totals for pos chips. Denominator is always the league roster
+ * setting (never grows with over-drafts). FLEX numerator only counts RB/WR/TE
+ * drafted after their dedicated starter slots are filled.
+ */
+function posFilterSlotCount(
+  filter: PosFilter,
+  myCounts: Record<string, number>,
+  roster: RosterSlots,
+): { drafted: number; total: number } | null {
+  if (filter === "ALL") {
+    return {
+      drafted: Object.values(myCounts).reduce((a, b) => a + b, 0),
+      total: Object.values(roster).reduce((a, b) => a + b, 0),
+    };
+  }
+  if (filter === "FLEX") {
+    const total = Math.max(0, roster.FLEX ?? 0);
+    if (total <= 0) return null;
+    let flexLeft = total;
+    let filled = 0;
+    for (const pos of FLEX_POSITIONS) {
+      const spare = Math.max(0, (myCounts[pos] ?? 0) - Math.max(0, roster[pos] ?? 0));
+      const take = Math.min(spare, flexLeft);
+      filled += take;
+      flexLeft -= take;
+    }
+    return { drafted: filled, total };
+  }
+  const total = Math.max(0, Number(roster[filter] ?? 0));
+  if (total <= 0) return null;
+  return { drafted: myCounts[filter] ?? 0, total };
+}
 
 /**
  * Sheet height snaps (% of arena). Collapsed is overwritten at runtime to fit
@@ -113,9 +151,10 @@ const STAR_COL_CLASS = "w-8";
 /**
  * Sleeper draft rows: two-line identity + per-column label/value stats on every
  * row (ADP, PTS, and all pos stats). Compact-name band always reserves its
- * slot (h-4 + gap) so the fade-in never changes row height — only opacity.
+ * slot so the fade-in never changes row height — only opacity. Gap under the
+ * band stays tight (~Sleeper) so labels sit just below the name.
  */
-const PLAYER_ROW_ESTIMATE_PX = 76;
+const PLAYER_ROW_ESTIMATE_PX = 70;
 
 /**
  * Nested vertical + horizontal scrollers with directional lock.
@@ -217,14 +256,14 @@ function measureNameColumnPx(scrollEl: HTMLElement): { end: number; width: numbe
 
 /**
  * Fraction of the name column that must scroll off before compact-name fade
- * begins (slightly before half so the header eases in a touch earlier).
+ * begins (a bit before ~⅓ so the header eases in earlier).
  */
-const COMPACT_FADE_START_SCROLLED = 0.38;
+const COMPACT_FADE_START_SCROLLED = 0.28;
 
 /**
  * Scroll-linked compact-name opacity. Geometry is cached so scroll frames only
  * write a quantized CSS var (virtualized rows keep the fan-out tiny).
- * Fade stays at 0 until ~38% of the player-name column has scrolled past, then
+ * Fade stays at 0 until ~28% of the player-name column has scrolled past, then
  * ramps to 1 by the time the column has fully left the scrollport.
  * Row height is constant — only opacity / pointer-events change.
  */
@@ -570,6 +609,9 @@ export function MobileMockDraftSheet({
             nextUserOverall={nextUserOverall}
             prevYear={prevYear}
             projExtrasById={projExtrasById}
+            sheetSnap={snap}
+            paneActive={localTab === "players"}
+            onRequestExpand={() => setSnap("expanded")}
             onDraft={onDraft}
             onToggleQueue={onToggleQueue}
             onOpenPlayer={onOpenPlayer}
@@ -633,6 +675,9 @@ const PlayersPane = memo(function PlayersPane({
   nextUserOverall,
   prevYear,
   projExtrasById,
+  sheetSnap,
+  paneActive,
+  onRequestExpand,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -647,24 +692,59 @@ const PlayersPane = memo(function PlayersPane({
   nextUserOverall: number | null;
   prevYear: number;
   projExtrasById: Record<string, SeasonProjBoardExtras>;
+  sheetSnap: SheetSnap;
+  paneActive: boolean;
+  onRequestExpand: () => void;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
-  const [pos, setPos] = useState<"ALL" | Pos>("ALL");
+  const [pos, setPos] = useState<PosFilter>("ALL");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [watchOnly, setWatchOnly] = useState(false);
   const [draftedOnly, setDraftedOnly] = useState(false);
   const [showPrevYear, setShowPrevYear] = useState(false);
   const deferredQuery = useDeferredValue(query);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQuery("");
+    searchInputRef.current?.blur();
+  };
+
+  const openSearch = () => {
+    onRequestExpand();
+    setSearchOpen(true);
+  };
+
+  // Pulling the sheet down from full height dismisses search (Sleeper-style).
+  useEffect(() => {
+    if (searchOpen && sheetSnap !== "expanded") closeSearch();
+  }, [sheetSnap, searchOpen]);
+
+  // Leaving the Players tab dismisses search.
+  useEffect(() => {
+    if (!paneActive && searchOpen) closeSearch();
+  }, [paneActive, searchOpen]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const id = window.requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(id);
+  }, [searchOpen]);
 
   const filtered = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase();
     const pool = draftedOnly ? draftedPlayers : available;
     return pool.filter((p) => {
       if (watchOnly && !watchIds.has(p.id)) return false;
-      if (pos !== "ALL" && p.pos !== pos) return false;
+      if (pos === "FLEX") {
+        if (!(FLEX_POSITIONS as readonly string[]).includes(p.pos)) return false;
+      } else if (pos !== "ALL" && p.pos !== pos) {
+        return false;
+      }
       if (!q) return true;
       return p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q);
     });
@@ -679,93 +759,103 @@ const PlayersPane = memo(function PlayersPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 overflow-x-auto px-2 py-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <button
-          type="button"
-          aria-label="Search players"
-          onClick={() => setSearchOpen((o) => !o)}
-          className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
-        >
-          <Search className="size-5" strokeWidth={2.5} />
-        </button>
-        {POS_FILTERS.map((p) => {
-          const drafted =
-            p === "ALL"
-              ? Object.values(myCounts).reduce((a, b) => a + b, 0)
-              : (myCounts[p] ?? 0);
-          const totalSlots =
-            p === "ALL"
-              ? Object.values(settings.roster).reduce((a, b) => a + b, 0)
-              : p === "DEF"
-                ? settings.roster.DEF
-                : Number(settings.roster[p as keyof typeof settings.roster] ?? 0);
-          const showCount = p === "ALL" || totalSlots > 0;
-          const countLabel = showCount
-            ? `${drafted}/${p === "ALL" ? totalSlots : Math.max(totalSlots, drafted)}`
-            : "";
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => startTransition(() => setPos(p))}
-              className={cn(
-                "inline-flex size-12 shrink-0 flex-col items-center justify-center rounded-full font-display leading-none",
-                pos === p ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
-              )}
-            >
-              <span className="text-[11px] font-extrabold uppercase tracking-wide">
-                {p === "DEF" ? "DST" : p}
-              </span>
-              {showCount ? (
-                <span
-                  className={cn(
-                    "mt-0.5 text-[9px] font-semibold tabular-nums",
-                    pos === p ? "text-m-bg/75" : "text-m-muted",
-                  )}
-                >
-                  {countLabel}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-        <span className="mx-0.5 h-7 w-px shrink-0 bg-m-border" aria-hidden />
-        <ToolChip
-          active={watchOnly}
-          onClick={() => {
-            setWatchOnly((v) => !v);
-            if (!watchOnly) setDraftedOnly(false);
-          }}
-        >
-          <Star className={cn("size-3.5", watchOnly && "fill-current")} strokeWidth={2.5} />
-          Watchlist
-        </ToolChip>
-        <ToolChip
-          active={draftedOnly}
-          onClick={() => {
-            setDraftedOnly((v) => !v);
-            if (!draftedOnly) setWatchOnly(false);
-          }}
-        >
-          Drafted
-        </ToolChip>
-        <ToolChip active={showPrevYear} onClick={() => setShowPrevYear((v) => !v)}>
-          <ChartLine className="size-3.5" strokeWidth={2.5} />
-          {prevShort} Stats
-        </ToolChip>
-      </div>
-
       {searchOpen ? (
-        <div className="px-3 pb-2">
-          <input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search players"
-            className="w-full rounded-lg border border-m-border bg-m-card px-3 py-2 text-sm text-m-card-fg outline-none placeholder:text-m-muted"
-          />
+        <div className="flex items-center gap-2 px-3 py-2.5">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-m-muted"
+              strokeWidth={2.5}
+              aria-hidden
+            />
+            <input
+              ref={searchInputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search players"
+              enterKeyHint="search"
+              // text-base (16px) — iOS won't zoom the page on focus.
+              className="h-12 w-full rounded-xl border border-m-border bg-m-card py-2 pl-10 pr-3 text-base text-m-card-fg outline-none placeholder:text-m-muted"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={closeSearch}
+            className="shrink-0 px-1 font-display text-sm font-bold uppercase tracking-wide text-m-accent"
+          >
+            Cancel
+          </button>
         </div>
-      ) : null}
+      ) : (
+        <div className="flex items-center gap-2 overflow-x-auto px-2 py-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <button
+            type="button"
+            aria-label="Search players"
+            onClick={openSearch}
+            className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-m-icon-bg text-m-icon-fg"
+          >
+            <Search className="size-5" strokeWidth={2.5} />
+          </button>
+          {POS_FILTERS.map((p) => {
+            const slots = posFilterSlotCount(p, myCounts, settings.roster);
+            // Hide FLEX when the league has no flex slot; other zero-slot pos
+            // chips stay (filter-only) without a count.
+            if (p === "FLEX" && slots == null) return null;
+            const showCount = slots != null;
+            const countLabel =
+              slots != null ? `${slots.drafted}/${slots.total}` : "";
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => startTransition(() => setPos(p))}
+                className={cn(
+                  "inline-flex size-12 shrink-0 flex-col items-center justify-center rounded-full font-display leading-none",
+                  pos === p ? "bg-m-card-fg text-m-bg" : "bg-m-chip text-m-chip-fg",
+                )}
+              >
+                <span className="text-[11px] font-extrabold uppercase tracking-wide">
+                  {p === "DEF" ? "DST" : p}
+                </span>
+                {showCount ? (
+                  <span
+                    className={cn(
+                      "mt-0.5 text-[9px] font-semibold tabular-nums",
+                      pos === p ? "text-m-bg/75" : "text-m-muted",
+                    )}
+                  >
+                    {countLabel}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+          <span className="mx-0.5 h-12 w-px shrink-0 bg-m-border" aria-hidden />
+          <ToolChip
+            active={watchOnly}
+            onClick={() => {
+              setWatchOnly((v) => !v);
+              if (!watchOnly) setDraftedOnly(false);
+            }}
+          >
+            <Star className={cn("size-3.5", watchOnly && "fill-current")} strokeWidth={2.5} />
+            Watchlist
+          </ToolChip>
+          <ToolChip
+            active={draftedOnly}
+            onClick={() => {
+              setDraftedOnly((v) => !v);
+              if (!draftedOnly) setWatchOnly(false);
+            }}
+          >
+            <FootballIcon className="size-3.5" />
+            Drafted
+          </ToolChip>
+          <ToolChip active={showPrevYear} onClick={() => setShowPrevYear((v) => !v)}>
+            <ChartLine className="size-3.5" strokeWidth={2.5} />
+            {prevShort} Stats
+          </ToolChip>
+        </div>
+      )}
 
       <VirtualPlayersScroller
         filtered={filtered}
@@ -956,7 +1046,8 @@ function ToolChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide transition-colors",
+        // h-12 matches circular pos filters (size-12) in the same toolbar row.
+        "inline-flex h-12 shrink-0 items-center gap-1.5 rounded-full border px-3.5 font-display text-[11px] font-bold uppercase tracking-wide transition-colors",
         active
           ? "border-m-accent bg-m-accent/15 text-m-accent"
           : "border-m-border bg-m-chip text-m-chip-fg",
@@ -964,6 +1055,31 @@ function ToolChip({
     >
       {children}
     </button>
+  );
+}
+
+/** Sleeper-style outline football (tilted + laces) — Lucide has no football icon. */
+function FootballIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      {/* Tilted oval body */}
+      <ellipse cx="12" cy="12" rx="9" ry="5.5" transform="rotate(-40 12 12)" />
+      {/* Center lace seam */}
+      <path d="M9.2 10.4 L14.8 13.6" />
+      {/* Lace ticks */}
+      <path d="M10.4 9.6 L11.2 11.2" />
+      <path d="M11.6 10.4 L12.4 12" />
+      <path d="M12.8 11.2 L13.6 12.8" />
+    </svg>
   );
 }
 
@@ -1093,7 +1209,7 @@ const QueuePane = memo(function QueuePane({
                       "h-9 w-[3.25rem] shrink-0 rounded-lg font-display text-[11px] font-extrabold uppercase tracking-wide",
                       myTurn
                         ? "bg-m-accent text-m-accent-fg"
-                        : "bg-m-chip text-m-muted opacity-70",
+                        : "border border-m-border bg-m-border/70 text-m-chip-fg",
                     )}
                   >
                     Draft
@@ -1402,10 +1518,10 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
       {/*
         Compact band always keeps its layout slot (no -mb collapse / no
         scrolled-X padding toggle) so fade-in is opacity-only — no row jump.
-        mb-1.5 clears ADP/PTS labels below. Hairline paints on the band edge.
+        mb-px + pt-0.5 ≈ Sleeper’s tight gap above ADP/PTS labels.
       */}
       <div
-        className="pointer-events-none sticky left-0 z-20 mb-1.5 h-4 overflow-hidden bg-m-sheet px-2 relative [.is-scrolled-x_&]:pointer-events-auto"
+        className="pointer-events-none relative sticky left-0 z-20 mb-px h-4 overflow-hidden bg-m-sheet px-2 [.is-scrolled-x_&]:pointer-events-auto"
         style={{
           width: "var(--m-draft-scrollport-w, 100%)",
           opacity: "var(--m-draft-compact-opacity, 0)",
@@ -1415,7 +1531,7 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
           type="button"
           tabIndex={-1}
           onClick={() => onOpenPlayer(player.id)}
-          className="flex h-full max-w-full items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase tracking-wide text-m-muted"
+          className="flex h-full max-w-full items-center gap-1.5 text-left font-display text-[10px] font-bold uppercase leading-none tracking-wide text-m-muted"
         >
           <span className="truncate text-m-card-fg">{short}</span>
           <span
@@ -1442,7 +1558,7 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
         />
       </div>
 
-      <div className="flex items-stretch gap-1.5 py-2">
+      <div className="flex items-stretch gap-1.5 pt-0.5 pb-2">
         {!complete ? (
           <button
             type="button"
@@ -1452,7 +1568,7 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
               "my-0.5 w-[3.25rem] shrink-0 self-stretch rounded-lg font-display text-[11px] font-extrabold uppercase tracking-wide",
               myTurn
                 ? "bg-m-accent text-m-accent-fg"
-                : "bg-m-chip text-m-muted opacity-70",
+                : "border border-m-border bg-m-border/70 text-m-chip-fg",
             )}
           >
             Draft
