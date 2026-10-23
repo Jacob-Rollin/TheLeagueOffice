@@ -29,6 +29,7 @@ import {
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
 import {
+  FLEX_POSITIONS,
   fillRoster,
   posDisplayLabel,
   roundOf,
@@ -37,6 +38,7 @@ import {
   type Pick,
   type Player,
   type Pos,
+  type RosterSlots,
   type Settings,
 } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
@@ -57,8 +59,44 @@ import { pickLabelForOverall } from "./MobileMockDraftBoard";
 
 type SheetTab = "players" | "queue" | "team";
 type SheetSnap = "collapsed" | "peek" | "expanded";
+type PosFilter = "ALL" | Pos | "FLEX";
 
-const POS_FILTERS: Array<"ALL" | Pos> = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"];
+/** Sleeper order: FLEX sits between TE and K. */
+const POS_FILTERS: PosFilter[] = ["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"];
+
+/**
+ * Drafted / slot totals for pos chips. Denominator is always the league roster
+ * setting (never grows with over-drafts). FLEX numerator only counts RB/WR/TE
+ * drafted after their dedicated starter slots are filled.
+ */
+function posFilterSlotCount(
+  filter: PosFilter,
+  myCounts: Record<string, number>,
+  roster: RosterSlots,
+): { drafted: number; total: number } | null {
+  if (filter === "ALL") {
+    return {
+      drafted: Object.values(myCounts).reduce((a, b) => a + b, 0),
+      total: Object.values(roster).reduce((a, b) => a + b, 0),
+    };
+  }
+  if (filter === "FLEX") {
+    const total = Math.max(0, roster.FLEX ?? 0);
+    if (total <= 0) return null;
+    let flexLeft = total;
+    let filled = 0;
+    for (const pos of FLEX_POSITIONS) {
+      const spare = Math.max(0, (myCounts[pos] ?? 0) - Math.max(0, roster[pos] ?? 0));
+      const take = Math.min(spare, flexLeft);
+      filled += take;
+      flexLeft -= take;
+    }
+    return { drafted: filled, total };
+  }
+  const total = Math.max(0, Number(roster[filter] ?? 0));
+  if (total <= 0) return null;
+  return { drafted: myCounts[filter] ?? 0, total };
+}
 
 /**
  * Sheet height snaps (% of arena). Collapsed is overwritten at runtime to fit
@@ -647,7 +685,7 @@ const PlayersPane = memo(function PlayersPane({
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
 }) {
-  const [pos, setPos] = useState<"ALL" | Pos>("ALL");
+  const [pos, setPos] = useState<PosFilter>("ALL");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [watchOnly, setWatchOnly] = useState(false);
@@ -660,7 +698,11 @@ const PlayersPane = memo(function PlayersPane({
     const pool = draftedOnly ? draftedPlayers : available;
     return pool.filter((p) => {
       if (watchOnly && !watchIds.has(p.id)) return false;
-      if (pos !== "ALL" && p.pos !== pos) return false;
+      if (pos === "FLEX") {
+        if (!(FLEX_POSITIONS as readonly string[]).includes(p.pos)) return false;
+      } else if (pos !== "ALL" && p.pos !== pos) {
+        return false;
+      }
       if (!q) return true;
       return p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q);
     });
@@ -685,20 +727,13 @@ const PlayersPane = memo(function PlayersPane({
           <Search className="size-5" strokeWidth={2.5} />
         </button>
         {POS_FILTERS.map((p) => {
-          const drafted =
-            p === "ALL"
-              ? Object.values(myCounts).reduce((a, b) => a + b, 0)
-              : (myCounts[p] ?? 0);
-          const totalSlots =
-            p === "ALL"
-              ? Object.values(settings.roster).reduce((a, b) => a + b, 0)
-              : p === "DEF"
-                ? settings.roster.DEF
-                : Number(settings.roster[p as keyof typeof settings.roster] ?? 0);
-          const showCount = p === "ALL" || totalSlots > 0;
-          const countLabel = showCount
-            ? `${drafted}/${p === "ALL" ? totalSlots : Math.max(totalSlots, drafted)}`
-            : "";
+          const slots = posFilterSlotCount(p, myCounts, settings.roster);
+          // Hide FLEX when the league has no flex slot; other zero-slot pos
+          // chips stay (filter-only) without a count.
+          if (p === "FLEX" && slots == null) return null;
+          const showCount = slots != null;
+          const countLabel =
+            slots != null ? `${slots.drafted}/${slots.total}` : "";
           return (
             <button
               key={p}
