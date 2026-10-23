@@ -43,8 +43,33 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   const clockRef = useRef<HTMLDivElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
+  // Target / pick-advance: fully reveal the on-the-clock cell (not just a sliver).
+  // Account for the sticky teams bar so the box isn't tucked under the headers.
   useEffect(() => {
-    clockRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    const scroller = scrollerRef.current;
+    const cell = clockRef.current;
+    if (!scroller || !cell) return;
+
+    const run = () => {
+      const header = scroller.querySelector<HTMLElement>("[data-draft-team-header]");
+      const headerH = header?.offsetHeight ?? 48;
+      const sRect = scroller.getBoundingClientRect();
+      const cRect = cell.getBoundingClientRect();
+      const cellTop = cRect.top - sRect.top + scroller.scrollTop;
+      const cellLeft = cRect.left - sRect.left + scroller.scrollLeft;
+      const freeH = Math.max(1, scroller.clientHeight - headerH);
+      // Vertically center in the area below the sticky teams bar.
+      const nextTop = cellTop - headerH - (freeH - cRect.height) / 2;
+      const nextLeft = cellLeft - (scroller.clientWidth - cRect.width) / 2;
+      scroller.scrollTo({
+        top: Math.max(0, nextTop),
+        left: Math.max(0, nextLeft),
+        behavior: "smooth",
+      });
+    };
+    // Wait a frame so the clock ref is attached after pick/round changes.
+    const id = window.requestAnimationFrame(run);
+    return () => window.cancelAnimationFrame(id);
   }, [currentOverall, jumpSignal]);
 
   // Block iOS rubber-band pull past the teams bar / round 1 (empty gap under header).
@@ -107,6 +132,7 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
           return (
             <div
               key={`h-${t}`}
+              data-draft-team-header
               className={cn(
                 // Opaque sticky strip so scrolling cells never show through.
                 "sticky top-0 z-10 flex flex-col items-center gap-0.5 bg-m-bg px-0.5 py-1.5",
