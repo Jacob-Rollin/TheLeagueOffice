@@ -987,7 +987,8 @@ function ToolChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 font-display text-[11px] font-bold uppercase tracking-wide transition-colors",
+        // h-12 matches circular pos filters (size-12) in the same toolbar row.
+        "inline-flex h-12 shrink-0 items-center gap-1.5 rounded-full border px-3.5 font-display text-[11px] font-bold uppercase tracking-wide transition-colors",
         active
           ? "border-m-accent bg-m-accent/15 text-m-accent"
           : "border-m-border bg-m-chip text-m-chip-fg",
