@@ -4,22 +4,37 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   open: boolean;
+  /** Lobby (pre-start) vs live / complete draft. */
+  lobby: boolean;
   paused: boolean;
+  soundsMuted: boolean;
+  /** Lobby: Start is enabled only after a slot is claimed. */
+  canStart?: boolean;
   onClose: () => void;
+  onStartDraft?: () => void;
   onPauseToggle: () => void;
   onEndDraft: () => void;
   onOpenSettings: () => void;
+  onToggleSounds: () => void;
   onDeleteDraft: () => void;
 };
 
-/** In-draft overflow menu — solo mock actions only (no share / chat / multiplayer). */
+/**
+ * Overflow menu — solo mock actions only (no share / chat / multiplayer).
+ * Lobby: Start at top, then settings + mute. Live: pause / end + same extras.
+ */
 export function MobileMockDraftMenu({
   open,
+  lobby,
   paused,
+  soundsMuted,
+  canStart = false,
   onClose,
+  onStartDraft,
   onPauseToggle,
   onEndDraft,
   onOpenSettings,
+  onToggleSounds,
   onDeleteDraft,
 }: Props) {
   useEffect(() => {
@@ -46,9 +61,26 @@ export function MobileMockDraftMenu({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="space-y-2">
-          <MenuBtn onClick={onPauseToggle}>{paused ? "Resume Draft" : "Pause Draft"}</MenuBtn>
-          <MenuBtn onClick={onEndDraft}>End Draft</MenuBtn>
+          {lobby ? (
+            <MenuBtn
+              onClick={() => {
+                if (!canStart) return;
+                onStartDraft?.();
+              }}
+              disabled={!canStart}
+            >
+              Start Mock Draft
+            </MenuBtn>
+          ) : (
+            <>
+              <MenuBtn onClick={onPauseToggle}>{paused ? "Resume Draft" : "Pause Draft"}</MenuBtn>
+              <MenuBtn onClick={onEndDraft}>End Draft</MenuBtn>
+            </>
+          )}
           <MenuBtn onClick={onOpenSettings}>Draft Settings</MenuBtn>
+          <MenuBtn onClick={onToggleSounds}>
+            {soundsMuted ? "Enable Sounds" : "Mute Sounds"}
+          </MenuBtn>
           <MenuBtn danger onClick={onDeleteDraft}>
             Delete Draft
           </MenuBtn>
@@ -63,18 +95,22 @@ function MenuBtn({
   onClick,
   children,
   danger,
+  disabled,
 }: {
   onClick: () => void;
   children: React.ReactNode;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         "w-full rounded-full bg-m-chip px-4 py-3.5 text-center font-display text-base font-semibold tracking-wide",
         danger ? "text-red-500" : "text-m-chip-fg",
+        disabled && "opacity-45",
       )}
     >
       {children}

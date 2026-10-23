@@ -14,8 +14,28 @@ export type MockDraftSoundEvent =
   | "claim-slot";
 
 const SR = 44100;
+const MUTE_KEY = "mock-draft-sounds-muted";
 
 let sharedCtx: AudioContext | null = null;
+
+/** Persisted mute preference (localStorage). Default: sounds on. */
+export function isMockDraftSoundsMuted(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(MUTE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setMockDraftSoundsMuted(muted: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
+  } catch {
+    /* ignore quota */
+  }
+}
 
 function getCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -383,6 +403,7 @@ function samplesFor(event: MockDraftSoundEvent): Float32Array {
 
 export function playMockDraftSound(event: MockDraftSoundEvent) {
   if (typeof window === "undefined") return;
+  if (isMockDraftSoundsMuted()) return;
   if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
 
   const ctx = getCtx();
