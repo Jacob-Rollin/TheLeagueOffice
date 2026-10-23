@@ -522,6 +522,7 @@ export function MobileMockDraftArena() {
         onStartDraft={startDraft}
         onPauseToggle={() => {
           unlockMockDraftAudio();
+          playMockDraftSound(paused ? "resume" : "pause");
           setPaused((p) => !p);
           setMenuOpen(false);
         }}
