@@ -15,6 +15,7 @@ import {
   saveMockConfig,
   type MockConfig,
 } from "@/lib/mock-config";
+import { playMockDraftSound, unlockMockDraftAudio } from "@/lib/mock-draft-sounds";
 import { warmMockDraftClientCaches } from "@/lib/mock-draft-warm";
 import { cn } from "@/lib/utils";
 
@@ -130,6 +131,8 @@ export function MobileMockDraftArena() {
   };
 
   const claimSlot = (team: number) => {
+    unlockMockDraftAudio();
+    playMockDraftSound("claim-slot");
     const base = config ?? loadMockConfig() ?? DEFAULT_MOCK_CONFIG;
     const clean: MockConfig = {
       ...base,
@@ -204,6 +207,7 @@ export function MobileMockDraftArena() {
       window.alert("Claim a draft slot first.");
       return;
     }
+    unlockMockDraftAudio();
     if (!loadMockConfig()) saveMockConfig(config ?? DEFAULT_MOCK_CONFIG);
     setLive(true);
   };
