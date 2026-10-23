@@ -15,6 +15,7 @@ type Props = {
   onPauseToggle: () => void;
   onEndDraft: () => void;
   onOpenSettings: () => void;
+  onOpenAppSettings: () => void;
   onToggleSounds: () => void;
   onDeleteDraft: () => void;
 };
@@ -34,6 +35,7 @@ export function MobileMockDraftMenu({
   onPauseToggle,
   onEndDraft,
   onOpenSettings,
+  onOpenAppSettings,
   onToggleSounds,
   onDeleteDraft,
 }: Props) {
@@ -78,6 +80,7 @@ export function MobileMockDraftMenu({
             </>
           )}
           <MenuBtn onClick={onOpenSettings}>Draft Settings</MenuBtn>
+          <MenuBtn onClick={onOpenAppSettings}>App Settings</MenuBtn>
           <MenuBtn onClick={onToggleSounds}>
             {soundsMuted ? "Enable Sounds" : "Mute Sounds"}
           </MenuBtn>

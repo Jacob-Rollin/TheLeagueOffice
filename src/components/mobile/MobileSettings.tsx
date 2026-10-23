@@ -20,7 +20,14 @@ const outlineButton =
   "rounded-lg border border-m-border px-4 py-2 font-display text-base font-semibold tracking-wide text-m-card-fg";
 
 /** Full-screen Settings panel layered over the current mobile page. */
-export function MobileSettingsOverlay({ onClose }: { onClose: () => void }) {
+export function MobileSettingsOverlay({
+  onClose,
+  className,
+}: {
+  onClose: () => void;
+  /** Override root stacking (e.g. mock-draft arena needs above its sheet/menu). */
+  className?: string;
+}) {
   useEffect(() => {
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
@@ -38,7 +45,10 @@ export function MobileSettingsOverlay({ onClose }: { onClose: () => void }) {
       role="dialog"
       aria-modal="true"
       aria-label="Settings"
-      className="fixed inset-0 z-[60] max-w-[100vw] overflow-x-clip overflow-y-auto overscroll-x-none bg-m-bg touch-pan-y"
+      className={cn(
+        "fixed inset-0 z-[60] max-w-[100vw] overflow-x-clip overflow-y-auto overscroll-x-none bg-m-bg touch-pan-y",
+        className,
+      )}
     >
       <div
         className="mx-auto w-full max-w-md overflow-x-clip"
