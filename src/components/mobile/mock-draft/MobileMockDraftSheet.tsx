@@ -1057,7 +1057,7 @@ const QueuePane = memo(function QueuePane({
                       "h-9 w-[3.25rem] shrink-0 rounded-lg font-display text-[11px] font-extrabold uppercase tracking-wide",
                       myTurn
                         ? "bg-m-accent text-m-accent-fg"
-                        : "bg-m-chip text-m-muted opacity-70",
+                        : "border border-m-border bg-m-border/70 text-m-chip-fg",
                     )}
                   >
                     Draft
@@ -1412,7 +1412,7 @@ const PlayerStatsRow = memo(function PlayerStatsRow({
               "my-0.5 w-[3.25rem] shrink-0 self-stretch rounded-lg font-display text-[11px] font-extrabold uppercase tracking-wide",
               myTurn
                 ? "bg-m-accent text-m-accent-fg"
-                : "bg-m-chip text-m-muted opacity-70",
+                : "border border-m-border bg-m-border/70 text-m-chip-fg",
             )}
           >
             Draft
