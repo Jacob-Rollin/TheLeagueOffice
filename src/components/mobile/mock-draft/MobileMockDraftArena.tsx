@@ -97,6 +97,21 @@ export function MobileMockDraftArena() {
     };
   }, []);
 
+  // Arena sits outside MobileShell — pin document rubber-band so the board
+  // cannot be pulled past round 1 under the header.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overscrollBehaviorY;
+    const prevBody = body.style.overscrollBehaviorY;
+    html.style.overscrollBehaviorY = "none";
+    body.style.overscrollBehaviorY = "none";
+    return () => {
+      html.style.overscrollBehaviorY = prevHtml;
+      body.style.overscrollBehaviorY = prevBody;
+    };
+  }, []);
+
   // Resume an in-progress session into live mode; otherwise stay in lobby.
   useEffect(() => {
     if (!started || !config) return;
@@ -225,7 +240,7 @@ export function MobileMockDraftArena() {
   const inLobby = !live && !complete;
 
   return (
-    <div className="fixed inset-0 z-40 mx-auto flex max-w-md flex-col bg-m-bg text-m-card-fg">
+    <div className="fixed inset-0 z-40 mx-auto flex max-w-md flex-col overflow-hidden overscroll-none bg-m-bg text-m-card-fg">
       <header
         className="shrink-0 border-b border-m-border px-2 pb-2.5"
         style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
