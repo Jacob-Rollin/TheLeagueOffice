@@ -213,14 +213,14 @@ function measureNameColumnPx(scrollEl: HTMLElement): { end: number; width: numbe
 
 /**
  * Fraction of the name column that must scroll off before compact-name fade
- * begins (slightly before half so the header eases in a touch earlier).
+ * begins (a bit before ~⅓ so the header eases in earlier).
  */
-const COMPACT_FADE_START_SCROLLED = 0.38;
+const COMPACT_FADE_START_SCROLLED = 0.28;
 
 /**
  * Scroll-linked compact-name opacity. Geometry is cached so scroll frames only
  * write a quantized CSS var (virtualized rows keep the fan-out tiny).
- * Fade stays at 0 until ~38% of the player-name column has scrolled past, then
+ * Fade stays at 0 until ~28% of the player-name column has scrolled past, then
  * ramps to 1 by the time the column has fully left the scrollport.
  * Row height is constant — only opacity / pointer-events change.
  */
