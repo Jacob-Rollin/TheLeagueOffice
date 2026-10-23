@@ -805,6 +805,7 @@ function VirtualPlayersScroller({
 }) {
   const vertRef = useRef<HTMLDivElement | null>(null);
   const horizRef = useRef<HTMLDivElement | null>(null);
+  const headerTrackRef = useRef<HTMLDivElement | null>(null);
   const rafFadeRef = useRef(0);
 
   useDualAxisLock(vertRef, horizRef);
@@ -837,6 +838,10 @@ function VirtualPlayersScroller({
 
   const onHorizScroll = (e: UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
+    // Pin ADP/PTS header outside the Y scroller; mirror X so labels stay lined up.
+    if (headerTrackRef.current) {
+      headerTrackRef.current.style.transform = `translate3d(${-el.scrollLeft}px,0,0)`;
+    }
     if (rafFadeRef.current) return;
     rafFadeRef.current = requestAnimationFrame(() => {
       rafFadeRef.current = 0;
@@ -850,39 +855,52 @@ function VirtualPlayersScroller({
   const padBottom = Math.max(0, totalSize - (items[items.length - 1]?.end ?? 0));
 
   return (
-    <div
-      ref={vertRef}
-      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-2 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-    >
-      <div
-        ref={horizRef}
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] [--m-draft-compact-opacity:0]"
-        onScroll={onHorizScroll}
-      >
-        {filtered.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-m-muted">{emptyLabel}</p>
-        ) : null}
-        {/* Always-mounted probe so name-end stays measurable under virtualization. */}
-        <div className="pointer-events-none h-0 overflow-hidden" aria-hidden>
-          <div className="flex items-stretch gap-1.5 py-1">
-            {!complete ? <span className="w-[3.25rem] shrink-0" /> : null}
-            <span className="w-5 shrink-0" />
-            <span className={cn(NAME_COL_CLASS, "shrink-0")} />
-            <span data-name-scroll-end className="w-0 shrink-0" />
+    <div className="flex min-h-0 flex-1 flex-col px-2 pb-3">
+      {/*
+        Sleeper: ADP / PTS sit on a fixed strip under the filters (not inside the
+        vertical scroller — nested sticky was getting clipped / scrolling away).
+      */}
+      {filtered.length > 0 ? (
+        <div className="shrink-0 overflow-hidden border-b border-m-border bg-m-sheet">
+          <div ref={headerTrackRef} className="will-change-transform">
+            <PlayerListStatsHeader
+              complete={complete}
+              showPrevYear={showPrevYear}
+              prevYear={prevYear}
+              posFilter={posFilter}
+            />
           </div>
         </div>
-        {/*
-          Padding spacers keep rows in flow so min-w-max still drives horizontal
-          scroll width (absolute rows would collapse that).
-        */}
-        <div className="min-w-max">
-          <PlayerListStatsHeader
-            complete={complete}
-            showPrevYear={showPrevYear}
-            prevYear={prevYear}
-            posFilter={posFilter}
-          />
-          <div style={{ paddingTop: padTop, paddingBottom: padBottom }}>
+      ) : null}
+      <div
+        ref={vertRef}
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <div
+          ref={horizRef}
+          className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch] [--m-draft-compact-opacity:0]"
+          onScroll={onHorizScroll}
+        >
+          {filtered.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-m-muted">{emptyLabel}</p>
+          ) : null}
+          {/* Always-mounted probe so name-end stays measurable under virtualization. */}
+          <div className="pointer-events-none h-0 overflow-hidden" aria-hidden>
+            <div className="flex items-stretch gap-1.5 py-1">
+              {!complete ? <span className="w-[3.25rem] shrink-0" /> : null}
+              <span className="w-5 shrink-0" />
+              <span className={cn(NAME_COL_CLASS, "shrink-0")} />
+              <span data-name-scroll-end className="w-0 shrink-0" />
+            </div>
+          </div>
+          {/*
+            Padding spacers keep rows in flow so min-w-max still drives horizontal
+            scroll width (absolute rows would collapse that).
+          */}
+          <div
+            className="min-w-max"
+            style={{ paddingTop: padTop, paddingBottom: padBottom }}
+          >
             {items.map((item) => {
               const p = filtered[item.index]!;
               return (
@@ -925,7 +943,7 @@ function VirtualPlayersScroller({
   );
 }
 
-/** One column-label row (Sleeper) — values only on each player row. */
+/** Sleeper draft strip: ADP + PTS (and pos cols when filtered). */
 function PlayerListStatsHeader({
   complete,
   showPrevYear,
@@ -938,9 +956,10 @@ function PlayerListStatsHeader({
   posFilter: "ALL" | Pos;
 }) {
   const yearShort = `'${String(prevYear).slice(-2)}`;
+  // On ALL, Sleeper only labels ADP/PTS; pos-specific headers appear when filtered.
   const posCols = posFilter === "ALL" ? [] : (POS_STAT_COLUMNS[posFilter] ?? []);
   return (
-    <div className="sticky top-0 z-30 flex items-end gap-1.5 border-b border-m-border bg-m-sheet pb-1 pt-0.5">
+    <div className="flex min-w-max items-end gap-1.5 px-0 pb-1 pt-1">
       {!complete ? <span className="w-[3.25rem] shrink-0" aria-hidden /> : null}
       <span className="w-5 shrink-0" aria-hidden />
       <span className={cn(NAME_COL_CLASS, "shrink-0")} aria-hidden />
@@ -948,8 +967,8 @@ function PlayerListStatsHeader({
       <div className="flex shrink-0 items-end gap-3 pr-4">
         <StatHeaderLabel>ADP</StatHeaderLabel>
         {showPrevYear ? <StatHeaderLabel>{yearShort} ADP</StatHeaderLabel> : null}
-        <StatHeaderLabel>Pts</StatHeaderLabel>
-        {showPrevYear ? <StatHeaderLabel>{yearShort} Pts</StatHeaderLabel> : null}
+        <StatHeaderLabel>PTS</StatHeaderLabel>
+        {showPrevYear ? <StatHeaderLabel>{yearShort} PTS</StatHeaderLabel> : null}
         {posCols.map((col) => (
           <div key={col.key} className="flex shrink-0 items-end gap-3">
             <StatHeaderLabel>{col.label}</StatHeaderLabel>
