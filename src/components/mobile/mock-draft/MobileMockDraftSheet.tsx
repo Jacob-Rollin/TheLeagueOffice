@@ -111,7 +111,8 @@ function posFilterSlotCount(
 const SNAP_PCT: Record<SheetSnap, number> = {
   collapsed: 9,
   peek: 36,
-  expanded: 88,
+  // Slightly taller full pull-up (Sleeper-style almost board-covering sheet).
+  expanded: 94,
 };
 
 function nearestSheetSnap(pct: number, collapsedPct: number): SheetSnap {
@@ -451,7 +452,7 @@ export function MobileMockDraftSheet({
     }
     const deltaPct = (deltaY / drag.parentH) * 100;
     const floor = measureCollapsedPct();
-    setDragPct(Math.min(92, Math.max(floor, drag.startPct + deltaPct)));
+    setDragPct(Math.min(96, Math.max(floor, drag.startPct + deltaPct)));
   };
 
   const onHeaderPointerUp = () => {
