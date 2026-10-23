@@ -162,9 +162,11 @@ export function useMockDraftSession({
   picksRef.current = picks;
 
   const commitPick = useCallback(
-    (playerId: string, team: number) => {
+    (playerId: string, team: number, opts?: { silent?: boolean }) => {
       if (picksRef.current.some((p) => p.playerId === playerId)) return;
-      playMockDraftSound(team === settings.myTeam ? "pick-locked" : "ai-pick-locked");
+      if (!opts?.silent) {
+        playMockDraftSound(team === settings.myTeam ? "pick-locked" : "ai-pick-locked");
+      }
       setPicks((prev) => {
         if (prev.some((p) => p.playerId === playerId)) return prev;
         return [...prev, { playerId, team, overall: prev.length + 1 }];
@@ -305,10 +307,11 @@ export function useMockDraftSession({
     if (!live || !myTurn || paused || !pageVisible || clock !== 0) return;
     if (expiredForPickRef.current === picks.length) return;
     expiredForPickRef.current = picks.length;
+    // Clock-out autopick: only the expire cue — skip pick-locked so they don't stack.
     playMockDraftSound("clock-expired");
     if (queueAutopickOn && queuedPlayers[0]) return;
     const choice = autoPickForUser(available, myPlayers, settings, picks.length + 1);
-    if (choice) commitPick(choice.id, settings.myTeam);
+    if (choice) commitPick(choice.id, settings.myTeam, { silent: true });
   }, [
     live,
     clock,
