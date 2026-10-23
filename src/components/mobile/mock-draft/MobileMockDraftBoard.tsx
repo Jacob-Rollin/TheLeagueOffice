@@ -41,10 +41,40 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
 }) {
   const pickByOverall = new Map(picks.map((p) => [p.overall, p]));
   const clockRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     clockRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [currentOverall, jumpSignal]);
+
+  // Block iOS rubber-band pull past the teams bar / round 1 (empty gap under header).
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const start = { x: 0, y: 0 };
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      start.x = t.clientX;
+      start.y = t.clientY;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      // Only clamp primarily-vertical pull-down at the top edge.
+      if (el.scrollTop <= 0 && dy > 0 && Math.abs(dy) > Math.abs(dx)) {
+        e.preventDefault();
+      }
+    };
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+    };
+  }, []);
 
   // Sleeper-sized cells — denser than the old 112×72 tiles.
   const colW = 96;
@@ -53,7 +83,10 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   const mineColActive = !lobby || slotClaimed;
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
+    <div
+      ref={scrollerRef}
+      className="min-h-0 flex-1 overflow-auto overscroll-none"
+    >
       <div
         className="inline-grid p-1.5 pb-3"
         style={{
