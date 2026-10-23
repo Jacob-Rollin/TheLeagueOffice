@@ -211,9 +211,15 @@ function measureNameColumnPx(scrollEl: HTMLElement): { end: number; width: numbe
 }
 
 /**
+ * Fraction of the name column that must scroll off before compact-name fade
+ * begins (slightly before half so the header eases in a touch earlier).
+ */
+const COMPACT_FADE_START_SCROLLED = 0.38;
+
+/**
  * Scroll-linked compact-name opacity. Geometry is cached so scroll frames only
  * write a quantized CSS var (virtualized rows keep the fan-out tiny).
- * Fade stays at 0 until ≥ half the player-name column has scrolled past, then
+ * Fade stays at 0 until ~38% of the player-name column has scrolled past, then
  * ramps to 1 by the time the column has fully left the scrollport.
  * Row height is constant — only opacity / pointer-events change.
  */
@@ -230,8 +236,8 @@ function updateCompactNameFade(scrollEl: HTMLElement, remeasure = false) {
     geo = measureNameColumnPx(scrollEl);
     nameColCache.set(scrollEl, geo);
   }
-  // Hold until half the name column is off-screen; full once the column is gone.
-  const fadeStart = Math.max(0, geo.end - geo.width / 2);
+  // Start a bit before the column midpoint; full once the column is gone.
+  const fadeStart = Math.max(0, geo.end - geo.width * (1 - COMPACT_FADE_START_SCROLLED));
   const fadeRange = Math.max(1, geo.end - fadeStart);
   const opacity = Math.min(1, Math.max(0, (scrollEl.scrollLeft - fadeStart) / fadeRange));
   // 5% steps: progressive enough, far fewer style invalidations on fling.
