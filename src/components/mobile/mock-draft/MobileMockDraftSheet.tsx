@@ -13,21 +13,26 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useQuery } from "@tanstack/react-query";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
 import {
   ArrowDown,
   ArrowUp,
   ChartLine,
-  Circle,
-  CircleDot,
   FilePlus2,
   Info,
   Search,
   Shield,
   Star,
   Trash2,
+  X,
 } from "lucide-react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   fillRoster,
   posDisplayLabel,
@@ -987,6 +992,7 @@ const QueuePane = memo(function QueuePane({
   onOpenPlayer: (id: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [autopickInfoOpen, setAutopickInfoOpen] = useState(false);
   const selectedIndex = selectedId
     ? queuedPlayers.findIndex((p) => p.id === selectedId)
     : -1;
@@ -1000,13 +1006,44 @@ const QueuePane = memo(function QueuePane({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-end gap-2 px-3 py-2">
-        <span
-          className="inline-flex items-center gap-1 text-xs text-m-muted"
-          title="When on, drafts the #1 available player in your queue on your turn."
-        >
-          <Info className="size-3.5" strokeWidth={2.25} aria-hidden />
-          Auto-pick
-        </span>
+        <Popover open={autopickInfoOpen} onOpenChange={setAutopickInfoOpen}>
+          <div className="inline-flex items-center gap-1 text-xs text-m-muted">
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                aria-label="About auto-pick"
+                className="inline-flex size-5 items-center justify-center rounded-full text-m-muted"
+              >
+                <Info className="size-3.5" strokeWidth={2.25} aria-hidden />
+              </button>
+            </PopoverTrigger>
+            <span>Auto-pick</span>
+          </div>
+          <PopoverContent
+            side="top"
+            align="center"
+            sideOffset={8}
+            className="w-[min(18.5rem,calc(100vw-2rem))] rounded-xl border border-m-border bg-m-card p-3.5 text-m-card-fg shadow-lg"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className="font-display text-sm font-bold text-m-card-fg">Auto-pick</p>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setAutopickInfoOpen(false)}
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-m-chip text-m-muted"
+              >
+                <X className="size-3" strokeWidth={2.5} aria-hidden />
+              </button>
+            </div>
+            <p className="mt-1.5 text-[13px] leading-snug text-m-card-fg/90">
+              On your turn, drafts the next available player from the top of your
+              queue. If the queue is empty, picks the best available player for
+              your roster.
+            </p>
+            <PopoverPrimitive.Arrow className="fill-m-card" width={14} height={7} />
+          </PopoverContent>
+        </Popover>
         <button
           type="button"
           role="switch"
@@ -1098,16 +1135,20 @@ const QueuePane = memo(function QueuePane({
                   aria-label={selected ? "Deselect queue player" : "Select queue player"}
                   aria-pressed={selected}
                   onClick={() => setSelectedId(selected ? null : p.id)}
-                  className={cn(
-                    "flex size-9 shrink-0 items-center justify-center",
-                    selected ? "text-m-accent" : "text-m-muted",
-                  )}
+                  className="flex size-9 shrink-0 items-center justify-center"
                 >
-                  {selected ? (
-                    <CircleDot className="size-5" strokeWidth={2.25} />
-                  ) : (
-                    <Circle className="size-5" strokeWidth={2} />
-                  )}
+                  {/* Sleeper-style radio: ring + ~50% inner fill when selected. */}
+                  <span
+                    className={cn(
+                      "relative flex size-5 items-center justify-center rounded-full border-2",
+                      selected ? "border-m-accent" : "border-m-muted",
+                    )}
+                    aria-hidden
+                  >
+                    {selected ? (
+                      <span className="size-[11px] rounded-full bg-m-accent" />
+                    ) : null}
+                  </span>
                 </button>
               </li>
             );
