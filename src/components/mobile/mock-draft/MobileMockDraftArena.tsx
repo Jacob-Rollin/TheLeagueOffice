@@ -300,6 +300,7 @@ export function MobileMockDraftArena() {
   return (
     <div className="fixed inset-0 z-40 mx-auto flex max-w-md flex-col overflow-hidden overscroll-none bg-m-bg text-m-card-fg">
       <header
+        data-mock-draft-header
         className="shrink-0 border-b border-m-border px-2 pb-2.5"
         style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >

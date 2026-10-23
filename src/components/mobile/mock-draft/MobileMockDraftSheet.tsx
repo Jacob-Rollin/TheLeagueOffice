@@ -101,21 +101,26 @@ function posFilterSlotCount(
 }
 
 /**
- * Sheet height snaps (% of arena). Collapsed is overwritten at runtime to fit
- * the grabber + tabs only (Sleeper-style board-max view).
+ * Sheet height snaps (% of arena). Collapsed / expanded are overwritten at
+ * runtime — collapsed fits grabber+tabs; expanded stops under the draft
+ * header so last pick / timer / settings stay fully visible.
  */
 const SNAP_PCT: Record<SheetSnap, number> = {
   collapsed: 9,
   peek: 36,
-  // Full pull-up — leave a thin strip of board chrome above the sheet.
-  expanded: 97,
+  // Fallback until the arena header is measured.
+  expanded: 82,
 };
 
-function nearestSheetSnap(pct: number, collapsedPct: number): SheetSnap {
+function nearestSheetSnap(
+  pct: number,
+  collapsedPct: number,
+  expandedPct: number,
+): SheetSnap {
   const targets: Array<[SheetSnap, number]> = [
     ["collapsed", collapsedPct],
     ["peek", SNAP_PCT.peek],
-    ["expanded", SNAP_PCT.expanded],
+    ["expanded", expandedPct],
   ];
   let best: SheetSnap = "peek";
   let bestDist = Infinity;
@@ -373,6 +378,7 @@ export function MobileMockDraftSheet({
   const [snap, setSnap] = useState<SheetSnap>("peek");
   const [dragPct, setDragPct] = useState<number | null>(null);
   const [collapsedPct, setCollapsedPct] = useState(SNAP_PCT.collapsed);
+  const [expandedPct, setExpandedPct] = useState(SNAP_PCT.expanded);
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const chromeRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{
@@ -388,7 +394,11 @@ export function MobileMockDraftSheet({
   /** After a vertical drag on the header, ignore the synthetic click on a tab. */
   const suppressTabClickRef = useRef(false);
 
-  const snapPct = (s: SheetSnap) => (s === "collapsed" ? collapsedPct : SNAP_PCT[s]);
+  const snapPct = (s: SheetSnap) => {
+    if (s === "collapsed") return collapsedPct;
+    if (s === "expanded") return expandedPct;
+    return SNAP_PCT.peek;
+  };
   const heightPct = dragPct ?? snapPct(snap);
 
   const measureCollapsedPct = () => {
@@ -399,10 +409,35 @@ export function MobileMockDraftSheet({
     return Math.max(6, Math.min(18, ((chromeH + 1) / parentH) * 100));
   };
 
+  /** Full pull-up stops flush under the draft header (timer / last pick / gear). */
+  const measureExpandedPct = () => {
+    const parent = sheetRef.current?.parentElement;
+    const parentH = parent?.clientHeight ?? window.innerHeight;
+    if (parentH <= 0) return SNAP_PCT.expanded;
+    const header =
+      parent?.querySelector<HTMLElement>("[data-mock-draft-header]") ?? null;
+    const headerH = header?.offsetHeight ?? 96;
+    // 2px gap so the sheet radius doesn't kiss the header border.
+    const maxH = Math.max(120, parentH - headerH - 2);
+    const pct = (maxH / parentH) * 100;
+    return Math.max(SNAP_PCT.peek + 8, Math.min(92, pct));
+  };
+
+  const remeasureSheetSnaps = () => {
+    setCollapsedPct(measureCollapsedPct());
+    setExpandedPct(measureExpandedPct());
+  };
+
   useEffect(() => {
-    const next = measureCollapsedPct();
-    setCollapsedPct(next);
-  }, [queuedPlayers.length]);
+    remeasureSheetSnaps();
+    const parent = sheetRef.current?.parentElement;
+    if (!parent || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => remeasureSheetSnaps());
+    ro.observe(parent);
+    const header = parent.querySelector("[data-mock-draft-header]");
+    if (header) ro.observe(header);
+    return () => ro.disconnect();
+  }, [queuedPlayers.length, complete]);
 
   useEffect(() => {
     if (complete) setSnap("peek");
@@ -417,7 +452,9 @@ export function MobileMockDraftSheet({
     e.currentTarget.setPointerCapture(e.pointerId);
     const parentH = sheetRef.current?.parentElement?.clientHeight ?? window.innerHeight;
     const nextCollapsed = measureCollapsedPct();
+    const nextExpanded = measureExpandedPct();
     setCollapsedPct(nextCollapsed);
+    setExpandedPct(nextExpanded);
     const now = performance.now();
     dragRef.current = {
       startY: e.clientY,
@@ -448,7 +485,8 @@ export function MobileMockDraftSheet({
     }
     const deltaPct = (deltaY / drag.parentH) * 100;
     const floor = measureCollapsedPct();
-    setDragPct(Math.min(98, Math.max(floor, drag.startPct + deltaPct)));
+    const ceiling = measureExpandedPct();
+    setDragPct(Math.min(ceiling, Math.max(floor, drag.startPct + deltaPct)));
   };
 
   const onHeaderPointerUp = () => {
@@ -456,7 +494,9 @@ export function MobileMockDraftSheet({
     if (!drag) return;
     if (drag.moved) {
       const floor = measureCollapsedPct();
+      const ceiling = measureExpandedPct();
       setCollapsedPct(floor);
+      setExpandedPct(ceiling);
       const current = dragPct ?? snapPct(snap);
       const vy = drag.velocityY;
       // Project ~180ms of coast so a quick flick lands on the intended snap.
@@ -468,16 +508,16 @@ export function MobileMockDraftSheet({
         // If already past the next stop, prefer projected nearest.
         const dirTarget = snapPct(next);
         if (projected > dirTarget + 4) {
-          next = nearestSheetSnap(projected, floor);
+          next = nearestSheetSnap(projected, floor, ceiling);
         }
       } else if (vy <= -FLICK_VELOCITY_PX_MS) {
         next = sheetSnapInDirection(snap, "down");
         const dirTarget = next === "collapsed" ? floor : snapPct(next);
         if (projected < dirTarget - 4) {
-          next = nearestSheetSnap(projected, floor);
+          next = nearestSheetSnap(projected, floor, ceiling);
         }
       } else {
-        next = nearestSheetSnap(projected, floor);
+        next = nearestSheetSnap(projected, floor, ceiling);
       }
       setSnap(next);
       // Swallow the click that follows a drag; clear if no click arrives.
@@ -538,7 +578,7 @@ export function MobileMockDraftSheet({
         role="slider"
         aria-label="Resize player sheet"
         aria-valuemin={Math.round(collapsedPct)}
-        aria-valuemax={SNAP_PCT.expanded}
+        aria-valuemax={Math.round(expandedPct)}
         aria-valuenow={Math.round(heightPct)}
         tabIndex={0}
         onPointerDown={onHeaderPointerDown}
