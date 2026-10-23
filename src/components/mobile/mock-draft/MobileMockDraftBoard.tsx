@@ -35,9 +35,9 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
   complete: boolean;
   /** Increment to re-center the on-the-clock cell. */
   jumpSignal?: number;
-  /** Pre-start lobby: empty board with claim affordance on your slot. */
+  /** Pre-start lobby: Claim buttons (no Slot/AI labels until start). */
   lobby?: boolean;
-  /** Lobby only — true after the user claims a draft slot (AI names fill in). */
+  /** Lobby only — true after the user claims a draft slot. */
   slotClaimed?: boolean;
   onClaimSlot?: (team: number) => void;
   onOpenPlayer?: (id: string) => void;
@@ -108,9 +108,14 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
             <div className="flex" style={{ width: trackWidth, gap: gapPx }}>
               {Array.from({ length: settings.teams }, (_, i) => i + 1).map((t) => {
                 const isMine = mineColActive && t === settings.myTeam;
+                // Lobby: Claim on every open seat so the user can swap. AI
+                // names / avatars only appear after Start Mock Draft.
                 const showClaim = lobby && (!slotClaimed || t !== settings.myTeam);
-                const label =
-                  lobby && !slotClaimed ? `Slot ${t}` : teamName(settings, t);
+                const label = lobby
+                  ? isMine
+                    ? teamName(settings, t)
+                    : null
+                  : teamName(settings, t);
                 return (
                   <div
                     key={`h-${t}`}
@@ -127,30 +132,39 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                         <button
                           type="button"
                           onClick={() => onClaimSlot?.(t)}
-                          className="rounded-full bg-m-chip px-2 py-0.5 font-display text-[9px] font-extrabold uppercase tracking-wide text-m-chip-fg active:bg-m-accent active:text-m-accent-fg"
+                          className="w-full rounded-md bg-m-accent px-1 py-1.5 font-display text-[10px] font-extrabold uppercase tracking-wide text-m-accent-fg"
                         >
                           Claim
                         </button>
                       ) : (
-                        <span className="flex size-6 items-center justify-center rounded-full bg-m-accent text-[9px] font-bold text-m-accent-fg">
-                          You
-                        </span>
+                        <>
+                          <span className="flex size-7 items-center justify-center rounded-full bg-m-accent text-[10px] font-bold text-m-accent-fg">
+                            You
+                          </span>
+                          {label ? (
+                            <span className="max-w-full truncate text-center text-[9px] font-semibold leading-tight text-m-card-fg">
+                              {label}
+                            </span>
+                          ) : null}
+                        </>
                       )
                     ) : (
-                      <span
-                        className={cn(
-                          "flex size-6 items-center justify-center rounded-full text-[9px] font-bold",
-                          isMine
-                            ? "bg-m-accent text-m-accent-fg"
-                            : "bg-m-chip text-m-chip-fg",
-                        )}
-                      >
-                        {isMine ? "You" : "AI"}
-                      </span>
+                      <>
+                        <span
+                          className={cn(
+                            "flex size-6 items-center justify-center rounded-full text-[9px] font-bold",
+                            isMine
+                              ? "bg-m-accent text-m-accent-fg"
+                              : "bg-m-chip text-m-chip-fg",
+                          )}
+                        >
+                          {isMine ? "You" : "AI"}
+                        </span>
+                        <span className="max-w-full truncate text-center text-[9px] font-semibold leading-tight text-m-card-fg">
+                          {label}
+                        </span>
+                      </>
                     )}
-                    <span className="max-w-full truncate text-center text-[9px] font-semibold leading-tight text-m-card-fg">
-                      {label}
-                    </span>
                   </div>
                 );
               })}
