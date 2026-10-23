@@ -57,7 +57,11 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
       <div
         className="inline-grid p-1.5 pb-3"
         style={{
-          gap: gapPx,
+          // No row gap under the sticky teams bar — a vertical gutter lets
+          // on-the-clock rings peek through when the board is scrolled up.
+          // Round spacing comes from margin on pick cells instead.
+          columnGap: gapPx,
+          rowGap: 0,
           gridTemplateColumns: `repeat(${settings.teams}, ${colW}px)`,
           minWidth: settings.teams * (colW + gapPx),
         }}
@@ -71,10 +75,10 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
             <div
               key={`h-${t}`}
               className={cn(
-                "sticky top-0 z-10 flex flex-col items-center gap-0.5 px-0.5 py-1 backdrop-blur",
-                isMine
-                  ? "rounded-t-md bg-m-accent/20 ring-1 ring-m-accent"
-                  : "bg-m-bg/95",
+                // Opaque sticky strip so scrolling cells never show through.
+                "sticky top-0 z-10 flex flex-col items-center gap-0.5 bg-m-bg px-0.5 py-1.5",
+                isMine &&
+                  "rounded-t-md bg-[color-mix(in_srgb,var(--m-accent)_16%,var(--m-bg))] ring-1 ring-inset ring-m-accent",
               )}
             >
               {lobby ? (
@@ -134,7 +138,9 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                 key={`${round}-${team}`}
                 ref={isClock ? clockRef : undefined}
                 className={cn(
-                  "relative flex h-[62px] flex-col gap-0.5 overflow-hidden rounded-md px-1 pt-1 pb-3.5",
+                  "relative mb-[3px] flex h-[62px] flex-col gap-0.5 overflow-hidden rounded-md px-1 pt-1 pb-3.5",
+                  // Round 1 sits flush under the teams bar (no top ring peek).
+                  round === 1 && "rounded-t-none",
                   player
                     ? posCellClass(player.pos)
                     : isClock
@@ -145,6 +151,8 @@ export const MobileMockDraftBoard = memo(function MobileMockDraftBoard({
                   // Column wash for filled picks — keeps pos colors, marks "your" lane.
                   isMineCol && player && "ring-1 ring-inset ring-m-accent/45",
                   isMineCol && !player && !isClock && "ring-1 ring-inset ring-m-accent/25",
+                  // Keep clock/mine rings from drawing above the sticky teams bar.
+                  round === 1 && (isClock || isMineCol) && "ring-inset",
                 )}
               >
                 {player ? (
