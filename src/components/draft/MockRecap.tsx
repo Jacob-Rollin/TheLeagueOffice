@@ -73,13 +73,17 @@ export function MockRecap({
   picks,
   byId,
   playoffsStartWeek = 15,
+  variant = "desktop",
 }: {
   settings: Settings;
   picks: Pick[];
   byId: Map<string, Player>;
   /** Regular season runs through the week before this one. */
   playoffsStartWeek?: number;
+  /** Mobile arena uses `m-*` tokens so light/dark match the app shell. */
+  variant?: "desktop" | "mobile";
 }) {
+  const mobile = variant === "mobile";
   const recap = useMemo(() => {
     const enriched: TeamPick[] = [];
     for (const pick of picks) {
@@ -179,37 +183,86 @@ export function MockRecap({
 
   const { standings, steal, teams } = recap;
 
+  const card = mobile
+    ? "rounded-xl border border-m-border bg-m-card text-m-card-fg"
+    : "rounded-xl border border-border bg-card";
+  const muted = mobile ? "text-m-muted" : "text-muted-foreground";
+  const accent = mobile ? "text-m-accent" : "text-primary";
+  const accentBorder = mobile ? "border-m-accent/40" : "border-primary/40";
+  const youRow = mobile ? "bg-m-highlight" : "bg-primary/10";
+  const youPill = mobile
+    ? "ml-2 rounded bg-m-accent px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-m-accent-fg"
+    : "ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-primary-foreground";
+  const valueUp = mobile
+    ? "tabnum text-xs text-emerald-600 [.mobile-theme-dark_&]:text-emerald-400"
+    : "tabnum text-xs text-emerald-600";
+  const valueDown = mobile
+    ? "tabnum text-xs text-red-600 [.mobile-theme-dark_&]:text-red-400"
+    : "tabnum text-xs text-destructive";
+  const stealShell = mobile
+    ? cn("overflow-hidden rounded-xl border bg-m-card", accentBorder)
+    : "overflow-hidden rounded-xl border border-primary/40 bg-gradient-to-r from-primary/10 via-card to-card";
+  const stealValueBox = mobile
+    ? cn("rounded-lg border bg-m-bg px-4 py-3 text-center", accentBorder)
+    : "rounded-lg border border-primary/40 bg-background px-4 py-3 text-center";
+  const titleClass = mobile
+    ? "font-display text-2xl font-bold tracking-wide text-m-card-fg"
+    : "display-title text-2xl";
+  const sectionTitle = mobile
+    ? "font-display text-sm font-semibold uppercase tracking-widest text-m-card-fg"
+    : "font-display text-sm uppercase tracking-widest";
+  const tagChip = mobile
+    ? "mt-1 inline-block rounded-full border border-m-border bg-m-chip px-2 py-0.5 text-[10px] uppercase tracking-widest text-m-chip-fg"
+    : "mt-1 inline-block rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-widest text-muted-foreground";
+  const rowBorder = mobile ? "border-m-border/70" : "border-border/60";
+  const headBorder = mobile ? "border-m-border" : "border-border";
+
   return (
-    <div className="space-y-4 px-3">
+    <div className={cn("space-y-4 px-3", mobile && "pb-6 pt-3")}>
       {/* 1. Steal of the night */}
       {steal && (
-        <section className="overflow-hidden rounded-xl border border-primary/40 bg-gradient-to-r from-primary/10 via-card to-card">
+        <section className={stealShell}>
           <div className="flex flex-wrap items-center gap-4 p-4">
             <div className="min-w-0 flex-1">
-              <div className="font-display text-[11px] uppercase tracking-widest text-primary">
+              <div
+                className={cn(
+                  "font-display text-[11px] uppercase tracking-widest",
+                  accent,
+                )}
+              >
                 Draft Steal of the Night
               </div>
               <div className="mt-1 flex items-center gap-2">
                 <PositionBadge pos={steal.player.pos} className="h-6 text-[11px]" />
-                <h2 className="display-title text-2xl">{steal.player.name}</h2>
+                <h2 className={titleClass}>{steal.player.name}</h2>
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className={cn("mt-1 text-sm", muted)}>
                 {teamName(settings, steal.pick.team)} landed him at{" "}
-                <span className="tabnum font-semibold text-foreground">
+                <span
+                  className={cn(
+                    "tabnum font-semibold",
+                    mobile ? "text-m-card-fg" : "text-foreground",
+                  )}
+                >
                   {roundOf(steal.pick.overall, settings.teams)}.
                   {(((steal.pick.overall - 1) % settings.teams) + 1).toString().padStart(2, "0")}
                 </span>{" "}
                 — an ADP of {steal.adp.toFixed(0)} overall.
               </p>
             </div>
-            <div className="rounded-lg border border-primary/40 bg-background px-4 py-3 text-center">
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            <div className={stealValueBox}>
+              <div className={cn("text-[10px] uppercase tracking-widest", muted)}>
                 Value Drop
               </div>
-              <div className="tabnum font-display text-3xl font-semibold text-primary">
+              <div
+                className={cn(
+                  "tabnum font-display text-3xl font-semibold",
+                  accent,
+                )}
+              >
                 +{Math.max(0, Math.round(steal.delta))}
               </div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              <div className={cn("text-[10px] uppercase tracking-widest", muted)}>
                 picks
               </div>
             </div>
@@ -218,19 +271,23 @@ export function MockRecap({
       )}
 
       {/* 2. Simulated standings */}
-      <section className="overflow-hidden rounded-xl border border-border bg-card">
-        <header className="border-b border-border px-4 py-2.5">
-          <h3 className="font-display text-sm uppercase tracking-widest">
-            Projected Standings — Simulated Season
-          </h3>
-          <p className="text-[11px] text-muted-foreground">
+      <section className={cn("overflow-hidden", card)}>
+        <header className={cn("border-b px-4 py-2.5", headBorder)}>
+          <h3 className={sectionTitle}>Projected Standings — Simulated Season</h3>
+          <p className={cn("text-[11px]", muted)}>
             {Math.max(1, playoffsStartWeek - 1)}-week schedule simulation weighted by lineup
             strength and bench depth.
           </p>
         </header>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border text-[10px] uppercase tracking-widest text-muted-foreground">
+            <tr
+              className={cn(
+                "border-b text-[10px] uppercase tracking-widest",
+                headBorder,
+                muted,
+              )}
+            >
               <th className="px-4 py-2 text-left font-display">#</th>
               <th className="px-2 py-2 text-left font-display">Team</th>
               <th className="px-2 py-2 text-right font-display">Record</th>
@@ -243,27 +300,24 @@ export function MockRecap({
               <tr
                 key={t.team}
                 className={cn(
-                  "border-b border-border/60 last:border-0",
-                  t.team === settings.myTeam && "bg-primary/10",
+                  "border-b last:border-0",
+                  rowBorder,
+                  t.team === settings.myTeam && youRow,
                 )}
               >
-                <td className="tabnum px-4 py-2 text-muted-foreground">{i + 1}</td>
+                <td className={cn("tabnum px-4 py-2", muted)}>{i + 1}</td>
                 <td className="px-2 py-2 font-semibold">
                   {t.name}
-                  {t.team === settings.myTeam && (
-                    <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-primary-foreground">
-                      You
-                    </span>
-                  )}
+                  {t.team === settings.myTeam && <span className={youPill}>You</span>}
                 </td>
                 <td className="tabnum px-2 py-2 text-right">
                   {t.wins}-{t.losses}
                 </td>
-                <td className="tabnum px-2 py-2 text-right text-muted-foreground">
+                <td className={cn("tabnum px-2 py-2 text-right", muted)}>
                   {t.pointsFor.toFixed(0)}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <GradePill grade={t.grade} tone={t.tone} />
+                  <GradePill grade={t.grade} tone={t.tone} mobile={mobile} />
                 </td>
               </tr>
             ))}
@@ -272,28 +326,35 @@ export function MockRecap({
       </section>
 
       {/* 3. Team grade cards */}
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <section
+        className={cn("grid gap-3", !mobile && "md:grid-cols-2 xl:grid-cols-3")}
+      >
         {teams.map((t) => (
-          <article key={t.team} className="rounded-xl border border-border bg-card p-4">
+          <article key={t.team} className={cn(card, "p-4")}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <h4 className="truncate font-display text-lg">{t.name}</h4>
-                <span className="mt-1 inline-block rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-                  {t.tag}
-                </span>
+                <h4
+                  className={cn(
+                    "truncate font-display text-lg",
+                    mobile && "font-bold",
+                  )}
+                >
+                  {t.name}
+                </h4>
+                <span className={tagChip}>{t.tag}</span>
               </div>
-              <GradePill grade={t.grade} tone={t.tone} big />
+              <GradePill grade={t.grade} tone={t.tone} big mobile={mobile} />
             </div>
             <dl className="mt-3 space-y-2 text-sm">
               <div>
-                <dt className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                <dt className={cn("text-[10px] uppercase tracking-widest", muted)}>
                   Best Value Pick
                 </dt>
                 <dd className="truncate">
                   {t.best ? (
                     <>
                       <span className="font-semibold">{t.best.player.name}</span>{" "}
-                      <span className="tabnum text-xs text-emerald-600">
+                      <span className={valueUp}>
                         +{Math.max(0, Math.round(t.best.delta))}
                       </span>
                     </>
@@ -303,16 +364,14 @@ export function MockRecap({
                 </dd>
               </div>
               <div>
-                <dt className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                <dt className={cn("text-[10px] uppercase tracking-widest", muted)}>
                   Biggest Reach
                 </dt>
                 <dd className="truncate">
                   {t.reach ? (
                     <>
                       <span className="font-semibold">{t.reach.player.name}</span>{" "}
-                      <span className="tabnum text-xs text-destructive">
-                        {Math.round(t.reach.delta)}
-                      </span>
+                      <span className={valueDown}>{Math.round(t.reach.delta)}</span>
                     </>
                   ) : (
                     "—"
@@ -320,7 +379,7 @@ export function MockRecap({
                 </dd>
               </div>
               <div>
-                <dt className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                <dt className={cn("text-[10px] uppercase tracking-widest", muted)}>
                   Projected Starters
                 </dt>
                 <dd className="tabnum">
@@ -342,19 +401,30 @@ function GradePill({
   grade,
   tone,
   big,
+  mobile,
 }: {
   grade: string;
   tone: "good" | "even" | "bad";
   big?: boolean;
+  mobile?: boolean;
 }) {
   return (
     <span
       className={cn(
         "inline-grid place-items-center rounded-lg border font-display font-semibold",
         big ? "size-11 text-xl" : "size-7 text-xs",
-        tone === "good" && "border-emerald-500/40 bg-emerald-500/10 text-emerald-600",
-        tone === "even" && "border-border bg-muted text-foreground",
-        tone === "bad" && "border-destructive/40 bg-destructive/10 text-destructive",
+        tone === "good" &&
+          (mobile
+            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 [.mobile-theme-dark_&]:text-emerald-400"
+            : "border-emerald-500/40 bg-emerald-500/10 text-emerald-600"),
+        tone === "even" &&
+          (mobile
+            ? "border-m-border bg-m-chip text-m-chip-fg"
+            : "border-border bg-muted text-foreground"),
+        tone === "bad" &&
+          (mobile
+            ? "border-red-500/40 bg-red-500/10 text-red-700 [.mobile-theme-dark_&]:text-red-400"
+            : "border-destructive/40 bg-destructive/10 text-destructive"),
       )}
     >
       {grade}

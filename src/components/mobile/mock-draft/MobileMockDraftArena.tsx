@@ -295,6 +295,7 @@ export function MobileMockDraftArena() {
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <MockRecap
+            variant="mobile"
             settings={settings}
             picks={picks}
             byId={byId}
