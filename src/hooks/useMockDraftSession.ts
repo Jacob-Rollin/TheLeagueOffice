@@ -91,6 +91,7 @@ export function useMockDraftSession({
   const [customOrder, setCustomOrder] = useState<string[]>([]);
   const [speed, setSpeed] = useState<MockDraftSpeed>("normal");
   const [paused, setPaused] = useState(false);
+  const [endedEarly, setEndedEarly] = useState(false);
   const [clock, setClock] = useState<number | null>(null);
   const [tab, setTab] = useState<MockDraftTab>("players");
   const [rosterTeam, setRosterTeam] = useState(1);
@@ -108,7 +109,7 @@ export function useMockDraftSession({
   const watchIds = useMemo(() => new Set(watch), [watch]);
 
   const totalPicks = settings.teams * settings.rounds;
-  const complete = picks.length >= totalPicks;
+  const complete = picks.length >= totalPicks || endedEarly;
   const currentOverall = Math.min(picks.length + 1, totalPicks);
   const onTheClock = teamForPick(currentOverall, settings.teams, settings.snake);
   const myTurn = live && started && !complete && onTheClock === settings.myTeam;
@@ -389,6 +390,7 @@ export function useMockDraftSession({
           : normalizeDraftAiSpeed(session.speed ?? nextConfig.draftSpeed),
       );
       setPaused(Boolean(session.paused));
+      setEndedEarly(Boolean(session.endedEarly));
       const restoredTab = session.tab === "board" ? "players" : (session.tab as MockDraftTab) || "players";
       setTab(restoredTab === "queue" || restoredTab === "team" ? restoredTab : "players");
       setRosterTeam(session.rosterTeam || slot);
@@ -399,6 +401,7 @@ export function useMockDraftSession({
       setRosterTeam(slot);
       setSpeed(normalizeDraftAiSpeed(nextConfig.draftSpeed));
       setPaused(false);
+      setEndedEarly(false);
       setTab("players");
       clearMockSession();
     }
@@ -415,12 +418,13 @@ export function useMockDraftSession({
       customOrder,
       speed,
       paused,
+      endedEarly,
       tab,
       rosterTeam,
     };
     const id = window.setTimeout(() => saveMockSession(payload), 120);
     return () => window.clearTimeout(id);
-  }, [config, started, picks, watch, customOrder, speed, paused, tab, rosterTeam]);
+  }, [config, started, picks, watch, customOrder, speed, paused, endedEarly, tab, rosterTeam]);
 
   const watchRef = useRef(watch);
   watchRef.current = watch;
@@ -462,6 +466,12 @@ export function useMockDraftSession({
   }, []);
 
   const undoPick = useCallback(() => setPicks((prev) => prev.slice(0, -1)), []);
+
+  /** Finish the mock early — freezes AI/clock and treats the board as complete. */
+  const endDraftEarly = useCallback(() => {
+    setEndedEarly(true);
+    setPaused(true);
+  }, []);
 
   const myUpcoming = nextPicksFor(settings.myTeam, currentOverall, settings, 1);
   const untilMyPick = myUpcoming.length ? myUpcoming[0]! - currentOverall : null;
@@ -513,6 +523,7 @@ export function useMockDraftSession({
     moveQueued,
     removeQueued,
     undoPick,
+    endDraftEarly,
     clearSession: clearMockSession,
   };
 }

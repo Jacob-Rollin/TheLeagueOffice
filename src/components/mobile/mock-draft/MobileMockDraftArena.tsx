@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Crosshair, Settings, Timer, X } from "lucide-react";
+import { Crosshair, Menu, Timer, X } from "lucide-react";
 
 import { MockRecap } from "@/components/draft/MockRecap";
 import { useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
@@ -26,6 +26,11 @@ import {
 import { warmMockDraftClientCaches } from "@/lib/mock-draft-warm";
 import { cn } from "@/lib/utils";
 
+import {
+  MobileMockDraftConfirm,
+  MobileMockDraftNotice,
+  type MockDraftConfirmRequest,
+} from "./MobileMockDraftConfirm";
 import { MobileMockDraftBoard } from "./MobileMockDraftBoard";
 import { MobileMockDraftMenu } from "./MobileMockDraftMenu";
 import { MobileMockDraftSetupForm } from "./MobileMockDraftSetupForm";
@@ -48,6 +53,8 @@ export function MobileMockDraftArena() {
   const [soundsMuted, setSoundsMuted] = useState(() => isMockDraftSoundsMuted());
   /** Splash waits for day-cached catalog (+ board extras) like desktop. */
   const [cacheReady, setCacheReady] = useState(false);
+  const [confirmReq, setConfirmReq] = useState<MockDraftConfirmRequest | null>(null);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
 
   const seedDefaults = useCallback(() => {
     if (!loadMockConfig()) {
@@ -90,6 +97,7 @@ export function MobileMockDraftArena() {
     moveQueued,
     removeQueued,
     clearSession,
+    endDraftEarly,
     myCounts,
     nextUserOverall,
     setSpeed,
@@ -127,14 +135,18 @@ export function MobileMockDraftArena() {
   // Re-arm Web Audio after backgrounding / settings overlays (iOS suspends it).
   useEffect(() => installMockDraftAudioResume(), []);
 
-  // Resume an in-progress session into live mode; otherwise stay in lobby.
+  // Resume an in-progress session into live mode. Fresh lobby honors the saved
+  // Draft Settings slot so Start works without tapping Claim again (Claim still
+  // switches seats).
   useEffect(() => {
     if (!started || !config) return;
     const stored = loadMockSession();
     if (mockSessionMatchesConfig(stored, config) && (stored?.picks.length ?? 0) > 0) {
       setLive(true);
       setSlotClaimed(true);
+      return;
     }
+    setSlotClaimed(true);
   }, [started, config, bootKey]);
 
   const leaveToHome = () => {
@@ -157,9 +169,18 @@ export function MobileMockDraftArena() {
     setBootKey((k) => k + 1);
   };
 
-  const confirmLeave = (message: string, then: () => void) => {
-    if (picks.length > 0 && !window.confirm(message)) return;
-    then();
+  const confirmLeave = (title: string, message: string, then: () => void) => {
+    if (picks.length === 0) {
+      then();
+      return;
+    }
+    setConfirmReq({
+      title,
+      message,
+      confirmLabel: "Leave",
+      danger: true,
+      onConfirm: then,
+    });
   };
 
   const openSettings = () => {
@@ -215,19 +236,21 @@ export function MobileMockDraftArena() {
     saveMockConfig(clean);
 
     if (live && picks.length > 0 && structuralChanged) {
-      if (
-        !window.confirm(
-          "Saving settings restarts this mock with the new configuration. Continue?",
-        )
-      ) {
-        return;
-      }
-      clearMockSession();
-      setSettingsOpen(false);
-      setShowRecap(false);
-      setLive(false);
-      setSlotClaimed(true);
-      setBootKey((k) => k + 1);
+      setConfirmReq({
+        title: "Restart mock?",
+        message:
+          "Saving settings restarts this mock with the new configuration. Your current picks will be cleared.",
+        confirmLabel: "Restart",
+        danger: true,
+        onConfirm: () => {
+          clearMockSession();
+          setSettingsOpen(false);
+          setShowRecap(false);
+          setLive(false);
+          setSlotClaimed(true);
+          setBootKey((k) => k + 1);
+        },
+      });
       return;
     }
 
@@ -241,7 +264,7 @@ export function MobileMockDraftArena() {
 
   const startDraft = () => {
     if (!slotClaimed) {
-      window.alert("Claim a draft slot first.");
+      setNoticeMessage("Claim a draft slot first.");
       return;
     }
     unlockMockDraftAudio();
@@ -328,10 +351,14 @@ export function MobileMockDraftArena() {
               type="button"
               aria-label="Exit draft"
               onClick={() =>
-                confirmLeave("Leave this mock draft?", () => {
-                  clearSession();
-                  void navigate({ to: "/m" });
-                })
+                confirmLeave(
+                  "Leave draft?",
+                  "Leave this mock draft? Your in-progress board will be cleared.",
+                  () => {
+                    clearSession();
+                    void navigate({ to: "/m" });
+                  },
+                )
               }
               className="shrink-0 rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
             >
@@ -442,7 +469,7 @@ export function MobileMockDraftArena() {
               }}
               className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
             >
-              <Settings className="size-5" strokeWidth={2.5} />
+              <Menu className="size-5" strokeWidth={2.5} />
             </button>
           </div>
         </div>
@@ -513,6 +540,7 @@ export function MobileMockDraftArena() {
       <MobileMockDraftMenu
         open={menuOpen}
         lobby={inLobby}
+        complete={complete}
         paused={paused}
         soundsMuted={soundsMuted}
         canStart={slotClaimed}
@@ -530,19 +558,46 @@ export function MobileMockDraftArena() {
         onEndDraft={() => {
           unlockMockDraftAudio();
           setMenuOpen(false);
-          if (!complete && picks.length > 0) {
-            if (!window.confirm("End this draft early and view the recap?")) return;
+          if (complete) {
+            setShowRecap(true);
+            return;
           }
-          setPaused(true);
-          setShowRecap(true);
+          if (picks.length === 0) {
+            endDraftEarly();
+            setShowRecap(true);
+            return;
+          }
+          setConfirmReq({
+            title: "End draft early?",
+            message: "End this draft and view the recap? You can still browse the board afterward.",
+            confirmLabel: "End Draft",
+            danger: true,
+            onConfirm: () => {
+              endDraftEarly();
+              setShowRecap(true);
+            },
+          });
         }}
         onOpenSettings={openSettings}
         onOpenAppSettings={openAppSettings}
         onToggleSounds={toggleSounds}
         onDeleteDraft={() => {
           setMenuOpen(false);
-          confirmLeave("Delete this mock draft and return home?", leaveToHome);
+          confirmLeave(
+            "Delete draft?",
+            "Delete this mock draft and return home? This cannot be undone.",
+            leaveToHome,
+          );
         }}
+      />
+
+      <MobileMockDraftConfirm
+        request={confirmReq}
+        onDismiss={() => setConfirmReq(null)}
+      />
+      <MobileMockDraftNotice
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
       />
 
       {appSettingsOpen ? (
