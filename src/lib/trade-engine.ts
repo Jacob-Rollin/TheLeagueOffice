@@ -324,13 +324,15 @@ export function effectiveStarters(
 }
 
 const FLEX_ELIGIBLE = ["RB", "WR", "TE"];
+/** Superflex accepts QB plus standard flex positions. */
+const SFLEX_ELIGIBLE = ["QB", "RB", "WR", "TE"];
 
 export type Lineup = {
   /** Weekly points produced by the optimized starting lineup. */
   points: number;
-  /** Weekly points produced by each starting slot group (FLEX included). */
+  /** Weekly points produced by each starting slot group (FLEX / SFLEX included). */
   bySlot: Record<string, number>;
-  /** Starting slots left unfilled, by position (FLEX included). */
+  /** Starting slots left unfilled, by position (FLEX / SFLEX included). */
   vacancies: Record<string, number>;
   /** Total unfilled starting slots. */
   vacancyCount: number;
@@ -339,9 +341,8 @@ export type Lineup = {
 };
 
 /**
- * Two-pass optimizer: dedicated starting slots first, then the single best
- * remaining RB/WR/TE fills each FLEX spot. Bench totals are irrelevant — only
- * starting-lineup fulfillment counts.
+ * Multi-pass optimizer: dedicated slots → W/R/T FLEX → Superflex (QB/RB/WR/TE).
+ * Bench totals are irrelevant — only starting-lineup fulfillment counts.
  */
 export function optimizeLineup(
   players: FitPlayer[],
@@ -367,7 +368,7 @@ export function optimizeLineup(
   let points = 0;
   let used = 0;
 
-  // Pass A/B pass 1 — dedicated slots, highest projection first.
+  // Pass 1 — dedicated slots, highest projection first.
   for (const pos of ["QB", "RB", "WR", "TE", "K", "DEF"]) {
     const need = Math.max(0, req[pos] ?? 0);
     let filled = 0;
@@ -384,7 +385,7 @@ export function optimizeLineup(
     if (filled < need) vacancies[pos] = need - filled;
   }
 
-  // Pass 2 — dynamic flex optimization from the surplus RB/WR/TE pool.
+  // Pass 2 — W/R/T flex from the surplus RB/WR/TE pool.
   const flexNeed = Math.max(0, req["FLEX"] ?? 0);
   let flexFilled = 0;
   bySlot["FLEX"] = 0;
@@ -399,6 +400,22 @@ export function optimizeLineup(
     used++;
   }
   if (flexFilled < flexNeed) vacancies["FLEX"] = flexNeed - flexFilled;
+
+  // Pass 3 — Superflex from remaining QB/RB/WR/TE (after dedicated + FLEX).
+  const sflexNeed = Math.max(0, req["SFLEX"] ?? 0);
+  let sflexFilled = 0;
+  bySlot["SFLEX"] = 0;
+  for (const p of pool) {
+    if (sflexFilled >= sflexNeed) break;
+    if (p._used) continue;
+    if (!SFLEX_ELIGIBLE.includes(p.pos)) continue;
+    p._used = true;
+    points += p.weekly;
+    bySlot["SFLEX"] = (bySlot["SFLEX"] ?? 0) + p.weekly;
+    sflexFilled++;
+    used++;
+  }
+  if (sflexFilled < sflexNeed) vacancies["SFLEX"] = sflexNeed - sflexFilled;
 
   return {
     points,
@@ -420,12 +437,18 @@ export type MarginalImpact = {
   slotDelta: Record<string, number>;
 };
 
-/** Build the post-trade roster pool (remove give, insert get). */
+/** Build the post-trade roster pool (remove give, insert get). Prefer stable ids. */
 function applyTrade(roster: FitPlayer[], give: FitPlayer[], get: FitPlayer[]): FitPlayer[] {
   const after: FitPlayer[] = [];
   const pending = [...give];
   for (const p of roster) {
-    const idx = pending.findIndex((g) => g.pos === p.pos && Math.abs(g.weekly - p.weekly) < 1e-6);
+    const byId = p.id
+      ? pending.findIndex((g) => g.id && g.id === p.id)
+      : -1;
+    const idx =
+      byId >= 0
+        ? byId
+        : pending.findIndex((g) => g.pos === p.pos && Math.abs(g.weekly - p.weekly) < 1e-6);
     if (idx >= 0) {
       pending.splice(idx, 1);
       continue;
@@ -435,6 +458,8 @@ function applyTrade(roster: FitPlayer[], give: FitPlayer[], get: FitPlayer[]): F
   after.push(...get);
   return after;
 }
+
+const LINEUP_SLOTS = ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX", "SFLEX"] as const;
 
 /**
  * Marginal Starting Lineup Impact simulation.
@@ -458,7 +483,7 @@ export function marginalImpact(input: {
   const before = optimizeLineup(roster, req);
   const after = optimizeLineup(applyTrade(roster, give, get), req);
   const slotDelta: Record<string, number> = {};
-  for (const slot of ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX"])
+  for (const slot of LINEUP_SLOTS)
     slotDelta[slot] = (after.bySlot[slot] ?? 0) - (before.bySlot[slot] ?? 0);
   return {
     before: before.points,
@@ -497,7 +522,7 @@ export function rosterFit(input: {
   const clogs: string[] = [];
   let pct = 0;
 
-  const slots = ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX"].filter((k) => (req[k] ?? 0) > 0);
+  const slots = LINEUP_SLOTS.filter((k) => (req[k] ?? 0) > 0);
   for (const slot of slots) {
     const vb = before.vacancies[slot] ?? 0;
     const va = now.vacancies[slot] ?? 0;
@@ -511,9 +536,9 @@ export function rosterFit(input: {
   const base = Math.max(before.points, 1);
   pct += Math.max(-25, Math.min(25, (impact.delta / base) * 140));
 
-  // A genuine starting upgrade overrules package-size dilution.
-  if (impact.delta > 0.25) pct = Math.max(pct, 8);
-  if (impact.delta > 2) pct = Math.max(pct, 15);
+  // Soft floors — clear starter upgrades help, but do not force letter-A grades.
+  if (impact.delta > 0.25) pct = Math.max(pct, 6);
+  if (impact.delta > 2) pct = Math.max(pct, 10);
 
   // Incoming bodies that never crack the optimized lineup are bench depth.
   if (impact.delta <= 0 || !gate.eligible) {
@@ -549,8 +574,22 @@ function sameFitPlayer(a: FitPlayer, b: FitPlayer): boolean {
   return a.pos === b.pos && Math.abs(a.weekly - b.weekly) < 1e-6;
 }
 
-/** Hard cap on rostered quarterbacks for Market Radar / fit evaluations. */
+/**
+ * Legacy default QB roster capacity (1QB redraft). Prefer `qbRosterCapacity(starters)`
+ * when league starter template is known.
+ */
 export const MAX_QB_ROSTER_CAPACITY = 2;
+
+/**
+ * Soft QB headcount ceiling from starter template: dedicated QB slots + SFLEX + one
+ * backup. Superflex leagues can hold more than two QBs without being suppressed.
+ */
+export function qbRosterCapacity(starters?: Record<string, number> | null): number {
+  const req = effectiveStarters(starters);
+  const qbSlots = Math.max(0, req["QB"] ?? 0);
+  const sflexSlots = Math.max(0, req["SFLEX"] ?? 0);
+  return Math.max(MAX_QB_ROSTER_CAPACITY, qbSlots + sflexSlots + 1);
+}
 
 const SKILL_DEPTH_POSITIONS = new Set(["RB", "WR", "TE"]);
 /** Single-starter (or low-starter) positions that must not bleed RB/WR/TE depth. */
@@ -577,13 +616,14 @@ export function projectedPosCount(
   return countRosterPos(roster, pos) - countRosterPos(give, pos) + countRosterPos(get, pos);
 }
 
-/** True when a deal would push the roster past the hard 2-QB capacity. */
+/** True when a deal would push the roster past league QB capacity. */
 export function exceedsQbRosterCapacity(
   roster: FitPlayer[],
   give: FitPlayer[],
   get: FitPlayer[],
+  starters?: Record<string, number> | null,
 ): boolean {
-  return projectedPosCount(roster, give, get, "QB") > MAX_QB_ROSTER_CAPACITY;
+  return projectedPosCount(roster, give, get, "QB") > qbRosterCapacity(starters);
 }
 
 /**
@@ -632,10 +672,11 @@ export function tradeStarterEligible(input: {
     };
   }
 
-  if (exceedsQbRosterCapacity(roster, give, get)) {
+  const qbCap = qbRosterCapacity(req);
+  if (exceedsQbRosterCapacity(roster, give, get, req)) {
     return {
       eligible: false,
-      reason: `Suppressed — roster already at the ${MAX_QB_ROSTER_CAPACITY}-QB capacity limit.`,
+      reason: `Suppressed — roster already at the ${qbCap}-QB capacity limit.`,
       fillsVacancy: false,
       cracksLineup: false,
     };
@@ -674,8 +715,8 @@ export function tradeStarterEligible(input: {
     fillsVacancy,
     cracksLineup,
     reason: eligible
-      ? "Incoming assets project into an active starter or FLEX slot under league roster settings."
-      : "Suppressed — incoming target does not project higher than an active starter or fill an eligible starting/FLEX slot under synced league roster settings.",
+      ? "Incoming assets project into an active starter, FLEX, or Superflex slot under league roster settings."
+      : "Suppressed — incoming target does not project into a starter, FLEX, or Superflex slot under synced league roster settings.",
   };
 }
 
@@ -768,10 +809,11 @@ const SLOT_LABEL: Record<string, string> = {
   K: "K",
   DEF: "DEF",
   FLEX: "flex",
+  SFLEX: "superflex",
 };
 
 /**
- * High-End Executive Summary Engine with Two-Sided Opponent Evaluation.
+ * Plain-language executive summary with optional rival-acceptance note.
  */
 export function executiveSummary(input: {
   ready: boolean;
@@ -782,33 +824,36 @@ export function executiveSummary(input: {
   impact?: MarginalImpact;
   opponentImpact?: MarginalImpact | null;
 }): string {
-  if (!input.ready) return "Add players to both sides to run the valuation model.";
+  if (!input.ready) return "Add players on both sides to grade this trade.";
 
   const impact = input.impact;
+  const overflowNote = input.overflow
+    ? " You would need open bench spots (or a drop) to roster the full return."
+    : "";
 
-  // 🟢 THE FIX: Premium, descriptive Sandbox summary that aligns perfectly with the visual slider bar direction
   if (!impact || !impact.before || impact.before === 0) {
     const valueTrendDiff = input.pct;
     if (Math.abs(valueTrendDiff) <= 5) {
-      return "TRADE PROPOSAL ANALYSIS: Balanced asset exchange. Both packages map cleanly on our valuation matrix with identical historical value distributions.";
+      return `Market values look roughly even on both sides.${overflowNote}`;
     }
     return valueTrendDiff > 0
-      ? `TRADE PROPOSAL ANALYSIS: Highly Favorable. This proposal tilts significantly in your direction (+${valueTrendDiff.toFixed(1)}% asset premium) based on consensus market value index feeds.`
-      : `TRADE PROPOSAL ANALYSIS: Disadvantageous Asset Drain. This proposal tilts heavily to the rival side (${valueTrendDiff.toFixed(1)}% loss). You are surrendering an elite high-value starter for an inadequate return packages. Recommendation: DECLINE DEAL.`;
+      ? `Market values favor your side by about ${valueTrendDiff.toFixed(1)}%.${overflowNote}`
+      : `Market values favor their side by about ${Math.abs(valueTrendDiff).toFixed(1)}%. Push for more or pass.${overflowNote}`;
   }
 
   const consolidating = input.getCount < input.giveCount;
   const spreading = input.getCount > input.giveCount;
 
-  // Attached evaluation function checking rival starting lineups dynamically
   const withRival = (baseMsg: string) => {
     if (input.opponentImpact && input.opponentImpact.delta < -0.25) {
-      return `${baseMsg} RIVAL ACCEPTANCE PROBABILITY: LOW. This deal reduces the opponent's active weekly starting floor by ${Math.abs(input.opponentImpact.delta).toFixed(1)} pts/wk.`;
+      return `${baseMsg} Their starting lineup would drop about ${Math.abs(input.opponentImpact.delta).toFixed(1)} pts/wk, so they may not accept.`;
+    }
+    if (input.opponentImpact && input.opponentImpact.delta > 0.25) {
+      return `${baseMsg} Their lineup also improves (~+${input.opponentImpact.delta.toFixed(1)} pts/wk), which helps acceptance.`;
     }
     return baseMsg;
   };
 
-  // Explicit type configuration mapping for structural array objects
   const shifts: Array<{ slot: string; delta: number }> = Object.entries(impact.slotDelta)
     .map((entry) => ({ slot: String(entry[0]), delta: Number(entry[1]) }))
     .filter((s) => Math.abs(s.delta) >= 0.25)
@@ -818,31 +863,31 @@ export function executiveSummary(input: {
   const downs = shifts.filter((s) => s.delta < 0);
   const label = (slot: string) => SLOT_LABEL[slot] ?? slot;
   const fmt = (s: { slot: string; delta: number }) =>
-    `${label(s.slot)} tier floor (${s.delta > 0 ? "+" : ""}${s.delta.toFixed(1)} pts/wk)`;
+    `${label(s.slot)} (${s.delta > 0 ? "+" : ""}${s.delta.toFixed(1)} pts/wk)`;
 
   if (impact.delta > 0.25) {
     const top = ups[0];
     const bottom = downs[0];
-    const lead = top ? fmt(top) : "weekly starting floor";
+    const lead = top ? fmt(top) : "starting lineup";
     const tail = bottom
-      ? ` while giving back ${bottom.delta.toFixed(1)} pts/wk at ${label(bottom.slot)}`
-      : ", while holding positional parity everywhere else";
-    const scale = impact.delta >= 2 ? "significantly upgrades" : "upgrades";
+      ? ` You give back ${Math.abs(bottom.delta).toFixed(1)} at ${label(bottom.slot)}.`
+      : "";
+    const scale = impact.delta >= 2 ? "clearly upgrades" : "upgrades";
     return withRival(
-      `TRADE PROPOSAL ANALYSIS: This deal ${scale} your starting ${lead}${tail}. Net marginal lineup margin: +${impact.delta.toFixed(1)} pts/wk${spreading ? ", and that starting upgrade outweighs the bench depth you dilute." : "."}`,
+      `This deal ${scale} your ${lead} (net +${impact.delta.toFixed(1)} pts/wk).${tail}${spreading ? " The starter bump outweighs thinning the bench." : ""}${overflowNote}`,
     );
   }
 
   if (impact.delta < -0.25) {
     const worst = downs[0];
     const best = ups[0];
-    const lead = worst ? fmt(worst) : "weekly starting floor";
-    const tail = best ? ` The only gain is ${fmt(best)}.` : "";
-    return `TRADE PROPOSAL ANALYSIS: This deal downgrades your starting ${lead}. Net marginal lineup margin: ${impact.delta.toFixed(1)} pts/wk.${tail}`;
+    const lead = worst ? fmt(worst) : "starting lineup";
+    const tail = best ? ` Only gain: ${fmt(best)}.` : "";
+    return `This deal weakens your ${lead} (net ${impact.delta.toFixed(1)} pts/wk).${tail}${overflowNote}`;
   }
 
   return withRival(
-    `TRADE PROPOSAL ANALYSIS: Your optimized starting lineup projects the same output either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide this one on schedule, bye weeks, and long-term outlook."}`,
+    `Your starting lineup projects about the same either way (${impact.delta >= 0 ? "+" : ""}${impact.delta.toFixed(1)} pts/wk). ${consolidating ? "You consolidate bodies without changing weekly production." : "Decide on schedule, byes, and longer-term outlook."}${overflowNote}`,
   );
 }
 
@@ -890,12 +935,12 @@ export function scaleValue(raw: number): number {
 export function headlineVerdict(input: { ready: boolean; pct: number }): string {
   if (!input.ready) return "Load both sides";
   const p = input.pct;
-  if (p >= 25) return "Yes, by all means";
+  if (p >= 25) return "Strong accept";
   if (p >= 15) return "Accept this deal";
   if (p >= 8) return "Worth doing";
-  if (p > -8) return "Fair and balanced";
+  if (p > -8) return "Even deal";
   if (p > -15) return "Push for more";
-  return "Walk away from this deal";
+  return "Walk away";
 }
 
 /**
@@ -967,6 +1012,9 @@ export function powerDeltaToGradePct(
 /**
  * Small Top-Needs adjustment: boost returns that fill listed holes, soft-penalize
  * surplus clogs and dealing away a needed position.
+ *
+ * Optional `getQualityByPos` / `giveQualityByPos` (0–1+) scale need hits by whether
+ * the player is a real upgrade vs positional replacement (VORP-style).
  */
 export function needFitAdjustment(input: {
   topNeeds: string[];
@@ -974,11 +1022,20 @@ export function needFitAdjustment(input: {
   givePositions: string[];
   fills?: string[];
   clogs?: string[];
+  /** 0 = replacement-level filler, 1 = clear starter upgrade at that pos. */
+  getQualityByPos?: Record<string, number>;
+  giveQualityByPos?: Record<string, number>;
 }): number {
   const needs = input.topNeeds ?? [];
   if (!needs.length && !(input.getPositions?.length || input.givePositions?.length)) {
     return 0;
   }
+
+  const quality = (map: Record<string, number> | undefined, pos: string) => {
+    const q = map?.[pos] ?? map?.[normalizeNeedPos(pos)];
+    if (q == null || !Number.isFinite(q)) return 1;
+    return Math.max(0.25, Math.min(1.35, q));
+  };
 
   let score = 0;
   const seenGet = new Set<string>();
@@ -986,14 +1043,14 @@ export function needFitAdjustment(input: {
     const pos = normalizeNeedPos(raw);
     if (!pos || seenGet.has(pos)) continue;
     seenGet.add(pos);
-    if (posMatchesTopNeed(pos, needs)) score += 8;
+    if (posMatchesTopNeed(pos, needs)) score += 8 * quality(input.getQualityByPos, pos);
   }
   const seenGive = new Set<string>();
   for (const raw of input.givePositions) {
     const pos = normalizeNeedPos(raw);
     if (!pos || seenGive.has(pos)) continue;
     seenGive.add(pos);
-    if (posMatchesTopNeed(pos, needs)) score -= 5;
+    if (posMatchesTopNeed(pos, needs)) score -= 5 * quality(input.giveQualityByPos, pos);
   }
   for (const raw of input.fills ?? []) {
     if (posMatchesTopNeed(raw, needs)) score += 3;
@@ -1002,7 +1059,93 @@ export function needFitAdjustment(input: {
     if (!posMatchesTopNeed(raw, needs)) score -= 4;
   }
 
-  return Math.max(-20, Math.min(20, score));
+  return Math.max(-20, Math.min(20, Math.round(score * 10) / 10));
+}
+
+/**
+ * League-relative replacement weekly at a position: the (starters+1)th best
+ * projection among all rostered players. Used to scale need-fit quality.
+ */
+export function positionalReplacementWeekly(
+  leaguePlayers: FitPlayer[],
+  pos: string,
+  starterCount: number,
+): number {
+  const needle = String(pos ?? "").toUpperCase();
+  const ranked = leaguePlayers
+    .filter((p) => fitPos(p) === needle)
+    .map((p) => p.weekly)
+    .sort((a, b) => b - a);
+  if (!ranked.length) return 0;
+  const idx = Math.min(Math.max(0, starterCount), ranked.length - 1);
+  return ranked[idx] ?? 0;
+}
+
+/** Map a player's weekly vs replacement into a 0.25–1.35 quality multiplier. */
+export function needQualityFromWeekly(weekly: number, replacement: number): number {
+  if (!Number.isFinite(weekly) || weekly <= 0) return 0.25;
+  if (!Number.isFinite(replacement) || replacement <= 0) {
+    return weekly >= 8 ? 1 : 0.6;
+  }
+  const ratio = weekly / replacement;
+  if (ratio >= 1.35) return 1.35;
+  if (ratio >= 1.1) return 1;
+  if (ratio >= 0.95) return 0.75;
+  if (ratio >= 0.8) return 0.5;
+  return 0.25;
+}
+
+/**
+ * Soft post-blend adjustments: injury exposure, forced drops, rival acceptance,
+ * and light consolidation alignment with package scoring.
+ */
+export function analyzerGradeAdjustments(input: {
+  injuryDiff: number;
+  dropCount: number;
+  dropPenaltyWeekly: number;
+  rivalLineupDelta: number | null;
+  giveCount: number;
+  getCount: number;
+  lineupDelta: number;
+}): number {
+  let adj = 0;
+  // Incoming medical risk vs outgoing (riskScore units).
+  if (input.injuryDiff > 0) adj -= Math.min(6, input.injuryDiff * 1.5);
+  else if (input.injuryDiff < 0) adj += Math.min(4, Math.abs(input.injuryDiff) * 1.2);
+
+  if (input.dropCount > 0) {
+    adj -= Math.min(8, input.dropCount * 2 + Math.min(4, input.dropPenaltyWeekly * 0.35));
+  }
+
+  // Unrealistic fleeces: you gain a lot, they lose a starter.
+  if (
+    input.rivalLineupDelta != null &&
+    input.rivalLineupDelta < -1 &&
+    input.lineupDelta > 1
+  ) {
+    adj -= Math.min(6, Math.abs(input.rivalLineupDelta) * 1.5);
+  }
+
+  // Desk-aligned consolidation nudge (small).
+  const bodyDelta = input.getCount - input.giveCount;
+  if (bodyDelta < 0 && input.lineupDelta > 0.25) adj += Math.min(3, Math.abs(bodyDelta));
+  if (bodyDelta > 0 && input.lineupDelta < 0.25) adj -= Math.min(3, bodyDelta);
+
+  return Math.max(-12, Math.min(8, Math.round(adj * 10) / 10));
+}
+
+/** FantasyCalc current-values URL for redraft/dynasty and 1QB/SF. */
+export function fantasyCalcCurrentValuesUrl(opts?: {
+  isDynasty?: boolean;
+  numQbs?: 1 | 2;
+  numTeams?: number;
+  ppr?: 0 | 0.5 | 1;
+}): string {
+  const isDynasty = opts?.isDynasty ? "true" : "false";
+  const numQbs = opts?.numQbs === 2 ? 2 : 1;
+  const numTeams = Math.max(8, Math.min(24, opts?.numTeams ?? 12));
+  const ppr = opts?.ppr ?? 1;
+  return `https://api.fantasycalc.com/values/current?isDynasty=${isDynasty}&numQbs=${numQbs}&numTeams=${numTeams}&ppr=${ppr}`;
 }
 
 /**
@@ -1090,7 +1233,7 @@ export function needFitNote(input: {
 /** Prominent warning label for unequal packages that force bench drops. */
 export function benchSlotWarning(count: number): string {
   if (count <= 0) return "";
-  return `⚠️ +${count} BENCH SLOT${count > 1 ? "S" : ""} REQUIRED`;
+  return `+${count} bench slot${count > 1 ? "s" : ""} required`;
 }
 
 /** Roster statuses that freeze a player's active availability. */
@@ -1118,7 +1261,7 @@ export type BulletAsset = {
 
 export type Bullet = { tone: "pro" | "con" | "critical"; text: string };
 
-const WEEKS_LEFT = 17;
+const DEFAULT_WEEKS_LEFT = 17;
 
 /**
  * Context-aware bullet generation for one side of the deal. `side` decides
@@ -1133,9 +1276,15 @@ export function sideBullets(input: {
   benchDelta?: number | null;
   /** Extra bench slots the receiving package forces the user to clear. */
   dropSlots?: number;
+  /** Remaining NFL weeks in the fantasy season (defaults mid-season-safe 17). */
+  remainingWeeks?: number;
 }): Bullet[] {
   const out: Bullet[] = [];
   const incoming = input.side === "get";
+  const weeksLeft = Math.max(
+    1,
+    Math.min(18, Number(input.remainingWeeks) > 0 ? Number(input.remainingWeeks) : DEFAULT_WEEKS_LEFT),
+  );
 
   for (const a of input.assets) {
     const status = (a.injuryStatus ?? "").trim().toUpperCase();
@@ -1183,25 +1332,25 @@ export function sideBullets(input: {
     if (d > 0.25) {
       out.push({
         tone: "pro",
-        text: `Starting Lineup Boost: Increases your projected active scoring by ${d.toFixed(
+        text: `Starting lineup boost: +${d.toFixed(1)} pts/week (~${(d * weeksLeft).toFixed(
           1,
-        )} pts/week (${(d * WEEKS_LEFT).toFixed(1)} pts over season).`,
+        )} over the remaining ${weeksLeft} weeks).`,
       });
     } else if (d < -0.25) {
       out.push({
         tone: "con",
-        text: `Starting Lineup Drop: Reduces your projected active scoring by ${Math.abs(d).toFixed(
+        text: `Starting lineup drop: ${d.toFixed(1)} pts/week (~${Math.abs(d * weeksLeft).toFixed(
           1,
-        )} pts/week (${Math.abs(d * WEEKS_LEFT).toFixed(1)} pts over season).`,
+        )} over the remaining ${weeksLeft} weeks).`,
       });
     }
     const b = input.benchDelta ?? 0;
     if (Math.abs(b) >= 0.25) {
       out.push({
         tone: b > 0 ? "pro" : "con",
-        text: `Bench Depth Differential: Modifies bench totals by ${b > 0 ? "+" : ""}${b.toFixed(
-          1,
-        )} pts/week (${b > 0 ? "+" : ""}${(b * WEEKS_LEFT).toFixed(1)} pts over season).`,
+        text: `Bench depth: ${b > 0 ? "+" : ""}${b.toFixed(1)} pts/week (~${
+          b > 0 ? "+" : ""
+        }${(b * weeksLeft).toFixed(1)} over ${weeksLeft} weeks).`,
       });
     }
   }
@@ -1209,11 +1358,9 @@ export function sideBullets(input: {
   if (incoming && input.dropSlots && input.dropSlots > 0) {
     out.push({
       tone: "critical",
-      text: `Roster Impact: Completing this ${input.assets.length}-for-${
-        input.assets.length - input.dropSlots
-      } or multi-player deal will require manually dropping ${input.dropSlots} bench asset${
+      text: `Roster crunch: you need to drop ${input.dropSlots} player${
         input.dropSlots > 1 ? "s" : ""
-      } to clear active roster cap constraints.`,
+      } to fit this return on your roster.`,
     });
   }
 
@@ -2040,7 +2187,13 @@ function evaluateDeal(input: {
     const pos = fitPos(g);
     if (oppHole && pos === oppHole.pos) return true;
     if ((theirsImpact.slotDelta[pos] ?? 0) > 0.05) return true;
-    if (FLEX_ELIGIBLE.includes(pos) && (theirsImpact.slotDelta["FLEX"] ?? 0) > 0.05) return true;
+    if (
+      FLEX_ELIGIBLE.includes(pos) &&
+      ((theirsImpact.slotDelta["FLEX"] ?? 0) > 0.05 || (theirsImpact.slotDelta["SFLEX"] ?? 0) > 0.05)
+    ) {
+      return true;
+    }
+    if (pos === "QB" && (theirsImpact.slotDelta["SFLEX"] ?? 0) > 0.05) return true;
     return false;
   });
   if (!giveHelpsOppNeed && opponentDelta < 0.25) return null;
