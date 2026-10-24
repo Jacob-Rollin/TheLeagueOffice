@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Crosshair, Settings, Timer, X } from "lucide-react";
+import { Crosshair, Menu, Timer, X } from "lucide-react";
 
 import { MockRecap } from "@/components/draft/MockRecap";
 import { useOpenMobilePlayer } from "@/components/mobile/MobilePlayerSheet";
@@ -90,6 +90,7 @@ export function MobileMockDraftArena() {
     moveQueued,
     removeQueued,
     clearSession,
+    endDraftEarly,
     myCounts,
     nextUserOverall,
     setSpeed,
@@ -127,14 +128,18 @@ export function MobileMockDraftArena() {
   // Re-arm Web Audio after backgrounding / settings overlays (iOS suspends it).
   useEffect(() => installMockDraftAudioResume(), []);
 
-  // Resume an in-progress session into live mode; otherwise stay in lobby.
+  // Resume an in-progress session into live mode. Fresh lobby honors the saved
+  // Draft Settings slot so Start works without tapping Claim again (Claim still
+  // switches seats).
   useEffect(() => {
     if (!started || !config) return;
     const stored = loadMockSession();
     if (mockSessionMatchesConfig(stored, config) && (stored?.picks.length ?? 0) > 0) {
       setLive(true);
       setSlotClaimed(true);
+      return;
     }
+    setSlotClaimed(true);
   }, [started, config, bootKey]);
 
   const leaveToHome = () => {
@@ -441,7 +446,7 @@ export function MobileMockDraftArena() {
               }}
               className="rounded-lg bg-m-icon-bg p-2.5 text-m-icon-fg"
             >
-              <Settings className="size-5" strokeWidth={2.5} />
+              <Menu className="size-5" strokeWidth={2.5} />
             </button>
           </div>
         </div>
@@ -512,6 +517,7 @@ export function MobileMockDraftArena() {
       <MobileMockDraftMenu
         open={menuOpen}
         lobby={inLobby}
+        complete={complete}
         paused={paused}
         soundsMuted={soundsMuted}
         canStart={slotClaimed}
@@ -529,10 +535,14 @@ export function MobileMockDraftArena() {
         onEndDraft={() => {
           unlockMockDraftAudio();
           setMenuOpen(false);
-          if (!complete && picks.length > 0) {
+          if (complete) {
+            setShowRecap(true);
+            return;
+          }
+          if (picks.length > 0) {
             if (!window.confirm("End this draft early and view the recap?")) return;
           }
-          setPaused(true);
+          endDraftEarly();
           setShowRecap(true);
         }}
         onOpenSettings={openSettings}

@@ -6,6 +6,8 @@ type Props = {
   open: boolean;
   /** Lobby (pre-start) vs live / complete draft. */
   lobby: boolean;
+  /** Finished naturally or via End Draft — hide pause. */
+  complete?: boolean;
   paused: boolean;
   soundsMuted: boolean;
   /** Lobby: Start is enabled only after a slot is claimed. */
@@ -27,6 +29,7 @@ type Props = {
 export function MobileMockDraftMenu({
   open,
   lobby,
+  complete = false,
   paused,
   soundsMuted,
   canStart = false,
@@ -73,6 +76,8 @@ export function MobileMockDraftMenu({
             >
               Start Mock Draft
             </MenuBtn>
+          ) : complete ? (
+            <MenuBtn onClick={onEndDraft}>View Recap</MenuBtn>
           ) : (
             <>
               <MenuBtn onClick={onPauseToggle}>{paused ? "Resume Draft" : "Pause Draft"}</MenuBtn>

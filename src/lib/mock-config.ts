@@ -81,6 +81,8 @@ export type MockSessionState = {
   customOrder: string[];
   speed: DraftAiSpeed | "manual";
   paused: boolean;
+  /** User ended early from the menu — treat as finished (recap / no more picks). */
+  endedEarly?: boolean;
   tab: "players" | "board" | "team" | "queue";
   rosterTeam: number;
 };

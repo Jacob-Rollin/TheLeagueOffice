@@ -1173,25 +1173,25 @@ const QueuePane = memo(function QueuePane({
               side="top"
               align="center"
               sideOffset={8}
-              // Opaque card — skip shared PopoverContent fade/zoom (opacity
-              // animations) and theme tokens so the board never shows through.
-              style={{ backgroundColor: "#ffffff", opacity: 1 }}
-              className="z-[90] w-[min(18.5rem,calc(100vw-2rem))] rounded-xl border border-[#d9d5cc] p-3.5 text-[#1f2328] shadow-lg outline-none"
+              // Opaque m-* card — skip shared PopoverContent fade/zoom so the
+              // board never shows through; tokens follow light/dark shell.
+              style={{ opacity: 1 }}
+              className="z-[90] w-[min(18.5rem,calc(100vw-2rem))] rounded-xl border border-m-border bg-m-card p-3.5 text-m-card-fg shadow-lg outline-none"
             >
               <div className="flex items-start justify-between gap-3">
-                <p className="font-display text-sm font-bold text-[#1f2328]">
+                <p className="font-display text-sm font-bold text-m-card-fg">
                   Auto-pick
                 </p>
                 <button
                   type="button"
                   aria-label="Close"
                   onClick={() => setAutopickInfoOpen(false)}
-                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#f3f3f3] text-[#50565c]"
+                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-m-chip text-m-muted"
                 >
                   <X className="size-3" strokeWidth={2.5} aria-hidden />
                 </button>
               </div>
-              <p className="mt-1.5 text-[13px] leading-snug text-[#1f2328]">
+              <p className="mt-1.5 text-[13px] leading-snug text-m-card-fg">
                 On your turn, drafts the next available player from the top of
                 your queue. If the queue is empty, picks the best available
                 player for your roster.
@@ -1199,7 +1199,7 @@ const QueuePane = memo(function QueuePane({
               <PopoverPrimitive.Arrow
                 width={14}
                 height={7}
-                style={{ fill: "#ffffff" }}
+                className="fill-m-card"
               />
             </PopoverPrimitive.Content>
           </PopoverPrimitive.Portal>
