@@ -2,6 +2,7 @@ import {
   memo,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -649,76 +650,83 @@ export function MobileMockDraftSheet({
         </div>
       </div>
 
-      {mountedTabs.players ? (
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 flex-col",
-            localTab !== "players" && "hidden",
-          )}
-          aria-hidden={localTab !== "players"}
-        >
-          <PlayersPane
-            settings={settings}
-            available={available}
-            draftedPlayers={draftedPlayers}
-            watchIds={watchIds}
-            myTurn={myTurn}
-            complete={complete}
-            myCounts={myCounts}
-            nextUserOverall={nextUserOverall}
-            prevYear={prevYear}
-            projExtrasById={projExtrasById}
-            sheetSnap={snap}
-            paneActive={localTab === "players"}
-            onRequestExpand={() => setSnap("expanded")}
-            onDraft={onDraft}
-            onToggleQueue={onToggleQueue}
-            onOpenPlayer={onOpenPlayer}
-          />
-        </div>
-      ) : null}
-      {mountedTabs.queue ? (
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 flex-col",
-            localTab !== "queue" && "hidden",
-          )}
-          aria-hidden={localTab !== "queue"}
-        >
-          <QueuePane
-            queuedPlayers={queuedPlayers}
-            settings={settings}
-            myTurn={myTurn}
-            complete={complete}
-            queueAutopickOn={queueAutopickOn}
-            onQueueAutopickChange={onQueueAutopickChange}
-            onDraft={onDraft}
-            onMoveQueued={onMoveQueued}
-            onRemoveQueued={onRemoveQueued}
-            onOpenPlayer={onOpenPlayer}
-          />
-        </div>
-      ) : null}
-      {mountedTabs.team ? (
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 flex-col",
-            localTab !== "team" && "hidden",
-          )}
-          aria-hidden={localTab !== "team"}
-        >
-          <TeamPane
-            settings={settings}
-            picks={picks}
-            byId={byId}
-            draftedIds={draftedIds}
-            rosterTeam={rosterTeam}
-            onRosterTeamChange={onRosterTeamChange}
-            onOpenPlayer={onOpenPlayer}
-            currentOverall={currentOverall}
-          />
-        </div>
-      ) : null}
+      {/*
+        Stack panes with visibility (not display:none). Hiding via `hidden`
+        zeroes the scrollport and makes the virtualized Players list jump
+        (e.g. top → ~row 19) when you return from Queue/Team.
+      */}
+      <div className="relative min-h-0 flex-1">
+        {mountedTabs.players ? (
+          <div
+            className={cn(
+              "absolute inset-0 flex flex-col",
+              localTab !== "players" && "invisible pointer-events-none",
+            )}
+            aria-hidden={localTab !== "players"}
+          >
+            <PlayersPane
+              settings={settings}
+              available={available}
+              draftedPlayers={draftedPlayers}
+              watchIds={watchIds}
+              myTurn={myTurn}
+              complete={complete}
+              myCounts={myCounts}
+              nextUserOverall={nextUserOverall}
+              prevYear={prevYear}
+              projExtrasById={projExtrasById}
+              sheetSnap={snap}
+              paneActive={localTab === "players"}
+              onRequestExpand={() => setSnap("expanded")}
+              onDraft={onDraft}
+              onToggleQueue={onToggleQueue}
+              onOpenPlayer={onOpenPlayer}
+            />
+          </div>
+        ) : null}
+        {mountedTabs.queue ? (
+          <div
+            className={cn(
+              "absolute inset-0 flex flex-col",
+              localTab !== "queue" && "invisible pointer-events-none",
+            )}
+            aria-hidden={localTab !== "queue"}
+          >
+            <QueuePane
+              queuedPlayers={queuedPlayers}
+              settings={settings}
+              myTurn={myTurn}
+              complete={complete}
+              queueAutopickOn={queueAutopickOn}
+              onQueueAutopickChange={onQueueAutopickChange}
+              onDraft={onDraft}
+              onMoveQueued={onMoveQueued}
+              onRemoveQueued={onRemoveQueued}
+              onOpenPlayer={onOpenPlayer}
+            />
+          </div>
+        ) : null}
+        {mountedTabs.team ? (
+          <div
+            className={cn(
+              "absolute inset-0 flex flex-col",
+              localTab !== "team" && "invisible pointer-events-none",
+            )}
+            aria-hidden={localTab !== "team"}
+          >
+            <TeamPane
+              settings={settings}
+              picks={picks}
+              byId={byId}
+              draftedIds={draftedIds}
+              rosterTeam={rosterTeam}
+              onRosterTeamChange={onRosterTeamChange}
+              onOpenPlayer={onOpenPlayer}
+              currentOverall={currentOverall}
+            />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -927,6 +935,7 @@ const PlayersPane = memo(function PlayersPane({
         projExtrasById={projExtrasById}
         projIndex={projIndex}
         nextUserOverall={nextUserOverall}
+        paneActive={paneActive}
         emptyLabel={
           draftedOnly
             ? "No drafted players match these filters."
@@ -955,6 +964,7 @@ function VirtualPlayersScroller({
   projIndex,
   nextUserOverall,
   emptyLabel,
+  paneActive,
   onDraft,
   onToggleQueue,
   onOpenPlayer,
@@ -970,6 +980,7 @@ function VirtualPlayersScroller({
   projIndex: number;
   nextUserOverall: number | null;
   emptyLabel: string;
+  paneActive: boolean;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
   onOpenPlayer: (id: string) => void;
@@ -977,16 +988,34 @@ function VirtualPlayersScroller({
   const vertRef = useRef<HTMLDivElement | null>(null);
   const horizRef = useRef<HTMLDivElement | null>(null);
   const rafFadeRef = useRef(0);
+  const savedScrollTopRef = useRef(0);
+  const wasPaneActiveRef = useRef(paneActive);
 
   useDualAxisLock(vertRef, horizRef);
 
   const virtualizer = useVirtualizer({
     count: filtered.length,
-    getScrollElement: () => vertRef.current,
+    // Ignore the scrollport while the pane is inactive so tab swaps don't
+    // corrupt virtualizer offset while Queue/Team is showing.
+    getScrollElement: () => (paneActive ? vertRef.current : null),
     estimateSize: () => PLAYER_ROW_ESTIMATE_PX,
     overscan: 8,
     getItemKey: (i) => filtered[i]?.id ?? i,
   });
+
+  useLayoutEffect(() => {
+    const el = vertRef.current;
+    const becameActive = paneActive && !wasPaneActiveRef.current;
+    const becameInactive = !paneActive && wasPaneActiveRef.current;
+    if (becameInactive && el) {
+      savedScrollTopRef.current = el.scrollTop;
+    }
+    wasPaneActiveRef.current = paneActive;
+    if (!becameActive || !el) return;
+    const y = savedScrollTopRef.current;
+    el.scrollTop = y;
+    virtualizer.scrollToOffset(y, { align: "start" });
+  }, [paneActive, virtualizer]);
 
   // Remeasure name-end when Draft column appears/disappears or list mounts.
   useEffect(() => {
@@ -1023,6 +1052,11 @@ function VirtualPlayersScroller({
   return (
     <div
       ref={vertRef}
+      onScroll={() => {
+        if (paneActive && vertRef.current) {
+          savedScrollTopRef.current = vertRef.current.scrollTop;
+        }
+      }}
       className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-2 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       <div
