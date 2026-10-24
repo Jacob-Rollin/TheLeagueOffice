@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 
 import { PlayerAvatar } from "@/components/draft/PlayerAvatar";
+import { useMobileTheme } from "@/components/mobile/MobileThemeContext";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import {
   FLEX_POSITIONS,
@@ -1176,6 +1177,9 @@ const QueuePane = memo(function QueuePane({
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [autopickInfoOpen, setAutopickInfoOpen] = useState(false);
+  const { theme } = useMobileTheme();
+  // Portal mounts on body (outside MobileShell) — re-apply theme so m-* tokens resolve.
+  const themeClass = theme === "dark" ? "mobile-theme-dark" : "mobile-theme-light";
   const selectedIndex = selectedId
     ? queuedPlayers.findIndex((p) => p.id === selectedId)
     : -1;
@@ -1208,9 +1212,13 @@ const QueuePane = memo(function QueuePane({
               align="center"
               sideOffset={8}
               // Opaque m-* card — skip shared PopoverContent fade/zoom so the
-              // board never shows through; tokens follow light/dark shell.
+              // board never shows through. Theme class required on the portal
+              // root or dark text paints on a dark/unset background.
               style={{ opacity: 1 }}
-              className="z-[90] w-[min(18.5rem,calc(100vw-2rem))] rounded-xl border border-m-border bg-m-card p-3.5 text-m-card-fg shadow-lg outline-none"
+              className={cn(
+                themeClass,
+                "z-[90] w-[min(18.5rem,calc(100vw-2rem))] rounded-xl border border-m-border bg-m-card p-3.5 text-m-card-fg shadow-lg outline-none",
+              )}
             >
               <div className="flex items-start justify-between gap-3">
                 <p className="font-display text-sm font-bold text-m-card-fg">
