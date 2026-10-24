@@ -18,7 +18,13 @@ export type PowerRankingRow = {
   slot: number;
   team: string;
   owner: string;
+  /** Soft display band (55–100) for UI meters. */
   powerIndex: number;
+  /**
+   * League-relative 0–100 blend before the display band.
+   * Prefer this for before/after grade math so #1 teams are not crushed by remorm.
+   */
+  strengthScore: number;
   marketValue: number;
   weeklyProjection: number;
   wins: number;
@@ -39,15 +45,34 @@ export function starterRequirements(rosterPositions: string[]): Record<string, n
       .toUpperCase();
     if (!pos || SKIP_SLOTS.has(pos)) continue;
     const key =
-      pos === "SUPER_FLEX" || pos === "SUPERFLEX" || pos === "Q/W/R/T"
-        ? "FLEX"
+      pos === "SUPER_FLEX" || pos === "SUPERFLEX" || pos === "SFLEX" || pos === "Q/W/R/T"
+        ? "SFLEX"
         : pos === "W/R/T" || pos === "WRRBTE"
           ? "FLEX"
-          : pos;
-    if (!["QB", "RB", "WR", "TE", "FLEX", "K", "DEF"].includes(key)) continue;
+          : pos === "DST" || pos === "D/ST"
+            ? "DEF"
+            : pos;
+    if (!["QB", "RB", "WR", "TE", "FLEX", "SFLEX", "K", "DEF"].includes(key)) continue;
     req[key] = (req[key] ?? 0) + 1;
   }
   return effectiveStarters(req);
+}
+
+/** Active roster spots (starters + bench), excluding IR/taxi, for overflow checks. */
+export function leagueRosterCapFromPositions(
+  rosterPositions: string[] | null | undefined,
+  fallback: number,
+): number {
+  if (!rosterPositions?.length) return fallback;
+  let n = 0;
+  for (const raw of rosterPositions) {
+    const pos = String(raw ?? "")
+      .trim()
+      .toUpperCase();
+    if (!pos || SKIP_SLOTS.has(pos)) continue;
+    n += 1;
+  }
+  return n > 0 ? n : fallback;
 }
 
 function minMaxNormalize(values: number[]): number[] {
@@ -142,13 +167,15 @@ export function buildTruePowerRankings(
   const ranked = computed
     .map((row, i) => {
       const blend = 0.4 * (normMarket[i] ?? 0) + 0.4 * (normProj[i] ?? 0) + 0.2 * (normPf[i] ?? 0);
+      const strengthScore = Math.round(blend * 10) / 10;
       return {
         ...row,
+        strengthScore,
         powerIndex: toDisplayPowerIndex(blend),
         recordLabel: recordLabel(row.wins, row.losses, row.ties, row.pointsFor),
       };
     })
-    .sort((a, b) => b.powerIndex - a.powerIndex || b.pointsFor - a.pointsFor);
+    .sort((a, b) => b.strengthScore - a.strengthScore || b.pointsFor - a.pointsFor);
 
   return ranked.map((row, index) => ({
     rank: index + 1,
@@ -156,6 +183,7 @@ export function buildTruePowerRankings(
     team: row.team,
     owner: row.owner,
     powerIndex: row.powerIndex,
+    strengthScore: row.strengthScore,
     marketValue: Math.round(row.marketValue * 10) / 10,
     weeklyProjection: Math.round(row.weeklyProjection * 10) / 10,
     wins: row.wins,
