@@ -823,6 +823,10 @@ const PlayersPane = memo(function PlayersPane({
       ? -1
       : filtered.findIndex((p) => value(p, settings.scoring).adp >= nextUserOverall);
 
+  // Pos / watch / drafted / search — not showPrevYear (columns only). Changing
+  // any of these jumps the list to the top; tab swaps restore scroll instead.
+  const listFilterKey = `${pos}|${watchOnly ? 1 : 0}|${draftedOnly ? 1 : 0}|${deferredQuery.trim().toLowerCase()}`;
+
   const prevShort = `'${String(prevYear).slice(-2)}`;
 
   return (
@@ -936,6 +940,7 @@ const PlayersPane = memo(function PlayersPane({
         projExtrasById={projExtrasById}
         projIndex={projIndex}
         nextUserOverall={nextUserOverall}
+        listFilterKey={listFilterKey}
         paneActive={paneActive}
         emptyLabel={
           draftedOnly
@@ -965,6 +970,7 @@ function VirtualPlayersScroller({
   projIndex,
   nextUserOverall,
   emptyLabel,
+  listFilterKey,
   paneActive,
   onDraft,
   onToggleQueue,
@@ -981,6 +987,8 @@ function VirtualPlayersScroller({
   projIndex: number;
   nextUserOverall: number | null;
   emptyLabel: string;
+  /** Pos / watch / drafted / search — change jumps scroll to top. */
+  listFilterKey: string;
   paneActive: boolean;
   onDraft: (id: string) => void;
   onToggleQueue: (id: string) => void;
@@ -991,6 +999,7 @@ function VirtualPlayersScroller({
   const rafFadeRef = useRef(0);
   const savedScrollTopRef = useRef(0);
   const wasPaneActiveRef = useRef(paneActive);
+  const prevFilterKeyRef = useRef(listFilterKey);
 
   useDualAxisLock(vertRef, horizRef);
 
@@ -1004,6 +1013,18 @@ function VirtualPlayersScroller({
     getItemKey: (i) => filtered[i]?.id ?? i,
   });
 
+  // Filter change (pos chip, watchlist, drafted, search) → always top.
+  useLayoutEffect(() => {
+    if (prevFilterKeyRef.current === listFilterKey) return;
+    prevFilterKeyRef.current = listFilterKey;
+    savedScrollTopRef.current = 0;
+    const el = vertRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+    virtualizer.scrollToOffset(0, { align: "start" });
+  }, [listFilterKey, virtualizer]);
+
+  // Tab leave/return → restore scroll for the current filter only.
   useLayoutEffect(() => {
     const el = vertRef.current;
     const becameActive = paneActive && !wasPaneActiveRef.current;
