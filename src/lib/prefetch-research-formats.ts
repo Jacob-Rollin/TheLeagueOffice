@@ -9,7 +9,7 @@
 import { useEffect } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
-import { snapCdnPublicBase } from "@/lib/r2-public";
+import { snapCdnPublicBase } from "@/lib/snap-cdn-public";
 import {
   RESEARCH_CLIENT_STALE_MS,
   fetchResearchFpa,

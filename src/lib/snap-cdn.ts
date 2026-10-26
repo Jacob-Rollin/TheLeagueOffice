@@ -9,7 +9,7 @@ import {
   espnFluidMemo,
   ESPN_FLUID_TTL_MS,
 } from "@/lib/espn-fluid-cache";
-import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
+import { SNAP_OBJECT_KEYS, snapCdnUrl, snapCdnPublicBase } from "@/lib/snap-cdn-public";
 
 function allowFluidFallback(): boolean {
   try {
@@ -29,13 +29,13 @@ async function fetchSnapJson<T>(url: string): Promise<T | null> {
   }
 }
 
-async function fetchSnapPreferR2<T>(r2Path: string | null, apiPath: string): Promise<T | null> {
-  if (r2Path) {
-    const r2 = r2Url(r2Path);
-    if (r2) {
-      const hit = await fetchSnapJson<T>(r2);
+async function fetchSnapPreferCdn<T>(objectPath: string | null, apiPath: string): Promise<T | null> {
+  if (objectPath) {
+    const url = snapCdnUrl(objectPath);
+    if (url) {
+      const hit = await fetchSnapJson<T>(url);
       if (hit != null) return hit;
-      // snap-cdn / R2 base is configured — skip Vercel empty `no-store` probes.
+      // snap-cdn base is configured — skip Vercel empty `no-store` probes.
       if (snapCdnPublicBase()) return null;
     }
   }
@@ -43,9 +43,9 @@ async function fetchSnapPreferR2<T>(r2Path: string | null, apiPath: string): Pro
 }
 
 export async function fetchSnapTradeValueBasis() {
-  const hit = await fetchSnapPreferR2<
+  const hit = await fetchSnapPreferCdn<
     Awaited<ReturnType<typeof import("./players.server").loadTradeValueBasis>>
-  >(R2_SNAP_KEYS.tradeBasis(), "/api/data/snap/trade-basis");
+  >(SNAP_OBJECT_KEYS.tradeBasis(), "/api/data/snap/trade-basis");
   if (hit?.players && Object.keys(hit.players).length > 0) return hit;
   if (!allowFluidFallback()) {
     return (
@@ -63,9 +63,9 @@ export async function fetchSnapTradeValueBasis() {
 }
 
 export async function fetchSnapInjuryReports() {
-  const hit = await fetchSnapPreferR2<
+  const hit = await fetchSnapPreferCdn<
     Awaited<ReturnType<typeof import("./players.server").loadInjuryReports>>
-  >(R2_SNAP_KEYS.injuryReports(), "/api/data/snap/injury-reports");
+  >(SNAP_OBJECT_KEYS.injuryReports(), "/api/data/snap/injury-reports");
   if (hit && Array.isArray(hit.items)) return hit;
   if (!allowFluidFallback()) return { updatedAt: "", items: [] };
   const { getInjuryReports } = await import("./players.functions");
@@ -74,8 +74,8 @@ export async function fetchSnapInjuryReports() {
 
 export async function fetchSnapInjuryWire(limit = 5) {
   const safeLimit = Math.max(1, Math.min(60, limit));
-  const hit = await fetchSnapPreferR2<Awaited<ReturnType<typeof import("./players.server").loadInjuryWire>>>(
-    R2_SNAP_KEYS.injuryWire(),
+  const hit = await fetchSnapPreferCdn<Awaited<ReturnType<typeof import("./players.server").loadInjuryWire>>>(
+    SNAP_OBJECT_KEYS.injuryWire(),
     `/api/data/snap/injury-wire?limit=${safeLimit}`,
   );
   if (Array.isArray(hit) && hit.length > 0) {
@@ -118,9 +118,9 @@ export async function fetchSnapInjuryWire(limit = 5) {
 }
 
 export async function fetchSnapFantasyNews(limit = 40) {
-  const hit = await fetchSnapPreferR2<
+  const hit = await fetchSnapPreferCdn<
     Awaited<ReturnType<typeof import("./players.server").loadFantasyNewsFeed>>
-  >(R2_SNAP_KEYS.fantasyNews(), `/api/data/snap/fantasy-news?limit=${limit}`);
+  >(SNAP_OBJECT_KEYS.fantasyNews(), `/api/data/snap/fantasy-news?limit=${limit}`);
   if (Array.isArray(hit)) return hit;
   if (!allowFluidFallback()) return [];
   const { getFantasyNewsFeed } = await import("./players.functions");
@@ -128,9 +128,9 @@ export async function fetchSnapFantasyNews(limit = 40) {
 }
 
 export async function fetchSnapTradeMarket(format: "std" | "half" | "ppr" = "half") {
-  const hit = await fetchSnapPreferR2<
+  const hit = await fetchSnapPreferCdn<
     Awaited<ReturnType<typeof import("./trade-market.server").loadTradeMarket>>
-  >(R2_SNAP_KEYS.tradeMarket(format), `/api/data/snap/trade-market?format=${format}`);
+  >(SNAP_OBJECT_KEYS.tradeMarket(format), `/api/data/snap/trade-market?format=${format}`);
   if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
   if (!allowFluidFallback()) return { format, season: "", rows: [], opportunity: [] };
   const { getTradeMarket } = await import("./players.functions");

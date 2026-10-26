@@ -6,8 +6,8 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-// Vercel-only deploy target. Cloudflare Workers Builds is abandoned; always emit
-// Nitro's vercel preset unless NITRO_PRESET is explicitly overridden.
+// Vercel deploy target: emit Nitro's vercel preset unless NITRO_PRESET is
+// explicitly overridden.
 const preset = process.env["NITRO_PRESET"] ?? "vercel";
 
 // Unique per build; injected into the client bundle so asset URLs change every deploy.

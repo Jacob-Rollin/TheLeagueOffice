@@ -8,7 +8,7 @@
  * Does not use Fluid / createServerFn.
  */
 
-import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
+import { SNAP_OBJECT_KEYS, snapCdnUrl, snapCdnPublicBase } from "@/lib/snap-cdn-public";
 import { fetchWeeklyActualStatRows } from "@/lib/sleeper-week-stats";
 import { scoreActualLine, type ScoringMap } from "@/lib/scoring-map";
 
@@ -33,8 +33,8 @@ async function fetchSnapWeekStats(
   season: number,
   week: number,
 ): Promise<NativeWeekStatsSnap | null> {
-  const path = R2_SNAP_KEYS.nativeWeekStats(season, week);
-  const url = r2Url(path);
+  const path = SNAP_OBJECT_KEYS.nativeWeekStats(season, week);
+  const url = snapCdnUrl(path);
   if (!url) return null;
   try {
     const res = await fetch(url, { headers: { accept: "application/json" } });

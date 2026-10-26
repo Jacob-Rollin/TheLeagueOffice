@@ -8,7 +8,7 @@
  * Chip sets are position-scoped: QB pass / RB rush / WR-TE receiving.
  */
 
-import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
+import { SNAP_OBJECT_KEYS, snapCdnUrl, snapCdnPublicBase } from "@/lib/snap-cdn-public";
 import { getCached } from "@/lib/sleeper-cache";
 
 export type TeamOffenseRankKey =
@@ -89,8 +89,8 @@ const EMPTY: NflTeamOffenseRanksSnap = {
 };
 
 async function fetchSnap(season: string): Promise<NflTeamOffenseRanksSnap | null> {
-  const path = R2_SNAP_KEYS.nflTeamOffenseRanks(season);
-  const url = r2Url(path);
+  const path = SNAP_OBJECT_KEYS.nflTeamOffenseRanks(season);
+  const url = snapCdnUrl(path);
   if (!url) return null;
   try {
     const res = await fetch(url, { headers: { accept: "application/json" } });

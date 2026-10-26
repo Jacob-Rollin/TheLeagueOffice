@@ -10,7 +10,7 @@
  */
 
 import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
-import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
+import { SNAP_OBJECT_KEYS, snapCdnUrl, snapCdnPublicBase } from "@/lib/snap-cdn-public";
 import { getCached } from "@/lib/sleeper-cache";
 import { waitForSleeperPermit } from "@/lib/sleeper-rate-budget";
 
@@ -68,7 +68,7 @@ async function fetchSnapWeekStatRows(
   week: number,
 ): Promise<Record<string, Record<string, number>> | null> {
   if (!snapCdnPublicBase()) return null;
-  const url = r2Url(R2_SNAP_KEYS.nativeWeekStats(season, week));
+  const url = snapCdnUrl(SNAP_OBJECT_KEYS.nativeWeekStats(season, week));
   if (!url) return null;
   try {
     const res = await fetch(url, { headers: { accept: "application/json" } });

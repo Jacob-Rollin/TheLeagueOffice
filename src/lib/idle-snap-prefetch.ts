@@ -2,7 +2,7 @@
  * Idle warm of public snap-cdn JSON into React Query.
  *
  * Free-tier safe:
- * - Runs only when `VITE_SNAP_CDN_BASE` / R2 public base is set (never idle-hits Vercel/TiDB)
+ * - Runs only when `VITE_SNAP_CDN_BASE` is set (never idle-hits Vercel/TiDB)
  * - Uses existing fetch helpers that prefer snap-cdn and soft-empty (no Fluid)
  * - Serializes jobs (one at a time) after requestIdleCallback
  * - Skips when the tab is hidden
@@ -10,7 +10,7 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 
-import { snapCdnPublicBase } from "@/lib/r2-public";
+import { snapCdnPublicBase } from "@/lib/snap-cdn-public";
 import {
   RESEARCH_CLIENT_STALE_MS,
   fetchResearchFantasyLeaders,

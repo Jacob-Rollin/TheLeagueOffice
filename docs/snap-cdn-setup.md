@@ -1,7 +1,7 @@
 # Snap CDN setup (GitHub branch — no credit card)
 
 Browse reads public research/snap JSON from the orphan `snap-cdn` branch
-instead of TiDB via Vercel. No Cloudflare R2 / card required.
+instead of TiDB via Vercel. No paid object store / card required.
 
 **RU note:** With this base set in Production, research / injury / trade-market /
 player-brain browse should **not** hit TiDB. Missing or unset base is one of the
@@ -75,5 +75,5 @@ Each run **force-pushes an orphan** `snap-cdn` branch (no git history bloat). Be
 | Repo size | ~5–50 MB on `snap-cdn` only | Main branch untouched |
 | raw.githubusercontent.com | Fine for ~20 users | Soft rate limits; not a global CDN |
 
-If traffic grows a lot later, move the same object keys to Cloudflare R2 and
-point `VITE_SNAP_CDN_BASE` (or `VITE_R2_PUBLIC_BASE`) at the R2 public URL.
+If traffic grows a lot later, host the same object keys on any public static
+CDN and point `VITE_SNAP_CDN_BASE` at that base URL.
