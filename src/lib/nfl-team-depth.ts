@@ -10,7 +10,7 @@
  * Defense depth is intentionally omitted (fantasy offense only).
  */
 
-import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
+import { SNAP_OBJECT_KEYS, snapCdnUrl, snapCdnPublicBase } from "@/lib/snap-cdn-public";
 import { getCached } from "@/lib/sleeper-cache";
 
 export type TeamDepthSlot = "QB" | "RB" | "WR1" | "WR2" | "WR3" | "TE" | "K";
@@ -45,7 +45,7 @@ export const SLEEPER_WR_SLOT: Record<string, TeamDepthSlot> = {
 };
 
 async function fetchSnap(): Promise<NflTeamDepthSnap | null> {
-  const url = r2Url(R2_SNAP_KEYS.nflTeamDepth());
+  const url = snapCdnUrl(SNAP_OBJECT_KEYS.nflTeamDepth());
   if (!url) return null;
   try {
     const res = await fetch(url, { headers: { accept: "application/json" } });

@@ -12,7 +12,7 @@
 import localforage from "localforage";
 
 import type { PlayersPayload } from "@/lib/players-build";
-import { R2_SNAP_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
+import { SNAP_OBJECT_KEYS, snapCdnUrl, snapCdnPublicBase } from "@/lib/snap-cdn-public";
 import { fetchResearchSosBoard } from "@/lib/research-cdn";
 import type { SosBoard } from "@/lib/players.server";
 import type { PlayerSos, SosMatchup } from "@/lib/sos-presentation";
@@ -308,7 +308,7 @@ async function matrixFromExportUrl(url: string): Promise<BrainMatrix | null> {
  * Vercel export as the browse path until Publish Snap CDN is configured.
  */
 async function loadTidbWarehouseMatrix(): Promise<BrainMatrix | null> {
-  const snap = r2Url(R2_SNAP_KEYS.playersExport());
+  const snap = snapCdnUrl(SNAP_OBJECT_KEYS.playersExport());
   if (snap) {
     const fromSnap = await matrixFromExportUrl(snap);
     if (fromSnap) return fromSnap;

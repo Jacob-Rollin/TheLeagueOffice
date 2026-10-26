@@ -4,7 +4,7 @@ name: Publish Snap CDN
 # `snap-cdn` branch. Browsers read via raw.githubusercontent.com (no card,
 # free for a public repo) instead of TiDB via Vercel Fluid.
 #
-# Requires: APP_URL + CRON_SECRET (existing). No R2 / Cloudflare secrets.
+# Requires: APP_URL + CRON_SECRET (existing).
 
 on:
   schedule:

@@ -1,13 +1,13 @@
 /**
  * Client helpers for research aggregates.
- * Prefer public Cloudflare R2 (zero Vercel/TiDB), then `/api/data/research/*`.
+ * Prefer GitHub snap-cdn (`VITE_SNAP_CDN_BASE`, zero Vercel/TiDB), then `/api/data/research/*`.
  *
  * Production: never fall back to createServerFn — a miss must soft-empty
  * (browser and SSR) so we do not burn Fluid CPU. Dev/local may still use
  * Fluid when snaps are absent.
  */
 
-import { R2_RESEARCH_KEYS, r2Url, snapCdnPublicBase } from "@/lib/r2-public";
+import { SNAP_RESEARCH_KEYS, snapCdnUrl, snapCdnPublicBase } from "@/lib/snap-cdn-public";
 
 export type ResearchFormat = "std" | "half" | "ppr";
 
@@ -36,15 +36,15 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
-/** snap-cdn / R2 first; Vercel only when no public base is configured. */
-async function fetchResearchPreferR2<T>(
-  r2Path: string | null,
+/** snap-cdn first; Vercel only when no public base is configured. */
+async function fetchResearchPreferCdn<T>(
+  objectPath: string | null,
   apiPath: string,
 ): Promise<T | null> {
-  if (r2Path) {
-    const r2 = r2Url(r2Path);
-    if (r2) {
-      const hit = await fetchJson<T>(r2);
+  if (objectPath) {
+    const url = snapCdnUrl(objectPath);
+    if (url) {
+      const hit = await fetchJson<T>(url);
       if (hit != null) return hit;
       if (snapCdnPublicBase()) return null;
     }
@@ -55,9 +55,9 @@ async function fetchResearchPreferR2<T>(
 export async function fetchResearchFpa(format: ResearchFormat = "half") {
   const fmt = normalizeFormat(format);
   if (typeof window !== "undefined") {
-    const hit = await fetchResearchPreferR2<
+    const hit = await fetchResearchPreferCdn<
       Awaited<ReturnType<typeof import("./players.functions").getFantasyPointsAllowed>>
-    >(R2_RESEARCH_KEYS.fpa(fmt), `/api/data/research/fpa?format=${fmt}`);
+    >(SNAP_RESEARCH_KEYS.fpa(fmt), `/api/data/research/fpa?format=${fmt}`);
     if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
   }
   if (!allowFluidFallback()) return { season: "", weeksFrom: 0, weeksTo: 0, rows: [] };
@@ -94,11 +94,11 @@ export async function fetchResearchMatchupsGuide(
     // weren't published), fall through to TiDB SELECT — read-only, not Fluid
     // compute — so the week picker stays usable until Publish Snap CDN catches up.
     if (wKnown != null) {
-      const r2 = r2Url(R2_RESEARCH_KEYS.matchupsGuide(wKnown, fmt));
-      if (r2) {
+      const cdn = snapCdnUrl(SNAP_RESEARCH_KEYS.matchupsGuide(wKnown, fmt));
+      if (cdn) {
         const snap = await fetchJson<
           Awaited<ReturnType<typeof import("./players.functions").getMatchupsGuide>>
-        >(r2);
+        >(cdn);
         if (isWarmMatchupsGuide(snap)) return snap;
       }
     }
@@ -127,9 +127,9 @@ export async function fetchResearchMatchupsGuide(
 export async function fetchResearchSosAnalysis(format: ResearchFormat = "half") {
   const fmt = normalizeFormat(format);
   if (typeof window !== "undefined") {
-    const hit = await fetchResearchPreferR2<
+    const hit = await fetchResearchPreferCdn<
       Awaited<ReturnType<typeof import("./players.functions").getSosAnalysis>>
-    >(R2_RESEARCH_KEYS.sosAnalysis(fmt), `/api/data/research/sos-analysis?format=${fmt}`);
+    >(SNAP_RESEARCH_KEYS.sosAnalysis(fmt), `/api/data/research/sos-analysis?format=${fmt}`);
     if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
   }
   if (!allowFluidFallback()) {
@@ -150,9 +150,9 @@ export async function fetchResearchSosAnalysis(format: ResearchFormat = "half") 
 export async function fetchResearchFantasyLeaders(season?: string) {
   if (typeof window !== "undefined") {
     const qs = season ? `?season=${encodeURIComponent(season)}` : "";
-    const hit = await fetchResearchPreferR2<
+    const hit = await fetchResearchPreferCdn<
       Awaited<ReturnType<typeof import("./players.functions").getFantasyLeaders>>
-    >(R2_RESEARCH_KEYS.fantasyLeaders(), `/api/data/research/fantasy-leaders${qs}`);
+    >(SNAP_RESEARCH_KEYS.fantasyLeaders(), `/api/data/research/fantasy-leaders${qs}`);
     if (hit && Array.isArray((hit as { rows?: unknown[] }).rows) && (hit as { rows: unknown[] }).rows.length > 0) {
       return hit;
     }
@@ -169,9 +169,9 @@ export async function fetchResearchFantasyLeaders(season?: string) {
 export async function fetchResearchSosBoard(season?: string) {
   if (typeof window !== "undefined") {
     const qs = season ? `?season=${encodeURIComponent(season)}` : "";
-    const hit = await fetchResearchPreferR2<
+    const hit = await fetchResearchPreferCdn<
       Awaited<ReturnType<typeof import("./players.functions").getSosBoard>>
-    >(R2_RESEARCH_KEYS.sosBoard(), `/api/data/research/sos-board${qs}`);
+    >(SNAP_RESEARCH_KEYS.sosBoard(), `/api/data/research/sos-board${qs}`);
     if (hit && Array.isArray((hit as { schedule?: unknown[] }).schedule)) return hit;
   }
   if (!allowFluidFallback()) return { season: season ?? "", schedule: [], ranks: {} };
@@ -192,9 +192,9 @@ export async function fetchResearchRedZone(opts?: {
     qs.set("yardline", String(yardline));
     if (opts?.weekFrom != null) qs.set("weekFrom", String(opts.weekFrom));
     if (opts?.weekTo != null) qs.set("weekTo", String(opts.weekTo));
-    const hit = await fetchResearchPreferR2<
+    const hit = await fetchResearchPreferCdn<
       Awaited<ReturnType<typeof import("./players.functions").getRedZoneStats>>
-    >(R2_RESEARCH_KEYS.redzone(yardline), `/api/data/research/redzone?${qs}`);
+    >(SNAP_RESEARCH_KEYS.redzone(yardline), `/api/data/research/redzone?${qs}`);
     if (hit && (hit as { rowsByPos?: unknown }).rowsByPos) return hit;
   }
   if (!allowFluidFallback()) {
@@ -225,9 +225,9 @@ export async function fetchResearchRedZone(opts?: {
 export async function fetchResearchTargets(season?: string) {
   if (typeof window !== "undefined") {
     const qs = season ? `?season=${encodeURIComponent(season)}` : "";
-    const hit = await fetchResearchPreferR2<
+    const hit = await fetchResearchPreferCdn<
       Awaited<ReturnType<typeof import("./players.functions").getMostTargetedPlayers>>
-    >(R2_RESEARCH_KEYS.targets(), `/api/data/research/targets${qs}`);
+    >(SNAP_RESEARCH_KEYS.targets(), `/api/data/research/targets${qs}`);
     if (hit && Array.isArray((hit as { rows?: unknown[] }).rows)) return hit;
   }
   if (!allowFluidFallback()) return { season: season ?? "", maxWeek: 0, rows: [] };
@@ -238,10 +238,10 @@ export async function fetchResearchTargets(season?: string) {
 export async function fetchResearchAreTheyPlaying(week: number) {
   const safeWeek = Math.min(18, Math.max(1, Math.trunc(week) || 1));
   if (typeof window !== "undefined") {
-    const hit = await fetchResearchPreferR2<
+    const hit = await fetchResearchPreferCdn<
       Awaited<ReturnType<typeof import("./players.functions").getAreTheyPlaying>>
     >(
-      R2_RESEARCH_KEYS.areTheyPlaying(safeWeek),
+      SNAP_RESEARCH_KEYS.areTheyPlaying(safeWeek),
       `/api/data/research/are-they-playing?week=${safeWeek}`,
     );
     if (hit && Array.isArray((hit as { lines?: unknown[] }).lines)) return hit;

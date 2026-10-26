@@ -75,7 +75,7 @@ Start with A + B; add C when native leagues see real traffic.
 | Native leagues | Separate Coolify + TiDB C | `native_league_links` |
 
 ### Phase 4 — Full off-Vercel (only if still Fluid-bound)
-- Nitro on Coolify/Oracle + Cloudflare (or similar) in front
+- Nitro on Coolify/Oracle + a CDN (or similar) in front
 - Bigger lift: cookies, SSR, `NITRO_PRESET`
 
 ### Quick wins (no host move)
@@ -83,7 +83,7 @@ Start with A + B; add C when native leagues see real traffic.
 2. Confirm Production `VITE_SNAP_CDN_BASE` + green Publish Snap CDN — see `docs/snap-cdn-setup.md` (branch objects live; **you** must keep the Vercel env set + redeploy)
 3. Trim gameday ESPN delta frequency / limit vs Sleeper
 4. Cap full research-aggregates cadence; keep ATP-only Mon–Fri
-5. When >~20 concurrent: move snap JSON to R2 or Coolify static CDN
+5. When >~20 concurrent: move snap JSON to Coolify static CDN (or any public object host)
 
 ### TiDB RU — shipped / in progress
 | Item | Status |
@@ -102,11 +102,11 @@ What FantasyPros-style sites do well (from public stack / page behavior):
 | Pattern | FantasyPros-ish | Our free-tier approach |
 |---|---|---|
 | Data ready on first paint | Server-rendered HTML tables + embedded `ecrData` blobs | Prefetch snap-cdn JSON into RQ/IndexedDB **before** navigation; show last-good data instantly |
-| Edge CDN for static data | `cdn.fantasypros.com` (CloudFront/S3) | snap-cdn today → R2/Coolify static later |
+| Edge CDN for static data | `cdn.fantasypros.com` (CloudFront/S3) | snap-cdn today → Coolify static later |
 | Heavy tools on subdomains | e.g. draftwizard subdomain | Research worker / native app splits (Phase 1–3) |
 | Filter/sort without reload | Client table over already-loaded rows | Keep full payload client-side; sort/filter in memory (already true for many research pages) |
 | No blank “Loading…” flash | Content skeleton or previous rows stay visible | `placeholderData: (prev) => prev` everywhere; layout skeletons; never unmount table on refetch |
-| Asset CDN | Separate CDN host | Keep fonts/images lean; prefer snap/R2 for JSON |
+| Asset CDN | Separate CDN host | Keep fonts/images lean; prefer snap-cdn for JSON |
 
 **We should not** copy paid SSR-everything onto Fluid — that burns Hobby CPU. We copy the *feel*: instant chrome + stale-while-revalidate data from a public CDN.
 
