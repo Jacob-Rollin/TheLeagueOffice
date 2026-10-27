@@ -26,10 +26,33 @@ export const BAD_BEAT_LINES = [
   "came up short against [WINNER] by only [MARGIN] in a heartbreaker that could swing on a single correction.",
 ] as const;
 
-export const LUCKY_BREAK_LINES = [
+/** True Houdini: won while outscoring nobody else in the league besides their opponent. */
+export const LUCKY_BREAK_ONLY_OPPONENT_LINES = [
   "owes a gift to whoever made the schedule. They stole a W this week despite [LOSER] being the only team they would have beaten!",
   "caught every break on the schedule, escaping with a win against [LOSER] as the only club they outscored this week.",
 ] as const;
+
+/**
+ * Soft Houdini: still the luckiest winner by league-wide outscore count, but they
+ * beat more than just their opponent on the scoreboard — copy must stay accurate.
+ */
+export const LUCKY_BREAK_LINES = [
+  "owes a gift to whoever made the schedule. They stole a W against [LOSER] despite outscoring only [OUTSCORED] of the other [FIELD] teams this week.",
+  "caught every break on the schedule, escaping with a win against [LOSER] after outscoring just [OUTSCORED] of [FIELD] other clubs league-wide.",
+] as const;
+
+/** How many other weekly entries this team outscored (strictly lower points). */
+export function countTeamsOutscored(
+  entry: { rosterId: number; points: number },
+  field: readonly { rosterId: number; points: number }[],
+): number {
+  const pts = Number(entry.points) || 0;
+  const id = Number(entry.rosterId);
+  return field.reduce((count, other) => {
+    if (Number(other.rosterId) === id) return count;
+    return (Number(other.points) || 0) < pts ? count + 1 : count;
+  }, 0);
+}
 
 export const NOT_SO_LUCKY_LINES = [
   "posted a stout [PTS] and still took the loss to [WINNER]. Sometimes the box score is cruel.",
@@ -410,10 +433,19 @@ export function buildWeekReport(input: WeekReportInput): { awards: AwardRow[]; b
 
   const winners = pairs.map((p) => p.winner);
   const losers = pairs.map((p) => p.loser);
+  // Houdini = winner who outscored the fewest other teams league-wide (not merely
+  // the lowest scoring winner). Tie-break: lower points.
   const luckyBreak =
     winners.length > 0
-      ? [...winners].sort((a, b) => (Number(a.points) || 0) - (Number(b.points) || 0))[0]!
+      ? [...winners].sort((a, b) => {
+          const aOut = countTeamsOutscored(a, entries);
+          const bOut = countTeamsOutscored(b, entries);
+          if (aOut !== bOut) return aOut - bOut;
+          return (Number(a.points) || 0) - (Number(b.points) || 0);
+        })[0]!
       : null;
+  const luckyOutscored = luckyBreak ? countTeamsOutscored(luckyBreak, entries) : 0;
+  const luckyFieldOthers = Math.max(0, entries.length - 1);
   const notSoLucky =
     losers.length > 0
       ? [...losers].sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0))[0]!
@@ -784,16 +816,20 @@ export function buildWeekReport(input: WeekReportInput): { awards: AwardRow[]; b
   if (luckyBreak) {
     const luckyPair =
       pairs.find((p) => Number(p.winner.rosterId) === Number(luckyBreak.rosterId)) ?? null;
+    const onlyOpponent = luckyOutscored <= 1;
+    const luckyLines = onlyOpponent ? LUCKY_BREAK_ONLY_OPPONENT_LINES : LUCKY_BREAK_LINES;
     awards.push({
       id: "lucky",
       title: "Houdini Act",
       leadName: luckyBreak.teamName,
       sentence: fillPhrase(
-        pickPhrase(LUCKY_BREAK_LINES, `${selectedWeek}:lucky:${luckyBreak.rosterId}`),
+        pickPhrase(luckyLines, `${selectedWeek}:lucky:${luckyBreak.rosterId}`),
         {
           WINNER: luckyBreak.teamName,
           LOSER: luckyPair?.loser.teamName ?? "their opponent",
           PTS: metric(`${pts2(Number(luckyBreak.points) || 0)}pts`),
+          OUTSCORED: String(luckyOutscored),
+          FIELD: String(luckyFieldOthers),
         },
       ),
       rosterId: luckyBreak.rosterId,
