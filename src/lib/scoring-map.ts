@@ -378,9 +378,10 @@ export function resolveHostOrBoxScore(
 }
 
 /**
- * Native live Matchup/Team display: Sleeper client box-score first.
- * TiDB host `playerPoints` are finalize artifacts (Tue cron) — only used
- * when the browser week-stats line is missing.
+ * Live Matchup/Team display from browser→Sleeper week-stats (box first).
+ * Used for native leagues and current-week Sleeper-synced mobile boards —
+ * host `players_points` lag the stats endpoint on gameday. Host is fallback
+ * when the client week-stats line is missing.
  */
 export function resolveNativeLiveScore(
   hostPts: number | null | undefined,

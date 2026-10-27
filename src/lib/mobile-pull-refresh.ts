@@ -14,7 +14,7 @@ import { forceRosterRevalidate } from "@/lib/roster-cache";
 import { clearCache } from "@/lib/sleeper-cache";
 import { clearSleeperLiveMatchupMemory } from "@/lib/sleeper-matchups-client";
 import { sleeperBudgetRemaining } from "@/lib/sleeper-rate-budget";
-import { WEEKLY_ACTUAL_STATS_CACHE_KEY } from "@/lib/sleeper-week-stats";
+import { clearWeeklyActualStatsCache } from "@/lib/sleeper-week-stats";
 
 /** Minimum gap between user-forced refreshes on this tab. */
 export const MOBILE_PTR_COOLDOWN_MS = 18_000;
@@ -56,11 +56,10 @@ async function clearSleeperLeagueCaches(
   if (w != null) {
     keys.push(`sleeper-matchups-v1:${id}|${w}`);
     if (w > 1) keys.push(`sleeper-matchups-v1:${id}|${w - 1}`);
-    // Live player/team Fpts on Matchup/Team — must bust or PTR reuses stale 12s TTL.
-    keys.push(WEEKLY_ACTUAL_STATS_CACHE_KEY(seasonKey, w));
-    if (w > 1) keys.push(WEEKLY_ACTUAL_STATS_CACHE_KEY(seasonKey, w - 1));
   }
   await Promise.all(keys.map((key) => clearCache(key).catch(() => undefined)));
+  // Live player/team Fpts — must bust or PTR reuses stale week-stats TTL.
+  await clearWeeklyActualStatsCache(seasonKey, w);
   clearSleeperLiveMatchupMemory(id, w);
 }
 
@@ -116,16 +115,7 @@ export async function refreshMobileLeagueSurface(
     forcedNetwork = true;
   } else if (native && budgetOk) {
     // Native Matchup/Team score from shared client→Sleeper week-stats — bust those only.
-    const w = league.week != null && league.week > 0 ? Math.floor(league.week) : null;
-    const seasonKey = String(league.season || new Date().getUTCFullYear());
-    if (w != null) {
-      await Promise.all(
-        [
-          WEEKLY_ACTUAL_STATS_CACHE_KEY(seasonKey, w),
-          ...(w > 1 ? [WEEKLY_ACTUAL_STATS_CACHE_KEY(seasonKey, w - 1)] : []),
-        ].map((key) => clearCache(key).catch(() => undefined)),
-      );
-    }
+    await clearWeeklyActualStatsCache(league.season ?? null, league.week ?? null);
     forcedNetwork = true;
   } else if (!sleeper && !native) {
     // ESPN/Yahoo: drop in-tab Fluid memos so the next loaders may re-fetch once.
