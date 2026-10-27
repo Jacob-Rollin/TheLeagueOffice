@@ -304,31 +304,6 @@ export function hasDisplayableProjection(
   return proj != null && Number.isFinite(proj) && proj > 0;
 }
 
-/**
- * Score one raw Sleeper projection/stat row with a league scoring map.
- * Iterates scoring keys (Sleeper's model): settings[key] * stats[key].
- */
-export function scoreStats(
-  stats: Record<string, number> | null | undefined,
-  map: ScoringMap,
-): number | null {
-  if (!stats || !map) return null;
-  if (!hasScorableProjectionStats(stats)) return null;
-  const effective = effectiveScoringMap(stats, map);
-  let total = 0;
-  let touched = false;
-  for (const [key, ruleRaw] of Object.entries(effective)) {
-    if (isNonScoringProjectionKey(key)) continue;
-    const rule = Number(ruleRaw);
-    if (!Number.isFinite(rule) || rule === 0) continue;
-    const value = projectedStatForSetting(key, stats, effective);
-    if (value == null || !Number.isFinite(value)) continue;
-    total += value * rule;
-    touched = true;
-  }
-  return touched ? total : null;
-}
-
 const PTS_ALLOW_TIERS: ReadonlyArray<readonly [number, string]> = [
   [0, "pts_allow_0"],
   [6, "pts_allow_1_6"],
@@ -340,6 +315,54 @@ const PTS_ALLOW_TIERS: ReadonlyArray<readonly [number, string]> = [
 ];
 
 /**
+ * When the league scores PA buckets but the row only has aggregate `pts_allow`
+ * (common on trimmed game-log bags and some projection lines), inject the
+ * matching pts_allow_* flag so scoring matches Sleeper's matchup board.
+ */
+function withPtsAllowTiers(
+  stats: Record<string, number>,
+  map: ScoringMap,
+): Record<string, number> {
+  if (!hasPtsAllowBuckets(map)) return stats;
+  const hasTier = PTS_ALLOW_TIERS.some(
+    ([, key]) => Number(stats[key]) > 0 || Number(stats[`${key}_p`]) > 0,
+  );
+  // Also treat Sleeper's pts_allow_35_p alias as a present tier.
+  if (hasTier || Number(stats["pts_allow_35_p"]) > 0) return stats;
+  const allowed = Number(stats["pts_allow"]);
+  if (!Number.isFinite(allowed)) return stats;
+  const tier = PTS_ALLOW_TIERS.find(([max]) => allowed <= max)?.[1];
+  if (!tier) return stats;
+  return { ...stats, [tier]: 1 };
+}
+
+/**
+ * Score one raw Sleeper projection/stat row with a league scoring map.
+ * Iterates scoring keys (Sleeper's model): settings[key] * stats[key].
+ */
+export function scoreStats(
+  stats: Record<string, number> | null | undefined,
+  map: ScoringMap,
+): number | null {
+  if (!stats || !map) return null;
+  if (!hasScorableProjectionStats(stats)) return null;
+  const line = withPtsAllowTiers(stats, map);
+  const effective = effectiveScoringMap(line, map);
+  let total = 0;
+  let touched = false;
+  for (const [key, ruleRaw] of Object.entries(effective)) {
+    if (isNonScoringProjectionKey(key)) continue;
+    const rule = Number(ruleRaw);
+    if (!Number.isFinite(rule) || rule === 0) continue;
+    const value = projectedStatForSetting(key, line, effective);
+    if (value == null || !Number.isFinite(value)) continue;
+    total += value * rule;
+    touched = true;
+  }
+  return touched ? total : null;
+}
+
+/**
  * Fantasy points for a weekly box-score line in league scoring.
  * Injects a pts_allow_* tier when Sleeper only shipped the aggregate.
  * Shared by desktop My Team and mobile matchup cards (DEF remaps, etc.).
@@ -349,14 +372,7 @@ export function scoreActualLine(
   map: ScoringMap,
 ): number | null {
   if (!stats) return null;
-  let line = stats;
-  const allowed = Number(stats["pts_allow"]);
-  const hasTier = PTS_ALLOW_TIERS.some(([, key]) => Number(stats[key]) > 0);
-  if (Number.isFinite(allowed) && !hasTier) {
-    const tier = PTS_ALLOW_TIERS.find(([max]) => allowed <= max)?.[1];
-    if (tier) line = { ...stats, [tier]: 1 };
-  }
-  const pts = scoreStats(line, map);
+  const pts = scoreStats(stats, map);
   return pts == null ? null : Math.round(pts * 100) / 100;
 }
 

@@ -3167,8 +3167,21 @@ const LOG_KEYS = [
   "int",
   "ff",
   "fum_rec",
+  "blk_kick",
+  "def_td",
   "def_st_td",
+  "st_td",
+  "safe",
   "pts_allow",
+  // PA buckets — required so popup FPTS matches Sleeper matchup (not just pts_allow).
+  "pts_allow_0",
+  "pts_allow_1_6",
+  "pts_allow_7_13",
+  "pts_allow_14_20",
+  "pts_allow_21_27",
+  "pts_allow_28_34",
+  "pts_allow_35p",
+  "pts_allow_35_p",
 ] as const;
 
 /** Fill derived kicker fields so UI columns match Sleeper (0 vs dash, distance buckets). */

@@ -48,6 +48,7 @@ import { fetchLeagueScoringPreferred } from "@/lib/scoring-client";
 import {
   hasScorableProjectionStats,
   projectionPoints,
+  scoreActualLine,
   type ScoringMap,
 } from "@/lib/scoring-map";
 import {
@@ -1250,14 +1251,14 @@ function GameLogsPanel({
 
   const { data, isLoading } = useQuery({
     // Season logs only on open — career is a separate opt-in fetch below.
-    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v5"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v6"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
 
   const { data: careerData, isLoading: careerLoading } = useQuery({
-    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v5"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v6"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
     enabled: showCareer,
     staleTime: 1000 * 60 * 15,
@@ -1306,9 +1307,12 @@ function GameLogsPanel({
               <tbody>
                 {data.logs.map((g, index) => {
                   const played = g.played !== false && !g.isBye;
+                  // scoreActualLine (not projectionPoints): injects pts_allow_*
+                  // when game-log bags only kept aggregate pts_allow — otherwise
+                  // DST PA bonuses drop and popup FPTS lag the matchup board.
                   const leaguePts =
                     played && g.raw && Object.keys(g.raw).length > 0
-                      ? projectionPoints(g.raw, scoringMap, leagueFormat)
+                      ? scoreActualLine(g.raw, scoringMap)
                       : null;
                   const ptsVal =
                     leaguePts ?? ptsForFormat(g.points, scoringFormat);
@@ -1515,7 +1519,8 @@ function ProjectionsPanel({
 
   const { data, isLoading } = useQuery({
     // v2: past-week rows keep Sleeper proj lines for the Projections sub-tab.
-    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v5"],
+    // v6: LOG_KEYS keep pts_allow_* so DST FPTS matches matchup.
+    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v6"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -1553,9 +1558,11 @@ function ProjectionsPanel({
             });
             const hasProj = !isBye && projVal != null;
             // Actual weekly fantasy points (not a duplicate of Proj).
+            // scoreActualLine injects pts_allow_* when only aggregate pts_allow
+            // was kept — same path as Game Logs / matchup board.
             const leaguePts =
               played && g.raw && Object.keys(g.raw).length > 0
-                ? projectionPoints(g.raw, scoringMap, leagueFormat)
+                ? scoreActualLine(g.raw, scoringMap)
                 : null;
             const ptsVal = leaguePts ?? ptsForFormat(g.points, scoringFormat);
             const fpts = played && ptsVal != null ? fmtFantasyPts(ptsVal) : "-";
@@ -2016,7 +2023,7 @@ function OutlookPanel({
   const { data: logsBundle } = useQuery({
     // Current season only — career years load when Game Logs opens.
     // v2: past-week Proj from shared week projection bundles.
-    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v5"],
+    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v6"],
     enabled: Boolean(playerId && pos),
     queryFn: () =>
       fetchGameLogsClient(playerId, team || "FA", pos || "WR", null, { includeCareer: false }),
