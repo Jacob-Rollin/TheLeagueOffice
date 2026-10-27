@@ -79,8 +79,9 @@ export function generateRecapArticle(brief: EditorialBrief): GeneratedPressArtic
   const margin = pts2(brief.razorMargin);
   const apexPts = pts2(brief.apexPoints);
   const stalledPts = pts2(brief.stalledPoints);
-  const genius = brief.geniusTeam.trim() || topTeam;
-  const geniusEff = eff1(brief.geniusEfficiency || 0);
+  const geniusTeam = brief.geniusTeam.trim();
+  const geniusEff = brief.geniusEfficiency;
+  const hasGenius = Boolean(geniusTeam) && Number.isFinite(geniusEff) && geniusEff > 0;
   const activeMvpPlayer = brief.mvpPlayer;
   const mvpPts = pts2(activeMvpPlayer?.points ?? 0);
   const s = seed(brief, "recap");
@@ -99,6 +100,11 @@ export function generateRecapArticle(brief: EditorialBrief): GeneratedPressArtic
       ? ` Meanwhile ${nameToken(brief.woodshedWinner)} put ${nameToken(brief.woodshedLoser)} on the woodshed, winning by ${metric(`${pts2(brief.woodshedMargin)}pts`)}.`
       : "";
 
+  // Never invent Gridiron Genius at 0% — only cite when efficiency was actually measured.
+  const geniusParagraph = hasGenius
+    ? `${nameToken(geniusTeam)} earned Gridiron Genius honors at ${metric(`${eff1(geniusEff)}%`)} coaching efficiency. Managers who ignore that board heading into the next kickoff slate will be writing excuses later.`
+    : `The Gridiron Genius board stayed unsettled this week without a clean coaching-efficiency read. Managers who treat every flex call as live ammo will be ahead of the desk next kickoff.`;
+
   const lead = pickPhrase(RECAP_LEADS, s).replace("[WEEK]", String(brief.week));
   const title = pickPhrase(RECAP_TITLES, `${s}|title`)
     .replace("[WEEK]", String(brief.week))
@@ -110,7 +116,7 @@ export function generateRecapArticle(brief: EditorialBrief): GeneratedPressArtic
     paragraphs: [
       `${lead} Headlining the week was ${nameToken(topTeam)}, posting a week-high ${metric(`${apexPts}pts`)}.${mvpClause} On the opposite end, ${nameToken(lowTeam)} finished last with ${metric(`${stalledPts}pts`)}.${woodshedClause}`,
       `The razor drama belonged to ${nameToken(badBeatWinner)}, who edged ${nameToken(badBeatLoser)} by just ${metric(`${margin}pts`)}.${bustClause}`,
-      `${nameToken(genius)} earned Gridiron Genius honors at ${metric(`${geniusEff}%`)} coaching efficiency. Managers who ignore that board heading into the next kickoff slate will be writing excuses later.`,
+      geniusParagraph,
     ],
   };
 }

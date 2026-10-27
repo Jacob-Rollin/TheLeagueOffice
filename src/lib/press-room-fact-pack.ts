@@ -252,8 +252,11 @@ export function buildPressRoomFactPack(input: {
     razorWinner: brief.razorWinner.trim() || "",
     razorLoser: brief.razorLoser.trim() || "",
     razorMargin: brief.razorMargin,
-    geniusTeam: brief.geniusTeam.trim() || "",
-    geniusEfficiency: brief.geniusEfficiency,
+    geniusTeam:
+      brief.geniusEfficiency > 0 && brief.geniusTeam.trim()
+        ? brief.geniusTeam.trim()
+        : "",
+    geniusEfficiency: brief.geniusEfficiency > 0 ? brief.geniusEfficiency : 0,
     waiverPlayer: brief.waiverPlayer.trim() || "",
     waiverPlayerId: brief.waiverPlayerId,
     waiverTeam: brief.waiverTeam.trim() || "",
