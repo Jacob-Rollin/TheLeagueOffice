@@ -241,7 +241,8 @@ async function weeklyRawClient(
   id: string,
   season: string,
 ): Promise<Record<string, { stats?: Record<string, number> | null }>> {
-  return getCached(`weekly-raw-v1:${season}:${id}`, 15 * 60 * 1000, async () => {
+  // v2: keep DEF pts_allow_* / ff / blk_kick so popup FPTS matches matchup board.
+  return getCached(`weekly-raw-v2:${season}:${id}`, 15 * 60 * 1000, async () => {
     const res = await sleeperFetch(
       `${SLEEPER_BASE}/stats/nfl/player/${encodeURIComponent(id)}?season_type=regular&season=${season}&grouping=week`,
     );
@@ -312,7 +313,7 @@ const LOG_KEYS = [
   "pos_rank_std",
   "pos_rank_half_ppr",
   "pos_rank_ppr",
-  // K / DST counting stats used by mobile Game Log groups.
+  // K / DST counting stats used by mobile Game Log groups + league scoring.
   "fgm",
   "fga",
   "fgm_50p",
@@ -321,9 +322,22 @@ const LOG_KEYS = [
   "sack",
   "int",
   "fum_rec",
+  "ff",
+  "blk_kick",
   "def_td",
+  "def_st_td",
+  "st_td",
   "safe",
   "pts_allow",
+  // PA buckets — required so popup FPTS matches Sleeper matchup (not just pts_allow).
+  "pts_allow_0",
+  "pts_allow_1_6",
+  "pts_allow_7_13",
+  "pts_allow_14_20",
+  "pts_allow_21_27",
+  "pts_allow_28_34",
+  "pts_allow_35p",
+  "pts_allow_35_p",
 ] as const;
 
 /** Derive snap% from Sleeper off/def snap counts onto the raw log bag. */

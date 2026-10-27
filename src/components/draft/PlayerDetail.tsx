@@ -48,6 +48,7 @@ import { fetchLeagueScoringPreferred } from "@/lib/scoring-client";
 import {
   hasScorableProjectionStats,
   projectionPoints,
+  scoreActualLine,
   type ScoringMap,
 } from "@/lib/scoring-map";
 import {
@@ -1306,9 +1307,12 @@ function GameLogsPanel({
               <tbody>
                 {data.logs.map((g, index) => {
                   const played = g.played !== false && !g.isBye;
+                  // scoreActualLine (not projectionPoints): injects pts_allow_*
+                  // when game-log bags only kept aggregate pts_allow — otherwise
+                  // DST PA bonuses drop and popup FPTS lag the matchup board.
                   const leaguePts =
                     played && g.raw && Object.keys(g.raw).length > 0
-                      ? projectionPoints(g.raw, scoringMap, leagueFormat)
+                      ? scoreActualLine(g.raw, scoringMap)
                       : null;
                   const ptsVal =
                     leaguePts ?? ptsForFormat(g.points, scoringFormat);
@@ -1553,9 +1557,11 @@ function ProjectionsPanel({
             });
             const hasProj = !isBye && projVal != null;
             // Actual weekly fantasy points (not a duplicate of Proj).
+            // scoreActualLine injects pts_allow_* when only aggregate pts_allow
+            // was kept — same path as Game Logs / matchup board.
             const leaguePts =
               played && g.raw && Object.keys(g.raw).length > 0
-                ? projectionPoints(g.raw, scoringMap, leagueFormat)
+                ? scoreActualLine(g.raw, scoringMap)
                 : null;
             const ptsVal = leaguePts ?? ptsForFormat(g.points, scoringFormat);
             const fpts = played && ptsVal != null ? fmtFantasyPts(ptsVal) : "-";
