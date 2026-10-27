@@ -37,8 +37,9 @@ function MobileLeagueLayout() {
       leagueId: activeLeague.leagueId,
       platform: activeLeague.platform,
       week,
+      season: nflState.data?.season ?? null,
     });
-  }, [activeLeague, queryClient, week]);
+  }, [activeLeague, queryClient, week, nflState.data?.season]);
 
   if (loading || (exists && activeLeague?.id !== leagueId)) {
     return (

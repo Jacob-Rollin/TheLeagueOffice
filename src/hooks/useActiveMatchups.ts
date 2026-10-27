@@ -19,7 +19,9 @@ import {
   fetchSleeperWeekMatchupsClient,
 } from "@/lib/sleeper-matchups-client";
 import { sleeperBudgetRemaining } from "@/lib/sleeper-rate-budget";
+import { clearWeeklyActualStatsCache } from "@/lib/sleeper-week-stats";
 import type { LeagueWeekMatchups } from "@/lib/league.server";
+import { useNflState } from "@/hooks/useLeagueProjections";
 
 /**
  * Live current-week scoring via the visitor's browser → Sleeper.
@@ -217,6 +219,8 @@ export function useActiveMatchups(
   const pace = opts?.pace ?? "default";
   const { activeLeague } = useActiveLeague();
   const queryClient = useQueryClient();
+  const nflState = useNflState();
+  const nflSeason = nflState.data?.season ?? null;
   const id = activeLeague?.id ?? null;
   const leagueId = activeLeague?.leagueId ?? "";
   const platform = (activeLeague?.platform ?? "sleeper").trim().toLowerCase();
@@ -287,6 +291,8 @@ export function useActiveMatchups(
       debounce = window.setTimeout(() => {
         clearSleeperLiveMatchupMemory();
         clearPublicScoreboardMemory(safeWeek, 2);
+        // Bust week-stats IndexedDB so the refetch hits Sleeper, not a fresh TTL.
+        void clearWeeklyActualStatsCache(nflSeason, safeWeek);
         void queryClient.invalidateQueries({ queryKey: activeMatchupsQueryKey(id, safeWeek) });
         void queryClient.invalidateQueries({ queryKey: scoreboardQueryKey(safeWeek, 2) });
         void queryClient.invalidateQueries({
@@ -302,7 +308,7 @@ export function useActiveMatchups(
       document.removeEventListener("visibilitychange", onReturn);
       window.removeEventListener("focus", onReturn);
     };
-  }, [broadcast, id, safeWeek, isPastWeek, queryClient]);
+  }, [broadcast, id, safeWeek, isPastWeek, queryClient, nflSeason]);
 
   return {
     matchups: query.data ?? null,

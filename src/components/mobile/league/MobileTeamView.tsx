@@ -84,7 +84,9 @@ function playerIsLocked(
 export function MobileTeamView({ leagueId }: { leagueId: string }) {
   const { activeLeague } = useActiveLeague();
   const queryClient = useQueryClient();
-  const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
+  const platform = (activeLeague?.platform ?? "").toLowerCase();
+  const isNative = platform === "native";
+  const isSleeperSynced = platform === "sleeper";
   const linkId = isNative ? (activeLeague?.id ?? null) : null;
 
   const { data: playersPayload, loading: playersLoading } = useSleeperPlayers();
@@ -598,7 +600,11 @@ export function MobileTeamView({ leagueId }: { leagueId: string }) {
     if (!entry) return 0;
     const host = entryPoints(entry, p.id);
     const stats = statsFor(sleeperIdFor(p));
-    if (isNative) return resolveNativeLiveScore(host, stats, scoringMap);
+    // Native + live Sleeper: week-stats box first (host players_points lag on gameday).
+    // Past Sleeper weeks + ESPN/Yahoo keep host-first.
+    if (isNative || (isSleeperSynced && !isPastWeek)) {
+      return resolveNativeLiveScore(host, stats, scoringMap);
+    }
     return resolveHostOrBoxScore(host, stats, scoringMap);
   };
 

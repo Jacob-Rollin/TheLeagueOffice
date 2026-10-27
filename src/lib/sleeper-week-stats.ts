@@ -11,7 +11,7 @@
 
 import { SLEEPER_BASE, positionsQuery } from "@/lib/players-build";
 import { SNAP_OBJECT_KEYS, snapCdnUrl, snapCdnPublicBase } from "@/lib/snap-cdn-public";
-import { getCached } from "@/lib/sleeper-cache";
+import { clearCache, getCached } from "@/lib/sleeper-cache";
 import { waitForSleeperPermit } from "@/lib/sleeper-rate-budget";
 
 /** Shared IndexedDB key — matchup overlay + Statistics tab share one download. */
@@ -19,9 +19,34 @@ export const WEEKLY_ACTUAL_STATS_CACHE_KEY = (season: string | number, week: num
   `weekly-actual-stats-v7-v1-path:${season}|${week}`;
 
 /**
+ * Drop IndexedDB week-stats so the next poll/PTR hits Sleeper instead of a
+ * still-fresh TTL. Safe to call from visibility return + pull-to-refresh.
+ */
+export async function clearWeeklyActualStatsCache(
+  season: string | number | null | undefined,
+  week: number | null | undefined,
+): Promise<void> {
+  const w = week != null && week > 0 ? Math.floor(week) : null;
+  if (w == null) return;
+  const seasons = new Set<string>([
+    String(season || new Date().getUTCFullYear()),
+    String(new Date().getUTCFullYear()),
+  ]);
+  const keys: string[] = [];
+  for (const s of seasons) {
+    keys.push(WEEKLY_ACTUAL_STATS_CACHE_KEY(s, w));
+    if (w > 1) keys.push(WEEKLY_ACTUAL_STATS_CACHE_KEY(s, w - 1));
+  }
+  await Promise.all(keys.map((key) => clearCache(key).catch(() => undefined)));
+}
+
+/**
  * Live week actuals from browser → Sleeper (IndexedDB `getCached`).
  * Waits for a live rate-budget permit so Matchup scoring is not starved.
  * Snap-cdn is a soft warm fallback only — Actions finalize TiDB later.
+ *
+ * Callers poll via React Query + `visibleRefetchInterval`; shared getCached
+ * coalesces Matchup/Team/popup into one download per TTL window.
  */
 export async function fetchWeeklyActualStatRows(
   season: string | number,

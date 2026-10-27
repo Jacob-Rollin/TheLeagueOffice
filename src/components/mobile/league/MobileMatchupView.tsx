@@ -51,7 +51,9 @@ const record = (r: StandingRow | undefined) =>
 
 export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}) {
   const { activeLeague } = useActiveLeague();
-  const isNative = (activeLeague?.platform ?? "").toLowerCase() === "native";
+  const platform = (activeLeague?.platform ?? "").toLowerCase();
+  const isNative = platform === "native";
+  const isSleeperSynced = platform === "sleeper";
   const linkId = isNative ? (activeLeague?.id ?? null) : null;
 
   const { data: playersPayload } = useSleeperPlayers();
@@ -173,9 +175,12 @@ export function MobileMatchupView({ initialWeek }: { initialWeek?: number } = {}
   const pointsFor = (entry: WeeklyMatchupEntry, player: Player): number => {
     const host = entryPoints(entry, player.id);
     const stats = statsFor(sleeperIdFor(player));
-    // Native: browser Sleeper week-stats drive live scores; TiDB host is finalize-only.
-    if (isNative) return resolveNativeLiveScore(host, stats, scoringMap);
-    // Synced hosts: prefer non-zero host points; fall through to box for DEF remaps.
+    // Native + live Sleeper: prefer browser week-stats (same pace as popup Fpts feel).
+    // Host matchup players_points lag the stats endpoint on gameday.
+    // Past Sleeper weeks + ESPN/Yahoo keep host-first.
+    if (isNative || (isSleeperSynced && !isPastWeek)) {
+      return resolveNativeLiveScore(host, stats, scoringMap);
+    }
     return resolveHostOrBoxScore(host, stats, scoringMap);
   };
 

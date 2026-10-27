@@ -14,6 +14,7 @@ import { forceRosterRevalidate } from "@/lib/roster-cache";
 import { clearCache } from "@/lib/sleeper-cache";
 import { clearSleeperLiveMatchupMemory } from "@/lib/sleeper-matchups-client";
 import { sleeperBudgetRemaining } from "@/lib/sleeper-rate-budget";
+import { clearWeeklyActualStatsCache } from "@/lib/sleeper-week-stats";
 
 /** Minimum gap between user-forced refreshes on this tab. */
 export const MOBILE_PTR_COOLDOWN_MS = 18_000;
@@ -28,16 +29,23 @@ export type MobilePullRefreshLeague = {
   leagueId: string;
   platform: string;
   week?: number | null;
+  /** NFL season year for week-stats IndexedDB keys (defaults to current UTC year). */
+  season?: string | number | null;
 };
 
 export function mobilePtrCooldownRemainingMs(now = Date.now()): number {
   return Math.max(0, MOBILE_PTR_COOLDOWN_MS - (now - lastPtrAt));
 }
 
-async function clearSleeperLeagueCaches(leagueId: string, week: number | null | undefined) {
+async function clearSleeperLeagueCaches(
+  leagueId: string,
+  week: number | null | undefined,
+  season?: string | number | null,
+) {
   const id = String(leagueId ?? "").trim();
   if (!id) return;
   const w = week != null && week > 0 ? Math.floor(week) : null;
+  const seasonKey = String(season || new Date().getUTCFullYear());
   const keys = [
     `sleeper-rosters-v1:${id}`,
     `sleeper-standings-v1:${id}`,
@@ -50,7 +58,24 @@ async function clearSleeperLeagueCaches(leagueId: string, week: number | null | 
     if (w > 1) keys.push(`sleeper-matchups-v1:${id}|${w - 1}`);
   }
   await Promise.all(keys.map((key) => clearCache(key).catch(() => undefined)));
+  // Live player/team Fpts — must bust or PTR reuses stale week-stats TTL.
+  await clearWeeklyActualStatsCache(seasonKey, w);
   clearSleeperLiveMatchupMemory(id, w);
+}
+
+function isLiveScoringQueryKey(key: readonly unknown[]): boolean {
+  if (!Array.isArray(key) || key.length === 0) return false;
+  const head = String(key[0] ?? "");
+  return (
+    head === "active-matchups" ||
+    head === "sleeper-weekly-actual-stats" ||
+    head === "active-standings" ||
+    head === "league-rosters" ||
+    head === "league-transaction-log" ||
+    head === "mobile-league-settings" ||
+    head === "league-matchups-cdn-all" ||
+    head === "league-matchups-history"
+  );
 }
 
 /**
@@ -72,20 +97,7 @@ export async function refreshMobileLeagueSurface(
   if (mobilePtrCooldownRemainingMs(now) > 0) {
     // Soft: re-read React Query only (no cache bust) so the gesture still settles.
     await queryClient.refetchQueries({
-      predicate: (q) => {
-        const key = q.queryKey;
-        if (!Array.isArray(key) || key.length === 0) return false;
-        const head = String(key[0] ?? "");
-        return (
-          head === "active-matchups" ||
-          head === "active-standings" ||
-          head === "league-rosters" ||
-          head === "league-transaction-log" ||
-          head === "mobile-league-settings" ||
-          head === "league-matchups-cdn-all" ||
-          head === "league-matchups-history"
-        );
-      },
+      predicate: (q) => isLiveScoringQueryKey(q.queryKey),
       type: "active",
     });
     return { ok: true, forcedNetwork: false, reason: "cooldown" };
@@ -93,13 +105,19 @@ export async function refreshMobileLeagueSurface(
   lastPtrAt = now;
 
   const sleeper = platform === "sleeper";
-  const budgetOk = !sleeper || sleeperBudgetRemaining("warm") >= MIN_WARM_BUDGET_FOR_FULL_CLEAR;
+  const native = platform === "native";
+  const budgetOk =
+    (!sleeper && !native) || sleeperBudgetRemaining("warm") >= MIN_WARM_BUDGET_FOR_FULL_CLEAR;
   let forcedNetwork = false;
 
   if (sleeper && budgetOk) {
-    await clearSleeperLeagueCaches(leagueId, league.week ?? null);
+    await clearSleeperLeagueCaches(leagueId, league.week ?? null, league.season ?? null);
     forcedNetwork = true;
-  } else if (!sleeper) {
+  } else if (native && budgetOk) {
+    // Native Matchup/Team score from shared client→Sleeper week-stats — bust those only.
+    await clearWeeklyActualStatsCache(league.season ?? null, league.week ?? null);
+    forcedNetwork = true;
+  } else if (!sleeper && !native) {
     // ESPN/Yahoo: drop in-tab Fluid memos so the next loaders may re-fetch once.
     clearEspnFluidForLeague(leagueId, platform);
     forcedNetwork = true;
@@ -115,6 +133,8 @@ export async function refreshMobileLeagueSurface(
     queryClient.invalidateQueries({ queryKey: ["league-transaction-log", connectionId] }),
     queryClient.invalidateQueries({ queryKey: ["mobile-league-settings"] }),
     queryClient.invalidateQueries({ queryKey: ["active-matchups", connectionId] }),
+    // Live Fpts overlay (Matchup/Team) — same client→Sleeper week-stats popup uses.
+    queryClient.invalidateQueries({ queryKey: ["sleeper-weekly-actual-stats"] }),
     queryClient.invalidateQueries({ queryKey: ["league-matchups-cdn-all"] }),
     queryClient.invalidateQueries({ queryKey: ["league-matchups-history"] }),
     queryClient.invalidateQueries({ queryKey: ["league-scoring"] }),
@@ -133,6 +153,7 @@ export async function refreshMobileLeagueSurface(
       const key = q.queryKey;
       if (!Array.isArray(key) || key.length === 0) return false;
       const head = String(key[0] ?? "");
+      if (head === "sleeper-weekly-actual-stats") return true;
       if (
         head === "active-matchups" ||
         head === "league-rosters" ||
