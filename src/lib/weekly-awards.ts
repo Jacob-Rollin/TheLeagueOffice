@@ -222,6 +222,11 @@ export function coachingEfficiency(
   rosterPositions: string[],
 ): number | null {
   if (!rosterPlayers.length || scoredPoints <= 0) return null;
+  // Need enough cataloged positions to trust an optimal lineup; empty/unknown
+  // pos rows otherwise collapse optimal to 0 and invent a fake genius board.
+  const known = rosterPlayers.filter((p) => Boolean(p.pos));
+  if (known.length < 5) return null;
+
   const req = starterRequirements(rosterPositions);
   const qbSlots = Math.max(1, req["QB"] ?? 1);
   const rbSlots = Math.max(1, req["RB"] ?? 2);
@@ -232,7 +237,7 @@ export function coachingEfficiency(
   const kSlots = Math.max(1, req["K"] ?? 1);
 
   const byPos = (pos: string) =>
-    rosterPlayers.filter((p) => p.pos === pos).sort((a, b) => b.points - a.points);
+    known.filter((p) => p.pos === pos).sort((a, b) => b.points - a.points);
 
   const qbs = byPos("QB");
   const rbs = byPos("RB");
@@ -255,7 +260,10 @@ export function coachingEfficiency(
     takeTopPoints(ks, kSlots);
 
   if (optimal <= 0) return null;
-  return Math.min(100, (scoredPoints / optimal) * 100);
+  const pct = Math.min(100, (scoredPoints / optimal) * 100);
+  // Sub-1% reads as 0.0 in desk copy — treat as unmeasured.
+  if (!(pct >= 1)) return null;
+  return pct;
 }
 
 export type AwardRow = {
@@ -472,7 +480,7 @@ export function buildWeekReport(input: WeekReportInput): { awards: AwardRow[]; b
       Number(entry.points) || 0,
       rosterPositions,
     );
-    if (efficiency == null) continue;
+    if (efficiency == null || !(efficiency >= 1)) continue;
     if (!managerOfWeek || efficiency > managerOfWeek.efficiency) {
       managerOfWeek = { entry, efficiency };
     }
@@ -716,8 +724,12 @@ export function buildWeekReport(input: WeekReportInput): { awards: AwardRow[]; b
     razorWinner: badBeat?.winner.teamName ?? "",
     razorLoser: badBeat?.loser.teamName ?? "",
     razorMargin: badBeat?.margin ?? 0,
-    geniusTeam: managerOfWeek?.entry.teamName ?? "",
-    geniusEfficiency: managerOfWeek?.efficiency ?? 0,
+    geniusTeam:
+      managerOfWeek && managerOfWeek.efficiency >= 1
+        ? managerOfWeek.entry.teamName
+        : "",
+    geniusEfficiency:
+      managerOfWeek && managerOfWeek.efficiency >= 1 ? managerOfWeek.efficiency : 0,
     waiverPlayer: waiverGem?.player.name ?? "",
     waiverTeam:
       (waiverGem
@@ -861,7 +873,7 @@ export function buildWeekReport(input: WeekReportInput): { awards: AwardRow[]; b
     });
   }
 
-  if (managerOfWeek) {
+  if (managerOfWeek && managerOfWeek.efficiency >= 1) {
     awards.push({
       id: "motw",
       title: "Gridiron Genius",
