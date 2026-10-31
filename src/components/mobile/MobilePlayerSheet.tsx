@@ -48,7 +48,11 @@ import { prefetchPlayerDetail } from "@/lib/prefetch-player-detail";
 import { fetchResearchFpa } from "@/lib/research-cdn";
 import { formatNflKickoffLabel } from "@/lib/rolling-live-projection";
 import { resolveInjuryStatus } from "@/lib/sandbox-rosters";
-import { projectionPoints } from "@/lib/scoring-map";
+import {
+  projectionPoints,
+  scoreActualLine,
+  type ScoringMap,
+} from "@/lib/scoring-map";
 import { fetchSnapTradeMarket } from "@/lib/snap-cdn";
 import {
   fetchGameLogsClient,
@@ -492,6 +496,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 sosGrade={detail.data?.sos?.grade ?? null}
                 sosOpponents={detail.data?.sos?.opponents ?? null}
                 format={format}
+                scoringMap={scoringMap}
                 injuryStatus={resolveInjuryStatus(player) ?? player.injury_status ?? null}
                 injuryBodyPart={
                   (player as { injury_body_part?: string | null }).injury_body_part ?? null
@@ -506,6 +511,7 @@ function MobilePlayerSheet({ id, onClose }: { id: string; onClose: () => void })
                 team={team}
                 pos={player.pos}
                 format={format}
+                scoringMap={scoringMap}
                 exp={player.exp}
               />
             ) : (
@@ -905,6 +911,7 @@ function Overview({
   sosGrade,
   sosOpponents,
   format,
+  scoringMap,
   injuryStatus,
   injuryBodyPart,
   injuryNotes,
@@ -917,6 +924,7 @@ function Overview({
   sosGrade: string | null;
   sosOpponents: Array<{ week: number; opp: string; rank: number | null }> | null;
   format: Format;
+  scoringMap: ScoringMap;
   injuryStatus: string | null;
   injuryBodyPart: string | null;
   injuryNotes: string | null;
@@ -998,6 +1006,7 @@ function Overview({
         team={team}
         pos={pos}
         format={format}
+        scoringMap={scoringMap}
         focusWeek={focusWeek}
         sosRankByWeek={sosRankByWeek}
       />
@@ -1515,11 +1524,32 @@ function parseOppToken(opp: string | null | undefined): { label: string; abbr: s
 }
 
 /** Horizontal week cards under Overview matchup — current week starts on the left. */
+/** League-scored FPTS for a played log row; falls back to published pts_*. */
+function resolveMobileLogFpts(
+  log: {
+    isBye?: boolean;
+    played?: boolean;
+    raw?: Record<string, number> | null;
+    points: { std: number; half: number; ppr: number };
+  },
+  format: Format,
+  scoringMap: ScoringMap | null | undefined,
+): number | null {
+  if (log.isBye || log.played === false) return null;
+  if (scoringMap && log.raw && Object.keys(log.raw).length > 0) {
+    const scored = scoreActualLine(log.raw, scoringMap);
+    if (scored != null) return scored;
+  }
+  const pub = Number(log.points[format]);
+  return Number.isFinite(pub) ? pub : null;
+}
+
 function WeekProjectionsStrip({
   id,
   team,
   pos,
   format,
+  scoringMap,
   focusWeek,
   sosRankByWeek,
 }: {
@@ -1527,6 +1557,7 @@ function WeekProjectionsStrip({
   team: string | null;
   pos: string;
   format: Format;
+  scoringMap: ScoringMap;
   focusWeek: number | null;
   /** Weekly positional SoS ranks from detail SOS board (current season). */
   sosRankByWeek?: Map<number, number | null> | null;
@@ -1564,8 +1595,7 @@ function WeekProjectionsStrip({
           const logo = opp.abbr ? teamLogo(opp.abbr) : null;
           const proj =
             log.isBye || log.proj?.[format] == null ? null : Number(log.proj[format]);
-          const finalPts =
-            log.isBye || !log.played ? null : Number(log.points[format]);
+          const finalPts = resolveMobileLogFpts(log, format, scoringMap);
           const sosRank = sosRankByWeek?.get(log.week);
           const oppClass =
             !log.isBye && sosRank != null && Number.isFinite(sosRank)
@@ -1666,6 +1696,7 @@ function gameLogGroupedCols(
   format: Format,
   /** Weekly positional SoS ranks (current season only). */
   sosRankByWeek?: Map<number, number | null> | null,
+  scoringMap?: ScoringMap | null,
 ): { leftCols: TableCol<GameLogRow>[]; groups: ColGroup<GameLogRow>[] } {
   const rankKey = posRankStatKey(format);
   const leftCols: TableCol<GameLogRow>[] = [
@@ -1693,7 +1724,11 @@ function gameLogGroupedCols(
         key: "fpts",
         label: "Fpts",
         highlight: true,
-        render: (l) => (l.isBye || !l.played ? "-" : l.points[format].toFixed(1)),
+        // League map + scoreActualLine (PA tier injection) — match desktop popup / matchup.
+        render: (l) => {
+          const pts = resolveMobileLogFpts(l, format, scoringMap);
+          return pts == null ? "-" : pts.toFixed(1);
+        },
       },
       {
         key: "snap_pct",
@@ -1740,12 +1775,14 @@ function GameLogTab({
   team,
   pos,
   format,
+  scoringMap,
   exp,
 }: {
   id: string;
   team: string | null;
   pos: string;
   format: Format;
+  scoringMap: ScoringMap;
   exp: number | null;
 }) {
   const nflState = useNflState();
@@ -1785,8 +1822,8 @@ function GameLogTab({
   // Full 1–18 season board; unplayed weeks stay as "-" until the game is final.
   const logs = data?.logs ?? [];
   const { leftCols, groups } = useMemo(
-    () => gameLogGroupedCols(pos, format, sosRankByWeek),
-    [pos, format, sosRankByWeek],
+    () => gameLogGroupedCols(pos, format, sosRankByWeek, scoringMap),
+    [pos, format, sosRankByWeek, scoringMap],
   );
   const seasonLabel = data?.season ?? currentSeason;
 
@@ -1832,7 +1869,14 @@ function GameLogTab({
                   </span>
                 </button>
                 {open ? (
-                  <PastSeasonGameLog id={id} team={team} pos={pos} format={format} season={year} />
+                  <PastSeasonGameLog
+                    id={id}
+                    team={team}
+                    pos={pos}
+                    format={format}
+                    scoringMap={scoringMap}
+                    season={year}
+                  />
                 ) : null}
               </div>
             );
@@ -1848,18 +1892,23 @@ function PastSeasonGameLog({
   team,
   pos,
   format,
+  scoringMap,
   season,
 }: {
   id: string;
   team: string | null;
   pos: string;
   format: Format;
+  scoringMap: ScoringMap;
   season: string;
 }) {
   const { data, isLoading } = usePlayerLogs(id, team, pos, season, true);
   // Same full week board as the current season (unplayed weeks stay "-").
   const logs = data?.logs ?? [];
-  const { leftCols, groups } = useMemo(() => gameLogGroupedCols(pos, format), [pos, format]);
+  const { leftCols, groups } = useMemo(
+    () => gameLogGroupedCols(pos, format, null, scoringMap),
+    [pos, format, scoringMap],
+  );
 
   if (isLoading) {
     return <p className="px-4 py-8 text-center text-sm text-m-muted">Loading {season}...</p>;
