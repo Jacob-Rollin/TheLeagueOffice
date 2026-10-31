@@ -760,14 +760,13 @@ function ArticlesManager({
       const report = await regenerateWeeklyDeskArticles();
       if (!report.ok) throw new Error(report.error || "Weekly desk failed.");
       toast.success(
-        `Published Week ${report.week} desks` +
-          (report.waiverSlug && report.startSitSlug
-            ? ` (${report.waiverSlug}, ${report.startSitSlug}).`
-            : "."),
+        report.waiverSlug
+          ? `Published Week ${report.week} waiver wire (${report.waiverSlug}).`
+          : `Published Week ${report.week} waiver wire.`,
       );
       refresh();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not generate weekly desks.");
+      toast.error(err instanceof Error ? err.message : "Could not generate waiver wire.");
     } finally {
       setDeskBusy(false);
     }
@@ -789,7 +788,7 @@ function ArticlesManager({
             disabled={deskBusy}
             onClick={() => void generateWeeklyDesk()}
           >
-            {deskBusy ? "Generating…" : "Generate weekly desks"}
+            {deskBusy ? "Generating…" : "Generate waiver wire"}
           </button>
           <button
             type="button"
