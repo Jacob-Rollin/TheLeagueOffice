@@ -6,18 +6,19 @@ import type { WeeklyDeskKindFilter } from "@/lib/weekly-desk.server";
 function parseKind(request: Request): WeeklyDeskKindFilter {
   try {
     const kind = new URL(request.url).searchParams.get("kind")?.trim().toLowerCase();
-    if (kind === "waiver" || kind === "start-sit") return kind;
+    if (kind === "start-sit") return "start-sit";
+    if (kind === "waiver" || kind === "all") return "waiver";
   } catch {
     /* ignore */
   }
-  return "all";
+  return "waiver";
 }
 
 /**
- * Auto-publish Front Office weekly desks into CMS articles.
+ * Auto-publish Front Office Waiver Wire into CMS articles.
  * Prefer Actions cron (CRON_SECRET). Reuses GROQ_API_KEY when set.
  *
- * Query: `?kind=waiver` | `?kind=start-sit` | omit / `all` for both.
+ * Query: `?kind=waiver` (default). `?kind=start-sit` is a retired no-op.
  */
 export const Route = createFileRoute("/api/cron/weekly-desk")({
   server: {

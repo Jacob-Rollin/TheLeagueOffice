@@ -1,21 +1,19 @@
 /**
- * Build + auto-publish weekly Front Office CMS articles (Waiver Wire, Start/Sit).
+ * Build + auto-publish weekly Front Office CMS articles.
+ * Homepage feed: Waiver Wire only (Start/Sit desks are retired from auto-publish).
  * Upserts by stable slug so regenerations update the same row.
  */
 import {
-  buildStartSitDeskPack,
   buildWaiverDeskPack,
-  templateStartSitBlurbs,
   templateWaiverBlurbs,
   waiverTopList,
 } from "@/lib/weekly-desk-facts.server";
 import {
   renderGroupedByPosition,
-  renderPositionSection,
   renderPriorityList,
   wrapDeskArticle,
 } from "@/lib/weekly-desk-html";
-import { narrateStartSitBlurbs, narrateWaiverBlurbs } from "@/lib/weekly-desk-llm.server";
+import { narrateWaiverBlurbs } from "@/lib/weekly-desk-llm.server";
 import { weeklyDeskStockImage, type WeeklyDeskKind } from "@/lib/weekly-desk-stock";
 
 export type WeeklyDeskReport = {
@@ -109,63 +107,49 @@ async function publishWaiver(): Promise<{ slug: string; week: number; season: nu
   return { slug, week: pack.week, season: pack.season };
 }
 
-async function publishStartSit(): Promise<{ slug: string; week: number; season: number }> {
-  const pack = await buildStartSitDeskPack();
-  const templates = templateStartSitBlurbs(pack);
-  const narrated = await narrateStartSitBlurbs(pack, templates);
-  const order = ["QB", "RB", "WR", "TE", "DST"];
-  const sections: string[] = [];
-  let hero: { id: string; name: string; pos: string; team: string } | null = null;
-  for (const pos of order) {
-    const rows = narrated.byPos[pos];
-    if (!rows?.length) continue;
-    if (!hero) hero = rows[0]!;
-    sections.push(renderPositionSection(pos, rows));
+/** Unpublish retired Start/Sit desks so they leave the homepage feed. */
+async function unpublishStartSitDesks(): Promise<number> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
+    .from("articles")
+    .update({ published: false })
+    .eq("published", true)
+    .eq("category", "Start Sit")
+    .select("id");
+  if (error) {
+    console.warn("[weekly-desk] unpublish start-sit failed", error.message);
+    return 0;
   }
-  const content = wrapDeskArticle(narrated.intro, sections);
-  const slug = stableSlug("start-sit", pack.week, pack.season);
-  await upsertArticle({
-    slug,
-    title: `Start / Sit Advice: Week ${pack.week}`,
-    category: "Start Sit",
-    summary: `Position-by-position starts and sits for Week ${pack.week} based on matchup strength.`,
-    content,
-    image_url: weeklyDeskStockImage("start-sit", pack.week, pack.season),
-    author_name: "League Office Desk",
-    featured_player_id: hero?.id ?? null,
-    featured_player_name: hero?.name ?? null,
-    featured_player_pos: hero?.pos ?? null,
-    featured_player_team: hero?.team ?? null,
-  });
-  return { slug, week: pack.week, season: pack.season };
+  return data?.length ?? 0;
 }
 
 export type WeeklyDeskKindFilter = "all" | WeeklyDeskKind;
 
 /**
- * Cron / admin entry: publish weekly desks (auto-published).
- * - `all` — both (admin "Generate weekly desks")
- * - `waiver` — Tue cron (early-week adds)
- * - `start-sit` — Thu cron (after midweek practices / injury reports)
+ * Cron / admin entry: publish Waiver Wire only (auto-published).
+ * Start/Sit desks are retired from the homepage schedule.
+ * - `waiver` | `all` — Tue cron / admin generate
+ * - `start-sit` — no-op (unpublishes any leftover Start Sit rows)
  */
 export async function processWeeklyDeskCron(
-  kinds: WeeklyDeskKindFilter = "all",
+  kinds: WeeklyDeskKindFilter = "waiver",
 ): Promise<WeeklyDeskReport> {
   try {
-    const wantWaiver = kinds === "all" || kinds === "waiver";
-    const wantStartSit = kinds === "all" || kinds === "start-sit";
+    const unpublished = await unpublishStartSitDesks();
+    if (unpublished > 0) {
+      console.info(`[weekly-desk] unpublished ${unpublished} Start/Sit desk article(s)`);
+    }
 
-    const waiver = wantWaiver ? await publishWaiver() : null;
-    const startSit = wantStartSit ? await publishStartSit() : null;
-    const week = waiver?.week ?? startSit?.week ?? 0;
-    const season = waiver?.season ?? startSit?.season ?? 0;
+    if (kinds === "start-sit") {
+      return { ok: true, week: 0, season: 0 };
+    }
 
+    const waiver = await publishWaiver();
     return {
       ok: true,
-      week,
-      season,
-      ...(waiver?.slug ? { waiverSlug: waiver.slug } : {}),
-      ...(startSit?.slug ? { startSitSlug: startSit.slug } : {}),
+      week: waiver.week,
+      season: waiver.season,
+      waiverSlug: waiver.slug,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "weekly desk failed";

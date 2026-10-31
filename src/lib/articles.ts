@@ -57,27 +57,24 @@ export async function listArticles(): Promise<ArticleRow[]> {
 }
 
 export async function latestPublishedArticle(): Promise<ArticleRow | null> {
-  const { data, error } = await supabase
-    .from("articles")
-    .select(COLUMNS)
-    .eq("published", true)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data ? mapRow(data as ArticleRow) : null;
+  const rows = await listPublishedArticles(1);
+  return rows[0] ?? null;
 }
 
 /** Recent published briefings for the Front Office feed (excludes optional slug). */
 export async function listPublishedArticles(limit = 6): Promise<ArticleRow[]> {
+  // Homepage only surfaces Waiver Wire (and manual editorials) — Start/Sit desks retired.
   const { data, error } = await supabase
     .from("articles")
     .select(COLUMNS)
     .eq("published", true)
+    .neq("category", "Start Sit")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error(error.message);
-  return ((data ?? []) as ArticleRow[]).map(mapRow);
+  return ((data ?? []) as ArticleRow[])
+    .filter((row) => !String(row.slug ?? "").startsWith("start-sit-week-"))
+    .map(mapRow);
 }
 
 export async function getArticleBySlug(slug: string): Promise<ArticleRow | null> {

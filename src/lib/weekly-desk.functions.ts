@@ -14,11 +14,11 @@ async function requireCallerIsAdmin(userId: string) {
   if (data?.role !== "admin") throw new Error("Unauthorized: Admin privileges required.");
 }
 
-/** Admin-only: regenerate + auto-publish this week's Waiver Wire and Start/Sit articles. */
+/** Admin-only: regenerate + auto-publish this week's Waiver Wire article. */
 export const regenerateWeeklyDeskArticles = createServerFn({ method: "POST" })
   .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .handler(async ({ context }) => {
     await requireCallerIsAdmin(context.userId);
     const { processWeeklyDeskCron } = await import("@/lib/weekly-desk.server");
-    return processWeeklyDeskCron();
+    return processWeeklyDeskCron("waiver");
   });

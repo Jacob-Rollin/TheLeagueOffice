@@ -1,12 +1,16 @@
-name: Weekly Front Office Desk — Start/Sit
+name: Weekly Front Office Desk — Start/Sit (retired)
 
-# Publishes Start/Sit CMS article after midweek practices and injury reports.
-# Thu 13:00 UTC (~9am ET) — firmer designations than Tuesday.
+# Start/Sit CMS desks are no longer published to the homepage.
+# Kept as a disabled workflow so Actions history remains discoverable.
+# Waiver wire remains on weekly-desk.yml (Tue 9:00 UTC).
 
 on:
-  schedule:
-    - cron: "0 13 * * 4"
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type ENABLE to temporarily re-run (no-op by default)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -16,23 +20,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  publish:
+  retired:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 2
     steps:
-      - name: Publish start/sit desk
-        env:
-          APP_URL: ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Start/Sit desk retired
         run: |
-          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "APP_URL / CRON_SECRET not configured — skipping."
-            exit 0
+          echo "Start/Sit weekly desk publishing is retired."
+          echo "Homepage Front Office feed only auto-publishes Waiver Wire."
+          if [ "${{ inputs.confirm }}" = "ENABLE" ]; then
+            echo "ENABLE acknowledged, but start-sit publish remains disabled in app code."
           fi
-          BASE="${APP_URL%/}"
-          case "$BASE" in
-            http://theleagueoffice.app|https://theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
-            http://www.theleagueoffice.app) BASE="https://www.theleagueoffice.app" ;;
-          esac
-          curl -fsSL -H "Authorization: Bearer $CRON_SECRET" \
-            "$BASE/api/cron/weekly-desk?kind=start-sit"
+          exit 0
