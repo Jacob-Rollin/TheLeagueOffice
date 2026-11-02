@@ -883,6 +883,16 @@ function formatSnapPct(raw: Record<string, number> | undefined, played: boolean)
   return Number.isFinite(v) ? `${Math.round(v)}%` : "0%";
 }
 
+/** Snap% is irrelevant for K / DST — hide the Fantasy micro-column. */
+function showGameLogSnapPct(pos: string): boolean {
+  const p = String(pos ?? "").toUpperCase();
+  return p !== "K" && p !== "DEF" && p !== "DST";
+}
+
+function gameLogFantasyLabels(pos: string): string[] {
+  return showGameLogSnapPct(pos) ? ["Proj", "Fpts", "Snp%", "Rank"] : ["Proj", "Fpts", "Rank"];
+}
+
 function formatOppLabel(g: { opp?: string | null; isAway?: boolean; location?: string }): string {
   if (
     g.isAway ||
@@ -1253,14 +1263,14 @@ function GameLogsPanel({
 
   const { data, isLoading } = useQuery({
     // Season logs only on open — career is a separate opt-in fetch below.
-    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v7"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v8"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
 
   const { data: careerData, isLoading: careerLoading } = useQuery({
-    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v7"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v8"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
     enabled: showCareer,
     staleTime: 1000 * 60 * 15,
@@ -1302,7 +1312,7 @@ function GameLogsPanel({
             <table className="w-full border-collapse text-sm">
               <DoubleTierThead
                 leftLabels={["WK", "OPP"]}
-                fantasyLabels={["Proj", "Fpts", "Snp%", "Rank"]}
+                fantasyLabels={gameLogFantasyLabels(pos)}
                 groups={statGroups}
                 fantasyHighlightIndex={1}
               />
@@ -1343,6 +1353,7 @@ function GameLogsPanel({
                     ? weeklyPosRankDisplay(g.raw?.[rankKey])
                     : null;
                   const rankHeat = posRankHeatCellClass(weekRank);
+                  const withSnap = showGameLogSnapPct(pos);
 
                   return (
                     <tr
@@ -1380,9 +1391,11 @@ function GameLogsPanel({
                       >
                         {pts}
                       </td>
-                      <td className="px-3 py-2.5 text-center font-mono text-slate-700">
-                        {formatSnapPct(g.raw, played)}
-                      </td>
+                      {withSnap ? (
+                        <td className="px-3 py-2.5 text-center font-mono text-slate-700">
+                          {formatSnapPct(g.raw, played)}
+                        </td>
+                      ) : null}
                       <td
                         className={cn(
                           "px-3 py-2.5 text-center font-mono text-slate-700",
@@ -1523,7 +1536,8 @@ function ProjectionsPanel({
     // v2: past-week rows keep Sleeper proj lines for the Projections sub-tab.
     // v6: LOG_KEYS keep pts_allow_* so DST FPTS matches matchup.
     // v7: keep kicker FG distance / miss keys so league FPTS matches Sleeper.
-    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v7"],
+    // v8: derive K/DST weekly Rank (Sleeper stamps 999); hide Snp% for K/DST.
+    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v8"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -1543,7 +1557,7 @@ function ProjectionsPanel({
       <table className="w-full border-collapse text-sm">
         <DoubleTierThead
           leftLabels={["WK", "OPP"]}
-          fantasyLabels={["Proj", "Fpts", "Snp%", "Rank"]}
+          fantasyLabels={gameLogFantasyLabels(pos)}
           groups={statGroups}
           fantasyHighlightIndex={1}
         />
@@ -1581,6 +1595,7 @@ function ProjectionsPanel({
                 : "text-slate-600";
             const weekRank = played ? weeklyPosRankDisplay(g.raw?.[rankKey]) : null;
             const rankHeat = posRankHeatCellClass(weekRank);
+            const withSnap = showGameLogSnapPct(pos);
 
             return (
               <tr
@@ -1618,9 +1633,11 @@ function ProjectionsPanel({
                 >
                   {fpts}
                 </td>
-                <td className="px-3 py-2.5 text-center font-mono text-slate-700">
-                  {formatSnapPct(g.raw, played)}
-                </td>
+                {withSnap ? (
+                  <td className="px-3 py-2.5 text-center font-mono text-slate-700">
+                    {formatSnapPct(g.raw, played)}
+                  </td>
+                ) : null}
                 <td
                   className={cn(
                     "px-3 py-2.5 text-center font-mono text-slate-700",
@@ -2026,7 +2043,7 @@ function OutlookPanel({
   const { data: logsBundle } = useQuery({
     // Current season only — career years load when Game Logs opens.
     // v2: past-week Proj from shared week projection bundles.
-    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v7"],
+    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v8"],
     enabled: Boolean(playerId && pos),
     queryFn: () =>
       fetchGameLogsClient(playerId, team || "FA", pos || "WR", null, { includeCareer: false }),
