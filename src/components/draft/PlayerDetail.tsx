@@ -926,7 +926,15 @@ function positionStatGroups(pos: string): StatGroup[] {
           cols: [
             { kind: "stat", key: "rush_att", label: "CAR" },
             { kind: "stat", key: "rush_yd", label: "RYD" },
+            { kind: "avg", numKey: "rush_yd", denKey: "rush_att", label: "RAVG" },
             { kind: "stat", key: "rush_td", label: "RTD" },
+          ],
+        },
+        {
+          label: "FUMBLE",
+          cols: [
+            { kind: "stat", key: "fum", label: "FUM" },
+            { kind: "stat", key: "fum_lost", label: "LOST" },
           ],
         },
       ];

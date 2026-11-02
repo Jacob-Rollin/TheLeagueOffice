@@ -1221,7 +1221,9 @@ function PlayerNews({ id }: { id: string }) {
   );
 }
 
-type StatCol = { key: string; label: string };
+type StatCol =
+  | { kind?: "stat"; key: string; label: string }
+  | { kind: "avg"; key: string; label: string; numKey: string; denKey: string };
 type StatGroup = { label: string; cols: StatCol[] };
 
 /** Position-specific counting groups (Sleeper-style Fantasy / Pass / Rush headers). */
@@ -1244,7 +1246,15 @@ function positionStatGroups(pos: string): StatGroup[] {
           cols: [
             { key: "rush_att", label: "Att" },
             { key: "rush_yd", label: "Yd" },
+            { kind: "avg", key: "rush_avg", label: "Avg", numKey: "rush_yd", denKey: "rush_att" },
             { key: "rush_td", label: "TD" },
+          ],
+        },
+        {
+          label: "Fumble",
+          cols: [
+            { key: "fum", label: "Fum" },
+            { key: "fum_lost", label: "Lost" },
           ],
         },
       ];
@@ -1340,15 +1350,36 @@ function posRankStatKey(format: Format): string {
 }
 
 /** Format a counting stat. For played game-log rows, missing keys are 0 (Sleeper-style). */
-const statValue = (
+function statValue(
   raw: Record<string, number> | undefined,
   key: string,
   opts?: { zeroIfMissing?: boolean },
-) => {
+): string {
   const v = Number(raw?.[key]);
   if (Number.isFinite(v)) return Number.isInteger(v) ? String(v) : v.toFixed(1);
   return opts?.zeroIfMissing ? "0" : "-";
-};
+}
+
+/** Yards-per-carry / catch — dash when no attempts (same as desktop RAVG). */
+function avgStatValue(
+  raw: Record<string, number> | undefined,
+  numKey: string,
+  denKey: string,
+): string {
+  const num = Number(raw?.[numKey]);
+  const den = Number(raw?.[denKey]);
+  if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) return "-";
+  return (num / den).toFixed(1);
+}
+
+function renderStatCol(
+  raw: Record<string, number> | undefined,
+  col: StatCol,
+  opts?: { zeroIfMissing?: boolean },
+): string {
+  if (col.kind === "avg") return avgStatValue(raw, col.numKey, col.denKey);
+  return statValue(raw, col.key, opts);
+}
 
 type TableCol<R> = {
   key: string;
@@ -1684,7 +1715,7 @@ function careerGroupedCols(
         key: c.key,
         label: c.label,
         render: (r: CareerRow) =>
-          r.games > 0 ? statValue(r.raw, c.key, { zeroIfMissing: true }) : "-",
+          r.games > 0 ? renderStatCol(r.raw, c, { zeroIfMissing: true }) : "-",
       })),
     })),
   ];
@@ -1769,8 +1800,9 @@ function gameLogGroupedCols(
         key: c.key,
         label: c.label,
         // Played games: show 0 for omitted zero stats (e.g. INT / Pass TD), not "-".
+        // Avg cols stay "-" when there are no carries/catches.
         render: (l: GameLogRow) =>
-          l.isBye || !l.played ? "-" : statValue(l.raw, c.key, { zeroIfMissing: true }),
+          l.isBye || !l.played ? "-" : renderStatCol(l.raw, c, { zeroIfMissing: true }),
       })),
     })),
   ];
