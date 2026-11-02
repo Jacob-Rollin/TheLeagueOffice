@@ -878,9 +878,11 @@ function posRankStatKey(format: Scoring): string {
 
 function formatSnapPct(raw: Record<string, number> | undefined, played: boolean): string {
   if (!played) return "-";
-  const v = Number(raw?.["snap_pct"]);
-  // Kickers / ST often have no snap counts — show 0%, not dash.
-  return Number.isFinite(v) ? `${Math.round(v)}%` : "0%";
+  // Missing snap counts (Sleeper often lags off_snp after the game) → dash,
+  // same as Sleeper — never invent 0%. True 0 snaps still show 0%.
+  const rawPct = raw?.["snap_pct"];
+  if (rawPct == null || !Number.isFinite(Number(rawPct))) return "-";
+  return `${Math.round(Number(rawPct))}%`;
 }
 
 /** Snap% is irrelevant for K / DST — hide the Fantasy micro-column. */

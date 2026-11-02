@@ -1739,8 +1739,10 @@ function gameLogGroupedCols(
               label: "Snp%",
               render: (l: GameLogRow) => {
                 if (l.isBye || !l.played) return "-";
-                const v = Number(l.raw?.["snap_pct"]);
-                return Number.isFinite(v) ? `${Math.round(v)}%` : "0%";
+                // Match Sleeper: pending off_snp → dash, not a fake 0%.
+                const rawPct = l.raw?.["snap_pct"];
+                if (rawPct == null || !Number.isFinite(Number(rawPct))) return "-";
+                return `${Math.round(Number(rawPct))}%`;
               },
             } satisfies TableCol<GameLogRow>,
           ]),
