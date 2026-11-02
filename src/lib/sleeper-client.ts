@@ -34,18 +34,24 @@ function isUsableWeeklyPosRank(raw: unknown): boolean {
   return Number.isFinite(v) && v > 0 && v < 900;
 }
 
-function isKickerWeekRow(stats: Record<string, number>): boolean {
-  return (
-    stats["fgm"] != null ||
-    stats["fga"] != null ||
-    stats["xpm"] != null ||
-    stats["xpa"] != null
-  );
+/**
+ * Sleeper week-stats also stamp `fgm` on TEAM_* offense bags (pts ≈ 100+).
+ * Those must never enter the kicker rank pool or a 12-pt K looks like K27.
+ */
+function isKickerWeekRow(id: string, stats: Record<string, number>): boolean {
+  if (!/^\d+$/.test(id)) return false;
+  if (/^TEAM_/i.test(id)) return false;
+  const fgm = Number(stats["fgm"]) || 0;
+  const fga = Number(stats["fga"]) || 0;
+  const xpm = Number(stats["xpm"]) || 0;
+  const xpa = Number(stats["xpa"]) || 0;
+  // Require a real attempt — keys present as 0 on non-kickers are not enough.
+  return fgm > 0 || fga > 0 || xpm > 0 || xpa > 0;
 }
 
 function isDefWeekRow(id: string, stats: Record<string, number>): boolean {
-  // DST player ids are team abbreviations (LAR, LV, …).
-  if (!/^[A-Z]{2,3}$/.test(id)) return false;
+  // DST player ids are team abbreviations (LAR, LV, …) — never TEAM_BUF bags.
+  if (!/^[A-Z]{2,3}$/.test(id) || /^TEAM_/i.test(id)) return false;
   return (
     stats["pts_allow"] != null ||
     stats["sack"] != null ||
@@ -56,7 +62,7 @@ function isDefWeekRow(id: string, stats: Record<string, number>): boolean {
 
 /**
  * Rank K or DST for one week by published Sleeper pts (std / half / ppr).
- * Returns playerId → 1-based ranks.
+ * Returns playerId → 1-based ranks among that position only (~32 max).
  */
 export function computeKickerDefWeekRanks(
   rows: Record<string, Record<string, number>>,
@@ -66,7 +72,7 @@ export function computeKickerDefWeekRanks(
   for (const [id, stats] of Object.entries(rows)) {
     if (!stats) continue;
     if (pos === "K") {
-      if (!isKickerWeekRow(stats)) continue;
+      if (!isKickerWeekRow(id, stats)) continue;
     } else if (!isDefWeekRow(id, stats)) {
       continue;
     }
