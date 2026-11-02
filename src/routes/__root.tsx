@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, Link, createRootRouteWithContext, useRouter, useRouterState, HeadContent, Scripts } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import appCss from "../styles.css?url";
 import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
 import { scheduleIdleSnapPrefetch } from "@/lib/idle-snap-prefetch";
@@ -122,6 +123,7 @@ function RootShell({ children }: { children: ReactNode }) {
       </head>
       <body>
         {children}
+        <SpeedInsights />
         <Scripts />
       </body>
     </html>
