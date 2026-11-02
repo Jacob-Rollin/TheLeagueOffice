@@ -24,7 +24,7 @@ import {
   loadPracticeSquadIndex,
   type NflInjuryReportEntry,
 } from "./nfl-roster-status.server";
-import { normalizeFumbleRaw } from "./game-log-normalize";
+import { normalizeFumbleRaw, normalizeKickerRaw } from "./game-log-normalize";
 import { NFL_TEAMS, teamFullName } from "./nfl-teams";
 import { hasScorableProjectionStats, scoreStats } from "./scoring-map";
 
@@ -3184,28 +3184,6 @@ const LOG_KEYS = [
   "pts_allow_35_p",
 ] as const;
 
-/** Fill derived kicker fields so UI columns match Sleeper (0 vs dash, distance buckets). */
-function normalizeKickerRaw(raw: Record<string, number>): Record<string, number> {
-  const out = { ...raw };
-  const fga = out.fga;
-  const fgmiss = out.fgmiss;
-  if (out.fgm == null && fga != null && Number.isFinite(fga)) {
-    const miss = fgmiss != null && Number.isFinite(fgmiss) ? fgmiss : 0;
-    out.fgm = Math.max(0, fga - miss);
-  }
-  if (out.fgmiss == null && fga != null && out.fgm != null) {
-    out.fgmiss = Math.max(0, fga - out.fgm);
-  }
-  // Collapse 50+ aliases for the display column.
-  if (out.fgm_50p == null) {
-    const from59 = out.fgm_50_59;
-    const from60 = out.fgm_60p;
-    if (from59 != null || from60 != null) {
-      out.fgm_50p = (from59 ?? 0) + (from60 ?? 0);
-    }
-  }
-  return out;
-}
 
 const bioFor = memo<PlayerBio | null>(24 * HOUR, async (id) => {
   const res = await fetch(`${BASE}/players/nfl/${encodeURIComponent(id)}`, {

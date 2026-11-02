@@ -9,7 +9,7 @@
  * - 429 backoff (one retry) then stale/empty
  * - Projection week fan-out capped at 2 concurrent
  */
-import { normalizeFumbleRaw } from "@/lib/game-log-normalize";
+import { normalizeFumbleRaw, normalizeKickerRaw } from "@/lib/game-log-normalize";
 import { getCached, readCache } from "@/lib/sleeper-cache";
 import {
   SLEEPER_BASE,
@@ -313,12 +313,22 @@ const LOG_KEYS = [
   "pos_rank_std",
   "pos_rank_half_ppr",
   "pos_rank_ppr",
-  // K / DST counting stats used by mobile Game Log groups + league scoring.
+  // K / DST counting stats used by Game Log groups + league scoring.
+  // Distance / miss keys must stay — scoreActualLine prefers distance FG
+  // buckets over flat `fgm` when the league scores by distance (Sleeper default).
   "fgm",
   "fga",
+  "fgmiss",
+  "fgm_0_19",
+  "fgm_20_29",
+  "fgm_30_39",
+  "fgm_40_49",
   "fgm_50p",
+  "fgm_50_59",
+  "fgm_60p",
   "xpm",
   "xpa",
+  "xpmiss",
   "sack",
   "int",
   "fum_rec",
@@ -619,7 +629,9 @@ export async function fetchGameLogsClient(
           rawStats[k] = num(stats[k], 0);
         }
       }
-      const normalized = normalizeFumbleRaw(rawStats);
+      const normalized = normalizeFumbleRaw(
+        upperPos === "K" ? normalizeKickerRaw(rawStats) : rawStats,
+      );
       attachSnapPct(normalized, stats as Record<string, unknown>);
       byWeek.set(week, {
         week,
