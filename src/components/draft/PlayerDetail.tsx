@@ -919,6 +919,9 @@ function positionStatGroups(pos: string): StatGroup[] {
             { kind: "stat", key: "pass_yd", label: "PYD" },
             { kind: "stat", key: "pass_td", label: "PTD" },
             { kind: "stat", key: "pass_int", label: "INT" },
+            // Sleeper SK / YDS — times sacked and yards lost to sacks.
+            { kind: "stat", key: "pass_sack", label: "SK" },
+            { kind: "stat", key: "pass_sack_yds", label: "YDS" },
           ],
         },
         {
@@ -1274,14 +1277,14 @@ function GameLogsPanel({
 
   const { data, isLoading } = useQuery({
     // Season logs only on open — career is a separate opt-in fetch below.
-    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v9"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v10"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
 
   const { data: careerData, isLoading: careerLoading } = useQuery({
-    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v9"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v10"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
     enabled: showCareer,
     staleTime: 1000 * 60 * 15,
@@ -1548,7 +1551,7 @@ function ProjectionsPanel({
     // v6: LOG_KEYS keep pts_allow_* so DST FPTS matches matchup.
     // v7: keep kicker FG distance / miss keys so league FPTS matches Sleeper.
     // v9: K/DST Rank from week pts; exclude TEAM_* fgm bags that polluted ranks.
-    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v9"],
+    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v10"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -2054,7 +2057,7 @@ function OutlookPanel({
   const { data: logsBundle } = useQuery({
     // Current season only — career years load when Game Logs opens.
     // v2: past-week Proj from shared week projection bundles.
-    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v9"],
+    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v10"],
     enabled: Boolean(playerId && pos),
     queryFn: () =>
       fetchGameLogsClient(playerId, team || "FA", pos || "WR", null, { includeCareer: false }),

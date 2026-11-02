@@ -3148,6 +3148,9 @@ const LOG_KEYS = [
   "pass_yd",
   "pass_td",
   "pass_int",
+  // QB times sacked + yards lost (Sleeper Game Log SK / YDS).
+  "pass_sack",
+  "pass_sack_yds",
   "fum",
   "fum_lost",
   "fgm",

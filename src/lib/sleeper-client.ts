@@ -430,6 +430,9 @@ const LOG_KEYS = [
   "pass_yd",
   "pass_td",
   "pass_int",
+  // QB times sacked + yards lost (Sleeper Game Log SK / YDS).
+  "pass_sack",
+  "pass_sack_yds",
   // Total fumbles (Sleeper `fum`) — distinct from lost (`fum_lost`). Omitting
   // `fum` made the player-popup FUM column show "-" whenever LOST was 1+.
   "fum",
