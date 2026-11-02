@@ -25,6 +25,7 @@ import {
   PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
+  PLAYER_LIST_GROUP_EDGE_MUTED,
   PLAYER_LIST_GROUP_HEADER_ROW,
   PLAYER_LIST_GROUP_TH,
   SortHeaderButton,
@@ -573,8 +574,8 @@ function MiscHeaders({
           key={col.key}
           className={cn(
             "px-1.5 py-1.5 text-center",
-            i === 0 ? "border-l border-slate-100" : "",
-            col.key === "fpts" ? "text-slate-700" : "",
+            i === 0 && PLAYER_LIST_GROUP_EDGE_MUTED,
+            col.key === "fpts" && "text-slate-700",
           )}
         >
           <SortHeaderButton
@@ -868,7 +869,7 @@ function QbTable({
             onSort={onSort}
             className={cn(
               "px-1.5 py-1.5 text-center",
-              i === 0 ? "border-l border-slate-100" : "",
+              i === 0 && PLAYER_LIST_GROUP_EDGE_MUTED,
             )}
           />
         ))}
@@ -882,7 +883,7 @@ function QbTable({
             onSort={onSort}
             className={cn(
               "px-1.5 py-1.5 text-center",
-              i === 0 ? "border-l border-slate-100" : "",
+              i === 0 && PLAYER_LIST_GROUP_EDGE_MUTED,
             )}
           />
         ))}
@@ -1002,7 +1003,7 @@ function SkillTable({
       activeKey={sortKey}
       sortDir={sortDir}
       onSort={onSort}
-      className={cn("px-1.5 py-1.5 text-center", i === 0 ? "border-l border-slate-100" : "")}
+      className={cn("px-1.5 py-1.5 text-center", i === 0 && PLAYER_LIST_GROUP_EDGE_MUTED)}
     />
   ));
   const recSubHeaders = recCols.map((col, i) => (
@@ -1013,7 +1014,7 @@ function SkillTable({
       activeKey={sortKey}
       sortDir={sortDir}
       onSort={onSort}
-      className={cn("px-1.5 py-1.5 text-center", i === 0 ? "border-l border-slate-100" : "")}
+      className={cn("px-1.5 py-1.5 text-center", i === 0 && PLAYER_LIST_GROUP_EDGE_MUTED)}
     />
   ));
 
