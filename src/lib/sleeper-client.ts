@@ -28,6 +28,129 @@ const DAY = 24 * HOUR;
 /** Keep cold game-log opens from opening 10+ projection fetches at once. */
 const PROJ_WEEK_CONCURRENCY = 2;
 
+/** Sleeper leaves weekly pos_rank_* at 999 for K/DST — treat as empty. */
+function isUsableWeeklyPosRank(raw: unknown): boolean {
+  const v = Number(raw);
+  return Number.isFinite(v) && v > 0 && v < 900;
+}
+
+function isKickerWeekRow(stats: Record<string, number>): boolean {
+  return (
+    stats["fgm"] != null ||
+    stats["fga"] != null ||
+    stats["xpm"] != null ||
+    stats["xpa"] != null
+  );
+}
+
+function isDefWeekRow(id: string, stats: Record<string, number>): boolean {
+  // DST player ids are team abbreviations (LAR, LV, …).
+  if (!/^[A-Z]{2,3}$/.test(id)) return false;
+  return (
+    stats["pts_allow"] != null ||
+    stats["sack"] != null ||
+    stats["int"] != null ||
+    stats["fum_rec"] != null
+  );
+}
+
+/**
+ * Rank K or DST for one week by published Sleeper pts (std / half / ppr).
+ * Returns playerId → 1-based ranks.
+ */
+export function computeKickerDefWeekRanks(
+  rows: Record<string, Record<string, number>>,
+  pos: "K" | "DEF",
+): Map<string, { std: number; half: number; ppr: number }> {
+  const pool: { id: string; std: number; half: number; ppr: number }[] = [];
+  for (const [id, stats] of Object.entries(rows)) {
+    if (!stats) continue;
+    if (pos === "K") {
+      if (!isKickerWeekRow(stats)) continue;
+    } else if (!isDefWeekRow(id, stats)) {
+      continue;
+    }
+    pool.push({
+      id,
+      std: Number(stats["pts_std"]) || 0,
+      half: Number(stats["pts_half_ppr"]) || 0,
+      ppr: Number(stats["pts_ppr"]) || 0,
+    });
+  }
+  const rankKey = (key: "std" | "half" | "ppr") => {
+    const sorted = [...pool].sort(
+      (a, b) => b[key] - a[key] || a.id.localeCompare(b.id),
+    );
+    const m = new Map<string, number>();
+    sorted.forEach((p, i) => m.set(p.id, i + 1));
+    return m;
+  };
+  const byStd = rankKey("std");
+  const byHalf = rankKey("half");
+  const byPpr = rankKey("ppr");
+  const out = new Map<string, { std: number; half: number; ppr: number }>();
+  for (const p of pool) {
+    out.set(p.id, {
+      std: byStd.get(p.id) ?? 999,
+      half: byHalf.get(p.id) ?? 999,
+      ppr: byPpr.get(p.id) ?? 999,
+    });
+  }
+  return out;
+}
+
+/**
+ * Overlay derived weekly ranks onto K/DEF game-log rows when Sleeper's
+ * pos_rank_* is missing / 999. Uses shared week-stats IndexedDB cache.
+ */
+async function overlayKickerDefWeeklyRanks(
+  logs: GameLog[],
+  playerId: string,
+  pos: "K" | "DEF",
+  season: string,
+): Promise<GameLog[]> {
+  const playedWeeks = [
+    ...new Set(
+      logs.filter((l) => l.played && !l.isBye).map((l) => l.week).filter((w) => w >= 1 && w <= 18),
+    ),
+  ];
+  if (!playedWeeks.length) return logs;
+
+  const { fetchWeeklyActualStatRows } = await import("@/lib/sleeper-week-stats");
+  // Past weeks are stable — share Matchup's week-stats cache, long TTL.
+  const ttlMs = 6 * HOUR;
+  const weekHits = await mapPool(playedWeeks, PROJ_WEEK_CONCURRENCY, async (week) => {
+    try {
+      const rows = await fetchWeeklyActualStatRows(season, week, ttlMs);
+      const ranks = computeKickerDefWeekRanks(rows, pos);
+      return [week, ranks.get(playerId) ?? null] as const;
+    } catch {
+      return [week, null] as const;
+    }
+  });
+  const byWeek = new Map(weekHits);
+
+  return logs.map((log) => {
+    if (!log.played || log.isBye) return log;
+    const existing =
+      isUsableWeeklyPosRank(log.raw?.["pos_rank_half_ppr"]) ||
+      isUsableWeeklyPosRank(log.raw?.["pos_rank_std"]) ||
+      isUsableWeeklyPosRank(log.raw?.["pos_rank_ppr"]);
+    if (existing) return log;
+    const derived = byWeek.get(log.week);
+    if (!derived) return log;
+    return {
+      ...log,
+      raw: {
+        ...log.raw,
+        pos_rank_std: derived.std,
+        pos_rank_half_ppr: derived.half,
+        pos_rank_ppr: derived.ppr,
+      },
+    };
+  });
+}
+
 async function sleeperFetch(url: string, init?: RequestInit): Promise<Response> {
   if (!(await waitForSleeperPermit("warm", 4_000))) {
     return new Response(null, { status: 429, statusText: "budget" });
@@ -715,6 +838,11 @@ export async function fetchGameLogsClient(
         proj,
         projRaw,
       });
+    }
+    // Sleeper stamps weekly pos_rank_* = 999 for K / DST. Derive real ranks from
+    // that week's published pts among the same position (shared week-stats cache).
+    if (upperPos === "K" || upperPos === "DEF") {
+      return overlayKickerDefWeeklyRanks(logs, clean, upperPos, year);
     }
     return logs;
   };

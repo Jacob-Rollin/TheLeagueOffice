@@ -1125,7 +1125,7 @@ function PlayerCareerTotals({
 }) {
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({
-    queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v7"],
+    queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v8"],
     enabled: Boolean(id && pos && open),
     staleTime: 30 * 60 * 1000,
     retry: false,
@@ -1501,7 +1501,7 @@ function usePlayerLogs(
   return useQuery({
     // v3: snap% + weekly pos rank on raw; Fantasy / Pass / Rush grouped headers.
     // Past seasons: no includeCareer — one year at a time when the user expands VIEW.
-    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "logs-v7"],
+    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "logs-v8"],
     enabled: Boolean(id && pos && enabled),
     queryFn: () =>
       fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", seasonKey === "current" ? null : seasonKey, {
@@ -1712,6 +1712,7 @@ function gameLogGroupedCols(
       },
     },
   ];
+  const hideSnap = pos === "K" || pos === "DEF" || pos === "DST";
   const fantasy: ColGroup<GameLogRow> = {
     label: "Fantasy",
     cols: [
@@ -1730,16 +1731,19 @@ function gameLogGroupedCols(
           return pts == null ? "-" : pts.toFixed(1);
         },
       },
-      {
-        key: "snap_pct",
-        label: "Snp%",
-        render: (l) => {
-          if (l.isBye || !l.played) return "-";
-          const v = Number(l.raw?.["snap_pct"]);
-          // Kickers / special teams often have no snap counts — show 0, not dash.
-          return Number.isFinite(v) ? `${Math.round(v)}%` : "0%";
-        },
-      },
+      ...(hideSnap
+        ? []
+        : [
+            {
+              key: "snap_pct",
+              label: "Snp%",
+              render: (l: GameLogRow) => {
+                if (l.isBye || !l.played) return "-";
+                const v = Number(l.raw?.["snap_pct"]);
+                return Number.isFinite(v) ? `${Math.round(v)}%` : "0%";
+              },
+            } satisfies TableCol<GameLogRow>,
+          ]),
       {
         key: "rank",
         label: "Rank",
