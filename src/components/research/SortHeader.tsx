@@ -2,6 +2,23 @@ import { cn } from "@/lib/utils";
 
 export type SortDir = "asc" | "desc";
 
+/**
+ * Research board card chrome.
+ * Intentionally omits overflow-* — overflow-x-auto / overflow-hidden on an
+ * ancestor create a scrollport and stop `position: sticky` thead from pinning
+ * to the window while the player list scrolls.
+ */
+export const PLAYER_LIST_BOARD =
+  "rounded-xl border border-slate-200 bg-white shadow-sm";
+
+/**
+ * Stick Rk / Player / stat headers under SiteNav (`--site-sticky-top`).
+ * Filters + search stay in normal flow above the board and scroll away.
+ * Opaque th backgrounds so rows do not show through while stuck.
+ */
+export const PLAYER_LIST_STICKY_THEAD =
+  "sticky top-[var(--site-sticky-top,3.25rem)] z-30 shadow-[0_1px_0_0_rgb(226_232_240)] [&_th]:bg-slate-50";
+
 /** Group header row (Passing / Rushing / Misc). Leave Rk+Player cells blank — no "Players" label. */
 export const PLAYER_LIST_GROUP_HEADER_ROW =
   "border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500";
@@ -11,7 +28,7 @@ export const PLAYER_LIST_GROUP_TH =
 
 /** Column header row (Rk, Player, Proj, …) — Weekly Projections standard. */
 export const PLAYER_LIST_COL_HEADER_ROW =
-  "border-b border-slate-200 bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-500";
+  "border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500";
 
 /** Single-row tables without a group header (Wire, Most Targeted, My Team). */
 export const PLAYER_LIST_HEADER_ROW = PLAYER_LIST_COL_HEADER_ROW;

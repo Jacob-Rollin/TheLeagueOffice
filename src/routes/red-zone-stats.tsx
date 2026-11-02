@@ -21,6 +21,8 @@ import {
   RESEARCH_SEARCH_INPUT_CLASS,
 } from "@/components/research/ResearchAvailabilityFilter";
 import {
+  PLAYER_LIST_BOARD,
+  PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
   PLAYER_LIST_GROUP_HEADER_ROW,
@@ -518,7 +520,7 @@ function RedZoneStatsPage() {
         />
       </ResearchPoolFilterRow>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className={PLAYER_LIST_BOARD}>
         {pos === "QB" ? (
           <QbTable
             rows={rows}
@@ -702,9 +704,9 @@ function VirtualizedRedZoneTable({
       : 0;
 
   return (
-    <div ref={listRef} className="overflow-x-auto">
+    <div ref={listRef} className="min-w-0">
       <table className={cn("w-full border-collapse text-sm", minWidth)}>
-        <thead className="sticky top-0 z-10">{header}</thead>
+        <thead className={PLAYER_LIST_STICKY_THEAD}>{header}</thead>
         <tbody>
           {loading ? (
             <ResearchTableSkeleton rows={12} cols={colSpan} />

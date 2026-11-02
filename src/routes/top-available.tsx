@@ -7,6 +7,8 @@ import { PlayerModalHost, type PlayerModalHandle } from "@/components/draft/Play
 import { ActiveLeagueLabel } from "@/components/league/ActiveLeagueLabel";
 import { PlaybookShell } from "@/components/playbook/PlaybookShell";
 import {
+  PLAYER_LIST_BOARD,
+  PLAYER_LIST_STICKY_THEAD,
   PLAYER_LIST_COL_HEADER_ROW,
   PLAYER_LIST_GROUP_HEADER_ROW,
   PLAYER_LIST_GROUP_TH,
@@ -451,15 +453,15 @@ function TopAvailablePage() {
           return (
             <section key={table.pos}>
               <h2 className="mb-2 text-lg font-bold text-slate-900">{table.title}</h2>
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="overflow-x-auto">
+              <div className={PLAYER_LIST_BOARD}>
+                <div className="min-w-0">
                   <table
                     className={cn(
                       "w-full min-w-[820px] border-collapse text-sm",
                       overview && "table-fixed",
                     )}
                   >
-                    <thead>
+                    <thead className={PLAYER_LIST_STICKY_THEAD}>
                       {statView ? (
                         <tr className={PLAYER_LIST_GROUP_HEADER_ROW}>
                           <th colSpan={4} className="px-3 py-2" aria-hidden="true" />

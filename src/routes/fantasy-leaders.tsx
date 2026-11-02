@@ -21,6 +21,8 @@ import {
 } from "@/components/research/ResearchAvailabilityFilter";
 import { playerHoverPrefetchProps } from "@/lib/prefetch-player-detail";
 import {
+  PLAYER_LIST_BOARD,
+  PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
   PLAYER_LIST_GROUP_HEADER_ROW,
@@ -443,7 +445,7 @@ function FantasyLeadersPage() {
         />
       </ResearchPoolFilterRow>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className={PLAYER_LIST_BOARD}>
         <LeadersTable
           rows={rows}
           weeks={rangeWeeks}
@@ -612,12 +614,12 @@ function LeadersTable({
   );
 
   return (
-    <div ref={listRef} className="overflow-x-auto">
+    <div ref={listRef} className="min-w-0">
       <table
         className="w-full border-collapse text-sm"
         style={{ minWidth: `${420 + weeks.length * 60 + 150}px` }}
       >
-        <thead className="sticky top-0 z-10">
+        <thead className={PLAYER_LIST_STICKY_THEAD}>
           <tr className={PLAYER_LIST_GROUP_HEADER_ROW}>
             <th colSpan={3} className="px-3 py-2" aria-hidden="true" />
             {weeks.length ? (

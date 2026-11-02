@@ -22,6 +22,8 @@ import {
 } from "@/components/research/ResearchAvailabilityFilter";
 import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
+  PLAYER_LIST_BOARD,
+  PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_HEADER_ROW,
   SortHeaderButton,
@@ -368,10 +370,10 @@ function MostTargetedPage() {
         </Select>
       </ResearchPoolFilterRow>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div ref={listRef} className="overflow-x-auto">
+      <div className={PLAYER_LIST_BOARD}>
+        <div ref={listRef} className="min-w-0">
           <table className="w-full min-w-[640px] border-collapse text-sm">
-            <thead className="sticky top-0 z-10">
+            <thead className={PLAYER_LIST_STICKY_THEAD}>
               <tr className={PLAYER_LIST_HEADER_ROW}>
                 <th className="w-10 px-2 py-1.5 text-center">
                   <SortHeaderButton

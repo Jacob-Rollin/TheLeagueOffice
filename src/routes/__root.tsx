@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, Link, createRootRouteWithContext, useRouter, useRouterState, HeadContent, Scripts } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import appCss from "../styles.css?url";
 import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
@@ -132,9 +132,29 @@ function RootShell({ children }: { children: ReactNode }) {
 function SiteNav() {
   const [searchOpen, setSearchOpen] = useState(false);
 
+  // Publish nav height so research theads can stick just below SiteNav
+  // (ScoreTicker is not sticky and scrolls away with the page).
+  useLayoutEffect(() => {
+    const header = document.getElementById("site-nav");
+    if (!header) return;
+    const publish = () => {
+      document.documentElement.style.setProperty(
+        "--site-sticky-top",
+        `${Math.ceil(header.getBoundingClientRect().height)}px`,
+      );
+    };
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(header);
+    return () => ro.disconnect();
+  }, [searchOpen]);
+
   // sticky + z-50: GlobalSearch lists must paint above landing Manage Your League / Open Playbook.
   return (
-    <header className="sticky top-0 z-50 border-b-4 border-accent bg-primary text-primary-foreground">
+    <header
+      id="site-nav"
+      className="sticky top-0 z-50 border-b-4 border-accent bg-primary text-primary-foreground"
+    >
       <nav className="mx-auto flex w-full max-w-shell items-center gap-2 px-3 py-1.5">
         <Link to="/" className="display-title mr-2 whitespace-nowrap text-lg">
           THE LEAGUE <span className="text-accent-foreground/90 rounded bg-accent px-1.5">OFFICE</span>
