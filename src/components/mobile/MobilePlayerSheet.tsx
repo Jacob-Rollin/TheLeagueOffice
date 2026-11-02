@@ -1125,7 +1125,7 @@ function PlayerCareerTotals({
 }) {
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({
-    queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v8"],
+    queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v9"],
     enabled: Boolean(id && pos && open),
     staleTime: 30 * 60 * 1000,
     retry: false,
@@ -1501,7 +1501,7 @@ function usePlayerLogs(
   return useQuery({
     // v3: snap% + weekly pos rank on raw; Fantasy / Pass / Rush grouped headers.
     // Past seasons: no includeCareer — one year at a time when the user expands VIEW.
-    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "logs-v8"],
+    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "logs-v9"],
     enabled: Boolean(id && pos && enabled),
     queryFn: () =>
       fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", seasonKey === "current" ? null : seasonKey, {
