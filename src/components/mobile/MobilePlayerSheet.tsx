@@ -1239,8 +1239,6 @@ function positionStatGroups(pos: string): StatGroup[] {
             { key: "pass_yd", label: "Yd" },
             { key: "pass_td", label: "TD" },
             { key: "pass_int", label: "Int" },
-            { key: "pass_sack", label: "Sk" },
-            { key: "pass_sack_yds", label: "Yds" },
           ],
         },
         {
@@ -1250,6 +1248,13 @@ function positionStatGroups(pos: string): StatGroup[] {
             { key: "rush_yd", label: "Yd" },
             { kind: "avg", key: "rush_avg", label: "Avg", numKey: "rush_yd", denKey: "rush_att" },
             { key: "rush_td", label: "TD" },
+          ],
+        },
+        {
+          label: "Sacked",
+          cols: [
+            { key: "pass_sack", label: "Sk" },
+            { key: "pass_sack_yds", label: "Yds" },
           ],
         },
         {

@@ -919,9 +919,6 @@ function positionStatGroups(pos: string): StatGroup[] {
             { kind: "stat", key: "pass_yd", label: "PYD" },
             { kind: "stat", key: "pass_td", label: "PTD" },
             { kind: "stat", key: "pass_int", label: "INT" },
-            // Sleeper SK / YDS — times sacked and yards lost to sacks.
-            { kind: "stat", key: "pass_sack", label: "SK" },
-            { kind: "stat", key: "pass_sack_yds", label: "YDS" },
           ],
         },
         {
@@ -932,6 +929,13 @@ function positionStatGroups(pos: string): StatGroup[] {
             { kind: "stat", key: "rush_yd", label: "YDS" },
             { kind: "avg", numKey: "rush_yd", denKey: "rush_att", label: "AVG" },
             { kind: "stat", key: "rush_td", label: "TD" },
+          ],
+        },
+        {
+          label: "SACKED",
+          cols: [
+            { kind: "stat", key: "pass_sack", label: "SK" },
+            { kind: "stat", key: "pass_sack_yds", label: "YDS" },
           ],
         },
         {
@@ -1550,7 +1554,7 @@ function ProjectionsPanel({
     // v2: past-week rows keep Sleeper proj lines for the Projections sub-tab.
     // v6: LOG_KEYS keep pts_allow_* so DST FPTS matches matchup.
     // v7: keep kicker FG distance / miss keys so league FPTS matches Sleeper.
-    // v9: K/DST Rank from week pts; exclude TEAM_* fgm bags that polluted ranks.
+    // v10: QB Sacked group (pass_sack / pass_sack_yds) after Rushing.
     queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v10"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
