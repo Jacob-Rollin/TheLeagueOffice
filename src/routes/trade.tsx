@@ -395,20 +395,31 @@ function TradePage() {
 
   /** Bench vacancy check: receiving more players than you send can force a drop. */
   const rosterCap = rosterSize(draft.settings.roster);
+  const myIrIds = useMemo(
+    () => new Set((league?.synced ? league.myTeam?.ir : null)?.map((p) => p.id) ?? []),
+    [league?.synced, league?.myTeam],
+  );
+  const activeRosterBodies = useMemo(
+    () =>
+      myIrIds.size
+        ? userRoster.filter((p) => !myIrIds.has(p.id)).length
+        : userRoster.length,
+    [userRoster, myIrIds],
+  );
   const benchPool = useMemo(
     () =>
       userRoster
-        .filter((p) => !give.some((g) => g.id === p.id))
+        .filter((p) => !myIrIds.has(p.id) && !give.some((g) => g.id === p.id))
         .concat(get)
         .map((p) => ({
           name: p.name,
           pos: p.pos,
           weekly: valueOf(p).weekly,
         })),
-    [userRoster, give, get, valueOf],
+    [userRoster, give, get, valueOf, myIrIds],
   );
   const constraint = rosterConstraint({
-    rosterCount: userRoster.length,
+    rosterCount: activeRosterBodies,
     rosterCap,
     giveCount: give.length,
     getCount: get.length,
@@ -475,7 +486,8 @@ function TradePage() {
 
   const adjustedGrade = grade(adjustedPct);
   const ready = give.length > 0 && get.length > 0;
-  const benchSlotsRequired = Math.max(0, get.length - give.length);
+  // True overflow drops — not raw package body delta (open spots need 0).
+  const benchSlotsRequired = constraint.dropCount > 0 ? constraint.dropCount : 0;
   const verdict = executiveSummary({
     ready,
     pct: adjustedPct,

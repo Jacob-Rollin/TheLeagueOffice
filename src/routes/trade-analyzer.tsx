@@ -23,7 +23,9 @@ import type { PlayerDetail } from "@/lib/players.server";
 import {
   POWER_INDEX_CEIL,
   POWER_INDEX_FLOOR,
+  activeRosterCount,
   buildTruePowerRankings,
+  buildTruePowerRankingsDetailed,
   leagueRosterCapFromPositions,
   starterRequirements,
 } from "@/lib/power-rankings";
@@ -114,6 +116,8 @@ type AnalyzerTeam = {
   logo: string | null;
   slot: number;
   players: Player[];
+  /** Players parked in IR / IL — excluded from active roster capacity checks. */
+  irIds: string[];
 };
 
 function TradeAnalyzerRoute() {
@@ -242,6 +246,7 @@ function TradeAnalyzerPage() {
             logo: null,
             slot: draft.settings.myTeam,
             players: sandboxTeams.myTeam,
+            irIds: [],
           },
           ...sandboxTeams.rivalTeams.map((t, i) => ({
             key: t.key,
@@ -250,6 +255,7 @@ function TradeAnalyzerPage() {
             logo: null,
             slot: i + 2,
             players: t.players,
+            irIds: [] as string[],
           })),
         ];
       }
@@ -262,6 +268,7 @@ function TradeAnalyzerPage() {
           logo: null,
           slot: t,
           players: rostersByTeam.get(t) ?? [],
+          irIds: [] as string[],
         }));
     }
     if (league?.synced && league.teams.length) {
@@ -272,6 +279,7 @@ function TradeAnalyzerPage() {
         logo: t.logo,
         slot: t.slot,
         players: t.players,
+        irIds: (t.ir ?? []).map((p) => p.id),
       }));
     }
     return [...rostersByTeam.keys()]
@@ -283,6 +291,7 @@ function TradeAnalyzerPage() {
         logo: null,
         slot: t,
         players: rostersByTeam.get(t) ?? [],
+        irIds: [] as string[],
       }));
   }, [sandboxMode, sandboxTeams, league?.synced, league?.teams, rostersByTeam, draft.settings]);
 
@@ -437,8 +446,16 @@ function TradeAnalyzerPage() {
     [projectFor, byId, weeklyOf],
   );
 
-  const powerRows = useMemo(() => {
-    if (!allTeams.length) return [];
+  const powerRosterPositions = useMemo(
+    () =>
+      league?.rosterPositions?.length
+        ? league.rosterPositions
+        : Object.entries(starters).flatMap(([pos, n]) => Array(n).fill(pos)),
+    [league?.rosterPositions, starters],
+  );
+
+  const powerBeforeDetailed = useMemo(() => {
+    if (!allTeams.length) return null;
     const standingBySlot = new Map((standings?.rows ?? []).map((r) => [r.rosterId, r]));
     const inputs = allTeams.map((team) => {
       const standing = standingBySlot.get(team.slot);
@@ -453,17 +470,19 @@ function TradeAnalyzerPage() {
         pointsFor: standing?.pointsFor ?? 0,
       };
     });
-    return buildTruePowerRankings(inputs, {
+    return buildTruePowerRankingsDetailed(inputs, {
       brain,
       projectFor: projectWeekly,
-      rosterPositions: league?.rosterPositions?.length
-        ? league.rosterPositions
-        : Object.entries(starters).flatMap(([pos, n]) => Array(n).fill(pos)),
+      rosterPositions: powerRosterPositions,
     });
-  }, [allTeams, standings, brain, league?.rosterPositions, starters, projectWeekly]);
+  }, [allTeams, standings, brain, powerRosterPositions, projectWeekly]);
+
+  const powerRows = powerBeforeDetailed?.rows ?? [];
 
   const powerAfter = useMemo(() => {
-    if (!leftTeam || !rightTeam || (!give.length && !get.length)) return null;
+    if (!leftTeam || !rightTeam || (!give.length && !get.length) || !powerBeforeDetailed) {
+      return null;
+    }
     const giveSet = new Set(give.map((p) => p.id));
     const getSet = new Set(get.map((p) => p.id));
     const standingBySlot = new Map((standings?.rows ?? []).map((r) => [r.rosterId, r]));
@@ -492,12 +511,12 @@ function TradeAnalyzerPage() {
         pointsFor: standing?.pointsFor ?? 0,
       };
     });
+    // Freeze before-trade min/max so strength Δ is on a shared scale.
     return buildTruePowerRankings(inputs, {
       brain,
       projectFor: projectWeekly,
-      rosterPositions: league?.rosterPositions?.length
-        ? league.rosterPositions
-        : Object.entries(starters).flatMap(([pos, n]) => Array(n).fill(pos)),
+      rosterPositions: powerRosterPositions,
+      freezeScale: powerBeforeDetailed.scale,
     });
   }, [
     leftTeam,
@@ -507,9 +526,9 @@ function TradeAnalyzerPage() {
     allTeams,
     standings,
     brain,
-    league?.rosterPositions,
-    starters,
+    powerRosterPositions,
     projectWeekly,
+    powerBeforeDetailed,
   ]);
 
   const leftPower = powerRows.find((r) => r.slot === leftTeam?.slot);
@@ -589,24 +608,30 @@ function TradeAnalyzerPage() {
     give.length,
   );
 
+  // Synced rosterPositions are starter-only (BN stripped) — add draft bench slots.
   const rosterCap = leagueRosterCapFromPositions(
     league?.synced ? league.rosterPositions : null,
     rosterSize(draft.settings.roster),
+    draft.settings.roster.BENCH ?? 0,
   );
   const leagueScoringCtx = useMemo(
     () => ({ weeklyFor: (id: string) => projectWeekly(id) }),
     [projectWeekly],
   );
+  const leftIrIds = leftTeam?.irIds ?? [];
+  const activeCount = activeRosterCount(userRoster, leftIrIds);
+  const irIdSet = useMemo(() => new Set(leftIrIds), [leftIrIds]);
   const benchPool = useMemo(
     () =>
       userRoster
-        .filter((p) => !give.some((g) => g.id === p.id))
+        // IR does not occupy an active spot — never pick them as overflow drops.
+        .filter((p) => !irIdSet.has(p.id) && !give.some((g) => g.id === p.id))
         .concat(get)
         .map((p) => ({ name: p.name, pos: p.pos, weekly: projectWeekly(p.id) })),
-    [userRoster, give, get, projectWeekly],
+    [userRoster, give, get, projectWeekly, irIdSet],
   );
   const constraint = rosterConstraint({
-    rosterCount: userRoster.length,
+    rosterCount: activeCount,
     rosterCap,
     giveCount: give.length,
     getCount: get.length,
@@ -968,6 +993,7 @@ function TradeAnalyzerPage() {
             fitPct={fit.pct}
             gradeParts={valueOnly ? null : blended.parts}
             valueOnly={valueOnly}
+            usedPower={blended.usedPower}
             gradeLetter={adjustedGrade.letter}
             gradeTone={adjustedGrade.tone}
             headline={headlineVerdict({ ready, pct: adjustedPct })}
@@ -1570,6 +1596,7 @@ function AnalyzerResults({
   fitPct,
   gradeParts,
   valueOnly,
+  usedPower,
   gradeLetter,
   gradeTone,
   headline,
@@ -1590,6 +1617,7 @@ function AnalyzerResults({
   fitPct: number;
   gradeParts: AnalyzerGradeParts | null;
   valueOnly: boolean;
+  usedPower: boolean;
   gradeLetter: string;
   gradeTone: string;
   headline: string;
@@ -1661,7 +1689,9 @@ function AnalyzerResults({
               <p className="mt-1 text-sm leading-snug text-foreground">{verdict}</p>
               {!valueOnly && (
                 <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  50% power · 35% lineup · 15% need fit
+                  {usedPower
+                    ? "50% power · 35% lineup · 15% need fit"
+                    : "70% lineup · 30% need fit"}
                 </p>
               )}
               {!valueOnly && fitNote ? (
