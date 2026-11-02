@@ -10,6 +10,7 @@ import {
   PLAYER_LIST_BOARD,
   PLAYER_LIST_STICKY_THEAD,
   PLAYER_LIST_COL_HEADER_ROW,
+  PLAYER_LIST_GROUP_EDGE_MUTED,
   PLAYER_LIST_GROUP_HEADER_ROW,
   PLAYER_LIST_GROUP_TH,
 } from "@/components/research/SortHeader";
@@ -501,7 +502,7 @@ function TopAvailablePage() {
                                 key={col.key}
                                 className={cn(
                                   "px-1.5 py-1.5 text-center",
-                                  col.groupStart && "border-l border-slate-100",
+                                  col.groupStart && PLAYER_LIST_GROUP_EDGE_MUTED,
                                 )}
                               >
                                 {col.label}

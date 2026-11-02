@@ -25,6 +25,7 @@ import {
   PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
+  PLAYER_LIST_GROUP_EDGE_MUTED,
   PLAYER_LIST_GROUP_HEADER_ROW,
   PLAYER_LIST_GROUP_TH,
   SortHeaderButton,
@@ -639,10 +640,10 @@ function LeadersTable({
               sortTh(
                 `w${week}`,
                 String(week),
-                cn("w-[60px] px-1.5 py-1.5 text-center", i === 0 && "border-l border-slate-100"),
+                cn("w-[60px] px-1.5 py-1.5 text-center", i === 0 && PLAYER_LIST_GROUP_EDGE_MUTED),
               ),
             )}
-            {sortTh("avg", "Avg", "w-16 border-l border-slate-100 px-1.5 py-1.5 text-center")}
+            {sortTh("avg", "Avg", cn("w-16 px-1.5 py-1.5 text-center", PLAYER_LIST_GROUP_EDGE_MUTED))}
             {sortTh("ttl", "Ttl", "w-16 px-1.5 py-1.5 text-center text-slate-700")}
           </tr>
         </thead>

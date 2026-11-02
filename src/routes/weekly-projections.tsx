@@ -47,6 +47,7 @@ import {
   PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
+  PLAYER_LIST_GROUP_EDGE_MUTED,
   PLAYER_LIST_GROUP_HEADER_ROW,
   PLAYER_LIST_GROUP_TH,
   SortHeaderButton,
@@ -439,7 +440,7 @@ function WeeklyProjectionsPage() {
                     key={col.key}
                     className={cn(
                       "px-1.5 py-1.5 text-center",
-                      col.groupStart ? "border-l border-slate-100" : "",
+                      col.groupStart && PLAYER_LIST_GROUP_EDGE_MUTED,
                     )}
                   >
                     <SortHeaderButton
@@ -450,7 +451,7 @@ function WeeklyProjectionsPage() {
                     />
                   </th>
                 ))}
-                <th className="border-l border-slate-100 px-2 py-1.5 text-center">
+                <th className={cn("px-2 py-1.5 text-center", PLAYER_LIST_GROUP_EDGE_MUTED)}>
                   <SortHeaderButton
                     label="Value / Trend"
                     active={sortKey === "value"}

@@ -14,6 +14,7 @@ import {
   PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
+  PLAYER_LIST_GROUP_EDGE,
   PLAYER_LIST_GROUP_HEADER_ROW,
   SortHeaderButton,
   type SortDir,
@@ -163,7 +164,7 @@ function FantasyPointsAllowedPage() {
                   <th
                     key={pos.key}
                     colSpan={2}
-                    className="border-l border-slate-200 px-2 py-2 text-center"
+                    className={cn("px-2 py-2 text-center", PLAYER_LIST_GROUP_EDGE)}
                   >
                     <SortHeaderButton
                       label={pos.label}
@@ -177,7 +178,12 @@ function FantasyPointsAllowedPage() {
               <tr className={PLAYER_LIST_COL_HEADER_ROW}>
                 {POS_COLS.map((pos) => (
                   <Fragment key={pos.key}>
-                    <th className="border-l border-slate-200 px-1.5 py-1.5 text-center font-bold">
+                    <th
+                      className={cn(
+                        "px-1.5 py-1.5 text-center font-bold",
+                        PLAYER_LIST_GROUP_EDGE,
+                      )}
+                    >
                       RK
                     </th>
                     <th className="px-1.5 py-1.5 text-center font-bold">PA</th>

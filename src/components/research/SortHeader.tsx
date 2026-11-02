@@ -31,8 +31,20 @@ export const PLAYER_LIST_STICKY_THEAD =
 export const PLAYER_LIST_GROUP_HEADER_ROW =
   "bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500 [&_th]:shadow-[inset_0_-1px_0_0_rgb(226_232_240)]";
 
+/**
+ * Vertical group rule for sticky thead cells. Prefer over `border-l`: opaque th
+ * fills + border-collapse eat collapsed left borders so PASSING|RUSHING edges
+ * disappear while body rows still show theirs.
+ */
+export const PLAYER_LIST_GROUP_EDGE =
+  "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-slate-200";
+
+/** Lighter group edge — matches body `border-l border-slate-100`. */
+export const PLAYER_LIST_GROUP_EDGE_MUTED =
+  "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-slate-100";
+
 export const PLAYER_LIST_GROUP_TH =
-  "border-l border-slate-200 px-2 py-2 text-center text-slate-700";
+  "px-2 py-2 text-center text-slate-700 before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-slate-200";
 
 /** Column header row (Rk, Player, Proj, …) — Weekly Projections standard. */
 export const PLAYER_LIST_COL_HEADER_ROW =
