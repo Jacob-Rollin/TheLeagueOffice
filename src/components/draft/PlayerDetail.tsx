@@ -923,10 +923,19 @@ function positionStatGroups(pos: string): StatGroup[] {
         },
         {
           label: "RUSHING",
+          // Section header already says Rushing — no RYD/RAVG/RTD prefixes.
           cols: [
             { kind: "stat", key: "rush_att", label: "CAR" },
-            { kind: "stat", key: "rush_yd", label: "RYD" },
-            { kind: "stat", key: "rush_td", label: "RTD" },
+            { kind: "stat", key: "rush_yd", label: "YDS" },
+            { kind: "avg", numKey: "rush_yd", denKey: "rush_att", label: "AVG" },
+            { kind: "stat", key: "rush_td", label: "TD" },
+          ],
+        },
+        {
+          label: "FUMBLE",
+          cols: [
+            { kind: "stat", key: "fum", label: "FUM" },
+            { kind: "stat", key: "fum_lost", label: "LOST" },
           ],
         },
       ];
@@ -936,9 +945,9 @@ function positionStatGroups(pos: string): StatGroup[] {
           label: "RUSHING",
           cols: [
             { kind: "stat", key: "rush_att", label: "CAR" },
-            { kind: "stat", key: "rush_yd", label: "RYD" },
-            { kind: "avg", numKey: "rush_yd", denKey: "rush_att", label: "RAVG" },
-            { kind: "stat", key: "rush_td", label: "RTD" },
+            { kind: "stat", key: "rush_yd", label: "YDS" },
+            { kind: "avg", numKey: "rush_yd", denKey: "rush_att", label: "AVG" },
+            { kind: "stat", key: "rush_td", label: "TD" },
           ],
         },
         {
