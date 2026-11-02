@@ -34,7 +34,21 @@ export type PowerRankingRow = {
   recordLabel: string;
 };
 
-const SKIP_SLOTS = new Set(["BN", "BENCH", "IR", "IL", "TAXI", "RESERVE"]);
+/** Min/max anchors used to normalize power factors across the league. */
+export type PowerNormScale = {
+  market: { min: number; max: number };
+  proj: { min: number; max: number };
+  pf: { min: number; max: number };
+};
+
+/** Slots that are never starter seats (includes bench). */
+const STARTER_SKIP_SLOTS = new Set(["BN", "BENCH", "IR", "IL", "TAXI", "RESERVE"]);
+
+/**
+ * Slots that do not count toward active roster capacity.
+ * BN/BENCH (+ TAXI when listed) *do* count — only IR / IL / reserve are excluded.
+ */
+const CAP_SKIP_SLOTS = new Set(["IR", "IL", "RESERVE"]);
 
 /** Count dedicated starter slots from a host league roster_positions template. */
 export function starterRequirements(rosterPositions: string[]): Record<string, number> {
@@ -43,7 +57,7 @@ export function starterRequirements(rosterPositions: string[]): Record<string, n
     const pos = String(raw ?? "")
       .trim()
       .toUpperCase();
-    if (!pos || SKIP_SLOTS.has(pos)) continue;
+    if (!pos || STARTER_SKIP_SLOTS.has(pos)) continue;
     const key =
       pos === "SUPER_FLEX" || pos === "SUPERFLEX" || pos === "SFLEX" || pos === "Q/W/R/T"
         ? "SFLEX"
@@ -58,31 +72,63 @@ export function starterRequirements(rosterPositions: string[]): Record<string, n
   return effectiveStarters(req);
 }
 
-/** Active roster spots (starters + bench), excluding IR/taxi, for overflow checks. */
+/**
+ * Active roster spots (starters + bench), excluding IR/taxi, for overflow checks.
+ *
+ * Synced league `rosterPositions` are often starter-only (BN stripped upstream).
+ * Pass `benchSlots` so capacity still includes bench when BN is absent from the list.
+ */
 export function leagueRosterCapFromPositions(
   rosterPositions: string[] | null | undefined,
   fallback: number,
+  benchSlots = 0,
 ): number {
   if (!rosterPositions?.length) return fallback;
-  let n = 0;
+  let startersOrListed = 0;
+  let listedBench = 0;
   for (const raw of rosterPositions) {
     const pos = String(raw ?? "")
       .trim()
       .toUpperCase();
-    if (!pos || SKIP_SLOTS.has(pos)) continue;
-    n += 1;
+    if (!pos || CAP_SKIP_SLOTS.has(pos)) continue;
+    if (pos === "BN" || pos === "BENCH") {
+      listedBench += 1;
+      continue;
+    }
+    startersOrListed += 1;
   }
+  const bench = listedBench > 0 ? listedBench : Math.max(0, Math.floor(benchSlots));
+  const n = startersOrListed + bench;
   return n > 0 ? n : fallback;
 }
 
-function minMaxNormalize(values: number[]): number[] {
+/** Active (tradeable) roster bodies — exclude IR / IL designations. */
+export function activeRosterCount(
+  players: { id: string }[],
+  irIds: Iterable<string> | null | undefined,
+): number {
+  if (!players.length) return 0;
+  const ir = new Set(
+    [...(irIds ?? [])].map((id) => String(id ?? "").trim()).filter(Boolean),
+  );
+  if (!ir.size) return players.length;
+  return players.filter((p) => !ir.has(p.id)).length;
+}
+
+function boundsOf(values: number[]): { min: number; max: number } {
+  if (!values.length) return { min: 0, max: 0 };
+  return {
+    min: Math.min(...values),
+    max: Math.max(...values),
+  };
+}
+
+function normalizeWithBounds(values: number[], b: { min: number; max: number }): number[] {
   if (!values.length) return [];
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max === min) {
+  if (!Number.isFinite(b.min) || !Number.isFinite(b.max) || b.max === b.min) {
     return values.map(() => 50);
   }
-  return values.map((v) => ((v - min) / (max - min)) * 100);
+  return values.map((v) => ((v - b.min) / (b.max - b.min)) * 100);
 }
 
 /**
@@ -112,11 +158,20 @@ function recordLabel(wins: number, losses: number, ties: number, pointsFor: numb
   return `${record} | ${pf} PF`;
 }
 
+export type BuildPowerRankingsResult = {
+  rows: PowerRankingRow[];
+  /** League min/max anchors — freeze these when scoring after-trade power. */
+  scale: PowerNormScale;
+};
+
 /**
  * Weighted Power Strength Index (Playbook True Power Rankings):
  * 40% roster market value + 40% optimal weekly projection + 20% season points for.
  * Each factor is min-max normalized across the league, then mapped into the soft
  * display band so indexes are not crushed toward zero for mid/low teams.
+ *
+ * Pass `freezeScale` (from a before-trade build) so after-trade strength stays on
+ * the same axes — otherwise min-max re-runs and deltas are not comparable.
  */
 export function buildTruePowerRankings(
   teams: PowerRankingInputs[],
@@ -124,9 +179,33 @@ export function buildTruePowerRankings(
     brain: BrainMatrix | null;
     projectFor: (playerId: string) => number | null;
     rosterPositions: string[];
+    /** Reuse before-trade league mins/maxes for after-trade grading. */
+    freezeScale?: PowerNormScale | null;
   },
 ): PowerRankingRow[] {
-  if (!teams.length) return [];
+  return buildTruePowerRankingsDetailed(teams, opts).rows;
+}
+
+/** Same as `buildTruePowerRankings`, also returning the normalization scale. */
+export function buildTruePowerRankingsDetailed(
+  teams: PowerRankingInputs[],
+  opts: {
+    brain: BrainMatrix | null;
+    projectFor: (playerId: string) => number | null;
+    rosterPositions: string[];
+    freezeScale?: PowerNormScale | null;
+  },
+): BuildPowerRankingsResult {
+  if (!teams.length) {
+    return {
+      rows: [],
+      scale: {
+        market: { min: 0, max: 0 },
+        proj: { min: 0, max: 0 },
+        pf: { min: 0, max: 0 },
+      },
+    };
+  }
 
   const starters = starterRequirements(opts.rosterPositions);
   const scoring = { weeklyFor: opts.projectFor };
@@ -160,9 +239,24 @@ export function buildTruePowerRankings(
     };
   });
 
-  const normMarket = minMaxNormalize(computed.map((r) => r.marketValue));
-  const normProj = minMaxNormalize(computed.map((r) => r.weeklyProjection));
-  const normPf = minMaxNormalize(computed.map((r) => r.pointsFor));
+  const scale: PowerNormScale = opts.freezeScale ?? {
+    market: boundsOf(computed.map((r) => r.marketValue)),
+    proj: boundsOf(computed.map((r) => r.weeklyProjection)),
+    pf: boundsOf(computed.map((r) => r.pointsFor)),
+  };
+
+  const normMarket = normalizeWithBounds(
+    computed.map((r) => r.marketValue),
+    scale.market,
+  );
+  const normProj = normalizeWithBounds(
+    computed.map((r) => r.weeklyProjection),
+    scale.proj,
+  );
+  const normPf = normalizeWithBounds(
+    computed.map((r) => r.pointsFor),
+    scale.pf,
+  );
 
   const ranked = computed
     .map((row, i) => {
@@ -177,7 +271,7 @@ export function buildTruePowerRankings(
     })
     .sort((a, b) => b.strengthScore - a.strengthScore || b.pointsFor - a.pointsFor);
 
-  return ranked.map((row, index) => ({
+  const rows = ranked.map((row, index) => ({
     rank: index + 1,
     slot: row.slot,
     team: row.team,
@@ -192,4 +286,6 @@ export function buildTruePowerRankings(
     pointsFor: row.pointsFor,
     recordLabel: row.recordLabel,
   }));
+
+  return { rows, scale };
 }

@@ -59,9 +59,26 @@ describe("analyzer grade helpers", () => {
     expect(g.pct).toBe(7);
   });
 
-  it("power delta uses relative change", () => {
-    expect(powerDeltaToGradePct(50, 55)).toBe(10);
+  it("power delta uses absolute strength change on the shared 0–100 scale", () => {
+    expect(powerDeltaToGradePct(50, 55)).toBe(5);
+    expect(powerDeltaToGradePct(90, 95)).toBe(5);
     expect(powerDeltaToGradePct(null, 55)).toBeNull();
+  });
+
+  it("does not double-count need fills already covered by get positions", () => {
+    const withFill = needFitAdjustment({
+      topNeeds: ["WR"],
+      getPositions: ["WR"],
+      givePositions: [],
+      fills: ["WR"],
+    });
+    const withoutFill = needFitAdjustment({
+      topNeeds: ["WR"],
+      getPositions: ["WR"],
+      givePositions: [],
+    });
+    expect(withFill).toBe(withoutFill);
+    expect(withFill).toBe(8);
   });
 
   it("scales need fit by quality", () => {

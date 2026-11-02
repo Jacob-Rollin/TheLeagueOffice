@@ -989,8 +989,11 @@ export function posMatchesTopNeed(pos: string, topNeeds: string[]): boolean {
 }
 
 /**
- * Map True Power Index before/after into a grade-style pct (FantasyPros power %).
- * Null when either side is missing.
+ * Map True Power strength before/after into a grade-style pct.
+ *
+ * Uses absolute strength Δ on the shared 0–100 scale (freeze before-trade
+ * min/max when scoring after). Relative % crushed #1 teams and inflated mid
+ * teams for the same roster move.
  */
 export function powerDeltaToGradePct(
   powerBefore: number | null | undefined,
@@ -1004,9 +1007,8 @@ export function powerDeltaToGradePct(
   ) {
     return null;
   }
-  const base = Math.max(Number(powerBefore), 1);
-  const pct = ((Number(powerAfter) - Number(powerBefore)) / base) * 100;
-  return Math.max(-40, Math.min(40, Math.round(pct * 10) / 10));
+  const delta = Number(powerAfter) - Number(powerBefore);
+  return Math.max(-40, Math.min(40, Math.round(delta * 10) / 10));
 }
 
 /**
@@ -1052,14 +1054,16 @@ export function needFitAdjustment(input: {
     seenGive.add(pos);
     if (posMatchesTopNeed(pos, needs)) score -= 5 * quality(input.giveQualityByPos, pos);
   }
+  // Vacancy fills already covered by get-pos need hits — don't double-count.
   for (const raw of input.fills ?? []) {
-    if (posMatchesTopNeed(raw, needs)) score += 3;
+    const pos = normalizeNeedPos(raw);
+    if (posMatchesTopNeed(raw, needs) && !seenGet.has(pos)) score += 3;
   }
   for (const raw of input.clogs ?? []) {
     if (!posMatchesTopNeed(raw, needs)) score -= 4;
   }
 
-  return Math.max(-20, Math.min(20, Math.round(score * 10) / 10));
+  return Math.max(-15, Math.min(15, Math.round(score * 10) / 10));
 }
 
 /**
