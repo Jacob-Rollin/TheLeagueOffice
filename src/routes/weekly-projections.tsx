@@ -43,6 +43,8 @@ import {
   useResearchScoringFormat,
 } from "@/components/research/ScoringFormatSelect";
 import {
+  PLAYER_LIST_BOARD,
+  PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
   PLAYER_LIST_GROUP_HEADER_ROW,
@@ -395,10 +397,10 @@ function WeeklyProjectionsPage() {
         />
       </ResearchPoolFilterRow>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div ref={listRef} className="overflow-x-auto">
+      <div className={PLAYER_LIST_BOARD}>
+        <div ref={listRef} className="min-w-0">
           <table className={cn("w-full border-collapse text-sm", minWidth)}>
-            <thead className="sticky top-0 z-10">
+            <thead className={PLAYER_LIST_STICKY_THEAD}>
               <tr className={PLAYER_LIST_GROUP_HEADER_ROW}>
                 <th colSpan={2} className="px-3 py-2" aria-hidden="true" />
                 {statGroups.map((group) => (

@@ -12,6 +12,8 @@ import {
 } from "@/components/research/ScoringFormatSelect";
 import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
+  PLAYER_LIST_BOARD,
+  PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_HEADER_ROW,
   SortHeaderButton,
@@ -243,17 +245,17 @@ function SosAnalysisPage() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
+        <div className={PLAYER_LIST_BOARD}>
+          <div className="min-w-0">
             <table className={cn("w-full table-fixed border-collapse text-sm", layout.minWidth)}>
               <colgroup>
                 {layout.widths.map((w, i) => (
                   <col key={`${tab}-${i}`} style={{ width: w }} />
                 ))}
               </colgroup>
-              <thead>
+              <thead className={PLAYER_LIST_STICKY_THEAD}>
                 <tr className={PLAYER_LIST_HEADER_ROW}>
-                  <th className="sticky left-0 z-10 bg-slate-50 px-4 py-2 text-left">
+                  <th className="sticky left-0 top-[var(--site-sticky-top,3.25rem)] z-40 bg-slate-50 px-4 py-2 text-left">
                     {sortHeader("team", "Team", "left")}
                   </th>
                   {activePos ? (

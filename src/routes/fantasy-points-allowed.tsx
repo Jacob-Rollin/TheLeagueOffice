@@ -10,6 +10,8 @@ import {
 } from "@/components/research/ScoringFormatSelect";
 import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
+  PLAYER_LIST_BOARD,
+  PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_COL_HEADER_ROW,
   PLAYER_LIST_GROUP_HEADER_ROW,
@@ -140,14 +142,14 @@ function FantasyPointsAllowedPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+      <div className={PLAYER_LIST_BOARD}>
+        <div className="min-w-0">
           <table className="w-full min-w-[980px] border-collapse text-sm">
-            <thead>
+            <thead className={PLAYER_LIST_STICKY_THEAD}>
               <tr className={cn(PLAYER_LIST_GROUP_HEADER_ROW, "text-slate-700")}>
                 <th
                   rowSpan={2}
-                  className="sticky left-0 z-10 border-r border-slate-200 bg-slate-50 px-3 py-2.5 text-left align-bottom"
+                  className="sticky left-0 top-[var(--site-sticky-top,3.25rem)] z-40 border-r border-slate-200 bg-slate-50 px-3 py-2.5 text-left align-bottom"
                 >
                   <SortHeaderButton
                     label="Team"

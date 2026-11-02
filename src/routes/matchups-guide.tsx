@@ -18,6 +18,8 @@ import {
 } from "@/components/research/ScoringFormatSelect";
 import { ResearchTableSkeleton } from "@/components/research/ResearchTableSkeleton";
 import {
+  PLAYER_LIST_BOARD,
+  PLAYER_LIST_STICKY_THEAD,
   nextSortState,
   PLAYER_LIST_HEADER_ROW,
   SortHeaderButton,
@@ -511,10 +513,10 @@ function MatchupsGuidePage() {
         />
       </ResearchPoolFilterRow>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
+      <div className={PLAYER_LIST_BOARD}>
+        <div className="min-w-0">
           <table className="w-full min-w-[760px] border-collapse text-sm">
-            <thead>
+            <thead className={PLAYER_LIST_STICKY_THEAD}>
               <tr className={PLAYER_LIST_HEADER_ROW}>
                 <th className="w-14 px-2 py-2 text-center">
                   <SortHeaderButton
