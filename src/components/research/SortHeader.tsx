@@ -14,14 +14,22 @@ export const PLAYER_LIST_BOARD =
 /**
  * Stick Rk / Player / stat headers under SiteNav (`--site-sticky-top`).
  * Filters + search stay in normal flow above the board and scroll away.
- * Opaque th backgrounds so rows do not show through while stuck.
+ *
+ * Two-row boards: border-collapse leaves a sub-pixel seam between the group
+ * and column header rows where scrolled stats flash through. `tr` margins are
+ * ignored in tables, so seal with an opaque thead::before fill behind the rows
+ * (plus solid th backgrounds).
  */
 export const PLAYER_LIST_STICKY_THEAD =
-  "sticky top-[var(--site-sticky-top,3.25rem)] z-30 shadow-[0_1px_0_0_rgb(226_232_240)] [&_th]:bg-slate-50";
+  "sticky top-[var(--site-sticky-top,3.25rem)] z-30 bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)] before:pointer-events-none before:absolute before:inset-0 before:z-0 before:bg-slate-50 before:content-[''] [&_tr]:relative [&_tr]:z-[1] [&_tr]:bg-slate-50 [&_th]:relative [&_th]:z-[1] [&_th]:bg-slate-50";
 
-/** Group header row (Passing / Rushing / Misc). Leave Rk+Player cells blank — no "Players" label. */
+/**
+ * Group header row (Passing / Rushing / Misc). Leave Rk+Player cells blank —
+ * no "Players" label. Separator is drawn on the th (box-shadow), not border-b:
+ * collapsed borders between sticky header rows open a hairline hole.
+ */
 export const PLAYER_LIST_GROUP_HEADER_ROW =
-  "border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500";
+  "bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500 [&_th]:shadow-[inset_0_-1px_0_0_rgb(226_232_240)]";
 
 export const PLAYER_LIST_GROUP_TH =
   "border-l border-slate-200 px-2 py-2 text-center text-slate-700";
