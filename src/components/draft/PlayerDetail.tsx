@@ -844,13 +844,17 @@ type StatCol =
 type StatGroup = { label: string; cols: StatCol[] };
 
 const CATEGORY_TH =
-  "text-[10px] font-black tracking-widest text-slate-400 uppercase text-center border-b border-slate-100 py-1";
+  "text-[10px] font-black tracking-wide text-slate-400 uppercase text-center border-b border-slate-100 py-1";
+/** Dense micro headers — QB boards are wide; keep labels readable without forcing x-scroll. */
 const MICRO_TH =
-  "px-3 py-2.5 text-[11px] font-black uppercase tracking-widest text-slate-900";
+  "px-1.5 py-2 text-[10px] font-black uppercase tracking-wide text-slate-900";
+const STAT_TD = "px-1.5 py-2 text-center font-mono text-sm text-slate-700";
 /** Hairline between Fantasy / Passing / … category blocks (matches mobile). */
 const GROUP_EDGE = "border-l border-slate-200";
 /** Soft Fpts column wash — same light-theme tone as mobile `--m-rank-col`. */
 const FPTS_COL_BG = "bg-[#e3f4f9]";
+/** Share width evenly so Game Logs / Projections stay inside the modal. */
+const LOG_TABLE = "w-full table-fixed border-collapse text-sm";
 
 /**
  * Soft heat for Sleeper pos_rank_* (1 = best at position) — weekly Game Log
@@ -916,8 +920,9 @@ function positionStatGroups(pos: string): StatGroup[] {
           cols: [
             { kind: "stat", key: "pass_cmp", label: "CMP" },
             { kind: "stat", key: "pass_att", label: "ATT" },
-            { kind: "stat", key: "pass_yd", label: "PYD" },
-            { kind: "stat", key: "pass_td", label: "PTD" },
+            // Section header already says Passing — no PYD/PTD prefixes.
+            { kind: "stat", key: "pass_yd", label: "YDS" },
+            { kind: "stat", key: "pass_td", label: "TD" },
             { kind: "stat", key: "pass_int", label: "INT" },
           ],
         },
@@ -1202,10 +1207,7 @@ function renderGroupedStatCells(
     g.cols.map((col, ci) => (
       <td
         key={`${g.label}-${col.label}`}
-        className={cn(
-          "px-3 py-2.5 text-center font-mono text-slate-700",
-          ci === 0 && GROUP_EDGE,
-        )}
+        className={cn(STAT_TD, ci === 0 && GROUP_EDGE)}
       >
         {col.kind === "avg"
           ? avgOrDash(raw, col.numKey, col.denKey, played)
@@ -1326,8 +1328,8 @@ function GameLogsPanel({
         <p className="px-6 py-8 text-center text-sm text-slate-400">No game logs recorded yet.</p>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-hidden">
+            <table className={LOG_TABLE}>
               <DoubleTierThead
                 leftLabels={["WK", "OPP"]}
                 fantasyLabels={gameLogFantasyLabels(pos)}
@@ -1381,10 +1383,10 @@ function GameLogsPanel({
                         index % 2 === 1 ? "bg-slate-50/40" : "bg-white",
                       )}
                     >
-                      <td className="px-3 py-2.5 text-left font-semibold text-slate-900">
+                      <td className={cn(STAT_TD, "text-left font-semibold text-slate-900")}>
                         {String(g.week)}
                       </td>
-                      <td className="px-3 py-2.5 text-center font-bold text-slate-700">
+                      <td className={cn(STAT_TD, "font-bold text-slate-700")}>
                         {isBye ? (
                           <span className="text-xs font-extrabold tracking-wide text-slate-400">
                             BYE
@@ -1393,33 +1395,24 @@ function GameLogsPanel({
                           <span className={oppClass}>{oppLabel}</span>
                         )}
                       </td>
-                      <td
-                        className={cn(
-                          "px-3 py-2.5 text-center font-mono text-slate-700",
-                          GROUP_EDGE,
-                        )}
-                      >
+                      <td className={cn(STAT_TD, GROUP_EDGE)}>
                         {hasProj ? fmtFantasyPts(projVal) : "-"}
                       </td>
                       <td
                         className={cn(
-                          "px-3 py-2.5 text-center font-mono font-bold text-slate-900",
+                          STAT_TD,
+                          "font-bold text-slate-900",
                           FPTS_COL_BG,
                         )}
                       >
                         {pts}
                       </td>
                       {withSnap ? (
-                        <td className="px-3 py-2.5 text-center font-mono text-slate-700">
+                        <td className={STAT_TD}>
                           {formatSnapPct(g.raw, played)}
                         </td>
                       ) : null}
-                      <td
-                        className={cn(
-                          "px-3 py-2.5 text-center font-mono text-slate-700",
-                          rankHeat,
-                        )}
-                      >
+                      <td className={cn(STAT_TD, rankHeat)}>
                         {weekRank != null ? String(weekRank) : "-"}
                       </td>
                       {renderGroupedStatCells(g.raw, statGroups, played)}
@@ -1571,8 +1564,8 @@ function ProjectionsPanel({
   }
 
   return (
-    <div className="w-full overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
+    <div className="w-full overflow-x-hidden">
+      <table className={LOG_TABLE}>
         <DoubleTierThead
           leftLabels={["WK", "OPP"]}
           fantasyLabels={gameLogFantasyLabels(pos)}
@@ -1623,10 +1616,10 @@ function ProjectionsPanel({
                   index % 2 === 1 ? "bg-slate-50/40" : "bg-white",
                 )}
               >
-                <td className="px-3 py-2.5 text-left font-semibold text-slate-900">
+                <td className={cn(STAT_TD, "text-left font-semibold text-slate-900")}>
                   {String(g.week)}
                 </td>
-                <td className="px-3 py-2.5 text-center font-bold text-slate-700">
+                <td className={cn(STAT_TD, "font-bold text-slate-700")}>
                   {isBye ? (
                     <span className="text-xs font-extrabold tracking-wide text-slate-400">
                       BYE
@@ -1635,33 +1628,16 @@ function ProjectionsPanel({
                     <span className={oppClass}>{oppLabel}</span>
                   )}
                 </td>
-                <td
-                  className={cn(
-                    "px-3 py-2.5 text-center font-mono text-slate-700",
-                    GROUP_EDGE,
-                  )}
-                >
+                <td className={cn(STAT_TD, GROUP_EDGE)}>
                   {hasProj ? fmtFantasyPts(projVal) : "-"}
                 </td>
-                <td
-                  className={cn(
-                    "px-3 py-2.5 text-center font-mono font-bold text-slate-900",
-                    FPTS_COL_BG,
-                  )}
-                >
+                <td className={cn(STAT_TD, "font-bold text-slate-900", FPTS_COL_BG)}>
                   {fpts}
                 </td>
                 {withSnap ? (
-                  <td className="px-3 py-2.5 text-center font-mono text-slate-700">
-                    {formatSnapPct(g.raw, played)}
-                  </td>
+                  <td className={STAT_TD}>{formatSnapPct(g.raw, played)}</td>
                 ) : null}
-                <td
-                  className={cn(
-                    "px-3 py-2.5 text-center font-mono text-slate-700",
-                    rankHeat,
-                  )}
-                >
+                <td className={cn(STAT_TD, rankHeat)}>
                   {weekRank != null ? String(weekRank) : "-"}
                 </td>
                 {renderGroupedStatCells(g.projRaw, statGroups, showStats)}
