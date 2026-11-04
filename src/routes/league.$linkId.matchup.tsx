@@ -632,6 +632,7 @@ function NativeMatchupPage() {
                 showActuals={showActuals}
                 onOpen={(id) => modalRef.current?.open(id)}
                 showTotals
+                showFavoriteCheck
               />
 
               {benchRows.some((r) => r.leftId || r.rightId) ? (
@@ -844,6 +845,7 @@ function MirroredLineupBoard({
   showActuals,
   onOpen,
   showTotals,
+  showFavoriteCheck = false,
 }: {
   title: string;
   rows: Array<{ slot: string; leftId: string | null; rightId: string | null }>;
@@ -861,6 +863,8 @@ function MirroredLineupBoard({
   showActuals: boolean;
   onOpen: (id: string) => void;
   showTotals?: boolean;
+  /** Green proj check / highlight — starters only (Playbook parity). */
+  showFavoriteCheck?: boolean;
 }) {
   if (!rows.length) return null;
 
@@ -939,7 +943,7 @@ function MirroredLineupBoard({
             rightPosRank={rightSid ? rankFor(rightSid).pos : null}
             leftBye={leftMeta.bye}
             rightBye={rightMeta.bye}
-            showFavoriteCheck
+            showFavoriteCheck={showFavoriteCheck}
             onOpenPlayer={onOpen}
           />
         );

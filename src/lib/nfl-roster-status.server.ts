@@ -159,8 +159,9 @@ async function fetchInjuryReport(season: string): Promise<Map<string, NflInjuryR
     const row = parseCsvLine(line);
     if (typeIdx >= 0 && (row[typeIdx] ?? "").trim().toUpperCase() !== "REG") continue;
     const gsisId = (row[gsisIdx] ?? "").trim();
+    // Empty CSV week cells parse as 0 — skip those so UI never shows "Week 0".
     const week = Number(row[weekIdx]);
-    if (!gsisId || !Number.isFinite(week)) continue;
+    if (!gsisId || !Number.isFinite(week) || week < 1) continue;
     const prev = byGsis.get(gsisId);
     if (prev && prev.week > week) continue;
     byGsis.set(gsisId, {
