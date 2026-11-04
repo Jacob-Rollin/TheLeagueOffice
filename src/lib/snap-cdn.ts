@@ -182,6 +182,7 @@ export async function fetchSnapRosterNews(ids: string[]) {
 
   const players: RosterNews["players"] = clean.map((id) => {
     const report = reportById.get(id);
+    // Prefer the long designation ("Questionable") over chip codes ("Q").
     const status = report?.status?.trim() || null;
     const statusShort = report?.statusShort?.trim() || null;
     const onIr = statusShort === "IR" || /^injured reserve$/i.test(status ?? "");
@@ -190,16 +191,10 @@ export async function fetchSnapRosterNews(ids: string[]) {
       status,
       bodyPart: report?.injury?.trim() || null,
       reserve: onIr,
-      // Official practice-report rows aren't on the public snap — map what we have
-      // so designation/injury labels still populate from the injury-reports feed.
-      report: report
-        ? {
-            week: 0,
-            status: statusShort || status,
-            injury: report.injury?.trim() || null,
-            practice: null,
-          }
-        : null,
+      // Injury-reports snap has no official NFL report week/practice row. Leave
+      // `report` null so Team Insights doesn't render "Week 0 injury report: Q".
+      // Designation + body part still flow through `status` / `bodyPart` above.
+      report: null,
       news: newsById.get(id) ?? null,
     };
   });

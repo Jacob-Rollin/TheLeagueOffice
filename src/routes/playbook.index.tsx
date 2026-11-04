@@ -277,6 +277,24 @@ const DESIGNATION_RANK: Record<string, number> = {
   NA: 1,
 };
 
+/** Expand chip codes (Q/O/D) to readable labels for Team Insights copy. */
+const DESIGNATION_LABEL: Record<string, string> = {
+  Q: "Questionable",
+  O: "Out",
+  OUT: "Out",
+  D: "Doubtful",
+  IR: "IR",
+  NA: "Not Active",
+  PUP: "PUP",
+  SUSP: "Suspended",
+};
+
+function designationLabel(raw: string | null | undefined): string | null {
+  const text = (raw ?? "").trim();
+  if (!text) return null;
+  return DESIGNATION_LABEL[text] ?? DESIGNATION_LABEL[text.toUpperCase()] ?? text;
+}
+
 /**
  * Current designation, preferring the freshest source: NFL reserve list, then
  * this week's official report, then the server-side Sleeper status, then the
@@ -289,7 +307,13 @@ function designationFor(
 ): string | null {
   const sleeper = (news?.status ?? player.injury ?? player.injury_status ?? "").trim();
   if (news?.reserve || sleeper === "IR" || sleeper === "Injured Reserve") return "IR";
-  if (news?.report?.status && nflWeek != null && news.report.week >= nflWeek) {
+  // week < 1 means the upstream row had no usable week — don't treat it as current.
+  if (
+    news?.report?.status &&
+    nflWeek != null &&
+    news.report.week >= 1 &&
+    news.report.week >= nflWeek
+  ) {
     return news.report.status;
   }
   return sleeper && INJURY_TAGS.has(sleeper) ? sleeper : null;
@@ -489,26 +513,30 @@ function buildTeamInsightSlides(opts: {
       ""
     ).trim();
     const report = lead.news?.report ?? null;
+    const reportStatus = designationLabel(report?.status) ?? "No game designation";
     const reportLine = report
       ? [
-          `Week ${report.week} injury report: ${report.status ?? "No game designation"}`,
+          report.week >= 1
+            ? `Week ${report.week} injury report: ${reportStatus}`
+            : `Injury report: ${reportStatus}`,
           practiceShort(report.practice),
         ]
           .filter(Boolean)
           .join(" · ")
       : null;
     const fallbackNotes = (p.injury_notes || brain?.[p.id]?.injuryNotes || "").trim();
+    const labelText = designationLabel(lead.label);
     const body = lead.news?.news?.headline
       ? clipText(lead.news.news.headline)
       : fallbackNotes && fallbackNotes.length > 20
         ? clipText(fallbackNotes)
-        : `${p.name} is listed ${lead.label ?? "on the injury report"}${bodyPart ? ` with a ${bodyPart.toLowerCase()} injury` : ""}. Monitor practice reports before lock.`;
+        : `${p.name} is listed ${labelText ? `as ${labelText}` : "on the injury report"}${bodyPart ? ` with a ${bodyPart.toLowerCase()} injury` : ""}. Monitor practice reports before lock.`;
     const age = lead.news?.news ? newsAge(lead.news.news.published, nowMs) : null;
 
     slides.push({
       id: "player-news",
       tag: "Player News",
-      headline: `${p.name}${lead.label ? ` (${lead.label})` : ""}${bodyPart ? ` — ${bodyPart}` : ""}`,
+      headline: `${p.name}${labelText ? ` (${labelText})` : ""}${bodyPart ? ` — ${bodyPart}` : ""}`,
       body,
       meta: [reportLine, age].filter(Boolean).join(" · ") || undefined,
       player: p,
