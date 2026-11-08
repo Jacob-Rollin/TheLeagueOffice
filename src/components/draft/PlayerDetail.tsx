@@ -527,7 +527,7 @@ export function PlayerDetail({
             >
               {/* Equal-height shoulders + centered dip under the headshot. */}
               <path
-                d="M0 34 L 48 34 C 78 34, 92 66, 110 68 C 128 70, 150 34, 190 34 L 1000 34 L 1000 88 L 0 88 Z"
+                d="M0 34 L 72 34 C 92 34, 100 66, 110 68 C 120 70, 140 34, 175 34 L 1000 34 L 1000 88 L 0 88 Z"
                 fill="rgba(2, 6, 23, 0.94)"
               />
             </svg>
@@ -671,7 +671,7 @@ export function PlayerDetail({
           </div>
           <div
             className={cn(
-              "absolute inset-x-0 bottom-0 z-30 flex h-[50px] items-end justify-between gap-3 overflow-visible px-6 pb-2.5 pl-[196px]",
+              "absolute inset-x-0 bottom-0 z-30 flex h-[46px] items-end justify-between gap-3 overflow-visible px-6 pb-2.5 pl-[196px]",
               isScoringOpen && "z-40",
             )}
           >
