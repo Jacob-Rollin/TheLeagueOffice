@@ -815,14 +815,14 @@ function StandalonePlayerHeader({
           preserveAspectRatio="none"
         >
           <path
-            d="M0 24 C 48 26, 78 64, 108 68 C 140 70, 180 50, 240 42 L 1000 40 L 1000 88 L 0 88 Z"
+            d="M0 34 L 48 34 C 78 34, 92 66, 110 68 C 128 70, 150 34, 190 34 L 1000 34 L 1000 88 L 0 88 Z"
             fill="rgba(2, 6, 23, 0.94)"
           />
         </svg>
       </div>
 
       <div className="relative z-10 flex min-h-[160px] w-full items-stretch">
-        <div className="relative ml-3 flex w-[124px] min-h-[160px] shrink-0 select-none self-stretch pt-1">
+        <div className="relative ml-12 flex w-[124px] min-h-[160px] shrink-0 select-none self-stretch pt-1">
           <div className="absolute inset-x-0 top-0 bottom-0 overflow-hidden">
             <img
               src={playerImage(player.id, player.pos as Pos, player.team)}
@@ -841,7 +841,7 @@ function StandalonePlayerHeader({
 
         <div
           className={cn(
-            "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-3 pb-[3.25rem] pl-5 pr-10 text-left",
+            "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-3 pb-14 pl-7 pr-10 text-left",
             isScoringOpen ? "z-40" : "z-10",
           )}
         >
@@ -887,7 +887,7 @@ function StandalonePlayerHeader({
         </div>
       </div>
 
-      <div className="absolute bottom-2 left-3 z-30">
+      <div className="absolute bottom-2.5 left-12 z-30">
         <span
           className={cn(
             "flex min-w-[2.1rem] items-center justify-center rounded-md px-1.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-white shadow-sm",
@@ -899,7 +899,7 @@ function StandalonePlayerHeader({
       </div>
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 z-30 flex h-12 items-center justify-between gap-3 overflow-visible pl-[148px] pr-6",
+          "absolute inset-x-0 bottom-0 z-30 flex h-[50px] items-end justify-between gap-3 overflow-visible px-6 pb-2.5 pl-[196px]",
           isScoringOpen && "z-40",
         )}
       >
@@ -914,7 +914,10 @@ function StandalonePlayerHeader({
             <HeaderRankInline value={`${Math.round(Number(startedPct ?? 0))}%`} label="Started" />
           </div>
         </div>
-        <div ref={scoringMenuRef} className="relative z-[60] shrink-0 overflow-visible text-left">
+        <div
+          ref={scoringMenuRef}
+          className="relative z-[60] mb-0.5 shrink-0 overflow-visible text-left"
+        >
           <button
             type="button"
             aria-label="Scoring format"
