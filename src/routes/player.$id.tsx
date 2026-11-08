@@ -791,7 +791,7 @@ function StandalonePlayerHeader({
 
   return (
     <div
-      className="relative z-40 min-h-[160px] w-full overflow-hidden rounded-t-xl rounded-b-none border-x border-t border-slate-100 text-white shadow-sm"
+      className="relative z-40 min-h-[160px] w-full overflow-visible rounded-t-xl rounded-b-none border-x border-t border-slate-100 text-white shadow-sm"
       style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
     >
       {watermarkLogo ? (
@@ -807,21 +807,8 @@ function StandalonePlayerHeader({
         />
       ) : null}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[18] h-[60px]" aria-hidden>
-        <svg
-          className="absolute inset-0 h-full w-full"
-          viewBox="0 0 1000 60"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M0 34 C 70 34, 95 12, 145 12 C 195 12, 235 20, 300 20 L 1000 20 L 1000 60 L 0 60 Z"
-            fill="rgba(2, 6, 23, 0.92)"
-          />
-        </svg>
-      </div>
-
       <div className="relative z-10 flex min-h-[160px] w-full items-stretch">
-        <div className="relative z-20 mb-0 ml-0 mt-0 flex w-[140px] min-h-[160px] flex-shrink-0 items-end self-stretch overflow-hidden bg-transparent pl-0 select-none">
+        <div className="relative z-20 mb-0 ml-0 mt-0 flex w-[140px] min-h-[160px] flex-shrink-0 items-end self-stretch overflow-visible bg-transparent pl-0 select-none">
           <div className="absolute inset-0 overflow-hidden bg-transparent">
             <img
               src={playerImage(player.id, player.pos as Pos, player.team)}
@@ -829,18 +816,32 @@ function StandalonePlayerHeader({
               loading="lazy"
               className={cn(
                 "pointer-events-none relative z-20 h-full w-full select-none",
-                isDefense ? "object-contain px-3 pb-12 pt-3" : "object-cover object-[55%_center]",
+                isDefense ? "object-contain px-3 pb-9 pt-3" : "object-cover object-[55%_center]",
               )}
               onError={(e) => {
                 e.currentTarget.style.visibility = "hidden";
               }}
             />
           </div>
+          <div className="absolute bottom-0 left-0 z-50 flex select-none flex-row items-center whitespace-nowrap bg-transparent pl-0 text-center uppercase">
+            <span
+              className={cn(
+                "flex shrink-0 items-center justify-center px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
+                POS_STRIP_BG[player.pos] ?? "bg-slate-700",
+              )}
+            >
+              {player.pos === "DEF" ? "DST" : player.pos}
+            </span>
+            <span className="flex flex-row items-center justify-center space-x-1.5 rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
+              <span>{teamNickname}</span>
+              {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
+            </span>
+          </div>
         </div>
 
         <div
           className={cn(
-            "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-4 pb-16 pl-6 pr-10 text-left",
+            "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-4 pb-14 pl-6 pr-10 text-left",
             isScoringOpen ? "z-40" : "z-10",
           )}
         >
@@ -880,26 +881,12 @@ function StandalonePlayerHeader({
 
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 z-30 flex h-[44px] items-end gap-3 overflow-visible pb-2 pl-0 pr-5",
+          "absolute inset-x-0 bottom-0 z-30 flex items-end justify-between gap-3 overflow-visible pb-2.5 pl-[164px] pr-5",
           isScoringOpen && "z-40",
         )}
       >
-        <div className="mb-0.5 flex shrink-0 items-center">
-          <span
-            className={cn(
-              "flex shrink-0 items-center justify-center px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
-              POS_STRIP_BG[player.pos] ?? "bg-slate-700",
-            )}
-          >
-            {player.pos === "DEF" ? "DST" : player.pos}
-          </span>
-          <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap bg-transparent px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
-            <span>{teamNickname}</span>
-            {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
-          </span>
-        </div>
-        <div className="min-w-0 flex-1 border-l border-white/10 pl-4">
-          <p className="mb-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-white/45">
+        <div className="min-w-0 flex-1">
+          <p className="mb-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-white/50">
             Player Rankings
           </p>
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 text-xs font-black uppercase tracking-wide text-white">
