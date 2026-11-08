@@ -519,12 +519,22 @@ export function PlayerDetail({
                       ? "object-contain px-3 pb-9 pt-3"
                       : "object-cover object-[55%_center]",
                   )}
+                  style={
+                    isDefense
+                      ? undefined
+                      : {
+                          WebkitMaskImage:
+                            "linear-gradient(to right, #000 0%, #000 62%, transparent 100%)",
+                          maskImage:
+                            "linear-gradient(to right, #000 0%, #000 62%, transparent 100%)",
+                        }
+                  }
                   onError={(e) => {
                     e.currentTarget.style.visibility = "hidden";
                   }}
                 />
               </div>
-              <div className="absolute bottom-0 left-0 z-30 flex w-full flex-row items-stretch overflow-visible rounded-tr-md rounded-br-none bg-transparent pl-0">
+              <div className="absolute bottom-0 left-0 z-40 flex w-max max-w-full flex-row items-stretch overflow-visible rounded-tr-md rounded-br-none bg-transparent pl-0">
                 <span
                   className={cn(
                     "flex shrink-0 items-center justify-center rounded-none px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
@@ -533,22 +543,16 @@ export function PlayerDetail({
                 >
                   {player.pos === "DEF" ? "DST" : player.pos}
                 </span>
-                <span className="flex min-w-0 flex-1 flex-row items-center justify-between gap-2 rounded-tr-md rounded-br-none bg-slate-950/90 px-2.5 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
+                <span className="flex shrink-0 flex-row items-center gap-1.5 rounded-tr-md rounded-br-none bg-slate-950/90 px-2.5 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
                   {compactLogo ? (
                     <img
                       src={compactLogo}
                       alt=""
                       aria-hidden="true"
-                      className="h-4 w-4 shrink-0 object-contain"
+                      className="h-3.5 w-3.5 shrink-0 object-contain"
                     />
-                  ) : (
-                    <span className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  )}
-                  {!isDefense && jerseyNumber ? (
-                    <span>#{jerseyNumber}</span>
-                  ) : (
-                    <span className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  )}
+                  ) : null}
+                  {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
                 </span>
               </div>
             </div>
