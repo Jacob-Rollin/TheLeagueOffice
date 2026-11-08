@@ -296,11 +296,23 @@ jobs:
               if not name:
                   continue
               chart = teams.setdefault(team, {})
+              age = p.get("age")
+              if not isinstance(age, (int, float)):
+                  birth = p.get("birth_date")
+                  age = None
+                  if isinstance(birth, str) and birth:
+                      try:
+                          y, m, d = [int(x) for x in birth.split("-")[:3]]
+                          today = datetime.date.today()
+                          age = today.year - y - ((today.month, today.day) < (m, d))
+                      except Exception:
+                          age = None
               chart.setdefault(slot, []).append({
                   "id": str(pid),
                   "name": name,
                   "order": int(order),
                   "injury": p.get("injury_status") or None,
+                  "age": int(age) if isinstance(age, (int, float)) else None,
               })
 
           for chart in teams.values():
@@ -311,14 +323,19 @@ jobs:
           if len(teams) < 28:
               raise SystemExit(f"too few team depth charts: {len(teams)}")
 
-          Path("out/snap/nfl-team-depth-v1.json").write_text(
-              json.dumps({
-                  "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
-                  "source": "sleeper-players-depth",
-                  "teams": teams,
-              }, separators=(",", ":"))
+          payload = {
+              "updatedAt": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+              "source": "sleeper-players-depth",
+              "teams": teams,
+          }
+          # v2 adds per-player age; keep v1 in sync for older clients.
+          Path("out/snap/nfl-team-depth-v2.json").write_text(
+              json.dumps(payload, separators=(",", ":"))
           )
-          print("ok nfl-team-depth-v1", len(teams))
+          Path("out/snap/nfl-team-depth-v1.json").write_text(
+              json.dumps(payload, separators=(",", ":"))
+          )
+          print("ok nfl-team-depth-v2", len(teams))
           PY
 
           count=$(find out -type f -name '*.json' | wc -l | tr -d ' ')

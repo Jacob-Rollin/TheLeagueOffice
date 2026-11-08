@@ -9,6 +9,7 @@ import { RosteredOnLabel } from "@/components/draft/RosteredOnLabel";
 import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections";
 import { sosHasUsableRanks, usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
+import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos, Scoring } from "@/lib/draft";
 import { fetchNflTeamDepth, teamDepthFor, type TeamDepthSlot } from "@/lib/nfl-team-depth";
 import { getTeamPrimaryColor, NFL_TEAMS, teamById } from "@/lib/nfl-teams";
@@ -262,6 +263,12 @@ function PlayerHubPage() {
 
   // Same Sleeper depth snap as the Depth Chart tab — not ROS-proj order.
   const playerTeam = data?.player.team;
+  const { data: catalog } = useSleeperPlayers();
+  const ageById = useMemo(() => {
+    const map = new Map<string, number | null>();
+    for (const p of catalog?.players ?? []) map.set(p.id, p.age);
+    return map;
+  }, [catalog]);
   const { data: depthBoard } = useQuery({
     queryKey: ["nfl-team-depth", "snap-v1"],
     enabled: Boolean(playerTeam) && playerTeam !== "FA",
@@ -290,14 +297,17 @@ function PlayerHubPage() {
         seen.add(entry.id);
         const hit = projById.get(entry.id);
         ordered.push(
-          hit ?? {
-            id: entry.id,
-            name: entry.name,
-            pos: player.pos,
-            proj: 0,
-            adp: 999,
-            injury: entry.injury,
-          },
+          hit
+            ? { ...hit, age: entry.age ?? ageById.get(entry.id) ?? hit.age ?? null }
+            : {
+                id: entry.id,
+                name: entry.name,
+                pos: player.pos,
+                proj: 0,
+                adp: 999,
+                age: entry.age ?? ageById.get(entry.id) ?? null,
+                injury: entry.injury,
+              },
         );
       }
     }
@@ -570,6 +580,7 @@ function PlayerHubPage() {
                       const fallbackLogo =
                         teamLogo(player.team) ??
                         `https://sleepercdn.com/images/team_logos/nfl/${player.team.toLowerCase()}.png`;
+                      const age = ageById.get(d.id);
                       return (
                         <Link
                           key={d.id}
@@ -645,11 +656,9 @@ function PlayerHubPage() {
                             </div>
                           </div>
                           <div className="flex flex-row items-baseline space-x-0.5 pr-1 text-right text-xs font-black tracking-wide text-slate-900">
-                            <span>
-                              {Number.isFinite(d.proj) && d.proj > 0 ? d.proj.toFixed(2) : "—"}
-                            </span>
+                            <span>{age != null && Number.isFinite(age) ? age : "—"}</span>
                             <span className="select-none text-[9px] font-bold lowercase text-slate-400">
-                              proj
+                              age
                             </span>
                           </div>
                         </Link>

@@ -30,12 +30,11 @@ import { useNflGameProgress } from "@/hooks/useNflGameProgress";
 import { sosHasUsableRanks, usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
-import type { Scoring } from "@/lib/draft";
+import type { Pos, Scoring } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
 import {
   fetchNflTeamDepth,
   teamDepthFor,
-  type TeamDepthEntry,
   type TeamDepthSlot,
 } from "@/lib/nfl-team-depth";
 import { getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
@@ -2227,41 +2226,58 @@ function OutlookPanel({
   );
 }
 
-const DEPTH_POS_LABEL_CLASS: Record<string, string> = {
-  QB: "text-qb",
-  RB: "text-rb",
-  WR1: "text-wr",
-  WR2: "text-wr",
-  WR3: "text-wr",
-  TE: "text-te",
-  K: "text-k",
-};
-
-const DEPTH_STATUS_LEGEND: { status: string; label: string }[] = [
-  { status: "IR", label: "Injured Reserve" },
-  { status: "O", label: "Out" },
-  { status: "D", label: "Doubtful" },
-  { status: "Q", label: "Questionable" },
-];
-
-function splitDepthPlayerName(name: string): { first: string; last: string } {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return { first: "", last: parts[0] ?? name };
-  return { first: parts[0]!, last: parts.slice(1).join(" ") };
-}
-
 type DepthPanelEntry = {
   id: string;
   name: string;
   pos: string;
   injury: string | null;
-  proj: number;
+  age: number | null;
 };
 
+function DepthChartAvatar({
+  id,
+  pos,
+  team,
+  name,
+}: {
+  id: string;
+  pos: string;
+  team: string;
+  name: string;
+}) {
+  const logo = teamLogo(team);
+  const isDefense = pos.toUpperCase() === "DEF";
+  const [useLogo, setUseLogo] = useState(isDefense || !id);
+
+  if (useLogo || !id) {
+    return (
+      <img
+        src={logo ?? ""}
+        alt=""
+        aria-hidden
+        className="relative z-20 h-8 w-8 flex-shrink-0 rounded-full border border-slate-100 bg-slate-50 object-contain shadow-sm"
+        onError={(e) => {
+          e.currentTarget.style.visibility = "hidden";
+        }}
+      />
+    );
+  }
+
+  return (
+    <img
+      src={playerImage(id, pos as Pos, team)}
+      alt={name}
+      loading="lazy"
+      className="relative z-20 h-8 w-8 flex-shrink-0 rounded-full border border-slate-100 bg-white object-cover shadow-sm"
+      onError={() => setUseLogo(true)}
+    />
+  );
+}
+
 /**
- * Desktop depth chart — same Sleeper depth_chart_order / WR1–WR3 snap as mobile.
- * Starters come from official chart order (not ROS proj), so practice-squad /
- * unlisted players never appear.
+ * Desktop depth chart — original two-column card layout, ordered by Sleeper
+ * depth_chart_order (practice-squad / unlisted players omitted). Shows age
+ * instead of projections.
  */
 function DepthChartPanel({
   playerId,
@@ -2271,11 +2287,17 @@ function DepthChartPanel({
 }: {
   playerId: string;
   team: string;
-  depthChart: DepthPanelEntry[];
+  depthChart: {
+    id: string;
+    name: string;
+    pos: string;
+    injury: string | null;
+    proj: number;
+    age?: number | null;
+  }[];
   onSelectPlayer?: (id: string) => void;
 }) {
   const liveInjuries = useLiveInjuryStatuses();
-  const { projectFor } = useLeagueProjections();
   const { data: catalog } = useSleeperPlayers();
   const playersById = useMemo(() => {
     const map = new Map<string, CatalogPlayer>();
@@ -2293,48 +2315,142 @@ function DepthChartPanel({
   });
 
   const injuryStatusFor = useCallback(
-    (id: string): string | null => {
+    (id: string, fallback: string | null = null): string | null => {
       const live = liveInjuries.data?.[id];
       const meta = playersById.get(id);
       const carrier =
         live !== undefined
           ? {
+              id,
               injury_status: live.status?.trim() || null,
               injury: live.status?.trim() || null,
             }
           : meta
             ? meta
-            : null;
+            : fallback
+              ? { id, injury_status: fallback, injury: fallback }
+              : null;
       if (!carrier) return null;
       return resolveInjuryStatus(carrier) ?? carrier.injury_status ?? null;
     },
     [liveInjuries.data, playersById],
   );
 
-  const depthRows = useMemo(() => {
-    const chart = teamDepthFor(depthBoard, team);
-    const projById = new Map(depthChart.map((d) => [d.id, d]));
+  const ageFor = useCallback(
+    (id: string, fallback: number | null | undefined = null): number | null => {
+      const fromCatalog = playersById.get(id)?.age;
+      if (fromCatalog != null && Number.isFinite(fromCatalog)) return fromCatalog;
+      if (fallback != null && Number.isFinite(fallback)) return fallback;
+      return null;
+    },
+    [playersById],
+  );
 
-    const toCells = (slot: TeamDepthSlot, entries: TeamDepthEntry[] | undefined) => {
-      const top = (entries ?? []).slice(0, 3);
-      return [0, 1, 2].map((i) => {
-        const entry = top[i];
-        if (!entry) return null;
-        const hit = projById.get(entry.id);
+  const activeName = depthChart.find((d) => d.id === playerId)?.name ?? null;
+
+  const byPos = useMemo(() => {
+    const chart = teamDepthFor(depthBoard, team);
+    const nameById = new Map(depthChart.map((d) => [d.id, d]));
+
+    const fromSlot = (slot: TeamDepthSlot, pos: string): DepthPanelEntry[] =>
+      (chart?.[slot] ?? []).map((entry) => {
+        const hit = nameById.get(entry.id);
         const meta = playersById.get(entry.id);
         return {
           id: entry.id,
           name: entry.name || hit?.name || meta?.name || entry.id,
-          pos: slot.startsWith("WR") ? "WR" : slot,
-          proj: hit?.proj ?? 0,
-          injury: injuryStatusFor(entry.id),
-        } satisfies DepthPanelEntry;
-      }) as [DepthPanelEntry | null, DepthPanelEntry | null, DepthPanelEntry | null];
-    };
+          pos,
+          injury: injuryStatusFor(entry.id, hit?.injury ?? entry.injury),
+          age: ageFor(entry.id, entry.age ?? hit?.age),
+        };
+      });
 
-    const slots: TeamDepthSlot[] = ["QB", "RB", "WR1", "WR2", "WR3", "TE", "K"];
-    return slots.map((label) => ({ label, cells: toCells(label, chart?.[label]) }));
-  }, [depthBoard, depthChart, injuryStatusFor, playersById, team]);
+    // Flat WR list: Sleeper WR1/WR2/WR3 starters, then 2nds, then 3rds.
+    const wrColumns = [fromSlot("WR1", "WR"), fromSlot("WR2", "WR"), fromSlot("WR3", "WR")];
+    const wrMax = Math.max(0, ...wrColumns.map((col) => col.length));
+    const wrRows: DepthPanelEntry[] = [];
+    const wrSeen = new Set<string>();
+    for (let i = 0; i < wrMax; i += 1) {
+      for (const col of wrColumns) {
+        const entry = col[i];
+        if (!entry || wrSeen.has(entry.id)) continue;
+        wrSeen.add(entry.id);
+        wrRows.push(entry);
+      }
+    }
+
+    // DEF is not in the Sleeper offense snap — keep prior teammate list order.
+    const defRows: DepthPanelEntry[] = depthChart
+      .filter((d) => d.pos === "DEF")
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        pos: d.pos,
+        injury: injuryStatusFor(d.id, d.injury),
+        age: ageFor(d.id, d.age),
+      }));
+
+    return {
+      QB: fromSlot("QB", "QB"),
+      RB: fromSlot("RB", "RB"),
+      K: fromSlot("K", "K"),
+      WR: wrRows,
+      TE: fromSlot("TE", "TE"),
+      DEF: defRows,
+    };
+  }, [ageFor, depthBoard, depthChart, injuryStatusFor, playersById, team]);
+
+  const missingAgeIds = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const rows of Object.values(byPos)) {
+      for (const row of rows) {
+        if (row.age != null || seen.has(row.id)) continue;
+        seen.add(row.id);
+        ids.push(row.id);
+      }
+    }
+    return ids;
+  }, [byPos]);
+
+  // Catalog ages are often null (projection rows omit them). Prefer snap ages;
+  // fill gaps from cached Sleeper bios until the depth snap includes age.
+  const { data: bioAges } = useQuery({
+    queryKey: ["depth-chart-bio-ages", team, missingAgeIds.join("|")],
+    enabled: Boolean(team) && team !== "FA" && missingAgeIds.length > 0,
+    staleTime: 24 * 60 * 60 * 1000,
+    queryFn: async () => {
+      const out: Record<string, number> = {};
+      await Promise.all(
+        missingAgeIds.map(async (pid) => {
+          const bio = await fetchPlayerBioClient(pid);
+          const birth = bio?.birthDate;
+          if (!birth) return;
+          const t = new Date(birth).getTime();
+          if (!Number.isFinite(t)) return;
+          out[pid] = Math.floor((Date.now() - t) / 31557600000);
+        }),
+      );
+      return out;
+    },
+  });
+
+  const resolveAge = (d: DepthPanelEntry): number | null => {
+    if (d.age != null && Number.isFinite(d.age)) return d.age;
+    const fromBio = bioAges?.[d.id];
+    return fromBio != null && Number.isFinite(fromBio) ? fromBio : null;
+  };
+
+  const leftBlocks: { title: string; rows: DepthPanelEntry[] }[] = [
+    { title: "QUARTERBACKS", rows: byPos.QB },
+    { title: "RUNNING BACKS", rows: byPos.RB },
+    { title: "KICKERS", rows: byPos.K },
+  ];
+  const rightBlocks: { title: string; rows: DepthPanelEntry[] }[] = [
+    { title: "WIDE RECEIVERS", rows: byPos.WR },
+    { title: "TIGHT ENDS", rows: byPos.TE },
+    { title: "TEAM DEFENSES", rows: byPos.DEF },
+  ];
 
   if (!team || team === "FA") {
     return (
@@ -2344,135 +2460,99 @@ function DepthChartPanel({
     );
   }
 
-  const empty = depthRows.every((r) => r.cells.every((c) => c == null));
+  const empty = leftBlocks.every((b) => b.rows.length === 0) && rightBlocks.every((b) => b.rows.length === 0);
+  if (empty) {
+    return (
+      <p className="py-8 text-center text-sm text-slate-400">
+        {depthLoading ? "Loading depth chart…" : `No ${team} depth chart available.`}
+      </p>
+    );
+  }
 
-  return (
-    <div className="w-full bg-white px-6 py-4">
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[3rem_1fr_1fr_1fr] border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-400">
-          <span>Pos</span>
-          <span>Starter</span>
-          <span>2nd</span>
-          <span>3rd</span>
-        </div>
-        {empty ? (
-          <p className="px-4 py-8 text-center text-sm text-slate-400">
-            {depthLoading ? "Loading depth chart…" : `No ${team} depth chart available.`}
-          </p>
-        ) : (
-          depthRows.map((row, idx) => (
-            <div
-              key={row.label}
+  const renderCard = (d: DepthPanelEntry, index: number) => {
+    const badge = injuryBadgeInfo(injuryStatusFor(d.id, d.injury));
+    const isActive =
+      d.id === playerId ||
+      (activeName != null && d.name.trim().toLowerCase() === activeName.trim().toLowerCase());
+    const age = resolveAge(d);
+
+    const inner = (
+      <>
+        <div
+          className="absolute top-0 bottom-0 left-0 w-1 rounded-l-xl"
+          style={{ backgroundColor: getTeamPrimaryColor(team) }}
+          aria-hidden
+        />
+        <div className="flex min-w-0 items-center space-x-2.5">
+          <span className="flex h-[18px] w-[18px] flex-shrink-0 select-none items-center justify-center rounded-full bg-slate-100 text-[10px] font-black text-slate-500">
+            {index + 1}
+          </span>
+          <DepthChartAvatar id={d.id} pos={d.pos} team={team} name={d.name} />
+          <span
+            className={cn(
+              "max-w-[120px] truncate text-xs font-black",
+              isActive ? "text-blue-600" : "text-slate-900",
+            )}
+          >
+            {d.name}
+          </span>
+          {badge ? (
+            <span
               className={cn(
-                "grid grid-cols-[3rem_1fr_1fr_1fr] border-b border-slate-100 px-3 py-2.5 last:border-0",
-                idx % 2 === 1 && "bg-slate-50/70",
+                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black tracking-wider",
+                badge.className,
               )}
             >
-              <div
-                className={cn(
-                  "pt-0.5 text-xs font-black",
-                  DEPTH_POS_LABEL_CLASS[row.label] ?? "text-slate-400",
-                )}
-              >
-                {row.label}
-              </div>
-              {row.cells.map((cell, col) => {
-                if (!cell) return <div key={`${row.label}-${col}`} />;
-                const meta = playersById.get(cell.id);
-                const age = meta?.age;
-                const badge = injuryBadgeInfo(cell.injury);
-                const { first, last } = splitDepthPlayerName(cell.name);
-                const isActive = cell.id === playerId;
-                const weekProj = projectFor(cell.id);
-                const seasonProj = Number.isFinite(cell.proj) && cell.proj > 0 ? cell.proj : null;
-                const projLabel =
-                  weekProj != null && Number.isFinite(weekProj) && weekProj > 0
-                    ? weekProj.toFixed(1)
-                    : seasonProj != null
-                      ? seasonProj.toFixed(1)
-                      : null;
+              {badge.letter}
+            </span>
+          ) : null}
+        </div>
+        <div className="ml-auto flex flex-shrink-0 items-center">
+          <div className="text-xs font-black tracking-wide text-slate-900 uppercase">
+            {age != null ? age : "—"}
+            <span className="ml-0.5 text-[10px] font-bold normal-case text-slate-400">age</span>
+          </div>
+        </div>
+      </>
+    );
 
-                const body = (
-                  <>
-                    <div className="flex min-w-0 items-center gap-1">
-                      {age != null ? (
-                        <span className="text-[10px] text-slate-400">{age} y/o</span>
-                      ) : null}
-                      {badge ? (
-                        <span
-                          className={cn(
-                            "shrink-0 rounded px-1 text-[9px] font-black",
-                            badge.className,
-                          )}
-                        >
-                          {badge.letter}
-                        </span>
-                      ) : null}
-                    </div>
-                    {first ? (
-                      <p className="truncate text-[10px] leading-tight text-slate-400">{first}</p>
-                    ) : null}
-                    <p
-                      className={cn(
-                        "truncate text-[12px] font-black leading-tight",
-                        isActive ? "text-blue-600" : "text-slate-900",
-                      )}
-                    >
-                      {last}
-                    </p>
-                    {projLabel ? (
-                      <p className="mt-0.5 text-[11px] font-semibold tabular-nums text-slate-400">
-                        {projLabel}
-                      </p>
-                    ) : null}
-                  </>
-                );
+    const klass = cn(
+      "relative mb-2 flex w-full items-center justify-between overflow-hidden rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 pl-5 text-left shadow-sm transition-colors hover:bg-slate-100/60",
+      isActive && "border-blue-100 bg-blue-50/50 hover:bg-blue-50/70",
+    );
 
-                const klass = cn(
-                  "min-w-0 rounded-md px-1.5 py-1 text-left transition-colors",
-                  isActive && "bg-emerald-50 ring-1 ring-emerald-200/80",
-                  onSelectPlayer && "hover:bg-slate-100/80",
-                );
+    return onSelectPlayer ? (
+      <button key={d.id} type="button" className={klass} onClick={() => onSelectPlayer(d.id)}>
+        {inner}
+      </button>
+    ) : (
+      <Link key={d.id} to="/player/$id" params={{ id: d.id }} className={klass}>
+        {inner}
+      </Link>
+    );
+  };
 
-                return onSelectPlayer ? (
-                  <button
-                    key={cell.id}
-                    type="button"
-                    onClick={() => onSelectPlayer(cell.id)}
-                    className={klass}
-                  >
-                    {body}
-                  </button>
-                ) : (
-                  <Link key={cell.id} to="/player/$id" params={{ id: cell.id }} className={klass}>
-                    {body}
-                  </Link>
-                );
-              })}
+  const renderColumn = (blocks: { title: string; rows: DepthPanelEntry[] }[]) => (
+    <div className="flex w-full flex-col gap-5">
+      {blocks.map((block) =>
+        block.rows.length === 0 ? null : (
+          <section key={block.title} className="w-full">
+            <span className="mb-2 block text-left text-[10px] font-black tracking-widest text-slate-400 uppercase">
+              {block.title}
+            </span>
+            <div className="flex flex-col">
+              {block.rows.map((d, index) => renderCard(d, index))}
             </div>
-          ))
-        )}
-      </div>
+          </section>
+        ),
+      )}
+    </div>
+  );
 
-      <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 px-0.5">
-        {DEPTH_STATUS_LEGEND.map((row) => {
-          const badge = injuryBadgeInfo(row.status);
-          if (!badge) return null;
-          return (
-            <li key={row.status} className="flex items-center gap-1.5 text-[11px] text-slate-500">
-              <span
-                className={cn(
-                  "inline-flex min-w-[1.5rem] items-center justify-center rounded px-1 py-0.5 text-[9px] font-black",
-                  badge.className,
-                )}
-              >
-                {badge.letter}
-              </span>
-              <span>{row.label}</span>
-            </li>
-          );
-        })}
-      </ul>
+  return (
+    <div className="grid w-full grid-cols-1 items-start gap-6 overflow-visible bg-white px-6 py-4 md:grid-cols-2">
+      {renderColumn(leftBlocks)}
+      {renderColumn(rightBlocks)}
     </div>
   );
 }
