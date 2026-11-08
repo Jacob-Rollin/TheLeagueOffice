@@ -815,7 +815,7 @@ function StandalonePlayerHeader({
           preserveAspectRatio="none"
         >
           <path
-            d="M0 18 C 45 20, 75 60, 105 64 C 140 68, 185 42, 250 30 L 1000 28 L 1000 88 L 0 88 Z"
+            d="M0 16 C 40 18, 70 68, 100 72 C 130 74, 170 40, 220 18 L 1000 16 L 1000 88 L 0 88 Z"
             fill="rgba(2, 6, 23, 0.94)"
           />
         </svg>
