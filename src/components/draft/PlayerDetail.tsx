@@ -527,7 +527,7 @@ export function PlayerDetail({
             >
               {/* Equal-height shoulders + centered dip under the headshot. */}
               <path
-                d="M0 34 L 72 34 C 92 34, 100 66, 110 68 C 120 70, 140 34, 175 34 L 1000 34 L 1000 88 L 0 88 Z"
+                d="M0 34 L 60 34 C 85 34, 95 68, 110 68 C 125 68, 135 34, 170 34 L 1000 34 L 1000 88 L 0 88 Z"
                 fill="rgba(2, 6, 23, 0.94)"
               />
             </svg>
@@ -557,7 +557,7 @@ export function PlayerDetail({
             <div
               className={cn(
                 // When the scoring menu is open, lift above Game Logs year chips (z-20 trap).
-                "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-3 pb-14 pl-7 pr-12 text-left",
+                "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-3 pb-14 pl-8 pr-12 text-left",
                 isScoringOpen ? "z-40" : "z-10",
               )}
             >
