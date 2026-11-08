@@ -808,21 +808,33 @@ function StandalonePlayerHeader({
         />
       ) : null}
 
+      {/*
+        Pixel-locked dip centered on the headshot so shoulders stay level at any width.
+        Photo ml-[88px] / w-[124] (center 150); dip 46→254 (center 150); shelf y=28.
+      */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[18] h-[88px]" aria-hidden>
+        <div
+          className="absolute bottom-0 left-0 top-[28px] w-[46px]"
+          style={{ backgroundColor: "rgba(2, 6, 23, 0.94)" }}
+        />
         <svg
-          className="absolute inset-0 h-full w-full"
-          viewBox="0 0 1000 88"
+          className="absolute bottom-0 left-[46px] h-[88px] w-[208px]"
+          viewBox="0 0 208 88"
           preserveAspectRatio="none"
         >
           <path
-            d="M0 34 L 60 34 C 85 34, 95 68, 110 68 C 125 68, 135 34, 170 34 L 1000 34 L 1000 88 L 0 88 Z"
+            d="M0 28 C 42 28, 64 66, 104 66 C 144 66, 166 28, 208 28 L 208 88 L 0 88 Z"
             fill="rgba(2, 6, 23, 0.94)"
           />
         </svg>
+        <div
+          className="absolute bottom-0 left-[254px] right-0 top-[28px]"
+          style={{ backgroundColor: "rgba(2, 6, 23, 0.94)" }}
+        />
       </div>
 
       <div className="relative z-10 flex min-h-[160px] w-full items-stretch">
-        <div className="relative ml-12 flex w-[124px] min-h-[160px] shrink-0 select-none self-stretch pt-1">
+        <div className="relative ml-[88px] flex w-[124px] min-h-[160px] shrink-0 select-none self-stretch pt-1">
           <div className="absolute inset-x-0 top-0 bottom-0 overflow-hidden">
             <img
               src={playerImage(player.id, player.pos as Pos, player.team)}
@@ -830,7 +842,7 @@ function StandalonePlayerHeader({
               loading="lazy"
               className={cn(
                 "pointer-events-none h-full w-full select-none",
-                isDefense ? "object-contain px-2 pb-10 pt-2" : "object-cover object-[55%_center]",
+                isDefense ? "object-contain px-2 pb-10 pt-2" : "object-cover object-[46%_center]",
               )}
               onError={(e) => {
                 e.currentTarget.style.visibility = "hidden";
@@ -841,7 +853,7 @@ function StandalonePlayerHeader({
 
         <div
           className={cn(
-            "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-3 pb-14 pl-8 pr-10 text-left",
+            "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-3 pb-14 pl-10 pr-10 text-left",
             isScoringOpen ? "z-40" : "z-10",
           )}
         >
@@ -887,7 +899,7 @@ function StandalonePlayerHeader({
         </div>
       </div>
 
-      <div className="absolute bottom-2.5 left-12 z-30">
+      <div className="absolute bottom-2.5 left-[88px] z-30">
         <span
           className={cn(
             "flex min-w-[2.1rem] items-center justify-center rounded-md px-1.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-white shadow-sm",
@@ -899,7 +911,7 @@ function StandalonePlayerHeader({
       </div>
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 z-30 flex h-[46px] items-end justify-between gap-3 overflow-visible px-6 pb-2.5 pl-[196px]",
+          "absolute inset-x-0 bottom-0 z-30 flex h-[60px] items-center justify-between gap-3 overflow-visible px-6 pt-1.5 pl-[272px] pr-6",
           isScoringOpen && "z-40",
         )}
       >
