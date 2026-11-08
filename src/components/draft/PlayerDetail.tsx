@@ -530,7 +530,7 @@ export function PlayerDetail({
                 headshot, then lift for the rankings shelf on the right.
               */}
               <path
-                d="M0 16 C 40 18, 70 68, 100 72 C 130 74, 170 40, 220 18 L 1000 16 L 1000 88 L 0 88 Z"
+                d="M0 24 C 48 26, 78 64, 108 68 C 140 70, 180 50, 240 42 L 1000 40 L 1000 88 L 0 88 Z"
                 fill="rgba(2, 6, 23, 0.94)"
               />
             </svg>
@@ -560,7 +560,7 @@ export function PlayerDetail({
             <div
               className={cn(
                 // When the scoring menu is open, lift above Game Logs year chips (z-20 trap).
-                "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-4 pb-14 pl-5 pr-12 text-left",
+                "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-3 pb-[3.25rem] pl-5 pr-12 text-left",
                 isScoringOpen ? "z-40" : "z-10",
               )}
             >

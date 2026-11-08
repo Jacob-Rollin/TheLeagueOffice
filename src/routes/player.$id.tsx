@@ -815,7 +815,7 @@ function StandalonePlayerHeader({
           preserveAspectRatio="none"
         >
           <path
-            d="M0 16 C 40 18, 70 68, 100 72 C 130 74, 170 40, 220 18 L 1000 16 L 1000 88 L 0 88 Z"
+            d="M0 24 C 48 26, 78 64, 108 68 C 140 70, 180 50, 240 42 L 1000 40 L 1000 88 L 0 88 Z"
             fill="rgba(2, 6, 23, 0.94)"
           />
         </svg>
@@ -841,7 +841,7 @@ function StandalonePlayerHeader({
 
         <div
           className={cn(
-            "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-4 pb-14 pl-5 pr-10 text-left",
+            "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-3 pb-[3.25rem] pl-5 pr-10 text-left",
             isScoringOpen ? "z-40" : "z-10",
           )}
         >
