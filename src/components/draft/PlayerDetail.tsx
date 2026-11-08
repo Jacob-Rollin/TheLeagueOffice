@@ -512,35 +512,42 @@ export function PlayerDetail({
             />
           ) : null}
 
-          {/* Sleeper-style darker rankings rail — wave rises under the headshot. */}
+          {/*
+            Sleeper curve: dark rail dips under the headshot (photo tucks behind),
+            then lifts for rankings + scoring. SVG sits above the photo in z-order.
+          */}
           <div
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-[12] h-[56px]"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-[18] h-[88px]"
             aria-hidden
           >
             <svg
               className="absolute inset-0 h-full w-full"
-              viewBox="0 0 1000 56"
+              viewBox="0 0 1000 88"
               preserveAspectRatio="none"
             >
+              {/*
+                Red-sketch curve: start mid-jersey on the left, dip under the
+                headshot, then lift for the rankings shelf on the right.
+              */}
               <path
-                d="M0 6 L 150 6 C 190 6, 220 28, 275 34 L 1000 34 L 1000 56 L 0 56 Z"
-                fill="rgba(2, 6, 23, 0.52)"
+                d="M0 20 C 70 22, 110 60, 165 64 C 210 66, 250 40, 300 30 L 1000 28 L 1000 88 L 0 88 Z"
+                fill="rgba(2, 6, 23, 0.94)"
               />
             </svg>
           </div>
 
-          <div className="relative z-20 flex min-h-[160px] w-full items-stretch">
-            {/* Headshot shifts right a touch so the curve cradles it cleanly. */}
+          <div className="relative z-10 flex min-h-[160px] w-full items-stretch">
+            {/* Headshot extends into the rail so the curve can cover its lower edge. */}
             <div className="relative ml-3 flex w-[124px] min-h-[160px] shrink-0 select-none self-stretch pt-1">
-              <div className="absolute inset-x-0 top-0 bottom-7 overflow-hidden">
+              <div className="absolute inset-x-0 top-0 bottom-0 overflow-hidden">
                 <img
                   src={playerImage(player.id, player.pos, player.team)}
                   alt=""
                   loading="lazy"
                   className={cn(
-                    "pointer-events-none relative z-20 h-full w-full select-none transition-all",
+                    "pointer-events-none h-full w-full select-none transition-all",
                     isDefense
-                      ? "object-contain px-2 pb-1 pt-2"
+                      ? "object-contain px-2 pb-10 pt-2"
                       : "object-cover object-[55%_center]",
                   )}
                   onError={(e) => {
@@ -548,21 +555,12 @@ export function PlayerDetail({
                   }}
                 />
               </div>
-              {/* Position badge sits in the dark curve pocket under the photo. */}
-              <span
-                className={cn(
-                  "absolute bottom-2 left-0 z-30 flex min-w-[2.1rem] items-center justify-center rounded-md px-1.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-white shadow-sm",
-                  POS_STRIP_BG[player.pos] ?? "bg-slate-700",
-                )}
-              >
-                {player.pos === "DEF" ? "DST" : player.pos}
-              </span>
             </div>
 
             <div
               className={cn(
                 // When the scoring menu is open, lift above Game Logs year chips (z-20 trap).
-                "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-4 pb-[52px] pl-5 pr-12 text-left",
+                "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-4 pb-14 pl-5 pr-12 text-left",
                 isScoringOpen ? "z-40" : "z-10",
               )}
             >
@@ -663,10 +661,20 @@ export function PlayerDetail({
             </div>
           </div>
 
-          {/* Rankings + scoring live on the darker curved rail (not the teal body). */}
+          {/* Position badge + rankings + scoring sit on the lifted dark rail. */}
+          <div className="absolute bottom-2 left-3 z-30">
+            <span
+              className={cn(
+                "flex min-w-[2.1rem] items-center justify-center rounded-md px-1.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-white shadow-sm",
+                POS_STRIP_BG[player.pos] ?? "bg-slate-700",
+              )}
+            >
+              {player.pos === "DEF" ? "DST" : player.pos}
+            </span>
+          </div>
           <div
             className={cn(
-              "absolute inset-x-0 bottom-0 z-30 flex h-10 items-center justify-between gap-3 overflow-visible pl-[148px] pr-6",
+              "absolute inset-x-0 bottom-0 z-30 flex h-12 items-center justify-between gap-3 overflow-visible pl-[148px] pr-6",
               isScoringOpen && "z-40",
             )}
           >
