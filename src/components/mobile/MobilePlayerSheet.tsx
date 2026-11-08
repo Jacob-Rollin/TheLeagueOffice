@@ -2063,7 +2063,7 @@ function TeamTab({
 
   // Sleeper depth_chart_position + order via dedicated snap (not SOS / not proj-sorted).
   const { data: depthBoard, isLoading: depthLoading } = useQuery({
-    queryKey: ["nfl-team-depth", "snap-v1"],
+    queryKey: ["nfl-team-depth", "snap-v2c"],
     enabled: Boolean(team),
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -2107,8 +2107,34 @@ function TeamTab({
     const chart = teamDepthFor(depthBoard, team);
     const projById = new Map(depthChart.map((d) => [d.id, d]));
 
+    const isIrStatus = (status: string | null | undefined) => {
+      const s = (status ?? "").toUpperCase().trim();
+      return s === "IR" || s === "INJURED RESERVE" || s === "INJURED_RESERVE";
+    };
+
     const toCells = (slot: TeamDepthSlot, entries: TeamDepthEntry[] | undefined) => {
-      const top = (entries ?? []).slice(0, 3);
+      const pos = slot.startsWith("WR") ? "WR" : slot;
+      const merged = [...(entries ?? [])];
+      const seen = new Set(merged.map((e) => e.id));
+      // Fill open Starter/2nd/3rd cells with IR teammates omitted by older Active-only snaps.
+      // Skip WR1/2/3 — those columns share one WR pool and would duplicate extras.
+      if (merged.length < 3 && !slot.startsWith("WR")) {
+        for (const d of depthChart) {
+          if (merged.length >= 3) break;
+          if (d.pos !== pos || seen.has(d.id)) continue;
+          const injury = injuryStatusFor(d.id) ?? d.injury;
+          if (!isIrStatus(injury)) continue;
+          seen.add(d.id);
+          merged.push({
+            id: d.id,
+            name: d.name,
+            order: 99,
+            injury,
+            age: d.age ?? null,
+          });
+        }
+      }
+      const top = merged.slice(0, 3);
       const cells = [0, 1, 2].map((i) => {
         const entry = top[i];
         if (!entry) return null;
@@ -2118,7 +2144,7 @@ function TeamTab({
         return {
           id: entry.id,
           name: entry.name || hit?.name || meta?.name || entry.id,
-          pos: slot.startsWith("WR") ? "WR" : slot,
+          pos,
           proj: hit?.proj ?? 0,
           age: entry.age ?? meta?.age ?? hit?.age ?? null,
           injury: injuryStatusFor(entry.id),

@@ -336,7 +336,6 @@ export function PlayerDetail({
   const watermarkLogo = getWatermarkLogoUrl(player.team);
   const raidersWatermark = isRaidersTeam(player.team);
   const teamMeta = teamById(player.team);
-  const teamNickname = (teamMeta?.name ?? player.team ?? "FA").toUpperCase();
   const jerseyNumber = bio?.number != null ? String(bio.number) : null;
   const isDefense = player.pos === "DEF";
   const conference =
@@ -480,7 +479,7 @@ export function PlayerDetail({
         </div>
       ) : null}
 
-      <header className="overflow-visible">
+      <header className={cn("relative overflow-visible", isScoringOpen && "z-[80]")}>
         <div
           className={cn(
             "relative flex min-h-[160px] w-full items-stretch overflow-visible text-white shadow-sm",
@@ -520,12 +519,22 @@ export function PlayerDetail({
                       ? "object-contain px-3 pb-9 pt-3"
                       : "object-cover object-[55%_center]",
                   )}
+                  style={
+                    isDefense
+                      ? undefined
+                      : {
+                          WebkitMaskImage:
+                            "linear-gradient(to right, #000 0%, #000 62%, transparent 100%)",
+                          maskImage:
+                            "linear-gradient(to right, #000 0%, #000 62%, transparent 100%)",
+                        }
+                  }
                   onError={(e) => {
                     e.currentTarget.style.visibility = "hidden";
                   }}
                 />
               </div>
-              <div className="absolute bottom-0 left-0 z-30 flex min-w-full w-max max-w-[200px] flex-row items-center whitespace-nowrap rounded-tr-md rounded-br-none bg-transparent pl-0">
+              <div className="absolute bottom-0 left-0 z-40 flex w-max max-w-full flex-row items-stretch overflow-visible rounded-tr-md rounded-br-none bg-transparent pl-0">
                 <span
                   className={cn(
                     "flex shrink-0 items-center justify-center rounded-none px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
@@ -534,8 +543,15 @@ export function PlayerDetail({
                 >
                   {player.pos === "DEF" ? "DST" : player.pos}
                 </span>
-                <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
-                  <span>{teamNickname}</span>
+                <span className="flex shrink-0 flex-row items-center gap-1.5 rounded-tr-md rounded-br-none bg-slate-950/90 px-2.5 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
+                  {compactLogo ? (
+                    <img
+                      src={compactLogo}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-3.5 w-3.5 shrink-0 object-contain"
+                    />
+                  ) : null}
                   {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
                 </span>
               </div>
@@ -636,18 +652,18 @@ export function PlayerDetail({
             </div>
           </div>
 
-          {/* Rankings stay near the bottom of the hero; team/number badge stays on the photo. */}
+          {/* Rankings stay near the bottom of the hero; scoring sits beside STARTED and opens down over tabs. */}
           <div
             className={cn(
-              "absolute inset-x-0 bottom-0 z-30 flex items-end justify-between gap-3 overflow-visible pb-2.5 pl-[164px] pr-5",
-              isScoringOpen && "z-40",
+              "absolute inset-x-0 bottom-0 z-30 flex items-end overflow-visible pb-2.5 pl-[164px] pr-5",
+              isScoringOpen && "z-[80]",
             )}
           >
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 overflow-visible">
               <p className="mb-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-white/50">
                 Player Rankings
               </p>
-              <div className="flex min-w-0 flex-wrap items-center gap-x-3 text-xs font-black uppercase tracking-wide text-white">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 overflow-visible text-xs font-black uppercase tracking-wide text-white">
                 <span>
                   #{posRankLabel} {player.pos}
                 </span>
@@ -657,57 +673,57 @@ export function PlayerDetail({
                 <span>{`${Math.round(Number(rosteredPct ?? 0))}%`} ROSTERED</span>
                 <span className="text-white/20">|</span>
                 <span>{`${Math.round(Number(startedPct ?? 0))}%`} STARTED</span>
-              </div>
-            </div>
-            <div ref={scoringMenuRef} className="relative z-[60] mb-0.5 shrink-0 text-left">
-              <button
-                type="button"
-                aria-label="Scoring format"
-                aria-expanded={isScoringOpen}
-                aria-haspopup="listbox"
-                onClick={() => setIsScoringOpen(!isScoringOpen)}
-                className="relative flex min-w-[64px] cursor-pointer items-center justify-between rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-white transition-all select-none hover:bg-white/15"
-              >
-                <span>
-                  {SCORING_OPTIONS.find((o) => o.value === scoringFormat)?.label ?? "HALF"}
-                </span>
-                {isScoringOpen ? (
-                  <ChevronUp className="ml-1.5 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
-                ) : (
-                  <ChevronDown className="ml-1.5 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
-                )}
-              </button>
-              {isScoringOpen ? (
-                <div
-                  role="listbox"
-                  aria-label="Scoring formats"
-                  className="absolute bottom-full right-0 z-[60] mb-1.5 flex w-20 origin-bottom-right flex-col overflow-visible rounded-lg border border-slate-200/80 bg-white py-0.5 text-left shadow-xl"
-                >
-                  {SCORING_OPTIONS.map((option) => {
-                    const active = scoringFormat === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="option"
-                        aria-selected={active}
-                        onClick={() => {
-                          setScoringFormat(option.value);
-                          setIsScoringOpen(false);
-                        }}
-                        className={cn(
-                          "w-full cursor-pointer select-none px-3 py-1.5 text-left text-[11px] transition-colors",
-                          active
-                            ? "bg-slate-100 font-black text-slate-900"
-                            : "font-bold text-slate-600 hover:bg-slate-50/80 hover:text-slate-900",
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
+                <div ref={scoringMenuRef} className="relative z-[90] shrink-0 overflow-visible text-left">
+                  <button
+                    type="button"
+                    aria-label="Scoring format"
+                    aria-expanded={isScoringOpen}
+                    aria-haspopup="listbox"
+                    onClick={() => setIsScoringOpen(!isScoringOpen)}
+                    className="relative flex min-w-[64px] cursor-pointer items-center justify-between rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-white transition-all select-none hover:bg-white/15"
+                  >
+                    <span>
+                      {SCORING_OPTIONS.find((o) => o.value === scoringFormat)?.label ?? "HALF"}
+                    </span>
+                    {isScoringOpen ? (
+                      <ChevronUp className="ml-1.5 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
+                    ) : (
+                      <ChevronDown className="ml-1.5 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
+                    )}
+                  </button>
+                  {isScoringOpen ? (
+                    <div
+                      role="listbox"
+                      aria-label="Scoring formats"
+                      className="absolute left-0 top-full z-[90] mt-1.5 flex w-20 origin-top-left flex-col overflow-visible rounded-lg border border-slate-200/80 bg-white py-0.5 text-left shadow-xl"
+                    >
+                      {SCORING_OPTIONS.map((option) => {
+                        const active = scoringFormat === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            onClick={() => {
+                              setScoringFormat(option.value);
+                              setIsScoringOpen(false);
+                            }}
+                            className={cn(
+                              "w-full cursor-pointer select-none px-3 py-1.5 text-left text-[11px] transition-colors",
+                              active
+                                ? "bg-slate-100 font-black text-slate-900"
+                                : "font-bold text-slate-600 hover:bg-slate-50/80 hover:text-slate-900",
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
+              </div>
             </div>
           </div>
 
@@ -2314,7 +2330,7 @@ function DepthChartPanel({
   }, [catalog]);
 
   const { data: depthBoard, isLoading: depthLoading } = useQuery({
-    queryKey: ["nfl-team-depth", "snap-v1"],
+    queryKey: ["nfl-team-depth", "snap-v2c"],
     enabled: Boolean(team) && team !== "FA",
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -2360,21 +2376,53 @@ function DepthChartPanel({
     const chart = teamDepthFor(depthBoard, team);
     const nameById = new Map(depthChart.map((d) => [d.id, d]));
 
-    const fromSlot = (slot: TeamDepthSlot, pos: string): DepthPanelEntry[] =>
-      (chart?.[slot] ?? []).map((entry) => {
-        const hit = nameById.get(entry.id);
-        const meta = playersById.get(entry.id);
-        return {
-          id: entry.id,
-          name: entry.name || hit?.name || meta?.name || entry.id,
+    const isIrStatus = (status: string | null | undefined) => {
+      const s = (status ?? "").toUpperCase().trim();
+      return s === "IR" || s === "INJURED RESERVE" || s === "INJURED_RESERVE";
+    };
+
+    // Until snap-cdn republishes Inactive/IR rows, fold IR teammates from the
+    // detail depth list onto the Sleeper-ordered chart so they still appear.
+    const appendMissingIr = (pos: string, rows: DepthPanelEntry[]): DepthPanelEntry[] => {
+      const seen = new Set(rows.map((r) => r.id));
+      const extras: DepthPanelEntry[] = [];
+      for (const d of depthChart) {
+        if (d.pos !== pos || seen.has(d.id)) continue;
+        const injury = injuryStatusFor(d.id, d.injury);
+        if (!isIrStatus(injury)) continue;
+        seen.add(d.id);
+        extras.push({
+          id: d.id,
+          name: d.name,
           pos,
-          injury: injuryStatusFor(entry.id, hit?.injury ?? entry.injury),
-          age: ageFor(entry.id, entry.age ?? hit?.age),
-        };
-      });
+          injury,
+          age: ageFor(d.id, d.age),
+        });
+      }
+      return extras.length ? [...rows, ...extras] : rows;
+    };
+
+    const entryFromSnap = (entry: { id: string; name: string; injury: string | null; age?: number | null }, pos: string): DepthPanelEntry => {
+      const hit = nameById.get(entry.id);
+      const meta = playersById.get(entry.id);
+      return {
+        id: entry.id,
+        name: entry.name || hit?.name || meta?.name || entry.id,
+        pos,
+        injury: injuryStatusFor(entry.id, hit?.injury ?? entry.injury),
+        age: ageFor(entry.id, entry.age ?? hit?.age),
+      };
+    };
+
+    const fromSlot = (slot: TeamDepthSlot, pos: string): DepthPanelEntry[] =>
+      appendMissingIr(pos, (chart?.[slot] ?? []).map((entry) => entryFromSnap(entry, pos)));
 
     // Flat WR list: Sleeper WR1/WR2/WR3 starters, then 2nds, then 3rds.
-    const wrColumns = [fromSlot("WR1", "WR"), fromSlot("WR2", "WR"), fromSlot("WR3", "WR")];
+    const wrColumns = [
+      (chart?.WR1 ?? []).map((e) => entryFromSnap(e, "WR")),
+      (chart?.WR2 ?? []).map((e) => entryFromSnap(e, "WR")),
+      (chart?.WR3 ?? []).map((e) => entryFromSnap(e, "WR")),
+    ];
     const wrMax = Math.max(0, ...wrColumns.map((col) => col.length));
     const wrRows: DepthPanelEntry[] = [];
     const wrSeen = new Set<string>();
@@ -2402,7 +2450,7 @@ function DepthChartPanel({
       QB: fromSlot("QB", "QB"),
       RB: fromSlot("RB", "RB"),
       K: fromSlot("K", "K"),
-      WR: wrRows,
+      WR: appendMissingIr("WR", wrRows),
       TE: fromSlot("TE", "TE"),
       DEF: defRows,
     };

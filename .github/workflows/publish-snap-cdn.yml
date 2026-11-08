@@ -277,8 +277,11 @@ jobs:
               depth_pos = str(p.get("depth_chart_position") or "").strip().upper() or None
               if not team or team == "FA":
                   continue
-              # Match Sleeper app offense depth: Active + numeric depth_chart_order.
-              if status != "Active" or not isinstance(order, (int, float)):
+              # Match Sleeper offense depth: Active + Inactive (IR/PUP stay on chart)
+              # with numeric depth_chart_order. Skip Practice Squad noise.
+              if not isinstance(order, (int, float)):
+                  continue
+              if status not in ("Active", "Inactive"):
                   continue
               # Fantasy offense slots only (Sleeper also shows DEF — we skip that).
               # FB on the RB chart (e.g. Hunter Luepke) must map to RB — not drop.
