@@ -530,7 +530,7 @@ export function PlayerDetail({
                 headshot, then lift for the rankings shelf on the right.
               */}
               <path
-                d="M0 20 C 70 22, 110 60, 165 64 C 210 66, 250 40, 300 30 L 1000 28 L 1000 88 L 0 88 Z"
+                d="M0 18 C 45 20, 75 60, 105 64 C 140 68, 185 42, 250 30 L 1000 28 L 1000 88 L 0 88 Z"
                 fill="rgba(2, 6, 23, 0.94)"
               />
             </svg>
