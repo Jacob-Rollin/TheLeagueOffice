@@ -1099,7 +1099,9 @@ const depthCharts = memo<Map<string, Map<Pos, DepthChartEntry[]>>>(6 * HOUR, asy
     const team = (p?.team ?? "").trim().toUpperCase();
     const order = p?.depth_chart_order;
     if (!team || pos === "DEF" || !POSITIONS.includes(pos)) continue;
-    if (typeof order !== "number" || p?.status !== "Active") continue;
+    // Sleeper keeps IR (status Inactive + injury IR) on the depth chart.
+    if (typeof order !== "number") continue;
+    if (p?.status !== "Active" && p?.status !== "Inactive") continue;
     // WRs need a chart slot (LWR/RWR/SWR); bare WR with no position is practice-squad noise.
     const depthPos = (p.depth_chart_position ?? "").trim().toUpperCase() || null;
     if (pos === "WR" && !depthPos) continue;

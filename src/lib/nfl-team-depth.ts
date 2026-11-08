@@ -71,7 +71,8 @@ async function fetchSnap(): Promise<NflTeamDepthSnap | null> {
 /** Resolve shared depth board (IndexedDB + snap-cdn). */
 export async function fetchNflTeamDepth(): Promise<NflTeamDepthSnap> {
   // Cache key aligns with snap object key (path bump for raw CDN).
-  return getCached("nfl-team-depth-snap-v2b", CLIENT_TTL_MS, async () => {
+  // Cache key bump when snap inclusion rules change (e.g. Inactive/IR on chart).
+  return getCached("nfl-team-depth-snap-v2c", CLIENT_TTL_MS, async () => {
     if (!snapCdnPublicBase()) return EMPTY;
     const snap = await fetchSnap();
     if (!snap || Object.keys(snap.teams).length === 0) return EMPTY;
