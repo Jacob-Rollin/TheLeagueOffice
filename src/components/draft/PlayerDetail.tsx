@@ -115,8 +115,14 @@ const POS_STRIP_BG: Record<string, string> = {
   DEF: "bg-def",
 };
 
-function VitalsDivider() {
-  return <span className="mx-3 text-white/20">|</span>;
+/** Sleeper-style stacked vital — keeps value at text-sm so the hero height stays put. */
+function HeaderVitalStack({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0 text-left">
+      <p className="text-[10px] font-black uppercase tracking-widest text-white/50">{label}</p>
+      <p className="text-sm font-black uppercase leading-tight tracking-wider text-white">{value}</p>
+    </div>
+  );
 }
 
 type DetailTab = "logs" | "projections" | "sos" | "outlook" | "depth" | "news";
@@ -495,214 +501,237 @@ export function PlayerDetail({
             />
           ) : null}
 
+          {/*
+            Extended team/number badge → full-width curved rail.
+            Top edge rises under the headshot, settles for rankings on the right.
+          */}
           <div
-            className="relative z-20 mb-0 ml-0 mt-0 flex w-[140px] min-h-[160px] flex-shrink-0 items-end self-stretch overflow-visible rounded-bl-none bg-transparent pl-0 select-none"
-            style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-[18] h-[60px]"
+            aria-hidden
           >
+            <svg
+              className="absolute inset-0 h-full w-full"
+              viewBox="0 0 1000 60"
+              preserveAspectRatio="none"
+            >
+              {/* Rise under headshot, then a taller flat shelf for rankings. */}
+              <path
+                d="M0 34 C 70 34, 95 12, 145 12 C 195 12, 235 20, 300 20 L 1000 20 L 1000 60 L 0 60 Z"
+                fill="rgba(2, 6, 23, 0.92)"
+              />
+            </svg>
+          </div>
+
+          <div className="relative z-10 flex min-h-[160px] w-full items-stretch">
             <div
-              className="absolute inset-0 overflow-hidden rounded-bl-none bg-transparent"
+              className="relative z-20 mb-0 ml-0 mt-0 flex w-[140px] min-h-[160px] flex-shrink-0 items-end self-stretch overflow-hidden rounded-bl-none bg-transparent pl-0 select-none"
               style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
             >
-              <img
-                src={playerImage(player.id, player.pos, player.team)}
-                alt=""
-                loading="lazy"
-                className={cn(
-                  "pointer-events-none relative z-20 h-full w-full select-none transition-all",
-                  isDefense ? "object-contain px-3 pb-9 pt-3" : "object-cover object-[55%_center]",
-                )}
-                onError={(e) => {
-                  e.currentTarget.style.visibility = "hidden";
-                }}
-              />
+              <div
+                className="absolute inset-0 overflow-hidden rounded-bl-none bg-transparent"
+                style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
+              >
+                <img
+                  src={playerImage(player.id, player.pos, player.team)}
+                  alt=""
+                  loading="lazy"
+                  className={cn(
+                    "pointer-events-none relative z-20 h-full w-full select-none transition-all",
+                    isDefense
+                      ? "object-contain px-3 pb-12 pt-3"
+                      : "object-cover object-[55%_center]",
+                  )}
+                  onError={(e) => {
+                    e.currentTarget.style.visibility = "hidden";
+                  }}
+                />
+              </div>
             </div>
-            <div className="absolute bottom-0 left-0 z-30 flex min-w-full w-max max-w-[200px] flex-row items-center whitespace-nowrap rounded-tr-md rounded-br-none bg-transparent pl-0">
+
+            <div
+              className={cn(
+                // When the scoring menu is open, lift above Game Logs year chips (z-20 trap).
+                "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-4 pb-16 pl-6 pr-12 text-left",
+                isScoringOpen ? "z-40" : "z-10",
+              )}
+            >
+              {showDraftActions ? (
+                draftRosterLabel ? (
+                  <div className="mb-0.5 flex min-w-0 max-w-full items-center gap-1 text-[11px] font-semibold leading-snug text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.55)]">
+                    <ArrowRight
+                      className="size-3 shrink-0 drop-shadow-sm"
+                      strokeWidth={2.5}
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{draftRosterLabel}</span>
+                  </div>
+                ) : null
+              ) : (
+                <RosteredOnLabel playerId={player.id} playerName={player.name} />
+              )}
+              <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-visible">
+                <h1 className="truncate text-3xl font-black leading-tight tracking-tight text-white">
+                  {player.name}
+                </h1>
+                {injuryDetails ? (
+                  <span
+                    className={cn(
+                      "ml-2 inline-flex select-none items-center justify-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest shadow-sm",
+                      injuryDetails.classes,
+                    )}
+                  >
+                    {injuryDetails.text}
+                  </span>
+                ) : null}
+                <div className="relative z-30 ml-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label={watched ? "Unwatch" : "Watch"}
+                    aria-pressed={watched}
+                    onClick={toggleWatch}
+                    className="group inline-flex max-w-[38px] cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-2.5 py-1.5 transition-all duration-300 hover:max-w-[130px] hover:border-white/40 hover:bg-white/10"
+                  >
+                    <Star
+                      className={cn(
+                        "size-3.5 shrink-0",
+                        watched ? "fill-amber-400 text-amber-400" : "text-white/90",
+                      )}
+                      strokeWidth={watched ? 0 : 2}
+                    />
+                    <span className="ml-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                      {watched ? "Unwatch" : "Watch"}
+                    </span>
+                  </button>
+                  <DesktopPlayerCompare anchorPlayer={player} />
+                  {showNativeFantasyRosterActions ? <NativeFantasyPopupRosterButtons /> : null}
+                  {showDraftActions ? (
+                    <button
+                      type="button"
+                      disabled={draftDisabled}
+                      onClick={() => {
+                        if (draftDisabled) return;
+                        if (onSessionDraft) onSessionDraft(player.id);
+                        else draft.draftPlayer(player.id);
+                      }}
+                      className={cn(
+                        "relative z-30 inline-flex min-w-[76px] items-center justify-center rounded-full px-4 py-1.5 text-xs font-black tracking-wide uppercase whitespace-nowrap shadow-sm transition-all duration-200",
+                        draftDisabled
+                          ? "pointer-events-none cursor-default border border-white/10 bg-white/10 text-white/40"
+                          : "cursor-pointer border border-white bg-white text-slate-900 hover:bg-slate-100",
+                      )}
+                    >
+                      {drafted ? "Drafted" : canDraft ? "Draft" : "Waiting"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {isDefense ? (
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+                  <HeaderVitalStack label="Conference" value={conference} />
+                  <HeaderVitalStack label="Division" value={division} />
+                </div>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+                  <HeaderVitalStack label="Age" value={displayAge} />
+                  <HeaderVitalStack label="Height" value={height} />
+                  <HeaderVitalStack label="Weight" value={weight} />
+                  <HeaderVitalStack label="Exp" value={expYears} />
+                  <HeaderVitalStack label="College" value={college} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Pos + team badge and rankings sit inside the extended curved rail. */}
+          <div
+            className={cn(
+              "absolute inset-x-0 bottom-0 z-30 flex h-[44px] items-end gap-3 overflow-visible pb-2 pl-0 pr-5",
+              isScoringOpen && "z-40",
+            )}
+          >
+            <div className="mb-0.5 flex shrink-0 items-center">
               <span
                 className={cn(
-                  "flex shrink-0 items-center justify-center rounded-none px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
+                  "flex shrink-0 items-center justify-center px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
                   POS_STRIP_BG[player.pos] ?? "bg-slate-700",
                 )}
               >
                 {player.pos === "DEF" ? "DST" : player.pos}
               </span>
-              <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
+              <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap bg-transparent px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
                 <span>{teamNickname}</span>
                 {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
               </span>
             </div>
-          </div>
-
-          <div
-            className={cn(
-              // When the scoring menu is open, lift above Game Logs year chips (z-20 trap).
-              "relative flex min-w-0 flex-1 flex-col items-start justify-center overflow-visible py-5 pb-9 pl-6 pr-12 text-left",
-              isScoringOpen ? "z-40" : "z-10",
-            )}
-          >
-            {showDraftActions ? (
-              draftRosterLabel ? (
-                <div className="mb-0.5 flex min-w-0 max-w-full items-center gap-1 text-[11px] font-semibold leading-snug text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.55)]">
-                  <ArrowRight
-                    className="size-3 shrink-0 drop-shadow-sm"
-                    strokeWidth={2.5}
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{draftRosterLabel}</span>
-                </div>
-              ) : null
-            ) : (
-              <RosteredOnLabel playerId={player.id} playerName={player.name} />
-            )}
-            <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-visible">
-              <h1 className="truncate text-3xl font-black leading-tight tracking-tight text-white">
-                {player.name}
-              </h1>
-              {injuryDetails ? (
-                <span
-                  className={cn(
-                    "ml-2 inline-flex select-none items-center justify-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest shadow-sm",
-                    injuryDetails.classes,
-                  )}
-                >
-                  {injuryDetails.text}
-                </span>
-              ) : null}
-              <div className="relative z-30 ml-3 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  aria-label={watched ? "Unwatch" : "Watch"}
-                  aria-pressed={watched}
-                  onClick={toggleWatch}
-                  className="group inline-flex max-w-[38px] cursor-pointer select-none items-center overflow-hidden whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-2.5 py-1.5 transition-all duration-300 hover:max-w-[130px] hover:border-white/40 hover:bg-white/10"
-                >
-                  <Star
-                    className={cn(
-                      "size-3.5 shrink-0",
-                      watched ? "fill-amber-400 text-amber-400" : "text-white/90",
-                    )}
-                    strokeWidth={watched ? 0 : 2}
-                  />
-                  <span className="ml-1.5 text-[10px] font-black uppercase tracking-wider text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                    {watched ? "Unwatch" : "Watch"}
-                  </span>
-                </button>
-                <DesktopPlayerCompare anchorPlayer={player} />
-                {showNativeFantasyRosterActions ? <NativeFantasyPopupRosterButtons /> : null}
-                {showDraftActions ? (
-                  <button
-                    type="button"
-                    disabled={draftDisabled}
-                    onClick={() => {
-                      if (draftDisabled) return;
-                      if (onSessionDraft) onSessionDraft(player.id);
-                      else draft.draftPlayer(player.id);
-                    }}
-                    className={cn(
-                      "relative z-30 inline-flex min-w-[76px] items-center justify-center rounded-full px-4 py-1.5 text-xs font-black tracking-wide uppercase whitespace-nowrap shadow-sm transition-all duration-200",
-                      draftDisabled
-                        ? "pointer-events-none cursor-default border border-white/10 bg-white/10 text-white/40"
-                        : "cursor-pointer border border-white bg-white text-slate-900 hover:bg-slate-100",
-                    )}
-                  >
-                    {drafted ? "Drafted" : canDraft ? "Draft" : "Waiting"}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            {isDefense ? (
-              <div className="mt-2 text-sm font-black uppercase leading-snug tracking-wider text-white/70">
-                CONFERENCE <span className="font-black text-white">{conference}</span>
-                <span className="mx-3 text-white/20">|</span>
-                DIVISION <span className="font-black text-white">{division}</span>
-              </div>
-            ) : (
-              <div className="mt-2 flex flex-wrap items-center text-sm font-black uppercase leading-snug tracking-wider text-white/70">
-                <span>AGE {displayAge}</span>
-                <VitalsDivider />
-                <span>HEIGHT {height}</span>
-                <VitalsDivider />
-                <span>WEIGHT {weight}</span>
-                <VitalsDivider />
-                <span>EXP {expYears}</span>
-                <VitalsDivider />
-                <span>
-                  COLLEGE <span className="font-black text-white">{college}</span>
-                </span>
-              </div>
-            )}
-
-            <div className="mt-2 w-full min-w-0">
-              <span className="mb-1 block text-left text-[10px] font-black uppercase tracking-widest text-white/50">
+            <div className="min-w-0 flex-1 border-l border-white/10 pl-4">
+              <p className="mb-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-white/45">
                 Player Rankings
-              </span>
-              <div className="flex flex-wrap items-center text-xs font-black uppercase tracking-wide text-white">
+              </p>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 text-xs font-black uppercase tracking-wide text-white">
                 <span>
                   #{posRankLabel} {player.pos}
                 </span>
-                <VitalsDivider />
+                <span className="text-white/20">|</span>
                 <span>#{overallRankLabel} OVERALL</span>
-                <VitalsDivider />
-                <span>
-                  {`${Math.round(Number(rosteredPct ?? 0))}%`} ROSTERED
-                </span>
-                <VitalsDivider />
-                <span>
-                  {`${Math.round(Number(startedPct ?? 0))}%`} STARTED
-                </span>
-                <div ref={scoringMenuRef} className="relative z-[60] ml-6 inline-block text-left">
-                  <button
-                    type="button"
-                    aria-label="Scoring format"
-                    aria-expanded={isScoringOpen}
-                    aria-haspopup="listbox"
-                    onClick={() => setIsScoringOpen(!isScoringOpen)}
-                    className="relative flex min-w-[64px] cursor-pointer items-center justify-between rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-white transition-all select-none hover:bg-white/15"
-                  >
-                    <span>
-                      {SCORING_OPTIONS.find((o) => o.value === scoringFormat)?.label ?? "HALF"}
-                    </span>
-                    {isScoringOpen ? (
-                      <ChevronUp className="ml-1.5 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
-                    ) : (
-                      <ChevronDown className="ml-1.5 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
-                    )}
-                  </button>
-                  {isScoringOpen ? (
-                    <div
-                      role="listbox"
-                      aria-label="Scoring formats"
-                      className="absolute top-full right-0 z-[60] mt-1.5 flex w-20 origin-top-right flex-col overflow-visible rounded-lg border border-slate-200/80 bg-white py-0.5 text-left shadow-xl"
-                    >
-                      {SCORING_OPTIONS.map((option) => {
-                        const active = scoringFormat === option.value;
-                        return (
-                          <button
-                            key={option.value}
-                            type="button"
-                            role="option"
-                            aria-selected={active}
-                            onClick={() => {
-                              setScoringFormat(option.value);
-                              setIsScoringOpen(false);
-                            }}
-                            className={cn(
-                              "w-full cursor-pointer select-none px-3 py-1.5 text-left text-[11px] transition-colors",
-                              active
-                                ? "bg-slate-100 font-black text-slate-900"
-                                : "font-bold text-slate-600 hover:bg-slate-50/80 hover:text-slate-900",
-                            )}
-                          >
-                            {option.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
+                <span className="text-white/20">|</span>
+                <span>{`${Math.round(Number(rosteredPct ?? 0))}%`} ROSTERED</span>
+                <span className="text-white/20">|</span>
+                <span>{`${Math.round(Number(startedPct ?? 0))}%`} STARTED</span>
               </div>
             </div>
+            <div ref={scoringMenuRef} className="relative z-[60] mb-0.5 shrink-0 text-left">
+              <button
+                type="button"
+                aria-label="Scoring format"
+                aria-expanded={isScoringOpen}
+                aria-haspopup="listbox"
+                onClick={() => setIsScoringOpen(!isScoringOpen)}
+                className="relative flex min-w-[64px] cursor-pointer items-center justify-between rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-white transition-all select-none hover:bg-white/15"
+              >
+                <span>
+                  {SCORING_OPTIONS.find((o) => o.value === scoringFormat)?.label ?? "HALF"}
+                </span>
+                {isScoringOpen ? (
+                  <ChevronUp className="ml-1.5 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
+                ) : (
+                  <ChevronDown className="ml-1.5 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
+                )}
+              </button>
+              {isScoringOpen ? (
+                <div
+                  role="listbox"
+                  aria-label="Scoring formats"
+                  className="absolute bottom-full right-0 z-[60] mb-1.5 flex w-20 origin-bottom-right flex-col overflow-visible rounded-lg border border-slate-200/80 bg-white py-0.5 text-left shadow-xl"
+                >
+                  {SCORING_OPTIONS.map((option) => {
+                    const active = scoringFormat === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        onClick={() => {
+                          setScoringFormat(option.value);
+                          setIsScoringOpen(false);
+                        }}
+                        className={cn(
+                          "w-full cursor-pointer select-none px-3 py-1.5 text-left text-[11px] transition-colors",
+                          active
+                            ? "bg-slate-100 font-black text-slate-900"
+                            : "font-bold text-slate-600 hover:bg-slate-50/80 hover:text-slate-900",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           </div>
+
           {/* Compact chrome engages once this sentinel leaves the popup viewport. */}
           <div ref={heroSentinelRef} className="pointer-events-none absolute bottom-0 left-0 h-px w-px" aria-hidden />
         </div>
