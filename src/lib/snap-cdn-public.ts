@@ -66,9 +66,9 @@ export const SNAP_OBJECT_KEYS = {
   nflTeamOffenseRanks: (season: number | string) =>
     `snap/nfl-team-offense-ranks-v2-${season}.json`,
   /**
-   * Sleeper depth charts for mobile Team tab (depth_chart_position + order).
+   * Sleeper depth charts for mobile Team tab (depth_chart_position + order + age).
    * Actions → `/v1/players/nfl` once; visitors hit GitHub raw only.
-   * Path bump (v1) busts raw.githubusercontent.com negative cache after first publish.
+   * Path bump (v2) includes age and busts raw.githubusercontent.com cache.
    */
-  nflTeamDepth: () => `snap/nfl-team-depth-v1.json`,
+  nflTeamDepth: () => `snap/nfl-team-depth-v2.json`,
 } as const;

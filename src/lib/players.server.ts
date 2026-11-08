@@ -46,6 +46,7 @@ export type DepthEntry = {
   pos: Pos;
   proj: number;
   adp: number;
+  age: number | null;
   injury: string | null;
 };
 
@@ -1364,6 +1365,7 @@ export async function loadPlayerDetail(id: string): Promise<PlayerDetail | null>
               pos: p.pos,
               proj: p.proj.half,
               adp: p.adp.half,
+              age: p.age ?? null,
               injury: injuryForDepth(p),
             })),
         );

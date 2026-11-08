@@ -206,6 +206,7 @@ export async function fetchPlayerDetailClient(
               pos: p.pos,
               proj: p.proj.half,
               adp: p.adp.half,
+              age: p.age ?? null,
               injury: injuryForDepth(p),
             })),
         );

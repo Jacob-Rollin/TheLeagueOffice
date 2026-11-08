@@ -20,6 +20,8 @@ export type TeamDepthEntry = {
   name: string;
   order: number;
   injury: string | null;
+  /** Sleeper age when the snap includes it (v2+). */
+  age?: number | null;
 };
 
 export type TeamDepthChart = Partial<Record<TeamDepthSlot, TeamDepthEntry[]>>;
@@ -44,8 +46,8 @@ export const SLEEPER_WR_SLOT: Record<string, TeamDepthSlot> = {
   SWR: "WR3",
 };
 
-async function fetchSnap(): Promise<NflTeamDepthSnap | null> {
-  const url = snapCdnUrl(SNAP_OBJECT_KEYS.nflTeamDepth());
+async function fetchSnapUrl(path: string): Promise<NflTeamDepthSnap | null> {
+  const url = snapCdnUrl(path);
   if (!url) return null;
   try {
     const res = await fetch(url, { headers: { accept: "application/json" } });
@@ -58,10 +60,18 @@ async function fetchSnap(): Promise<NflTeamDepthSnap | null> {
   }
 }
 
+async function fetchSnap(): Promise<NflTeamDepthSnap | null> {
+  // Prefer v2 (includes age); fall back to v1 until Actions republishes.
+  return (
+    (await fetchSnapUrl(SNAP_OBJECT_KEYS.nflTeamDepth())) ??
+    (await fetchSnapUrl("snap/nfl-team-depth-v1.json"))
+  );
+}
+
 /** Resolve shared depth board (IndexedDB + snap-cdn). */
 export async function fetchNflTeamDepth(): Promise<NflTeamDepthSnap> {
   // Cache key aligns with snap object key (path bump for raw CDN).
-  return getCached("nfl-team-depth-snap-v1", CLIENT_TTL_MS, async () => {
+  return getCached("nfl-team-depth-snap-v2b", CLIENT_TTL_MS, async () => {
     if (!snapCdnPublicBase()) return EMPTY;
     const snap = await fetchSnap();
     if (!snap || Object.keys(snap.teams).length === 0) return EMPTY;
