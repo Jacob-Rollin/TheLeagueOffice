@@ -1,7 +1,7 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { playerImage, teamLogo } from "@/components/draft/PlayerAvatar";
 import { PlayerDetail } from "@/components/draft/PlayerDetail";
@@ -10,14 +10,12 @@ import { useLeagueProjections, useNflState } from "@/hooks/useLeagueProjections"
 import { sosHasUsableRanks, usePlayerSos, useSosPeerMatrix } from "@/hooks/usePlayerSos";
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import type { Pos, Scoring } from "@/lib/draft";
+import { fetchNflTeamDepth, teamDepthFor, type TeamDepthSlot } from "@/lib/nfl-team-depth";
 import { getTeamPrimaryColor, NFL_TEAMS, teamById } from "@/lib/nfl-teams";
 import { getPlayerDetail } from "@/lib/players.functions";
 import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
 import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
-import {
-  fetchNextGameClient,
-  fetchPlayerBioClient,
-} from "@/lib/sleeper-client";
+import { fetchNextGameClient, fetchPlayerBioClient } from "@/lib/sleeper-client";
 import {
   playoffWindowPresentation,
   positionalSosStanding,
@@ -50,9 +48,10 @@ type DetailTabKey = (typeof DETAIL_TABS)[number]["key"];
 /** Drive the hidden PlayerDetail tab buttons without editing that component. */
 function clickPlayerDetailTab(root: HTMLElement | null, label: string) {
   if (!root) return;
+  // Header is visually hidden on the hub page — still click its tab buttons.
   const buttons = root.querySelectorAll("header button");
   for (const btn of buttons) {
-    if (btn.textContent?.trim() === label) {
+    if (btn.textContent?.trim().toLowerCase() === label.trim().toLowerCase()) {
       (btn as HTMLButtonElement).click();
       return;
     }
@@ -96,9 +95,7 @@ const nextGameQuery = (team: string) =>
     retry: false,
   });
 
-const TEAM_NAME: Record<string, string> = Object.fromEntries(
-  NFL_TEAMS.map((t) => [t.id, t.name]),
-);
+const TEAM_NAME: Record<string, string> = Object.fromEntries(NFL_TEAMS.map((t) => [t.id, t.name]));
 
 const POS_STRIP_BG: Record<string, string> = {
   QB: "bg-qb",
@@ -186,7 +183,8 @@ function injuryLetter(injury: string | null | undefined): "Q" | "O" | "D" | "IR"
   if (raw === "DOUBTFUL" || raw === "D") return "D";
   if (raw === "OUT" || raw === "O") return "O";
   if (raw === "IR" || raw === "INJURED RESERVE" || raw === "INJURED_RESERVE") return "IR";
-  if (raw === "NA" || raw === "INACTIVE" || raw === "NOT ACTIVE" || raw === "NOT_ACTIVE") return "NA";
+  if (raw === "NA" || raw === "INACTIVE" || raw === "NOT ACTIVE" || raw === "NOT_ACTIVE")
+    return "NA";
   return null;
 }
 
@@ -219,10 +217,8 @@ export const Route = createFileRoute("/player/$id")({
 
 /** Dynamic risk bucket routing for the injury telemetry meter. */
 function riskTier(score: number): { label: string; text: string; fill: string } {
-  if (score >= 70)
-    return { label: "HIGH RISK", text: "text-rose-500", fill: "bg-rose-500" };
-  if (score >= 35)
-    return { label: "MODERATE RISK", text: "text-amber-500", fill: "bg-amber-500" };
+  if (score >= 70) return { label: "HIGH RISK", text: "text-rose-500", fill: "bg-rose-500" };
+  if (score >= 35) return { label: "MODERATE RISK", text: "text-amber-500", fill: "bg-amber-500" };
   return { label: "LOW RISK", text: "text-emerald-500", fill: "bg-emerald-500" };
 }
 
@@ -264,6 +260,53 @@ function PlayerHubPage() {
   // While NFL state loads, highlight nothing — never default to week 1.
   const detailHostRef = useRef<HTMLDivElement>(null);
 
+  // Same Sleeper depth snap as the Depth Chart tab — not ROS-proj order.
+  const playerTeam = data?.player.team;
+  const { data: depthBoard } = useQuery({
+    queryKey: ["nfl-team-depth", "snap-v1"],
+    enabled: Boolean(playerTeam) && playerTeam !== "FA",
+    staleTime: 30 * 60 * 1000,
+    placeholderData: (prev) => prev,
+    retry: false,
+    queryFn: () => fetchNflTeamDepth(),
+  });
+  const posDepthChart = useMemo(() => {
+    const player = data?.player;
+    const depthChart = data?.depthChart ?? [];
+    if (!player) return [];
+    const chart = teamDepthFor(depthBoard, player.team);
+    const projById = new Map(depthChart.map((d) => [d.id, d]));
+    const slots: TeamDepthSlot[] =
+      player.pos === "WR"
+        ? ["WR1", "WR2", "WR3"]
+        : player.pos === "QB" || player.pos === "RB" || player.pos === "TE" || player.pos === "K"
+          ? [player.pos]
+          : [];
+    const ordered: typeof depthChart = [];
+    const seen = new Set<string>();
+    for (const slot of slots) {
+      for (const entry of chart?.[slot] ?? []) {
+        if (seen.has(entry.id)) continue;
+        seen.add(entry.id);
+        const hit = projById.get(entry.id);
+        ordered.push(
+          hit ?? {
+            id: entry.id,
+            name: entry.name,
+            pos: player.pos,
+            proj: 0,
+            adp: 999,
+            injury: entry.injury,
+          },
+        );
+      }
+    }
+    // Soft fallback if snap is cold — keep prior teammate list.
+    return ordered.length > 0
+      ? ordered
+      : depthChart.filter((d) => d.pos === player.pos).slice(0, 6);
+  }, [data?.depthChart, data?.player, depthBoard]);
+
   useEffect(() => {
     setActiveTab("logs");
   }, [id]);
@@ -272,18 +315,27 @@ function PlayerHubPage() {
     const label = DETAIL_TABS.find((t) => t.key === activeTab)?.label;
     if (!label) return;
     // Allow PlayerDetail to mount before bridging the visible page tabs.
-    const timer = window.setTimeout(() => {
+    // Retry briefly — tab buttons appear after the detail query settles.
+    let cancelled = false;
+    let tries = 0;
+    const tick = () => {
+      if (cancelled) return;
       clickPlayerDetailTab(detailHostRef.current, label);
-    }, 0);
-    return () => window.clearTimeout(timer);
+      tries += 1;
+      if (tries < 8) window.setTimeout(tick, 50);
+    };
+    const timer = window.setTimeout(tick, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [activeTab, id, data?.player.id]);
 
   if (isLoading)
     return <p className="py-24 text-center text-sm text-zinc-500">Loading player hub…</p>;
   if (!data) return <p className="py-24 text-center text-sm text-zinc-500">Player not found.</p>;
 
-  const { player, depthChart, injuryRisk } = data;
-  const posDepthChart = depthChart.filter((d) => d.pos === player.pos);
+  const { player, injuryRisk } = data;
   const brainEntry = brain?.[player.id] ?? null;
   const brainSos = playerSos;
   const tier = riskTier(injuryRisk.score);
@@ -319,8 +371,7 @@ function PlayerHubPage() {
     (player.injury && brainEntry?.injuryType
       ? brainEntry.injuryType
       : "No significant historical flags");
-  const injuryDesignation =
-    resolveInjuryStatus(player, brain) ?? "Healthy — no designation";
+  const injuryDesignation = resolveInjuryStatus(player, brain) ?? "Healthy — no designation";
 
   return (
     <main className="w-full min-h-screen bg-slate-50 text-slate-900 overflow-y-auto">
@@ -414,7 +465,9 @@ function PlayerHubPage() {
             )}
 
             {(player.pos !== "DEF" || brainSos) && (
-              <Widget title={`Strength of schedule vs ${player.pos === "DEF" ? "DEF" : player.pos}`}>
+              <Widget
+                title={`Strength of schedule vs ${player.pos === "DEF" ? "DEF" : player.pos}`}
+              >
                 {!brainSos ? (
                   <p className="text-xs text-zinc-500">Schedule data unavailable.</p>
                 ) : (
@@ -467,8 +520,10 @@ function PlayerHubPage() {
                           : sosDifficultyFromStars(stars);
                         const opp = isBye
                           ? "BYE"
-                          : (slot.matchup?.opp ?? "—").replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ||
-                            "—";
+                          : (slot.matchup?.opp ?? "—")
+                              .replace(/^vs\s+|^@\s+/i, "")
+                              .trim()
+                              .toUpperCase() || "—";
                         const isCurrentWeek =
                           currentNflWeek != null && slot.week === currentNflWeek;
                         const difficultyLabel = label ?? "NEUTRAL";
