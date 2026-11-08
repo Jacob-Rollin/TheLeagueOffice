@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { playerImage, teamLogo } from "./PlayerAvatar";
 import { RosteredOnLabel } from "./RosteredOnLabel";
 import { DesktopPlayerCompare } from "@/components/compare/DesktopPlayerCompare";
@@ -31,8 +31,13 @@ import { sosHasUsableRanks, usePlayerSos, useSosPeerMatrix } from "@/hooks/usePl
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Scoring } from "@/lib/draft";
-import type { Pos } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
+import {
+  fetchNflTeamDepth,
+  teamDepthFor,
+  type TeamDepthEntry,
+  type TeamDepthSlot,
+} from "@/lib/nfl-team-depth";
 import { getTeamPrimaryColor, teamById } from "@/lib/nfl-teams";
 import { detailQuery } from "@/lib/player-detail-query";
 import { fetchPlayerNewsClient } from "@/lib/player-news-client";
@@ -111,8 +116,26 @@ const POS_STRIP_BG: Record<string, string> = {
   DEF: "bg-def",
 };
 
-function VitalsDivider() {
-  return <span className="mx-3 text-white/20">|</span>;
+function HeaderStatStack({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0 text-left">
+      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-white/55">{label}</p>
+      <p className="mt-0.5 text-sm font-black uppercase leading-none tracking-wide text-white">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function HeaderRankStack({ value, label }: { value: ReactNode; label: string }) {
+  return (
+    <div className="min-w-0 text-left">
+      <p className="text-xs font-black uppercase tracking-wide text-white">{value}</p>
+      <p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-white/50">
+        {label}
+      </p>
+    </div>
+  );
 }
 
 type DetailTab = "logs" | "projections" | "sos" | "outlook" | "depth" | "news";
@@ -251,11 +274,7 @@ export function PlayerDetail({
   const isPopup = Boolean(onClose);
 
   const leagueScoringQuery = useQuery({
-    queryKey: [
-      "player-detail-league-scoring",
-      activeLeague?.platform,
-      activeLeague?.leagueId,
-    ],
+    queryKey: ["player-detail-league-scoring", activeLeague?.platform, activeLeague?.leagueId],
     enabled: Boolean(activeLeague?.leagueId) && !scoringControlled,
     staleTime: 1000 * 60 * 60,
     queryFn: () =>
@@ -304,23 +323,24 @@ export function PlayerDetail({
       setCompactHeader(false);
       return;
     }
-    const io = new IntersectionObserver(
-      ([entry]) => setCompactHeader(!entry?.isIntersecting),
-      { root, threshold: 0, rootMargin: "0px" },
-    );
+    const io = new IntersectionObserver(([entry]) => setCompactHeader(!entry?.isIntersecting), {
+      root,
+      threshold: 0,
+      rootMargin: "0px",
+    });
     io.observe(sentinel);
     return () => io.disconnect();
   }, [id, isPopup, isLoading, data?.player?.id]);
 
-  if (isLoading) return <p className="p-6 text-center text-sm text-muted-foreground">Loading player…</p>;
-  if (!data) return <p className="p-6 text-center text-sm text-muted-foreground">Player not found.</p>;
+  if (isLoading)
+    return <p className="p-6 text-center text-sm text-muted-foreground">Loading player…</p>;
+  if (!data)
+    return <p className="p-6 text-center text-sm text-muted-foreground">Player not found.</p>;
 
   const { player, depthChart } = data;
   const scoring = scoringFormat;
-  const drafted =
-    sessionDrafted !== undefined ? sessionDrafted : draft.draftedIds.has(player.id);
-  const watched =
-    sessionWatched !== undefined ? sessionWatched : draft.watchIds.has(player.id);
+  const drafted = sessionDrafted !== undefined ? sessionDrafted : draft.draftedIds.has(player.id);
+  const watched = sessionWatched !== undefined ? sessionWatched : draft.watchIds.has(player.id);
   const toggleWatch = () => {
     if (onSessionToggleWatch) onSessionToggleWatch(player.id);
     else draft.toggleWatch(player.id);
@@ -333,22 +353,15 @@ export function PlayerDetail({
   const jerseyNumber = bio?.number != null ? String(bio.number) : null;
   const isDefense = player.pos === "DEF";
   const conference =
-    (player as { conference?: string | null }).conference ??
-    teamMeta?.conference ??
-    "NFC";
+    (player as { conference?: string | null }).conference ?? teamMeta?.conference ?? "NFC";
   const division =
-    (player as { division?: string | null }).division ??
-    teamMeta?.division ??
-    "NORTH";
+    (player as { division?: string | null }).division ?? teamMeta?.division ?? "NORTH";
 
   // Prefer catalog age; otherwise derive from Sleeper birth_date (bio.birthDate).
-  const birthDate =
-    (player as { birth_date?: string | null }).birth_date ?? bio?.birthDate ?? null;
+  const birthDate = (player as { birth_date?: string | null }).birth_date ?? bio?.birthDate ?? null;
   const displayAge =
     player.age ||
-    (birthDate
-      ? Math.floor((Date.now() - new Date(birthDate).getTime()) / 31557600000)
-      : "—");
+    (birthDate ? Math.floor((Date.now() - new Date(birthDate).getTime()) / 31557600000) : "—");
 
   // Prefer live week-proj injury when present so header matches depth-chart badges.
   const liveForPlayer = liveInjuries.data?.[player.id];
@@ -358,18 +371,13 @@ export function PlayerDetail({
           ...player,
           injury_status: liveForPlayer.status?.trim() || null,
           injury: liveForPlayer.status?.trim() || null,
-          injury_body_part:
-            liveForPlayer.bodyPart?.trim() ||
-            player.injury_body_part ||
-            null,
+          injury_body_part: liveForPlayer.bodyPart?.trim() || player.injury_body_part || null,
         }
       : player;
   const injuryStatusRaw = resolveInjuryStatus(injuryCarrier, brain) ?? null;
   const injuryDetails = getFullInjuryBadgeDetails(injuryStatusRaw);
   const injuryBodyPart =
-    (liveForPlayer !== undefined
-      ? liveForPlayer.bodyPart?.trim() || null
-      : null) ||
+    (liveForPlayer !== undefined ? liveForPlayer.bodyPart?.trim() || null : null) ||
     player.injury_body_part?.trim() ||
     brain?.[player.id]?.injuryType?.trim() ||
     "";
@@ -507,7 +515,7 @@ export function PlayerDetail({
           ) : null}
 
           <div
-            className="relative z-20 mb-0 ml-0 mt-0 flex w-[140px] min-h-[160px] flex-shrink-0 items-end self-stretch overflow-visible rounded-bl-none bg-transparent pl-0 select-none"
+            className="relative z-20 mb-0 ml-0 mt-0 flex w-[140px] min-h-[160px] flex-shrink-0 items-end self-stretch overflow-hidden rounded-bl-none bg-transparent pl-0 select-none"
             style={{ backgroundColor: getTeamPrimaryColor(player.team) }}
           >
             <div
@@ -520,27 +528,22 @@ export function PlayerDetail({
                 loading="lazy"
                 className={cn(
                   "pointer-events-none relative z-20 h-full w-full select-none transition-all",
-                  isDefense ? "object-contain px-3 pb-9 pt-3" : "object-cover object-[55%_center]",
+                  isDefense ? "object-contain px-3 pb-3 pt-3" : "object-cover object-[55%_center]",
                 )}
                 onError={(e) => {
                   e.currentTarget.style.visibility = "hidden";
                 }}
               />
             </div>
-            <div className="absolute bottom-0 left-0 z-30 flex min-w-full w-max max-w-[200px] flex-row items-center whitespace-nowrap rounded-tr-md rounded-br-none bg-transparent pl-0">
-              <span
-                className={cn(
-                  "flex shrink-0 items-center justify-center rounded-none px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
-                  POS_STRIP_BG[player.pos] ?? "bg-slate-700",
-                )}
-              >
-                {player.pos === "DEF" ? "DST" : player.pos}
-              </span>
-              <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
-                <span>{teamNickname}</span>
-                {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
-              </span>
-            </div>
+            {/* Sleeper-style position chip: square with one curved top-right corner. */}
+            <span
+              className={cn(
+                "absolute bottom-0 left-0 z-30 flex min-w-[2.25rem] items-center justify-center rounded-tr-lg px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white shadow-sm",
+                POS_STRIP_BG[player.pos] ?? "bg-slate-700",
+              )}
+            >
+              {player.pos === "DEF" ? "DST" : player.pos}
+            </span>
           </div>
 
           <div
@@ -568,17 +571,27 @@ export function PlayerDetail({
               <h1 className="truncate text-3xl font-black leading-tight tracking-tight text-white">
                 {player.name}
               </h1>
+              {!isDefense ? (
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-slate-900 shadow-sm">
+                  <span>{teamNickname}</span>
+                  {jerseyNumber ? <span>#{jerseyNumber}</span> : null}
+                </span>
+              ) : (
+                <span className="inline-flex shrink-0 items-center rounded-full bg-white/90 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-slate-900 shadow-sm">
+                  {teamNickname}
+                </span>
+              )}
               {injuryDetails ? (
                 <span
                   className={cn(
-                    "ml-2 inline-flex select-none items-center justify-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest shadow-sm",
+                    "inline-flex select-none items-center justify-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest shadow-sm",
                     injuryDetails.classes,
                   )}
                 >
                   {injuryDetails.text}
                 </span>
               ) : null}
-              <div className="relative z-30 ml-3 flex flex-wrap items-center gap-2">
+              <div className="relative z-30 ml-1 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   aria-label={watched ? "Unwatch" : "Watch"}
@@ -622,46 +635,36 @@ export function PlayerDetail({
             </div>
 
             {isDefense ? (
-              <div className="mt-2 text-sm font-black uppercase leading-snug tracking-wider text-white/70">
-                CONFERENCE <span className="font-black text-white">{conference}</span>
-                <span className="mx-3 text-white/20">|</span>
-                DIVISION <span className="font-black text-white">{division}</span>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+                <HeaderStatStack label="Conference" value={conference} />
+                <HeaderStatStack label="Division" value={division} />
               </div>
             ) : (
-              <div className="mt-2 flex flex-wrap items-center text-sm font-black uppercase leading-snug tracking-wider text-white/70">
-                <span>AGE {displayAge}</span>
-                <VitalsDivider />
-                <span>HEIGHT {height}</span>
-                <VitalsDivider />
-                <span>WEIGHT {weight}</span>
-                <VitalsDivider />
-                <span>EXP {expYears}</span>
-                <VitalsDivider />
-                <span>
-                  COLLEGE <span className="font-black text-white">{college}</span>
-                </span>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+                <HeaderStatStack label="Age" value={displayAge} />
+                <HeaderStatStack label="Height" value={height} />
+                <HeaderStatStack label="Weight" value={weight} />
+                <HeaderStatStack label="Exp" value={expYears} />
+                <HeaderStatStack label="College" value={college} />
               </div>
             )}
 
-            <div className="mt-2 w-full min-w-0">
-              <span className="mb-1 block text-left text-[10px] font-black uppercase tracking-widest text-white/50">
+            <div className="mt-3 w-full min-w-0">
+              <span className="mb-1.5 block text-left text-[10px] font-black uppercase tracking-widest text-white/50">
                 Player Rankings
               </span>
-              <div className="flex flex-wrap items-center text-xs font-black uppercase tracking-wide text-white">
-                <span>
-                  #{posRankLabel} {player.pos}
-                </span>
-                <VitalsDivider />
-                <span>#{overallRankLabel} OVERALL</span>
-                <VitalsDivider />
-                <span>
-                  {`${Math.round(Number(rosteredPct ?? 0))}%`} ROSTERED
-                </span>
-                <VitalsDivider />
-                <span>
-                  {`${Math.round(Number(startedPct ?? 0))}%`} STARTED
-                </span>
-                <div ref={scoringMenuRef} className="relative z-[60] ml-6 inline-block text-left">
+              <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
+                <HeaderRankStack value={`#${posRankLabel}`} label={player.pos} />
+                <HeaderRankStack value={`#${overallRankLabel}`} label="Overall" />
+                <HeaderRankStack
+                  value={`${Math.round(Number(rosteredPct ?? 0))}%`}
+                  label="Rostered"
+                />
+                <HeaderRankStack
+                  value={`${Math.round(Number(startedPct ?? 0))}%`}
+                  label="Started"
+                />
+                <div ref={scoringMenuRef} className="relative z-[60] mb-0.5 inline-block text-left">
                   <button
                     type="button"
                     aria-label="Scoring format"
@@ -676,7 +679,10 @@ export function PlayerDetail({
                     {isScoringOpen ? (
                       <ChevronUp className="ml-1.5 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
                     ) : (
-                      <ChevronDown className="ml-1.5 size-3 shrink-0 opacity-90" strokeWidth={2.5} />
+                      <ChevronDown
+                        className="ml-1.5 size-3 shrink-0 opacity-90"
+                        strokeWidth={2.5}
+                      />
                     )}
                   </button>
                   {isScoringOpen ? (
@@ -715,7 +721,11 @@ export function PlayerDetail({
             </div>
           </div>
           {/* Compact chrome engages once this sentinel leaves the popup viewport. */}
-          <div ref={heroSentinelRef} className="pointer-events-none absolute bottom-0 left-0 h-px w-px" aria-hidden />
+          <div
+            ref={heroSentinelRef}
+            className="pointer-events-none absolute bottom-0 left-0 h-px w-px"
+            aria-hidden
+          />
         </div>
 
         <div className="flex w-full select-none items-center justify-between overflow-visible border-b border-slate-100 bg-white px-6">
@@ -846,8 +856,7 @@ type StatGroup = { label: string; cols: StatCol[] };
 const CATEGORY_TH =
   "text-[10px] font-black tracking-wide text-slate-400 uppercase text-center border-b border-slate-100 py-1";
 /** Dense micro headers — QB boards are wide; keep labels readable without forcing x-scroll. */
-const MICRO_TH =
-  "px-1.5 py-2 text-[10px] font-black uppercase tracking-wide text-slate-900";
+const MICRO_TH = "px-1.5 py-2 text-[10px] font-black uppercase tracking-wide text-slate-900";
 const STAT_TD = "px-1.5 py-2 text-center font-mono text-sm text-slate-700";
 /** Hairline between Fantasy / Passing / … category blocks (matches mobile). */
 const GROUP_EDGE = "border-l border-slate-200";
@@ -900,14 +909,20 @@ function gameLogFantasyLabels(pos: string): string[] {
 }
 
 function formatOppLabel(g: { opp?: string | null; isAway?: boolean; location?: string }): string {
-  if (
-    g.isAway ||
-    g.location === "away" ||
-    g.opp?.trim().startsWith("@")
-  ) {
-    return `@ ${g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ?? ""}`;
+  if (g.isAway || g.location === "away" || g.opp?.trim().startsWith("@")) {
+    return `@ ${
+      g.opp
+        ?.replace(/^vs\s+|^@\s+/i, "")
+        .trim()
+        .toUpperCase() ?? ""
+    }`;
   }
-  return g.opp?.replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() || "-";
+  return (
+    g.opp
+      ?.replace(/^vs\s+|^@\s+/i, "")
+      .trim()
+      .toUpperCase() || "-"
+  );
 }
 
 /** Position-specific macro groups for Sleeper-style double-tier headers. */
@@ -1119,10 +1134,7 @@ function ptsForFormat(
   return v != null && Number.isFinite(v) ? v : null;
 }
 
-function projForFormat(
-  proj: GameLog["proj"],
-  scoring: Scoring,
-): number | null {
+function projForFormat(proj: GameLog["proj"], scoring: Scoring): number | null {
   if (!proj) return null;
   const v = proj[scoring];
   return v != null && Number.isFinite(v) ? v : null;
@@ -1148,14 +1160,8 @@ function resolveLogProjection(
   },
 ): number | null {
   const { projectFor, nflWeek, seasonYear, nflSeason, scoringMap, leagueFormat } = opts;
-  const sameSeason =
-    !seasonYear || !nflSeason || String(seasonYear) === String(nflSeason);
-  if (
-    sameSeason &&
-    nflWeek != null &&
-    Number(g.week) === Number(nflWeek) &&
-    !g.isBye
-  ) {
+  const sameSeason = !seasonYear || !nflSeason || String(seasonYear) === String(nflSeason);
+  if (sameSeason && nflWeek != null && Number(g.week) === Number(nflWeek) && !g.isBye) {
     const live = projectFor(playerId);
     if (live != null && Number.isFinite(live)) return live;
   }
@@ -1171,11 +1177,7 @@ function fmtFantasyPts(value: number | null | undefined): string {
   return value.toFixed(2);
 }
 
-function numOrDash(
-  raw: Record<string, number> | undefined,
-  key: string,
-  played: boolean,
-): string {
+function numOrDash(raw: Record<string, number> | undefined, key: string, played: boolean): string {
   // Bye / inactive / IR / DNP: dash. Played weeks: missing counting stats are 0.
   if (!played) return "-";
   if (!raw) return "0";
@@ -1205,10 +1207,7 @@ function renderGroupedStatCells(
 ) {
   return groups.flatMap((g) =>
     g.cols.map((col, ci) => (
-      <td
-        key={`${g.label}-${col.label}`}
-        className={cn(STAT_TD, ci === 0 && GROUP_EDGE)}
-      >
+      <td key={`${g.label}-${col.label}`} className={cn(STAT_TD, ci === 0 && GROUP_EDGE)}>
         {col.kind === "avg"
           ? avgOrDash(raw, col.numKey, col.denKey, played)
           : numOrDash(raw, col.key, played)}
@@ -1244,8 +1243,7 @@ function GameLogsPanel({
       ? currentSeasonYear - yearsExp
       : currentSeasonYear;
   const availableSeasons = useMemo(
-    () =>
-      LOG_SEASONS.filter((yearStr) => Number.parseInt(yearStr, 10) >= entryYear),
+    () => LOG_SEASONS.filter((yearStr) => Number.parseInt(yearStr, 10) >= entryYear),
     [entryYear],
   );
   const sosRankByWeek = useMemo(() => {
@@ -1256,9 +1254,7 @@ function GameLogsPanel({
     return map;
   }, [playerSos]);
 
-  const [season, setSeason] = useState<LogSeason>(
-    () => availableSeasons[0] ?? "2026",
-  );
+  const [season, setSeason] = useState<LogSeason>(() => availableSeasons[0] ?? "2026");
   // Career totals fan out multi-year Sleeper fetches — load only when expanded.
   const [showCareer, setShowCareer] = useState(false);
 
@@ -1346,8 +1342,7 @@ function GameLogsPanel({
                     played && g.raw && Object.keys(g.raw).length > 0
                       ? scoreActualLine(g.raw, scoringMap)
                       : null;
-                  const ptsVal =
-                    leaguePts ?? ptsForFormat(g.points, scoringFormat);
+                  const ptsVal = leaguePts ?? ptsForFormat(g.points, scoringFormat);
                   const pts = played && ptsVal != null ? fmtFantasyPts(ptsVal) : "-";
                   const projVal = resolveLogProjection(g, id, scoringFormat, {
                     projectFor,
@@ -1359,7 +1354,9 @@ function GameLogsPanel({
                   });
                   const hasProj = !g.isBye && projVal != null;
                   const isBye = Boolean(g.isBye) || g.opp === "BYE";
-                  const oppLabel = formatOppLabel(g as { opp?: string | null; isAway?: boolean; location?: string });
+                  const oppLabel = formatOppLabel(
+                    g as { opp?: string | null; isAway?: boolean; location?: string },
+                  );
                   // Current-season logs: tint Opp with positional SoS (same tiers as Outlook).
                   const sosRank =
                     Number.parseInt(season, 10) === currentSeasonYear
@@ -1369,9 +1366,7 @@ function GameLogsPanel({
                     !isBye && sosRank != null && Number.isFinite(sosRank)
                       ? cn("font-semibold", sosOppTextClass(sosRank))
                       : "text-slate-600";
-                  const weekRank = played
-                    ? weeklyPosRankDisplay(g.raw?.[rankKey])
-                    : null;
+                  const weekRank = played ? weeklyPosRankDisplay(g.raw?.[rankKey]) : null;
                   const rankHeat = posRankHeatCellClass(weekRank);
                   const withSnap = showGameLogSnapPct(pos);
 
@@ -1398,19 +1393,11 @@ function GameLogsPanel({
                       <td className={cn(STAT_TD, GROUP_EDGE)}>
                         {hasProj ? fmtFantasyPts(projVal) : "-"}
                       </td>
-                      <td
-                        className={cn(
-                          STAT_TD,
-                          "font-bold text-slate-900",
-                          FPTS_COL_BG,
-                        )}
-                      >
+                      <td className={cn(STAT_TD, "font-bold text-slate-900", FPTS_COL_BG)}>
                         {pts}
                       </td>
                       {withSnap ? (
-                        <td className={STAT_TD}>
-                          {formatSnapPct(g.raw, played)}
-                        </td>
+                        <td className={STAT_TD}>{formatSnapPct(g.raw, played)}</td>
                       ) : null}
                       <td className={cn(STAT_TD, rankHeat)}>
                         {weekRank != null ? String(weekRank) : "-"}
@@ -1445,7 +1432,9 @@ function GameLogsPanel({
             ) : careerLoading ? (
               <p className="py-4 text-center text-sm text-slate-400">Loading career totals…</p>
             ) : career.length === 0 ? (
-              <p className="py-4 text-center text-sm text-slate-400">No career season totals yet.</p>
+              <p className="py-4 text-center text-sm text-slate-400">
+                No career season totals yet.
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-sm">
@@ -1559,7 +1548,9 @@ function ProjectionsPanel({
   }
   if (!data || data.logs.length === 0) {
     return (
-      <p className="px-6 py-8 text-center text-sm text-slate-400">No weekly projections available.</p>
+      <p className="px-6 py-8 text-center text-sm text-slate-400">
+        No weekly projections available.
+      </p>
     );
   }
 
@@ -1594,8 +1585,7 @@ function ProjectionsPanel({
                 : null;
             const ptsVal = leaguePts ?? ptsForFormat(g.points, scoringFormat);
             const fpts = played && ptsVal != null ? fmtFantasyPts(ptsVal) : "-";
-            const showStats =
-              !isBye && hasScorableProjectionStats(g.projRaw);
+            const showStats = !isBye && hasScorableProjectionStats(g.projRaw);
             const oppLabel = formatOppLabel(
               g as { opp?: string | null; isAway?: boolean; location?: string },
             );
@@ -1621,9 +1611,7 @@ function ProjectionsPanel({
                 </td>
                 <td className={cn(STAT_TD, "font-bold text-slate-700")}>
                   {isBye ? (
-                    <span className="text-xs font-extrabold tracking-wide text-slate-400">
-                      BYE
-                    </span>
+                    <span className="text-xs font-extrabold tracking-wide text-slate-400">BYE</span>
                   ) : (
                     <span className={oppClass}>{oppLabel}</span>
                   )}
@@ -1631,12 +1619,8 @@ function ProjectionsPanel({
                 <td className={cn(STAT_TD, GROUP_EDGE)}>
                   {hasProj ? fmtFantasyPts(projVal) : "-"}
                 </td>
-                <td className={cn(STAT_TD, "font-bold text-slate-900", FPTS_COL_BG)}>
-                  {fpts}
-                </td>
-                {withSnap ? (
-                  <td className={STAT_TD}>{formatSnapPct(g.raw, played)}</td>
-                ) : null}
+                <td className={cn(STAT_TD, "font-bold text-slate-900", FPTS_COL_BG)}>{fpts}</td>
+                {withSnap ? <td className={STAT_TD}>{formatSnapPct(g.raw, played)}</td> : null}
                 <td className={cn(STAT_TD, rankHeat)}>
                   {weekRank != null ? String(weekRank) : "-"}
                 </td>
@@ -1829,16 +1813,15 @@ function SosHeatmapPanel({
         : "";
       const rawOpp = !dataSaysBye ? hit!.opp : scheduleOpp;
       const opp =
-        (rawOpp || scheduleOpp || "—").replace(/^vs\s+|^@\s+/i, "").trim().toUpperCase() ||
-        "—";
+        (rawOpp || scheduleOpp || "—")
+          .replace(/^vs\s+|^@\s+/i, "")
+          .trim()
+          .toUpperCase() || "—";
       // Match Outlook: stars derive only from sosStarsFromRank(weekly defensive rank).
-      const rank =
-        hit?.rank != null && Number.isFinite(Number(hit.rank)) ? Number(hit.rank) : null;
+      const rank = hit?.rank != null && Number.isFinite(Number(hit.rank)) ? Number(hit.rank) : null;
       const stars = sosStarsFromRank(rank);
       const { tone, label } =
-        stars != null
-          ? sosDifficultyFromStars(stars)
-          : { tone: "bye" as const, label: null };
+        stars != null ? sosDifficultyFromStars(stars) : { tone: "bye" as const, label: null };
       const isHome = game ? (game.home || "").toUpperCase() === upperTeam : true;
       const isAway = Boolean(game) && !isHome;
       const venueTeam = isHome ? upperTeam : opp;
@@ -1877,12 +1860,7 @@ function SosHeatmapPanel({
         </span>
         <div className="grid w-full grid-cols-1 divide-y divide-slate-100 rounded-xl border border-slate-200/60 bg-white p-4 text-center shadow-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           <div className="flex flex-col items-center justify-center p-3 text-center sm:p-2">
-            <span
-              className={cn(
-                "text-xl font-black uppercase tracking-wide",
-                overallGradeClass,
-              )}
-            >
+            <span className={cn("text-xl font-black uppercase tracking-wide", overallGradeClass)}>
               {overallGrade}
             </span>
             <span className="mt-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">
@@ -2053,11 +2031,7 @@ function OutlookPanel({
     return brainSos.matchups[0] ?? null;
   }, [brainSos, week]);
 
-  const opponentAbbr = (
-    currentMatchup?.opp ||
-    nextGame?.opponent ||
-    ""
-  )
+  const opponentAbbr = (currentMatchup?.opp || nextGame?.opponent || "")
     .replace(/^vs\s+|^@\s+/i, "")
     .trim()
     .toUpperCase();
@@ -2101,7 +2075,7 @@ function OutlookPanel({
     const mine =
       leagueProj != null && Number.isFinite(leagueProj)
         ? leagueProj
-        : projectFor(playerId) ?? logProj;
+        : (projectFor(playerId) ?? logProj);
     if (mine == null || !Number.isFinite(mine) || mine <= 0) return null;
     return {
       pct: (mine / total) * 100,
@@ -2207,11 +2181,7 @@ function OutlookPanel({
           {kickoffLabel}
         </span>
         {WeatherIcon ? (
-          <WeatherIcon
-            className="ml-2 size-3.5 text-slate-500"
-            strokeWidth={1.75}
-            aria-hidden
-          />
+          <WeatherIcon className="ml-2 size-3.5 text-slate-500" strokeWidth={1.75} aria-hidden />
         ) : null}
       </div>
 
@@ -2277,46 +2247,42 @@ function OutlookPanel({
   );
 }
 
-function DepthChartAvatar({
-  id,
-  pos,
-  team,
-  name,
-}: {
-  id: string;
-  pos: string;
-  team: string;
-  name: string;
-}) {
-  const logo = teamLogo(team);
-  const isDefense = pos.toUpperCase() === "DEF";
-  const [useLogo, setUseLogo] = useState(isDefense || !id);
+const DEPTH_POS_LABEL_CLASS: Record<string, string> = {
+  QB: "text-qb",
+  RB: "text-rb",
+  WR1: "text-wr",
+  WR2: "text-wr",
+  WR3: "text-wr",
+  TE: "text-te",
+  K: "text-k",
+};
 
-  if (useLogo || !id) {
-    return (
-      <img
-        src={logo ?? ""}
-        alt=""
-        aria-hidden
-        className="relative z-20 h-8 w-8 flex-shrink-0 rounded-full border border-slate-100 bg-slate-50 object-contain shadow-sm"
-        onError={(e) => {
-          e.currentTarget.style.visibility = "hidden";
-        }}
-      />
-    );
-  }
+const DEPTH_STATUS_LEGEND: { status: string; label: string }[] = [
+  { status: "IR", label: "Injured Reserve" },
+  { status: "O", label: "Out" },
+  { status: "D", label: "Doubtful" },
+  { status: "Q", label: "Questionable" },
+];
 
-  return (
-    <img
-      src={playerImage(id, pos as Pos, team)}
-      alt={name}
-      loading="lazy"
-      className="relative z-20 h-8 w-8 flex-shrink-0 rounded-full border border-slate-100 bg-white object-cover shadow-sm"
-      onError={() => setUseLogo(true)}
-    />
-  );
+function splitDepthPlayerName(name: string): { first: string; last: string } {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { first: "", last: parts[0] ?? name };
+  return { first: parts[0]!, last: parts.slice(1).join(" ") };
 }
 
+type DepthPanelEntry = {
+  id: string;
+  name: string;
+  pos: string;
+  injury: string | null;
+  proj: number;
+};
+
+/**
+ * Desktop depth chart — same Sleeper depth_chart_order / WR1–WR3 snap as mobile.
+ * Starters come from official chart order (not ROS proj), so practice-squad /
+ * unlisted players never appear.
+ */
 function DepthChartPanel({
   playerId,
   team,
@@ -2325,17 +2291,11 @@ function DepthChartPanel({
 }: {
   playerId: string;
   team: string;
-  depthChart: {
-    id: string;
-    name: string;
-    pos: string;
-    injury: string | null;
-    proj: number;
-  }[];
+  depthChart: DepthPanelEntry[];
   onSelectPlayer?: (id: string) => void;
 }) {
-  // Same shared week-proj overlay as popup header / mobile Team depth / ATP.
   const liveInjuries = useLiveInjuryStatuses();
+  const { projectFor } = useLeagueProjections();
   const { data: catalog } = useSleeperPlayers();
   const playersById = useMemo(() => {
     const map = new Map<string, CatalogPlayer>();
@@ -2343,161 +2303,196 @@ function DepthChartPanel({
     return map;
   }, [catalog]);
 
-  /** Injury token for depth cells — same path as popup header. Never stale detail/catalog-only injury. */
+  const { data: depthBoard, isLoading: depthLoading } = useQuery({
+    queryKey: ["nfl-team-depth", "snap-v1"],
+    enabled: Boolean(team) && team !== "FA",
+    staleTime: 30 * 60 * 1000,
+    placeholderData: (prev) => prev,
+    retry: false,
+    queryFn: () => fetchNflTeamDepth(),
+  });
+
   const injuryStatusFor = useCallback(
-    (id: string, fallback: string | null): string | null => {
+    (id: string): string | null => {
       const live = liveInjuries.data?.[id];
       const meta = playersById.get(id);
       const carrier =
         live !== undefined
           ? {
-              id,
               injury_status: live.status?.trim() || null,
               injury: live.status?.trim() || null,
             }
           : meta
             ? meta
-            : fallback
-              ? { id, injury_status: fallback, injury: fallback }
-              : null;
+            : null;
       if (!carrier) return null;
       return resolveInjuryStatus(carrier) ?? carrier.injury_status ?? null;
     },
     [liveInjuries.data, playersById],
   );
 
-  const activeName = depthChart.find((d) => d.id === playerId)?.name ?? null;
+  const depthRows = useMemo(() => {
+    const chart = teamDepthFor(depthBoard, team);
+    const projById = new Map(depthChart.map((d) => [d.id, d]));
 
-  const byPos = useMemo(() => {
-    const group = (slot: string) =>
-      depthChart
-        .filter((d) => d.pos === slot)
-        .slice()
-        .sort((a, b) => b.proj - a.proj);
-    return {
-      QB: group("QB"),
-      RB: group("RB"),
-      K: group("K"),
-      WR: group("WR"),
-      TE: group("TE"),
-      DEF: group("DEF"),
+    const toCells = (slot: TeamDepthSlot, entries: TeamDepthEntry[] | undefined) => {
+      const top = (entries ?? []).slice(0, 3);
+      return [0, 1, 2].map((i) => {
+        const entry = top[i];
+        if (!entry) return null;
+        const hit = projById.get(entry.id);
+        const meta = playersById.get(entry.id);
+        return {
+          id: entry.id,
+          name: entry.name || hit?.name || meta?.name || entry.id,
+          pos: slot.startsWith("WR") ? "WR" : slot,
+          proj: hit?.proj ?? 0,
+          injury: injuryStatusFor(entry.id),
+        } satisfies DepthPanelEntry;
+      }) as [DepthPanelEntry | null, DepthPanelEntry | null, DepthPanelEntry | null];
     };
-  }, [depthChart]);
 
-  const leftBlocks: { title: string; rows: typeof depthChart }[] = [
-    { title: "QUARTERBACKS", rows: byPos.QB },
-    { title: "RUNNING BACKS", rows: byPos.RB },
-    { title: "KICKERS", rows: byPos.K },
-  ];
-  const rightBlocks: { title: string; rows: typeof depthChart }[] = [
-    { title: "WIDE RECEIVERS", rows: byPos.WR },
-    { title: "TIGHT ENDS", rows: byPos.TE },
-    { title: "TEAM DEFENSES", rows: byPos.DEF },
-  ];
+    const slots: TeamDepthSlot[] = ["QB", "RB", "WR1", "WR2", "WR3", "TE", "K"];
+    return slots.map((label) => ({ label, cells: toCells(label, chart?.[label]) }));
+  }, [depthBoard, depthChart, injuryStatusFor, playersById, team]);
 
-  if (depthChart.length === 0) {
+  if (!team || team === "FA") {
     return (
       <p className="py-8 text-center text-sm text-slate-400">
-        No {team} depth chart available.
+        No team depth chart for free agents.
       </p>
     );
   }
 
-  const renderCard = (
-    d: (typeof depthChart)[number],
-    index: number,
-  ) => {
-    // Same badge path as popup header: resolveInjuryStatus → injuryBadgeInfo.
-    const badge = injuryBadgeInfo(injuryStatusFor(d.id, d.injury));
-    const isActive =
-      d.id === playerId ||
-      (activeName != null &&
-        d.name.trim().toLowerCase() === activeName.trim().toLowerCase());
-
-    const inner = (
-      <>
-        <div
-          className="absolute top-0 bottom-0 left-0 w-1 rounded-l-xl"
-          style={{ backgroundColor: getTeamPrimaryColor(team) }}
-          aria-hidden
-        />
-        <div className="flex min-w-0 items-center space-x-2.5">
-          <span className="flex h-[18px] w-[18px] flex-shrink-0 select-none items-center justify-center rounded-full bg-slate-100 text-[10px] font-black text-slate-500">
-            {index + 1}
-          </span>
-          <DepthChartAvatar id={d.id} pos={d.pos} team={team} name={d.name} />
-          <span
-            className={cn(
-              "max-w-[120px] truncate text-xs font-black",
-              isActive ? "text-blue-600" : "text-slate-900",
-            )}
-          >
-            {d.name}
-          </span>
-          {badge ? (
-            <span
-              className={cn(
-                "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-black tracking-wider",
-                badge.className,
-              )}
-            >
-              {badge.letter}
-            </span>
-          ) : null}
-        </div>
-        <div className="ml-auto flex flex-shrink-0 items-center">
-          <div className="text-xs font-black tracking-wide text-slate-900 uppercase">
-            {Number.isFinite(d.proj) && d.proj > 0 ? d.proj.toFixed(2) : "—"}
-            <span className="ml-0.5 text-[10px] font-bold normal-case text-slate-400">
-              proj
-            </span>
-          </div>
-        </div>
-      </>
-    );
-
-    const klass = cn(
-      "relative mb-2 flex w-full items-center justify-between overflow-hidden rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 pl-5 text-left shadow-sm transition-colors hover:bg-slate-100/60",
-      isActive && "border-blue-100 bg-blue-50/50 hover:bg-blue-50/70",
-    );
-
-    return onSelectPlayer ? (
-      <button
-        key={d.id}
-        type="button"
-        className={klass}
-        onClick={() => onSelectPlayer(d.id)}
-      >
-        {inner}
-      </button>
-    ) : (
-      <Link key={d.id} to="/player/$id" params={{ id: d.id }} className={klass}>
-        {inner}
-      </Link>
-    );
-  };
-
-  const renderColumn = (blocks: { title: string; rows: typeof depthChart }[]) => (
-    <div className="flex w-full flex-col gap-5">
-      {blocks.map((block) =>
-        block.rows.length === 0 ? null : (
-          <section key={block.title} className="w-full">
-            <span className="mb-2 block text-left text-[10px] font-black tracking-widest text-slate-400 uppercase">
-              {block.title}
-            </span>
-            <div className="flex flex-col">
-              {block.rows.map((d, index) => renderCard(d, index))}
-            </div>
-          </section>
-        ),
-      )}
-    </div>
-  );
+  const empty = depthRows.every((r) => r.cells.every((c) => c == null));
 
   return (
-    <div className="grid w-full grid-cols-1 items-start gap-6 overflow-visible bg-white px-6 py-4 md:grid-cols-2">
-      {renderColumn(leftBlocks)}
-      {renderColumn(rightBlocks)}
+    <div className="w-full bg-white px-6 py-4">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="grid grid-cols-[3rem_1fr_1fr_1fr] border-b border-slate-200 bg-slate-50 px-3 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+          <span>Pos</span>
+          <span>Starter</span>
+          <span>2nd</span>
+          <span>3rd</span>
+        </div>
+        {empty ? (
+          <p className="px-4 py-8 text-center text-sm text-slate-400">
+            {depthLoading ? "Loading depth chart…" : `No ${team} depth chart available.`}
+          </p>
+        ) : (
+          depthRows.map((row, idx) => (
+            <div
+              key={row.label}
+              className={cn(
+                "grid grid-cols-[3rem_1fr_1fr_1fr] border-b border-slate-100 px-3 py-2.5 last:border-0",
+                idx % 2 === 1 && "bg-slate-50/70",
+              )}
+            >
+              <div
+                className={cn(
+                  "pt-0.5 text-xs font-black",
+                  DEPTH_POS_LABEL_CLASS[row.label] ?? "text-slate-400",
+                )}
+              >
+                {row.label}
+              </div>
+              {row.cells.map((cell, col) => {
+                if (!cell) return <div key={`${row.label}-${col}`} />;
+                const meta = playersById.get(cell.id);
+                const age = meta?.age;
+                const badge = injuryBadgeInfo(cell.injury);
+                const { first, last } = splitDepthPlayerName(cell.name);
+                const isActive = cell.id === playerId;
+                const weekProj = projectFor(cell.id);
+                const seasonProj = Number.isFinite(cell.proj) && cell.proj > 0 ? cell.proj : null;
+                const projLabel =
+                  weekProj != null && Number.isFinite(weekProj) && weekProj > 0
+                    ? weekProj.toFixed(1)
+                    : seasonProj != null
+                      ? seasonProj.toFixed(1)
+                      : null;
+
+                const body = (
+                  <>
+                    <div className="flex min-w-0 items-center gap-1">
+                      {age != null ? (
+                        <span className="text-[10px] text-slate-400">{age} y/o</span>
+                      ) : null}
+                      {badge ? (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded px-1 text-[9px] font-black",
+                            badge.className,
+                          )}
+                        >
+                          {badge.letter}
+                        </span>
+                      ) : null}
+                    </div>
+                    {first ? (
+                      <p className="truncate text-[10px] leading-tight text-slate-400">{first}</p>
+                    ) : null}
+                    <p
+                      className={cn(
+                        "truncate text-[12px] font-black leading-tight",
+                        isActive ? "text-blue-600" : "text-slate-900",
+                      )}
+                    >
+                      {last}
+                    </p>
+                    {projLabel ? (
+                      <p className="mt-0.5 text-[11px] font-semibold tabular-nums text-slate-400">
+                        {projLabel}
+                      </p>
+                    ) : null}
+                  </>
+                );
+
+                const klass = cn(
+                  "min-w-0 rounded-md px-1.5 py-1 text-left transition-colors",
+                  isActive && "bg-emerald-50 ring-1 ring-emerald-200/80",
+                  onSelectPlayer && "hover:bg-slate-100/80",
+                );
+
+                return onSelectPlayer ? (
+                  <button
+                    key={cell.id}
+                    type="button"
+                    onClick={() => onSelectPlayer(cell.id)}
+                    className={klass}
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <Link key={cell.id} to="/player/$id" params={{ id: cell.id }} className={klass}>
+                    {body}
+                  </Link>
+                );
+              })}
+            </div>
+          ))
+        )}
+      </div>
+
+      <ul className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 px-0.5">
+        {DEPTH_STATUS_LEGEND.map((row) => {
+          const badge = injuryBadgeInfo(row.status);
+          if (!badge) return null;
+          return (
+            <li key={row.status} className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <span
+                className={cn(
+                  "inline-flex min-w-[1.5rem] items-center justify-center rounded px-1 py-0.5 text-[9px] font-black",
+                  badge.className,
+                )}
+              >
+                {badge.letter}
+              </span>
+              <span>{row.label}</span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -2520,7 +2515,10 @@ function oneSentenceSummary(raw: string | null | undefined, fallback: string): s
   const match = text.match(/^(.+?[.!?])(?:\s|$)/);
   const sentence = (match?.[1] ?? text).trim();
   if (sentence.length <= 220) return sentence;
-  const clipped = sentence.slice(0, 217).replace(/\s+\S*$/, "").trim();
+  const clipped = sentence
+    .slice(0, 217)
+    .replace(/\s+\S*$/, "")
+    .trim();
   return `${clipped}…`;
 }
 
@@ -2602,7 +2600,9 @@ function EditorialNewsPanel({
     return (
       <div className="w-full">
         {medicalIntel}
-        <p className="py-8 text-center text-sm text-slate-400">No recent articles for this player.</p>
+        <p className="py-8 text-center text-sm text-slate-400">
+          No recent articles for this player.
+        </p>
       </div>
     );
   }
@@ -2629,19 +2629,15 @@ function EditorialNewsPanel({
             className="mb-4 flex w-full flex-col items-start overflow-hidden rounded-xl border border-slate-100 bg-white p-5 text-left shadow-sm"
           >
             {n.link ? (
-              <a
-                href={n.link}
-                target="_blank"
-                rel="noreferrer"
-                className={headlineClass}
-              >
+              <a href={n.link} target="_blank" rel="noreferrer" className={headlineClass}>
                 {n.headline}
               </a>
             ) : (
               <h3 className={headlineClass}>{n.headline}</h3>
             )}
             <span className="mb-4 block text-[11px] font-medium text-slate-400">
-              {n.source}{ago ? ` · ${ago}` : ""}
+              {n.source}
+              {ago ? ` · ${ago}` : ""}
             </span>
             <p className="mb-4 block w-full border-l-2 border-slate-200/80 pl-3.5 text-left text-sm leading-relaxed font-medium text-slate-500 italic">
               {summary}
@@ -2664,4 +2660,3 @@ function EditorialNewsPanel({
 /* ------------------------------------------------------------------ */
 /* End tab panels                                                      */
 /* ------------------------------------------------------------------ */
-
