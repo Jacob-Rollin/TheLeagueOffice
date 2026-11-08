@@ -2023,6 +2023,7 @@ type DepthEntry = {
   name: string;
   pos: string;
   proj: number;
+  age: number | null;
   injury: string | null;
 };
 
@@ -2042,8 +2043,6 @@ function TeamTab({
   const nflState = useNflState();
   const season = nflState.data?.season ?? String(new Date().getUTCFullYear());
   const { data: catalog } = useSleeperPlayers();
-  // Active-week proj (same path as matchup / ATP) — not season ROS from depthChart.
-  const { projectFor } = useLeagueProjections();
   // Same shared week-proj overlay as popup header / ATP / catalog badges.
   const liveInjuries = useLiveInjuryStatuses();
   const playersById = useMemo(() => {
@@ -2121,6 +2120,7 @@ function TeamTab({
           name: entry.name || hit?.name || meta?.name || entry.id,
           pos: slot.startsWith("WR") ? "WR" : slot,
           proj: hit?.proj ?? 0,
+          age: entry.age ?? meta?.age ?? hit?.age ?? null,
           injury: injuryStatusFor(entry.id),
         } satisfies DepthEntry;
       });
@@ -2130,6 +2130,39 @@ function TeamTab({
     const slots: TeamDepthSlot[] = ["QB", "RB", "WR1", "WR2", "WR3", "TE", "K"];
     return slots.map((label) => ({ label, cells: toCells(label, chart?.[label]) }));
   }, [depthBoard, depthChart, injuryStatusFor, playersById, team]);
+
+  const missingAgeIds = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const row of depthRows) {
+      for (const cell of row.cells) {
+        if (!cell || cell.age != null || seen.has(cell.id)) continue;
+        seen.add(cell.id);
+        ids.push(cell.id);
+      }
+    }
+    return ids;
+  }, [depthRows]);
+
+  const { data: bioAges } = useQuery({
+    queryKey: ["mobile-depth-bio-ages", team, missingAgeIds.join("|")],
+    enabled: Boolean(team) && missingAgeIds.length > 0,
+    staleTime: 24 * 60 * 60 * 1000,
+    queryFn: async () => {
+      const out: Record<string, number> = {};
+      await Promise.all(
+        missingAgeIds.map(async (pid) => {
+          const bio = await fetchPlayerBioClient(pid);
+          const birth = bio?.birthDate;
+          if (!birth) return;
+          const t = new Date(birth).getTime();
+          if (!Number.isFinite(t)) return;
+          out[pid] = Math.floor((Date.now() - t) / 31557600000);
+        }),
+      );
+      return out;
+    },
+  });
 
   if (!team) {
     return <p className="px-4 py-8 text-center text-sm text-m-muted">No team depth chart for free agents.</p>;
@@ -2192,13 +2225,15 @@ function TeamTab({
                 if (!cell) {
                   return <div key={`${row.label}-${col}`} />;
                 }
-                const meta = playersById.get(cell.id);
-                const age = meta?.age;
+                const age =
+                  cell.age ??
+                  playersById.get(cell.id)?.age ??
+                  bioAges?.[cell.id] ??
+                  null;
                 // Same badge path as popup header: resolveInjuryStatus → injuryBadgeInfo.
                 const badge = injuryBadgeInfo(cell.injury);
                 const { first, last } = splitPlayerName(cell.name);
                 const isActive = cell.id === playerId;
-                const weekProj = projectFor(cell.id);
                 return (
                   <button
                     key={cell.id}
@@ -2210,9 +2245,6 @@ function TeamTab({
                     )}
                   >
                     <div className="flex items-center gap-1">
-                      {age != null ? (
-                        <span className="text-[10px] text-m-muted">{age} y/o</span>
-                      ) : null}
                       {badge ? (
                         <span className={cn("rounded px-1 text-[9px] font-black", badge.className)}>
                           {badge.letter}
@@ -2228,11 +2260,9 @@ function TeamTab({
                     >
                       {last}
                     </p>
-                    {weekProj != null && Number.isFinite(weekProj) && weekProj > 0 ? (
-                      <p className="mt-0.5 text-[11px] font-semibold tabular-nums text-m-muted">
-                        {weekProj.toFixed(1)}
-                      </p>
-                    ) : null}
+                    <p className="mt-0.5 text-[11px] font-semibold tabular-nums text-m-muted">
+                      {age != null && Number.isFinite(age) ? `${age} age` : "—"}
+                    </p>
                   </button>
                 );
               })}
