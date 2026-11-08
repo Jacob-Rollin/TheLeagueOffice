@@ -719,11 +719,11 @@ function StandalonePlayerHeader({
 }) {
   const { rankFor } = useLeagueProjections();
   const teamMeta = teamById(player.team);
-  const teamNickname = (teamMeta?.name ?? player.team ?? "FA").toUpperCase();
   const jerseyNumber = bio?.number != null ? String(bio.number) : null;
   const isDefense = player.pos === "DEF";
   const conference = teamMeta?.conference ?? "NFC";
   const division = teamMeta?.division ?? "NORTH";
+  const badgeLogo = teamLogo(player.team);
   const watermarkLogo = getWatermarkLogoUrl(player.team);
   const raidersWatermark =
     player.team?.toUpperCase() === "LV" || player.team?.toUpperCase() === "OAK";
@@ -835,7 +835,7 @@ function StandalonePlayerHeader({
               }}
             />
           </div>
-          <div className="absolute bottom-0 left-0 z-50 flex select-none flex-row items-center whitespace-nowrap bg-transparent pl-0 text-center uppercase">
+          <div className="absolute bottom-0 left-0 z-50 flex w-full select-none flex-row items-stretch overflow-visible rounded-tr-md rounded-br-none bg-transparent pl-0 text-center uppercase">
             <span
               className={cn(
                 "flex shrink-0 items-center justify-center px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
@@ -844,9 +844,22 @@ function StandalonePlayerHeader({
             >
               {player.pos === "DEF" ? "DST" : player.pos}
             </span>
-            <span className="flex flex-row items-center justify-center space-x-1.5 rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
-              <span>{teamNickname}</span>
-              {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
+            <span className="flex min-w-0 flex-1 flex-row items-center justify-between gap-2 rounded-tr-md rounded-br-none bg-slate-950/90 px-2.5 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
+              {badgeLogo ? (
+                <img
+                  src={badgeLogo}
+                  alt=""
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 object-contain"
+                />
+              ) : (
+                <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+              )}
+              {!isDefense && jerseyNumber ? (
+                <span>#{jerseyNumber}</span>
+              ) : (
+                <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+              )}
             </span>
           </div>
         </div>

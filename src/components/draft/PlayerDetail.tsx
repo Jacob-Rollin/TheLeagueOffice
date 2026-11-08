@@ -336,7 +336,6 @@ export function PlayerDetail({
   const watermarkLogo = getWatermarkLogoUrl(player.team);
   const raidersWatermark = isRaidersTeam(player.team);
   const teamMeta = teamById(player.team);
-  const teamNickname = (teamMeta?.name ?? player.team ?? "FA").toUpperCase();
   const jerseyNumber = bio?.number != null ? String(bio.number) : null;
   const isDefense = player.pos === "DEF";
   const conference =
@@ -525,7 +524,7 @@ export function PlayerDetail({
                   }}
                 />
               </div>
-              <div className="absolute bottom-0 left-0 z-30 flex min-w-full w-max max-w-[200px] flex-row items-center whitespace-nowrap rounded-tr-md rounded-br-none bg-transparent pl-0">
+              <div className="absolute bottom-0 left-0 z-30 flex w-full flex-row items-stretch overflow-visible rounded-tr-md rounded-br-none bg-transparent pl-0">
                 <span
                   className={cn(
                     "flex shrink-0 items-center justify-center rounded-none px-2 py-1 text-[11px] font-black uppercase tracking-wider text-white",
@@ -534,9 +533,22 @@ export function PlayerDetail({
                 >
                   {player.pos === "DEF" ? "DST" : player.pos}
                 </span>
-                <span className="flex flex-row items-center justify-center space-x-1.5 whitespace-nowrap rounded-tr-md rounded-br-none bg-slate-950/90 px-3 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
-                  <span>{teamNickname}</span>
-                  {!isDefense && jerseyNumber ? <span>#{jerseyNumber}</span> : null}
+                <span className="flex min-w-0 flex-1 flex-row items-center justify-between gap-2 rounded-tr-md rounded-br-none bg-slate-950/90 px-2.5 py-1 text-center text-[11px] font-black uppercase tracking-wider text-white">
+                  {compactLogo ? (
+                    <img
+                      src={compactLogo}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-4 w-4 shrink-0 object-contain"
+                    />
+                  ) : (
+                    <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  )}
+                  {!isDefense && jerseyNumber ? (
+                    <span>#{jerseyNumber}</span>
+                  ) : (
+                    <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  )}
                 </span>
               </div>
             </div>
