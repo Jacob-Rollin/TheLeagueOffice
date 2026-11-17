@@ -871,8 +871,22 @@ const STAT_TD = "px-1.5 py-2 text-center font-mono text-sm text-slate-700";
 const GROUP_EDGE = "border-l border-slate-200";
 /** Soft Fpts column wash — same light-theme tone as mobile `--m-rank-col`. */
 const FPTS_COL_BG = "bg-[#e3f4f9]";
-/** Share width evenly so Game Logs / Projections stay inside the modal. */
+/**
+ * Fixed layout so Fantasy / stat columns share leftover width evenly.
+ * WK + OPP get explicit cols (see GameLogWeekOppColgroup) — otherwise
+ * table-fixed stretches them and leaves a huge gap before Opp.
+ */
 const LOG_TABLE = "w-full table-fixed border-collapse text-sm";
+
+/** Narrow WK + compact Opp (@ + logo + abbr); remaining cols share space evenly. */
+function GameLogWeekOppColgroup() {
+  return (
+    <colgroup>
+      <col style={{ width: "2rem" }} />
+      <col style={{ width: "5rem" }} />
+    </colgroup>
+  );
+}
 
 /**
  * Soft heat for Sleeper pos_rank_* (1 = best at position) — weekly Game Log
@@ -931,6 +945,49 @@ function formatOppLabel(g: { opp?: string | null; isAway?: boolean; location?: s
       ?.replace(/^vs\s+|^@\s+/i, "")
       .trim()
       .toUpperCase() || "-"
+  );
+}
+
+/** Sleeper-style Opp cell: optional @, team logo, abbr (SoS tint on the abbr). */
+function GameLogOppCell({
+  isBye,
+  oppLabel,
+  className,
+}: {
+  isBye: boolean;
+  oppLabel: string;
+  className?: string;
+}) {
+  if (isBye) {
+    return (
+      <span className="text-xs font-extrabold tracking-wide text-slate-400">BYE</span>
+    );
+  }
+  const away = /^\s*@/.test(oppLabel);
+  const abbr = oppLabel
+    .replace(/^vs\s+|^@\s+/i, "")
+    .trim()
+    .toUpperCase();
+  const logo = teamLogo(abbr);
+  return (
+    <span className={cn("inline-flex max-w-full items-center gap-0.5", className)}>
+      {away ? (
+        <span className="w-2.5 shrink-0 text-left text-[10px] font-bold leading-none text-slate-400">
+          @
+        </span>
+      ) : null}
+      {logo ? (
+        <img
+          src={logo}
+          alt=""
+          aria-hidden
+          className="size-3.5 shrink-0 object-contain"
+          loading="lazy"
+          decoding="async"
+        />
+      ) : null}
+      <span className="truncate">{abbr || "-"}</span>
+    </span>
   );
 }
 
@@ -1080,12 +1137,15 @@ function DoubleTierThead({
   fantasyLabels,
   groups,
   fantasyHighlightIndex,
+  /** How many leading left headers stay left-aligned (WK+OPP = 2). */
+  leftAlignCount = 1,
 }: {
   leftLabels: string[];
   fantasyLabels: string[];
   groups: StatGroup[];
   /** Soft wash on a Fantasy micro-header (e.g. Fpts). */
   fantasyHighlightIndex?: number;
+  leftAlignCount?: number;
 }) {
   return (
     <thead>
@@ -1102,7 +1162,10 @@ function DoubleTierThead({
       </tr>
       <tr className="border-b border-slate-100 bg-white text-left">
         {leftLabels.map((h, i) => (
-          <th key={`left-${h}`} className={cn(MICRO_TH, i === 0 ? "text-left" : "text-center")}>
+          <th
+            key={`left-${h}`}
+            className={cn(MICRO_TH, i < leftAlignCount ? "text-left" : "text-center")}
+          >
             {h}
           </th>
         ))}
@@ -1366,11 +1429,13 @@ function GameLogsPanel({
         <>
           <div className="overflow-x-hidden">
             <table className={LOG_TABLE}>
+              <GameLogWeekOppColgroup />
               <DoubleTierThead
                 leftLabels={["WK", "OPP"]}
                 fantasyLabels={gameLogFantasyLabels(pos)}
                 groups={statGroups}
                 fantasyHighlightIndex={1}
+                leftAlignCount={2}
               />
               <tbody>
                 {data.logs.map((g, index) => {
@@ -1405,7 +1470,7 @@ function GameLogsPanel({
                   const oppClass =
                     !isBye && sosRank != null && Number.isFinite(sosRank)
                       ? cn("font-semibold", sosOppTextClass(sosRank))
-                      : "text-slate-600";
+                      : "font-bold text-slate-700";
                   const weekRank = played ? weeklyPosRankDisplay(g.raw?.[rankKey]) : null;
                   const rankHeat = posRankHeatCellClass(weekRank);
                   const withSnap = showGameLogSnapPct(pos);
@@ -1418,17 +1483,11 @@ function GameLogsPanel({
                         index % 2 === 1 ? "bg-slate-50/40" : "bg-white",
                       )}
                     >
-                      <td className={cn(STAT_TD, "text-left font-semibold text-slate-900")}>
+                      <td className={cn(STAT_TD, "px-1.5 text-left font-semibold text-slate-900")}>
                         {String(g.week)}
                       </td>
-                      <td className={cn(STAT_TD, "font-bold text-slate-700")}>
-                        {isBye ? (
-                          <span className="text-xs font-extrabold tracking-wide text-slate-400">
-                            BYE
-                          </span>
-                        ) : (
-                          <span className={oppClass}>{oppLabel}</span>
-                        )}
+                      <td className={cn(STAT_TD, "px-1 text-left")}>
+                        <GameLogOppCell isBye={isBye} oppLabel={oppLabel} className={oppClass} />
                       </td>
                       <td className={cn(STAT_TD, GROUP_EDGE)}>
                         {hasProj ? fmtFantasyPts(projVal) : "-"}
@@ -1598,11 +1657,13 @@ function ProjectionsPanel({
   return (
     <div className="w-full overflow-x-hidden">
       <table className={LOG_TABLE}>
+        <GameLogWeekOppColgroup />
         <DoubleTierThead
           leftLabels={["WK", "OPP"]}
           fantasyLabels={gameLogFantasyLabels(pos)}
           groups={statGroups}
           fantasyHighlightIndex={1}
+          leftAlignCount={2}
         />
         <tbody>
           {data.logs.map((g, index) => {
@@ -1634,7 +1695,7 @@ function ProjectionsPanel({
             const oppClass =
               !isBye && sosRank != null && Number.isFinite(sosRank)
                 ? cn("font-semibold", sosOppTextClass(sosRank))
-                : "text-slate-600";
+                : "font-bold text-slate-700";
             const weekRank = played ? weeklyPosRankDisplay(g.raw?.[rankKey]) : null;
             const rankHeat = posRankHeatCellClass(weekRank);
             const withSnap = showGameLogSnapPct(pos);
@@ -1647,15 +1708,11 @@ function ProjectionsPanel({
                   index % 2 === 1 ? "bg-slate-50/40" : "bg-white",
                 )}
               >
-                <td className={cn(STAT_TD, "text-left font-semibold text-slate-900")}>
+                <td className={cn(STAT_TD, "px-1.5 text-left font-semibold text-slate-900")}>
                   {String(g.week)}
                 </td>
-                <td className={cn(STAT_TD, "font-bold text-slate-700")}>
-                  {isBye ? (
-                    <span className="text-xs font-extrabold tracking-wide text-slate-400">BYE</span>
-                  ) : (
-                    <span className={oppClass}>{oppLabel}</span>
-                  )}
+                <td className={cn(STAT_TD, "px-1 text-left")}>
+                  <GameLogOppCell isBye={isBye} oppLabel={oppLabel} className={oppClass} />
                 </td>
                 <td className={cn(STAT_TD, GROUP_EDGE)}>
                   {hasProj ? fmtFantasyPts(projVal) : "-"}
