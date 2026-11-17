@@ -195,7 +195,7 @@ export function PlayerDetail({
   scoringFormat?: Scoring;
   onScoringFormatChange?: (format: Scoring) => void;
 }) {
-  const { data, isLoading } = useQuery(detailQuery(id));
+  const { data, isLoading, isFetching, isError } = useQuery(detailQuery(id));
   const { data: bio } = useQuery({
     queryKey: ["player-bio", id],
     queryFn: () => fetchPlayerBioClient(id),
@@ -319,10 +319,14 @@ export function PlayerDetail({
     return () => io.disconnect();
   }, [id, isPopup, isLoading, data?.player?.id]);
 
-  if (isLoading)
+  if (isLoading || (isFetching && !data))
     return <p className="p-6 text-center text-sm text-muted-foreground">Loading player…</p>;
   if (!data)
-    return <p className="p-6 text-center text-sm text-muted-foreground">Player not found.</p>;
+    return (
+      <p className="p-6 text-center text-sm text-muted-foreground">
+        {isError ? "Player details unavailable right now." : "Player not found."}
+      </p>
+    );
 
   const { player, depthChart } = data;
   const scoring = scoringFormat;

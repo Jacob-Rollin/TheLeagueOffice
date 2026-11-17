@@ -13,9 +13,7 @@ import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos, Scoring } from "@/lib/draft";
 import { fetchNflTeamDepth, teamDepthFor, type TeamDepthSlot } from "@/lib/nfl-team-depth";
 import { getTeamPrimaryColor, NFL_TEAMS, teamById } from "@/lib/nfl-teams";
-import { getPlayerDetail } from "@/lib/players.functions";
-import { fetchPlayerDetailClient } from "@/lib/player-detail-client";
-import { hydratePlayerBrain } from "@/lib/playerBrainHydration";
+import { detailQuery } from "@/lib/player-detail-query";
 import { fetchNextGameClient, fetchPlayerBioClient } from "@/lib/sleeper-client";
 import {
   playoffWindowPresentation,
@@ -59,25 +57,7 @@ function clickPlayerDetailTab(root: HTMLElement | null, label: string) {
   }
 }
 
-/* ---------- queries (page-local, not shared with the draft popup) ---------- */
-
-const profileQuery = (id: string) =>
-  queryOptions({
-    queryKey: ["player", id, "client-v1"],
-    queryFn: async () => {
-      const brain = await hydratePlayerBrain().catch(() => null);
-      const client = await fetchPlayerDetailClient(id, brain);
-      if (client) return client;
-      try {
-        if (import.meta.env.PROD) return null;
-      } catch {
-        /* ignore */
-      }
-      return getPlayerDetail({ data: { id } });
-    },
-    staleTime: 1000 * 60 * 30,
-    retry: false,
-  });
+/* ---------- queries ---------- */
 
 const bioQuery = (id: string) =>
   queryOptions({
@@ -217,7 +197,7 @@ export const Route = createFileRoute("/player/$id")({
     ],
   }),
   loader: async ({ context, params }) => {
-    await context.queryClient.ensureQueryData(profileQuery(params.id));
+    await context.queryClient.ensureQueryData(detailQuery(params.id));
   },
   component: PlayerHubPage,
 });
@@ -231,7 +211,7 @@ function riskTier(score: number): { label: string; text: string; fill: string } 
 
 function PlayerHubPage() {
   const { id } = Route.useParams();
-  const { data, isLoading } = useQuery(profileQuery(id));
+  const { data, isLoading, isFetching, isError } = useQuery(detailQuery(id));
   const { data: bio } = useQuery(bioQuery(id));
   const brain = usePlayerBrain();
   const [activeTab, setActiveTab] = useState<DetailTabKey>("logs");
@@ -356,9 +336,14 @@ function PlayerHubPage() {
     };
   }, [activeTab, id, data?.player.id]);
 
-  if (isLoading)
+  if (isLoading || (isFetching && !data))
     return <p className="py-24 text-center text-sm text-zinc-500">Loading player hub…</p>;
-  if (!data) return <p className="py-24 text-center text-sm text-zinc-500">Player not found.</p>;
+  if (!data)
+    return (
+      <p className="py-24 text-center text-sm text-zinc-500">
+        {isError ? "Player details unavailable right now." : "Player not found."}
+      </p>
+    );
 
   const { player, injuryRisk } = data;
   const brainEntry = brain?.[player.id] ?? null;
