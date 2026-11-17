@@ -458,6 +458,8 @@ const LOG_KEYS = [
   "fgm_50p",
   "fgm_50_59",
   "fgm_60p",
+  // Display-only — Game Log PCT column (also derived in normalizeKickerRaw).
+  "fgm_pct",
   "xpm",
   "xpa",
   "xpmiss",

@@ -857,7 +857,8 @@ type LogSeason = (typeof LOG_SEASONS)[number];
 
 type StatCol =
   | { kind: "stat"; key: string; label: string }
-  | { kind: "avg"; numKey: string; denKey: string; label: string };
+  | { kind: "avg"; numKey: string; denKey: string; label: string }
+  | { kind: "pct"; key: string; label: string };
 
 type StatGroup = { label: string; cols: StatCol[] };
 
@@ -1013,10 +1014,14 @@ function positionStatGroups(pos: string): StatGroup[] {
           ],
         },
         {
+          // Compact Sleeper-style FG board: short range folded into 0-29 + PCT
+          // so the modal stays table-fixed without an x-scrollbar.
           label: "FIELD GOALS",
           cols: [
             { kind: "stat", key: "fga", label: "ATT" },
             { kind: "stat", key: "fgm", label: "MADE" },
+            { kind: "pct", key: "fgm_pct", label: "PCT" },
+            { kind: "stat", key: "fgm_0_29", label: "0-29" },
             { kind: "stat", key: "fgm_30_39", label: "30-39" },
             { kind: "stat", key: "fgm_40_49", label: "40-49" },
             { kind: "stat", key: "fgm_50p", label: "50+" },
@@ -1208,6 +1213,31 @@ function avgOrDash(
   return (num / den).toFixed(1);
 }
 
+/** FG% (and similar) — prefer published pct, else makes/attempts. */
+function pctOrDash(
+  raw: Record<string, number> | undefined,
+  key: string,
+  played: boolean,
+): string {
+  if (!played) return "-";
+  if (!raw) return "-";
+  let v = raw[key];
+  if (v == null || !Number.isFinite(v)) {
+    if (key === "fgm_pct") {
+      const made = raw["fgm"];
+      const att = raw["fga"];
+      if (made == null || att == null || !Number.isFinite(made) || !Number.isFinite(att) || att <= 0) {
+        return "-";
+      }
+      v = (made / att) * 100;
+    } else {
+      return "-";
+    }
+  }
+  const rounded = Math.round(v * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+}
+
 function renderGroupedStatCells(
   raw: Record<string, number> | undefined,
   groups: StatGroup[],
@@ -1218,7 +1248,9 @@ function renderGroupedStatCells(
       <td key={`${g.label}-${col.label}`} className={cn(STAT_TD, ci === 0 && GROUP_EDGE)}>
         {col.kind === "avg"
           ? avgOrDash(raw, col.numKey, col.denKey, played)
-          : numOrDash(raw, col.key, played)}
+          : col.kind === "pct"
+            ? pctOrDash(raw, col.key, played)
+            : numOrDash(raw, col.key, played)}
       </td>
     )),
   );
@@ -1287,14 +1319,14 @@ function GameLogsPanel({
 
   const { data, isLoading } = useQuery({
     // Season logs only on open — career is a separate opt-in fetch below.
-    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v10"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v11"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
 
   const { data: careerData, isLoading: careerLoading } = useQuery({
-    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v10"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v11"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
     enabled: showCareer,
     staleTime: 1000 * 60 * 15,
@@ -1545,7 +1577,8 @@ function ProjectionsPanel({
     // v6: LOG_KEYS keep pts_allow_* so DST FPTS matches matchup.
     // v7: keep kicker FG distance / miss keys so league FPTS matches Sleeper.
     // v10: QB Sacked group (pass_sack / pass_sack_yds) after Rushing.
-    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v10"],
+    // v11: kicker 0-29 + FG% columns (normalizeKickerRaw).
+    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v11"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -2023,7 +2056,7 @@ function OutlookPanel({
   const { data: logsBundle } = useQuery({
     // Current season only — career years load when Game Logs opens.
     // v2: past-week Proj from shared week projection bundles.
-    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v10"],
+    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v11"],
     enabled: Boolean(playerId && pos),
     queryFn: () =>
       fetchGameLogsClient(playerId, team || "FA", pos || "WR", null, { includeCareer: false }),

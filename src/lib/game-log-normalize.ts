@@ -37,5 +37,22 @@ export function normalizeKickerRaw(raw: Record<string, number>): Record<string, 
       out["fgm_50p"] = (from59 ?? 0) + (from60 ?? 0);
     }
   }
+  // Short-range display bucket (Sleeper 0-19 + 20-29) — one column so the
+  // Game Log board stays inside the modal without an x-scrollbar.
+  if (out["fgm_0_29"] == null) {
+    const from019 = out["fgm_0_19"];
+    const from2029 = out["fgm_20_29"];
+    if (from019 != null || from2029 != null) {
+      out["fgm_0_29"] = (from019 ?? 0) + (from2029 ?? 0);
+    }
+  }
+  // Prefer Sleeper's published pct; otherwise derive from makes / attempts.
+  if (out["fgm_pct"] == null) {
+    const made = out["fgm"];
+    const att = out["fga"];
+    if (made != null && att != null && Number.isFinite(made) && Number.isFinite(att) && att > 0) {
+      out["fgm_pct"] = Math.round((made / att) * 1000) / 10;
+    }
+  }
   return out;
 }

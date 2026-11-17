@@ -3167,6 +3167,7 @@ const LOG_KEYS = [
   "fgm_50p",
   "fgm_50_59",
   "fgm_60p",
+  "fgm_pct",
   "xpa",
   "xpm",
   "xpmiss",

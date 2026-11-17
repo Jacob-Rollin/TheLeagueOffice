@@ -1127,7 +1127,7 @@ function PlayerCareerTotals({
 }) {
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({
-    queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v10"],
+    queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v11"],
     enabled: Boolean(id && pos && open),
     staleTime: 30 * 60 * 1000,
     retry: false,
@@ -1225,7 +1225,8 @@ function PlayerNews({ id }: { id: string }) {
 
 type StatCol =
   | { kind?: "stat"; key: string; label: string }
-  | { kind: "avg"; key: string; label: string; numKey: string; denKey: string };
+  | { kind: "avg"; key: string; label: string; numKey: string; denKey: string }
+  | { kind: "pct"; key: string; label: string };
 type StatGroup = { label: string; cols: StatCol[] };
 
 /** Position-specific counting groups (Sleeper-style Fantasy / Pass / Rush headers). */
@@ -1294,10 +1295,15 @@ function positionStatGroups(pos: string): StatGroup[] {
     case "K":
       return [
         {
+          // Match desktop: short range + PCT so 20-29 makes are not invisible.
           label: "Field Goals",
           cols: [
             { key: "fgm", label: "FGM" },
             { key: "fga", label: "FGA" },
+            { kind: "pct", key: "fgm_pct", label: "Pct" },
+            { key: "fgm_0_29", label: "0-29" },
+            { key: "fgm_30_39", label: "30-39" },
+            { key: "fgm_40_49", label: "40-49" },
             { key: "fgm_50p", label: "50+" },
           ],
         },
@@ -1381,12 +1387,26 @@ function avgStatValue(
   return (num / den).toFixed(1);
 }
 
+function pctStatValue(raw: Record<string, number> | undefined, key: string): string {
+  let v = Number(raw?.[key]);
+  if (!Number.isFinite(v) && key === "fgm_pct") {
+    const made = Number(raw?.["fgm"]);
+    const att = Number(raw?.["fga"]);
+    if (!Number.isFinite(made) || !Number.isFinite(att) || att <= 0) return "-";
+    v = (made / att) * 100;
+  }
+  if (!Number.isFinite(v)) return "-";
+  const rounded = Math.round(v * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+}
+
 function renderStatCol(
   raw: Record<string, number> | undefined,
   col: StatCol,
   opts?: { zeroIfMissing?: boolean },
 ): string {
   if (col.kind === "avg") return avgStatValue(raw, col.numKey, col.denKey);
+  if (col.kind === "pct") return pctStatValue(raw, col.key);
   return statValue(raw, col.key, opts);
 }
 
@@ -1541,7 +1561,7 @@ function usePlayerLogs(
   return useQuery({
     // v3: snap% + weekly pos rank on raw; Fantasy / Pass / Rush grouped headers.
     // Past seasons: no includeCareer — one year at a time when the user expands VIEW.
-    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "logs-v10"],
+    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "logs-v11"],
     enabled: Boolean(id && pos && enabled),
     queryFn: () =>
       fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", seasonKey === "current" ? null : seasonKey, {
