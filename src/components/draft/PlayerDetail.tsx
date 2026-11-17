@@ -878,12 +878,13 @@ const FPTS_COL_BG = "bg-[#e3f4f9]";
  */
 const LOG_TABLE = "w-full table-fixed border-collapse text-sm";
 
-/** Narrow WK + compact Opp (@ + logo + abbr); remaining cols share space evenly. */
+/** Narrow WK + compact Opp (vs/@ + logo + abbr); remaining cols share space evenly. */
 function GameLogWeekOppColgroup() {
   return (
     <colgroup>
       <col style={{ width: "2rem" }} />
-      <col style={{ width: "5rem" }} />
+      {/* Room for "vs"/"@" + logo + 3-letter abbr without stretching Fantasy cols. */}
+      <col style={{ width: "5.75rem" }} />
     </colgroup>
   );
 }
@@ -932,23 +933,20 @@ function gameLogFantasyLabels(pos: string): string[] {
 }
 
 function formatOppLabel(g: { opp?: string | null; isAway?: boolean; location?: string }): string {
-  if (g.isAway || g.location === "away" || g.opp?.trim().startsWith("@")) {
-    return `@ ${
-      g.opp
-        ?.replace(/^vs\s+|^@\s+/i, "")
-        .trim()
-        .toUpperCase() ?? ""
-    }`;
-  }
-  return (
+  const abbr =
     g.opp
       ?.replace(/^vs\s+|^@\s+/i, "")
       .trim()
-      .toUpperCase() || "-"
-  );
+      .toUpperCase() ?? "";
+  if (!abbr) return "-";
+  if (g.isAway || g.location === "away" || g.opp?.trim().startsWith("@")) {
+    return `@ ${abbr}`;
+  }
+  // Home games use Sleeper's "vs" prefix so @/vs + logo columns stay aligned.
+  return `vs ${abbr}`;
 }
 
-/** Sleeper-style Opp cell: optional @, team logo, abbr (SoS tint on the abbr). */
+/** Sleeper-style Opp cell: vs/@ + team logo + abbr (SoS tint on the abbr). */
 function GameLogOppCell({
   isBye,
   oppLabel,
@@ -971,11 +969,10 @@ function GameLogOppCell({
   const logo = teamLogo(abbr);
   return (
     <span className={cn("inline-flex max-w-full items-center gap-0.5", className)}>
-      {away ? (
-        <span className="w-2.5 shrink-0 text-left text-[10px] font-bold leading-none text-slate-400">
-          @
-        </span>
-      ) : null}
+      {/* Fixed-width prefix so home "vs" and away "@" keep logos/abbreviations aligned. */}
+      <span className="w-3.5 shrink-0 text-left text-[10px] font-bold leading-none text-slate-400">
+        {away ? "@" : "vs"}
+      </span>
       {logo ? (
         <img
           src={logo}
