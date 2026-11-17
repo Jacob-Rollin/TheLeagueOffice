@@ -10,8 +10,11 @@
  * Defense depth is intentionally omitted (fantasy offense only).
  */
 
+import { isUnavailableInjury } from "@/lib/injury-badge";
 import { SNAP_OBJECT_KEYS, snapCdnUrl, snapCdnPublicBase } from "@/lib/snap-cdn-public";
 import { getCached } from "@/lib/sleeper-cache";
+
+export { isUnavailableInjury as isDepthChartDesignated };
 
 export type TeamDepthSlot = "QB" | "RB" | "WR1" | "WR2" | "WR3" | "TE" | "K";
 
@@ -61,18 +64,51 @@ async function fetchSnapUrl(path: string): Promise<NflTeamDepthSnap | null> {
 }
 
 async function fetchSnap(): Promise<NflTeamDepthSnap | null> {
-  // Prefer v2 (includes age); fall back to v1 until Actions republishes.
+  // Prefer v3 (deeper benches); fall back until Actions republishes.
   return (
     (await fetchSnapUrl(SNAP_OBJECT_KEYS.nflTeamDepth())) ??
+    (await fetchSnapUrl("snap/nfl-team-depth-v2.json")) ??
     (await fetchSnapUrl("snap/nfl-team-depth-v1.json"))
   );
 }
 
+/**
+ * Keep designated Out/IR/etc. visible in a fixed-width (Starter/2nd/3rd) row.
+ * Snap rows stay in order; missing designated teammates replace the last
+ * healthy backup when the row is already full (never replaces the starter).
+ */
+export function promoteDesignatedOntoDepthRow<T extends { id: string }>(
+  rows: T[],
+  extras: T[],
+  isDesignated: (row: T) => boolean,
+  max = 3,
+): T[] {
+  const seen = new Set(rows.map((r) => r.id));
+  const combined = [...rows];
+  for (const extra of extras) {
+    if (seen.has(extra.id)) continue;
+    seen.add(extra.id);
+    combined.push(extra);
+  }
+  if (combined.length <= max) return combined;
+  for (let i = max; i < combined.length; i += 1) {
+    const overflow = combined[i]!;
+    if (!isDesignated(overflow)) continue;
+    // Replace the last visible slot only — never the starter, keep 2nd string
+    // stable when promoting a midweek Out/IR reshuffle into the board.
+    const victim = max - 1;
+    if (victim < 1) break;
+    const tmp = combined[victim]!;
+    combined[victim] = overflow;
+    combined[i] = tmp;
+  }
+  return combined.slice(0, max);
+}
+
 /** Resolve shared depth board (IndexedDB + snap-cdn). */
 export async function fetchNflTeamDepth(): Promise<NflTeamDepthSnap> {
-  // Cache key aligns with snap object key (path bump for raw CDN).
-  // Cache key bump when snap inclusion rules change (e.g. Inactive/IR on chart).
-  return getCached("nfl-team-depth-snap-v2c", CLIENT_TTL_MS, async () => {
+  // Cache key bump with snap object path (v3 keeps more depth rows + Out/IR).
+  return getCached("nfl-team-depth-snap-v3", CLIENT_TTL_MS, async () => {
     if (!snapCdnPublicBase()) return EMPTY;
     const snap = await fetchSnap();
     if (!snap || Object.keys(snap.teams).length === 0) return EMPTY;

@@ -11,7 +11,12 @@ import { sosHasUsableRanks, usePlayerSos, useSosPeerMatrix } from "@/hooks/usePl
 import { usePlayerBrain } from "@/hooks/usePlayerBrain";
 import { useSleeperPlayers } from "@/hooks/useSleeperPlayers";
 import type { Pos, Scoring } from "@/lib/draft";
-import { fetchNflTeamDepth, teamDepthFor, type TeamDepthSlot } from "@/lib/nfl-team-depth";
+import {
+  fetchNflTeamDepth,
+  isDepthChartDesignated,
+  teamDepthFor,
+  type TeamDepthSlot,
+} from "@/lib/nfl-team-depth";
 import { getTeamPrimaryColor, NFL_TEAMS, teamById } from "@/lib/nfl-teams";
 import { detailQuery } from "@/lib/player-detail-query";
 import { fetchNextGameClient, fetchPlayerBioClient } from "@/lib/sleeper-client";
@@ -256,7 +261,7 @@ function PlayerHubPage() {
     return map;
   }, [catalog]);
   const { data: depthBoard } = useQuery({
-    queryKey: ["nfl-team-depth", "snap-v2c"],
+    queryKey: ["nfl-team-depth", "snap-v3"],
     enabled: Boolean(playerTeam) && playerTeam !== "FA",
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -301,11 +306,10 @@ function PlayerHubPage() {
     if (ordered.length === 0) {
       return depthChart.filter((d) => d.pos === player.pos).slice(0, 6);
     }
-    // Keep IR teammates visible even when an older Active-only snap omitted them.
+    // Keep Out/IR/PUP teammates visible when a stale snap omitted them.
     for (const d of depthChart) {
       if (d.pos !== player.pos || seen.has(d.id)) continue;
-      const inj = (d.injury ?? "").toUpperCase().trim();
-      if (inj !== "IR" && inj !== "INJURED RESERVE" && inj !== "INJURED_RESERVE") continue;
+      if (!isDepthChartDesignated(d.injury)) continue;
       seen.add(d.id);
       ordered.push(d);
     }

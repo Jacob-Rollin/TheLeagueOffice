@@ -321,7 +321,9 @@ jobs:
           for chart in teams.values():
               for slot, rows in chart.items():
                   rows.sort(key=lambda r: (r["order"], r["name"]))
-                  chart[slot] = rows[:3]
+                  # Top 5 so midweek Out/IR reshuffles stay on the published chart
+                  # (clients still render Starter/2nd/3rd from the head of the list).
+                  chart[slot] = rows[:5]
 
           if len(teams) < 28:
               raise SystemExit(f"too few team depth charts: {len(teams)}")
@@ -331,14 +333,17 @@ jobs:
               "source": "sleeper-players-depth",
               "teams": teams,
           }
-          # v2 adds per-player age; keep v1 in sync for older clients.
+          # v3 keeps top-5 benches; keep v2/v1 in sync for older clients.
+          Path("out/snap/nfl-team-depth-v3.json").write_text(
+              json.dumps(payload, separators=(",", ":"))
+          )
           Path("out/snap/nfl-team-depth-v2.json").write_text(
               json.dumps(payload, separators=(",", ":"))
           )
           Path("out/snap/nfl-team-depth-v1.json").write_text(
               json.dumps(payload, separators=(",", ":"))
           )
-          print("ok nfl-team-depth-v2", len(teams))
+          print("ok nfl-team-depth-v3", len(teams))
           PY
 
           count=$(find out -type f -name '*.json' | wc -l | tr -d ' ')

@@ -34,6 +34,7 @@ import type { Pos, Scoring } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
 import {
   fetchNflTeamDepth,
+  isDepthChartDesignated,
   teamDepthFor,
   type TeamDepthSlot,
 } from "@/lib/nfl-team-depth";
@@ -2334,7 +2335,7 @@ function DepthChartPanel({
   }, [catalog]);
 
   const { data: depthBoard, isLoading: depthLoading } = useQuery({
-    queryKey: ["nfl-team-depth", "snap-v2c"],
+    queryKey: ["nfl-team-depth", "snap-v3"],
     enabled: Boolean(team) && team !== "FA",
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -2380,20 +2381,15 @@ function DepthChartPanel({
     const chart = teamDepthFor(depthBoard, team);
     const nameById = new Map(depthChart.map((d) => [d.id, d]));
 
-    const isIrStatus = (status: string | null | undefined) => {
-      const s = (status ?? "").toUpperCase().trim();
-      return s === "IR" || s === "INJURED RESERVE" || s === "INJURED_RESERVE";
-    };
-
-    // Until snap-cdn republishes Inactive/IR rows, fold IR teammates from the
-    // detail depth list onto the Sleeper-ordered chart so they still appear.
-    const appendMissingIr = (pos: string, rows: DepthPanelEntry[]): DepthPanelEntry[] => {
+    // Stale snaps drop midweek Out/IR reshuffles — fold designated teammates
+    // from the detail depth list onto the Sleeper-ordered chart.
+    const appendMissingDesignated = (pos: string, rows: DepthPanelEntry[]): DepthPanelEntry[] => {
       const seen = new Set(rows.map((r) => r.id));
       const extras: DepthPanelEntry[] = [];
       for (const d of depthChart) {
         if (d.pos !== pos || seen.has(d.id)) continue;
         const injury = injuryStatusFor(d.id, d.injury);
-        if (!isIrStatus(injury)) continue;
+        if (!isDepthChartDesignated(injury)) continue;
         seen.add(d.id);
         extras.push({
           id: d.id,
@@ -2419,7 +2415,7 @@ function DepthChartPanel({
     };
 
     const fromSlot = (slot: TeamDepthSlot, pos: string): DepthPanelEntry[] =>
-      appendMissingIr(pos, (chart?.[slot] ?? []).map((entry) => entryFromSnap(entry, pos)));
+      appendMissingDesignated(pos, (chart?.[slot] ?? []).map((entry) => entryFromSnap(entry, pos)));
 
     // Flat WR list: Sleeper WR1/WR2/WR3 starters, then 2nds, then 3rds.
     const wrColumns = [
@@ -2454,7 +2450,7 @@ function DepthChartPanel({
       QB: fromSlot("QB", "QB"),
       RB: fromSlot("RB", "RB"),
       K: fromSlot("K", "K"),
-      WR: appendMissingIr("WR", wrRows),
+      WR: appendMissingDesignated("WR", wrRows),
       TE: fromSlot("TE", "TE"),
       DEF: defRows,
     };

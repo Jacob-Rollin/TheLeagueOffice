@@ -68,7 +68,7 @@ export const SNAP_OBJECT_KEYS = {
   /**
    * Sleeper depth charts for mobile Team tab (depth_chart_position + order + age).
    * Actions → `/v1/players/nfl` once; visitors hit GitHub raw only.
-   * Path bump (v2) includes age and busts raw.githubusercontent.com cache.
+   * Path bump (v3): keep top 5 per slot so midweek Out/IR reshuffles stay on chart.
    */
-  nflTeamDepth: () => `snap/nfl-team-depth-v2.json`,
+  nflTeamDepth: () => `snap/nfl-team-depth-v3.json`,
 } as const;
