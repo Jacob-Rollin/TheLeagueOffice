@@ -1301,7 +1301,7 @@ function positionStatGroups(pos: string): StatGroup[] {
             { key: "fgm", label: "FGM" },
             { key: "fga", label: "FGA" },
             { kind: "pct", key: "fgm_pct", label: "Pct" },
-            { key: "fgm_0_29", label: "0-29" },
+            { key: "fgm_0_29", label: "1-29" },
             { key: "fgm_30_39", label: "30-39" },
             { key: "fgm_40_49", label: "40-49" },
             { key: "fgm_50p", label: "50+" },

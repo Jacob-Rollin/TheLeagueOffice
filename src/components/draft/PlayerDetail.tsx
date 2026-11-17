@@ -1014,14 +1014,14 @@ function positionStatGroups(pos: string): StatGroup[] {
           ],
         },
         {
-          // Compact Sleeper-style FG board: short range folded into 0-29 + PCT
+          // Compact Sleeper-style FG board: short range folded into 1-29 + PCT
           // so the modal stays table-fixed without an x-scrollbar.
           label: "FIELD GOALS",
           cols: [
             { kind: "stat", key: "fga", label: "ATT" },
             { kind: "stat", key: "fgm", label: "MADE" },
             { kind: "pct", key: "fgm_pct", label: "PCT" },
-            { kind: "stat", key: "fgm_0_29", label: "0-29" },
+            { kind: "stat", key: "fgm_0_29", label: "1-29" },
             { kind: "stat", key: "fgm_30_39", label: "30-39" },
             { kind: "stat", key: "fgm_40_49", label: "40-49" },
             { kind: "stat", key: "fgm_50p", label: "50+" },
