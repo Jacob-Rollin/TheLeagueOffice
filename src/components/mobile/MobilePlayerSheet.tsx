@@ -31,6 +31,8 @@ import { injuryBadgeInfo, type InjuryBadgeInfo } from "@/lib/injury-badge";
 import type { LeagueActivityEvent, LeagueActivityMove } from "@/lib/league.functions";
 import {
   fetchNflTeamDepth,
+  isDepthChartDesignated,
+  promoteDesignatedOntoDepthRow,
   teamDepthFor,
   type TeamDepthEntry,
   type TeamDepthSlot,
@@ -1125,7 +1127,7 @@ function PlayerCareerTotals({
 }) {
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({
-    queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v10"],
+    queryKey: ["player-logs", id, "career-totals", team ?? "FA", pos, "proj-v11"],
     enabled: Boolean(id && pos && open),
     staleTime: 30 * 60 * 1000,
     retry: false,
@@ -1223,7 +1225,8 @@ function PlayerNews({ id }: { id: string }) {
 
 type StatCol =
   | { kind?: "stat"; key: string; label: string }
-  | { kind: "avg"; key: string; label: string; numKey: string; denKey: string };
+  | { kind: "avg"; key: string; label: string; numKey: string; denKey: string }
+  | { kind: "pct"; key: string; label: string };
 type StatGroup = { label: string; cols: StatCol[] };
 
 /** Position-specific counting groups (Sleeper-style Fantasy / Pass / Rush headers). */
@@ -1292,10 +1295,15 @@ function positionStatGroups(pos: string): StatGroup[] {
     case "K":
       return [
         {
+          // Match desktop: short range + PCT so 20-29 makes are not invisible.
           label: "Field Goals",
           cols: [
             { key: "fgm", label: "FGM" },
             { key: "fga", label: "FGA" },
+            { kind: "pct", key: "fgm_pct", label: "Pct" },
+            { key: "fgm_0_29", label: "1-29" },
+            { key: "fgm_30_39", label: "30-39" },
+            { key: "fgm_40_49", label: "40-49" },
             { key: "fgm_50p", label: "50+" },
           ],
         },
@@ -1379,12 +1387,26 @@ function avgStatValue(
   return (num / den).toFixed(1);
 }
 
+function pctStatValue(raw: Record<string, number> | undefined, key: string): string {
+  let v = Number(raw?.[key]);
+  if (!Number.isFinite(v) && key === "fgm_pct") {
+    const made = Number(raw?.["fgm"]);
+    const att = Number(raw?.["fga"]);
+    if (!Number.isFinite(made) || !Number.isFinite(att) || att <= 0) return "-";
+    v = (made / att) * 100;
+  }
+  if (!Number.isFinite(v)) return "-";
+  const rounded = Math.round(v * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+}
+
 function renderStatCol(
   raw: Record<string, number> | undefined,
   col: StatCol,
   opts?: { zeroIfMissing?: boolean },
 ): string {
   if (col.kind === "avg") return avgStatValue(raw, col.numKey, col.denKey);
+  if (col.kind === "pct") return pctStatValue(raw, col.key);
   return statValue(raw, col.key, opts);
 }
 
@@ -1539,7 +1561,7 @@ function usePlayerLogs(
   return useQuery({
     // v3: snap% + weekly pos rank on raw; Fantasy / Pass / Rush grouped headers.
     // Past seasons: no includeCareer — one year at a time when the user expands VIEW.
-    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "logs-v10"],
+    queryKey: ["player-logs", id, seasonKey, team ?? "FA", pos ?? "", "logs-v11"],
     enabled: Boolean(id && pos && enabled),
     queryFn: () =>
       fetchGameLogsClient(id, team ?? "FA", pos ?? "WR", seasonKey === "current" ? null : seasonKey, {
@@ -2063,7 +2085,7 @@ function TeamTab({
 
   // Sleeper depth_chart_position + order via dedicated snap (not SOS / not proj-sorted).
   const { data: depthBoard, isLoading: depthLoading } = useQuery({
-    queryKey: ["nfl-team-depth", "snap-v2c"],
+    queryKey: ["nfl-team-depth", "snap-v3"],
     enabled: Boolean(team),
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -2107,25 +2129,21 @@ function TeamTab({
     const chart = teamDepthFor(depthBoard, team);
     const projById = new Map(depthChart.map((d) => [d.id, d]));
 
-    const isIrStatus = (status: string | null | undefined) => {
-      const s = (status ?? "").toUpperCase().trim();
-      return s === "IR" || s === "INJURED RESERVE" || s === "INJURED_RESERVE";
-    };
-
     const toCells = (slot: TeamDepthSlot, entries: TeamDepthEntry[] | undefined) => {
       const pos = slot.startsWith("WR") ? "WR" : slot;
-      const merged = [...(entries ?? [])];
-      const seen = new Set(merged.map((e) => e.id));
-      // Fill open Starter/2nd/3rd cells with IR teammates omitted by older Active-only snaps.
+      const base = [...(entries ?? [])];
+      const seen = new Set(base.map((e) => e.id));
+      // Stale snaps miss midweek Out/IR reshuffles. Pull designated teammates
+      // from the detail list and promote them into the visible 3 cells.
       // Skip WR1/2/3 — those columns share one WR pool and would duplicate extras.
-      if (merged.length < 3 && !slot.startsWith("WR")) {
+      const extras: TeamDepthEntry[] = [];
+      if (!slot.startsWith("WR")) {
         for (const d of depthChart) {
-          if (merged.length >= 3) break;
           if (d.pos !== pos || seen.has(d.id)) continue;
           const injury = injuryStatusFor(d.id) ?? d.injury;
-          if (!isIrStatus(injury)) continue;
+          if (!isDepthChartDesignated(injury)) continue;
           seen.add(d.id);
-          merged.push({
+          extras.push({
             id: d.id,
             name: d.name,
             order: 99,
@@ -2134,7 +2152,12 @@ function TeamTab({
           });
         }
       }
-      const top = merged.slice(0, 3);
+      const top = promoteDesignatedOntoDepthRow(
+        base,
+        extras,
+        (row) => isDepthChartDesignated(injuryStatusFor(row.id) ?? row.injury),
+        3,
+      );
       const cells = [0, 1, 2].map((i) => {
         const entry = top[i];
         if (!entry) return null;

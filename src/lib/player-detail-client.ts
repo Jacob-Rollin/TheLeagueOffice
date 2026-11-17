@@ -4,16 +4,24 @@
  * season-stat maps, ownership research) on every open.
  */
 
-import { readCache } from "@/lib/sleeper-cache";
+import { getCached } from "@/lib/sleeper-cache";
 import { fetchGameLogsClient } from "@/lib/sleeper-client";
 import { fetchResearchSosBoard } from "@/lib/research-cdn";
-import { currentSeason, type Player, type Pos, POSITIONS } from "@/lib/players-build";
+import {
+  buildPlayersPayload,
+  currentSeason,
+  type Player,
+  type Pos,
+  POSITIONS,
+} from "@/lib/players-build";
 import type { PlayerDetail, SeasonLine } from "@/lib/players.server";
 import { sosFromBoard } from "@/lib/sos-from-board";
 import type { BrainMatrix } from "@/lib/playerBrainHydration";
 import type { PlayersPayload } from "@/lib/players-build";
 
+/** Same key as useSleeperPlayers — one shared catalog build per visitor day. */
 const CATALOG_KEY = "players-v4";
+const CATALOG_TTL_MS = 1000 * 60 * 60 * 24;
 
 function emptySeasonLine(season: string, raw: Record<string, number> = {}): SeasonLine {
   return {
@@ -133,8 +141,12 @@ function simpleInjuryRisk(player: Player, history: SeasonLine[]) {
 async function loadCatalogPlayer(
   id: string,
 ): Promise<{ player: Player; season: string; all: Player[] } | null> {
-  const hit = await readCache<PlayersPayload>(CATALOG_KEY);
-  const payload = hit?.data;
+  // Build (or reuse) the shared catalog — do not soft-miss when IndexedDB is
+  // still cold. Popup/page opens that raced ahead of useSleeperPlayers used to
+  // return null here; production then cached that miss and showed no game logs.
+  const payload = await getCached(CATALOG_KEY, CATALOG_TTL_MS, buildPlayersPayload).catch(
+    () => null as PlayersPayload | null,
+  );
   if (!payload?.players?.length) return null;
   const player = payload.players.find((p) => p.id === id);
   if (!player) return null;

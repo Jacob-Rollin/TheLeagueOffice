@@ -34,6 +34,21 @@ describe("normalizeKickerRaw", () => {
   it("preserves existing fgm_50p", () => {
     expect(normalizeKickerRaw({ fgm_50p: 1, fgm_50_59: 1 })["fgm_50p"]).toBe(1);
   });
+
+  it("folds 0-19 + 20-29 into fgm_0_29 for the short-range column", () => {
+    // Jason Sanders W10: 2×20-29 + 2×40-49 — short range must not vanish.
+    expect(normalizeKickerRaw({ fgm_20_29: 2, fgm_40_49: 2 })["fgm_0_29"]).toBe(2);
+    expect(normalizeKickerRaw({ fgm_0_19: 1, fgm_20_29: 1 })["fgm_0_29"]).toBe(2);
+  });
+
+  it("derives fgm_pct from makes / attempts when Sleeper omits it", () => {
+    expect(normalizeKickerRaw({ fgm: 4, fga: 4 })["fgm_pct"]).toBe(100);
+    expect(normalizeKickerRaw({ fgm: 4, fga: 5 })["fgm_pct"]).toBe(80);
+  });
+
+  it("preserves published fgm_pct", () => {
+    expect(normalizeKickerRaw({ fgm: 4, fga: 5, fgm_pct: 80 })["fgm_pct"]).toBe(80);
+  });
 });
 
 /** Typical Sleeper half-PPR kicker distance map (flat fgm unused when distances set). */

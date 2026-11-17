@@ -34,6 +34,7 @@ import type { Pos, Scoring } from "@/lib/draft";
 import { injuryBadgeInfo } from "@/lib/injury-badge";
 import {
   fetchNflTeamDepth,
+  isDepthChartDesignated,
   teamDepthFor,
   type TeamDepthSlot,
 } from "@/lib/nfl-team-depth";
@@ -195,7 +196,7 @@ export function PlayerDetail({
   scoringFormat?: Scoring;
   onScoringFormatChange?: (format: Scoring) => void;
 }) {
-  const { data, isLoading } = useQuery(detailQuery(id));
+  const { data, isLoading, isFetching, isError } = useQuery(detailQuery(id));
   const { data: bio } = useQuery({
     queryKey: ["player-bio", id],
     queryFn: () => fetchPlayerBioClient(id),
@@ -319,10 +320,14 @@ export function PlayerDetail({
     return () => io.disconnect();
   }, [id, isPopup, isLoading, data?.player?.id]);
 
-  if (isLoading)
+  if (isLoading || (isFetching && !data))
     return <p className="p-6 text-center text-sm text-muted-foreground">Loading player…</p>;
   if (!data)
-    return <p className="p-6 text-center text-sm text-muted-foreground">Player not found.</p>;
+    return (
+      <p className="p-6 text-center text-sm text-muted-foreground">
+        {isError ? "Player details unavailable right now." : "Player not found."}
+      </p>
+    );
 
   const { player, depthChart } = data;
   const scoring = scoringFormat;
@@ -852,7 +857,8 @@ type LogSeason = (typeof LOG_SEASONS)[number];
 
 type StatCol =
   | { kind: "stat"; key: string; label: string }
-  | { kind: "avg"; numKey: string; denKey: string; label: string };
+  | { kind: "avg"; numKey: string; denKey: string; label: string }
+  | { kind: "pct"; key: string; label: string };
 
 type StatGroup = { label: string; cols: StatCol[] };
 
@@ -1008,10 +1014,14 @@ function positionStatGroups(pos: string): StatGroup[] {
           ],
         },
         {
+          // Compact Sleeper-style FG board: short range folded into 1-29 + PCT
+          // so the modal stays table-fixed without an x-scrollbar.
           label: "FIELD GOALS",
           cols: [
             { kind: "stat", key: "fga", label: "ATT" },
             { kind: "stat", key: "fgm", label: "MADE" },
+            { kind: "pct", key: "fgm_pct", label: "PCT" },
+            { kind: "stat", key: "fgm_0_29", label: "1-29" },
             { kind: "stat", key: "fgm_30_39", label: "30-39" },
             { kind: "stat", key: "fgm_40_49", label: "40-49" },
             { kind: "stat", key: "fgm_50p", label: "50+" },
@@ -1203,6 +1213,31 @@ function avgOrDash(
   return (num / den).toFixed(1);
 }
 
+/** FG% (and similar) — prefer published pct, else makes/attempts. */
+function pctOrDash(
+  raw: Record<string, number> | undefined,
+  key: string,
+  played: boolean,
+): string {
+  if (!played) return "-";
+  if (!raw) return "-";
+  let v = raw[key];
+  if (v == null || !Number.isFinite(v)) {
+    if (key === "fgm_pct") {
+      const made = raw["fgm"];
+      const att = raw["fga"];
+      if (made == null || att == null || !Number.isFinite(made) || !Number.isFinite(att) || att <= 0) {
+        return "-";
+      }
+      v = (made / att) * 100;
+    } else {
+      return "-";
+    }
+  }
+  const rounded = Math.round(v * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+}
+
 function renderGroupedStatCells(
   raw: Record<string, number> | undefined,
   groups: StatGroup[],
@@ -1213,7 +1248,9 @@ function renderGroupedStatCells(
       <td key={`${g.label}-${col.label}`} className={cn(STAT_TD, ci === 0 && GROUP_EDGE)}>
         {col.kind === "avg"
           ? avgOrDash(raw, col.numKey, col.denKey, played)
-          : numOrDash(raw, col.key, played)}
+          : col.kind === "pct"
+            ? pctOrDash(raw, col.key, played)
+            : numOrDash(raw, col.key, played)}
       </td>
     )),
   );
@@ -1282,14 +1319,14 @@ function GameLogsPanel({
 
   const { data, isLoading } = useQuery({
     // Season logs only on open — career is a separate opt-in fetch below.
-    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v10"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "season", "proj-v11"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
   });
 
   const { data: careerData, isLoading: careerLoading } = useQuery({
-    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v10"],
+    queryKey: ["player-logs", id, season, team || "FA", pos, "career", "proj-v11"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, season, { includeCareer: true }),
     enabled: showCareer,
     staleTime: 1000 * 60 * 15,
@@ -1540,7 +1577,8 @@ function ProjectionsPanel({
     // v6: LOG_KEYS keep pts_allow_* so DST FPTS matches matchup.
     // v7: keep kicker FG distance / miss keys so league FPTS matches Sleeper.
     // v10: QB Sacked group (pass_sack / pass_sack_yds) after Rushing.
-    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v10"],
+    // v11: kicker 0-29 + FG% columns (normalizeKickerRaw).
+    queryKey: ["player-logs", id, "current", team || "FA", pos, "proj-v11"],
     queryFn: () => fetchGameLogsClient(id, team || "FA", pos, null, { includeCareer: false }),
     staleTime: 1000 * 60 * 15,
     retry: false,
@@ -2018,7 +2056,7 @@ function OutlookPanel({
   const { data: logsBundle } = useQuery({
     // Current season only — career years load when Game Logs opens.
     // v2: past-week Proj from shared week projection bundles.
-    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v10"],
+    queryKey: ["player-logs", playerId, "current", team || "FA", pos, "proj-v11"],
     enabled: Boolean(playerId && pos),
     queryFn: () =>
       fetchGameLogsClient(playerId, team || "FA", pos || "WR", null, { includeCareer: false }),
@@ -2330,7 +2368,7 @@ function DepthChartPanel({
   }, [catalog]);
 
   const { data: depthBoard, isLoading: depthLoading } = useQuery({
-    queryKey: ["nfl-team-depth", "snap-v2c"],
+    queryKey: ["nfl-team-depth", "snap-v3"],
     enabled: Boolean(team) && team !== "FA",
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -2376,20 +2414,15 @@ function DepthChartPanel({
     const chart = teamDepthFor(depthBoard, team);
     const nameById = new Map(depthChart.map((d) => [d.id, d]));
 
-    const isIrStatus = (status: string | null | undefined) => {
-      const s = (status ?? "").toUpperCase().trim();
-      return s === "IR" || s === "INJURED RESERVE" || s === "INJURED_RESERVE";
-    };
-
-    // Until snap-cdn republishes Inactive/IR rows, fold IR teammates from the
-    // detail depth list onto the Sleeper-ordered chart so they still appear.
-    const appendMissingIr = (pos: string, rows: DepthPanelEntry[]): DepthPanelEntry[] => {
+    // Stale snaps drop midweek Out/IR reshuffles — fold designated teammates
+    // from the detail depth list onto the Sleeper-ordered chart.
+    const appendMissingDesignated = (pos: string, rows: DepthPanelEntry[]): DepthPanelEntry[] => {
       const seen = new Set(rows.map((r) => r.id));
       const extras: DepthPanelEntry[] = [];
       for (const d of depthChart) {
         if (d.pos !== pos || seen.has(d.id)) continue;
         const injury = injuryStatusFor(d.id, d.injury);
-        if (!isIrStatus(injury)) continue;
+        if (!isDepthChartDesignated(injury)) continue;
         seen.add(d.id);
         extras.push({
           id: d.id,
@@ -2415,7 +2448,7 @@ function DepthChartPanel({
     };
 
     const fromSlot = (slot: TeamDepthSlot, pos: string): DepthPanelEntry[] =>
-      appendMissingIr(pos, (chart?.[slot] ?? []).map((entry) => entryFromSnap(entry, pos)));
+      appendMissingDesignated(pos, (chart?.[slot] ?? []).map((entry) => entryFromSnap(entry, pos)));
 
     // Flat WR list: Sleeper WR1/WR2/WR3 starters, then 2nds, then 3rds.
     const wrColumns = [
@@ -2450,7 +2483,7 @@ function DepthChartPanel({
       QB: fromSlot("QB", "QB"),
       RB: fromSlot("RB", "RB"),
       K: fromSlot("K", "K"),
-      WR: appendMissingIr("WR", wrRows),
+      WR: appendMissingDesignated("WR", wrRows),
       TE: fromSlot("TE", "TE"),
       DEF: defRows,
     };
